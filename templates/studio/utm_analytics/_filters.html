@@ -2,8 +2,7 @@
 <form method="get" class="bg-card border border-border rounded-lg p-4 mb-6 flex flex-wrap items-end gap-3">
   <div>
     <label class="block text-xs font-medium text-muted-foreground mb-1" for="filter-range">Date range</label>
-    <select id="filter-range" name="range" onchange="this.form.submit()"
-            class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    <select id="filter-range" name="range" onchange="this.form.submit()" class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       <option value="7d" {% if filters.range_key == '7d' %}selected{% endif %}>Last 7 days</option>
       <option value="30d" {% if filters.range_key == '30d' %}selected{% endif %}>Last 30 days</option>
       <option value="90d" {% if filters.range_key == '90d' %}selected{% endif %}>Last 90 days</option>
@@ -26,8 +25,7 @@
 
   <div>
     <label class="block text-xs font-medium text-muted-foreground mb-1" for="filter-attr">Attribution</label>
-    <select id="filter-attr" name="attribution" onchange="this.form.submit()"
-            class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    <select id="filter-attr" name="attribution" onchange="this.form.submit()" class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       <option value="first_touch" {% if filters.attribution == 'first_touch' %}selected{% endif %}>First touch</option>
       <option value="last_touch" {% if filters.attribution == 'last_touch' %}selected{% endif %}>Last touch</option>
     </select>
@@ -35,8 +33,7 @@
 
   <div>
     <label class="block text-xs font-medium text-muted-foreground mb-1" for="filter-source">utm_source</label>
-    <select id="filter-source" name="utm_source" onchange="this.form.submit()"
-            class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    <select id="filter-source" name="utm_source" onchange="this.form.submit()" class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       <option value="">All sources</option>
       {% for source in source_options %}
       <option value="{{ source }}" {% if filters.utm_source == source %}selected{% endif %}>{{ source }}</option>
@@ -46,8 +43,7 @@
 
   <div>
     <label class="block text-xs font-medium text-muted-foreground mb-1" for="filter-medium">utm_medium</label>
-    <select id="filter-medium" name="utm_medium" onchange="this.form.submit()"
-            class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    <select id="filter-medium" name="utm_medium" onchange="this.form.submit()" class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       <option value="">All mediums</option>
       {% for medium in medium_options %}
       <option value="{{ medium }}" {% if filters.utm_medium == medium %}selected{% endif %}>{{ medium }}</option>

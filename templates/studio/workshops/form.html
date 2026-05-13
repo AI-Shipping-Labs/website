@@ -82,9 +82,9 @@
 
     <div>
       <label for="status" class="block text-sm font-medium text-foreground mb-1">Status</label>
-      <select id="status" name="status"
+      <select id="status" name="status" class="studio-select w-full bg-secondary border {% if form_errors.status %}border-red-500{% else %}border-border{% endif %} rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
               data-testid="status-select"
-              class="studio-select w-full bg-secondary border {% if form_errors.status %}border-red-500{% else %}border-border{% endif %} rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+              >
         <option value="draft" {% if submitted.status == 'draft' %}selected{% endif %}>Draft</option>
         <option value="published" {% if submitted.status == 'published' %}selected{% endif %}>Published</option>
       </select>
@@ -113,9 +113,9 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label for="landing_required_level" class="block text-sm font-medium text-foreground mb-1">Landing gate</label>
-          <select id="landing_required_level" name="landing_required_level"
+          <select id="landing_required_level" name="landing_required_level" class="studio-select w-full bg-secondary border {% if form_errors.landing_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
                   data-testid="landing-gate-select"
-                  class="studio-select w-full bg-secondary border {% if form_errors.landing_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+                  >
             {% for value, label in tier_level_choices %}
             <option value="{{ value }}" {% if submitted.landing_required_level == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
@@ -128,9 +128,9 @@
 
         <div>
           <label for="pages_required_level" class="block text-sm font-medium text-foreground mb-1">Pages gate</label>
-          <select id="pages_required_level" name="pages_required_level"
+          <select id="pages_required_level" name="pages_required_level" class="studio-select w-full bg-secondary border {% if form_errors.pages_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
                   data-testid="pages-gate-select"
-                  class="studio-select w-full bg-secondary border {% if form_errors.pages_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+                  >
             {% for value, label in tier_level_choices %}
             <option value="{{ value }}" {% if submitted.pages_required_level == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
@@ -143,9 +143,9 @@
 
         <div>
           <label for="recording_required_level" class="block text-sm font-medium text-foreground mb-1">Recording gate</label>
-          <select id="recording_required_level" name="recording_required_level"
+          <select id="recording_required_level" name="recording_required_level" class="studio-select w-full bg-secondary border {% if form_errors.recording_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
                   data-testid="recording-gate-select"
-                  class="studio-select w-full bg-secondary border {% if form_errors.recording_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+                  >
             {% for value, label in tier_level_choices %}
             <option value="{{ value }}" {% if submitted.recording_required_level == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}

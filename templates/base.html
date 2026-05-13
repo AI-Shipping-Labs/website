@@ -285,6 +285,22 @@
       }
     }
 
+    select.app-select,
+    select.studio-select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-image:
+        linear-gradient(45deg, transparent 50%, hsl(var(--muted-foreground)) 50%),
+        linear-gradient(135deg, hsl(var(--muted-foreground)) 50%, transparent 50%);
+      background-repeat: no-repeat;
+      background-position:
+        calc(100% - 1rem) 50%,
+        calc(100% - 0.75rem) 50%;
+      background-size: 0.25rem 0.25rem, 0.25rem 0.25rem;
+      padding-right: 2.5rem;
+    }
+
     /* Touch target: ensure toggle switches have 44px minimum tap area */
     .touch-target-toggle {
       position: relative;

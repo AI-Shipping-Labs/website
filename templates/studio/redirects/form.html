@@ -36,8 +36,7 @@
 
     <div class="mb-6">
       <label class="block text-sm font-medium text-foreground mb-1">Redirect Type</label>
-      <select name="redirect_type"
-              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <select name="redirect_type" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
         <option value="301" {% if redirect_obj and redirect_obj.redirect_type == 301 %}selected{% endif %}>301 - Permanent</option>
         <option value="302" {% if redirect_obj and redirect_obj.redirect_type == 302 %}selected{% endif %}>302 - Temporary</option>
       </select>

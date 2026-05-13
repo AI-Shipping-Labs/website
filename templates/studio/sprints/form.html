@@ -52,8 +52,7 @@
 
     <div class="mb-6">
       <label class="block text-sm font-medium text-foreground mb-1">Status</label>
-      <select name="status"
-              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
+      <select name="status" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
         {% for value, label in status_choices %}
         <option value="{{ value }}" {% if form_data.status == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
@@ -62,10 +61,10 @@
 
     <div class="mb-6" id="event-series-field">
       <label for="sprint-event-series" class="block text-sm font-medium text-foreground mb-1">Event series</label>
-      <select name="event_series"
+      <select name="event_series" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select"
               id="sprint-event-series"
               data-testid="sprint-event-series"
-              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
+              >
         <option value="" {% if not form_data.event_series %}selected{% endif %}>— None —</option>
         {% for series in event_series_list %}
         <option value="{{ series.pk }}" {% if form_data.event_series == series.pk|stringformat:"s" %}selected{% endif %}>{{ series.name }}</option>
@@ -86,9 +85,9 @@
 
     <div class="mb-6">
       <label class="block text-sm font-medium text-foreground mb-1">Minimum tier to join</label>
-      <select name="min_tier_level"
+      <select name="min_tier_level" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select"
               data-testid="sprint-min-tier-level"
-              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
+              >
         {% for value, label in tier_level_choices %}
         <option value="{{ value }}" {% if form_data.min_tier_level == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
         {% endfor %}

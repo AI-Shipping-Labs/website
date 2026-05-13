@@ -882,18 +882,43 @@ class TimezonePreferenceAPITest(TestCase):
 
 
 class AccountPageTimezonePreferenceDisplayTest(TestCase):
-    def test_shows_typeable_timezone_control_with_offset_labels(self):
+    def test_account_timezone_renders_as_select_not_datalist(self):
         user = User.objects.create_user(email="tz-display@example.com")
         self.client.force_login(user)
 
         response = self.client.get("/account/")
 
         self.assertContains(response, 'id="display-preferences-section"')
+        self.assertContains(response, "<select", html=False)
         self.assertContains(response, 'id="timezone-preference-input"')
-        self.assertContains(response, 'list="timezone-preference-options"')
+        self.assertContains(response, 'name="timezone"')
+        self.assertNotContains(response, '<datalist id="timezone-preference-options"')
+        self.assertNotContains(response, 'list="timezone-preference-options"')
         self.assertContains(response, "GMT+02:00 Europe/Berlin")
         self.assertContains(response, "GMT-04:00 America/New_York")
         self.assertContains(response, "Used for event times when you are signed in.")
+
+    def test_account_timezone_select_includes_browser_default_option(self):
+        user = User.objects.create_user(email="tz-default@example.com")
+        self.client.force_login(user)
+
+        response = self.client.get("/account/")
+
+        self.assertContains(response, '<option value="">Use browser timezone</option>')
+
+    def test_account_timezone_select_uses_app_select_class(self):
+        user = User.objects.create_user(email="tz-class@example.com")
+        self.client.force_login(user)
+
+        response = self.client.get("/account/")
+        content = response.content.decode()
+
+        marker = 'id="timezone-preference-input"'
+        self.assertIn(marker, content)
+        tag_start = content.rfind("<select", 0, content.index(marker))
+        tag_end = content.index(">", content.index(marker))
+        select_tag = content[tag_start:tag_end]
+        self.assertIn("app-select", select_tag)
 
     def test_saved_timezone_label_is_selected(self):
         user = User.objects.create_user(
@@ -904,11 +929,11 @@ class AccountPageTimezonePreferenceDisplayTest(TestCase):
 
         response = self.client.get("/account/")
 
-        self.assertContains(response, 'value="GMT+02:00 Europe/Berlin"')
+        self.assertContains(response, '<option value="Europe/Berlin" selected>')
         self.assertContains(response, "Current timezone: GMT+02:00 Europe/Berlin")
 
-    def test_no_saved_preference_marks_input_for_browser_detection(self):
-        """Issue #582: the input needs a ``data-has-preference=false``
+    def test_no_saved_preference_marks_select_for_browser_detection(self):
+        """Issue #582: the select needs a ``data-has-preference=false``
         marker so the inline detection script knows it may overwrite the
         empty value with the resolved browser timezone."""
         user = User.objects.create_user(email="tz-empty@example.com")
@@ -923,10 +948,8 @@ class AccountPageTimezonePreferenceDisplayTest(TestCase):
             response, 'data-testid="timezone-detected-hint"'
         )
         self.assertContains(response, 'id="timezone-detected-hint"')
-        # The "Use browser timezone" string is still allowed as the
-        # placeholder attribute, but it must NEVER appear as the rendered
-        # input value -- the value attribute is empty until the JS
-        # writes the detected name in.
+        # The browser-default affordance must be an empty option, not a
+        # rendered saved value.
         self.assertNotContains(response, 'value="Use browser timezone"')
 
     def test_saved_preference_marks_input_has_preference_true(self):

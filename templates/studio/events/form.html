@@ -95,9 +95,9 @@
     {% endcomment %}
     <div>
       <label class="block text-sm font-medium text-foreground mb-1" for="external-host-input">External host</label>
-      <select name="external_host" id="external-host-input"
+      <select name="external_host" id="external-host-input" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
               data-testid="studio-event-external-host"
-              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+              >
         {% for value, label in external_host_choices %}
         <option value="{{ value }}"{% if event and event.external_host == value %} selected{% elif not event and form_values.external_host == value %} selected{% endif %}>{{ label }}</option>
         {% endfor %}

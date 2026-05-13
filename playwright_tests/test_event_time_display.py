@@ -149,17 +149,14 @@ def test_member_finds_saves_and_reloads_timezone(
     page.goto(f'{django_server}/account/', wait_until='domcontentloaded')
 
     timezone_input = page.get_by_test_id('account-timezone-input')
-    timezone_input.fill('Berlin')
-    timezone_input.press('ArrowDown')
-    timezone_input.press('Enter')
-    timezone_input.fill('GMT+02:00 Europe/Berlin')
+    timezone_input.select_option('Europe/Berlin')
     page.get_by_test_id('save-timezone-btn').click()
 
     status = page.get_by_test_id('timezone-preference-status')
     expect(status).to_contain_text('Current timezone: GMT+02:00 Europe/Berlin')
 
     page.reload(wait_until='domcontentloaded')
-    assert timezone_input.input_value() == 'GMT+02:00 Europe/Berlin'
+    assert timezone_input.input_value() == 'Europe/Berlin'
     context.close()
 
 
@@ -175,17 +172,17 @@ def test_account_timezone_options_have_offsets_and_are_ordered(
     page = context.new_page()
     page.goto(f'{django_server}/account/', wait_until='domcontentloaded')
 
-    labels = page.locator('#timezone-preference-options option').evaluate_all(
-        """options => options.slice(0, 80).map(option => option.value)"""
+    labels = page.locator('#timezone-preference-input option:not([value=""])').evaluate_all(
+        """options => options.slice(0, 80).map(option => option.textContent.trim())"""
     )
     label_pattern = re.compile(r"^GMT[+-]\d{2}:\d{2} .+$")
     assert all(label_pattern.match(label) for label in labels)
 
     berlin_option = page.locator(
-        '#timezone-preference-options option[value="GMT+02:00 Europe/Berlin"]'
+        '#timezone-preference-input option[value="Europe/Berlin"]'
     )
     new_york_option = page.locator(
-        '#timezone-preference-options option[value="GMT-04:00 America/New_York"]'
+        '#timezone-preference-input option[value="America/New_York"]'
     )
     assert berlin_option.count() == 1
     assert new_york_option.count() == 1
@@ -233,13 +230,8 @@ def test_member_clears_timezone_and_uses_browser_timezone(
     _stub_browser_timezone(page, 'Europe/Berlin')
     page.goto(f'{django_server}/account/', wait_until='domcontentloaded')
     page.get_by_test_id('clear-timezone-btn').click()
-    # After #582, clearing the preference auto-detects the browser timezone
-    # and surfaces it in the status copy (with a Save hint). The legacy
-    # "Using browser timezone." string only appears as a fallback when
-    # detection fails; here detection is stubbed to Europe/Berlin so the
-    # detected variant is the expected one.
     expect(page.get_by_test_id('timezone-preference-status')).to_contain_text(
-        'Showing your browser timezone: Europe/Berlin'
+        'Using browser timezone.'
     )
 
     page.goto(f'{django_server}/events/local-time-event', wait_until='domcontentloaded')

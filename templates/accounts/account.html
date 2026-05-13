@@ -265,22 +265,18 @@
           <label for="timezone-preference-input" class="block text-sm font-medium text-foreground mb-1">Timezone</label>
           <p class="text-sm text-muted-foreground mb-3">Used for event times when you are signed in.</p>
           <div class="flex flex-col gap-3 sm:flex-row">
-            <input
+            <select class="app-select w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               id="timezone-preference-input"
+              name="timezone"
               data-testid="account-timezone-input"
-              type="text"
-              list="timezone-preference-options"
-              value="{{ preferred_timezone_label }}"
-              placeholder="Use browser timezone"
               autocomplete="off"
               data-has-preference="{% if user.preferred_timezone %}true{% else %}false{% endif %}"
-              class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
-            <datalist id="timezone-preference-options" data-testid="account-timezone-options">
+              <option value="">Use browser timezone</option>
               {% for option in timezone_options %}
-              <option value="{{ option.label }}" data-timezone="{{ option.value }}"></option>
+              <option value="{{ option.value }}" {% if user.preferred_timezone == option.value %}selected{% endif %}>{{ option.label }}</option>
               {% endfor %}
-            </datalist>
+            </select>
             <div class="flex gap-3">
               <button
                 type="button"
@@ -667,18 +663,18 @@ function toggleNewsletter() {
 function resolveTimezoneInputValue() {
   var input = document.getElementById('timezone-preference-input');
   if (!input) return '';
-  var rawValue = input.value.trim();
-  if (!rawValue) return '';
+  return input.value.trim();
+}
 
-  var options = document.querySelectorAll('#timezone-preference-options option');
-  for (var i = 0; i < options.length; i++) {
-    if (options[i].value === rawValue) {
-      return options[i].dataset.timezone || '';
+function getTimezoneSelectLabel(timezoneName) {
+  var input = document.getElementById('timezone-preference-input');
+  if (!input || !timezoneName) return timezoneName || '';
+  for (var i = 0; i < input.options.length; i++) {
+    if (input.options[i].value === timezoneName) {
+      return input.options[i].textContent.trim();
     }
   }
-
-  var parts = rawValue.split(/\s+/);
-  return parts[parts.length - 1];
+  return timezoneName;
 }
 
 function detectBrowserTimezone() {
@@ -768,7 +764,7 @@ function applyDetectedTimezone() {
 
   input.dataset.detectedTimezone = detected;
   input.value = detected;
-  status.textContent = 'Showing your browser timezone: ' + detected
+  status.textContent = 'Showing your browser timezone: ' + getTimezoneSelectLabel(detected)
     + '. Click Save to remember this.';
   showDetectedHint(detected);
   setSaveButtonDisabled(true);
@@ -782,29 +778,20 @@ function setTimezonePreferenceStatus(timezoneName, label) {
     // A preference has been saved -- show the formatted label, hide the
     // detected hint, and re-enable Save (it will toggle off again only
     // when the value matches a fresh detection with no preference).
-    input.value = label || timezoneName;
+    input.value = timezoneName;
     input.dataset.hasPreference = 'true';
     status.textContent = 'Current timezone: ' + (label || timezoneName);
     hideDetectedHint();
     setSaveButtonDisabled(false);
   } else {
-    // The preference was cleared -- reset to the detected value if we
-    // have one, otherwise fall back to the empty/placeholder state.
+    // The preference was cleared -- select the explicit browser-default
+    // option. Browser timezone detection can still run on future visits,
+    // but Clear itself is a reset to the default state.
     input.dataset.hasPreference = 'false';
-    var detected = detectBrowserTimezone();
-    if (detected) {
-      input.dataset.detectedTimezone = detected;
-      input.value = detected;
-      status.textContent = 'Showing your browser timezone: ' + detected
-        + '. Click Save to remember this.';
-      showDetectedHint(detected);
-      setSaveButtonDisabled(true);
-    } else {
-      input.value = '';
-      status.textContent = 'Using browser timezone.';
-      hideDetectedHint();
-      setSaveButtonDisabled(false);
-    }
+    input.value = '';
+    status.textContent = 'Using browser timezone.';
+    hideDetectedHint();
+    setSaveButtonDisabled(false);
   }
 }
 
@@ -856,17 +843,20 @@ function clearTimezonePreference() {
   submitTimezonePreference('');
 }
 
-// Issue #582: detect the browser timezone, populate the input when the
+// Issue #582/#596: detect the browser timezone, populate the select when the
 // user has no saved preference, and gate the Save button so an
-// unmodified auto-detection is a no-op. Wire up the input listener so
-// typing reveals the Save button and hides the detected hint.
+// unmodified auto-detection is a no-op. Wire up the change listener so
+// selecting a different option reveals the Save button and hides the
+// detected hint. Issue #579 owns the Studio external_host select swap;
+// campaign tag typeaheads are a deferred follow-up because multi-value
+// free-text entry does not map cleanly to a native select.
 (function initTimezoneDetection() {
   function init() {
     applyDetectedTimezone();
     var input = document.getElementById('timezone-preference-input');
     if (!input) return;
-    input.addEventListener('input', function() {
-      // The user typed something -- hide the detected hint immediately
+    input.addEventListener('change', function() {
+      // The user picked an option -- hide the detected hint immediately
       // and let updateSaveButtonForDetection decide if Save stays
       // disabled (only when value == unmodified detection).
       hideDetectedHint();

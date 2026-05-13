@@ -60,8 +60,7 @@
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Status</label>
-        <select name="status" {% if is_synced %}disabled{% endif %}
-                class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
+        <select name="status" {% if is_synced %}disabled{% endif %} class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
           <option value="draft" {% if not article.published %}selected{% endif %}>Draft</option>
           <option value="published" {% if article.published %}selected{% endif %}>Published</option>
         </select>

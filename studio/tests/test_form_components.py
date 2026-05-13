@@ -1,7 +1,9 @@
 """Tests for shared Studio form helpers and includes."""
 
 import re
+from pathlib import Path
 
+from django.conf import settings
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
@@ -114,3 +116,25 @@ class StudioFormIncludeTest(SimpleTestCase):
 
         self.assertIn('Save Changes', html)
         self.assertIn('href="/studio/articles/"', html)
+
+
+class GlobalSelectStyleTest(SimpleTestCase):
+    """Regression coverage for the shared select chrome from issue #596."""
+
+    def _template(self, relative_path):
+        return Path(settings.BASE_DIR, 'templates', relative_path).read_text()
+
+    def test_global_base_defines_app_select_and_studio_select_alias(self):
+        html = self._template('base.html')
+
+        self.assertIn('select.app-select,', html)
+        self.assertIn('select.studio-select', html)
+        self.assertIn('appearance: none;', html)
+        self.assertIn('linear-gradient(45deg', html)
+        self.assertIn('hsl(var(--muted-foreground))', html)
+        self.assertNotIn('data:image/svg+xml', html)
+
+    def test_studio_base_does_not_duplicate_studio_select_rule(self):
+        html = self._template('studio/base.html')
+
+        self.assertNotIn('select.studio-select {', html)

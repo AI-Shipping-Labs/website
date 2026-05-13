@@ -1,9 +1,9 @@
 """End-to-end tests for the auto-detected timezone display on /account/.
 
-These cover the issue #582 behaviour: when the user has no saved
+These cover the issue #582/#596 behaviour: when the user has no saved
 ``preferred_timezone``, the Display Preferences card detects the browser
-timezone via ``Intl.DateTimeFormat().resolvedOptions().timeZone``, shows
-the resolved IANA name in the input, and gates the Save button so the
+timezone via ``Intl.DateTimeFormat().resolvedOptions().timeZone``, selects
+the resolved IANA name in the dropdown, and gates the Save button so the
 unmodified detection cannot be persisted by mistake. The detection is
 display-only -- the value is not saved to the user record until the
 user explicitly clicks Save.
@@ -117,10 +117,10 @@ def _wait_for_timezone_init(page):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_no_preference_shows_detected_iana_name_in_input(
+def test_no_preference_shows_detected_iana_name_in_select(
     django_server, django_db_blocker, browser
 ):
-    """Acceptance: empty preference => input shows detected IANA name."""
+    """Acceptance: empty preference => select shows detected IANA name."""
     with django_db_blocker.unblock():
         _clear_account_timezone_users()
         _create_user('tz-detect@timezone.test')
@@ -134,9 +134,20 @@ def test_no_preference_shows_detected_iana_name_in_input(
 
     timezone_input = page.get_by_test_id('account-timezone-input')
     assert timezone_input.input_value() == 'Europe/Berlin'
+    assert timezone_input.evaluate(
+        "el => el.tagName === 'SELECT' && el.classList.contains('app-select')"
+    )
+    caret_image = timezone_input.evaluate(
+        "el => getComputedStyle(el).backgroundImage"
+    )
+    assert 'linear-gradient' in caret_image
+    assert 'url(' not in caret_image
+    assert timezone_input.locator('option').first.evaluate(
+        "el => el.value === '' && el.textContent.includes('Use browser timezone')"
+    )
 
     expect(page.get_by_test_id('timezone-preference-status')).to_contain_text(
-        'Showing your browser timezone: Europe/Berlin'
+        'Showing your browser timezone: GMT+02:00 Europe/Berlin'
     )
     expect(page.get_by_test_id('timezone-detected-hint')).to_be_visible()
     expect(page.get_by_test_id('timezone-detected-hint')).to_contain_text(
@@ -164,8 +175,9 @@ def test_saved_preference_is_not_overwritten_by_browser_detection(
     timezone_input = page.get_by_test_id('account-timezone-input')
     assert re.match(
         r'^GMT[+-]\d{2}:\d{2} America/New_York$',
-        timezone_input.input_value(),
+        timezone_input.locator('option:checked').inner_text(),
     ) is not None
+    assert timezone_input.input_value() == 'America/New_York'
 
     status = page.get_by_test_id('timezone-preference-status')
     expect(status).to_contain_text('Current timezone:')
@@ -229,15 +241,13 @@ def test_save_button_disabled_until_input_diverges_from_detection(
     expect(save_btn).to_have_attribute('aria-disabled', 'true')
 
     timezone_input = page.get_by_test_id('account-timezone-input')
-    timezone_input.focus()
-    timezone_input.press('End')
-    timezone_input.press('X')
+    timezone_input.select_option('America/New_York')
 
     # Save becomes enabled the moment the value differs from detection.
     expect(save_btn).not_to_have_attribute('aria-disabled', 'true')
 
-    # Backspace back to the detected value -- Save re-disables.
-    timezone_input.press('Backspace')
+    # Selecting the detected value again re-disables Save.
+    timezone_input.select_option('Europe/Berlin')
     expect(timezone_input).to_have_value('Europe/Berlin')
     expect(save_btn).to_have_attribute('aria-disabled', 'true')
     context.close()
@@ -259,16 +269,19 @@ def test_explicit_save_persists_then_survives_reload(
     _wait_for_timezone_init(page)
 
     timezone_input = page.get_by_test_id('account-timezone-input')
-    timezone_input.fill('GMT+02:00 Europe/Berlin')
+    timezone_input.select_option('America/New_York')
     page.get_by_test_id('save-timezone-btn').click()
 
     expect(page.get_by_test_id('timezone-preference-status')).to_contain_text(
-        'Current timezone: GMT+02:00 Europe/Berlin'
+        'Current timezone: GMT-04:00 America/New_York'
     )
 
     page.reload(wait_until='domcontentloaded')
     timezone_input = page.get_by_test_id('account-timezone-input')
-    expect(timezone_input).to_have_value('GMT+02:00 Europe/Berlin')
+    expect(timezone_input).to_have_value('America/New_York')
+    expect(timezone_input.locator('option:checked')).to_have_text(
+        re.compile(r'^GMT[+-]\d{2}:\d{2} America/New_York$')
+    )
 
     # Once a preference is saved, the Detected hint must not reappear.
     expect(page.get_by_test_id('timezone-detected-hint')).to_be_hidden()
@@ -276,10 +289,10 @@ def test_explicit_save_persists_then_survives_reload(
 
 
 @pytest.mark.django_db(transaction=True)
-def test_clear_falls_back_to_detected_name_and_status(
+def test_clear_resets_to_browser_default_option(
     django_server, django_db_blocker, browser
 ):
-    """Clearing a saved preference reverts to the detected name."""
+    """Clearing a saved preference selects the browser-default option."""
     with django_db_blocker.unblock():
         _clear_account_timezone_users()
         _create_user(
@@ -294,15 +307,15 @@ def test_clear_falls_back_to_detected_name_and_status(
     page.get_by_test_id('clear-timezone-btn').click()
 
     timezone_input = page.get_by_test_id('account-timezone-input')
-    expect(timezone_input).to_have_value('Europe/Berlin')
+    expect(timezone_input).to_have_value('')
+    expect(timezone_input.locator('option:checked')).to_have_text(
+        'Use browser timezone'
+    )
 
     expect(page.get_by_test_id('timezone-preference-status')).to_contain_text(
-        'Showing your browser timezone: Europe/Berlin'
+        'Using browser timezone.'
     )
-    expect(page.get_by_test_id('timezone-detected-hint')).to_be_visible()
-    expect(page.get_by_test_id('timezone-detected-hint')).to_contain_text(
-        'Detected: Europe/Berlin'
-    )
+    expect(page.get_by_test_id('timezone-detected-hint')).to_be_hidden()
 
     page.reload(wait_until='domcontentloaded')
     _wait_for_timezone_init(page)

@@ -30,6 +30,9 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from playwright_tests.conftest import (
+    expand_studio_sidebar_section as _expand_studio_sidebar_section,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -262,6 +265,7 @@ class TestScenario6SidebarNoTopLevelEnrollments:
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
 
         # The sidebar still has the other Content links
+        _expand_studio_sidebar_section(page, "content")
         sidebar = page.locator("#studio-sidebar")
         sidebar_text = sidebar.inner_text()
         assert "Courses" in sidebar_text

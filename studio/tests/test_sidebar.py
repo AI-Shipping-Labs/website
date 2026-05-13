@@ -1,10 +1,10 @@
-"""Tests for the reorganised Studio sidebar (issue #570).
+"""Tests for the reorganised Studio sidebar (issues #570, #592).
 
 Covers the structural expectations the spec calls out:
 
 - Top utility row order (``Back to website`` then theme toggle), placed
   above the section groups.
-- The five collapsible sections render in the expected order with the
+- The six collapsible sections render in the expected order with the
   expected labels.
 - Every existing nav link is still present and points at the same URL,
   identified by ``href`` plus link text.
@@ -17,6 +17,8 @@ Covers the structural expectations the spec calls out:
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+
+from studio.templatetags.studio_filters import studio_sidebar_state
 
 User = get_user_model()
 
@@ -95,7 +97,7 @@ class StudioSidebarStructureTest(TestCase):
     # Section order + labels
     # ------------------------------------------------------------------
 
-    def test_five_section_headers_render_in_expected_order(self):
+    def test_six_section_headers_render_in_expected_order(self):
         response = self._get_studio_dashboard()
         body = response.content.decode()
 
@@ -106,6 +108,7 @@ class StudioSidebarStructureTest(TestCase):
             'aria-controls="studio-section-events"',
             'aria-controls="studio-section-content"',
             'aria-controls="studio-section-people"',
+            'aria-controls="studio-section-planning"',
             'aria-controls="studio-section-marketing"',
             'aria-controls="studio-section-operations"',
         ]
@@ -160,6 +163,7 @@ class StudioSidebarStructureTest(TestCase):
         ('/studio/imports/', 'Imports'),
         ('/studio/tier_overrides/', 'Tier overrides'),
         ('/studio/crm/', 'CRM'),
+        # Planning
         ('/studio/sprints/', 'Sprints'),
         ('/studio/plans/', 'Plans'),
         # Events
@@ -257,9 +261,9 @@ class StudioSidebarStructureTest(TestCase):
 
         # Events' <ul> is un-hidden on the dashboard (default open section).
         self.assertIn('id="studio-section-events" class="space-y-1 mt-1"', body)
-        # The other four sections render with the ``hidden`` class on
+        # The other five sections render with the ``hidden`` class on
         # /studio/ (which is not in any section's deep path).
-        for slug in ('content', 'people', 'marketing', 'operations'):
+        for slug in ('content', 'people', 'planning', 'marketing', 'operations'):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -275,8 +279,8 @@ class StudioSidebarStructureTest(TestCase):
             'aria-expanded="true"\n                  aria-controls="studio-section-events"',
             body,
         )
-        # The four collapsed sections render aria-expanded="false".
-        for slug in ('content', 'people', 'marketing', 'operations'):
+        # The five collapsed sections render aria-expanded="false".
+        for slug in ('content', 'people', 'planning', 'marketing', 'operations'):
             self.assertIn(
                 f'aria-expanded="false"\n                  aria-controls="studio-section-{slug}"',
                 body,
@@ -295,9 +299,9 @@ class StudioSidebarStructureTest(TestCase):
 
         # People <ul> is NOT hidden — section auto-expanded server-side.
         self.assertIn('id="studio-section-people" class="space-y-1 mt-1"', body)
-        # Content / Events / Marketing / Operations remain collapsed —
+        # Content / Events / Planning / Marketing / Operations remain collapsed —
         # Events no longer stays open once another section is active.
-        for slug in ('content', 'events', 'marketing', 'operations'):
+        for slug in ('content', 'events', 'planning', 'marketing', 'operations'):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -313,7 +317,7 @@ class StudioSidebarStructureTest(TestCase):
         self.assertIn('id="studio-section-content" class="space-y-1 mt-1"', body)
         # Events collapses back to hidden because Content is the active
         # section now (Events is only the dashboard default).
-        for slug in ('events', 'people', 'marketing', 'operations'):
+        for slug in ('events', 'people', 'planning', 'marketing', 'operations'):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -329,7 +333,7 @@ class StudioSidebarStructureTest(TestCase):
         # the Events section's deep path.
         self.assertIn('id="studio-section-events" class="space-y-1 mt-1"', body)
         # All other sections are collapsed.
-        for slug in ('content', 'people', 'marketing', 'operations'):
+        for slug in ('content', 'people', 'planning', 'marketing', 'operations'):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -343,13 +347,7 @@ class StudioSidebarStructureTest(TestCase):
 
         # People section open.
         self.assertIn('id="studio-section-people" class="space-y-1 mt-1"', body)
-        # The Users children <ul> (Imports / Tier overrides / New user) is
-        # always visible while People is expanded — issue #624 dropped the
-        # per-Users sub-toggle so the children no longer carry the
-        # ``hidden`` class.
-        self.assertIn('id="studio-users-children" class="ml-6 mt-1 space-y-1"', body)
-        # The Users chevron sub-toggle was removed; the row is now a single
-        # <a> with no nested <button>.
+        self.assertNotIn('id="studio-users-children"', body)
         self.assertNotIn('data-studio-users-toggle', body)
 
     def test_visiting_marketing_page_expands_marketing_section(self):
@@ -359,7 +357,7 @@ class StudioSidebarStructureTest(TestCase):
         body = response.content.decode()
 
         self.assertIn('id="studio-section-marketing" class="space-y-1 mt-1"', body)
-        for slug in ('content', 'people', 'events', 'operations'):
+        for slug in ('content', 'people', 'planning', 'events', 'operations'):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -373,22 +371,102 @@ class StudioSidebarStructureTest(TestCase):
         self.assertIn('id="studio-section-operations" class="space-y-1 mt-1"', body)
 
     # ------------------------------------------------------------------
-    # Users row — single anchor, no split-button chevron (#624)
+    # Planning section auto-expansion
     # ------------------------------------------------------------------
 
-    def test_users_row_is_single_anchor_with_no_chevron_button(self):
+    def test_visiting_sprints_expands_planning_section(self):
+        self.client.login(email='staff@test.com', password='pw')
+        response = self.client.get('/studio/sprints/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+
+        self.assertIn('id="studio-section-planning" class="space-y-1 mt-1"', body)
+        self.assertIn(
+            'aria-expanded="true"\n                  aria-controls="studio-section-planning"',
+            body,
+        )
+        for slug in ('content', 'people', 'events', 'marketing', 'operations'):
+            self.assertIn(
+                f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
+                body,
+            )
+
+    def test_visiting_plans_expands_planning_section(self):
+        self.client.login(email='staff@test.com', password='pw')
+        response = self.client.get('/studio/plans/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+
+        self.assertIn('id="studio-section-planning" class="space-y-1 mt-1"', body)
+        self.assertIn(
+            'aria-expanded="true"\n                  aria-controls="studio-section-planning"',
+            body,
+        )
+        for slug in ('content', 'people', 'events', 'marketing', 'operations'):
+            self.assertIn(
+                f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
+                body,
+            )
+
+    # ------------------------------------------------------------------
+    # Users row — single anchor, no inner chevron/list
+    # ------------------------------------------------------------------
+
+    def test_people_section_has_no_users_subgroup_chevron(self):
         response = self._get_studio_dashboard()
         body = response.content.decode()
 
-        # The Users row is now a single <a> pointing at studio_user_list
-        # (#624 removed the split-button pattern).
         self.assertContains(response, 'href="/studio/users/"')
-
-        # The chevron sub-toggle <button> and its aria attributes are gone.
         self.assertNotIn('data-studio-users-toggle', body)
+        self.assertNotIn('id="studio-users-children"', body)
         self.assertNotIn('aria-controls="studio-users-children"', body)
         self.assertNotIn('aria-label="Toggle Users sub-menu"', body)
         self.assertNotIn('studio-users-chevron', body)
+
+    def test_people_section_links_are_flat_and_ordered_for_superuser(self):
+        response = self._get_studio_dashboard(superuser=True)
+        body = response.content.decode()
+        start = body.index('id="studio-section-people"')
+        end = body.index('id="studio-section-planning"')
+        people = body[start:end]
+
+        expected_order = [
+            '<span>Users</span>',
+            '<span>Imports</span>',
+            '<span>Tier overrides</span>',
+            '<span>New user</span>',
+            '<span>CRM</span>',
+        ]
+        positions = [people.find(label) for label in expected_order]
+        for label, idx in zip(expected_order, positions):
+            self.assertGreater(idx, -1, f'People link missing: {label}')
+        self.assertEqual(positions, sorted(positions))
+        self.assertNotIn('<span>Sprints</span>', people)
+        self.assertNotIn('<span>Plans</span>', people)
+
+    def test_studio_sidebar_state_assigns_people_and_planning(self):
+        for path in ('/studio/sprints/', '/studio/plans/'):
+            with self.subTest(path=path):
+                state = studio_sidebar_state(path)
+                self.assertTrue(state['planning_active'])
+                self.assertFalse(state['people_active'])
+                self.assertNotIn('users_row_active', state)
+                self.assertNotIn('users_children_active', state)
+                self.assertNotIn('users_expanded', state)
+
+        for path in (
+            '/studio/users/',
+            '/studio/users/export',
+            '/studio/imports/',
+            '/studio/tier_overrides/',
+            '/studio/users/new/',
+            '/studio/users/created/',
+            '/studio/crm/',
+        ):
+            with self.subTest(path=path):
+                state = studio_sidebar_state(path)
+                self.assertTrue(state['people_active'])
+                self.assertFalse(state['planning_active'])
 
     # ------------------------------------------------------------------
     # Footer

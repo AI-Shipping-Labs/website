@@ -7,7 +7,7 @@ The behaviour these guard against is purely template / class-list:
   ``bg-gray-800`` palette.
 - The drawer ``<aside>`` must use the wider ``w-[min(85vw,18rem)]``
   rule on mobile (with ``md:w-64`` preserving the desktop layout).
-- All five section toggles must use ``text-foreground/70``,
+- All six section toggles must use ``text-foreground/70``,
   ``font-semibold``, and ``min-h-[44px]``.
 - The Users row must be a single ``<a>`` — no ``data-studio-users-toggle``
   ``<button>``, no ``aria-controls="studio-users-children"`` chevron,
@@ -106,10 +106,10 @@ class StudioSidebarMobileFixesTest(TestCase):
 
     # ------------------------------------------------------------------
     # Fix 3: section toggles use text-foreground/70, font-semibold,
-    # and min-h-[44px] — all five sections.
+    # and min-h-[44px] — all six sections.
     # ------------------------------------------------------------------
 
-    SECTIONS = ('events', 'content', 'people', 'marketing', 'operations')
+    SECTIONS = ('events', 'content', 'people', 'planning', 'marketing', 'operations')
 
     def test_each_section_toggle_uses_lifted_contrast_and_44px(self):
         body = self._dashboard_body()
@@ -160,19 +160,9 @@ class StudioSidebarMobileFixesTest(TestCase):
         self.assertNotIn('aria-label="Toggle Users sub-menu"', body)
         self.assertNotIn('studio-users-chevron', body)
 
-    def test_users_children_list_renders_unconditionally_inside_people(self):
+    def test_users_children_list_no_longer_renders_inside_people(self):
         body = self._dashboard_body()
-        # The Users children <ul> no longer carries a conditional ``hidden``
-        # class — when People is expanded the children render in flow.
-        self.assertIn(
-            'id="studio-users-children" class="ml-6 mt-1 space-y-1"',
-            body,
-        )
-        # And the variant with a trailing ``hidden`` token must NOT appear.
-        self.assertNotIn(
-            'id="studio-users-children" class="ml-6 mt-1 space-y-1 hidden"',
-            body,
-        )
+        self.assertNotIn('id="studio-users-children"', body)
 
     def test_users_row_has_no_split_button_wrapper(self):
         body = self._dashboard_body()

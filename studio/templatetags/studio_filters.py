@@ -278,12 +278,10 @@ def sync_status_pill(status, error_count=0, size='sm'):
 def studio_sidebar_state(path):
     """Compute which collapsible sidebar section contains the active page.
 
-    Issue #570 reorganised the Studio sidebar into five collapsible
-    sections (Content, People, Events, Marketing, Operations) plus a
-    nested Users sub-group inside People. To avoid a flash of
-    collapsed-then-expanded on first paint, the section containing the
-    active page must render expanded server-side — that means the
-    template needs to know which section is active before any JS runs.
+    Issue #570 reorganised the Studio sidebar into collapsible sections.
+    To avoid a flash of collapsed-then-expanded on first paint, the section
+    containing the active page must render expanded server-side — that means
+    the template needs to know which section is active before any JS runs.
 
     Django's ``{% with %}`` tag does not accept boolean expressions with
     mixed precedence (``a or b in c`` errors at parse time), so we
@@ -302,26 +300,18 @@ def studio_sidebar_state(path):
         or 'recordings' in p
         or 'downloads' in p
     )
-    # Users sub-group children: Imports, Tier overrides, New user.
-    users_children_active = (
-        '/studio/imports/' in p
+    people_active = (
+        p == '/studio/users/'
+        or p == '/studio/users/export'
+        or '/studio/imports/' in p
         or 'tier-override' in p
         or 'tier_override' in p
         or 'tier_overrides' in p
         or '/users/new' in p
         or '/users/created' in p
-    )
-    # Users row itself is the leaf for /studio/users/ and /studio/users/export.
-    users_row_active = (
-        p == '/studio/users/' or p == '/studio/users/export'
-    )
-    people_active = (
-        users_row_active
-        or users_children_active
         or '/crm' in p
-        or '/sprints' in p
-        or '/plans' in p
     )
+    planning_active = '/sprints' in p or '/plans' in p
     events_active = (
         '/events/' in p
         or p == '/studio/events'
@@ -347,22 +337,22 @@ def studio_sidebar_state(path):
     # active, Events renders expanded so the admin lands on its primary
     # surface. Once any other section is active, Events collapses back.
     any_other_section_active = (
-        content_active or people_active or marketing_active or operations_active
+        content_active
+        or people_active
+        or planning_active
+        or marketing_active
+        or operations_active
     )
     events_expanded = events_active or not any_other_section_active
 
     return {
         'content_active': content_active,
         'people_active': people_active,
+        'planning_active': planning_active,
         'events_active': events_active,
         'events_expanded': events_expanded,
         'marketing_active': marketing_active,
         'operations_active': operations_active,
-        'users_row_active': users_row_active,
-        'users_children_active': users_children_active,
-        # The Users sub-group also auto-expands when Users itself is active
-        # — the spec calls for the friendlier expanded default.
-        'users_expanded': users_row_active or users_children_active,
     }
 
 

@@ -1,8 +1,9 @@
 """End-to-end tests for the reorganised Studio sidebar (issues #570, #576).
 
 The Studio sidebar is split into a small top utility row
-(``Back to website`` + theme toggle), a Dashboard link, and five
-collapsible sections — Events, Content, People, Marketing, Operations.
+(``Back to website`` + theme toggle), a Dashboard link, and six
+collapsible sections — Events, Content, People, Planning, Marketing,
+Operations.
 The section that contains the current page auto-expands server-side; on
 the dashboard only Events is open (#576 moved Events to the top and
 flipped the dashboard default from Content to Events).
@@ -109,11 +110,18 @@ class TestStaffLandsInStudio:
         )
 
         # Section toggles render in the order: Events, Content, People,
-        # Marketing, Operations. Bounding-box y-positions are strictly
+        # Planning, Marketing, Operations. Bounding-box y-positions are strictly
         # increasing.
         section_ys = [
             _section_button(page, slug).bounding_box()["y"]
-            for slug in ("events", "content", "people", "marketing", "operations")
+            for slug in (
+                "events",
+                "content",
+                "people",
+                "planning",
+                "marketing",
+                "operations",
+            )
         ]
         assert section_ys == sorted(section_ys), (
             f"Sections out of order; y-positions: {section_ys}"
@@ -127,8 +135,8 @@ class TestStaffLandsInStudio:
             assert link.count() == 1
             assert link.is_visible(), f"{label!r} should be visible in expanded Events"
 
-        # The other four sections are collapsed — their <ul> bodies are not visible.
-        for slug in ("content", "people", "marketing", "operations"):
+        # The other five sections are collapsed — their <ul> bodies are not visible.
+        for slug in ("content", "people", "planning", "marketing", "operations"):
             ul = _section_list(page, slug)
             assert ul.count() == 1
             assert not ul.is_visible(), (
@@ -223,10 +231,13 @@ class TestPeopleAutoExpands:
         assert people_button.get_attribute("aria-expanded") == "true"
         assert people_ul.is_visible()
 
-        for label in ["Users", "CRM", "Sprints", "Plans"]:
+        for label in ["Users", "Imports", "Tier overrides", "CRM"]:
             assert page.locator(
                 f'#studio-section-people a:has(span:text-is("{label}"))'
             ).count() >= 1
+        assert page.locator(
+            'aside#studio-sidebar [data-studio-users-toggle]'
+        ).count() == 0
 
         # Active highlight on the CRM link.
         crm_link = page.locator(
@@ -236,23 +247,18 @@ class TestPeopleAutoExpands:
 
         # All other sections collapsed — Events also collapses now that
         # another section is active (#576).
-        for slug in ("content", "events", "marketing", "operations"):
+        for slug in ("content", "events", "planning", "marketing", "operations"):
             assert not _section_list(page, slug).is_visible()
 
 
 # ---------------------------------------------------------------------------
-# Scenario 4: deep-link into Imports — People section auto-expands and the
-# Users children list is always visible inside it (#624 removed the
-# Users sub-toggle so there is no longer a separate chevron to expand).
+# Scenario 4: deep-link into Imports — People section auto-expands.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestImportsAutoExpandsPeopleSection:
-    """Navigating to /studio/imports/ expands the People section, the
-    Users children list (Imports / Tier overrides / New user) is visible
-    without any per-Users sub-toggle, and superuser-only ``New user``
-    renders for superusers."""
+class TestImportsAutoExpandsPeople:
+    """Navigating to /studio/imports/ expands the flat People section."""
 
     def test_imports_deep_link_expands_people_and_users(
         self, django_server, browser
@@ -268,21 +274,19 @@ class TestImportsAutoExpandsPeopleSection:
         )
 
         assert _section_list(page, "people").is_visible()
-        users_children = page.locator("#studio-users-children")
-        assert users_children.is_visible()
-        # The Users sub-toggle was removed in #624; no chevron <button>.
         assert page.locator(
             'aside#studio-sidebar [data-studio-users-toggle]'
         ).count() == 0
+        assert page.locator("#studio-users-children").count() == 0
 
         imports_link = page.locator(
-            '#studio-users-children a[href="/studio/imports/"]'
+            '#studio-section-people a[href="/studio/imports/"]'
         )
         assert "bg-secondary" in (imports_link.get_attribute("class") or "")
 
         # New user link is rendered (superuser only).
         new_user = page.locator(
-            '#studio-users-children a[href="/studio/users/new/"]'
+            '#studio-section-people a[href="/studio/users/new/"]'
         )
         assert new_user.count() == 1
         assert new_user.is_visible()
@@ -297,7 +301,7 @@ class TestImportsAutoExpandsPeopleSection:
 class TestNonSuperuserGating:
     """Non-superuser staff do not see ``New user`` or ``API tokens``."""
 
-    def test_users_subgroup_omits_new_user_for_non_superuser(
+    def test_people_section_omits_new_user_for_non_superuser(
         self, django_server, browser
     ):
         _ensure_tiers()
@@ -310,19 +314,17 @@ class TestNonSuperuserGating:
             f"{django_server}/studio/users/", wait_until="domcontentloaded"
         )
 
-        # Users sub-group present.
-        users_children = page.locator("#studio-users-children")
-        assert users_children.count() == 1
+        assert page.locator("#studio-users-children").count() == 0
 
         # Imports + Tier overrides visible; New user not rendered at all.
         assert page.locator(
-            '#studio-users-children a[href="/studio/imports/"]'
+            '#studio-section-people a[href="/studio/imports/"]'
         ).count() == 1
         assert page.locator(
-            '#studio-users-children a[href="/studio/tier_overrides/"]'
+            '#studio-section-people a[href="/studio/tier_overrides/"]'
         ).count() == 1
         assert page.locator(
-            '#studio-users-children a[href="/studio/users/new/"]'
+            '#studio-section-people a[href="/studio/users/new/"]'
         ).count() == 0
 
     def test_operations_omits_api_tokens_for_non_superuser(
@@ -351,18 +353,15 @@ class TestNonSuperuserGating:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 6: Users row — single anchor, no split-button (#624)
+# Scenario 6: Users row — single anchor, no inner subgroup
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
 class TestUsersRowIsSingleAnchor:
-    """Issue #624 collapsed the Users split-button into a single <a>.
-    The Users children list (Imports, Tier overrides, New user) is
-    visible whenever the People section is expanded — there is no
-    per-Users sub-toggle."""
+    """Users is a plain link and People has no nested Users subgroup."""
 
-    def test_users_row_is_a_single_link_with_visible_children(
+    def test_users_row_is_a_single_link_in_flat_people_section(
         self, django_server, browser
     ):
         _ensure_tiers()
@@ -381,13 +380,10 @@ class TestUsersRowIsSingleAnchor:
             'aside#studio-sidebar [data-studio-users-toggle]'
         ).count() == 0
 
-        # Children list is always visible while People is expanded — no
-        # per-Users toggle needed.
-        children = page.locator("#studio-users-children")
-        assert children.is_visible()
+        assert page.locator("#studio-users-children").count() == 0
         for label in ["Imports", "Tier overrides"]:
             assert page.locator(
-                f'#studio-users-children a:has(span:text-is("{label}"))'
+                f'#studio-section-people a:has(span:text-is("{label}"))'
             ).is_visible()
 
         # The Users row itself is exactly one <a> pointing at /studio/users/.
@@ -403,7 +399,110 @@ class TestUsersRowIsSingleAnchor:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 7: theme toggle works from its new top-of-sidebar position
+# Scenario 7: Planning section
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestPlanningSection:
+    """Sprints and Plans live in their own top-level Planning section."""
+
+    def test_sprints_deep_link_expands_planning_and_highlights_sprints(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 800})
+        page.goto(
+            f"{django_server}/studio/sprints/", wait_until="domcontentloaded"
+        )
+
+        planning_button = _section_button(page, "planning")
+        assert planning_button.get_attribute("aria-expanded") == "true"
+        assert _section_list(page, "planning").is_visible()
+
+        sprints_link = page.locator(
+            '#studio-section-planning a[href="/studio/sprints/"]'
+        )
+        assert "bg-secondary" in (sprints_link.get_attribute("class") or "")
+
+        for slug in ("content", "events", "people", "marketing", "operations"):
+            assert not _section_list(page, slug).is_visible()
+
+        people_y = _section_button(page, "people").bounding_box()["y"]
+        planning_y = planning_button.bounding_box()["y"]
+        marketing_y = _section_button(page, "marketing").bounding_box()["y"]
+        assert people_y < planning_y < marketing_y
+
+    def test_plans_deep_link_expands_planning_and_highlights_plans(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 800})
+        page.goto(
+            f"{django_server}/studio/plans/", wait_until="domcontentloaded"
+        )
+
+        assert _section_button(page, "planning").get_attribute(
+            "aria-expanded"
+        ) == "true"
+        assert _section_list(page, "planning").is_visible()
+
+        plans_link = page.locator(
+            '#studio-section-planning a[href="/studio/plans/"]'
+        )
+        assert "bg-secondary" in (plans_link.get_attribute("class") or "")
+        assert not _section_list(page, "people").is_visible()
+
+    def test_dashboard_shows_planning_between_people_and_marketing(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 800})
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+        planning = _section_button(page, "planning")
+        assert planning.get_attribute("aria-expanded") == "false"
+        assert not _section_list(page, "planning").is_visible()
+
+        people_y = _section_button(page, "people").bounding_box()["y"]
+        planning_y = planning.bounding_box()["y"]
+        marketing_y = _section_button(page, "marketing").bounding_box()["y"]
+        assert people_y < planning_y < marketing_y
+
+        _section_button(page, "people").click()
+        people_labels = page.locator("#studio-section-people a span").all_inner_texts()
+        assert [label.strip() for label in people_labels if label.strip()] == [
+            "Users",
+            "Imports",
+            "Tier overrides",
+            "New user",
+            "CRM",
+        ]
+
+        planning.click()
+        planning_labels = page.locator(
+            "#studio-section-planning a span"
+        ).all_inner_texts()
+        assert [label.strip() for label in planning_labels if label.strip()] == [
+            "Sprints",
+            "Plans",
+        ]
+
+
+# ---------------------------------------------------------------------------
+# Scenario 8: theme toggle works from its new top-of-sidebar position
 # ---------------------------------------------------------------------------
 
 
@@ -688,7 +787,7 @@ class TestEventsAsDashboardDefault:
         assert _section_button(page, "events").get_attribute(
             "aria-expanded"
         ) == "true"
-        for slug in ("content", "people", "marketing", "operations"):
+        for slug in ("content", "people", "planning", "marketing", "operations"):
             assert _section_button(page, slug).get_attribute(
                 "aria-expanded"
             ) == "false"
@@ -734,8 +833,8 @@ class TestContentPageCollapsesEvents:
             '#studio-section-events a[href="/studio/events/"]'
         ).is_visible()
 
-        # People, Marketing, Operations are also collapsed.
-        for slug in ("people", "marketing", "operations"):
+        # People, Planning, Marketing, Operations are also collapsed.
+        for slug in ("people", "planning", "marketing", "operations"):
             assert not _section_list(page, slug).is_visible()
 
 
@@ -775,7 +874,7 @@ class TestEventsPageKeepsEventsExpanded:
             event_series_link.get_attribute("class") or ""
         )
 
-        for slug in ("content", "people", "marketing", "operations"):
+        for slug in ("content", "people", "planning", "marketing", "operations"):
             assert not _section_list(page, slug).is_visible()
 
 

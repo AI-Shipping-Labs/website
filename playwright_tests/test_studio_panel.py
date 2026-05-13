@@ -43,6 +43,9 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from playwright_tests.conftest import (
+    expand_studio_sidebar_section as _expand_studio_sidebar_section,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -917,20 +920,23 @@ class TestScenario11SidebarNavigation:
         assert "Dashboard" in page.content()
 
         # Step 2: Click "Articles" in the sidebar
+        _expand_studio_sidebar_section(page, "content")
         sidebar = page.locator("aside")
-        sidebar.locator('a:has-text("Articles")').click()
+        sidebar.locator('a[href="/studio/articles/"]').click()
         page.wait_for_load_state("domcontentloaded")
         assert "/studio/articles/" in page.url
 
         # Step 3: Click "Events" in the sidebar
+        _expand_studio_sidebar_section(page, "events")
         sidebar = page.locator("aside")
-        sidebar.locator('a:has-text("Events")').click()
+        sidebar.locator('a[href="/studio/events/"]').click()
         page.wait_for_load_state("domcontentloaded")
         assert "/studio/events/" in page.url
 
         # Step 4: Click "Users" in the sidebar
+        _expand_studio_sidebar_section(page, "people")
         sidebar = page.locator("aside")
-        sidebar.locator('a:has-text("Users")').click()
+        sidebar.locator('a[href="/studio/users/"]').click()
         page.wait_for_load_state("domcontentloaded")
         assert "/studio/users/" in page.url
 

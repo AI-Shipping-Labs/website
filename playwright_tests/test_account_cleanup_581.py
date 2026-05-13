@@ -419,7 +419,7 @@ def test_scenario_7_settings_still_work_after_cleanup(
             )
 
         # 2) Display Preferences: pick a timezone option and Save.
-        page.fill("#timezone-preference-input", "(UTC) UTC")
+        page.locator("#timezone-preference-input").select_option("Europe/Berlin")
         page.click("#save-timezone-btn")
         tz_status = page.locator("#timezone-preference-status")
         expect(tz_status).to_contain_text("Current timezone:", timeout=5000)

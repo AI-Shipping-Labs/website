@@ -50,9 +50,9 @@
 
     <div class="mb-6">
       <label for="id_email_column" class="block text-sm font-medium text-foreground mb-1">Email column</label>
-      <select id="id_email_column" name="email_column" required
+      <select id="id_email_column" name="email_column" required class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
               data-testid="import-email-column"
-              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+              >
         {% for col in header %}
         <option value="{{ col }}" {% if col == default_email_column %}selected{% endif %}>{{ col }}</option>
         {% endfor %}
@@ -74,9 +74,9 @@
 
     <div class="mb-6">
       <label for="id_tier" class="block text-sm font-medium text-foreground mb-1">Tier</label>
-      <select id="id_tier" name="tier_id"
+      <select id="id_tier" name="tier_id" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
               data-testid="import-tier-select"
-              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+              >
         <option value="{{ no_tier_sentinel }}" selected>(no tier change)</option>
         {% for tier in tiers %}
         <option value="{{ tier.pk }}">{{ tier.name }}</option>

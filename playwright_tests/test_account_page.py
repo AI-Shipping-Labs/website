@@ -246,7 +246,6 @@ def _go_to_account(page, base_url):
 # Scenario: Anonymous visitor is redirected to login
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioAnonymousRedirectToLogin:
     """Anonymous visitor is redirected to login when trying to manage
@@ -260,6 +259,7 @@ class TestScenarioAnonymousRedirectToLogin:
             wait_until="domcontentloaded",
         )
         assert "/accounts/login/" in page.url
+    @pytest.mark.core
     def test_authenticated_user_sees_account_page(
         self, django_server, test_users, django_db_blocker
     , browser):
@@ -281,7 +281,6 @@ class TestScenarioAnonymousRedirectToLogin:
 # Scenario: Free member visits account page
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioFreeMemberAccountPage:
     """Free member visits account page and sees upgrade options."""
@@ -356,7 +355,6 @@ class TestScenarioFreeMemberAccountPage:
 # Scenario: Basic member views subscription details
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioBasicMemberSubscription:
     """Basic member views subscription details and explores upgrade
@@ -444,7 +442,6 @@ class TestScenarioBasicMemberSubscription:
 # Scenario: Main member initiates a downgrade
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioMainMemberDowngrade:
     """Main member initiates a downgrade to Basic."""
@@ -504,7 +501,6 @@ class TestScenarioMainMemberDowngrade:
 # Scenario: Premium member at highest tier
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioPremiumMemberHighestTier:
     """Premium member sees they are at the highest tier."""
@@ -540,7 +536,6 @@ class TestScenarioPremiumMemberHighestTier:
 # Scenario: Pending downgrade notice
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioPendingDowngradeNotice:
     """Main member with pending downgrade sees notice."""
@@ -589,7 +584,6 @@ class TestScenarioPendingDowngradeNotice:
 # Scenario: Pending cancellation notice
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioPendingCancellationNotice:
     """Main member with pending cancellation sees notice and no
@@ -629,7 +623,6 @@ class TestScenarioPendingCancellationNotice:
 # Scenario: Cancel subscription confirmation
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioCancelSubscriptionConfirmation:
     """Paid member cancels subscription after reading the
@@ -686,7 +679,6 @@ class TestScenarioCancelSubscriptionConfirmation:
 # Scenario: Newsletter toggle
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioNewsletterToggle:
     """Free member toggles newsletter subscription off and back on."""
@@ -704,6 +696,7 @@ class TestScenarioNewsletterToggle:
         status = page.locator("#newsletter-status")
         assert "You are subscribed to newsletters." in status.inner_text()
         ctx.close()
+    @pytest.mark.core
     def test_toggle_off_and_on(
         self, django_server, test_users, django_db_blocker
     , browser):
@@ -764,11 +757,11 @@ class TestScenarioNewsletterToggle:
 # Scenario: Change password success
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioChangePasswordSuccess:
     """Member changes their password successfully."""
 
+    @pytest.mark.core
     def test_change_password_success_message_and_fields_cleared(
         self, django_server, test_users, django_db_blocker
     , browser):
@@ -847,7 +840,6 @@ class TestScenarioChangePasswordSuccess:
 # Scenario: Change password error
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioChangePasswordError:
     """Member enters wrong current password and sees an error."""
@@ -904,7 +896,6 @@ class TestScenarioChangePasswordError:
 # Scenario: Email verification banner
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioEmailVerificationBanner:
     """Member who has not verified their email sees verification
@@ -943,7 +934,6 @@ class TestScenarioEmailVerificationBanner:
         ctx.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioResendVerificationEmail:
     """Unverified member can resend verification email from /account/."""

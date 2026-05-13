@@ -38,11 +38,11 @@ from playwright_tests.conftest import (
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioMemberUpdatesNameAndPassword:
     """A free member edits their name and password without leaving /account/."""
 
+    @pytest.mark.core
     def test_name_and_password_in_same_session_on_account_page(
         self, django_server, django_db_blocker, browser
     ):
@@ -116,7 +116,6 @@ class TestScenarioMemberUpdatesNameAndPassword:
             context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioLegacyProfileBookmarkRedirects:
     """Bookmark to /account/profile still lands the member on /account/."""
@@ -162,7 +161,6 @@ class TestScenarioLegacyProfileBookmarkRedirects:
             context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenarioMobileMenuProfileLinkScrollsToForm:
     """Mobile menu Profile link sends the member to /account/#profile."""

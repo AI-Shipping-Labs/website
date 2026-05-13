@@ -76,7 +76,6 @@ def _create_course(title="Access Course", slug="access-course"):
     return course
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestDesktopGrantSearchAndRevoke:
     def test_search_select_grant_then_revoke(self, django_server, browser):
@@ -127,7 +126,6 @@ class TestDesktopGrantSearchAndRevoke:
         assert "Access revoked for findme@test.com" in body
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestMobileAccessListResponsive:
     def test_mobile_no_horizontal_overflow_and_revoke_tappable(
@@ -181,7 +179,6 @@ class TestMobileAccessListResponsive:
         assert "Access revoked for mobile@test.com" in page.content()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestMobileEnrollmentsResponsive:
     def test_mobile_no_overflow_and_unenroll_tappable(

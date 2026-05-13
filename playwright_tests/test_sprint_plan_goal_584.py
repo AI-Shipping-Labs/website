@@ -81,7 +81,6 @@ def _seed_goal_plan(*, goal='Ship one project', visibility='cohort'):
     return {'sprint_slug': sprint.slug, 'plan_id': plan.pk}
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSprintPlanGoal584:
     def test_owner_sees_goal_and_details(self, django_server, browser):

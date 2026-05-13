@@ -166,7 +166,6 @@ def _mark_unit_completed(user, unit):
 #              in the catalog
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1AnonymousDiscoversCourse:
     """Anonymous visitor discovers the free AI Hero course in the catalog."""
@@ -213,7 +212,6 @@ class TestScenario1AnonymousDiscoversCourse:
 #              sees signup CTA
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2AnonymousLandingPageSignupCTA:
     """Anonymous visitor reads the course landing page and sees signup CTA."""
@@ -276,7 +274,6 @@ class TestScenario2AnonymousLandingPageSignupCTA:
 # Scenario 3: Anonymous visitor can preview Day 1 content
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3AnonymousPreviewDay1:
     """Anonymous visitor can preview Day 1 content."""
@@ -308,7 +305,6 @@ class TestScenario3AnonymousPreviewDay1:
 # Scenario 4: Free member works through Day 1 to Day 2
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4FreeMemberDay1ToDay2:
     """Free member works through the course from Day 1 to Day 2."""
@@ -375,7 +371,6 @@ class TestScenario4FreeMemberDay1ToDay2:
 # Scenario 5: Free member tracks progress across the course
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5FreeMemberTracksProgress:
     """Free member tracks progress across the course."""
@@ -417,7 +412,6 @@ class TestScenario5FreeMemberTracksProgress:
 # Scenario 6: Free member accesses the last unit (Day 7)
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6FreeMemberAccessesDay7:
     """Free member accesses the last unit (Day 7)."""
@@ -468,7 +462,6 @@ class TestScenario6FreeMemberAccessesDay7:
 # Scenario 8: Basic member can also access the free course
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8BasicMemberAccessesFree:
     """Basic member can also access the free course."""

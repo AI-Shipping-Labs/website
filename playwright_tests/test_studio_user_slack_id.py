@@ -106,7 +106,6 @@ def _read_user_field(email, field):
     return value
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStudioUserSlackId:
     # ---------------- Scenario 1 --------------------------------------------

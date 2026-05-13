@@ -97,7 +97,6 @@ def _run_seed_data(flush=False):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11BrowseSiteAsAdmin:
     """Developer seeds data and then browses the site as an admin to

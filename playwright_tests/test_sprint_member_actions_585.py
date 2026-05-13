@@ -383,6 +383,7 @@ class TestStaffSeesPlanRequestNotification:
 class TestLeaveFromCohortBoardWithConfirm:
     """Click Leave -> accept dialog -> redirect -> board returns 404."""
 
+    @pytest.mark.core
     def test_leave_after_confirm_unenrolls_and_privates_plan(
         self, django_server, browser,
     ):

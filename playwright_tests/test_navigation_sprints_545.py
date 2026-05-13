@@ -464,6 +464,7 @@ def test_staff_studio_link_lives_in_account_menu_not_public_nav(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 def test_sprints_page_lists_active_sprint(django_server, page, django_db_blocker):
     with django_db_blocker.unblock():
         _clear_sprints()

@@ -119,7 +119,6 @@ def _set_user_name(email, first_name, last_name):
     connection.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestProgressVisibleForEveryMember:
     """The board surfaces every teammate's progress, public or private."""
@@ -193,7 +192,6 @@ class TestProgressVisibleForEveryMember:
             context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestPrivatePlanLeaksNoContent:
     """A private member's plan content never appears on the board."""
@@ -252,7 +250,6 @@ class TestPrivatePlanLeaksNoContent:
             context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCohortPlanLinkStillWorks:
     """Cohort rows are clickable and route to the read-only plan page."""
@@ -301,7 +298,6 @@ class TestCohortPlanLinkStillWorks:
             context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestNoPlanRowAtBottom:
     """An enrolled member without a plan shows up at the bottom, not clickable."""
@@ -354,7 +350,6 @@ class TestNoPlanRowAtBottom:
             context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSortStableOnReload:
     """Tied progress sorts by ``member.email`` ascending, deterministic across reloads."""
@@ -418,7 +413,6 @@ class TestSortStableOnReload:
             context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestDeletedEnrollmentDisappears:
     """Members removed from the sprint disappear from the board."""
@@ -463,7 +457,6 @@ class TestDeletedEnrollmentDisappears:
             context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestDashboardCohortCtaForAnyOtherMember:
     """Dashboard "View cohort" CTA fires when sprint has any other enrolled member."""

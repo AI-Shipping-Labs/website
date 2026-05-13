@@ -160,7 +160,6 @@ def _create_source(repo_name, content_type=None, content_path=''):
 # Scenario 1: Re-sync an article from its edit page
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestArticleResyncFromEditPage:
     def test_resync_button_queues_article_sync(
@@ -208,6 +207,7 @@ class TestArticleResyncFromEditPage:
         connection.close()
         context.close()
 
+    @pytest.mark.core
     def test_dashboard_shows_queued_after_resync(
         self, django_server, browser,
     ):
@@ -247,7 +247,6 @@ class TestArticleResyncFromEditPage:
 # Scenario 2: Re-sync from a unit edit page (inherits course)
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestUnitPageInheritsCourseSource:
     def test_unit_page_resync_uses_course_content_type(
@@ -293,7 +292,6 @@ class TestUnitPageInheritsCourseSource:
 # Scenario 3: Manually-created article hides the button
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestManualArticleHidesResync:
     def test_manual_article_no_origin_panel_no_button(
@@ -327,7 +325,6 @@ class TestManualArticleHidesResync:
 # Scenario 4: Worker-down warning surfaces on the flash
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestResyncWorkerDownWarning:
     def test_worker_down_flash_is_warning(
@@ -370,7 +367,6 @@ class TestResyncWorkerDownWarning:
 # Scenario 5: Re-sync from a workshop detail page
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestWorkshopResyncFromDetail:
     def test_workshop_detail_resync_targets_workshop_source(
@@ -423,7 +419,6 @@ class TestWorkshopResyncFromDetail:
 # Scenario 6: Non-staff cannot trigger a re-sync
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestResyncNonStaffBlocked:
     def test_non_staff_post_returns_403_no_synclog(
@@ -473,7 +468,6 @@ class TestResyncNonStaffBlocked:
 # Scenario 7: 404 for nonexistent object
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestResync404Missing:
     def test_post_to_missing_object_returns_404(
@@ -518,7 +512,6 @@ class TestResync404Missing:
 # Scenario 8: Missing ContentSource flashes graceful error
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestResyncMissingContentSource:
     def test_missing_source_flashes_red_error(

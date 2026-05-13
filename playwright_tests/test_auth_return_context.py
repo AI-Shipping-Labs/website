@@ -84,9 +84,9 @@ def _login(page, email="return-context@test.com"):
     page.click("#login-submit")
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAuthReturnContext:
+    @pytest.mark.core
     def test_event_login_returns_to_event_and_registration_cta(
         self, django_server, page, django_db_blocker
     ):

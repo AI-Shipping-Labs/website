@@ -17,7 +17,6 @@ import pytest
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAboutPageBrandIcons:
     """The /about page must render LinkedIn icons for both founder cards."""

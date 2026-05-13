@@ -108,7 +108,6 @@ def _checkpoint_descriptions(page, week_number):
     )
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCarryForwardMovesIncompleteCheckpointsToNextWeek:
     """The headline scenario from the issue body.
@@ -169,7 +168,6 @@ class TestCarryForwardMovesIncompleteCheckpointsToNextWeek:
         assert _checkpoint_descriptions(page, 2) == ["A", "C"]
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCarryForwardPrependsAboveExistingDestinationItems:
     """When the destination already has chips, moves go ABOVE them.
@@ -222,7 +220,6 @@ class TestCarryForwardPrependsAboveExistingDestinationItems:
         ]
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCarryForwardRevertsOnApiFailure:
     """A 422 from the move endpoint reverts the optimistic UI.
@@ -280,7 +277,6 @@ class TestCarryForwardRevertsOnApiFailure:
         assert _checkpoint_descriptions(page, 2) == []
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCarryForwardEmptyWeekHintsUpdate:
     """The empty-week hint toggles correctly after a carry-forward.
@@ -340,7 +336,6 @@ class TestCarryForwardEmptyWeekHintsUpdate:
         assert "hidden" in (w2_hint.get_attribute("class") or "")
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCarryForwardThenDragBackPreservesEditing:
     """Regression: drag still works on a chip that was carried forward.
@@ -405,7 +400,6 @@ class TestCarryForwardThenDragBackPreservesEditing:
         assert _checkpoint_descriptions(page, 2) == []
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCarryForwardNoButtonOnFinalWeek:
     """The final week card has no carry-forward button in the live DOM.

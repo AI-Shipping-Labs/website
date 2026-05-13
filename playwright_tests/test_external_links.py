@@ -132,7 +132,6 @@ def _create_article_with_target_self(slug='target-self-article'):
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestWorkshopExternalLinkOpensInNewTab:
     def test_external_link_has_target_blank_and_noopener(
@@ -243,7 +242,6 @@ class TestWorkshopExternalLinkOpensInNewTab:
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestArticleTargetSelfRespected:
     def test_handwritten_target_self_preserved_default_link_rewritten(

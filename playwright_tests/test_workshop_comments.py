@@ -142,7 +142,6 @@ def _create_course_with_unit(
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestWorkshopReaderAsksQuestion:
     def test_basic_user_posts_question_and_sees_it_in_list(
@@ -189,7 +188,6 @@ class TestWorkshopReaderAsksQuestion:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAnonymousVisitorSeesSignInPrompt:
     def test_logged_out_visitor_on_open_workshop_page(
@@ -221,7 +219,6 @@ class TestAnonymousVisitorSeesSignInPrompt:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestGatedUserDoesNotSeeQA:
     def test_free_user_below_pages_tier_sees_paywall_not_qa(
@@ -255,7 +252,6 @@ class TestGatedUserDoesNotSeeQA:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestReaderReplies:
     def test_user_b_replies_to_user_a_question(
@@ -318,7 +314,6 @@ class TestReaderReplies:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestUpvotePersistsAcrossReload:
     def test_upvote_count_and_active_state_persist(
@@ -389,7 +384,6 @@ class TestUpvotePersistsAcrossReload:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCourseUnitQARegression:
     def test_user_posts_question_on_course_unit(
@@ -436,7 +430,6 @@ class TestCourseUnitQARegression:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestContentIsolationAcrossSurfaces:
     def test_unit_and_page_questions_dont_leak_between_surfaces(

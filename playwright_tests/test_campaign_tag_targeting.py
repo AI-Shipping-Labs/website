@@ -62,7 +62,6 @@ def _tag_user(email, tags):
     connection.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCampaignIncludeTagNarrowsRecipients:
     """An operator scopes a Main+ campaign to ``early-adopter`` and the

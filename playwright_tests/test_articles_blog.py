@@ -100,13 +100,13 @@ def _login_admin_via_browser(page, base_url, email, password="adminpass123"):
     page.wait_for_load_state("domcontentloaded")
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1AnonymousDiscoverArticles:
     """
     Scenario 1: Anonymous visitor discovers articles and reads one.
     """
 
+    @pytest.mark.core
     def test_blog_listing_shows_published_articles_only(self, django_server, page):
         """Three published articles appear; the draft does not."""
         _clear_articles()
@@ -171,6 +171,7 @@ class TestScenario1AnonymousDiscoverArticles:
         assert "Alice" in content
         assert "Bob" in content
         assert "Charlie" in content
+    @pytest.mark.core
     def test_clicking_article_navigates_to_detail(self, django_server, page):
         """Click an article card and navigate to its detail page."""
         _clear_articles()
@@ -221,7 +222,6 @@ class TestScenario1AnonymousDiscoverArticles:
         assert back_link.count() >= 1
         href = back_link.first.get_attribute("href")
         assert href == "/blog"
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2FilterByTag:
     """
@@ -297,7 +297,6 @@ class TestScenario2FilterByTag:
         assert "Python for ML" in content
         assert "Go Microservices" in content
         assert "Python Web Scraping" in content
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3FreeUserPaywall:
     """
@@ -305,6 +304,7 @@ class TestScenario3FreeUserPaywall:
     and sees the upgrade path.
     """
 
+    @pytest.mark.core
     def test_free_user_sees_paywall_on_gated_article(self, django_server, browser):
         """Free user sees lock icon on listing, teaser + CTA on detail."""
         _clear_articles()
@@ -378,7 +378,6 @@ class TestScenario3FreeUserPaywall:
 
         # Navigated to /pricing
         assert "/pricing" in page.url
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4BasicMemberReadsGatedArticle:
     """
@@ -428,7 +427,6 @@ class TestScenario4BasicMemberReadsGatedArticle:
         assert "Expert" in body
         assert "mlops" in body
         assert "deployment" in body
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5BasicMemberHitsMainGatedArticle:
     """
@@ -482,7 +480,6 @@ class TestScenario5BasicMemberHitsMainGatedArticle:
         assert pricing_link.count() >= 1
         href = pricing_link.first.get_attribute("href")
         assert "/pricing" in href
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6RelatedArticles:
     """
@@ -566,7 +563,6 @@ class TestScenario6RelatedArticles:
 
         assert "/blog/mlops-best-practices" in page.url
         assert "MLOps Best Practices" in page.content()
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11TagChipOnDetailPage:
     """
@@ -617,7 +613,6 @@ class TestScenario11TagChipOnDetailPage:
         # Both python-tagged articles should be shown
         assert "Intro to Python" in body
         assert "Advanced Python" in body
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario12AdminCreatesArticle:
     """

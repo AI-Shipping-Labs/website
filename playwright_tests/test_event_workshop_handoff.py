@@ -144,7 +144,6 @@ def _create_workshop_linked_to(
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestWorkshopLinkedEventHandsOff:
     """Member opens a completed workshop-linked event; recording UI is
@@ -248,7 +247,6 @@ class TestWorkshopLinkedEventHandsOff:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestOrphanEventIsAnnouncementOnly:
     """Anonymous visitor opens a completed event with no linked Workshop.
@@ -320,7 +318,6 @@ class TestOrphanEventIsAnnouncementOnly:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestUpcomingWorkshopLinkedEventRegisters:
     """Member visits an upcoming workshop-linked event before the

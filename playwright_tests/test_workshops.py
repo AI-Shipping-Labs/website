@@ -127,9 +127,9 @@ def _create_workshop(
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestVisitorBrowsesCatalog:
+    @pytest.mark.core
     def test_visitor_sees_catalog_and_lands_on_paywalled_landing(
         self, django_server, page,
     ):
@@ -252,7 +252,6 @@ class TestVisitorBrowsesCatalog:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestBasicUserReadsPagesButNotRecording:
     def test_basic_user_legacy_link_redirects_to_canonical_tutorial(
@@ -289,6 +288,7 @@ class TestBasicUserReadsPagesButNotRecording:
 
         ctx.close()
 
+    @pytest.mark.core
     def test_basic_user_sees_unlocked_pages_and_locked_recording(
         self, browser, django_server,
     ):
@@ -375,7 +375,6 @@ class TestBasicUserReadsPagesButNotRecording:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestMainUserHasFullAccess:
     def test_main_user_sees_recording_and_pages(
@@ -420,7 +419,6 @@ class TestMainUserHasFullAccess:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestEventsPastCardLinksToWorkshop:
     def test_past_event_card_links_to_workshop(
@@ -452,7 +450,6 @@ class TestEventsPastCardLinksToWorkshop:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestWorkshopSitemap:
     def test_sitemap_lists_workshop_urls(self, django_server, page):
@@ -476,7 +473,6 @@ class TestWorkshopSitemap:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestPlayerShellLayout:
     def test_player_shell_renders_outline_and_tutorial_pane(
@@ -534,7 +530,6 @@ class TestPlayerShellLayout:
         ctx.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestWorkshopWithoutCodeRepoNoMaterialsRow:
     def test_no_code_repo_no_repo_row_in_outline(
@@ -579,7 +574,6 @@ class TestWorkshopWithoutCodeRepoNoMaterialsRow:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestDraftWorkshopHidden:
     def test_draft_not_in_catalog_and_404_on_detail(

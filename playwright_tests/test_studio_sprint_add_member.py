@@ -77,7 +77,6 @@ def _create_sprint(name, slug, duration_weeks=6):
     return sprint
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestOperatorEnrollsNewMember:
     """Operator clicks Add member, picks a user, lands in the editor."""
@@ -159,7 +158,6 @@ class TestOperatorEnrollsNewMember:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestReAddSameMemberIsSilentNoOp:
     """Re-adding ``member@test.com`` is idempotent."""
@@ -241,7 +239,6 @@ class TestReAddSameMemberIsSilentNoOp:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestOperatorMissingMemberError:
     """Submitting with no member shows a clear inline error."""
@@ -291,7 +288,6 @@ class TestOperatorMissingMemberError:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestNonStaffCannotReachAddMember:
     """A free member cannot reach the Studio Add member URL."""

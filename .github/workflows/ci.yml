@@ -67,6 +67,13 @@ jobs:
           end=$(date +%s)
           echo "CI_TIMING phase=ruff_check seconds=$((end - start))"
 
+      - name: Advisory lint report
+        run: |
+          start=$(date +%s)
+          make lint-advisory
+          end=$(date +%s)
+          echo "CI_TIMING phase=lint_advisory seconds=$((end - start))"
+
       - name: Collect static files
         run: |
           start=$(date +%s)

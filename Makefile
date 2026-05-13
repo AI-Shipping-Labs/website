@@ -1,4 +1,4 @@
-.PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright test-playwright test-playwright-core lint lint-fix clean
+.PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright test-playwright test-playwright-core lint lint-fix lint-advisory clean
 
 # Default SITE_BASE_URL for local dev so generated links (unsubscribe,
 # calendar invites, password resets, share URLs) point at the running
@@ -91,6 +91,11 @@ lint:
 # Run ruff linter with auto-fix
 lint-fix:
 	uv run ruff check --fix .
+
+# Run expanded Ruff checks and trend metrics without failing the build
+lint-advisory:
+	uv run ruff check --config ruff-advisory.toml --statistics --exit-zero .
+	uv run python scripts/lint_advisory_metrics.py
 
 # Clean generated files
 clean:

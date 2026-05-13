@@ -1,0 +1,33 @@
+extend = "pyproject.toml"
+output-format = "concise"
+
+[lint]
+select = ["B", "BLE", "C4", "SIM", "RET", "ARG", "T20", "C901"]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.per-file-ignores]
+# Django migration callbacks intentionally keep ``apps`` / ``schema_editor``
+# signatures, and historical data migrations sometimes use print progress.
+"*/migrations/*.py" = ["ARG001", "ARG002", "C901", "T201"]
+
+# Django admin hooks and actions must keep framework-defined signatures even
+# when a specific hook does not need every argument.
+"*/admin/*.py" = ["ARG001", "ARG002"]
+
+# Django signal/check receivers and management commands also use callback
+# signatures controlled by Django.
+"*/signals.py" = ["ARG001", "ARG002"]
+"*/checks.py" = ["ARG001", "ARG002"]
+"*/management/commands/*.py" = ["ARG002"]
+
+# Test methods, mocks, and Playwright fixtures often receive framework or
+# patch-provided arguments that are intentionally unused in a specific case.
+"*/tests/*.py" = ["ARG001", "ARG002"]
+"playwright_tests/*.py" = ["ARG001", "ARG002"]
+
+# Standalone operational scripts and deploy helpers are CLI surfaces where
+# stdout progress is the interface.
+"scripts/*.py" = ["T201"]
+"deploy/*.py" = ["T201"]

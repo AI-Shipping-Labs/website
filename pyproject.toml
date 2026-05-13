@@ -35,7 +35,8 @@ pythonpath = ["."]
 markers = [
     "core: critical user-path Playwright tests run on every push (see _docs/testing-guidelines.md)",
     "manual_visual: screenshot-generator/manual-review Playwright tests excluded from default CI",
-    "legacy_checkout: tests for removed local Stripe Checkout/subscription mutation flows",
+    "legacy_checkout: retained local Stripe Checkout/subscription API tests excluded from default CI",
+    "slow_platform: SQLite/threading/migration/concurrency tests excluded from default CI",
 ]
 
 [tool.coverage.run]

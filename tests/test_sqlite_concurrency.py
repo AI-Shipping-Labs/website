@@ -48,11 +48,15 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
 from django.conf import settings
 from django.db import connection
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
+
+pytestmark = pytest.mark.slow_platform
 
 
+@tag('slow_platform')
 class SqliteOptionsWiringTest(SimpleTestCase):
     """Settings-level assertions for the SQLite concurrency tuning.
 
@@ -111,6 +115,7 @@ class SqliteOptionsWiringTest(SimpleTestCase):
         )
 
 
+@tag('slow_platform')
 class SqlitePragmasAppliedTest(SimpleTestCase):
     """Live PRAGMA assertions: the OPTIONS actually take effect on the
     real connection. Catches the case where someone sets OPTIONS but a
@@ -256,6 +261,7 @@ def _run_writers(db_path, n_threads, *, apply_fix, hold_seconds=0.05):
     return errors, total_rows
 
 
+@tag('slow_platform')
 class SqliteConcurrentWritersTest(SimpleTestCase):
     """Black-box concurrency test against a real on-disk SQLite file.
 
@@ -354,6 +360,7 @@ class SqliteConcurrentWritersTest(SimpleTestCase):
         )
 
 
+@tag('slow_platform')
 class SqliteSettingsBranchPostgresTest(SimpleTestCase):
     """Document the contract: the SQLite OPTIONS block must be guarded
     by an ``ENGINE == sqlite3`` check, so Postgres deployments aren't

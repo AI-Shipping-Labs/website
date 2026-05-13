@@ -697,13 +697,35 @@ make test-playwright-manual-visual
 
 `make test-playwright-core` runs `pytest -m core playwright_tests/ -v`. The
 Deploy Dev workflow runs the same command in a parallel `playwright-core`
-job; a failure blocks the deploy. The full suite runs on the
-`scheduled-playwright.yml` workflow every 3 hours (skipped if no commits
-have landed since the last successful run) and via `workflow_dispatch`.
-Pull-request CI excludes screenshot-generator/manual-review tests with
-`pytest -m "not manual_visual" playwright_tests/ -v`; scheduled and manual
-full-suite runs still include them. Run `make test-playwright-manual-visual`
-when you specifically need the screenshot/manual-review suites.
+job with the default marker exclusion:
+
+```bash
+pytest -m "core and not manual_visual and not legacy_checkout and not slow_platform" playwright_tests/ -v
+```
+
+A failure blocks the deploy. The scheduled workflow runs the broader Playwright
+suite every 3 hours, skipped if no commits have landed since the last successful
+run. That scheduled default is sharded across separate GitHub Actions matrix
+jobs and uses:
+
+```bash
+pytest -m "not manual_visual and not legacy_checkout and not slow_platform" <shard files> -v
+```
+
+Manual dispatch of `scheduled-playwright.yml` can also run the excluded marker
+suites by enabling the `include_excluded` input. Run
+`make test-playwright-manual-visual` locally when you specifically need the
+screenshot/manual-review suites.
+
+### Special Playwright and platform markers
+
+Use these markers to keep default CI focused while preserving opt-in coverage:
+
+| Marker | Use for | Default CI behavior |
+|---|---|---|
+| `manual_visual` | Screenshot generators and tests whose primary output is manual visual review. | Excluded from Deploy Dev and the scheduled default; runnable with `make test-playwright-manual-visual` or scheduled manual dispatch with `include_excluded`. |
+| `legacy_checkout` | Retained local Stripe Checkout/subscription API coverage while the product migrates to Payment Links and the Customer Portal. | Excluded from Deploy Dev and the scheduled default. Do not add or move payment tests under this marker while #604/#612/#613 are active unless that work owns the payment change. |
+| `slow_platform` | SQLite/threading/migration/concurrency tests or equivalent platform-level checks that are valuable but slow or contention-prone. | Excluded from default pytest-marker Playwright runs. For Django `manage.py test`, mirror with `@tag('slow_platform')` when practical so future tag-based runs can exclude it explicitly. |
 
 ### What belongs in `core`
 

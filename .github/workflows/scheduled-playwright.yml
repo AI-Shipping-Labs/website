@@ -6,16 +6,26 @@ on:
     # cadence cost-free during idle periods (issue #617 user update).
     - cron: '0 */3 * * *'
   workflow_dispatch:
+    inputs:
+      include_excluded:
+        description: "Also run manual_visual / legacy_checkout / slow_platform marker suites"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: scheduled-playwright
   cancel-in-progress: true
 
+env:
+  PLAYWRIGHT_DEFAULT_MARKERS: not manual_visual and not legacy_checkout and not slow_platform
+
 jobs:
-  playwright-full:
-    name: Playwright Full Suite
+  changes:
+    name: Change Gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    outputs:
+      skip: ${{ steps.changed.outputs.skip }}
 
     steps:
       - name: Skip if no new commits since last successful run
@@ -24,9 +34,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          # workflow_dispatch always runs the full suite (manual override).
+          # workflow_dispatch always runs the suite (manual override).
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual dispatch — running full suite regardless of SHA."
+            echo "Manual dispatch - running suite regardless of SHA."
             echo "skip=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -41,7 +51,7 @@ jobs:
             --jq '.[0].headSha // ""')
 
           if [ -z "${PREVIOUS_SHA}" ]; then
-            echo "No prior successful run found (first-ever run) — proceeding."
+            echo "No prior successful run found (first-ever run) - proceeding."
             echo "skip=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -55,28 +65,97 @@ jobs:
           echo "Previous successful SHA: ${PREVIOUS_SHA}; current: ${GITHUB_SHA}; proceeding."
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
+  playwright-full:
+    name: Playwright Full Suite (${{ matrix.shard_name }})
+    needs: changes
+    if: needs.changes.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard_name: shard 1/4
+            shard_index: 0
+            shard_total: 4
+          - shard_name: shard 2/4
+            shard_index: 1
+            shard_total: 4
+          - shard_name: shard 3/4
+            shard_index: 2
+            shard_total: 4
+          - shard_name: shard 4/4
+            shard_index: 3
+            shard_total: 4
+
+    steps:
       - name: Checkout code
-        if: steps.changed.outputs.skip != 'true'
         uses: actions/checkout@v5
 
       - name: Install uv
-        if: steps.changed.outputs.skip != 'true'
         uses: astral-sh/setup-uv@v7
 
       - name: Set up Python
-        if: steps.changed.outputs.skip != 'true'
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
       - name: Install dependencies
-        if: steps.changed.outputs.skip != 'true'
         run: uv sync
 
       - name: Install Playwright browsers
-        if: steps.changed.outputs.skip != 'true'
         run: uv run playwright install --with-deps chromium
 
-      - name: Run full Playwright suite
-        if: steps.changed.outputs.skip != 'true'
-        run: uv run pytest playwright_tests/ -v
+      - name: Select Playwright shard files
+        id: shard
+        shell: bash
+        run: |
+          mapfile -t files < <(
+            find playwright_tests -maxdepth 1 -type f -name 'test_*.py' | sort |
+              awk -v shard="${{ matrix.shard_index }}" -v total="${{ matrix.shard_total }}" \
+                '((NR - 1) % total) == shard'
+          )
+
+          printf '%s\n' "${files[@]}" > .playwright-shard-files
+          echo "count=${#files[@]}" >> "$GITHUB_OUTPUT"
+          printf 'Selected %s files for %s:\n' "${#files[@]}" "${{ matrix.shard_name }}"
+          printf '  %s\n' "${files[@]}"
+
+      - name: Run full Playwright shard
+        shell: bash
+        run: |
+          mapfile -t files < .playwright-shard-files
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No Playwright files selected for ${{ matrix.shard_name }}."
+            exit 0
+          fi
+
+          uv run pytest -m "${PLAYWRIGHT_DEFAULT_MARKERS}" "${files[@]}" -v
+
+  playwright-excluded-markers:
+    name: Playwright Excluded Marker Suites
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' && inputs.include_excluded && needs.changes.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Install Playwright browsers
+        run: uv run playwright install --with-deps chromium
+
+      - name: Run excluded Playwright marker suites
+        run: uv run pytest -m "manual_visual or legacy_checkout or slow_platform" playwright_tests/ -v

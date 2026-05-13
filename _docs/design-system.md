@@ -147,6 +147,22 @@ inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border bor
 
 Top-level CTAs commonly add `w-full sm:w-auto` on mobile-to-desktop transitions. Real `<button>` elements should include disabled styling such as `disabled:cursor-not-allowed disabled:opacity-50` when the state exists.
 
+### Studio header + action row
+
+Studio entity-detail pages use one consistent header pattern: breadcrumb or back link first, then a header with the H1/subtitle on the left and entity-level actions on the right. On mobile, use `flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between` so actions wrap below the title.
+
+Primary entity actions belong in the header action row, not inline with the H1, not in a far-down action card, and not duplicated in a sidebar panel. `View on site` is always a secondary bordered button in this row when the entity has a public URL. Form-edit pages keep the sticky Save/Cancel bar, but header actions such as `View on site`, `Edit on GitHub`, and `Re-sync source` should not be duplicated there. Section-level actions still live in their section, and list pages keep their existing list-header plus per-row Actions-cell pattern.
+
+Use `templates/studio/_partials/header_actions.html` for new detail pages when the template can supply its action block, or copy the same markup inline when local form placement requires it. The partial accepts `eyebrow`, `title`, optional `subtitle`, optional `back_url` / `back_label`, and optional `testid` / `actions_testid` values. The action wrapper defaults to `data-testid="studio-header-actions"`.
+
+Canonical Studio header button classes:
+
+- Primary: `bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity`.
+- Secondary: `bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors`.
+- Destructive secondary: `border border-red-500/40 bg-red-500/10 text-red-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500/20 transition-colors`.
+
+Current Studio detail surfaces using the pattern include users, CRM, sprints, plans, workshops, project review, recordings, articles, courses, events, downloads, event series, campaigns, UTM campaigns, and import batches.
+
 ## Pills, Badges, and Chips
 
 Canonical shape: `inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium`.

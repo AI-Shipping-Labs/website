@@ -10,15 +10,41 @@
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
     <span class="text-foreground">{% if article %}{{ article.title }}{% else %}New Article{% endif %}</span>
   </div>
-  <div class="flex items-center space-x-4">
-    <h1 class="text-2xl font-semibold text-foreground">{% if is_synced %}View Article{% elif article %}Edit Article{% else %}New Article{% endif %}</h1>
-    {% if article %}
-    <a href="{{ article.get_absolute_url }}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground flex items-center space-x-1" data-testid="view-on-site">
-      <i data-lucide="external-link" class="w-4 h-4"></i>
-      <span>View on site</span>
-    </a>
-    {% endif %}
-  </div>
+  <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold text-foreground">{% if is_synced %}View Article{% elif article %}Edit Article{% else %}New Article{% endif %}</h1>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
+      {% if article %}
+      {% if github_edit_url %}
+      <a href="{{ github_edit_url }}" target="_blank" rel="noopener noreferrer"
+         class="border border-blue-500/40 bg-blue-500/10 px-4 py-2 rounded-lg text-sm font-medium text-blue-200 transition-colors hover:bg-blue-500/20 flex items-center space-x-1"
+         data-testid="sticky-github-source-link">
+        {% include 'includes/_icon_github.html' with css='w-4 h-4' %}
+        <span>Edit on GitHub</span>
+      </a>
+      {% endif %}
+      <a href="{{ article.get_absolute_url }}" target="_blank" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1" data-testid="view-on-site">
+        <i data-lucide="external-link" class="w-4 h-4"></i>
+        <span>View on site</span>
+      </a>
+      {% if article.source_repo %}
+      <form method="post"
+            action="{% url 'studio_sync_object_trigger' model_name=article|model_name object_id=article.pk %}"
+            class="inline-flex"
+            data-testid="sticky-resync-source-form">
+        {% csrf_token %}
+        <button type="submit"
+                class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1"
+                data-testid="sticky-resync-source-button">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span>Re-sync source</span>
+        </button>
+      </form>
+      {% endif %}
+      {% endif %}
+    </div>
+  </header>
 </div>
 
 {% url 'studio_article_list' as article_cancel_url %}
@@ -105,14 +131,6 @@
         <dd class="text-foreground">{{ article.author|default:"Not set" }}</dd>
       </div>
     </dl>
-  </div>
-
-  <div class="bg-card border border-border rounded-lg p-4" data-testid="article-workflow-panel">
-    <h2 class="text-sm font-medium text-foreground mb-3">Workflows</h2>
-    <a href="{{ article.get_absolute_url }}" target="_blank" class="inline-flex w-full items-center justify-center rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted" data-testid="panel-view-on-site">
-      <i data-lucide="external-link" class="mr-2 h-4 w-4"></i>
-      <span>View on site</span>
-    </a>
   </div>
 
   {% if article.published %}

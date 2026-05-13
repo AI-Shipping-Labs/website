@@ -16,22 +16,38 @@
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
     <span class="text-foreground">{{ series.name }}</span>
   </div>
-  <div class="flex flex-wrap items-center justify-between gap-4">
-    <div>
+  <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
+    <div class="min-w-0">
       <h1 class="text-2xl font-semibold text-foreground" data-testid="event-series-name">{{ series.name }}</h1>
       <p class="text-muted-foreground mt-1" data-testid="event-series-cadence">
         {{ series.get_cadence_display }} on {{ series.get_day_of_week_display }} at {{ series.start_time|time:"H:i" }} {{ series.timezone }}
         — {{ events|length }} occurrence{{ events|length|pluralize }}
       </p>
     </div>
-    <div class="flex items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
       <a href="{{ series.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
-         class="inline-flex items-center rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted">
+         class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1">
         <i data-lucide="external-link" class="mr-2 h-4 w-4"></i>
         <span>View public series page</span>
       </a>
+      <button type="submit"
+              form="event-series-metadata-form"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+              data-testid="event-series-metadata-save">
+        Save metadata
+      </button>
+      <form method="post" action="{% url 'studio_event_series_delete' series_id=series.pk %}"
+            data-testid="event-series-delete-form"
+            onsubmit="return confirm('Delete this series? The member events will remain.');">
+        {% csrf_token %}
+        <button type="submit"
+                class="border border-red-500/40 bg-red-500/10 text-red-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500/20 transition-colors"
+                data-testid="event-series-delete-submit">
+          Delete series
+        </button>
+      </form>
     </div>
-  </div>
+  </header>
 </div>
 
 {% if add_error %}
@@ -112,7 +128,7 @@
 
   <!-- Sidebar: metadata edit + delete -->
   <aside class="space-y-4 lg:sticky lg:top-8">
-    <form method="post" class="bg-card border border-border rounded-lg p-4 space-y-3"
+    <form id="event-series-metadata-form" method="post" class="bg-card border border-border rounded-lg p-4 space-y-3"
           data-testid="event-series-metadata-form">
       {% csrf_token %}
       <h2 class="text-sm font-medium text-foreground">Series metadata</h2>
@@ -135,11 +151,6 @@
         <textarea id="meta-description" name="description" rows="4"
                   class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono">{{ series.description }}</textarea>
       </div>
-      <button type="submit"
-              class="inline-flex w-full items-center justify-center rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
-              data-testid="event-series-metadata-save">
-        Save metadata
-      </button>
     </form>
 
     <div class="bg-card border border-red-500/30 rounded-lg p-4 space-y-3" data-testid="event-series-delete-panel">
@@ -149,16 +160,6 @@
         in place but unlink them from the series. To delete the events themselves,
         delete each event from the events list.
       </p>
-      <form method="post" action="{% url 'studio_event_series_delete' series_id=series.pk %}"
-            data-testid="event-series-delete-form"
-            onsubmit="return confirm('Delete this series? The member events will remain.');">
-        {% csrf_token %}
-        <button type="submit"
-                class="inline-flex w-full items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-300 hover:bg-red-500/20"
-                data-testid="event-series-delete-submit">
-          Delete series
-        </button>
-      </form>
     </div>
   </aside>
 </div>

@@ -10,7 +10,36 @@
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
     <span class="text-foreground">{{ campaign.subject }}</span>
   </div>
-  <h1 class="text-2xl font-semibold text-foreground">{{ campaign.subject }}</h1>
+  <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold text-foreground break-all">{{ campaign.subject }}</h1>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
+      {% if campaign.status == 'draft' %}
+      <form method="post" action="{% url 'studio_campaign_send' campaign_id=campaign.pk %}"
+            onsubmit="return confirm('Send to {{ recipient_count }} recipients? This cannot be undone.');">
+        {% csrf_token %}
+        <button type="submit"
+                data-testid="send-campaign-btn"
+                class="border border-red-500/40 bg-red-500/10 text-red-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500/20 transition-colors">
+          Send to {{ recipient_count }} recipient{{ recipient_count|pluralize }}
+        </button>
+      </form>
+      <a href="{% url 'studio_campaign_edit' campaign_id=campaign.pk %}"
+         data-testid="edit-campaign-link"
+         class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+        Edit
+      </a>
+      {% else %}
+      <form method="post" action="{% url 'studio_campaign_duplicate' campaign_id=campaign.pk %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+          Duplicate Campaign
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </header>
   {% worker_status_inline %}
 </div>
 
@@ -138,7 +167,6 @@
             onsubmit="return confirm('Send to {{ recipient_count }} recipients? This cannot be undone.');">
         {% csrf_token %}
         <button type="submit"
-                data-testid="send-campaign-btn"
                 class="bg-red-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
           Send to {{ recipient_count }} recipient{{ recipient_count|pluralize }}
         </button>
@@ -156,7 +184,6 @@
       {% if campaign.status == 'draft' %}
       {# Edit — neutral, draft only #}
       <a href="{% url 'studio_campaign_edit' campaign_id=campaign.pk %}"
-         data-testid="edit-campaign-link"
          class="bg-secondary text-foreground border border-border px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
         Edit
       </a>

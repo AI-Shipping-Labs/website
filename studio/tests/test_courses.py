@@ -253,10 +253,10 @@ class StudioCourseSourceManagedCleanupTest(StaffUserMixin, TestCase):
     """Tests for the source-managed course edit cleanup (issue #490).
 
     Verifies that source-managed courses:
-    - render a compact source action row (sticky bar) containing all three
+    - render a compact source action row containing all three
       source actions: View on site, Edit on GitHub, Re-sync source
     - link to the course YAML operator guide from the sticky bar
-    - do not duplicate the View on site link in the page header
+    - do not duplicate the View on site link in the sticky bar
     - render absent Stripe/price metadata as `Not configured`, not as empty
       input fields that look configured
     - do not duplicate `Individual purchase` rows between the form and the
@@ -277,10 +277,11 @@ class StudioCourseSourceManagedCleanupTest(StaffUserMixin, TestCase):
     def test_source_managed_compact_action_row_contains_three_source_actions(self):
         response = self.client.get(f'/studio/courses/{self.synced.pk}/edit')
 
-        self.assertContains(response, 'data-testid="sticky-action-row"')
+        self.assertContains(response, 'data-testid="studio-header-actions"')
         self.assertContains(response, 'data-testid="sticky-github-source-link"')
-        self.assertContains(response, 'data-testid="sticky-view-on-site"')
+        self.assertContains(response, 'data-testid="view-on-site"')
         self.assertContains(response, 'data-testid="sticky-resync-source-button"')
+        self.assertNotContains(response, 'data-testid="sticky-view-on-site"')
 
     def test_source_managed_links_to_course_yaml_guide(self):
         response = self.client.get(f'/studio/courses/{self.synced.pk}/edit')
@@ -289,13 +290,14 @@ class StudioCourseSourceManagedCleanupTest(StaffUserMixin, TestCase):
         self.assertContains(response, '_docs/course_yaml.md')
         self.assertContains(response, 'Course YAML guide')
 
-    def test_source_managed_header_omits_duplicate_view_on_site_link(self):
+    def test_source_managed_header_has_single_view_on_site_link(self):
         response = self.client.get(f'/studio/courses/{self.synced.pk}/edit')
 
-        # Sticky bar version remains the single canonical "View on site"
-        # link in the action area; the page-header repeat is suppressed
-        # for source-managed courses.
-        self.assertNotContains(response, 'data-testid="view-on-site"')
+        body = response.content.decode()
+
+        self.assertContains(response, 'data-testid="view-on-site"', count=1)
+        self.assertNotContains(response, 'data-testid="sticky-view-on-site"')
+        self.assertEqual(body.count('data-testid="view-on-site"'), 1)
 
     def test_source_managed_stripe_fields_render_as_not_configured(self):
         # No price, no product, no price ID set on the course.

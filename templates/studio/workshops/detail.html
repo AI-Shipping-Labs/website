@@ -10,12 +10,14 @@
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
     <span class="text-foreground">{{ workshop.title }}</span>
   </div>
-  <div class="flex flex-wrap items-center justify-between gap-4">
-    <h1 class="text-2xl font-semibold text-foreground" data-testid="workshop-title">{{ workshop.title }}</h1>
-    <div class="flex items-center gap-3">
+  <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold text-foreground break-all" data-testid="workshop-title">{{ workshop.title }}</h1>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
       <a href="{{ workshop.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
          data-testid="view-on-site"
-         class="text-sm text-muted-foreground hover:text-foreground flex items-center space-x-1">
+         class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1">
         <i data-lucide="external-link" class="w-4 h-4"></i>
         <span>View on site</span>
       </a>
@@ -26,7 +28,7 @@
         <span>Edit</span>
       </a>
     </div>
-  </div>
+  </header>
 </div>
 
 {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}

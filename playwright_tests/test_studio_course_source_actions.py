@@ -69,11 +69,11 @@ def test_source_managed_action_row_desktop_single_line(
         wait_until="networkidle",
     )
 
-    action_row = page.locator('[data-testid="sticky-action-row"]').first
+    action_row = page.locator('[data-testid="studio-header-actions"]').first
     assert action_row.is_visible()
 
     github = page.locator('[data-testid="sticky-github-source-link"]').first
-    view = page.locator('[data-testid="sticky-view-on-site"]').first
+    view = page.locator('[data-testid="view-on-site"]').first
     resync = page.locator('[data-testid="sticky-resync-source-button"]').first
     docs = page.locator('[data-testid="sticky-docs-link"]').first
 
@@ -128,12 +128,12 @@ def test_source_managed_action_row_mobile_no_horizontal_overflow(
 
     # Source action row exists and the three buttons are present (sticky bar
     # may hug the bottom of the viewport on mobile, which is the design).
-    assert page.locator('[data-testid="sticky-action-row"]').count() == 1
+    assert page.locator('[data-testid="studio-header-actions"]').count() == 1
     assert (
         page.locator('[data-testid="sticky-github-source-link"]').count() == 1
     )
     assert (
-        page.locator('[data-testid="sticky-view-on-site"]').count() == 1
+        page.locator('[data-testid="view-on-site"]').count() == 1
     )
     assert (
         page.locator('[data-testid="sticky-resync-source-button"]').count() == 1

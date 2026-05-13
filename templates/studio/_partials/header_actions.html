@@ -1,0 +1,18 @@
+{% if back_url %}
+<div class="mb-6">
+  <a href="{{ back_url }}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; {{ back_label }}
+  </a>
+</div>
+{% endif %}
+<header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+        data-testid="{{ testid|default:'studio-header' }}">
+  <div class="min-w-0">
+    {% if eyebrow %}<p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">{{ eyebrow }}</p>{% endif %}
+    <h1 class="text-2xl font-semibold text-foreground mt-1 break-all">{{ title }}</h1>
+    {% if subtitle %}<p class="text-sm text-muted-foreground mt-1">{{ subtitle }}</p>{% endif %}
+  </div>
+  <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="{{ actions_testid|default:'studio-header-actions' }}">
+    {% block actions %}{% endblock %}
+  </div>
+</header>

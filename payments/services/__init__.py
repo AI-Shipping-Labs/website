@@ -6,11 +6,13 @@ webhooks for fulfillment, and Customer Portal for billing management.
 
 import logging
 from datetime import datetime, timezone
+from smtplib import SMTPException
 
 import stripe
-from django.core.mail import send_mail
+from django.core.mail import BadHeaderError, send_mail
 
 from accounts.models import User
+from analytics.models import UserAttribution
 from integrations.config import get_config
 from payments.exceptions import WebhookPermanentError
 from payments.models import ConversionAttribution, Tier, WebhookEvent
@@ -478,9 +480,9 @@ def handle_invoice_payment_failed(invoice_data):
             ),
             from_email=None,  # Uses DEFAULT_FROM_EMAIL
             recipient_list=[user.email],
-            fail_silently=True,
+            fail_silently=False,
         )
-    except Exception:
+    except (BadHeaderError, OSError, SMTPException):
         logger.exception(
             "invoice.payment_failed: Failed to send email to user=%s",
             user.email,
@@ -574,7 +576,7 @@ def _tier_from_subscription(subscription_id):
         price_id = _subscription_price_id(subscription)
         if price_id:
             return _tier_for_price_id(price_id)
-    except Exception:
+    except stripe.StripeError:
         logger.exception(
             "Failed to look up tier from subscription %s", subscription_id
         )
@@ -587,7 +589,7 @@ def _get_subscription_period_end(subscription_id):
         client = _get_stripe_client()
         subscription = client.subscriptions.retrieve(subscription_id)
         return _subscription_period_end(subscription)
-    except Exception:
+    except stripe.StripeError:
         logger.exception(
             "Failed to get period end for subscription %s", subscription_id
         )
@@ -606,7 +608,7 @@ def _get_subscription_price_id(subscription_id):
         client = _get_stripe_client()
         subscription = client.subscriptions.retrieve(subscription_id)
         return _subscription_price_id(subscription)
-    except Exception:
+    except stripe.StripeError:
         logger.exception(
             "Failed to get price id for subscription %s", subscription_id
         )
@@ -668,8 +670,7 @@ def _record_conversion_attribution(
     attribution = None
     try:
         attribution = user.attribution
-    except Exception:
-        # OneToOne RelatedObjectDoesNotExist or any other lookup failure.
+    except UserAttribution.DoesNotExist:
         attribution = None
 
     if attribution is None:

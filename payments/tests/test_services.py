@@ -10,6 +10,7 @@ Tests cover:
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
+import stripe
 from django.test import TestCase, tag
 
 from accounts.models import User
@@ -174,6 +175,33 @@ class SubscriptionExtractionTest(TestCase):
         mock_get_client.return_value = mock_client
 
         self.assertEqual(_tier_from_subscription("sub_tier_price"), self.basic)
+
+    @patch("payments.services._get_stripe_client")
+    def test_subscription_lookup_stripe_error_fails_soft(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.side_effect = stripe.APIConnectionError(
+            message="network unavailable",
+        )
+        mock_get_client.return_value = mock_client
+
+        with patch("payments.services.logger") as mock_logger:
+            price_id = _get_subscription_price_id("sub_stripe_down")
+            period_end = _get_subscription_period_end("sub_stripe_down")
+            tier = _tier_from_subscription("sub_stripe_down")
+
+        self.assertEqual(price_id, "")
+        self.assertIsNone(period_end)
+        self.assertIsNone(tier)
+        self.assertEqual(mock_logger.exception.call_count, 3)
+
+    @patch("payments.services._get_stripe_client")
+    def test_subscription_lookup_unexpected_error_propagates(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.side_effect = RuntimeError("parser bug")
+        mock_get_client.return_value = mock_client
+
+        with self.assertRaisesMessage(RuntimeError, "parser bug"):
+            _get_subscription_price_id("sub_bug")
 
     @patch("payments.services._get_stripe_client")
     def test_incomplete_subscription_shape_fails_soft(self, mock_get_client):

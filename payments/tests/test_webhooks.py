@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import json
 import time
+from smtplib import SMTPException
 from unittest.mock import patch
 
 from django.core import mail
@@ -748,6 +749,47 @@ class InvoicePaymentFailedHandlerTest(TestCase):
         # Should not raise
         handle_invoice_payment_failed(invoice_data)
         mock_send_mail.assert_not_called()
+
+    @patch("payments.services.send_mail")
+    def test_email_transport_error_is_logged_without_revoking_tier(
+        self, mock_send_mail,
+    ):
+        """Mail transport failures are visible but do not change membership."""
+        mock_send_mail.side_effect = SMTPException("smtp down")
+        main_tier = Tier.objects.get(slug="main")
+        user = User.objects.create_user(email="smtpdown@test.com")
+        user.tier = main_tier
+        user.stripe_customer_id = "cus_smtpdown"
+        user.save(update_fields=["tier", "stripe_customer_id"])
+        invoice_data = {
+            "customer": "cus_smtpdown",
+            "customer_email": "smtpdown@test.com",
+        }
+
+        with patch("payments.services.logger") as mock_logger:
+            handle_invoice_payment_failed(invoice_data)
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier, main_tier)
+        mock_logger.exception.assert_called_once()
+
+    @patch("payments.services.send_mail")
+    def test_unexpected_email_error_propagates_for_webhook_retry(
+        self, mock_send_mail,
+    ):
+        """Programmer errors should not be converted into processed webhooks."""
+        mock_send_mail.side_effect = RuntimeError("template bug")
+        user = User.objects.create_user(
+            email="emailbug@test.com",
+            stripe_customer_id="cus_emailbug",
+        )
+        invoice_data = {
+            "customer": user.stripe_customer_id,
+            "customer_email": user.email,
+        }
+
+        with self.assertRaisesMessage(RuntimeError, "template bug"):
+            handle_invoice_payment_failed(invoice_data)
 
 
 @tag('core')

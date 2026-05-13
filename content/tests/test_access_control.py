@@ -514,10 +514,10 @@ class RequiredLevelFieldTest(TestCase):
 
 @tag('core')
 class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
-    """Smoke test: blog detail view renders gated CTA when user lacks access.
+    """Blog detail tier-state coverage for server-rendered article access.
 
-    Per-tier matrix coverage lives in
-    playwright_tests/test_access_control.py.
+    These tests keep article body/paywall state in Django so Playwright only
+    needs a browser smoke for auth cookies and paywall navigation.
     """
 
     @classmethod
@@ -530,12 +530,48 @@ class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
             date=date(2025, 6, 15), published=True,
             required_level=LEVEL_BASIC,
         )
+        cls.main_article = Article.objects.create(
+            title='Main Article', slug='main-article',
+            description='Main description',
+            content_html='<p>Full main content</p>',
+            date=date(2025, 6, 16), published=True,
+            required_level=LEVEL_MAIN,
+        )
+        cls.free_user = User.objects.create_user(email='free-blog@test.com')
+        cls.free_user.tier = cls.free_tier
+        cls.free_user.save()
+        cls.basic_user = User.objects.create_user(email='basic-blog@test.com')
+        cls.basic_user.tier = cls.basic_tier
+        cls.basic_user.save()
 
     def test_anonymous_sees_gated_basic_article(self):
         response = self.client.get('/blog/basic-article')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Full basic content')
         self.assertContains(response, 'Upgrade to Basic to read this article')
+
+    def test_free_user_sees_gated_basic_article(self):
+        self.client.force_login(self.free_user)
+        response = self.client.get('/blog/basic-article')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Full basic content')
+        self.assertContains(response, 'Upgrade to Basic to read this article')
+        self.assertContains(response, 'href="/pricing"')
+
+    def test_basic_member_sees_full_basic_article(self):
+        self.client.force_login(self.basic_user)
+        response = self.client.get('/blog/basic-article')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Full basic content')
+        self.assertNotContains(response, 'Upgrade to Basic to read this article')
+
+    def test_basic_member_sees_main_article_paywall(self):
+        self.client.force_login(self.basic_user)
+        response = self.client.get('/blog/main-article')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Full main content')
+        self.assertContains(response, 'Upgrade to Main to read this article')
+        self.assertContains(response, 'href="/pricing"')
 
 
 @tag('core')

@@ -3,6 +3,7 @@
 import os
 import shutil
 import tempfile
+from dataclasses import dataclass
 
 from django.db import IntegrityError
 from django.utils import timezone
@@ -33,6 +34,46 @@ from integrations.services.github_sync.repo import (
     clone_or_pull_repo,
     fetch_remote_head_sha,
 )
+
+
+@dataclass(frozen=True)
+class PreparedRepo:
+    repo_dir: str
+    temp_dir: str | None
+    commit_sha: str
+
+
+@dataclass(frozen=True)
+class SyncPipelineResult:
+    stats: dict
+    s3_errors: list
+    tiers_result: dict
+
+
+@dataclass(frozen=True)
+class RepoClassification:
+    course_dirs: list
+    workshop_dirs: list
+    article_files: list
+    project_files: list
+    event_files: list
+    instructor_files: list
+    curated_link_files: list
+    download_files: list
+    interview_files: list
+
+    def as_dict(self):
+        return {
+            'course_dirs': self.course_dirs,
+            'workshop_dirs': self.workshop_dirs,
+            'article_files': self.article_files,
+            'project_files': self.project_files,
+            'event_files': self.event_files,
+            'instructor_files': self.instructor_files,
+            'curated_link_files': self.curated_link_files,
+            'download_files': self.download_files,
+            'interview_files': self.interview_files,
+        }
 
 
 def _is_head_unchanged_skip(log):
@@ -94,102 +135,109 @@ def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
     Returns:
         SyncLog or None: The sync log entry.
     """
-    # Acquire sync lock (Edge Case 4: Concurrent Syncs)
-    # Skip locking when repo_dir is provided (testing mode)
     use_lock = repo_dir is None
     if use_lock and not acquire_sync_lock(source):
-        logger.info(
-            'Sync already in progress for %s, skipping.', source.repo_name,
+        return _write_lock_skipped_log(source, batch_id)
+
+    head_skip_log = _maybe_skip_unchanged_head(
+        source, repo_dir=repo_dir, batch_id=batch_id, force=force,
+    )
+    if head_skip_log is not None:
+        if use_lock:
+            release_sync_lock(source)
+        return head_skip_log
+
+    sync_log = _start_sync_log(source, batch_id)
+    prepared = None
+    try:
+        prepared = _prepare_repo(source, repo_dir)
+        pipeline_result = _run_content_pipeline(
+            source, prepared.repo_dir, prepared.commit_sha, sync_log,
         )
-        # Issue #221: the in-memory ``source`` may point to a row that was
-        # deleted (or rolled back under SQLite contention) before this task
-        # ran. Writing the SyncLog with a stale FK raises IntegrityError and
-        # fails the worker task. Confirm the source still exists, and treat
-        # the SyncLog write itself as best-effort.
-        if not ContentSource.objects.filter(pk=source.pk).exists():
-            logger.warning(
-                'Skipping SyncLog for %s: ContentSource %s no longer exists.',
-                source.repo_name, source.pk,
-            )
-            return None
-        try:
-            sync_log = SyncLog.objects.create(
-                source=source,
-                batch_id=batch_id,
-                status='skipped',
-                finished_at=timezone.now(),
-                errors=[
-                    {'file': '', 'error': 'Sync already in progress, skipped.'},
-                ],
-            )
-        except IntegrityError:
-            logger.warning(
-                'Could not write skipped SyncLog for %s (FK gone); '
-                'returning without raising.',
-                source.repo_name,
-            )
-            return None
-        return sync_log
+        _finish_successful_sync(source, sync_log, prepared, pipeline_result)
+    except Exception as e:
+        _mark_sync_failed(source, sync_log, e, prepared)
+    finally:
+        _cleanup_prepared_repo(prepared)
+        if use_lock:
+            _release_lock_and_enqueue_follow_up(source)
 
-    # Cheap HEAD-SHA skip check (issue #235).
-    #
-    # If the upstream HEAD hasn't moved since the last successful sync, a
-    # full clone + file walk would be a no-op. Use ``git ls-remote HEAD``
-    # (a single network round-trip, no object download) to compare. Skip
-    # the optimisation when:
-    #   - ``force=True`` (operator clicked "Force resync" or webhook fired)
-    #   - ``repo_dir`` is provided (no remote to check; tests + ``--from-disk``)
-    #   - the latest terminal sync wasn't success or a prior HEAD skip
-    #     (we want to retry failures)
-    #   - we don't yet have a baseline (first-ever sync)
-    #
-    # If the HEAD lookup itself fails (network error, missing auth) we
-    # fall through and run the sync rather than silently skipping —
-    # better to do the work than to lie about being up to date.
+    return sync_log
+
+
+def _write_lock_skipped_log(source, batch_id):
+    logger.info(
+        'Sync already in progress for %s, skipping.', source.repo_name,
+    )
+    # Issue #221: the in-memory ``source`` may point to a row that was
+    # deleted (or rolled back under SQLite contention) before this task
+    # ran. Writing the SyncLog with a stale FK raises IntegrityError and
+    # fails the worker task. Confirm the source still exists, and treat
+    # the SyncLog write itself as best-effort.
+    if not ContentSource.objects.filter(pk=source.pk).exists():
+        logger.warning(
+            'Skipping SyncLog for %s: ContentSource %s no longer exists.',
+            source.repo_name, source.pk,
+        )
+        return None
+    try:
+        return SyncLog.objects.create(
+            source=source,
+            batch_id=batch_id,
+            status='skipped',
+            finished_at=timezone.now(),
+            errors=[
+                {'file': '', 'error': 'Sync already in progress, skipped.'},
+            ],
+        )
+    except IntegrityError:
+        logger.warning(
+            'Could not write skipped SyncLog for %s (FK gone); '
+            'returning without raising.',
+            source.repo_name,
+        )
+        return None
+
+
+def _maybe_skip_unchanged_head(source, *, repo_dir, batch_id, force):
+    """Write and return a skip log when the remote HEAD is unchanged."""
     if (
-        repo_dir is None
-        and not force
-        and _can_skip_for_unchanged_head(source)
+        repo_dir is not None
+        or force
+        or not _can_skip_for_unchanged_head(source)
     ):
-        head_sha = fetch_remote_head_sha(source.repo_name, source.is_private)
-        if head_sha and head_sha == source.last_synced_commit:
-            now = timezone.now()
-            sync_log = SyncLog.objects.create(
-                source=source,
-                batch_id=batch_id,
-                status='skipped',
-                commit_sha=head_sha,
-                finished_at=now,
-                errors=[{'file': '', 'error': 'HEAD unchanged'}],
-            )
-            source.last_synced_at = now
-            source.last_sync_status = 'skipped'
-            source.last_sync_log = f'Skipped: HEAD unchanged ({head_sha[:7]})'
-            source.save(update_fields=[
-                'last_synced_at', 'last_sync_status', 'last_sync_log',
-                'updated_at',
-            ])
-            if use_lock:
-                release_sync_lock(source)
-            logger.info(
-                'Skipping sync for %s — HEAD unchanged (%s).',
-                source.repo_name, head_sha[:7],
-            )
-            return sync_log
+        return None
 
-    # Issue #274: queued → running transition.
-    #
-    # The Studio trigger views now create a SyncLog at status='queued' the
-    # moment the operator clicks "Sync now". When the worker (this code)
-    # finally picks up the task, we UPDATE that existing row instead of
-    # creating a duplicate — otherwise the dashboard would show two rows
-    # for one logical sync (a queued one and a running one).
-    #
-    # We look for the most recent queued row for this source within the
-    # last queued-watchdog window (only those rows could plausibly belong
-    # to *this* enqueue call). If none found — direct CLI invocation,
-    # webhook bypass, etc. — fall back to creating one as before.
+    head_sha = fetch_remote_head_sha(source.repo_name, source.is_private)
+    if not head_sha or head_sha != source.last_synced_commit:
+        return None
+
+    now = timezone.now()
+    sync_log = SyncLog.objects.create(
+        source=source,
+        batch_id=batch_id,
+        status='skipped',
+        commit_sha=head_sha,
+        finished_at=now,
+        errors=[{'file': '', 'error': 'HEAD unchanged'}],
+    )
+    source.last_synced_at = now
+    source.last_sync_status = 'skipped'
+    source.last_sync_log = f'Skipped: HEAD unchanged ({head_sha[:7]})'
+    source.save(update_fields=[
+        'last_synced_at', 'last_sync_status', 'last_sync_log',
+        'updated_at',
+    ])
+    logger.info(
+        'Skipping sync for %s — HEAD unchanged (%s).',
+        source.repo_name, head_sha[:7],
+    )
+    return sync_log
+
+
+def _start_sync_log(source, batch_id):
     from django.conf import settings as _settings
+
     queued_window = timezone.now() - timezone.timedelta(
         minutes=getattr(_settings, 'SYNC_QUEUED_THRESHOLD_MINUTES', 10),
     )
@@ -218,142 +266,125 @@ def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
 
     source.last_sync_status = 'running'
     source.save(update_fields=['last_sync_status', 'updated_at'])
-
-    temp_dir = None
-    commit_sha = ''
-    try:
-        if repo_dir is None:
-            temp_dir = tempfile.mkdtemp(prefix='github-sync-')
-            commit_sha = clone_or_pull_repo(
-                source.repo_name, temp_dir, source.is_private,
-            )
-            repo_dir = temp_dir
-        else:
-            # For testing / --from-disk, resolve the SHA from the local
-            # clone if possible; otherwise fall back to the legacy
-            # ``test-commit-sha`` marker so downstream per-item
-            # ``source_commit`` writes (and tests asserting on it) still
-            # have a value.
-            commit_sha = _resolve_local_repo_sha(repo_dir) or 'test-commit-sha'
-
-        # The walker now operates on the whole repo and dispatches per file —
-        # no more per-source ``content_path`` slicing. Edge Case 5: Max files
-        # guard still applies; we just count over the whole repo.
-        content_dir = repo_dir
-        file_count = _count_content_files(content_dir)
-        if file_count > source.max_files:
-            raise GitHubSyncError(
-                f'Repository contains more than {source.max_files} content files. '
-                f'Increase max_files on the ContentSource or reduce repo size.'
-            )
-
-        # Upload images to S3 before content sync (so CDN URLs are live)
-        # Edge Case 3: S3 errors do not abort sync
-        s3_stats = upload_images_to_s3(content_dir, source)
-        s3_errors = s3_stats.get('errors', [])
-        if s3_errors:
-            logger.warning(
-                'S3 image upload had %d error(s) for %s, continuing with content sync.',
-                len(s3_errors), source.repo_name,
-            )
-        logger.info(
-            'S3 upload for %s: %d uploaded, %d skipped',
-            source.repo_name, s3_stats['uploaded'], s3_stats['skipped'],
-        )
-
-        # Sync tiers.yaml from repo root into SiteConfig
-        tiers_result = _sync_tiers_yaml(repo_dir)
-
-        # Collect known image paths for broken reference checks (Edge Case 8)
-        known_images = _collect_image_paths(content_dir)
-
-        # One walker for the entire repo. The walker dispatches each file to
-        # the appropriate leaf parser based on filename, frontmatter, and
-        # location. See ``_sync_repo``.
-        stats = _sync_repo(source, content_dir, commit_sha, sync_log,
-                           known_images=known_images)
-
-        # Merge S3 errors into stats
-        all_errors = s3_errors + stats.get('errors', [])
-
-        # Update sync log
-        sync_log.items_created = stats.get('created', 0)
-        sync_log.items_updated = stats.get('updated', 0)
-        sync_log.items_unchanged = stats.get('unchanged', 0)
-        sync_log.items_deleted = stats.get('deleted', 0)
-        sync_log.items_detail = stats.get('items_detail', [])
-        sync_log.tiers_synced = tiers_result.get('synced', False)
-        sync_log.tiers_count = tiers_result.get('count', 0)
-        sync_log.errors = all_errors
-        sync_log.commit_sha = commit_sha or ''
-
-        if sync_log.errors:
-            sync_log.status = 'partial'
-        else:
-            sync_log.status = 'success'
-
-        sync_log.finished_at = timezone.now()
-        sync_log.save()
-
-        # Update source
-        source.last_synced_at = timezone.now()
-        source.last_sync_status = sync_log.status
-        source.last_sync_log = (
-            f"Created: {sync_log.items_created}, "
-            f"Updated: {sync_log.items_updated}, "
-            f"Unchanged: {sync_log.items_unchanged}, "
-            f"Deleted: {sync_log.items_deleted}"
-        )
-        if sync_log.errors:
-            source.last_sync_log += f"\nErrors: {len(sync_log.errors)}"
-        # Issue #235: only persist last_synced_commit on success/partial
-        # (i.e. the sync at least completed without raising). On failure
-        # we keep the previous last-good SHA so the next skip check still
-        # has a baseline. We treat ``partial`` (per-file errors) as good
-        # enough — the repo was processed, we know what we have.
-        if commit_sha and commit_sha != 'test-commit-sha':
-            source.last_synced_commit = commit_sha
-        source.save()
-
-    except Exception as e:
-        logger.exception('Sync failed for %s', source.repo_name)
-        sync_log.status = 'failed'
-        sync_log.finished_at = timezone.now()
-        sync_log.errors = [{'file': '', 'error': str(e)}]
-        # Record which SHA we were trying to sync against (helps debug
-        # repeated failures), but do NOT update ContentSource —
-        # ``last_synced_commit`` is a "last known good" pointer.
-        if commit_sha:
-            sync_log.commit_sha = commit_sha
-        sync_log.save()
-
-        source.last_sync_status = 'failed'
-        source.last_sync_log = f'Sync failed: {e}'
-        source.save()
-
-    finally:
-        if temp_dir and os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-        # Release sync lock and check for follow-up (Edge Case 9)
-        if use_lock:
-            follow_up = release_sync_lock(source)
-            if follow_up:
-                logger.info(
-                    'Follow-up sync requested for %s, enqueuing.',
-                    source.repo_name,
-                )
-                try:
-                    from django_q.tasks import async_task
-                    async_task(
-                        'integrations.services.github.sync_content_source',
-                        source,
-                        task_name=f'sync-{source.repo_name}-followup',
-                    )
-                except ImportError:
-                    sync_content_source(source)
-
     return sync_log
+
+
+def _prepare_repo(source, repo_dir):
+    if repo_dir is None:
+        temp_dir = tempfile.mkdtemp(prefix='github-sync-')
+        commit_sha = clone_or_pull_repo(
+            source.repo_name, temp_dir, source.is_private,
+        )
+        return PreparedRepo(
+            repo_dir=temp_dir, temp_dir=temp_dir, commit_sha=commit_sha,
+        )
+
+    # For testing / --from-disk, resolve the SHA from the local clone if
+    # possible; otherwise fall back to the legacy ``test-commit-sha`` marker.
+    commit_sha = _resolve_local_repo_sha(repo_dir) or 'test-commit-sha'
+    return PreparedRepo(repo_dir=repo_dir, temp_dir=None, commit_sha=commit_sha)
+
+
+def _run_content_pipeline(source, repo_dir, commit_sha, sync_log):
+    _enforce_max_content_files(source, repo_dir)
+    s3_stats = upload_images_to_s3(repo_dir, source)
+    s3_errors = s3_stats.get('errors', [])
+    if s3_errors:
+        logger.warning(
+            'S3 image upload had %d error(s) for %s, continuing with content sync.',
+            len(s3_errors), source.repo_name,
+        )
+    logger.info(
+        'S3 upload for %s: %d uploaded, %d skipped',
+        source.repo_name, s3_stats['uploaded'], s3_stats['skipped'],
+    )
+
+    tiers_result = _sync_tiers_yaml(repo_dir)
+    known_images = _collect_image_paths(repo_dir)
+    stats = _sync_repo(
+        source, repo_dir, commit_sha, sync_log, known_images=known_images,
+    )
+    return SyncPipelineResult(
+        stats=stats, s3_errors=s3_errors, tiers_result=tiers_result,
+    )
+
+
+def _enforce_max_content_files(source, repo_dir):
+    file_count = _count_content_files(repo_dir)
+    if file_count > source.max_files:
+        raise GitHubSyncError(
+            f'Repository contains more than {source.max_files} content files. '
+            f'Increase max_files on the ContentSource or reduce repo size.'
+        )
+
+
+def _finish_successful_sync(source, sync_log, prepared, pipeline_result):
+    stats = pipeline_result.stats
+    tiers_result = pipeline_result.tiers_result
+    sync_log.items_created = stats.get('created', 0)
+    sync_log.items_updated = stats.get('updated', 0)
+    sync_log.items_unchanged = stats.get('unchanged', 0)
+    sync_log.items_deleted = stats.get('deleted', 0)
+    sync_log.items_detail = stats.get('items_detail', [])
+    sync_log.tiers_synced = tiers_result.get('synced', False)
+    sync_log.tiers_count = tiers_result.get('count', 0)
+    sync_log.errors = pipeline_result.s3_errors + stats.get('errors', [])
+    sync_log.commit_sha = prepared.commit_sha or ''
+    sync_log.status = 'partial' if sync_log.errors else 'success'
+    sync_log.finished_at = timezone.now()
+    sync_log.save()
+
+    source.last_synced_at = timezone.now()
+    source.last_sync_status = sync_log.status
+    source.last_sync_log = (
+        f"Created: {sync_log.items_created}, "
+        f"Updated: {sync_log.items_updated}, "
+        f"Unchanged: {sync_log.items_unchanged}, "
+        f"Deleted: {sync_log.items_deleted}"
+    )
+    if sync_log.errors:
+        source.last_sync_log += f"\nErrors: {len(sync_log.errors)}"
+    if prepared.commit_sha and prepared.commit_sha != 'test-commit-sha':
+        source.last_synced_commit = prepared.commit_sha
+    source.save()
+
+
+def _mark_sync_failed(source, sync_log, error, prepared):
+    logger.exception('Sync failed for %s', source.repo_name)
+    sync_log.status = 'failed'
+    sync_log.finished_at = timezone.now()
+    sync_log.errors = [{'file': '', 'error': str(error)}]
+    if prepared is not None and prepared.commit_sha:
+        sync_log.commit_sha = prepared.commit_sha
+    sync_log.save()
+
+    source.last_sync_status = 'failed'
+    source.last_sync_log = f'Sync failed: {error}'
+    source.save()
+
+
+def _cleanup_prepared_repo(prepared):
+    if prepared and prepared.temp_dir and os.path.exists(prepared.temp_dir):
+        shutil.rmtree(prepared.temp_dir, ignore_errors=True)
+
+
+def _release_lock_and_enqueue_follow_up(source):
+    follow_up = release_sync_lock(source)
+    if not follow_up:
+        return
+    logger.info(
+        'Follow-up sync requested for %s, enqueuing.',
+        source.repo_name,
+    )
+    try:
+        from django_q.tasks import async_task
+        async_task(
+            'integrations.services.github.sync_content_source',
+            source,
+            task_name=f'sync-{source.repo_name}-followup',
+        )
+    except ImportError:
+        sync_content_source(source)
 
 
 def _classify_repo_files(repo_dir, classify_errors=None):
@@ -392,179 +423,154 @@ def _classify_repo_files(repo_dir, classify_errors=None):
               the interview-question convention (lowercase kebab-case,
               not README) AND having no special frontmatter.
     """
-    course_dirs = []
-    workshop_dirs = []
-    claimed_prefixes = []  # rel paths (with trailing /) of claimed subtrees
+    return RepoFileClassifier(repo_dir, classify_errors).classify().as_dict()
 
-    # Pass 1: find course.yaml and workshop.yaml to identify claimed subtrees.
-    for root, dirs, files in os.walk(repo_dir, topdown=True):
-        # Skip .git
-        dirs[:] = [d for d in dirs if d != '.git' and not d.startswith('.git')]
-        if 'course.yaml' in files:
-            course_dirs.append(root)
-            rel = os.path.relpath(root, repo_dir)
-            prefix = '' if rel == '.' else rel + os.sep
-            claimed_prefixes.append(prefix)
-            # Don't descend further: course parser handles its own subtree.
-            dirs[:] = []
-            continue
-        if 'workshop.yaml' in files:
-            workshop_dirs.append(root)
-            rel = os.path.relpath(root, repo_dir)
-            prefix = '' if rel == '.' else rel + os.sep
-            claimed_prefixes.append(prefix)
-            dirs[:] = []
-            continue
 
-    def _is_under_claimed(rel_path):
-        for prefix in claimed_prefixes:
-            if not prefix:
-                # The repo root itself is a claimed dir (single-course mode)
-                # which means EVERY file at the root is claimed by the
-                # course parser. The course parser will pick the ones it
-                # wants; everything else is silently ignored.
-                return True
-            if rel_path.startswith(prefix):
+class RepoFileClassifier:
+    """Two-pass repo classifier that preserves the legacy dict boundary."""
+
+    def __init__(self, repo_dir, classify_errors=None):
+        self.repo_dir = repo_dir
+        self.classify_errors = classify_errors
+        self.course_dirs = []
+        self.workshop_dirs = []
+        self.claimed_prefixes = []
+        self.article_files = []
+        self.project_files = []
+        self.event_files = []
+        self.instructor_files = []
+        self.curated_link_files = []
+        self.download_files = []
+        self.interview_files = []
+
+    def classify(self):
+        self._claim_structured_subtrees()
+        self._classify_unclaimed_files()
+        return RepoClassification(
+            course_dirs=self.course_dirs,
+            workshop_dirs=self.workshop_dirs,
+            article_files=self.article_files,
+            project_files=self.project_files,
+            event_files=self.event_files,
+            instructor_files=self.instructor_files,
+            curated_link_files=self.curated_link_files,
+            download_files=self.download_files,
+            interview_files=self.interview_files,
+        )
+
+    def _claim_structured_subtrees(self):
+        for root, dirs, files in os.walk(self.repo_dir, topdown=True):
+            self._prune_git_dirs(dirs)
+            if 'course.yaml' in files:
+                self._claim_subtree(root, self.course_dirs)
+                dirs[:] = []
+                continue
+            if 'workshop.yaml' in files:
+                self._claim_subtree(root, self.workshop_dirs)
+                dirs[:] = []
+
+    def _claim_subtree(self, root, target):
+        target.append(root)
+        rel = os.path.relpath(root, self.repo_dir)
+        prefix = '' if rel == '.' else rel + os.sep
+        self.claimed_prefixes.append(prefix)
+
+    def _is_under_claimed(self, rel_path):
+        for prefix in self.claimed_prefixes:
+            if not prefix or rel_path.startswith(prefix):
                 return True
         return False
 
-    article_files = []
-    project_files = []
-    event_files = []
-    instructor_files = []
-    curated_link_files = []
-    download_files = []
-    interview_files = []
+    def _classify_unclaimed_files(self):
+        for root, dirs, files in os.walk(self.repo_dir, topdown=True):
+            self._prune_git_dirs(dirs)
+            for filename in files:
+                self._classify_file(root, filename)
 
-    # Pass 2: walk every file and classify by inspection. We re-walk so
-    # subtree pruning is independent of the first pass — callers don't
-    # rely on path order within categories anyway.
-    for root, dirs, files in os.walk(repo_dir, topdown=True):
+    @staticmethod
+    def _prune_git_dirs(dirs):
         dirs[:] = [d for d in dirs if d != '.git' and not d.startswith('.git')]
 
-        for filename in files:
-            filepath = os.path.join(root, filename)
-            rel_path = os.path.relpath(filepath, repo_dir)
+    def _classify_file(self, root, filename):
+        filepath = os.path.join(root, filename)
+        rel_path = os.path.relpath(filepath, self.repo_dir)
+        if self._is_structural_or_claimed_file(rel_path, filename):
+            return
 
-            # tiers.yaml is handled separately in sync_content_source.
-            if rel_path == 'tiers.yaml':
-                continue
-            # course.yaml / workshop.yaml are dispatched by their subtree.
-            if filename in ('course.yaml', 'workshop.yaml'):
-                continue
-            # Any file under a claimed subtree is owned by the
-            # course/workshop parser — skip it for everything else.
-            if _is_under_claimed(rel_path):
-                continue
+        parts = rel_path.split(os.sep)
+        ext = os.path.splitext(filename)[1].lower()
+        if self._classify_by_special_dir(rel_path, parts, ext):
+            return
+        if ext in ('.yaml', '.yml'):
+            self._classify_yaml(filepath, rel_path)
+        elif ext == '.md':
+            self._classify_markdown(filepath, rel_path, filename, parts)
 
-            # Path-component checks for special directories.
-            parts = rel_path.split(os.sep)
-            ext = os.path.splitext(filename)[1].lower()
+    def _is_structural_or_claimed_file(self, rel_path, filename):
+        return (
+            rel_path == 'tiers.yaml'
+            or filename in ('course.yaml', 'workshop.yaml')
+            or self._is_under_claimed(rel_path)
+        )
 
-            if 'instructors' in parts and ext in ('.yaml', '.yml'):
-                instructor_files.append(rel_path)
-                continue
-            if 'curated-links' in parts and ext in ('.md', '.yaml', '.yml'):
-                curated_link_files.append(rel_path)
-                continue
-            if 'downloads' in parts and ext in ('.yaml', '.yml'):
-                download_files.append(rel_path)
-                continue
+    def _classify_by_special_dir(self, rel_path, parts, ext):
+        if 'instructors' in parts and ext in ('.yaml', '.yml'):
+            self.instructor_files.append(rel_path)
+            return True
+        if 'curated-links' in parts and ext in ('.md', '.yaml', '.yml'):
+            self.curated_link_files.append(rel_path)
+            return True
+        if 'downloads' in parts and ext in ('.yaml', '.yml'):
+            self.download_files.append(rel_path)
+            return True
+        if (
+            ('events' in parts or 'recordings' in parts)
+            and ext in ('.yaml', '.yml', '.md')
+        ):
+            self.event_files.append(rel_path)
+            return True
+        return False
 
-            # Files under an ``events/`` or ``recordings/`` subtree:
-            # events, regardless of whether the YAML contains a
-            # ``start_datetime`` (legacy recording-only events have
-            # only ``published_at``). This mirrors the directory-based
-            # dispatch the old per-type orchestrators used.
-            if (
-                ('events' in parts or 'recordings' in parts)
-                and ext in ('.yaml', '.yml', '.md')
-            ):
-                event_files.append(rel_path)
-                continue
+    def _classify_yaml(self, filepath, rel_path):
+        try:
+            data = _parse_yaml_file(filepath)
+        except ValueError as exc:
+            if self.classify_errors is not None:
+                self.classify_errors.append({
+                    'file': rel_path,
+                    'error': str(exc),
+                })
+            return
+        if 'start_datetime' in data or 'published_at' in data:
+            self.event_files.append(rel_path)
 
-            if ext in ('.yaml', '.yml'):
-                # YAML with start_datetime -> event (catches events that
-                # live outside an ``events/`` subtree).
-                try:
-                    data = _parse_yaml_file(filepath)
-                except ValueError as exc:
-                    # Malformed YAML — record an error so the dashboard
-                    # surfaces it, then skip classification.
-                    if classify_errors is not None:
-                        classify_errors.append({
-                            'file': rel_path,
-                            'error': str(exc),
-                        })
-                    continue
-                if 'start_datetime' in data or 'published_at' in data:
-                    # ``published_at``-only files were treated as
-                    # recording-style events by the legacy orchestrator;
-                    # preserve that.
-                    event_files.append(rel_path)
-                continue
-
-            if ext == '.md':
-                if filename.upper() == 'README.MD':
-                    continue
-                # Path-based dispatch for the monorepo's well-known
-                # subtrees first so a partially-formed frontmatter still
-                # gets routed correctly. The article/project per-file
-                # parsers do their own validation and will surface a
-                # SyncLog error when frontmatter is missing.
-                if 'blog' in parts:
-                    article_files.append(rel_path)
-                    continue
-                if 'projects' in parts:
-                    project_files.append(rel_path)
-                    continue
-                if 'interview-questions' in parts:
-                    interview_files.append(rel_path)
-                    continue
-                try:
-                    metadata, _body = _parse_markdown_file(filepath)
-                except ValueError:
-                    # Hand the file to the article dispatcher anyway so
-                    # its per-file try/except records the parse error
-                    # AND adds the filename-derived slug to
-                    # ``failed_slugs`` (excluding it from stale-cleanup
-                    # soft-delete). Articles are the most permissive
-                    # default for unclassified markdown.
-                    article_files.append(rel_path)
-                    continue
-                # Project: ``difficulty`` claims it. ``author`` alone
-                # was historically the project marker but plenty of
-                # articles also carry ``author``; ``difficulty`` is the
-                # discriminator we keep.
-                if metadata.get('difficulty'):
-                    project_files.append(rel_path)
-                    continue
-                # Article: has a date field.
-                if metadata.get('date'):
-                    article_files.append(rel_path)
-                    continue
-                # Interview question: root-level kebab-case .md with no
-                # special frontmatter we already matched.
-                if (
-                    '/' not in rel_path
-                    and os.sep not in rel_path
-                    and _interview_question_filename(filename)
-                ):
-                    interview_files.append(rel_path)
-                    continue
-                # else: silently ignore (README, docs, etc.)
-
-    return {
-        'course_dirs': course_dirs,
-        'workshop_dirs': workshop_dirs,
-        'article_files': article_files,
-        'project_files': project_files,
-        'event_files': event_files,
-        'instructor_files': instructor_files,
-        'curated_link_files': curated_link_files,
-        'download_files': download_files,
-        'interview_files': interview_files,
-    }
+    def _classify_markdown(self, filepath, rel_path, filename, parts):
+        if filename.upper() == 'README.MD':
+            return
+        if 'blog' in parts:
+            self.article_files.append(rel_path)
+            return
+        if 'projects' in parts:
+            self.project_files.append(rel_path)
+            return
+        if 'interview-questions' in parts:
+            self.interview_files.append(rel_path)
+            return
+        try:
+            metadata, _body = _parse_markdown_file(filepath)
+        except ValueError:
+            self.article_files.append(rel_path)
+            return
+        if metadata.get('difficulty'):
+            self.project_files.append(rel_path)
+        elif metadata.get('date'):
+            self.article_files.append(rel_path)
+        elif (
+            '/' not in rel_path
+            and os.sep not in rel_path
+            and _interview_question_filename(filename)
+        ):
+            self.interview_files.append(rel_path)
 
 
 _DEFAULT_WORKSHOPS_REPO = 'AI-Shipping-Labs/workshops'

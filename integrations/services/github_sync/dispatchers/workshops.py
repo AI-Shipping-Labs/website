@@ -96,8 +96,6 @@ def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
     links to native ``/workshops/<slug>`` URLs. ``workshops_repo_name``
     pairs with it so the GitHub-URL detector matches the right host.
     """
-    from content.models import Workshop
-
     seen_slugs = set()
     failed_slugs = set()
 
@@ -109,7 +107,14 @@ def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
             workshops_repo_name=workshops_repo_name,
         )
 
-    # Stale cleanup: workshops whose source folder disappeared this sync.
+    _cleanup_stale_workshops_for_source(
+        source, seen_slugs, failed_slugs, stats,
+    )
+
+
+def _cleanup_stale_workshops_for_source(source, seen_slugs, failed_slugs, stats):
+    from content.models import Workshop
+
     stale = Workshop.objects.filter(
         source_repo=source.repo_name,
         status='published',
@@ -123,10 +128,16 @@ def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
             'action': action,
             'content_type': 'workshop',
         },
-        cleanup=lambda workshops: Workshop.objects.filter(
-            pk__in=[ws.pk for ws in workshops],
-        ).update(status='draft'),
+        cleanup=_mark_stale_workshops_draft,
     )
+
+
+def _mark_stale_workshops_draft(workshops):
+    from content.models import Workshop
+
+    Workshop.objects.filter(
+        pk__in=[workshop.pk for workshop in workshops],
+    ).update(status='draft')
 
 
 def _sync_single_workshop(

@@ -885,10 +885,15 @@ def _record_conversion_attribution(
 def _community_invite(user):
     """Invite a user to the community via a background task."""
     try:
-        from jobs.tasks import async_task
+        from jobs.tasks import async_task, build_task_name
         async_task(
             "community.tasks.hooks.community_invite_task",
             user_id=user.pk,
+            task_name=build_task_name(
+                "Invite community member",
+                f"user #{user.pk}",
+                "payment lifecycle",
+            ),
         )
     except Exception:
         logger.exception("Failed to enqueue community invite for user=%s", user.email)
@@ -897,10 +902,15 @@ def _community_invite(user):
 def _community_reactivate(user):
     """Reactivate a user in the community via a background task."""
     try:
-        from jobs.tasks import async_task
+        from jobs.tasks import async_task, build_task_name
         async_task(
             "community.tasks.hooks.community_reactivate_task",
             user_id=user.pk,
+            task_name=build_task_name(
+                "Reactivate community member",
+                f"user #{user.pk}",
+                "payment lifecycle",
+            ),
         )
     except Exception:
         logger.exception("Failed to enqueue community reactivate for user=%s", user.email)
@@ -909,10 +919,15 @@ def _community_reactivate(user):
 def _community_remove(user):
     """Remove a user from the community via a background task."""
     try:
-        from jobs.tasks import async_task
+        from jobs.tasks import async_task, build_task_name
         async_task(
             "community.tasks.hooks.community_remove_task",
             user_id=user.pk,
+            task_name=build_task_name(
+                "Remove community member",
+                f"user #{user.pk}",
+                "payment lifecycle",
+            ),
         )
     except Exception:
         logger.exception("Failed to enqueue community remove for user=%s", user.email)
@@ -921,10 +936,15 @@ def _community_remove(user):
 def _community_schedule_removal(user):
     """Schedule community removal at billing_period_end via a background task."""
     try:
-        from jobs.tasks import async_task
+        from jobs.tasks import async_task, build_task_name
         async_task(
             "community.tasks.removal.scheduled_community_removal",
             user_id=user.pk,
+            task_name=build_task_name(
+                "Schedule community removal",
+                f"user #{user.pk}",
+                "payment lifecycle",
+            ),
         )
     except Exception:
         logger.exception(

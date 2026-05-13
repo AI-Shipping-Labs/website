@@ -19,6 +19,7 @@ from accounts.models import TierOverride
 from email_app.models import EmailCampaign, EmailLog
 from email_app.services.email_classification import EMAIL_KIND_PROMOTIONAL
 from email_app.tests.test_email_service import assert_no_internal_footer_text
+from jobs.tasks import build_task_name
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -1079,6 +1080,11 @@ class CampaignAdminTest(TierSetupMixin, TestCase):
         mock_async_task.assert_called_once_with(
             'email_app.tasks.send_campaign.send_campaign',
             campaign_id=self.campaign.pk,
+            task_name=build_task_name(
+                'Send campaign',
+                f'#{self.campaign.pk} {self.campaign.subject}',
+                'Django admin campaign action',
+            ),
         )
 
     @patch('jobs.tasks.async_task')

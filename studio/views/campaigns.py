@@ -482,11 +482,16 @@ def campaign_send(request, campaign_id):
         )
         return redirect("studio_campaign_detail", campaign_id=campaign.pk)
 
-    from jobs.tasks import async_task
+    from jobs.tasks import async_task, build_task_name
 
     task_id = async_task(
         "email_app.tasks.send_campaign.send_campaign",
         campaign_id=campaign.pk,
+        task_name=build_task_name(
+            "Send campaign",
+            f"#{campaign.pk} {campaign.subject}",
+            "Studio campaign detail",
+        ),
     )
     logger.info(
         "Enqueued campaign %s for sending from Studio (task_id=%s)",

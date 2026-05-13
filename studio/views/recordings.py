@@ -9,7 +9,7 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from events.models import Event
-from jobs.tasks import async_task
+from jobs.tasks import async_task, build_task_name
 from studio.decorators import staff_required
 from studio.utils import get_github_edit_url, is_synced
 
@@ -91,6 +91,11 @@ def recording_publish_youtube(request, recording_id):
             'jobs.tasks.youtube_upload.upload_recording_to_youtube',
             recording.id,
             max_retries=3,
+            task_name=build_task_name(
+                'Upload recording to YouTube',
+                f'event #{recording.id} {recording.title}',
+                'Studio recording publish',
+            ),
         )
         logger.info(
             'Enqueued YouTube upload for event %s (task_id=%s)',

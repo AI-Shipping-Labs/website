@@ -19,7 +19,7 @@ from accounts.models import (
 )
 from accounts.services.import_users import get_import_adapter
 from accounts.utils.tags import normalize_tags
-from jobs.tasks import async_task
+from jobs.tasks import async_task, build_task_name
 from studio.decorators import staff_required
 
 IMPORT_TASK_PATH = "accounts.tasks.run_import_batch_task"
@@ -154,7 +154,15 @@ def import_batch_new(request):
         }
         batch.save(update_fields=["params"])
 
-    async_task(IMPORT_TASK_PATH, batch.pk)
+    async_task(
+        IMPORT_TASK_PATH,
+        batch.pk,
+        task_name=build_task_name(
+            "Run user import",
+            f"{source} batch #{batch.pk} {'dry-run' if dry_run else 'live'}",
+            "Studio user imports",
+        ),
+    )
     messages.success(request, f"Import batch {batch.pk} was queued.")
     return redirect("studio_import_batch_detail", batch_id=batch.pk)
 
@@ -189,7 +197,15 @@ def import_batch_rerun(request, batch_id):
         status=ImportBatch.STATUS_RUNNING,
         params=params,
     )
-    async_task(IMPORT_TASK_PATH, rerun.pk)
+    async_task(
+        IMPORT_TASK_PATH,
+        rerun.pk,
+        task_name=build_task_name(
+            "Rerun user import",
+            f"{rerun.source} batch #{rerun.pk} live",
+            "Studio user imports",
+        ),
+    )
     messages.success(request, f"Import batch {rerun.pk} was queued.")
     return redirect("studio_import_batch_detail", batch_id=rerun.pk)
 

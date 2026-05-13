@@ -24,6 +24,8 @@ from django.utils import timezone
 from django_q.models import OrmQ, Task
 from django_q.signing import SignedPackage
 
+from jobs.tasks import build_task_name
+
 User = get_user_model()
 
 
@@ -322,6 +324,25 @@ class RetryFailedTaskTest(TestCase):
         self.assertEqual(call_args[0][0], task.func)
         self.assertEqual(call_args[0][1:], ('arg1', 'arg2'))
         self.assertEqual(call_args[1].get('k'), 'v')
+        self.assertEqual(call_args[1].get('task_name'), task.name)
+
+    @patch('studio.views.worker.async_task')
+    def test_retry_uses_readable_fallback_name_when_original_is_blank(self, mock_async):
+        task = _create_task(success=False, name='', result='boom')
+
+        response = self.client.post(
+            f'/studio/worker/failed/{task.pk}/retry/',
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            mock_async.call_args.kwargs['task_name'],
+            build_task_name(
+                'Retry failed task',
+                task.func,
+                'Studio worker recovery',
+            ),
+        )
 
     @patch('studio.views.worker.async_task')
     def test_retry_deletes_the_failed_row(self, mock_async):

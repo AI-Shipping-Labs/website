@@ -91,10 +91,16 @@ def _queue_initial_sync(request, source):
     try:
         try:
             from django_q.tasks import async_task
+
+            from jobs.tasks.names import build_task_name
             async_task(
                 'integrations.services.github.sync_content_source',
                 source,
-                task_name=f'sync-{source.repo_name}',
+                task_name=build_task_name(
+                    'Sync content source',
+                    source.repo_name,
+                    'Studio content source create',
+                ),
             )
             _mark_source_queued(source)
             warning = _worker_warning_suffix()

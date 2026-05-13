@@ -16,6 +16,7 @@ from integrations.services.github import (
     INSTALLATION_REPOS_CACHE_KEY,
     GitHubSyncError,
 )
+from jobs.tasks import build_task_name
 
 User = get_user_model()
 
@@ -140,7 +141,11 @@ class ContentSourceCreateViewTest(TestCase):
         mock_async.assert_called_once_with(
             'integrations.services.github.sync_content_source',
             source,
-            task_name='sync-AI-Shipping-Labs/blog',
+            task_name=build_task_name(
+                'Sync content source',
+                source.repo_name,
+                'Studio content source create',
+            ),
         )
         self.assertEqual(
             SyncLog.objects.filter(source=source, status='queued').count(),

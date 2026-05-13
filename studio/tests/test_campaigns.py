@@ -10,6 +10,7 @@ from django.urls import reverse
 from email_app.models import EmailCampaign
 from email_app.services.email_service import EmailService
 from email_app.tests.test_email_service import assert_no_internal_footer_text
+from jobs.tasks import build_task_name
 from payments.models import Tier
 
 User = get_user_model()
@@ -360,6 +361,11 @@ class StudioCampaignDetailTest(TestCase):
         mock_async_task.assert_called_once_with(
             "email_app.tasks.send_campaign.send_campaign",
             campaign_id=self.campaign.pk,
+            task_name=build_task_name(
+                "Send campaign",
+                f"#{self.campaign.pk} {self.campaign.subject}",
+                "Studio campaign detail",
+            ),
         )
 
     @patch("jobs.tasks.async_task")

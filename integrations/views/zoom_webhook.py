@@ -168,12 +168,17 @@ def _handle_recording_completed(payload, webhook_log):
 
     # Enqueue background job to download from Zoom and upload to S3
     if download_url:
-        from jobs.tasks import async_task
+        from jobs.tasks import async_task, build_task_name
         async_task(
             'jobs.tasks.recording_upload.upload_recording_to_s3',
             event.id,
             download_url,
             max_retries=3,
+            task_name=build_task_name(
+                'Upload Zoom recording',
+                f'event #{event.id} {event.title}',
+                'Zoom webhook',
+            ),
         )
         logger.info(
             'Enqueued S3 upload job for event "%s" (id=%s)',

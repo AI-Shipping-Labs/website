@@ -404,6 +404,15 @@ class StudioPlanParticipantNavigationTest(TestCase):
         self.assertContains(response, 'crossorigin="anonymous"')
         self.assertNotContains(response, 'sortablejs@latest')
 
+    def test_plan_editor_helper_scripts_load_before_dom_orchestrator(self):
+        response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
+        html = response.content.decode()
+        state_idx = html.index('js/studio/plan_editor_state.js')
+        api_idx = html.index('js/studio/plan_editor_api.js')
+        main_idx = html.index('js/studio/plan_editor.js')
+        self.assertLess(state_idx, main_idx)
+        self.assertLess(api_idx, main_idx)
+
     def test_save_indicator_present_with_initial_saved_state(self):
         response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
         self.assertContains(response, 'data-testid="save-indicator"')

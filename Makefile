@@ -61,9 +61,9 @@ coverage:
 	uv run coverage run manage.py test
 	uv run coverage report --fail-under=85
 
-# Run the full Playwright end-to-end suite.
+# Run the full active Playwright end-to-end suite.
 test-playwright:
-	uv run pytest playwright_tests/ -v
+	uv run pytest -m "not legacy_checkout" playwright_tests/ -v
 
 # Run only the core subset of Playwright tests (auth, access control, payments,
 # one happy path each for events/courses/sprints/plans, notifications, and

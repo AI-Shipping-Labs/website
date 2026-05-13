@@ -13,7 +13,7 @@ Covers:
 """
 
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings, tag
@@ -182,7 +182,7 @@ class CanAccessWithCourseAccessTest(TierSetupMixin, TestCase):
 
 
 class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
-    """Test that the course detail page shows 'Buy this course' button correctly."""
+    """Course detail uses membership CTAs instead of local course checkout."""
 
     def setUp(self):
         self.client = Client()
@@ -193,20 +193,19 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
             stripe_price_id='price_test_123',
         )
 
-    def test_anonymous_user_sees_buy_button_that_can_resume_after_login(self):
-        """Anonymous users can start a course purchase and get sent through login."""
+    def test_anonymous_user_sees_membership_cta_without_buy_button(self):
         response = self.client.get('/courses/buyable-course')
-        self.assertContains(response, 'buy-course-btn')
-        self.assertContains(response, 'Buy this course for EUR 49.99')
-        self.assertContains(response, 'data.login_url')
+        self.assertContains(response, 'View Pricing')
+        self.assertNotContains(response, 'buy-course-btn')
+        self.assertNotContains(response, 'Buy this course')
 
-    def test_free_user_sees_buy_button(self):
-        """A free user who lacks tier access sees the buy button."""
+    def test_free_user_sees_membership_cta_without_buy_button(self):
         User.objects.create_user(email='free@test.com', password='testpass')
         self.client.login(email='free@test.com', password='testpass')
         response = self.client.get('/courses/buyable-course')
-        self.assertContains(response, 'buy-course-btn')
-        self.assertContains(response, 'Buy this course for EUR 49.99')
+        self.assertContains(response, 'View Pricing')
+        self.assertNotContains(response, 'buy-course-btn')
+        self.assertNotContains(response, 'Buy this course')
 
     def test_main_user_does_not_see_buy_button(self):
         """A user with tier access should not see the buy button."""
@@ -241,14 +240,12 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'buy-course-btn')
         self.assertContains(response, 'href="/courses/buyable-course/m1/u1"')
 
-    def test_buy_button_shows_subscription_cta_alongside(self):
-        """The buy button appears alongside the subscription CTA."""
+    def test_subscription_cta_is_the_only_purchase_cta(self):
         User.objects.create_user(email='both@test.com', password='testpass')
         self.client.login(email='both@test.com', password='testpass')
         response = self.client.get('/courses/buyable-course')
-        # Both subscription CTA and buy button should be present
         self.assertContains(response, 'View Pricing')
-        self.assertContains(response, 'Buy this course')
+        self.assertNotContains(response, 'Buy this course')
 
 
 # ============================================================
@@ -256,10 +253,9 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
-@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 @tag('core')
 class ApiCoursePurchaseTest(TierSetupMixin, TestCase):
-    """Test POST /api/courses/{slug}/purchase endpoint."""
+    """Local one-time course checkout endpoint is hard-deprecated."""
 
     def setUp(self):
         self.client = Client()
@@ -271,153 +267,24 @@ class ApiCoursePurchaseTest(TierSetupMixin, TestCase):
             stripe_price_id='price_buy_me',
         )
 
-    def test_anonymous_returns_401(self):
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
+    def test_returns_410_even_when_checkout_flag_enabled(self):
         response = self.client.post('/api/courses/buy-me/purchase')
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 410)
+        self.assertIn('deprecated', response.json()['error'])
+
+    @patch('integrations.config.get_config')
+    def test_response_includes_portal_url_without_calling_stripe(self, mock_config):
+        mock_config.return_value = 'https://billing.example.test/portal'
+        self.client.login(email='buyer@test.com', password='testpass')
+
+        response = self.client.post('/api/courses/buy-me/purchase')
+
+        self.assertEqual(response.status_code, 410)
         self.assertEqual(
-            response.json()['login_url'],
-            '/accounts/login/?next=%2Fcourses%2Fbuy-me',
+            response.json()['portal_url'],
+            'https://billing.example.test/portal',
         )
-
-    def test_anonymous_purchase_post_with_course_page_csrf_returns_login_url(self):
-        csrf_client = Client(enforce_csrf_checks=True)
-        page_response = csrf_client.get('/courses/buy-me')
-        csrf_token = page_response.cookies['csrftoken'].value
-
-        response = csrf_client.post(
-            '/api/courses/buy-me/purchase',
-            HTTP_X_CSRFTOKEN=csrf_token,
-        )
-
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(
-            response.json()['login_url'],
-            '/accounts/login/?next=%2Fcourses%2Fbuy-me',
-        )
-
-    def test_already_has_access_returns_400(self):
-        self.user.tier = self.main_tier
-        self.user.save()
-        self.client.login(email='buyer@test.com', password='testpass')
-        response = self.client.post('/api/courses/buy-me/purchase')
-        self.assertEqual(response.status_code, 400)
-        data = response.json()
-        self.assertIn('already have access', data['error'])
-
-    def test_no_individual_price_returns_400(self):
-        Course.objects.create(
-            title='No Price', slug='no-price-api',
-            status='published', required_level=20,
-        )
-        self.client.login(email='buyer@test.com', password='testpass')
-        response = self.client.post('/api/courses/no-price-api/purchase')
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('not available', response.json()['error'])
-
-    def test_no_stripe_price_id_returns_400(self):
-        Course.objects.create(
-            title='No Stripe', slug='no-stripe-api',
-            status='published', required_level=20,
-            individual_price_eur=Decimal('10.00'),
-        )
-        self.client.login(email='buyer@test.com', password='testpass')
-        response = self.client.post('/api/courses/no-stripe-api/purchase')
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('Stripe pricing not configured', response.json()['error'])
-
-    def test_nonexistent_course_returns_404(self):
-        self.client.login(email='buyer@test.com', password='testpass')
-        response = self.client.post('/api/courses/nonexistent/purchase')
-        self.assertEqual(response.status_code, 404)
-
-    def test_draft_course_returns_404(self):
-        Course.objects.create(
-            title='Draft', slug='draft-purchase',
-            status='draft', individual_price_eur=Decimal('10'),
-            stripe_price_id='price_draft',
-        )
-        self.client.login(email='buyer@test.com', password='testpass')
-        response = self.client.post('/api/courses/draft-purchase/purchase')
-        self.assertEqual(response.status_code, 404)
-
-    @patch('payments.services._get_stripe_client')
-    def test_creates_checkout_session(self, mock_get_client):
-        """Successful checkout creation returns checkout_url."""
-        mock_client = MagicMock()
-        mock_session = MagicMock()
-        mock_session.url = 'https://checkout.stripe.com/cs_test_purchase'
-        mock_client.checkout.sessions.create.return_value = mock_session
-        mock_get_client.return_value = mock_client
-
-        self.client.login(email='buyer@test.com', password='testpass')
-        response = self.client.post('/api/courses/buy-me/purchase')
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data['checkout_url'], 'https://checkout.stripe.com/cs_test_purchase')
-
-    @patch('payments.services._get_stripe_client')
-    def test_checkout_session_uses_payment_mode(self, mock_get_client):
-        """Checkout session is created with mode='payment' (not subscription)."""
-        mock_client = MagicMock()
-        mock_session = MagicMock()
-        mock_session.url = 'https://checkout.stripe.com/cs_test'
-        mock_client.checkout.sessions.create.return_value = mock_session
-        mock_get_client.return_value = mock_client
-
-        self.client.login(email='buyer@test.com', password='testpass')
-        self.client.post('/api/courses/buy-me/purchase')
-
-        call_params = mock_client.checkout.sessions.create.call_args[1]['params']
-        self.assertEqual(call_params['mode'], 'payment')
-
-    @patch('payments.services._get_stripe_client')
-    def test_checkout_session_includes_course_metadata(self, mock_get_client):
-        """Checkout session includes course_id in metadata."""
-        mock_client = MagicMock()
-        mock_session = MagicMock()
-        mock_session.url = 'https://checkout.stripe.com/cs_test'
-        mock_client.checkout.sessions.create.return_value = mock_session
-        mock_get_client.return_value = mock_client
-
-        self.client.login(email='buyer@test.com', password='testpass')
-        self.client.post('/api/courses/buy-me/purchase')
-
-        call_params = mock_client.checkout.sessions.create.call_args[1]['params']
-        self.assertEqual(call_params['metadata']['course_id'], str(self.course.pk))
-        self.assertEqual(call_params['metadata']['user_id'], str(self.user.pk))
-
-    @patch('payments.services._get_stripe_client')
-    def test_checkout_uses_stripe_customer_id_if_available(self, mock_get_client):
-        """If user has stripe_customer_id, use it instead of email."""
-        mock_client = MagicMock()
-        mock_session = MagicMock()
-        mock_session.url = 'https://checkout.stripe.com/cs_test'
-        mock_client.checkout.sessions.create.return_value = mock_session
-        mock_get_client.return_value = mock_client
-
-        self.user.stripe_customer_id = 'cus_existing'
-        self.user.save()
-
-        self.client.login(email='buyer@test.com', password='testpass')
-        self.client.post('/api/courses/buy-me/purchase')
-
-        call_params = mock_client.checkout.sessions.create.call_args[1]['params']
-        self.assertEqual(call_params['customer'], 'cus_existing')
-        self.assertNotIn('customer_email', call_params)
-
-    @patch('payments.services._get_stripe_client')
-    def test_stripe_error_returns_500(self, mock_get_client):
-        mock_get_client.side_effect = Exception('Stripe API error')
-
-        self.client.login(email='buyer@test.com', password='testpass')
-        with self.assertLogs('content.views.courses', level='ERROR') as logs:
-            response = self.client.post('/api/courses/buy-me/purchase')
-        self.assertEqual(response.status_code, 500)
-        self.assertIn(
-            'Failed to create course purchase checkout for course buy-me',
-            logs.output[0],
-        )
-        self.assertIn('error', response.json())
 
     def test_get_method_not_allowed(self):
         self.client.login(email='buyer@test.com', password='testpass')
@@ -688,15 +555,15 @@ class StudioCourseFormIndividualPriceTest(TestCase):
         self.assertContains(response, 'prod_abc')
         self.assertContains(response, 'price_xyz')
 
-    def test_edit_form_shows_create_stripe_button_when_needed(self):
-        """Show Create Stripe Product button when price is set but no stripe IDs."""
+    def test_edit_form_hides_create_stripe_button_when_needed(self):
+        """Studio no longer creates Stripe products for individual purchases."""
         course = Course.objects.create(
             title='Needs Stripe', slug='needs-stripe',
             individual_price_eur=Decimal('25.00'),
         )
         response = self.client.get(f'/studio/courses/{course.pk}/edit')
-        self.assertContains(response, 'create-stripe-product-btn')
-        self.assertContains(response, 'Create Stripe Product')
+        self.assertNotContains(response, 'create-stripe-product-btn')
+        self.assertNotContains(response, 'Create Stripe Product')
 
     def test_edit_form_hides_create_button_when_stripe_exists(self):
         """Do not show Create Stripe Product button when stripe IDs exist."""
@@ -724,7 +591,7 @@ class StudioCourseFormIndividualPriceTest(TestCase):
 
 
 class StudioCreateStripeProductTest(TestCase):
-    """Test the Create Stripe Product endpoint for courses."""
+    """Studio Stripe product creation endpoint is hard-deprecated."""
 
     def setUp(self):
         self.client = Client()
@@ -738,47 +605,15 @@ class StudioCreateStripeProductTest(TestCase):
         )
 
     @patch('payments.services._get_stripe_client')
-    def test_creates_stripe_product_and_price(self, mock_get_client):
-        mock_client = MagicMock()
-        mock_product = MagicMock()
-        mock_product.id = 'prod_test_123'
-        mock_price = MagicMock()
-        mock_price.id = 'price_test_456'
-        mock_client.products.create.return_value = mock_product
-        mock_client.prices.create.return_value = mock_price
-        mock_get_client.return_value = mock_client
-
+    def test_create_stripe_product_returns_410_without_calling_stripe(
+        self, mock_get_client,
+    ):
         response = self.client.post(
             f'/studio/courses/{self.course.pk}/create-stripe-product',
         )
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data['product_id'], 'prod_test_123')
-        self.assertEqual(data['price_id'], 'price_test_456')
-
-        self.course.refresh_from_db()
-        self.assertEqual(self.course.stripe_product_id, 'prod_test_123')
-        self.assertEqual(self.course.stripe_price_id, 'price_test_456')
-
-    @patch('payments.services._get_stripe_client')
-    def test_price_in_cents(self, mock_get_client):
-        """Price is sent to Stripe as cents (unit_amount)."""
-        mock_client = MagicMock()
-        mock_product = MagicMock()
-        mock_product.id = 'prod_cents'
-        mock_price = MagicMock()
-        mock_price.id = 'price_cents'
-        mock_client.products.create.return_value = mock_product
-        mock_client.prices.create.return_value = mock_price
-        mock_get_client.return_value = mock_client
-
-        self.client.post(
-            f'/studio/courses/{self.course.pk}/create-stripe-product',
-        )
-
-        price_params = mock_client.prices.create.call_args[1]['params']
-        self.assertEqual(price_params['unit_amount'], 3999)  # 39.99 EUR * 100
-        self.assertEqual(price_params['currency'], 'eur')
+        self.assertEqual(response.status_code, 410)
+        self.assertIn('deprecated', response.json()['error'])
+        mock_get_client.assert_not_called()
 
     def test_already_has_stripe_product_returns_400(self):
         self.course.stripe_product_id = 'prod_existing'
@@ -786,8 +621,7 @@ class StudioCreateStripeProductTest(TestCase):
         response = self.client.post(
             f'/studio/courses/{self.course.pk}/create-stripe-product',
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('already has', response.json()['error'])
+        self.assertEqual(response.status_code, 410)
 
     def test_no_individual_price_returns_400(self):
         course = Course.objects.create(
@@ -796,8 +630,7 @@ class StudioCreateStripeProductTest(TestCase):
         response = self.client.post(
             f'/studio/courses/{course.pk}/create-stripe-product',
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('individual_price_eur', response.json()['error'])
+        self.assertEqual(response.status_code, 410)
 
     def test_nonexistent_course_returns_404(self):
         response = self.client.post('/studio/courses/99999/create-stripe-product')
@@ -827,21 +660,6 @@ class StudioCreateStripeProductTest(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertIn('/accounts/login/', response.url)
-
-    @patch('payments.services._get_stripe_client')
-    def test_stripe_error_returns_500(self, mock_get_client):
-        mock_get_client.side_effect = Exception('Stripe API error')
-        with self.assertLogs('studio.views.courses', level='ERROR') as logs:
-            response = self.client.post(
-                f'/studio/courses/{self.course.pk}/create-stripe-product',
-            )
-        self.assertEqual(response.status_code, 500)
-        self.assertIn(
-            f'Failed to create Stripe product for course {self.course.pk}',
-            logs.output[0],
-        )
-        self.assertIn('error', response.json())
-
 
 # ============================================================
 # Course Unit Access with CourseAccess

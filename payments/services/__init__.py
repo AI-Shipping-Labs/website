@@ -1,7 +1,7 @@
 """Business logic for Stripe payments and subscription lifecycle.
 
-All Stripe API calls and user-tier updates are centralized here so views
-stay thin and logic is easy to test.
+The active product model is Stripe Payment Links for checkout, Stripe
+webhooks for fulfillment, and Customer Portal for billing management.
 """
 
 import logging
@@ -78,14 +78,6 @@ def _subscription_price_id(subscription):
     return price_id if price_id is not _MISSING and price_id else ""
 
 
-def _subscription_item_id(subscription):
-    item = _first_subscription_item(subscription)
-    item_id = _stripe_value(item, "id")
-    if item_id in (_MISSING, None, ""):
-        raise ValueError("Subscription has no subscription item to update.")
-    return item_id
-
-
 def _subscription_period_end(subscription):
     period_end = _stripe_value(subscription, "current_period_end")
     if period_end in (_MISSING, None, ""):
@@ -100,58 +92,14 @@ def _subscription_period_end(subscription):
 
 
 def create_checkout_session(user, tier_slug, billing_period, success_url, cancel_url):
-    """Create a Stripe Checkout Session for the given tier and billing period.
+    """Deprecated local Checkout Session creation.
 
-    Args:
-        user: The authenticated User instance.
-        tier_slug: Slug of the tier to purchase (e.g. "basic", "main").
-        billing_period: Either "monthly" or "yearly".
-        success_url: URL to redirect to after successful checkout.
-        cancel_url: URL to redirect to if the user cancels.
-
-    Returns:
-        The Stripe Checkout Session object.
-
-    Raises:
-        ValueError: If the tier or price_id is not found.
+    Paid signup now goes through configured Stripe Payment Links. This
+    function remains only to fail loudly for stale internal callers.
     """
-    try:
-        tier = Tier.objects.get(slug=tier_slug)
-    except Tier.DoesNotExist:
-        raise ValueError(f"Tier '{tier_slug}' not found.")
-
-    if billing_period == "yearly":
-        price_id = tier.stripe_price_id_yearly
-    else:
-        price_id = tier.stripe_price_id_monthly
-
-    if not price_id:
-        raise ValueError(
-            f"No Stripe price ID configured for tier '{tier_slug}' ({billing_period})."
-        )
-
-    client = _get_stripe_client()
-
-    session_params = {
-        "mode": "subscription",
-        "line_items": [{"price": price_id, "quantity": 1}],
-        "success_url": success_url,
-        "cancel_url": cancel_url,
-        "client_reference_id": str(user.pk),
-        "customer_email": user.email,
-        "metadata": {
-            "user_id": str(user.pk),
-            "tier_slug": tier_slug,
-        },
-    }
-
-    # If user already has a Stripe customer ID, use it instead of email
-    if user.stripe_customer_id:
-        session_params.pop("customer_email")
-        session_params["customer"] = user.stripe_customer_id
-
-    session = client.checkout.sessions.create(params=session_params)
-    return session
+    raise RuntimeError(
+        "Local Checkout Session creation is deprecated; use Stripe Payment Links."
+    )
 
 
 def handle_checkout_completed(session_data):
@@ -545,141 +493,24 @@ def handle_invoice_payment_failed(invoice_data):
 
 
 def upgrade_subscription(user, new_tier_slug, billing_period):
-    """Upgrade a user's subscription via Stripe (proration).
-
-    Updates the existing subscription to the new price. Stripe handles
-    proration automatically. The actual tier change happens via webhook
-    when Stripe fires customer.subscription.updated.
-
-    Args:
-        user: The authenticated User instance.
-        new_tier_slug: Slug of the tier to upgrade to.
-        billing_period: Either "monthly" or "yearly".
-
-    Returns:
-        The updated Stripe Subscription object.
-
-    Raises:
-        ValueError: If the tier, price_id, or subscription is not found.
-    """
-    if not user.subscription_id:
-        raise ValueError("User has no active subscription to upgrade.")
-
-    try:
-        tier = Tier.objects.get(slug=new_tier_slug)
-    except Tier.DoesNotExist:
-        raise ValueError(f"Tier '{new_tier_slug}' not found.")
-
-    if billing_period == "yearly":
-        price_id = tier.stripe_price_id_yearly
-    else:
-        price_id = tier.stripe_price_id_monthly
-
-    if not price_id:
-        raise ValueError(
-            f"No Stripe price ID configured for tier '{new_tier_slug}' ({billing_period})."
-        )
-
-    client = _get_stripe_client()
-
-    subscription = client.subscriptions.retrieve(user.subscription_id)
-    item_id = _subscription_item_id(subscription)
-
-    # Update subscription with proration (Stripe default behavior)
-    updated = client.subscriptions.update(
-        user.subscription_id,
-        params={
-            "items": [{"id": item_id, "price": price_id}],
-            "proration_behavior": "create_prorations",
-        },
+    """Deprecated direct subscription mutation."""
+    raise RuntimeError(
+        "Direct subscription upgrades are deprecated; use Stripe Customer Portal."
     )
-
-    return updated
 
 
 def downgrade_subscription(user, new_tier_slug, billing_period):
-    """Schedule a downgrade at the end of the current billing period.
-
-    Sets pending_tier on the user. The actual plan change is scheduled
-    via Stripe's subscription schedule so it takes effect at period end.
-
-    Args:
-        user: The authenticated User instance.
-        new_tier_slug: Slug of the tier to downgrade to.
-        billing_period: Either "monthly" or "yearly".
-
-    Returns:
-        The updated Stripe Subscription object.
-
-    Raises:
-        ValueError: If the tier, price_id, or subscription is not found.
-    """
-    if not user.subscription_id:
-        raise ValueError("User has no active subscription to downgrade.")
-
-    try:
-        new_tier = Tier.objects.get(slug=new_tier_slug)
-    except Tier.DoesNotExist:
-        raise ValueError(f"Tier '{new_tier_slug}' not found.")
-
-    if billing_period == "yearly":
-        price_id = new_tier.stripe_price_id_yearly
-    else:
-        price_id = new_tier.stripe_price_id_monthly
-
-    if not price_id:
-        raise ValueError(
-            f"No Stripe price ID configured for tier '{new_tier_slug}' ({billing_period})."
-        )
-
-    client = _get_stripe_client()
-
-    subscription = client.subscriptions.retrieve(user.subscription_id)
-    item_id = _subscription_item_id(subscription)
-
-    # Schedule the change at period end (no proration)
-    updated = client.subscriptions.update(
-        user.subscription_id,
-        params={
-            "items": [{"id": item_id, "price": price_id}],
-            "proration_behavior": "none",
-            "billing_cycle_anchor": "unchanged",
-        },
+    """Deprecated direct subscription mutation."""
+    raise RuntimeError(
+        "Direct subscription downgrades are deprecated; use Stripe Customer Portal."
     )
-
-    # Set pending_tier on the user so the UI can show "changing to X at period end"
-    user.pending_tier = new_tier
-    user.save(update_fields=["pending_tier"])
-
-    return updated
 
 
 def cancel_subscription(user):
-    """Cancel a user's subscription at the end of the billing period.
-
-    The user keeps access until billing_period_end. When Stripe fires
-    customer.subscription.deleted at period end, the webhook handler
-    sets the user's tier back to 'free'.
-
-    Args:
-        user: The authenticated User instance.
-
-    Returns:
-        The updated Stripe Subscription object.
-
-    Raises:
-        ValueError: If the user has no active subscription.
-    """
-    if not user.subscription_id:
-        raise ValueError("User has no active subscription to cancel.")
-
-    client = _get_stripe_client()
-    updated = client.subscriptions.update(
-        user.subscription_id,
-        params={"cancel_at_period_end": True},
+    """Deprecated direct subscription mutation."""
+    raise RuntimeError(
+        "Direct subscription cancellation is deprecated; use Stripe Customer Portal."
     )
-
-    return updated
 
 
 def verify_webhook_signature(payload, sig_header):

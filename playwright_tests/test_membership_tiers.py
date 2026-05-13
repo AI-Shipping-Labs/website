@@ -395,14 +395,15 @@ class TestScenario4MainMonthlyStripeLink:
         expected = STRIPE_LINKS["main"]["monthly"]
         assert monthly_link == expected
     @pytest.mark.core
-    def test_main_join_button_uses_api_checkout(self, django_server, page):
-        """Verify the Join button uses JS-based API checkout (no target=_blank)."""
+    def test_main_join_button_uses_payment_link(self, django_server, page):
+        """Verify the Join button is a direct Stripe Payment Link."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
         main_card = _get_tier_card_by_name(page, "Main")
         join_button = main_card.locator("a.tier-cta-link")
-        assert join_button.get_attribute("data-tier") == "main"
+        assert join_button.get_attribute("data-tier") is None
+        assert join_button.get_attribute("href").startswith("https://buy.stripe.com/")
 @pytest.mark.django_db
 class TestScenario5AnnualStripeLinksSwap:
     """

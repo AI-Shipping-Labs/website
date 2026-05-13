@@ -210,26 +210,21 @@ class AccountPagePaidUserTest(TestCase):
         content = response.content.decode()
         self.assertIn("15/03/2026", content)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_shows_upgrade_button_for_non_premium(self):
-        """Main-tier users see 'Upgrade' button."""
+    def test_paid_user_sees_customer_portal_management(self):
+        """Paid users manage billing through the Customer Portal."""
         response = self.client.get("/account/")
         content = response.content.decode()
-        self.assertIn('id="upgrade-btn"', content)
+        self.assertIn('id="manage-subscription-btn"', content)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_shows_downgrade_button(self):
-        """Main-tier users see 'Downgrade' button."""
+    def test_paid_user_does_not_see_local_downgrade_button(self):
         response = self.client.get("/account/")
         content = response.content.decode()
-        self.assertIn('id="downgrade-btn"', content)
+        self.assertNotIn('id="downgrade-btn"', content)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_shows_cancel_button(self):
-        """Paid users see 'Cancel Subscription' button."""
+    def test_paid_user_does_not_see_local_cancel_button(self):
         response = self.client.get("/account/")
         content = response.content.decode()
-        self.assertIn('id="cancel-btn"', content)
+        self.assertNotIn('id="cancel-btn"', content)
 
     def test_context_not_free(self):
         """Context has is_free=False for paid users."""
@@ -256,26 +251,21 @@ class AccountPagePremiumUserTest(TestCase):
         )
         self.client.force_login(self.user)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_no_upgrade_button_for_premium(self):
         """Premium users do not see 'Upgrade' button (already at highest tier)."""
         response = self.client.get("/account/")
         content = response.content.decode()
         self.assertNotIn('id="upgrade-btn"', content)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_shows_downgrade_button(self):
-        """Premium users see 'Downgrade' button."""
+    def test_premium_user_does_not_see_local_downgrade_button(self):
         response = self.client.get("/account/")
         content = response.content.decode()
-        self.assertIn('id="downgrade-btn"', content)
+        self.assertNotIn('id="downgrade-btn"', content)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_shows_cancel_button(self):
-        """Premium users see 'Cancel Subscription' button."""
+    def test_premium_user_does_not_see_local_cancel_button(self):
         response = self.client.get("/account/")
         content = response.content.decode()
-        self.assertIn('id="cancel-btn"', content)
+        self.assertNotIn('id="cancel-btn"', content)
 
 
 class AccountPageBasicUserTest(TestCase):
@@ -292,26 +282,22 @@ class AccountPageBasicUserTest(TestCase):
         )
         self.client.force_login(self.user)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_shows_upgrade_button(self):
-        """Basic users see 'Upgrade' button."""
+    def test_basic_user_uses_customer_portal_not_upgrade_button(self):
         response = self.client.get("/account/")
         content = response.content.decode()
-        self.assertIn('id="upgrade-btn"', content)
+        self.assertIn('id="manage-subscription-btn"', content)
+        self.assertNotIn('id="upgrade-btn"', content)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_no_downgrade_button_for_basic(self):
         """Basic users do not see 'Downgrade' button (lowest paid tier)."""
         response = self.client.get("/account/")
         content = response.content.decode()
         self.assertNotIn('id="downgrade-btn"', content)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_shows_cancel_button(self):
-        """Basic users see 'Cancel Subscription' button."""
+    def test_basic_user_does_not_see_local_cancel_button(self):
         response = self.client.get("/account/")
         content = response.content.decode()
-        self.assertIn('id="cancel-btn"', content)
+        self.assertNotIn('id="cancel-btn"', content)
 
 
 class AccountPagePendingDowngradeTest(TestCase):
@@ -477,8 +463,9 @@ class AccountPageMembershipActionStateTest(TestCase):
         # suppressed; the action buttons still reflect the highest tier.
         self.assertNotContains(response, 'id="account-plan-state"')
         self.assertNotContains(response, 'id="upgrade-btn"')
-        self.assertContains(response, 'id="downgrade-btn"')
-        self.assertContains(response, 'id="cancel-btn"')
+        self.assertContains(response, 'id="manage-subscription-btn"')
+        self.assertNotContains(response, 'id="downgrade-btn"')
+        self.assertNotContains(response, 'id="cancel-btn"')
 
     def test_pending_downgrade_uses_scheduled_change_state(self):
         response = self._account_response(
@@ -537,10 +524,6 @@ class AccountPageMembershipActionStateTest(TestCase):
         self.assertContains(
             response,
             "Base subscription. Temporary Premium access is active.",
-        )
-        self.assertEqual(
-            [tier.slug for tier in response.context["upgrade_tiers"]],
-            ["main", "premium"],
         )
         self.assertNotContains(response, 'id="upgrade-btn"')
         self.assertContains(response, 'id="manage-subscription-btn"')
@@ -629,123 +612,6 @@ class EmailPreferencesAPITest(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
-
-@tag('core')
-class CancelSubscriptionAPITest(TestCase):
-    """Tests for the account cancel subscription API endpoint."""
-
-    def setUp(self):
-        self.user = User.objects.create_user(email="cancel-api@example.com")
-        self.url = "/account/api/cancel"
-        self.client.force_login(self.user)
-
-    def test_logged_out_redirects(self):
-        """Logged-out user gets redirect."""
-        self.client.logout()
-        response = self.client.post(
-            self.url,
-            data="{}",
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 302)
-
-    def test_get_not_allowed(self):
-        """GET is not allowed on this endpoint."""
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, 405)
-
-    def test_no_subscription_returns_400(self):
-        """User without subscription_id gets a 400 error."""
-        response = self.client.post(
-            self.url,
-            data="{}",
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 400)
-        data = response.json()
-        self.assertIn("error", data)
-
-    @patch("payments.services.cancel_subscription")
-    def test_cancel_sets_billing_period_end(self, mock_cancel):
-        """Cancel API saves billing_period_end from Stripe response."""
-        main_tier = Tier.objects.get(slug="main")
-        self.user.tier = main_tier
-        self.user.subscription_id = "sub_cancel_test"
-        self.user.save(update_fields=["tier", "subscription_id"])
-
-        mock_sub = MagicMock()
-        mock_sub.current_period_end = 1774396800  # 2026-03-25 00:00:00 UTC
-        mock_cancel.return_value = mock_sub
-
-        response = self.client.post(
-            self.url,
-            data="{}",
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200)
-
-        self.user.refresh_from_db()
-        self.assertIsNotNone(self.user.billing_period_end)
-        self.assertEqual(self.user.billing_period_end.year, 2026)
-        self.assertEqual(self.user.billing_period_end.month, 3)
-        self.assertEqual(self.user.billing_period_end.day, 25)
-
-    @patch("payments.services.cancel_subscription")
-    def test_cancel_sets_pending_tier_to_free(self, mock_cancel):
-        """Cancel API sets pending_tier to free tier."""
-        main_tier = Tier.objects.get(slug="main")
-        self.user.tier = main_tier
-        self.user.subscription_id = "sub_cancel_pending"
-        self.user.save(update_fields=["tier", "subscription_id"])
-
-        mock_sub = MagicMock()
-        mock_sub.current_period_end = 1774396800
-        mock_cancel.return_value = mock_sub
-
-        response = self.client.post(
-            self.url,
-            data="{}",
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200)
-
-        self.user.refresh_from_db()
-        self.assertIsNotNone(self.user.pending_tier)
-        self.assertEqual(self.user.pending_tier.slug, "free")
-
-    # `test_cancel_without_period_end_does_not_crash` removed under
-    # `_docs/testing-guidelines.md` Rule 7 (do not test impossible API states).
-    # The Stripe API guarantees `current_period_end` on a Subscription object;
-    # a `MagicMock(spec=[])` representing a Subscription with no attributes is
-    # not a state Stripe can produce. The defensive `getattr(..., None)` in
-    # `accounts/views/account.py::cancel_subscription_view` is harmless extra
-    # caution but not a real bug surface that needs a regression test.
-
-    @patch("payments.services.cancel_subscription")
-    def test_cancel_then_page_shows_date(self, mock_cancel):
-        """After cancellation, account page displays the billing end date."""
-        main_tier = Tier.objects.get(slug="main")
-        self.user.tier = main_tier
-        self.user.subscription_id = "sub_cancel_show"
-        self.user.save(update_fields=["tier", "subscription_id"])
-
-        mock_sub = MagicMock()
-        mock_sub.current_period_end = 1774396800  # 2026-03-25 00:00:00 UTC
-        mock_cancel.return_value = mock_sub
-
-        # Cancel the subscription
-        self.client.post(
-            self.url,
-            data="{}",
-            content_type="application/json",
-        )
-
-        # Load the account page
-        response = self.client.get("/account/")
-        content = response.content.decode()
-        self.assertIn("access ends on", content)
-        self.assertIn("25/03/2026", content)
-
 
 class AccountPageEmailPreferencesDisplayTest(TestCase):
     """Tests for email preferences display on account page."""
@@ -1087,73 +953,12 @@ class AccountPageContextDataTest(TestCase):
         response = self.client.get("/account/")
         self.assertIn("tier", response.context)
 
-    def test_context_has_upgrade_tiers_for_free_user(self):
+    def test_context_no_longer_exposes_local_upgrade_downgrade_tiers(self):
         user = User.objects.create_user(email="ctx-up@example.com")
         self.client.force_login(user)
         response = self.client.get("/account/")
-        upgrade_tiers = response.context["upgrade_tiers"]
-        # Free user should see basic, main, premium as upgrade options
-        slugs = [t.slug for t in upgrade_tiers]
-        self.assertIn("basic", slugs)
-        self.assertIn("main", slugs)
-        self.assertIn("premium", slugs)
-
-    def test_context_has_upgrade_tiers_for_main_user(self):
-        main_tier = Tier.objects.get(slug="main")
-        user = User.objects.create_user(email="ctx-up2@example.com")
-        user.tier = main_tier
-        user.save(update_fields=["tier"])
-        self.client.force_login(user)
-        response = self.client.get("/account/")
-        upgrade_tiers = response.context["upgrade_tiers"]
-        slugs = [t.slug for t in upgrade_tiers]
-        self.assertIn("premium", slugs)
-        self.assertNotIn("basic", slugs)
-        self.assertNotIn("main", slugs)
-
-    def test_context_has_downgrade_tiers_for_main_user(self):
-        main_tier = Tier.objects.get(slug="main")
-        user = User.objects.create_user(email="ctx-down@example.com")
-        user.tier = main_tier
-        user.save(update_fields=["tier"])
-        self.client.force_login(user)
-        response = self.client.get("/account/")
-        downgrade_tiers = response.context["downgrade_tiers"]
-        slugs = [t.slug for t in downgrade_tiers]
-        self.assertIn("basic", slugs)
-        self.assertNotIn("main", slugs)
-        self.assertNotIn("premium", slugs)
-
-    def test_context_empty_downgrade_tiers_for_basic(self):
-        basic_tier = Tier.objects.get(slug="basic")
-        user = User.objects.create_user(email="ctx-basic@example.com")
-        user.tier = basic_tier
-        user.save(update_fields=["tier"])
-        self.client.force_login(user)
-        response = self.client.get("/account/")
-        self.assertEqual(len(response.context["downgrade_tiers"]), 0)
-
-    def test_context_empty_upgrade_tiers_for_premium(self):
-        premium_tier = Tier.objects.get(slug="premium")
-        user = User.objects.create_user(email="ctx-premium@example.com")
-        user.tier = premium_tier
-        user.save(update_fields=["tier"])
-        self.client.force_login(user)
-        response = self.client.get("/account/")
-        self.assertEqual(len(response.context["upgrade_tiers"]), 0)
-
-    def test_context_has_downgrade_tiers_for_premium_user(self):
-        premium_tier = Tier.objects.get(slug="premium")
-        user = User.objects.create_user(email="ctx-pdown@example.com")
-        user.tier = premium_tier
-        user.save(update_fields=["tier"])
-        self.client.force_login(user)
-        response = self.client.get("/account/")
-        downgrade_tiers = response.context["downgrade_tiers"]
-        slugs = [t.slug for t in downgrade_tiers]
-        self.assertIn("basic", slugs)
-        self.assertIn("main", slugs)
-        self.assertNotIn("premium", slugs)
+        self.assertNotIn("upgrade_tiers", response.context)
+        self.assertNotIn("downgrade_tiers", response.context)
 
 
 class AccountPageHeaderFooterTest(TestCase):

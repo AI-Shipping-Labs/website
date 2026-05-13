@@ -178,21 +178,10 @@
         <!-- Action Buttons -->
         <div class="flex flex-col sm:flex-row flex-wrap gap-3 mt-6">
           {% if show_upgrade_action %}
-            {% if is_free or not stripe_checkout_enabled %}
             <a href="/pricing" class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" id="upgrade-btn">
               <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
               Upgrade
             </a>
-            {% endif %}
-            {% if stripe_checkout_enabled and not is_free %}
-            <button type="button"
-                    class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-                    id="upgrade-btn"
-                    onclick="showUpgradeModal()">
-              <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
-              Upgrade
-            </button>
-            {% endif %}
           {% endif %}
 
           {% if show_manage_subscription %}
@@ -202,26 +191,6 @@
             <i data-lucide="settings" class="h-4 w-4"></i>
             Manage Subscription
           </a>
-          {% endif %}
-
-          {% if show_downgrade_action %}
-          <button type="button"
-                  class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
-                  id="downgrade-btn"
-                  onclick="showDowngradeModal()">
-            <i data-lucide="arrow-down-circle" class="h-4 w-4"></i>
-            Downgrade
-          </button>
-          {% endif %}
-
-          {% if show_cancel_action %}
-          <button type="button"
-                  class="inline-flex items-center gap-2 rounded-md border border-red-500/30 bg-transparent px-4 py-2.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
-                  id="cancel-btn"
-                  onclick="showCancelConfirm()">
-            <i data-lucide="x-circle" class="h-4 w-4"></i>
-            Cancel Subscription
-          </button>
           {% endif %}
         </div>
       </div>
@@ -356,123 +325,6 @@
 
     </div>
 
-  {% if stripe_checkout_enabled %}
-  <!-- Upgrade Modal -->
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="upgrade-modal">
-    <div class="rounded-lg border border-border bg-card p-5 sm:p-6 max-w-md w-full mx-4">
-      <h3 class="text-xl font-semibold mb-4">Upgrade Your Plan</h3>
-      <p class="text-sm text-muted-foreground mb-6">Choose a tier to upgrade to. You will be redirected to Stripe Checkout.</p>
-      <div class="space-y-3" id="upgrade-tiers">
-        {% for t in upgrade_tiers %}
-        <button type="button"
-                class="w-full flex items-center justify-between rounded-lg border border-border p-4 text-left transition-colors hover:bg-secondary"
-                onclick="doUpgrade('{{ t.slug }}')">
-          <div>
-            <span class="font-medium text-foreground">{{ t.name }}</span>
-            <span class="text-sm text-muted-foreground ml-2">&euro;{{ t.price_eur_month }}/mo</span>
-          </div>
-          <i data-lucide="arrow-right" class="h-4 w-4 text-accent"></i>
-        </button>
-        {% endfor %}
-      </div>
-      <button type="button" class="mt-4 w-full rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-secondary" onclick="hideUpgradeModal()">
-        Cancel
-      </button>
-    </div>
-  </div>
-
-  <!-- Downgrade Modal -->
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="downgrade-modal">
-    <div class="rounded-lg border border-border bg-card p-5 sm:p-6 max-w-md w-full mx-4">
-      <h3 class="text-xl font-semibold mb-4">Downgrade Your Plan</h3>
-      <p class="text-sm text-muted-foreground mb-6">
-        Select a lower tier. The change will take effect at the end of your current billing period.
-      </p>
-      <div class="space-y-3" id="downgrade-tiers">
-        {% for t in downgrade_tiers %}
-        <button type="button"
-                class="w-full flex items-center justify-between rounded-lg border border-border p-4 text-left transition-colors hover:bg-secondary"
-                onclick="doDowngrade('{{ t.slug }}')">
-          <div>
-            <span class="font-medium text-foreground">{{ t.name }}</span>
-            <span class="text-sm text-muted-foreground ml-2">&euro;{{ t.price_eur_month }}/mo</span>
-          </div>
-          <i data-lucide="arrow-right" class="h-4 w-4 text-muted-foreground"></i>
-        </button>
-        {% endfor %}
-      </div>
-      <button type="button" class="mt-4 w-full rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-secondary" onclick="hideDowngradeModal()">
-        Cancel
-      </button>
-    </div>
-  </div>
-
-  <!-- Cancel Confirmation Modal -->
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="cancel-modal">
-    <div class="rounded-lg border border-border bg-card p-5 sm:p-6 max-w-md w-full mx-4">
-      <div class="flex items-center gap-3 mb-4">
-        <i data-lucide="alert-triangle" class="h-6 w-6 text-red-400"></i>
-        <h3 class="text-xl font-semibold">Cancel Subscription</h3>
-      </div>
-
-      <p class="text-sm text-muted-foreground mb-4">
-        You will keep access to your current tier until the end of your billing period{% if billing_period_end %} ({{ billing_period_end|date:"d/m/Y" }}){% endif %}.
-      </p>
-
-      <!-- Feature loss summary -->
-      <div class="mb-4" id="cancel-feature-loss">
-        <p class="text-sm font-medium text-foreground mb-2">Features you will lose:</p>
-        {% if tier_features %}
-        <ul class="space-y-1" id="cancel-feature-list">
-          {% for feature in tier_features %}
-          <li class="flex items-center gap-2 text-sm text-muted-foreground">
-            <i data-lucide="x" class="h-4 w-4 text-red-400 shrink-0"></i>
-            {{ feature }}
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p class="text-sm text-muted-foreground" id="cancel-generic-loss">You will lose access to all paid features.</p>
-        {% endif %}
-      </div>
-
-      <!-- Checkbox confirmation -->
-      <div class="mb-4">
-        <label class="flex items-start gap-3 cursor-pointer min-h-[44px] py-1">
-          <input type="checkbox" id="cancel-confirm-checkbox"
-                 class="mt-0.5 h-5 w-5 min-w-[20px] rounded border-border bg-background text-accent focus:ring-accent">
-          <span class="text-sm text-foreground">I understand I will lose access to paid features at the end of my billing period</span>
-        </label>
-      </div>
-
-      <!-- Text confirmation -->
-      <div class="mb-6">
-        <input type="text" id="cancel-confirm-text"
-               class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-               placeholder="Type confirm to proceed"
-               autocomplete="off">
-      </div>
-
-      <!-- Action buttons -->
-      <div class="flex flex-col-reverse sm:flex-row gap-3">
-        <button type="button"
-                class="flex-1 rounded-md bg-red-500/50 px-4 py-2.5 text-sm font-medium text-white/50 cursor-not-allowed transition-colors"
-                id="confirm-cancel-btn"
-                disabled
-                onclick="doCancel()">
-          Cancel my subscription
-        </button>
-        <button type="button"
-                class="flex-1 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
-                id="keep-plan-btn"
-                onclick="hideCancelConfirm()">
-          Keep my plan
-        </button>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
   {% include "includes/footer.html" %}
 </main>
 {% endblock %}
@@ -488,135 +340,6 @@ function getCsrfToken() {
     }
   }
   return '';
-}
-
-// Upgrade modal
-function showUpgradeModal() {
-  document.getElementById('upgrade-modal').classList.remove('hidden');
-}
-function hideUpgradeModal() {
-  document.getElementById('upgrade-modal').classList.add('hidden');
-}
-
-// Downgrade modal
-function showDowngradeModal() {
-  document.getElementById('downgrade-modal').classList.remove('hidden');
-}
-function hideDowngradeModal() {
-  document.getElementById('downgrade-modal').classList.add('hidden');
-}
-
-// Cancel confirm
-function showCancelConfirm() {
-  // Reset the form state each time the modal opens
-  var checkbox = document.getElementById('cancel-confirm-checkbox');
-  var textInput = document.getElementById('cancel-confirm-text');
-  if (checkbox) checkbox.checked = false;
-  if (textInput) textInput.value = '';
-  updateCancelButton();
-  document.getElementById('cancel-modal').classList.remove('hidden');
-}
-function hideCancelConfirm() {
-  document.getElementById('cancel-modal').classList.add('hidden');
-}
-
-// Update cancel button enabled/disabled state
-function updateCancelButton() {
-  var checkbox = document.getElementById('cancel-confirm-checkbox');
-  var textInput = document.getElementById('cancel-confirm-text');
-  var btn = document.getElementById('confirm-cancel-btn');
-  if (!checkbox || !textInput || !btn) return;
-
-  var isChecked = checkbox.checked;
-  var isConfirmed = textInput.value.trim().toLowerCase() === 'confirm';
-
-  if (isChecked && isConfirmed) {
-    btn.disabled = false;
-    btn.classList.remove('bg-red-500/50', 'text-white/50', 'cursor-not-allowed');
-    btn.classList.add('bg-red-500', 'text-white', 'hover:bg-red-600', 'cursor-pointer');
-  } else {
-    btn.disabled = true;
-    btn.classList.add('bg-red-500/50', 'text-white/50', 'cursor-not-allowed');
-    btn.classList.remove('bg-red-500', 'text-white', 'hover:bg-red-600', 'cursor-pointer');
-  }
-}
-
-// Attach event listeners for cancel confirmation controls
-(function() {
-  var checkbox = document.getElementById('cancel-confirm-checkbox');
-  var textInput = document.getElementById('cancel-confirm-text');
-  if (checkbox) checkbox.addEventListener('change', updateCancelButton);
-  if (textInput) textInput.addEventListener('keyup', updateCancelButton);
-  if (textInput) textInput.addEventListener('input', updateCancelButton);
-})();
-
-// Upgrade action: create a checkout session via the existing API
-function doUpgrade(tierSlug) {
-  fetch('/api/checkout/create', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': getCsrfToken(),
-    },
-    body: JSON.stringify({ tier_slug: tierSlug, billing_period: 'monthly' }),
-  })
-  .then(function(resp) { return resp.json(); })
-  .then(function(data) {
-    if (data.checkout_url) {
-      window.location.href = data.checkout_url;
-    } else {
-      alert(data.error || 'Failed to create checkout session');
-    }
-  })
-  .catch(function() {
-    alert('An error occurred. Please try again.');
-  });
-}
-
-// Downgrade action: call the existing downgrade API
-function doDowngrade(tierSlug) {
-  fetch('/api/subscription/downgrade', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': getCsrfToken(),
-    },
-    body: JSON.stringify({ tier_slug: tierSlug, billing_period: 'monthly' }),
-  })
-  .then(function(resp) { return resp.json(); })
-  .then(function(data) {
-    if (data.status === 'ok') {
-      window.location.reload();
-    } else {
-      alert(data.error || 'Failed to schedule downgrade');
-    }
-  })
-  .catch(function() {
-    alert('An error occurred. Please try again.');
-  });
-}
-
-// Cancel action: call the account cancel API (which also sets pending_tier to free)
-function doCancel() {
-  fetch('/account/api/cancel', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': getCsrfToken(),
-    },
-    body: '{}',
-  })
-  .then(function(resp) { return resp.json(); })
-  .then(function(data) {
-    if (data.status === 'ok') {
-      window.location.reload();
-    } else {
-      alert(data.error || 'Failed to cancel subscription');
-    }
-  })
-  .catch(function() {
-    alert('An error occurred. Please try again.');
-  });
 }
 
 // Newsletter toggle
@@ -869,15 +592,6 @@ function clearTimezonePreference() {
     init();
   }
 })();
-
-// Close modals when clicking backdrop
-document.querySelectorAll('#upgrade-modal, #downgrade-modal, #cancel-modal').forEach(function(modal) {
-  modal.addEventListener('click', function(e) {
-    if (e.target === modal) {
-      modal.classList.add('hidden');
-    }
-  });
-});
 
 // Change password
 function handleChangePassword(event) {

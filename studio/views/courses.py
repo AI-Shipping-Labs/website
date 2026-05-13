@@ -1,7 +1,6 @@
 """Studio views for course management and access management."""
 
 import json
-import logging
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -21,9 +20,6 @@ from studio.views.form_helpers import (
 )
 
 User = get_user_model()
-
-logger = logging.getLogger(__name__)
-
 
 @staff_required
 def course_list(request):
@@ -104,7 +100,6 @@ def course_edit(request, course_id):
         'github_edit_url': get_github_edit_url(course),
         'notify_url': reverse('studio_course_notify', kwargs={'course_id': course.pk}),
         'announce_url': reverse('studio_course_announce_slack', kwargs={'course_id': course.pk}),
-        'create_stripe_product_url': reverse('studio_course_create_stripe_product', kwargs={'course_id': course.pk}),
         'access_count': access_count,
         'active_enrollment_count': active_enrollment_count,
     })
@@ -209,48 +204,11 @@ def module_reorder(request, course_id):
 @staff_required
 @require_POST
 def course_create_stripe_product(request, course_id):
-    """Create a Stripe product and price for individual course purchase."""
-    course = get_object_or_404(Course, pk=course_id)
-
-    if course.stripe_product_id:
-        return JsonResponse({'error': 'Course already has a Stripe product'}, status=400)
-
-    if not course.individual_price_eur:
-        return JsonResponse({'error': 'Set individual_price_eur before creating a Stripe product'}, status=400)
-
-    try:
-        from payments.services import _get_stripe_client
-
-        client = _get_stripe_client()
-
-        # Create Stripe product
-        product = client.products.create(params={
-            'name': course.title,
-            'description': course.description[:500] if course.description else '',
-            'metadata': {
-                'course_id': str(course.pk),
-                'course_slug': course.slug,
-            },
-        })
-
-        # Create Stripe price (one-time, in EUR)
-        price = client.prices.create(params={
-            'product': product.id,
-            'unit_amount': int(course.individual_price_eur * 100),
-            'currency': 'eur',
-        })
-
-        course.stripe_product_id = product.id
-        course.stripe_price_id = price.id
-        course.save(update_fields=['stripe_product_id', 'stripe_price_id'])
-
-        return JsonResponse({
-            'product_id': product.id,
-            'price_id': price.id,
-        })
-    except Exception as e:
-        logger.exception('Failed to create Stripe product for course %s', course.pk)
-        return JsonResponse({'error': str(e)}, status=500)
+    """Deprecated: Studio no longer creates one-off Stripe course products."""
+    get_object_or_404(Course, pk=course_id)
+    return JsonResponse({
+        'error': 'Studio Stripe product creation is deprecated. Use membership Payment Links.',
+    }, status=410)
 
 
 @staff_required

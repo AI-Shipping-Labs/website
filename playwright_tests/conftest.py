@@ -63,12 +63,6 @@ def _start_django_server():
     # thread would raise SystemCheckError at startup and kill every E2E test.
     settings.SILENCED_SYSTEM_CHECKS = ['email_app.E001']
 
-    # Enable Stripe Checkout so that upgrade/downgrade/cancel buttons and
-    # the JS-based checkout flow are rendered in templates.  The setting
-    # defaults to False (payment-links mode) but E2E tests for the account
-    # page and pricing page expect the full checkout UI.
-    settings.STRIPE_CHECKOUT_ENABLED = True
-
     assert_playwright_database_is_safe(connection.settings_dict)
 
     # Run migrations first (uses in-memory or file-based sqlite)

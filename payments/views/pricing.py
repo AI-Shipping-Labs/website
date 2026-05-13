@@ -1,9 +1,11 @@
+from urllib.parse import urlencode
+
 from django.conf import settings
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import get_active_override
-from integrations.config import get_config, is_enabled
+from integrations.config import get_config
 from payments.models import Tier
 from payments.tier_state import build_tier_state
 
@@ -13,7 +15,6 @@ def pricing(request):
     """Pricing page showing all membership tiers in a comparison grid."""
     tiers = Tier.objects.all()
 
-    stripe_checkout_enabled = is_enabled("STRIPE_CHECKOUT_ENABLED")
     stripe_links = settings.STRIPE_PAYMENT_LINKS
 
     user = request.user
@@ -24,9 +25,8 @@ def pricing(request):
     )
     active_override = get_active_override(user)
 
-    # Build prefilled_email suffix for payment links
     prefilled_email = ""
-    if not stripe_checkout_enabled and user.is_authenticated:
+    if user.is_authenticated:
         prefilled_email = user.email
 
     tiers_data = []
@@ -35,14 +35,14 @@ def pricing(request):
         monthly_link = payment_links.get("monthly", "#")
         annual_link = payment_links.get("annual", "#")
 
-        # Append prefilled_email to payment links for logged-in users
-        if prefilled_email and not stripe_checkout_enabled:
+        if prefilled_email:
+            prefilled_query = urlencode({"prefilled_email": prefilled_email})
             if monthly_link and monthly_link != "#":
                 sep = "&" if "?" in monthly_link else "?"
-                monthly_link = f"{monthly_link}{sep}prefilled_email={prefilled_email}"
+                monthly_link = f"{monthly_link}{sep}{prefilled_query}"
             if annual_link and annual_link != "#":
                 sep = "&" if "?" in annual_link else "?"
-                annual_link = f"{annual_link}{sep}prefilled_email={prefilled_email}"
+                annual_link = f"{annual_link}{sep}{prefilled_query}"
 
         tiers_data.append({
             "tier": tier,
@@ -53,7 +53,7 @@ def pricing(request):
 
     context = {
         "tiers_data": tiers_data,
-        "stripe_checkout_enabled": stripe_checkout_enabled,
+        "stripe_checkout_enabled": False,
         "is_paid_member": is_paid_member,
         "prefilled_email": prefilled_email,
         "stripe_customer_portal_url": get_config("STRIPE_CUSTOMER_PORTAL_URL", ""),

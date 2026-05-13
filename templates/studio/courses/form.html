@@ -245,60 +245,9 @@
   {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True %}
   {% endif %}
 
-  {% if course.individual_price_eur and not course.stripe_product_id %}
-  <div class="bg-card border border-border rounded-lg p-4" id="stripe-product-section" data-testid="stripe-product-panel">
-    <h2 class="text-sm font-medium text-foreground mb-3">Stripe Product</h2>
-    <p class="text-sm text-muted-foreground mb-4">No Stripe product created for this course yet.</p>
-    <button type="button" id="create-stripe-product-btn"
-            onclick="createStripeProduct({{ course.pk }})"
-            class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
-      Create Stripe Product
-    </button>
-    <span id="stripe-product-status" class="mt-3 block text-sm text-muted-foreground"></span>
-  </div>
-  {% endif %}
 </aside>
 {% endif %}
 </div>
-
-{% if course and course.individual_price_eur and not course.stripe_product_id %}
-
-<script>
-function createStripeProduct(courseId) {
-  var btn = document.getElementById('create-stripe-product-btn');
-  var status = document.getElementById('stripe-product-status');
-  btn.disabled = true;
-  btn.textContent = 'Creating...';
-  status.textContent = '';
-
-  fetch('/studio/courses/' + courseId + '/create-stripe-product', {
-    method: 'POST',
-    headers: {
-      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-    },
-  })
-  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
-  .then(function(res) {
-    if (res.ok) {
-      status.textContent = 'Stripe product created!';
-      status.className = 'ml-3 text-sm text-green-500';
-      setTimeout(function() { location.reload(); }, 1000);
-    } else {
-      status.textContent = 'Error: ' + res.data.error;
-      status.className = 'ml-3 text-sm text-red-500';
-      btn.disabled = false;
-      btn.textContent = 'Create Stripe Product';
-    }
-  })
-  .catch(function(err) {
-    status.textContent = 'Network error: ' + err.message;
-    status.className = 'ml-3 text-sm text-red-500';
-    btn.disabled = false;
-    btn.textContent = 'Create Stripe Product';
-  });
-}
-</script>
-{% endif %}
 
 {% if course %}
 {% with module_count=modules|length %}

@@ -43,8 +43,7 @@ class PricingMobileResponsiveTest(TestCase):
         # There should be at least 4 CTA elements with min-h-[44px]
         # (one per tier card: Subscribe + 3 Join buttons)
         cta_min_height_count = content.count("min-h-[44px]")
-        # dismiss button (1) + 4 CTA buttons = 5
-        self.assertGreaterEqual(cta_min_height_count, 5)
+        self.assertGreaterEqual(cta_min_height_count, 4)
 
     def test_cta_buttons_have_responsive_vertical_padding(self):
         """CTA buttons should use py-3 on mobile, py-2.5 on sm+."""
@@ -76,17 +75,11 @@ class PricingMobileResponsiveTest(TestCase):
         content = self._get_pricing_content()
         self.assertIn("px-4 sm:px-6 lg:px-8", content)
 
-    def test_checkout_cancelled_banner_dismiss_button_has_tap_target(self):
-        """The dismiss button on the cancelled banner should have a 44px tap target."""
+    def test_checkout_cancelled_banner_removed(self):
+        """Local checkout feedback banner is gone with local checkout creation."""
         content = self._get_pricing_content()
-        # The dismiss button has min-w-[44px] min-h-[44px]
-        self.assertIn('id="dismiss-cancelled-banner"', content)
-        self.assertIn("min-w-[44px] min-h-[44px]", content)
-
-    def test_checkout_cancelled_banner_responsive_padding(self):
-        """The cancelled banner should have responsive padding."""
-        content = self._get_pricing_content()
-        self.assertIn("p-3 sm:p-4", content)
+        self.assertNotIn('id="checkout-cancelled-banner"', content)
+        self.assertNotIn('id="dismiss-cancelled-banner"', content)
 
     def test_grid_has_responsive_gap(self):
         """The tier grid should have larger gap on mobile for badge visibility."""

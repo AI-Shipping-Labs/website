@@ -7,21 +7,6 @@
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
-  <!-- Checkout Cancelled Banner (shown via JS when ?checkout=cancelled is present) -->
-  <div id="checkout-cancelled-banner" class="hidden mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-28" role="alert">
-    <div class="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 sm:p-4">
-      <div class="flex items-start sm:items-center justify-between gap-3">
-        <div class="flex items-start sm:items-center gap-2 sm:gap-3">
-          <i data-lucide="info" class="h-5 w-5 shrink-0 text-blue-400 mt-0.5 sm:mt-0"></i>
-          <p class="text-sm font-medium text-blue-300">Checkout was cancelled. You can try again anytime.</p>
-        </div>
-        <button type="button" id="dismiss-cancelled-banner" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-blue-400 hover:text-blue-300 transition-colors" aria-label="Dismiss">
-          <i data-lucide="x" class="h-4 w-4"></i>
-        </button>
-      </div>
-    </div>
-  </div>
-
   {# Issue #510: tighten mobile vertical spacing on the pricing tier section #}
   <section class="overflow-x-hidden max-lg:pb-6 pt-32 sm:pb-24 lg:pb-32" id="pricing-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -147,15 +132,6 @@
                data-action="manage-subscription">
               {{ item.state.action_label }}
             </a>
-            {% elif stripe_checkout_enabled %}
-            <a href="{{ item.payment_link_annual }}"
-               class="tier-cta-link block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors cursor-pointer min-h-[44px] flex items-center justify-center {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
-               data-tier="{{ item.tier.slug }}"
-               data-link-monthly="{{ item.payment_link_monthly }}"
-               data-link-annual="{{ item.payment_link_annual }}"
-               {% if item.tier.slug == 'main' %}style="box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);"{% endif %}>
-              {{ item.state.action_label }}
-            </a>
             {% else %}
             <a href="{{ item.payment_link_annual }}"
                class="tier-cta-link block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors cursor-pointer min-h-[44px] flex items-center justify-center {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
@@ -217,97 +193,6 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
     el.href = isAnnual ? el.dataset.linkAnnual : el.dataset.linkMonthly;
   });
 });
-
-// Get CSRF token from cookie
-function getCookie(name) {
-  var value = '; ' + document.cookie;
-  var parts = value.split('; ' + name + '=');
-  if (parts.length === 2) return parts.pop().split(';').shift();
-  return '';
-}
-
-// API checkout for logged-in users (only when Stripe Checkout is enabled)
-{% if stripe_checkout_enabled %}
-document.querySelectorAll('.tier-cta-link').forEach(function(el) {
-  el.addEventListener('click', function(e) {
-    var tierSlug = el.dataset.tier;
-    if (!tierSlug) return;
-    e.preventDefault();
-    var originalText = el.textContent;
-    el.style.pointerEvents = 'none';
-    el.textContent = 'Redirecting...';
-    fetch('/api/checkout/create', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
-      credentials: 'same-origin',
-      body: JSON.stringify({tier_slug: tierSlug, billing_period: isAnnual ? 'yearly' : 'monthly'})
-    })
-    .then(function(r) {
-      if (r.redirected || r.url.indexOf('/accounts/') !== -1) {
-        var billingPeriod = isAnnual ? 'yearly' : 'monthly';
-        var nextPath = '/pricing?tier=' + encodeURIComponent(tierSlug) + '&billing=' + encodeURIComponent(billingPeriod);
-        window.location.href = '/accounts/login/?next=' + encodeURIComponent(nextPath);
-        return;
-      }
-      return r.json();
-    })
-    .then(function(data) {
-      if (!data) return;
-      if (data.checkout_url) {
-        window.location.href = data.checkout_url;
-      } else {
-        alert(data.error || 'Failed to create checkout session');
-        el.style.pointerEvents = '';
-        el.textContent = originalText;
-      }
-    })
-    .catch(function(err) {
-      alert('Error: ' + err.message);
-      el.style.pointerEvents = '';
-      el.textContent = originalText;
-    });
-  });
-});
-{% endif %}
-
-// Checkout cancelled banner
-(function() {
-  var params = new URLSearchParams(window.location.search);
-  if (params.get('checkout') === 'cancelled') {
-    var banner = document.getElementById('checkout-cancelled-banner');
-    if (banner) {
-      banner.classList.remove('hidden');
-      // Reduce padding on main section when banner is visible
-      var section = document.getElementById('pricing-section');
-      if (section) {
-        section.classList.remove('pt-32');
-        section.classList.add('pt-8');
-      }
-    }
-    // Clean the URL so a refresh or share does not re-trigger the banner.
-    var cleanUrl = new URL(window.location);
-    cleanUrl.searchParams.delete('checkout');
-    history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
-  }
-  var dismissBtn = document.getElementById('dismiss-cancelled-banner');
-  if (dismissBtn) {
-    dismissBtn.addEventListener('click', function() {
-      var banner = document.getElementById('checkout-cancelled-banner');
-      if (banner) {
-        banner.remove();
-      }
-      // Restore section padding
-      var section = document.getElementById('pricing-section');
-      if (section) {
-        section.classList.remove('pt-8');
-        section.classList.add('pt-32');
-      }
-      var url = new URL(window.location);
-      url.searchParams.delete('checkout');
-      history.replaceState(null, '', url.pathname + url.search + url.hash);
-    });
-  }
-})();
 
 // Center the recommended tier in mobile scroll-snap carousels.
 (function() {

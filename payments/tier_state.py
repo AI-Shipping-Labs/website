@@ -155,6 +155,13 @@ def build_tier_state(tier, user, active_override):
         }
 
     if tier_level > base_level:
+        if has_subscription:
+            return {
+                "badge": "",
+                "note": "Manage your subscription to switch to this tier.",
+                "action_label": "Manage Subscription",
+                "action_kind": "portal",
+            }
         return {
             "badge": "",
             "note": "",

@@ -137,6 +137,49 @@ class WebhookSignatureValidationTest(QuietSubscriptionLookupMixin, TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    @override_settings(
+        STRIPE_CHECKOUT_ENABLED=False,
+        STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET,
+    )
+    def test_checkout_completed_webhook_fulfills_when_local_checkout_disabled(self):
+        """Payment Link checkout webhook still updates access and records idempotency."""
+        user = User.objects.create_user(email="payment-link-webhook@test.com")
+        basic_tier = Tier.objects.get(slug="basic")
+
+        event_data = _make_event_payload(
+            "evt_payment_link_checkout_1",
+            "checkout.session.completed",
+            {
+                "id": "cs_payment_link_1",
+                "customer": "cus_payment_link",
+                "customer_details": {"email": "payment-link-webhook@test.com"},
+                "subscription": "sub_payment_link",
+                "client_reference_id": str(user.pk),
+                "metadata": {"tier_slug": "basic", "user_id": str(user.pk)},
+            },
+        )
+        payload = json.dumps(event_data).encode()
+        sig = _build_stripe_signature(payload)
+
+        response = self.client.post(
+            WEBHOOK_URL,
+            data=payload,
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE=sig,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.tier, basic_tier)
+        self.assertEqual(user.stripe_customer_id, "cus_payment_link")
+        self.assertEqual(user.subscription_id, "sub_payment_link")
+        self.assertTrue(
+            WebhookEvent.objects.filter(
+                stripe_event_id="evt_payment_link_checkout_1",
+                event_type="checkout.session.completed",
+            ).exists()
+        )
+
     @override_settings(STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET)
     def test_tampered_payload_returns_400_and_no_side_effects(self):
         """Replaying a captured signature against a modified payload is rejected.

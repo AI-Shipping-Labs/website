@@ -34,6 +34,7 @@ DJANGO_SETTINGS_MODULE = "website.settings"
 pythonpath = ["."]
 markers = [
     "core: critical user-path Playwright tests run on every push (see _docs/testing-guidelines.md)",
+    "legacy_checkout: tests for removed local Stripe Checkout/subscription mutation flows",
 ]
 
 [tool.coverage.run]

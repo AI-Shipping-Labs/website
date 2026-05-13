@@ -335,7 +335,7 @@ class StudioSidebarStructureTest(TestCase):
                 body,
             )
 
-    def test_visiting_imports_expands_people_and_users_subgroup(self):
+    def test_visiting_imports_expands_people_section(self):
         self.client.login(email='admin@test.com', password='pw')
         response = self.client.get('/studio/imports/')
         self.assertEqual(response.status_code, 200)
@@ -343,13 +343,14 @@ class StudioSidebarStructureTest(TestCase):
 
         # People section open.
         self.assertIn('id="studio-section-people" class="space-y-1 mt-1"', body)
-        # Users children <ul> is also un-hidden.
+        # The Users children <ul> (Imports / Tier overrides / New user) is
+        # always visible while People is expanded — issue #624 dropped the
+        # per-Users sub-toggle so the children no longer carry the
+        # ``hidden`` class.
         self.assertIn('id="studio-users-children" class="ml-6 mt-1 space-y-1"', body)
-        # And the chevron button reports aria-expanded="true".
-        self.assertIn(
-            'aria-expanded="true"\n                        aria-controls="studio-users-children"',
-            body,
-        )
+        # The Users chevron sub-toggle was removed; the row is now a single
+        # <a> with no nested <button>.
+        self.assertNotIn('data-studio-users-toggle', body)
 
     def test_visiting_marketing_page_expands_marketing_section(self):
         self.client.login(email='staff@test.com', password='pw')
@@ -372,31 +373,22 @@ class StudioSidebarStructureTest(TestCase):
         self.assertIn('id="studio-section-operations" class="space-y-1 mt-1"', body)
 
     # ------------------------------------------------------------------
-    # Users row interaction — anchor + chevron button are siblings
+    # Users row — single anchor, no split-button chevron (#624)
     # ------------------------------------------------------------------
 
-    def test_users_row_has_anchor_and_chevron_button_siblings(self):
+    def test_users_row_is_single_anchor_with_no_chevron_button(self):
         response = self._get_studio_dashboard()
         body = response.content.decode()
 
-        # The anchor points at studio_user_list and is NOT wrapped around
-        # the chevron button — the chevron has its own data-testid hook
-        # and aria-controls.
-        self.assertIn('data-studio-users-toggle', body)
-        self.assertIn('aria-controls="studio-users-children"', body)
+        # The Users row is now a single <a> pointing at studio_user_list
+        # (#624 removed the split-button pattern).
+        self.assertContains(response, 'href="/studio/users/"')
 
-        # The chevron button must NOT live inside any <a>. We assert by
-        # confirming the button has no enclosing <a> tag from the row
-        # wrapper to the button: search for the substring of the <a> tag
-        # opening to its closing </a> and check the button is outside it.
-        users_a_open = body.find("href=\"/studio/users/\"")
-        users_a_close = body.find('</a>', users_a_open) + len('</a>')
-        button_idx = body.find('data-studio-users-toggle', users_a_open)
-        self.assertGreater(
-            button_idx,
-            users_a_close,
-            'Users chevron <button> must be a sibling of the <a>, not nested inside it',
-        )
+        # The chevron sub-toggle <button> and its aria attributes are gone.
+        self.assertNotIn('data-studio-users-toggle', body)
+        self.assertNotIn('aria-controls="studio-users-children"', body)
+        self.assertNotIn('aria-label="Toggle Users sub-menu"', body)
+        self.assertNotIn('studio-users-chevron', body)
 
     # ------------------------------------------------------------------
     # Footer

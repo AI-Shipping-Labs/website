@@ -39,5 +39,7 @@ class TimestampEditorWidget(Widget):
         return value
 
     class Media:
-        css = {}
-        js = ()
+        css = {
+            'all': ('css/admin/timestamp_editor.css',),
+        }
+        js = ('js/admin/timestamp_editor.js',)

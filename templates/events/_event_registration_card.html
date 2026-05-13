@@ -1,0 +1,222 @@
+{% if event.status == 'upcoming' and is_external_event %}
+{% comment %}
+  Issue #572: external (third-party-hosted) events bypass the in-app
+  registration flow entirely. ``required_level`` is intentionally ignored
+  here -- the partner controls access on their platform.
+{% endcomment %}
+<div class="mb-12 rounded-lg border border-accent/40 bg-accent/5 p-6" data-testid="event-external-join-card">
+  <div class="flex items-start gap-3">
+    <div class="rounded-full bg-accent/20 p-2">
+      <i data-lucide="external-link" class="h-5 w-5 text-accent"></i>
+    </div>
+    <div class="min-w-0 flex-1">
+      <p class="text-lg font-semibold text-foreground">This event is hosted on {{ event.external_host }}</p>
+      <p class="mt-2 text-sm text-muted-foreground">
+        Registration and joining happen on their platform. You'll leave AI Shipping Labs to sign up.
+      </p>
+      {% if event.zoom_join_url %}
+      <a href="{{ event.zoom_join_url }}" target="_blank" rel="noopener noreferrer"
+         class="mt-5 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+         data-testid="event-external-join-link">
+        {% if event.external_host %}Join on {{ event.external_host }}{% else %}Join external event{% endif %}
+        <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+      </a>
+      {% else %}
+      <p class="mt-5 inline-flex items-center gap-2 rounded-lg border border-border bg-secondary px-4 py-3 text-sm text-muted-foreground" data-testid="event-external-join-coming-soon">
+        <i data-lucide="clock" class="h-4 w-4"></i>
+        Link coming soon
+      </p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% elif event.status == 'upcoming' %}
+<div class="mb-12 rounded-lg border border-border bg-card p-6" data-testid="event-registration-card">
+  {% if anon_registered_email %}
+    <div data-testid="event-anonymous-registered-confirmation">
+      <div class="flex items-center gap-3">
+        <div class="rounded-full bg-green-500/20 p-2">
+          <i data-lucide="check" class="h-5 w-5 text-green-400"></i>
+        </div>
+        <div>
+          <p class="font-semibold text-foreground">You're registered for {{ event.title }}</p>
+          <p class="text-sm text-muted-foreground">
+            We've sent a confirmation with a calendar invite to
+            <span class="text-foreground" data-testid="event-anonymous-registered-email">{{ anon_registered_email }}</span>{% if anon_registered_account_created %},
+            plus a verification link to activate your free account{% endif %}.
+          </p>
+        </div>
+      </div>
+      <div class="mt-5 flex flex-wrap items-center gap-3">
+        <a href="{{ event_ics_url }}"
+           class="inline-flex items-center justify-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-medium text-accent transition-colors hover:bg-accent/20"
+           data-testid="event-anonymous-add-to-calendar"
+           download>
+          <i data-lucide="calendar-plus" class="h-4 w-4"></i>
+          Add to calendar
+        </a>
+        <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}"
+           class="text-sm text-muted-foreground hover:text-foreground"
+           data-testid="event-anonymous-manage-link">
+          Sign in to manage your registration
+        </a>
+      </div>
+    </div>
+  {% elif not user.is_authenticated %}
+    {% if event.required_level == 0 %}
+      <div data-testid="event-anonymous-email-form">
+        <p class="text-lg font-semibold text-foreground">Register for this event</p>
+        <p class="mt-2 text-sm text-muted-foreground">
+          Enter your email to save your spot. We'll create a free account for you
+          so you can manage your registration, and we'll send a calendar invite and
+          a verification link to activate the account. You can unsubscribe at any time.
+        </p>
+        <form id="event-anon-register-form" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-stretch" novalidate>
+          <label class="sr-only" for="event-anon-email">Email address</label>
+          <input id="event-anon-email"
+                 name="email"
+                 type="email"
+                 required
+                 autocomplete="email"
+                 placeholder="you@example.com"
+                 class="flex-1 rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          <button type="submit"
+                  id="event-anon-submit-btn"
+                  class="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+            Register for this event
+          </button>
+        </form>
+        <p id="event-anon-error" class="mt-3 hidden text-sm text-red-400" data-testid="event-anonymous-error"></p>
+        <p class="mt-4 text-sm text-muted-foreground">
+          Already have an account?
+          <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}" class="text-accent hover:underline">Sign in</a>
+          to register.
+        </p>
+      </div>
+    {% else %}
+      <div class="text-center" data-testid="event-anonymous-cta">
+        <p class="text-lg font-semibold text-foreground">A free account is required to register</p>
+        <p class="mt-2 text-sm text-muted-foreground">
+          Sign in or create a free account to save your spot. We'll send your
+          calendar invite and confirmation by email, and add you to occasional
+          newsletter updates about new events. You can unsubscribe at any time.
+        </p>
+        <div class="mt-4 flex flex-wrap items-center justify-center gap-3">
+          <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}"
+             class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+            Sign in to register
+          </a>
+          <a href="/accounts/signup/?next={{ event.get_absolute_url|urlencode }}"
+             class="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+            Create free account
+          </a>
+        </div>
+      </div>
+    {% endif %}
+  {% elif not has_access and gated_reason == "unverified_email" %}
+    {% include "content/_verify_email_required.html" %}
+  {% elif not has_access %}
+    <div class="text-center">
+      <div class="mb-4">
+        <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
+      </div>
+      <p class="text-lg font-semibold text-foreground">Upgrade to {{ required_tier_name }} to attend</p>
+      <p class="mt-2 text-sm text-muted-foreground" data-testid="event-required-tier-label">
+        {% if required_tier_name == "Premium" %}
+        This event requires a Premium membership.
+        {% else %}
+        This event requires a {{ required_tier_name }} membership or above.
+        {% endif %}
+      </p>
+      <a href="/pricing"
+         class="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+        <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+        View Pricing
+      </a>
+    </div>
+  {% elif event.is_full and not is_registered %}
+    <div class="text-center">
+      <i data-lucide="users" class="mx-auto h-10 w-10 text-muted-foreground"></i>
+      <p class="mt-4 text-lg font-semibold text-foreground">Event is full</p>
+      <p class="mt-2 text-sm text-muted-foreground">This event has reached its maximum capacity.</p>
+    </div>
+  {% elif is_registered %}
+    <div data-testid="event-registered-confirmation">
+      <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-center gap-3">
+          <div class="rounded-full bg-green-500/20 p-2">
+            <i data-lucide="check" class="h-5 w-5 text-green-400"></i>
+          </div>
+          <div>
+            <p class="font-semibold text-foreground">You're registered!</p>
+            {% if event.spots_remaining is not None %}
+            <p class="text-sm text-muted-foreground">{{ event.registration_count }}/{{ event.max_participants }} spots taken</p>
+            {% endif %}
+          </div>
+        </div>
+        <a href="{{ event_ics_url }}"
+           class="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-medium text-accent transition-colors hover:bg-accent/20 sm:w-auto"
+           data-testid="event-add-to-calendar"
+           download>
+          <i data-lucide="calendar-plus" class="h-4 w-4"></i>
+          Add to calendar
+        </a>
+      </div>
+
+      <ul class="mt-5 space-y-2 text-sm text-muted-foreground" data-testid="event-next-steps">
+        <li class="flex items-start gap-2">
+          <i data-lucide="mail" class="mt-0.5 h-4 w-4 flex-shrink-0 text-accent"></i>
+          <span>We've sent a confirmation to your email with the calendar invite attached. Check your inbox (and spam folder) within a few minutes.</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <i data-lucide="calendar-plus" class="mt-0.5 h-4 w-4 flex-shrink-0 text-accent"></i>
+          <span>If the email is delayed, use the <span class="text-foreground">Add to calendar</span> button above to download the invite directly.</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <i data-lucide="video" class="mt-0.5 h-4 w-4 flex-shrink-0 text-accent"></i>
+          <span>The join link unlocks here on the event page about 15 minutes before the start time.</span>
+        </li>
+      </ul>
+
+      {% if show_zoom_link %}
+      <div class="mt-4 rounded-lg border border-accent/30 bg-accent/5 p-4" data-testid="event-join-now">
+        <div class="flex items-center gap-3">
+          <i data-lucide="video" class="h-5 w-5 text-accent"></i>
+          <div>
+            <p class="font-semibold text-foreground">Join the event</p>
+            <a href="{% url 'event_join' event.slug %}" target="_blank" rel="noopener noreferrer"
+               class="text-accent hover:underline">
+              Click here to join
+            </a>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="mt-5 flex justify-end border-t border-border pt-4">
+        <button type="button"
+                class="w-full rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-red-500/50 hover:text-red-400 sm:w-auto"
+                id="unregister-btn"
+                data-event-unregister-button>
+          Cancel registration
+        </button>
+      </div>
+    </div>
+  {% else %}
+    <div class="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
+      <div class="w-full sm:w-auto text-center sm:text-left">
+        <p class="font-semibold text-foreground">Register for this event</p>
+        {% if event.spots_remaining is not None %}
+        <p class="text-sm text-muted-foreground">{{ event.spots_remaining }} spot{{ event.spots_remaining|pluralize }} remaining</p>
+        {% endif %}
+      </div>
+      <button type="button"
+              class="w-full sm:w-auto rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+              id="register-btn"
+              data-event-register-button>
+        Register
+      </button>
+    </div>
+  {% endif %}
+</div>
+{% endif %}

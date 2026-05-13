@@ -1,0 +1,72 @@
+{% load access_tags %}
+
+<header class="mb-12">
+  <div class="mb-4 flex flex-wrap items-center gap-2">
+    <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium
+      {% if event.status == 'upcoming' %}bg-blue-500/20 text-blue-400
+      {% elif event.status == 'completed' %}bg-green-500/20 text-green-400
+      {% elif event.status == 'cancelled' %}bg-secondary text-muted-foreground
+      {% else %}bg-secondary text-muted-foreground{% endif %}">
+      {{ event.get_status_display }}
+    </span>
+    {% if event.required_level > 0 %}
+    <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">
+      <i data-lucide="lock" class="h-3 w-3"></i>
+      {{ event.required_level|required_tier_label }}
+    </span>
+    {% endif %}
+    {% if event.is_external %}
+    <span class="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs font-medium text-accent" data-testid="event-detail-external-badge">
+      <i data-lucide="external-link" class="h-3 w-3"></i>
+      Hosted on {{ event.external_host }}
+    </span>
+    {% endif %}
+  </div>
+
+  <h1 class="[text-wrap:balance] text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
+    {{ event.title }}
+  </h1>
+
+  <div class="mt-6 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+    {% include "events/_event_time_display.html" %}
+    {% if show_event_location %}
+    <span class="flex items-center gap-1.5">
+      <i data-lucide="map-pin" class="h-4 w-4"></i>
+      {{ event.location }}
+    </span>
+    {% endif %}
+  </div>
+
+  {% comment %}
+    Issue #484: speaker/instructor row sits directly under the time +
+    location line so the value prop (who is teaching this) is visible
+    before scrolling. Renders nothing when no instructors are linked.
+  {% endcomment %}
+  {% if event_instructors %}
+  <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground" data-testid="event-instructors">
+    {% for instructor in event_instructors %}
+    <span class="flex items-center gap-2" data-testid="event-instructor">
+      {% if instructor.photo_url %}
+      <img src="{{ instructor.photo_url }}" alt=""
+           class="h-6 w-6 rounded-full border border-border object-cover">
+      {% else %}
+      <i data-lucide="user" class="h-4 w-4"></i>
+      {% endif %}
+      <span class="min-w-0 truncate">{{ instructor.name }}</span>
+    </span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if event.tags %}
+  <div class="mt-4 flex flex-wrap gap-2">
+    {% for tag in event.tags %}
+    {% if event.status == 'completed' %}
+    <a href="/events?filter=past&amp;tag={{ tag }}" class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors">{{ tag }}</a>
+    {% else %}
+    <span class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</header>

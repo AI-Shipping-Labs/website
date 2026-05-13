@@ -1,0 +1,66 @@
+.timestamp-editor__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+}
+
+.timestamp-editor__header {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #ccc;
+}
+
+.timestamp-editor__header--number {
+  width: 40px;
+}
+
+.timestamp-editor__header--time {
+  width: 120px;
+}
+
+.timestamp-editor__header--actions {
+  width: 100px;
+}
+
+.timestamp-editor__cell {
+  padding: 4px 8px;
+}
+
+.timestamp-editor__cell--number {
+  vertical-align: middle;
+}
+
+.timestamp-editor__time-input,
+.timestamp-editor__label-input {
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+.timestamp-editor__time-input {
+  width: 100px;
+}
+
+.timestamp-editor__label-input {
+  width: 100%;
+}
+
+.timestamp-editor__add {
+  padding: 6px 14px;
+  background: #417690;
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.timestamp-editor__row-button {
+  cursor: pointer;
+  padding: 2px 6px;
+  margin-right: 2px;
+}
+
+.timestamp-editor__row-button--danger {
+  color: #ba2121;
+}

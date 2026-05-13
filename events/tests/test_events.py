@@ -404,6 +404,21 @@ class EventDetailPageTest(TestCase):
     def test_detail_template(self):
         response = self.client.get('/events/detail-event')
         self.assertTemplateUsed(response, 'events/event_detail.html')
+        self.assertTemplateUsed(response, 'events/_event_hero_media.html')
+        self.assertTemplateUsed(response, 'events/_event_header.html')
+        self.assertTemplateUsed(response, 'events/_event_registration_card.html')
+        self.assertTemplateUsed(response, 'events/_event_description.html')
+
+    def test_detail_uses_static_page_script(self):
+        response = self.client.get('/events/detail-event')
+        html = response.content.decode()
+
+        self.assertIn('data-event-detail', html)
+        self.assertIn('data-event-slug="detail-event"', html)
+        self.assertIn('/static/js/events/event_detail.js', html)
+        self.assertNotIn('onclick="registerForEvent', html)
+        self.assertNotIn('onclick="unregisterFromEvent', html)
+        self.assertNotIn('function registerForEvent', html)
 
     def test_shows_title(self):
         response = self.client.get('/events/detail-event')

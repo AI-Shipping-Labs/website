@@ -1,0 +1,13 @@
+{% if event.has_recap and event.status == 'completed' %}
+<div class="event-recap space-y-12">
+  {{ event.recap_html|safe }}
+</div>
+{% elif event.description_html %}
+<div class="prose">
+  {{ event.description_html|safe }}
+</div>
+{% elif event.description %}
+<div class="prose">
+  <p class="text-muted-foreground">{{ event.description }}</p>
+</div>
+{% endif %}

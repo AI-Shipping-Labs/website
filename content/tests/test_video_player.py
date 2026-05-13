@@ -492,10 +492,20 @@ class TimestampEditorWidgetTest(TestCase):
         widget = TimestampEditorWidget()
         html = widget.render('timestamps', [{'time_seconds': 0, 'label': 'Intro'}], renderer=TemplatesSetting())
         self.assertIn('timestamp-editor', html)
+        self.assertIn('data-timestamp-editor', html)
+        self.assertIn('timestamp-editor__table', html)
         self.assertIn('id_timestamps', html)
         self.assertIn('Add Timestamp', html)
         self.assertIn('Time (MM:SS)', html)
         self.assertIn('Label', html)
+        self.assertNotIn('style=', html)
+        self.assertNotIn('<script>', html)
+
+    def test_widget_declares_static_media(self):
+        widget = TimestampEditorWidget()
+        media_html = str(widget.media)
+        self.assertIn('css/admin/timestamp_editor.css', media_html)
+        self.assertIn('js/admin/timestamp_editor.js', media_html)
 
 
 # --- Recording Admin Form Tests ---

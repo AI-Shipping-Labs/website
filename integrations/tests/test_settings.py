@@ -215,6 +215,33 @@ class SettingsDashboardViewTest(TestCase):
         pem_field = next(f for f in github_group['fields'] if f['key'] == 'GITHUB_APP_PRIVATE_KEY')
         self.assertTrue(pem_field['multiline'])
 
+    def test_github_default_secret_path_counts_as_configured(self):
+        IntegrationSetting.objects.create(
+            key='GITHUB_APP_ID',
+            value='3143490',
+            group='github',
+        )
+        IntegrationSetting.objects.create(
+            key='GITHUB_APP_INSTALLATION_ID',
+            value='117839867',
+            group='github',
+        )
+        self.client.login(email='admin@test.com', password='testpass')
+        response = self.client.get('/studio/settings/')
+        groups = response.context['groups']
+        github_group = next(g for g in groups if g['name'] == 'github')
+        secret_path_field = next(
+            f for f in github_group['fields']
+            if f['key'] == 'GITHUB_APP_PRIVATE_KEY_SECRET_ID'
+        )
+
+        self.assertEqual(github_group['status'], 'configured')
+        self.assertEqual(secret_path_field['source'], 'default')
+        self.assertEqual(
+            secret_path_field['current_value'],
+            'ai-shipping-labs/github-app-private-key',
+        )
+
     def test_dashboard_groups_settings_into_navigation_sections(self):
         self.client.login(email='admin@test.com', password='testpass')
         response = self.client.get('/studio/settings/')
@@ -278,7 +305,9 @@ class SettingsDashboardViewTest(TestCase):
         expected_total_items = len(response.context['auth_providers']) + len(response.context['groups'])
         self.assertEqual(summary['total_items'], expected_total_items)
         self.assertEqual(summary['configured_count'], 1)
-        self.assertEqual(summary['partial_count'], 2)
+        # Stripe has one DB-backed key, SES has one env-backed key, and
+        # GitHub has the default Secrets Manager path but no App IDs.
+        self.assertEqual(summary['partial_count'], 3)
         self.assertEqual(
             summary['missing_count'],
             expected_total_items - summary['configured_count'] - summary['partial_count'],

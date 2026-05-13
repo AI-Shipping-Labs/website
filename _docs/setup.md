@@ -52,7 +52,7 @@ Fetched at runtime by the Django app (not injected via ECS):
 |-----------|---------|
 | `ai-shipping-labs/github-app-private-key` | GitHub App PEM key for private content repo sync |
 
-The app fetches this from Secrets Manager automatically if the `GITHUB_APP_PRIVATE_KEY` env var and `GITHUB_APP_PRIVATE_KEY_FILE` are not set. Fallback order: local PEM file → env var → Secrets Manager.
+The app fetches this from Secrets Manager automatically if no direct PEM is set. The secret path and region can be configured in Studio with `GITHUB_APP_PRIVATE_KEY_SECRET_ID` and `GITHUB_APP_PRIVATE_KEY_SECRET_REGION`; otherwise the app uses `ai-shipping-labs/github-app-private-key` in `eu-west-1`. Fallback order: Studio PEM → local PEM file → env var → Studio secret path → default Secrets Manager path.
 
 When adding a new environment (e.g. prod), make sure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` include all domains that will submit forms to it. Production should include `aishippinglabs.com,www.aishippinglabs.com,prod.aishippinglabs.com`.
 

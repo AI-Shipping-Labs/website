@@ -100,6 +100,38 @@ class SiteBaseUrlConfigTest(TestCase):
         self.assertEqual(result2, 'https://prod.aishippinglabs.com')
 
 
+class WorkerConfigCacheTest(TestCase):
+    """Workers read runtime config fresh instead of using process cache."""
+
+    def setUp(self):
+        clear_config_cache()
+
+    def tearDown(self):
+        clear_config_cache()
+
+    def test_worker_process_bypasses_in_process_config_cache(self):
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL_ALIASES',
+            value='https://old.example.com',
+            group='site',
+        )
+        clear_config_cache()
+        self.assertEqual(
+            get_config('SITE_BASE_URL_ALIASES'),
+            'https://old.example.com',
+        )
+
+        IntegrationSetting.objects.filter(key='SITE_BASE_URL_ALIASES').update(
+            value='https://new.example.com',
+        )
+
+        with patch.dict(os.environ, {'DJANGO_QCLUSTER_PROCESS': 'true'}):
+            self.assertEqual(
+                get_config('SITE_BASE_URL_ALIASES'),
+                'https://new.example.com',
+            )
+
+
 class SiteSettingsSaveViewTest(TestCase):
     """``POST /studio/settings/site/save/`` upserts both keys and clears
     the config cache (AC #3 of issue #369). The route is generic

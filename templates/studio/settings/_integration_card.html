@@ -38,6 +38,9 @@ Context:
           {% elif field.source == 'env' %}
             <span data-source-badge="env"
                   class="px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400 whitespace-nowrap">Source: env</span>
+          {% elif field.source == 'default' %}
+            <span data-source-badge="default"
+                  class="px-2 py-0.5 text-xs rounded-full bg-gray-500/20 text-gray-400 whitespace-nowrap">Source: default</span>
           {% else %}
             <span data-source-badge="none"
                   class="px-2 py-0.5 text-xs rounded-full bg-gray-500/20 text-gray-400 whitespace-nowrap">Source: not set</span>

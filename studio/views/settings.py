@@ -111,12 +111,15 @@ def _build_group_context(group_def, db_settings):
     """
     fields = []
     keys_set = 0
-    total_keys = len(group_def['keys'])
+    total_keys = sum(
+        1 for key_def in group_def['keys'] if not key_def.get('optional')
+    )
 
     for key_def in group_def['keys']:
         key = key_def['key']
         db_value = db_settings.get(key, '')
         env_value = os.environ.get(key, '')
+        default_value = key_def.get('default', '')
 
         if db_value:
             current_value = db_value
@@ -124,11 +127,14 @@ def _build_group_context(group_def, db_settings):
         elif env_value:
             current_value = env_value
             source = 'env'
+        elif default_value:
+            current_value = default_value
+            source = 'default'
         else:
             current_value = ''
             source = ''
 
-        if current_value:
+        if current_value and not key_def.get('optional'):
             keys_set += 1
 
         fields.append({
@@ -137,6 +143,7 @@ def _build_group_context(group_def, db_settings):
             'is_secret': key_def.get('is_secret', False),
             'multiline': key_def.get('multiline', False),
             'is_boolean': key_def.get('is_boolean', False),
+            'optional': key_def.get('optional', False),
             'current_value': current_value,
             'source': source,
             'env_value': env_value,

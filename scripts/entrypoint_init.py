@@ -95,6 +95,7 @@ def main():
     else:
         # Worker container -> django-q cluster, in-process.
         print("Starting django-q cluster", flush=True)
+        os.environ["DJANGO_QCLUSTER_PROCESS"] = "true"
         call_command("qcluster", verbosity=1)
 
 

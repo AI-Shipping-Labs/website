@@ -1,8 +1,9 @@
 """Configuration helper for integration settings.
 
 Provides get_config() which checks the database first, then falls back
-to environment variables. Uses an in-process cache that is cleared
-when settings are saved via Studio.
+to Django settings and environment variables. Web processes use an
+in-process cache that is cleared when settings are saved via Studio.
+Worker processes bypass that cache and read runtime config fresh.
 
 Cross-process invalidation
 ==========================
@@ -25,6 +26,7 @@ the value, only "is it the same string we recorded last time".
 """
 
 import os
+import sys
 import uuid
 
 _STAMP_CACHE_KEY = 'integration_settings_stamp'
@@ -46,6 +48,9 @@ def get_config(key, default='', *, use_settings=True):
         str: The setting value.
     """
     global _cache, _cache_populated, _cache_stamp
+    if running_in_worker_process():
+        return _get_config_uncached(key, default, use_settings=use_settings)
+
     if not _cache_populated:
         _populate_cache()
     else:
@@ -70,6 +75,40 @@ def get_config(key, default='', *, use_settings=True):
         if settings_val is not None:
             return settings_val
     # Then env var
+    env_val = os.environ.get(key)
+    if env_val is not None:
+        return env_val
+    return default
+
+
+def running_in_worker_process():
+    """Return True when executing inside a Django-Q worker process."""
+    if os.environ.get('DJANGO_QCLUSTER_PROCESS') == 'true':
+        return True
+    return any(arg == 'qcluster' for arg in sys.argv)
+
+
+def _get_config_uncached(key, default='', *, use_settings=True):
+    """Read one config key without touching the in-process DB cache."""
+    try:
+        from integrations.models import IntegrationSetting  # noqa: PLC0415
+        db_value = (
+            IntegrationSetting.objects
+            .filter(key=key)
+            .values_list('value', flat=True)
+            .first()
+        )
+        if db_value:
+            return db_value
+    except Exception:
+        pass
+
+    from django.conf import settings  # noqa: PLC0415
+    if use_settings and settings.configured:
+        settings_val = getattr(settings, key, None)
+        if settings_val is not None:
+            return settings_val
+
     env_val = os.environ.get(key)
     if env_val is not None:
         return env_val

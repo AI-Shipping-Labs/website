@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import json
 import os
+import sys
 import tempfile
 from datetime import date
 from unittest.mock import MagicMock, patch
@@ -37,7 +38,8 @@ from content.models import (
     Workshop,
 )
 from events.models import Event
-from integrations.models import ContentSource, SyncLog
+from integrations.config import clear_config_cache
+from integrations.models import ContentSource, IntegrationSetting, SyncLog
 from integrations.services.content_sync_queue import ContentSyncQueueResult
 from integrations.services.github import (
     GitHubSyncError,
@@ -1873,6 +1875,12 @@ class SyncFailureTest(TestCase):
 class GitHubAppAuthTest(TestCase):
     """Test GitHub App token generation."""
 
+    def setUp(self):
+        clear_config_cache()
+
+    def tearDown(self):
+        clear_config_cache()
+
     @override_settings(
         GITHUB_APP_ID='',
         GITHUB_APP_PRIVATE_KEY='',
@@ -1911,6 +1919,76 @@ class GitHubAppAuthTest(TestCase):
         mock_post.assert_called_once()
         call_args = mock_post.call_args
         self.assertIn('67890', call_args[0][0])
+
+    @override_settings(
+        GITHUB_APP_ID='12345',
+        GITHUB_APP_PRIVATE_KEY='',
+        GITHUB_APP_INSTALLATION_ID='67890',
+    )
+    @patch(
+        'integrations.services.github_sync.client'
+        '._fetch_github_app_private_key_from_secrets_manager',
+        return_value='fake-key',
+    )
+    @patch('integrations.services.github_sync.client.jwt.encode')
+    @patch('integrations.services.github_sync.client.requests.post')
+    def test_uses_configured_secrets_manager_path(
+        self, mock_post, mock_jwt, mock_fetch_secret,
+    ):
+        from integrations.services.github import generate_github_app_token
+
+        IntegrationSetting.objects.create(
+            key='GITHUB_APP_PRIVATE_KEY_SECRET_ID',
+            value='prod/github-app/private-key',
+            group='github',
+        )
+        IntegrationSetting.objects.create(
+            key='GITHUB_APP_PRIVATE_KEY_SECRET_REGION',
+            value='us-east-1',
+            group='github',
+        )
+        clear_config_cache()
+
+        mock_jwt.return_value = 'fake-jwt-token'
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.json.return_value = {'token': 'ghs_test_token_123'}
+        mock_post.return_value = mock_response
+
+        self.assertEqual(generate_github_app_token(), 'ghs_test_token_123')
+        mock_fetch_secret.assert_called_once_with(
+            'prod/github-app/private-key',
+            'us-east-1',
+        )
+
+    def test_worker_secret_manager_fetch_bypasses_success_cache(self):
+        from integrations.services.github_sync import client as github_client
+
+        github_client._secrets_manager_pem_cache = {}
+        secret_client = MagicMock()
+        secret_client.get_secret_value.side_effect = [
+            {'SecretString': 'first-key'},
+            {'SecretString': 'second-key'},
+        ]
+        boto3_module = MagicMock()
+        boto3_module.client.return_value = secret_client
+
+        with (
+            patch.dict(os.environ, {'DJANGO_QCLUSTER_PROCESS': 'true'}),
+            patch.dict(sys.modules, {'boto3': boto3_module}),
+        ):
+            first = github_client._fetch_github_app_private_key_from_secrets_manager(
+                'prod/github-app/private-key',
+                'us-east-1',
+            )
+            second = github_client._fetch_github_app_private_key_from_secrets_manager(
+                'prod/github-app/private-key',
+                'us-east-1',
+            )
+
+        self.assertEqual(first, 'first-key')
+        self.assertEqual(second, 'second-key')
+        self.assertEqual(secret_client.get_secret_value.call_count, 2)
 
     @override_settings(
         GITHUB_APP_ID='12345',

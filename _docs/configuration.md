@@ -24,7 +24,7 @@ These variables are read at process start, before the DB is reachable, or used b
 | `EMAIL_BATCH_SIZE` | optional | Recipients per chunked `send_campaign_batch` task. Default 200. |
 | `SYNC_QUEUED_THRESHOLD_MINUTES` | optional | Watchdog: a sync stuck in `queued` longer than this is flipped to `failed`. Default 10. |
 | `SYNC_RUNNING_THRESHOLD_MINUTES` | optional | Watchdog: a sync stuck in `running` longer than this is flipped to `failed`. Default 30. |
-| `GITHUB_APP_PRIVATE_KEY_FILE` | optional | Path to a PEM file. Takes precedence over the `GITHUB_APP_PRIVATE_KEY` env var. The app falls back to AWS Secrets Manager (`ai-shipping-labs/github-app-private-key`) if neither is set. |
+| `GITHUB_APP_PRIVATE_KEY_FILE` | optional | Path to a PEM file. Takes precedence over the `GITHUB_APP_PRIVATE_KEY` env var. The app falls back to the Studio-configured AWS Secrets Manager secret path if neither is set. |
 
 Test: `curl -I {SITE_BASE_URL}/ping` returns `200 OK`. Then visit `{SITE_BASE_URL}/` and confirm the home page renders without 500 errors.
 
@@ -217,7 +217,9 @@ Keys to set in Studio:
 |-----|--------|-------|
 | `GITHUB_APP_ID` | non-secret | Numeric App ID from the App's settings page. |
 | `GITHUB_APP_INSTALLATION_ID` | non-secret | Installation ID — visible in the URL of the org's installation page. |
-| `GITHUB_APP_PRIVATE_KEY` | secret, multiline | Paste the PEM. The app falls back to `GITHUB_APP_PRIVATE_KEY_FILE` (env, file path), then AWS Secrets Manager (`ai-shipping-labs/github-app-private-key`) if unset. |
+| `GITHUB_APP_PRIVATE_KEY_SECRET_ID` | non-secret | AWS Secrets Manager secret name, path, or ARN containing the PEM. Default fallback is `ai-shipping-labs/github-app-private-key`. |
+| `GITHUB_APP_PRIVATE_KEY_SECRET_REGION` | non-secret | AWS region for the secret. Defaults to `eu-west-1` when empty. |
+| `GITHUB_APP_PRIVATE_KEY` | secret, multiline | Optional direct PEM paste. Prefer the Secrets Manager path above for production. |
 
 Webhook endpoint: `{SITE_BASE_URL}/api/webhooks/github` (no trailing slash). Configure in the App's "Webhook" tab.
 

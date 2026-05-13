@@ -8,7 +8,7 @@ import jwt
 import requests
 from django.core.cache import cache
 
-from integrations.config import get_config
+from integrations.config import get_config, running_in_worker_process
 from integrations.models import ContentSource
 from integrations.services.github_sync.common import (
     GITHUB_API_BASE,
@@ -23,41 +23,44 @@ from integrations.services.github_sync.common import (
 # Secrets Manager API round-trip (~1-2s) for every Django boot --
 # multiplied across the four settings imports the old entrypoint did.
 # We now resolve it lazily on the first call to
-# ``generate_github_app_token``. The result is cached at module level
-# for the lifetime of the process; if the secret rotates, restart the
-# task.
-_GITHUB_APP_PRIVATE_KEY_SECRET_ID = 'ai-shipping-labs/github-app-private-key'
-_GITHUB_APP_PRIVATE_KEY_SECRET_REGION = 'eu-west-1'
-_secrets_manager_pem_cache = None
+# ``generate_github_app_token``. Web processes cache successful lookups
+# per secret id/region, while workers fetch fresh so long-running queue
+# jobs do not hold stale credentials.
+_DEFAULT_GITHUB_APP_PRIVATE_KEY_SECRET_ID = (
+    'ai-shipping-labs/github-app-private-key'
+)
+_DEFAULT_GITHUB_APP_PRIVATE_KEY_SECRET_REGION = 'eu-west-1'
+_secrets_manager_pem_cache = {}
 
 
-def _fetch_github_app_private_key_from_secrets_manager():
+def _fetch_github_app_private_key_from_secrets_manager(secret_id, region):
     """Fetch the GitHub App PEM from AWS Secrets Manager (cached).
 
     Returns an empty string if boto3 is unavailable, the secret is
     missing, or the call fails for any reason -- never raises. Callers
     treat an empty string as "no key configured".
     """
-    global _secrets_manager_pem_cache
-    if _secrets_manager_pem_cache is not None:
-        return _secrets_manager_pem_cache
+    cache_key = (secret_id, region)
+    if not running_in_worker_process() and cache_key in _secrets_manager_pem_cache:
+        return _secrets_manager_pem_cache[cache_key]
     try:
         import boto3  # noqa: PLC0415
         client = boto3.client(
             'secretsmanager',
-            region_name=_GITHUB_APP_PRIVATE_KEY_SECRET_REGION,
+            region_name=region,
         )
         value = client.get_secret_value(
-            SecretId=_GITHUB_APP_PRIVATE_KEY_SECRET_ID,
+            SecretId=secret_id,
         )['SecretString']
     except Exception as e:
         logger.warning(
             'Failed to fetch secret %s: %s',
-            _GITHUB_APP_PRIVATE_KEY_SECRET_ID, e,
+            secret_id, e,
         )
-        value = ''
-    _secrets_manager_pem_cache = value
-    return value
+        return ''
+    if value and not running_in_worker_process():
+        _secrets_manager_pem_cache[cache_key] = value
+    return value or ''
 
 
 def _resolve_github_app_private_key():
@@ -68,13 +71,24 @@ def _resolve_github_app_private_key():
          falls through to Django settings (``GITHUB_APP_PRIVATE_KEY``,
          which is itself resolved from a PEM file or env var at
          settings-import time).
-      2. AWS Secrets Manager (production fallback), cached after the
-         first call.
+      2. AWS Secrets Manager (production fallback). The secret id/path
+         and region can be configured in Studio, with legacy defaults
+         preserved for existing deployments.
     """
     private_key = get_config('GITHUB_APP_PRIVATE_KEY')
     if private_key:
         return private_key
-    return _fetch_github_app_private_key_from_secrets_manager()
+    secret_id = get_config(
+        'GITHUB_APP_PRIVATE_KEY_SECRET_ID',
+        _DEFAULT_GITHUB_APP_PRIVATE_KEY_SECRET_ID,
+    )
+    region = get_config(
+        'GITHUB_APP_PRIVATE_KEY_SECRET_REGION',
+        _DEFAULT_GITHUB_APP_PRIVATE_KEY_SECRET_REGION,
+    )
+    if not secret_id:
+        return ''
+    return _fetch_github_app_private_key_from_secrets_manager(secret_id, region)
 
 
 def validate_webhook_signature(request, secret):
@@ -136,7 +150,9 @@ def generate_github_app_token():
         raise GitHubSyncError(
             'GitHub App credentials not configured. '
             'Set GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, '
-            'and GITHUB_APP_INSTALLATION_ID.'
+            'and GITHUB_APP_INSTALLATION_ID, or configure '
+            'GITHUB_APP_PRIVATE_KEY_SECRET_ID to fetch the private key '
+            'from AWS Secrets Manager.'
         )
 
     now = int(time.time())

@@ -90,7 +90,9 @@ INTEGRATION_GROUPS = [
         'keys': [
             {'key': 'GITHUB_APP_ID', 'is_secret': False, 'description': 'Numeric ID of the GitHub App used to read content repos. Found at github.com/settings/apps/<your-app>.'},
             {'key': 'GITHUB_APP_INSTALLATION_ID', 'is_secret': False, 'description': 'Installation ID of the GitHub App on the content org. Found at github.com/organizations/<org>/settings/installations.'},
-            {'key': 'GITHUB_APP_PRIVATE_KEY', 'is_secret': True, 'description': 'PEM private key issued by GitHub when the app was created. Used to sign API requests; without this content sync fails.', 'multiline': True},
+            {'key': 'GITHUB_APP_PRIVATE_KEY_SECRET_ID', 'is_secret': False, 'description': 'AWS Secrets Manager secret name, path, or ARN containing the GitHub App PEM private key. Leave the PEM field empty when this is set.', 'default': 'ai-shipping-labs/github-app-private-key'},
+            {'key': 'GITHUB_APP_PRIVATE_KEY_SECRET_REGION', 'is_secret': False, 'description': 'AWS region for the GitHub App private-key secret. Defaults to eu-west-1 when empty.', 'default': 'eu-west-1', 'optional': True},
+            {'key': 'GITHUB_APP_PRIVATE_KEY', 'is_secret': True, 'description': 'Optional direct PEM private key issued by GitHub. Prefer the AWS Secrets Manager secret path above for production.', 'multiline': True, 'optional': True},
         ],
     },
     {

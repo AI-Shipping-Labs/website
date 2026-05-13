@@ -64,7 +64,8 @@ class HeaderTextNavigationIssue580Test(TestCase):
             ['about-dropdown-btn', 'community-dropdown-btn', 'resources-dropdown-btn'],
         )
 
-        # Top-level test ids in left-to-right order.
+        # Top-level test ids in left-to-right order. Membership, Sprints,
+        # and Events live only inside Community.
         top_level_ids = re.findall(
             r'data-testid="(nav-about-trigger|nav-membership|nav-community-trigger|nav-sprints|nav-events|nav-resources-trigger)"',
             primary,
@@ -73,13 +74,13 @@ class HeaderTextNavigationIssue580Test(TestCase):
             top_level_ids,
             [
                 'nav-about-trigger',
-                'nav-membership',
                 'nav-community-trigger',
-                'nav-sprints',
-                'nav-events',
                 'nav-resources-trigger',
             ],
         )
+        self.assertNotIn('data-testid="nav-membership"', primary)
+        self.assertNotIn('data-testid="nav-sprints"', primary)
+        self.assertNotIn('data-testid="nav-events"', primary)
 
         # FAQ is no longer a top-level link — it only appears inside the
         # About dropdown, never as a sibling of the trigger buttons.
@@ -153,17 +154,14 @@ class HeaderTextNavigationIssue580Test(TestCase):
             ['mobile-about-toggle', 'mobile-community-toggle', 'mobile-resources-toggle'],
         )
 
-        # Mobile order between accordions: Membership, then Community accordion,
-        # then Sprints + Events as direct top-level links, then Resources accordion.
-        idx_membership = mobile_section.index('data-testid="mobile-nav-membership"')
+        # Mobile order between accordions: Community follows About, then Resources.
+        # Membership, Sprints, and Events live only inside Community.
+        self.assertNotIn('data-testid="mobile-nav-membership"', mobile_section)
+        self.assertNotIn('data-testid="mobile-nav-sprints"', mobile_section)
+        self.assertNotIn('data-testid="mobile-nav-events"', mobile_section)
         idx_community = mobile_section.index('id="mobile-community-toggle"')
-        idx_sprints = mobile_section.index('data-testid="mobile-nav-sprints"')
-        idx_events = mobile_section.index('data-testid="mobile-nav-events"')
         idx_resources = mobile_section.index('id="mobile-resources-toggle"')
-        self.assertLess(idx_membership, idx_community)
-        self.assertLess(idx_community, idx_sprints)
-        self.assertLess(idx_sprints, idx_events)
-        self.assertLess(idx_events, idx_resources)
+        self.assertLess(idx_community, idx_resources)
 
     @staticmethod
     def _slice_block(html, dropdown_id):

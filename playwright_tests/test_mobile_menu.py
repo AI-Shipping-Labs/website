@@ -75,10 +75,7 @@ class TestMobileMenuHitTarget:
 
         public_test_ids = [
             "mobile-nav-about-trigger",
-            "mobile-nav-membership",
             "mobile-nav-community-trigger",
-            "mobile-nav-sprints",
-            "mobile-nav-events",
             "mobile-nav-resources-trigger",
         ]
         for test_id in public_test_ids:
@@ -118,7 +115,7 @@ class TestMobileMenuHitTarget:
         for link_test_id in ["nav-membership", "nav-sprints", "nav-events"]:
             assert desktop_nav.locator(
                 f'[data-testid="{link_test_id}"]'
-            ).is_visible()
+            ).count() == 0
         assert page.locator("#community-dropdown-btn").is_visible()
         assert page.locator("#resources-dropdown-btn").is_visible()
         assert page.locator("#learn-dropdown-btn").count() == 0

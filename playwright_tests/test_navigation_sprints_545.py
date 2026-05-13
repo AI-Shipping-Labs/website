@@ -84,10 +84,7 @@ def _desktop_top_level_test_ids(page):
             const nav = document.querySelector('[data-testid="desktop-primary-nav"]');
             const ids = [
                 'nav-about-trigger',
-                'nav-membership',
                 'nav-community-trigger',
-                'nav-sprints',
-                'nav-events',
                 'nav-resources-trigger',
             ];
             const found = [...nav.querySelectorAll('[data-testid]')]
@@ -105,21 +102,20 @@ def _desktop_top_level_test_ids(page):
 # ---------------------------------------------------------------------------
 
 
-def test_anonymous_top_nav_has_six_destinations_in_order(django_server, page):
-    """Scenario: Anonymous visitor scans the top nav and finds the six destinations."""
+def test_anonymous_top_nav_has_three_groups_in_order(django_server, page):
+    """Scenario: Anonymous visitor scans the top nav and finds the grouped IA."""
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
     assert _desktop_top_level_test_ids(page) == [
         "nav-about-trigger",
-        "nav-membership",
         "nav-community-trigger",
-        "nav-sprints",
-        "nav-events",
         "nav-resources-trigger",
     ]
 
     nav = page.locator('[data-testid="desktop-primary-nav"]')
+    for duplicate_id in ["nav-membership", "nav-sprints", "nav-events"]:
+        assert nav.locator(f'[data-testid="{duplicate_id}"]').count() == 0
     # FAQ is not a top-level destination — only inside About.
     assert nav.get_by_role("link", name="FAQ").count() == 0
     # Activities is not a top-level destination (regression #555).
@@ -222,12 +218,14 @@ def test_community_dropdown_groups_membership_sprints_events(django_server, page
     _shot(page, "04-community-membership")
 
 
-def test_top_level_sprints_and_events_link_directly(django_server, page):
-    """Scenario: Visitor reaches Sprints and Events from one click at top level."""
+def test_community_links_reach_membership_sprints_and_events(django_server, page):
+    """Scenario: Visitor reaches community surfaces from the Community menu."""
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-    sprints = page.get_by_test_id("nav-sprints")
+    page.get_by_test_id("nav-community-trigger").hover()
+    page.get_by_test_id("nav-community-menu").wait_for(state="visible")
+    sprints = page.get_by_test_id("nav-community-link-sprints")
     assert sprints.get_attribute("href") == "/sprints"
     sprints.click()
     page.wait_for_url("**/sprints")
@@ -235,11 +233,13 @@ def test_top_level_sprints_and_events_link_directly(django_server, page):
     page.go_back()
     page.wait_for_load_state("domcontentloaded")
 
-    events = page.get_by_test_id("nav-events")
+    page.get_by_test_id("nav-community-trigger").hover()
+    page.get_by_test_id("nav-community-menu").wait_for(state="visible")
+    events = page.get_by_test_id("nav-community-link-events")
     assert events.get_attribute("href") == "/events"
     events.click()
     page.wait_for_url("**/events")
-    _shot(page, "05-sprints-events-direct")
+    _shot(page, "05-sprints-events-community")
 
 
 # ---------------------------------------------------------------------------
@@ -318,8 +318,8 @@ def test_mobile_resources_accordion_lists_blog_first(django_server, browser):
     context.close()
 
 
-def test_mobile_direct_links_appear_between_about_and_resources(django_server, browser):
-    """Scenario: Mobile visitor reads the cluster of direct links between accordions."""
+def test_mobile_top_level_groups_appear_between_about_and_resources(django_server, browser):
+    """Scenario: Mobile visitor sees Community as the only community surface group."""
     context = browser.new_context(viewport={"width": 390, "height": 844})
     page = context.new_page()
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
@@ -333,10 +333,7 @@ def test_mobile_direct_links_appear_between_about_and_resources(django_server, b
             const menu = document.getElementById('mobile-menu');
             const wanted = new Set([
                 'mobile-nav-about-trigger',
-                'mobile-nav-membership',
                 'mobile-nav-community-trigger',
-                'mobile-nav-sprints',
-                'mobile-nav-events',
                 'mobile-nav-resources-trigger',
             ]);
             return [...menu.querySelectorAll('[data-testid]')]
@@ -347,12 +344,15 @@ def test_mobile_direct_links_appear_between_about_and_resources(django_server, b
     )
     assert test_ids == [
         "mobile-nav-about-trigger",
-        "mobile-nav-membership",
         "mobile-nav-community-trigger",
-        "mobile-nav-sprints",
-        "mobile-nav-events",
         "mobile-nav-resources-trigger",
     ]
+    for duplicate_id in [
+        "mobile-nav-membership",
+        "mobile-nav-sprints",
+        "mobile-nav-events",
+    ]:
+        assert page.locator(f'#mobile-menu [data-testid="{duplicate_id}"]').count() == 0
     _shot(page, "08-mobile-cluster-order")
     context.close()
 
@@ -408,10 +408,7 @@ def test_authenticated_member_sees_same_public_nav_plus_account(
 
     assert _desktop_top_level_test_ids(page) == [
         "nav-about-trigger",
-        "nav-membership",
         "nav-community-trigger",
-        "nav-sprints",
-        "nav-events",
         "nav-resources-trigger",
     ]
     assert page.locator("#notification-bell-btn").is_visible()

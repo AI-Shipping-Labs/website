@@ -24,17 +24,14 @@ class ActivitiesSprintHubTest(TestCase):
         ]
 
         about_trigger = primary.index('id="about-dropdown-btn"')
-        membership_index = primary.index('data-testid="nav-membership"')
         community_index = primary.index('id="community-dropdown-btn"')
-        sprints_index = primary.index('data-testid="nav-sprints"')
-        events_index = primary.index('data-testid="nav-events"')
         resources_index = primary.index('id="resources-dropdown-btn"')
 
-        self.assertLess(about_trigger, membership_index)
-        self.assertLess(membership_index, community_index)
-        self.assertLess(community_index, sprints_index)
-        self.assertLess(sprints_index, events_index)
-        self.assertLess(events_index, resources_index)
+        self.assertLess(about_trigger, community_index)
+        self.assertLess(community_index, resources_index)
+        self.assertNotIn('data-testid="nav-membership"', primary)
+        self.assertNotIn('data-testid="nav-sprints"', primary)
+        self.assertNotIn('data-testid="nav-events"', primary)
 
         self.assertIn('href="/about"', header)
         self.assertIn('href="/pricing"', header)
@@ -42,7 +39,6 @@ class ActivitiesSprintHubTest(TestCase):
         self.assertIn('href="/sprints"', header)
         self.assertIn('href="/resources"', header)
         self.assertIn('href="/faq"', header)
-        self.assertIn('>Membership</a>', primary)
         self.assertNotIn('href="/activities"', header)
         self.assertNotIn('>Activities</a>', header)
 

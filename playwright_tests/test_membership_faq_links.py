@@ -28,7 +28,9 @@ class TestLoggedInUserMembershipNavigation:
         page = ctx.new_page()
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-        assert page.locator("header a", has_text="Membership").count() == 0
+        assert page.get_by_test_id("nav-membership").count() == 0
+        page.get_by_test_id("nav-community-trigger").hover()
+        assert page.get_by_test_id("nav-community-link-membership").is_visible()
         page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
         page.wait_for_load_state("domcontentloaded")
 

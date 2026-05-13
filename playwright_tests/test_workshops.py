@@ -473,19 +473,17 @@ class TestWorkshopSitemap:
 
 
 # ----------------------------------------------------------------------
-# Scenario 6: Action buttons render above the description and the
-# tutorial pages list (issue #360).
+# Scenario 6: Action buttons render below the README and tutorial pages list.
 # ----------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestWorkshopActionButtonsAboveDescription:
-    def test_action_buttons_render_above_description_and_pages_list(
+class TestWorkshopActionButtonsBelowTutorialPages:
+    def test_action_buttons_render_below_description_and_pages_list(
         self, browser, django_server,
     ):
         """Visitor with access sees video / tutorial / GitHub buttons
-        immediately under the title, before the description and the
-        tutorial pages list."""
+        below the README description and tutorial pages list."""
         _clear_workshops()
         _create_workshop(
             slug='ws',
@@ -534,12 +532,12 @@ class TestWorkshopActionButtonsAboveDescription:
         assert description_box is not None
         assert pages_box is not None
 
-        # Action block sits ABOVE the description.
-        assert video_box['y'] < description_box['y']
-        assert tutorial_box['y'] < description_box['y']
-        assert repo_box['y'] < description_box['y']
-        # Description sits above the tutorial pages list.
+        # Description and tutorial page list are read before action cards.
         assert description_box['y'] < pages_box['y']
+        assert pages_box['y'] < video_box['y']
+        assert pages_box['y'] < tutorial_box['y']
+        # The code link is grouped under the recording card.
+        assert video_box['y'] < repo_box['y']
 
         ctx.close()
 
@@ -572,7 +570,7 @@ class TestWorkshopWithoutCodeRepoNoEmptySlot:
         repo_link = page.locator('[data-testid="workshop-code-repo-link"]')
         assert repo_link.count() == 0
 
-        # Video + tutorial cards still render above the description.
+        # Video + tutorial cards still render below the description.
         video_link = page.locator('[data-testid="workshop-video-link"]')
         tutorial_link = page.locator('[data-testid="workshop-tutorial-link"]')
         description = page.locator('[data-testid="workshop-description"]')
@@ -589,8 +587,8 @@ class TestWorkshopWithoutCodeRepoNoEmptySlot:
         assert tutorial_box is not None
         assert description_box is not None
 
-        assert video_box['y'] < description_box['y']
-        assert tutorial_box['y'] < description_box['y']
+        assert description_box['y'] < video_box['y']
+        assert description_box['y'] < tutorial_box['y']
 
         # No empty wrapper sits where the repo button used to be: the
         # template gates the entire `<div class="mb-12">…</div>` wrapper

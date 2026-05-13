@@ -301,15 +301,15 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         # the paywall card's upgrade CTA by data-testid.
         self.assertNotContains(response, 'Upgrade to Free')
         body = response.content.decode()
-        # Locate the paywall card and assert the primary CTA is NOT a
-        # /pricing link (it must be /accounts/login/). Scoping the slice
-        # to the next HTML comment (the partial is followed by the
-        # workshop cross-link comment) avoids matching the unrelated
-        # /pricing links in the header / footer chrome.
+        # Locate the paywall CTA and assert the primary CTA is NOT a
+        # /pricing link (it must be /accounts/login/). Scope tightly
+        # around the CTA itself to avoid matching unrelated header/footer
+        # pricing links.
         card_start = body.index('data-testid="workshop-pages-paywall"')
-        card_end_marker = '<!--'
-        rel_end = body[card_start:].index(card_end_marker)
-        card_slice = body[card_start:card_start + rel_end]
+        cta_index = body.index(
+            'data-testid="workshop-pages-upgrade-cta"', card_start,
+        )
+        card_slice = body[max(card_start, cta_index - 400):cta_index + 200]
         self.assertIn('data-testid="workshop-pages-upgrade-cta"', card_slice)
         self.assertIn('/accounts/login/?next=', card_slice)
         self.assertNotIn(
@@ -355,12 +355,14 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/ws')
         self.assertContains(response, 'data-testid="workshop-video-locked"')
 
-    def test_landing_event_cross_link_renders_when_event_exists(self):
+    def test_landing_event_cross_link_hidden_when_event_exists(self):
         response = self.client.get('/workshops/ws')
-        self.assertContains(
+        self.assertNotContains(
             response, 'data-testid="workshop-event-cross-link"',
         )
-        self.assertContains(response, '/events/ws-event')
+        self.assertNotContains(
+            response, 'Saw this on the events timeline? View the event page',
+        )
 
     def test_landing_event_cross_link_hidden_when_no_event(self):
         ws = _make_workshop(slug='no-evt', title='No Event')

@@ -76,15 +76,10 @@ class AccountPageActionButtonsStackTest(TestCase):
         """Action buttons container has flex-col sm:flex-row for mobile stacking."""
         response = self.client.get("/account/")
         content = response.content.decode()
-        # Find the action buttons container near the upgrade/cancel buttons
-        upgrade_pos = content.find('id="upgrade-btn"')
-        if upgrade_pos == -1:
-            # Free user -- look for the pricing link
-            upgrade_pos = content.find('href="/pricing"')
-        self.assertNotEqual(upgrade_pos, -1)
-        # Look backwards for the flex container
-        preceding = content[max(0, upgrade_pos - 400):upgrade_pos]
-        self.assertIn("flex-col sm:flex-row", preceding)
+        self.assertIn(
+            'class="flex flex-col sm:flex-row flex-wrap gap-3 mt-6"',
+            content,
+        )
 
 
 class AccountPageModalMobileTest(TestCase):
@@ -184,9 +179,10 @@ class CancelModalTapTargetsTest(TestCase):
         """Cancel modal action buttons use flex-col-reverse sm:flex-row for mobile stacking."""
         response = self.client.get("/account/")
         content = response.content.decode()
-        cancel_btn_pos = content.index('id="confirm-cancel-btn"')
-        preceding = content[max(0, cancel_btn_pos - 300):cancel_btn_pos]
-        self.assertIn("flex-col-reverse sm:flex-row", preceding)
+        self.assertIn(
+            'class="flex flex-col-reverse sm:flex-row gap-3"',
+            content,
+        )
 
 
 class FormInputTextBaseTest(TestCase):

@@ -4,17 +4,17 @@
 {% block studio_title %}Workshops{% endblock %}
 
 {% block studio_content %}
-<div class="flex items-center justify-between mb-8">
-  <div>
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
+  <div class="min-w-0">
     <h1 class="text-2xl font-semibold text-foreground">Workshops</h1>
     <p class="text-muted-foreground mt-1">Manage workshop landing pages, gating, and re-syncs.</p>
     {% worker_status_inline %}
   </div>
-  <form method="post" action="{% url 'studio_workshop_resync' %}">
+  <form method="post" action="{% url 'studio_workshop_resync' %}" class="shrink-0">
     {% csrf_token %}
     <button type="submit"
             data-testid="workshop-resync-btn"
-            class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm font-medium text-foreground hover:bg-muted transition-colors flex items-center space-x-2">
+            class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm font-medium text-foreground hover:bg-muted transition-colors inline-flex items-center space-x-2">
       <i data-lucide="refresh-cw" class="w-4 h-4"></i>
       <span>Re-sync workshops</span>
     </button>

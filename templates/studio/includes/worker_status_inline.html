@@ -7,7 +7,7 @@ Driven by ``{% worker_status_inline %}`` (see ``studio.templatetags``).
 {% if worker_status.expect_worker %}
 <a href="{% url 'studio_worker' %}"
    data-testid="worker-status-inline"
-   class="inline-flex items-center gap-2 mt-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+   class="inline-flex flex-wrap items-center gap-x-2 gap-y-0 mt-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
   {% if worker_status.alive %}
     <span class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" aria-hidden="true"></span>
     <span class="text-foreground">Worker:</span>

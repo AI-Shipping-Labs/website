@@ -50,11 +50,16 @@ select.studio-select {
   }
 
   .studio-responsive-table tr {
-    margin-bottom: 0.75rem;
-    padding: 1rem;
+    margin-bottom: 0.375rem;
+    padding: 0.5rem 0.625rem;
     border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     background: hsl(var(--card));
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: 0.5rem;
+    row-gap: 0.0625rem;
+    align-items: baseline;
   }
 
   .studio-responsive-table tr:last-child {
@@ -62,28 +67,75 @@ select.studio-select {
   }
 
   .studio-responsive-table td {
-    padding: 0.35rem 0 !important;
+    padding: 0 !important;
     text-align: left !important;
     white-space: normal;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.375rem;
+    /* Default every <td> to its own full-width row so labelled facts
+       never collide with neighbouring columns (issue #620 Pixel 7
+       regression where the Status pill overlapped the next cell's
+       LABEL). The first/last cells redefine grid-column below. */
+    grid-column: 1 / -1;
+    line-height: 1.25;
   }
 
-  .studio-responsive-table td:first-child {
-    padding-top: 0 !important;
+  /* The first <td> (typically Title) sits in column 1 of the header
+     row and renders larger so it acts as the row header on mobile. The
+     Actions cell shares the same row in column 2 (see below) — that
+     saves an entire grid row of vertical chrome on every card. */
+  .studio-responsive-table tr > td:first-child {
+    grid-column: 1;
+    grid-row: 1;
+    font-weight: 600;
+    font-size: 0.875rem;
+    line-height: 1.3;
+    flex-wrap: wrap;
   }
 
-  .studio-responsive-table td:last-child {
-    padding-bottom: 0 !important;
+  /* Empty-state rows have a single <td> with colspan — span the full
+     width so the "No items found" message stays centred in the card. */
+  .studio-responsive-table tr > td:first-child:last-child {
+    grid-column: 1 / -1;
+    justify-content: center;
+    text-align: center !important;
+    font-weight: normal;
+  }
+
+  /* Suppress the data-label pseudo-element on the title row — the title is
+     visually self-evident and does not need a "TITLE" prefix. */
+  .studio-responsive-table tr > td:first-child[data-label]::before {
+    display: none;
+  }
+
+  /* The Actions cell sits to the right of the title on the same grid
+     row. Aligning to ``start`` keeps the buttons next to the title
+     baseline; the LABEL pseudo is suppressed below. */
+  .studio-responsive-table tr > td.studio-actions-cell {
+    grid-column: 2;
+    grid-row: 1;
+    justify-content: flex-end;
+    align-self: start;
+  }
+
+  /* The Actions cell drops its "ACTIONS" LABEL on mobile — the buttons
+     are self-evident next to the title. */
+  .studio-responsive-table tr > td.studio-actions-cell[data-label]::before {
+    display: none;
   }
 
   .studio-responsive-table td[data-label]::before {
     content: attr(data-label);
-    display: block;
-    margin-bottom: 0.125rem;
+    display: inline;
+    margin: 0;
+    flex-shrink: 0;
     font-size: 0.6875rem;
     font-weight: 600;
     line-height: 1rem;
     color: hsl(var(--muted-foreground));
     text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   .studio-responsive-table .studio-actions-cell,
@@ -93,7 +145,7 @@ select.studio-select {
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-start;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   .studio-responsive-table .studio-actions-cell a,

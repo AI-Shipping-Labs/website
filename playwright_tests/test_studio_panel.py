@@ -336,9 +336,12 @@ class TestScenario3StaffReviewsDashboard:
         assert "1" in events_stat.inner_text()
         assert "1 total" in events_stat.inner_text()
 
-        # Step 2: Click the current Studio article-management link.
-        articles_link = page.locator('a[href="/studio/articles/"]').first
-        assert articles_link.count() == 1
+        # Step 2: Click the visible Studio article-management link.
+        _expand_studio_sidebar_section(page, "content")
+        articles_link = page.locator(
+            '#studio-section-content a[href="/studio/articles/"]'
+        )
+        articles_link.wait_for(state="visible")
         articles_link.click()
         page.wait_for_load_state("domcontentloaded")
 
@@ -921,8 +924,7 @@ class TestScenario11SidebarNavigation:
 
         # Step 2: Click "Articles" in the sidebar
         _expand_studio_sidebar_section(page, "content")
-        sidebar = page.locator("aside")
-        sidebar.locator('a[href="/studio/articles/"]').click()
+        page.locator('#studio-section-content a[href="/studio/articles/"]').click()
         page.wait_for_load_state("domcontentloaded")
         assert "/studio/articles/" in page.url
 

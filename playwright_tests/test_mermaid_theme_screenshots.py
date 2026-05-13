@@ -27,6 +27,7 @@ from playwright_tests.test_workshops import (  # noqa: E402
 SHOT_DIR = '/tmp/mermaid-306-screenshots'
 
 
+@pytest.mark.manual_visual
 @pytest.mark.django_db(transaction=True)
 class TestThemeScreenshots:
     """Captures three states: dark initial, light initial, post-toggle."""

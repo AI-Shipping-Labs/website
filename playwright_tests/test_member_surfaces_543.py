@@ -102,6 +102,51 @@ def _open_anon_page(browser, base_url, path, viewport, theme):
 
 
 @pytest.mark.django_db(transaction=True)
+def test_member_surfaces_default_ci_smoke(
+    django_server, browser,
+):
+    _ensure_tiers()
+    _ensure_site_config_tiers()
+    user = _create_user(
+        "issue-543-smoke@example.com",
+        tier_slug="main",
+        first_name="Alex",
+    )
+    _seed_member_notifications(user)
+
+    member_routes = [
+        ("/", "Welcome back, Alex"),
+        ("/account/", "Account"),
+        ("/notifications", "Notifications"),
+    ]
+    auth_routes = [
+        ("/accounts/login/", "Sign in"),
+        ("/accounts/register/", "Create Account"),
+    ]
+
+    for path, text in member_routes:
+        context, page = _open_member_page(
+            browser, user.email, django_server, path, DESKTOP, "light"
+        )
+        try:
+            page.get_by_role("heading", name=text).first.wait_for()
+            assert _doc_overflow(page) <= 1
+        finally:
+            context.close()
+
+    for path, text in auth_routes:
+        context, page = _open_anon_page(
+            browser, django_server, path, DESKTOP, "light"
+        )
+        try:
+            page.get_by_role("heading", name=text).wait_for()
+            assert _doc_overflow(page) <= 1
+        finally:
+            context.close()
+
+
+@pytest.mark.manual_visual
+@pytest.mark.django_db(transaction=True)
 def test_member_surfaces_have_consistent_frames_screenshots(
     django_server, browser,
 ):

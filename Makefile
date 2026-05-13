@@ -1,4 +1,4 @@
-.PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright test-playwright test-playwright-core lint lint-fix lint-advisory clean
+.PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright test-playwright test-playwright-core test-playwright-manual-visual lint lint-fix lint-advisory clean
 
 # Default SITE_BASE_URL for local dev so generated links (unsubscribe,
 # calendar invites, password resets, share URLs) point at the running
@@ -72,6 +72,10 @@ test-playwright:
 # See _docs/testing-guidelines.md ("Core Playwright subset") for the tagging policy.
 test-playwright-core:
 	uv run pytest -m core playwright_tests/ -v
+
+# Run screenshot-generator/manual-review Playwright tests on demand.
+test-playwright-manual-visual:
+	uv run pytest -m manual_visual playwright_tests/ -v
 
 # Backwards-compat alias for older muscle-memory: `make playwright` runs the
 # full Playwright suite (same as `make test-playwright`).

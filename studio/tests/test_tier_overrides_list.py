@@ -155,7 +155,7 @@ class ActiveOverridesRenderTest(ActiveOverridesListTestBase):
         self.assertContains(response, 'data-testid="active-overrides-empty"')
         self.assertContains(
             response,
-            'No active overrides right now. Use the form below to grant one.',
+            'No active overrides right now. Use the search above to grant one.',
         )
         self.assertContains(response, 'No active overrides')
         # The empty section must not render the table or any rows.
@@ -192,12 +192,12 @@ class ActiveOverridesRenderTest(ActiveOverridesListTestBase):
             response,
             "Revoke this override? The user will immediately lose upgraded access.",
         )
-        # Revoke form posts to the existing endpoint with the override id.
+        # Revoke form posts to the per-user endpoint with the override id.
         self.assertContains(
             response,
             f'value="{override.pk}"',
         )
-        revoke_url = reverse('studio_tier_override_revoke')
+        revoke_url = reverse('studio_user_tier_override_revoke', args=[user.pk])
         self.assertContains(response, f'action="{revoke_url}"')
 
     def test_legacy_row_without_original_tier_renders_dash(self):
@@ -240,9 +240,8 @@ class ActiveOverridesRenderTest(ActiveOverridesListTestBase):
 
     def test_search_form_still_renders_on_same_page(self):
         response = self.client.get(self.url)
-        # The search-by-email form survives below the new section.
-        self.assertContains(response, 'name="email"')
-        self.assertContains(response, 'Search')
+        self.assertContains(response, 'data-testid="tier-override-user-search"')
+        self.assertContains(response, 'data-search-url="/studio/api/users/search/"')
 
 
 class ActiveOverridesRevokeIntegrationTest(ActiveOverridesListTestBase):
@@ -256,14 +255,13 @@ class ActiveOverridesRevokeIntegrationTest(ActiveOverridesListTestBase):
         response = self.client.get(self.url)
         self.assertEqual(len(response.context['active_overrides']), 1)
 
-        revoke_url = reverse('studio_tier_override_revoke')
+        revoke_url = reverse('studio_user_tier_override_revoke', args=[user.pk])
         post = self.client.post(
             revoke_url,
-            data={'override_id': override.pk, 'email': user.email},
+            data={'override_id': override.pk, 'next': 'tier_overrides_list'},
         )
-        # Existing handler redirects back to the standalone page.
         self.assertEqual(post.status_code, 302)
-        self.assertIn('/studio/users/tier-override/', post['Location'])
+        self.assertEqual(post['Location'], '/studio/tier_overrides/')
 
         override.refresh_from_db()
         self.assertFalse(override.is_active)
@@ -274,8 +272,11 @@ class ActiveOverridesRevokeIntegrationTest(ActiveOverridesListTestBase):
     def test_revoke_without_email_still_redirects_to_standalone_page(self):
         user = self._make_user('noemail@test.com', tier=self.free)
         override = self._make_override(user, self.main, expires_in_days=14)
-        revoke_url = reverse('studio_tier_override_revoke')
+        revoke_url = reverse('studio_user_tier_override_revoke', args=[user.pk])
 
-        post = self.client.post(revoke_url, data={'override_id': override.pk})
+        post = self.client.post(
+            revoke_url,
+            data={'override_id': override.pk, 'next': 'tier_overrides_list'},
+        )
         self.assertEqual(post.status_code, 302)
-        self.assertIn('/studio/users/tier-override/', post['Location'])
+        self.assertEqual(post['Location'], '/studio/tier_overrides/')

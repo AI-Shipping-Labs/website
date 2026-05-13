@@ -235,7 +235,7 @@ class UserDetailTierOverrideTemplateTest(_InlineOverrideTestBase):
         response = self.client.get(f'/studio/users/{member.pk}/')
         self.assertContains(
             response,
-            'href="/studio/users/tier-override/?email=history@test.com"',
+            f'href="/studio/users/{member.pk}/tier_override/"',
         )
 
     def test_first_tier_option_is_preselected(self):
@@ -269,7 +269,7 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
     def test_create_makes_override_and_redirects_to_detail(self):
         member = self._make_member('create@test.com', tier=self.free)
         response = self.client.post(
-            f'/studio/users/{member.pk}/tier-override/create',
+            f'/studio/users/{member.pk}/tier_override/create',
             {'tier_id': self.main.pk, 'duration': '1 month'},
         )
         self.assertRedirects(response, f'/studio/users/{member.pk}/')
@@ -282,7 +282,7 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
         member = self._make_member('replace@test.com', tier=self.free)
         old = self._make_override(member, override_tier=self.basic)
         response = self.client.post(
-            f'/studio/users/{member.pk}/tier-override/create',
+            f'/studio/users/{member.pk}/tier_override/create',
             {'tier_id': self.premium.pk, 'duration': '3 months'},
         )
         self.assertEqual(response.status_code, 302)
@@ -298,7 +298,7 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
         member = self._make_member('down@test.com', tier=self.main)
         before = TierOverride.objects.count()
         response = self.client.post(
-            f'/studio/users/{member.pk}/tier-override/create',
+            f'/studio/users/{member.pk}/tier_override/create',
             {'tier_id': self.basic.pk, 'duration': '1 month'},
         )
         self.assertRedirects(response, f'/studio/users/{member.pk}/')
@@ -308,7 +308,7 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
         member = self._make_member('same@test.com', tier=self.main)
         before = TierOverride.objects.count()
         response = self.client.post(
-            f'/studio/users/{member.pk}/tier-override/create',
+            f'/studio/users/{member.pk}/tier_override/create',
             {'tier_id': self.main.pk, 'duration': '1 month'},
         )
         self.assertEqual(response.status_code, 302)
@@ -317,7 +317,7 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
     def test_invalid_duration_is_rejected(self):
         member = self._make_member('bad-dur@test.com', tier=self.free)
         response = self.client.post(
-            f'/studio/users/{member.pk}/tier-override/create',
+            f'/studio/users/{member.pk}/tier_override/create',
             {'tier_id': self.main.pk, 'duration': '99 years'},
         )
         self.assertRedirects(response, f'/studio/users/{member.pk}/')
@@ -328,7 +328,7 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
     def test_missing_tier_id_is_rejected(self):
         member = self._make_member('no-tier@test.com', tier=self.free)
         response = self.client.post(
-            f'/studio/users/{member.pk}/tier-override/create',
+            f'/studio/users/{member.pk}/tier_override/create',
             {'duration': '1 month'},
         )
         self.assertEqual(response.status_code, 302)
@@ -339,7 +339,7 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
     def test_invalid_tier_id_is_rejected(self):
         member = self._make_member('bad-tier@test.com', tier=self.free)
         response = self.client.post(
-            f'/studio/users/{member.pk}/tier-override/create',
+            f'/studio/users/{member.pk}/tier_override/create',
             {'tier_id': '999999', 'duration': '1 month'},
         )
         self.assertEqual(response.status_code, 302)
@@ -350,13 +350,13 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
     def test_get_returns_405(self):
         member = self._make_member('get@test.com', tier=self.free)
         response = self.client.get(
-            f'/studio/users/{member.pk}/tier-override/create',
+            f'/studio/users/{member.pk}/tier_override/create',
         )
         self.assertEqual(response.status_code, 405)
 
     def test_404_for_unknown_user(self):
         response = self.client.post(
-            '/studio/users/9999999/tier-override/create',
+            '/studio/users/9999999/tier_override/create',
             {'tier_id': self.main.pk, 'duration': '1 month'},
         )
         self.assertEqual(response.status_code, 404)
@@ -365,7 +365,7 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
         self.client.logout()
         member = self._make_member('anon@test.com', tier=self.free)
         response = self.client.post(
-            f'/studio/users/{member.pk}/tier-override/create',
+            f'/studio/users/{member.pk}/tier_override/create',
             {'tier_id': self.main.pk, 'duration': '1 month'},
         )
         # @staff_required redirects unauthenticated users to login.
@@ -385,7 +385,7 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
         regular.save()
         self.client.login(email='regular@test.com', password='pw')
         response = self.client.post(
-            f'/studio/users/{member.pk}/tier-override/create',
+            f'/studio/users/{member.pk}/tier_override/create',
             {'tier_id': self.main.pk, 'duration': '1 month'},
         )
         self.assertEqual(response.status_code, 403)
@@ -404,7 +404,7 @@ class UserTierOverrideRevokeEndpointTest(_InlineOverrideTestBase):
         member = self._make_member('rev@test.com', tier=self.free)
         override = self._make_override(member, override_tier=self.main)
         response = self.client.post(
-            f'/studio/users/{member.pk}/tier-override/revoke',
+            f'/studio/users/{member.pk}/tier_override/revoke',
             {'override_id': override.pk},
         )
         self.assertRedirects(response, f'/studio/users/{member.pk}/')
@@ -418,7 +418,7 @@ class UserTierOverrideRevokeEndpointTest(_InlineOverrideTestBase):
         bystander = self._make_member('bystander@test.com', tier=self.free)
         override = self._make_override(owner, override_tier=self.main)
         response = self.client.post(
-            f'/studio/users/{bystander.pk}/tier-override/revoke',
+            f'/studio/users/{bystander.pk}/tier_override/revoke',
             {'override_id': override.pk},
         )
         # Redirects to the bystander's detail page with an error flash;
@@ -431,7 +431,7 @@ class UserTierOverrideRevokeEndpointTest(_InlineOverrideTestBase):
         member = self._make_member('miss@test.com', tier=self.free)
         override = self._make_override(member, override_tier=self.main)
         response = self.client.post(
-            f'/studio/users/{member.pk}/tier-override/revoke',
+            f'/studio/users/{member.pk}/tier_override/revoke',
             {},
         )
         self.assertEqual(response.status_code, 302)
@@ -441,7 +441,7 @@ class UserTierOverrideRevokeEndpointTest(_InlineOverrideTestBase):
     def test_get_returns_405(self):
         member = self._make_member('rg@test.com', tier=self.free)
         response = self.client.get(
-            f'/studio/users/{member.pk}/tier-override/revoke',
+            f'/studio/users/{member.pk}/tier_override/revoke',
         )
         self.assertEqual(response.status_code, 405)
 
@@ -452,7 +452,7 @@ class UserTierOverrideRevokeEndpointTest(_InlineOverrideTestBase):
         User.objects.create_user(email='reg2@test.com', password='pw')
         self.client.login(email='reg2@test.com', password='pw')
         response = self.client.post(
-            f'/studio/users/{member.pk}/tier-override/revoke',
+            f'/studio/users/{member.pk}/tier_override/revoke',
             {'override_id': override.pk},
         )
         self.assertEqual(response.status_code, 403)
@@ -460,13 +460,13 @@ class UserTierOverrideRevokeEndpointTest(_InlineOverrideTestBase):
         self.assertTrue(override.is_active)
 
 
-class StandaloneTierOverridePageRegressionTest(_InlineOverrideTestBase):
-    """Issue #562 must not change /studio/users/tier-override/ semantics."""
+class LegacyStandaloneTierOverrideRedirectTest(_InlineOverrideTestBase):
+    """Old standalone POST URLs preserve methods while moving to user URLs."""
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
 
-    def test_standalone_create_redirects_to_standalone_not_detail(self):
+    def test_standalone_create_redirects_to_user_create_preserving_method(self):
         member = self._make_member('legacy@test.com', tier=self.free)
         response = self.client.post(
             '/studio/users/tier-override/create',
@@ -476,24 +476,26 @@ class StandaloneTierOverridePageRegressionTest(_InlineOverrideTestBase):
                 'duration': '1 month',
             },
         )
-        # The standalone view redirects back to itself (with the email
-        # preserved), never to /studio/users/<id>/.
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('/studio/users/tier-override/', response.url)
-        self.assertNotIn(f'/studio/users/{member.pk}/', response.url)
-        self.assertTrue(
+        self.assertEqual(response.status_code, 308)
+        self.assertEqual(
+            response.url,
+            f'/studio/users/{member.pk}/tier_override/create',
+        )
+        self.assertFalse(
             TierOverride.objects.filter(user=member, is_active=True).exists(),
         )
 
-    def test_standalone_revoke_redirects_to_standalone_not_detail(self):
+    def test_standalone_revoke_redirects_to_user_revoke_preserving_method(self):
         member = self._make_member('legrev@test.com', tier=self.free)
         override = self._make_override(member, override_tier=self.main)
         response = self.client.post(
             '/studio/users/tier-override/revoke',
             {'override_id': override.pk, 'email': member.email},
         )
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('/studio/users/tier-override/', response.url)
-        self.assertNotIn(f'/studio/users/{member.pk}/', response.url)
+        self.assertEqual(response.status_code, 308)
+        self.assertEqual(
+            response.url,
+            f'/studio/users/{member.pk}/tier_override/revoke',
+        )
         override.refresh_from_db()
-        self.assertFalse(override.is_active)
+        self.assertTrue(override.is_active)

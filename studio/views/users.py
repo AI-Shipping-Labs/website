@@ -32,6 +32,7 @@ from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -782,16 +783,17 @@ def user_tier_override_create(request, user_id):
     user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
     tier_id = (request.POST.get('tier_id') or '').strip()
     duration = (request.POST.get('duration') or '').strip()
+    redirect_url = _tier_override_redirect_url(request, user)
 
     if not tier_id or not duration:
         messages.error(request, 'Missing required fields.')
-        return redirect('studio_user_detail', user_id=user.pk)
+        return redirect(redirect_url)
 
     try:
         override_tier = Tier.objects.get(pk=tier_id)
     except Tier.DoesNotExist:
         messages.error(request, 'Invalid tier selected.')
-        return redirect('studio_user_detail', user_id=user.pk)
+        return redirect(redirect_url)
 
     current_level = user.tier.level if user.tier_id else 0
     if override_tier.level <= current_level:
@@ -800,7 +802,7 @@ def user_tier_override_create(request, user_id):
             'Tier override must upgrade the user. '
             f'Pick a tier above {user.tier.name if user.tier_id else "Free"}.',
         )
-        return redirect('studio_user_detail', user_id=user.pk)
+        return redirect(redirect_url)
 
     now = timezone.now()
     expires_at = None
@@ -811,7 +813,7 @@ def user_tier_override_create(request, user_id):
 
     if expires_at is None:
         messages.error(request, f'Invalid duration: {duration}.')
-        return redirect('studio_user_detail', user_id=user.pk)
+        return redirect(redirect_url)
 
     # Deactivate any existing active override so the "one active per user"
     # invariant of the standalone page is preserved here too.
@@ -833,7 +835,7 @@ def user_tier_override_create(request, user_id):
         f'{user.email} -> {override_tier.name} until '
         f'{expires_at.strftime("%Y-%m-%d %H:%M UTC")}',
     )
-    return redirect('studio_user_detail', user_id=user.pk)
+    return redirect(redirect_url)
 
 
 @staff_required
@@ -846,10 +848,11 @@ def user_tier_override_revoke(request, user_id):
     (``tier_override_revoke``) stay untouched.
     """
     user = get_object_or_404(User, pk=user_id)
+    redirect_url = _tier_override_redirect_url(request, user)
     override_id = (request.POST.get('override_id') or '').strip()
     if not override_id:
         messages.error(request, 'Missing override ID.')
-        return redirect('studio_user_detail', user_id=user.pk)
+        return redirect(redirect_url)
 
     try:
         override = TierOverride.objects.get(
@@ -857,13 +860,21 @@ def user_tier_override_revoke(request, user_id):
         )
     except TierOverride.DoesNotExist:
         messages.error(request, 'Override not found or already inactive.')
-        return redirect('studio_user_detail', user_id=user.pk)
+        return redirect(redirect_url)
 
     override.is_active = False
     override.save(update_fields=['is_active'])
 
     messages.success(request, f'Override revoked for {user.email}.')
-    return redirect('studio_user_detail', user_id=user.pk)
+    return redirect(redirect_url)
+
+
+def _tier_override_redirect_url(request, user):
+    if request.POST.get('next') == 'tier_override':
+        return reverse('studio_user_tier_override_page', args=[user.pk])
+    if request.POST.get('next') == 'tier_overrides_list':
+        return reverse('studio_tier_overrides_list')
+    return reverse('studio_user_detail', args=[user.pk])
 
 
 @staff_required

@@ -130,7 +130,15 @@ from studio.views.sync import (
     sync_status,
     sync_trigger,
 )
-from studio.views.tier_overrides import tier_override_create, tier_override_page, tier_override_revoke
+from studio.views.tier_overrides import (
+    legacy_tier_override_create_redirect,
+    legacy_tier_override_page_redirect,
+    legacy_tier_override_revoke_redirect,
+    legacy_user_tier_override_action_redirect,
+    studio_user_search,
+    tier_override_page,
+    user_tier_override_page,
+)
 from studio.views.user_imports import (
     import_batch_detail,
     import_batch_fragment,
@@ -387,9 +395,24 @@ urlpatterns = [
     path('projects/<int:project_id>/review', project_review, name='studio_project_review'),
 
     # Tier Overrides
-    path('users/tier-override/', tier_override_page, name='studio_tier_override'),
-    path('users/tier-override/create', tier_override_create, name='studio_tier_override_create'),
-    path('users/tier-override/revoke', tier_override_revoke, name='studio_tier_override_revoke'),
+    path('tier_overrides/', tier_override_page, name='studio_tier_overrides_list'),
+    path('tier_overrides/', tier_override_page, name='studio_tier_override'),
+    path('api/users/search/', studio_user_search, name='studio_user_search'),
+    path(
+        'users/tier-override/',
+        legacy_tier_override_page_redirect,
+        name='studio_legacy_tier_override',
+    ),
+    path(
+        'users/tier-override/create',
+        legacy_tier_override_create_redirect,
+        name='studio_tier_override_create',
+    ),
+    path(
+        'users/tier-override/revoke',
+        legacy_tier_override_revoke_redirect,
+        name='studio_tier_override_revoke',
+    ),
 
     # Users list + CSV export (issue #271)
     path('users/', user_list, name='studio_user_list'),
@@ -446,18 +469,33 @@ urlpatterns = [
         user_slack_id_set,
         name='studio_user_slack_id_set',
     ),
-    # Inline tier-override controls on the user detail page (issue #562).
-    # These mirror /studio/users/tier-override/{create,revoke} but resolve
-    # the user from the URL and always redirect back to /studio/users/<id>/.
+    # Inline and per-user tier-override controls.
     path(
-        'users/<int:user_id>/tier-override/create',
+        'users/<int:user_id>/tier_override/',
+        user_tier_override_page,
+        name='studio_user_tier_override_page',
+    ),
+    path(
+        'users/<int:user_id>/tier_override/create',
         user_tier_override_create,
         name='studio_user_tier_override_create',
     ),
     path(
-        'users/<int:user_id>/tier-override/revoke',
+        'users/<int:user_id>/tier_override/revoke',
         user_tier_override_revoke,
         name='studio_user_tier_override_revoke',
+    ),
+    path(
+        'users/<int:user_id>/tier-override/create',
+        legacy_user_tier_override_action_redirect,
+        {'action': 'create'},
+        name='studio_legacy_user_tier_override_create',
+    ),
+    path(
+        'users/<int:user_id>/tier-override/revoke',
+        legacy_user_tier_override_action_redirect,
+        {'action': 'revoke'},
+        name='studio_legacy_user_tier_override_revoke',
     ),
 
     # CRM (issue #560). The ``Track in CRM`` CTA on the user profile is

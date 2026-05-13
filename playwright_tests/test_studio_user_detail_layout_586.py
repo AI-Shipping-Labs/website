@@ -590,11 +590,7 @@ class TestUserDetailLayout586:
         # Either the literal email or the urlencoded form is acceptable
         # (the template currently passes the raw email through; both
         # forms address the same record).
-        assert "/studio/users/tier-override/" in page.url
-        assert (
-            "email=m@example.com" in page.url
-            or "email=m%40example.com" in page.url
-        )
+        assert f"/studio/users/{member_pk}/tier_override/" in page.url
         context.close()
 
     # ---------------- Scenario 11 -------------------------------------------

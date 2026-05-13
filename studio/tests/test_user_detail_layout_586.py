@@ -279,7 +279,7 @@ class GrantTemporaryUpgradeSectionTest(_Base586):
             )
             self.assertContains(
                 response,
-                f'href="/studio/users/tier-override/?email={member.email}"',
+                f'href="/studio/users/{member.pk}/tier_override/"',
             )
 
 

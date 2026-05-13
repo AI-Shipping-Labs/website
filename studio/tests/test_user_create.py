@@ -278,10 +278,12 @@ class UserCreateConfirmationPageTest(TestCase):
         so the operator can grant a higher tier without leaving the flow."""
         self.client.post('/studio/users/new/', {'email': 'detail@test.com'})
         confirm = self.client.get('/studio/users/created/')
-        # The link uses the tier-override page, prefilled with the new email.
         self.assertContains(confirm, 'data-testid="user-detail-link"')
-        self.assertContains(confirm, '/studio/users/tier-override/')
-        self.assertContains(confirm, 'email=detail%40test.com')
+        created = User.objects.get(email='detail@test.com')
+        self.assertContains(
+            confirm,
+            f'/studio/users/{created.pk}/tier_override/',
+        )
 
     def test_password_dropped_from_session_after_render(self):
         """One render only -- a second visit must not reveal the password."""

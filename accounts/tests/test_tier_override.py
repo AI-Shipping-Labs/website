@@ -1126,27 +1126,33 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
         self.client.login(email="studioadmin@example.com", password="testpass")
 
     def test_56_search_user_by_email(self):
-        """#56: Admin searches user by email -> user found with tier."""
-        self._make_user(email="target56@example.com")
+        """#56: Old email search redirects to the user's override page."""
+        target = self._make_user(email="target56@example.com")
 
         response = self.client.get(
             "/studio/users/tier-override/",
             {"email": "target56@example.com"},
         )
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(
+            response["Location"],
+            f"/studio/users/{target.pk}/tier_override/",
+        )
+
+        response = self.client.get(response["Location"])
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            response.context["searched_user"].email, "target56@example.com"
+            response.context["detail_user"].email, "target56@example.com"
         )
 
     def test_57_search_nonexistent_email(self):
-        """#57: Admin searches nonexistent email -> error message."""
+        """#57: Unknown legacy email redirects to the global search shell."""
         response = self.client.get(
             "/studio/users/tier-override/",
             {"email": "nonexistent@example.com"},
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.context["searched_user"])
-        self.assertContains(response, "No user found")
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "/studio/tier_overrides/")
 
     def test_58_active_override_details_shown(self):
         """#58: Admin sees active override details."""
@@ -1154,8 +1160,7 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
         self._make_override(target, self.premium_tier, granted_by=self.admin)
 
         response = self.client.get(
-            "/studio/users/tier-override/",
-            {"email": "target58@example.com"},
+            f"/studio/users/{target.pk}/tier_override/",
         )
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(response.context["active_override"])
@@ -1166,9 +1171,8 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
         target = self._make_user(email="target59@example.com")
 
         response = self.client.post(
-            "/studio/users/tier-override/create",
+            f"/studio/users/{target.pk}/tier_override/create",
             {
-                "email": "target59@example.com",
                 "tier_id": self.premium_tier.pk,
                 "duration": "14 days",
             },
@@ -1191,9 +1195,8 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
         target = self._make_user(email="target60@example.com")
 
         response = self.client.post(
-            "/studio/users/tier-override/create",
+            f"/studio/users/{target.pk}/tier_override/create",
             {
-                "email": "target60@example.com",
                 "tier_id": self.premium_tier.pk,
                 "duration": "12 months",
             },
@@ -1215,9 +1218,8 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
         target = self._make_user(email="target61@example.com")
 
         response = self.client.post(
-            "/studio/users/tier-override/create",
+            f"/studio/users/{target.pk}/tier_override/create",
             {
-                "email": "target61@example.com",
                 "tier_id": self.premium_tier.pk,
                 "duration": "1 month",
             },
@@ -1241,10 +1243,9 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
         )
 
         response = self.client.post(
-            "/studio/users/tier-override/revoke",
+            f"/studio/users/{target.pk}/tier_override/revoke",
             {
                 "override_id": override.pk,
-                "email": "target62@example.com",
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -1257,11 +1258,10 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
 
     def test_63_no_active_override_no_revoke_button(self):
         """#63: User has no active override -> revoke button not shown."""
-        self._make_user(email="target63@example.com")
+        target = self._make_user(email="target63@example.com")
 
         response = self.client.get(
-            "/studio/users/tier-override/",
-            {"email": "target63@example.com"},
+            f"/studio/users/{target.pk}/tier_override/",
         )
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.context["active_override"])
@@ -1279,13 +1279,12 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
 
     def test_65_premium_user_shows_already_highest(self):
         """#65: User is already Premium -> UI shows 'already at highest tier'."""
-        self._make_user(
+        target = self._make_user(
             email="target65@example.com", tier=self.premium_tier,
         )
 
         response = self.client.get(
-            "/studio/users/tier-override/",
-            {"email": "target65@example.com"},
+            f"/studio/users/{target.pk}/tier_override/",
         )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context["is_highest_tier"])
@@ -1297,18 +1296,16 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
 
         # First submit
         self.client.post(
-            "/studio/users/tier-override/create",
+            f"/studio/users/{target.pk}/tier_override/create",
             {
-                "email": "target66@example.com",
                 "tier_id": self.premium_tier.pk,
                 "duration": "14 days",
             },
         )
         # Second submit (double-click)
         self.client.post(
-            "/studio/users/tier-override/create",
+            f"/studio/users/{target.pk}/tier_override/create",
             {
-                "email": "target66@example.com",
                 "tier_id": self.premium_tier.pk,
                 "duration": "14 days",
             },

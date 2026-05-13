@@ -119,12 +119,7 @@
         <div class="flex items-center gap-2 justify-end flex-wrap">
           <span>{{ tier_name }}</span>
           {% if tier_source == 'override' %}
-          {# Issue #568: the Override badge is a clickable shortcut to the #}
-          {# existing per-user overrides surface at /studio/users/tier-override/. #}
-          {# The inner <span> keeps its testid and data-tier-source so the #}
-          {# badge tests from #562 still target it. |urlencode is required #}
-          {# so emails with '+' / '@' round-trip as %2B / %40 in the href. #}
-          <a href="{% url 'studio_tier_override' %}?email={{ detail_user.email|urlencode }}"
+          <a href="{% url 'studio_user_tier_override_page' detail_user.pk %}"
              title="View this user's tier overrides"
              data-testid="user-detail-tier-badge-link"
              class="inline-flex">
@@ -235,6 +230,14 @@
       Active override to <span class="font-medium">{{ active_override.override_tier.name }}</span>
       until {{ active_override.expires_at|date:"M d, Y H:i" }} UTC.
     </p>
+    <p class="mb-3">
+      <a href="{% url 'studio_user_tier_override_page' detail_user.pk %}"
+         data-testid="user-detail-tier-override-page-link"
+         class="inline-flex items-center gap-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 px-3 py-1 text-xs font-medium hover:bg-amber-500/30 transition-colors">
+        <i data-lucide="shield-check" class="w-3 h-3"></i>
+        View override history
+      </a>
+    </p>
     <form method="post"
           action="{% url 'studio_user_tier_override_revoke' detail_user.pk %}"
           data-testid="user-detail-tier-override-revoke-form"
@@ -292,7 +295,7 @@
     </form>
     {% endif %}
     <p class="mt-4 text-xs text-muted-foreground">
-      <a href="{% url 'studio_tier_override' %}?email={{ detail_user.email }}"
+      <a href="{% url 'studio_user_tier_override_page' detail_user.pk %}"
          data-testid="user-detail-tier-override-history-link"
          class="hover:underline">
         View full override history &rarr;

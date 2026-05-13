@@ -113,15 +113,9 @@ class TestOverrideBadgeIsAClickableAnchor:
         assert anchor.count() == 1
         assert anchor.evaluate('el => el.tagName').lower() == 'a'
 
-        # 3. The href points at the existing tier-override page with the
-        #    user's email URL-encoded as a query parameter.
         href = anchor.get_attribute('href')
         assert href is not None
-        assert href.startswith('/studio/users/tier-override/?email=')
-        # @ -> %40 (urlencode), so the raw '@' must NOT appear in the
-        # email= portion of the query string.
-        assert 'email=overridden%40test.com' in href
-        assert 'email=overridden@test.com' not in href
+        assert href == f'/studio/users/{member_pk}/tier_override/'
 
         # 4. The hover-affordance title is set.
         assert (
@@ -154,12 +148,7 @@ class TestOverrideBadgeIsAClickableAnchor:
         ).click()
         page.wait_for_load_state('domcontentloaded')
 
-        # Landed on the existing tier-override page with ?email=.
-        assert '/studio/users/tier-override/' in page.url
-        assert (
-            'email=clickme%40test.com' in page.url
-            or 'email=clickme@test.com' in page.url
-        )
+        assert f'/studio/users/{member_pk}/tier_override/' in page.url
 
         # The destination page renders the per-user blocks. We assert
         # on the heading + the revoke button (Active Override card) and
@@ -179,8 +168,8 @@ class TestOverrideBadgeIsAClickableAnchor:
 
 
 @pytest.mark.django_db(transaction=True)
-class TestOverrideBadgeHrefUrlEncodesEmails:
-    """Emails with '+' and '@' must round-trip via the urlencode filter."""
+class TestOverrideBadgeHrefUsesUserId:
+    """Emails with '+' and '@' do not affect the pk-based href."""
 
     def test_plus_and_at_are_percent_encoded(
         self, django_server, browser,
@@ -206,22 +195,13 @@ class TestOverrideBadgeHrefUrlEncodesEmails:
             '[data-testid="user-detail-tier-badge-link"]',
         )
         href = anchor.get_attribute('href')
-        # '+' must be %2B, NOT '+' or '%20', and '@' must be %40.
-        assert 'email=alex%2Btest%40example.com' in href, (
-            f'href={href!r} did not contain the percent-encoded form '
-            'email=alex%2Btest%40example.com — the |urlencode filter is '
-            'either missing or the wrong filter was used.'
-        )
-        # Sanity: the raw email shape must NOT be present, otherwise the
-        # server would parse the '+' as a space and the lookup would fail.
+        assert href == f'/studio/users/{member_pk}/tier_override/'
         assert 'email=alex+test@example.com' not in href
 
         # Click through and confirm the destination page finds the user.
         anchor.click()
         page.wait_for_load_state('domcontentloaded')
-        assert '/studio/users/tier-override/' in page.url
-        # The lookup result must show the user's literal email, not an
-        # empty search or an error.
+        assert f'/studio/users/{member_pk}/tier_override/' in page.url
         body = page.content()
         assert 'alex+test@example.com' in body
         # Active Override card is rendered for the located user.

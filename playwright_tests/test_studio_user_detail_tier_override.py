@@ -348,7 +348,7 @@ class TestNoDowngradeOrHoldSteady:
 
         csrf = _csrf_cookie(context)
         response = context.request.post(
-            f'{django_server}/studio/users/{member_pk}/tier-override/create',
+            f'{django_server}/studio/users/{member_pk}/tier_override/create',
             form={
                 'csrfmiddlewaretoken': csrf,
                 'tier_id': str(basic_id),
@@ -415,13 +415,12 @@ class TestReplaceExistingOverride:
             '[data-testid="user-detail-tier-override-history-link"]',
         )
         assert history_link.count() == 1
-        assert (
-            'replaceme@test.com'
-            in history_link.get_attribute('href')
+        assert history_link.get_attribute('href').endswith(
+            f'/studio/users/{member_pk}/tier_override/',
         )
         history_link.click()
         page.wait_for_load_state('domcontentloaded')
-        assert '/studio/users/tier-override/' in page.url
+        assert f'/studio/users/{member_pk}/tier_override/' in page.url
 
         # Back to the detail page; revoke; create a new override.
         page.goto(
@@ -526,7 +525,7 @@ class TestNonStaffCannotReachEndpoint:
         context = _auth_context(browser, 'member@test.com')
         csrf = _csrf_cookie(context)
         response = context.request.post(
-            f'{django_server}/studio/users/{victim_pk}/tier-override/create',
+            f'{django_server}/studio/users/{victim_pk}/tier_override/create',
             form={
                 'csrfmiddlewaretoken': csrf,
                 'tier_id': str(main_id),
@@ -545,10 +544,10 @@ class TestNonStaffCannotReachEndpoint:
 
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
-class TestStandalonePageUnchanged:
-    """Issue #562 must not change /studio/users/tier-override/ semantics."""
+class TestLegacyStandaloneRedirects:
+    """Old standalone bookmarks redirect to the per-user override page."""
 
-    def test_standalone_create_and_revoke_redirect_to_standalone(
+    def test_standalone_bookmark_create_and_revoke_flow(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -561,28 +560,20 @@ class TestStandalonePageUnchanged:
         context = _auth_context(browser, staff_email)
         page = context.new_page()
 
-        # Open the standalone page with the email prefilled.
         page.goto(
             f'{django_server}/studio/users/tier-override/'
             f'?email=legacy@test.com',
             wait_until='domcontentloaded',
         )
 
-        # The standalone page still renders its create form heading.
+        assert f'/studio/users/{legacy_pk}/tier_override/' in page.url
         body = page.content()
-        assert 'Tier Overrides' in body
-        # No <h2>Active Override</h2> visible yet (the HTML COMMENT
-        # ``<!-- Active Override -->`` is always present in the template
-        # markup, so we look for the heading element specifically).
-        # Use exact match: the standalone page renders an "Active overrides"
-        # h2 (plural, lowercase) listing the per-user table, which would
-        # match a case-insensitive substring filter.
+        assert 'legacy@test.com' in body
+        assert 'Create Override' in body
         assert page.get_by_role(
             'heading', name='Active Override', exact=True,
         ).count() == 0
-        # Pick Basic radio and click 1 month duration. The standalone
-        # form re-uses the same DURATION_CHOICES so the button label
-        # is the same.
+
         from payments.models import Tier
         basic_id = Tier.objects.get(slug='basic').pk
         connection.close()
@@ -592,17 +583,8 @@ class TestStandalonePageUnchanged:
         page.locator('button[type="submit"][value="1 month"]').click()
         page.wait_for_load_state('domcontentloaded')
 
-        # Redirect back to the standalone page (NOT the detail page).
-        assert '/studio/users/tier-override/' in page.url
-        assert 'email=legacy%40test.com' in page.url.replace('@', '%40') \
-            or 'email=legacy@test.com' in page.url
-        assert f'/studio/users/{legacy_pk}/' not in page.url
+        assert f'/studio/users/{legacy_pk}/tier_override/' in page.url
 
-        # Active override card visible with Revoke Override button.
-        # Look for the heading element so we don't match the HTML
-        # comment marker in the template source. Use exact match so the
-        # "Active overrides" (plural, lowercase) heading on the standalone
-        # page doesn't also count.
         assert page.get_by_role(
             'heading', name='Active Override', exact=True,
         ).count() == 1
@@ -610,11 +592,9 @@ class TestStandalonePageUnchanged:
             'button[type="submit"]', has_text='Revoke Override',
         ).count() == 1
 
-        # Click Revoke Override; confirm; still on the standalone page.
         page.once('dialog', lambda d: d.accept())
         page.locator('button[type="submit"]', has_text='Revoke Override').click()
         page.wait_for_load_state('domcontentloaded')
-        assert '/studio/users/tier-override/' in page.url
-        assert f'/studio/users/{legacy_pk}/' not in page.url
+        assert f'/studio/users/{legacy_pk}/tier_override/' in page.url
 
         context.close()

@@ -319,7 +319,7 @@ class TestNonSuperuserGating:
             '#studio-users-children a[href="/studio/imports/"]'
         ).count() == 1
         assert page.locator(
-            '#studio-users-children a[href="/studio/users/tier-override/"]'
+            '#studio-users-children a[href="/studio/tier_overrides/"]'
         ).count() == 1
         assert page.locator(
             '#studio-users-children a[href="/studio/users/new/"]'

@@ -3,11 +3,16 @@
 from datetime import timedelta
 
 from dateutil.relativedelta import relativedelta
-from django.contrib import messages
 from django.contrib.auth import get_user_model
-from django.shortcuts import redirect, render
+from django.db.models import Q
+from django.http import (
+    HttpResponsePermanentRedirect,
+    HttpResponseRedirect,
+    JsonResponse,
+)
+from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_POST
 
 from accounts.models import TierOverride
 from payments.models import Tier
@@ -25,157 +30,143 @@ DURATION_CHOICES = [
 ]
 
 
-@staff_required
-def tier_override_page(request):
-    """Tier override management page with user search and override creation."""
-    search_email = request.GET.get('email', '').strip()
-    searched_user = None
-    active_override = None
-    override_history = []
-    available_tiers = []
-    is_highest_tier = False
-    error_message = ''
+class HttpResponsePermanentPreserveMethodRedirect(HttpResponseRedirect):
+    status_code = 308
 
-    # Cross-cutting list of every currently-active override across the platform.
-    # ``select_related`` avoids N+1 when rendering user / tier / granted-by columns.
-    active_overrides = (
+
+def _preserve_method_redirect(url):
+    return HttpResponsePermanentPreserveMethodRedirect(url)
+
+
+def _legacy_redirect(request, url):
+    if request.method == 'POST':
+        return _preserve_method_redirect(url)
+    return HttpResponsePermanentRedirect(url)
+
+
+def _active_overrides_queryset():
+    return (
         TierOverride.objects
         .filter(is_active=True, expires_at__gt=timezone.now())
-        .select_related(
-            'user', 'override_tier', 'original_tier', 'granted_by',
-        )
+        .select_related('user', 'override_tier', 'original_tier', 'granted_by')
         .order_by('expires_at')
     )
 
-    if search_email:
-        try:
-            searched_user = User.objects.select_related('tier').get(
-                email=search_email,
-            )
-        except User.DoesNotExist:
-            error_message = f'No user found with email "{search_email}".'
 
-    if searched_user is not None:
-        # Get active override
-        active_override = (
-            TierOverride.objects
-            .filter(user=searched_user, is_active=True, expires_at__gt=timezone.now())
-            .select_related('override_tier', 'granted_by')
-            .first()
+def _user_override_context(user):
+    active_override = (
+        TierOverride.objects
+        .filter(user=user, is_active=True, expires_at__gt=timezone.now())
+        .select_related('override_tier', 'granted_by')
+        .first()
+    )
+    override_history = (
+        TierOverride.objects
+        .filter(user=user)
+        .select_related('override_tier', 'original_tier', 'granted_by')
+        .order_by('-created_at')
+    )
+    current_level = user.tier.level if user.tier_id else 0
+    highest_tier = Tier.objects.order_by('-level').first()
+    is_highest_tier = bool(highest_tier and current_level >= highest_tier.level)
+    available_tiers = []
+    if not is_highest_tier:
+        available_tiers = list(
+            Tier.objects.filter(level__gt=current_level).order_by('level')
         )
-
-        # Get override history (including inactive ones)
-        override_history = (
-            TierOverride.objects
-            .filter(user=searched_user)
-            .select_related('override_tier', 'original_tier', 'granted_by')
-            .order_by('-created_at')
-        )
-
-        # Determine available tiers for override (only higher than subscription tier)
-        current_level = searched_user.tier.level if searched_user.tier else 0
-        highest_tier = Tier.objects.order_by('-level').first()
-        if highest_tier and current_level >= highest_tier.level:
-            is_highest_tier = True
-        else:
-            available_tiers = list(
-                Tier.objects.filter(level__gt=current_level).order_by('level')
-            )
-
-    duration_labels = [label for label, _ in DURATION_CHOICES]
-
-    return render(request, 'studio/tier_overrides.html', {
-        'search_email': search_email,
-        'searched_user': searched_user,
+    return {
+        'detail_user': user,
         'active_override': active_override,
-        'active_overrides': active_overrides,
         'override_history': override_history,
         'available_tiers': available_tiers,
         'is_highest_tier': is_highest_tier,
-        'duration_labels': duration_labels,
-        'error_message': error_message,
+        'duration_labels': [label for label, _ in DURATION_CHOICES],
+    }
+
+
+@staff_required
+def tier_override_page(request):
+    """Tier override entry point with autocomplete and active override list."""
+    return render(request, 'studio/tier_overrides.html', {
+        'active_overrides': _active_overrides_queryset(),
     })
 
 
 @staff_required
-@require_POST
-def tier_override_create(request):
-    """Create a new tier override for a user."""
-    email = request.POST.get('email', '').strip()
-    tier_id = request.POST.get('tier_id', '').strip()
-    duration = request.POST.get('duration', '').strip()
-
-    if not email or not tier_id or not duration:
-        messages.error(request, 'Missing required fields.')
-        return redirect(f'/studio/users/tier-override/?email={email}')
-
-    try:
-        user = User.objects.select_related('tier').get(email=email)
-    except User.DoesNotExist:
-        messages.error(request, f'No user found with email "{email}".')
-        return redirect('/studio/users/tier-override/')
-
-    try:
-        override_tier = Tier.objects.get(pk=tier_id)
-    except Tier.DoesNotExist:
-        messages.error(request, 'Invalid tier selected.')
-        return redirect(f'/studio/users/tier-override/?email={email}')
-
-    # Calculate expires_at from duration
-    now = timezone.now()
-    expires_at = None
-    for label, delta in DURATION_CHOICES:
-        if label == duration:
-            expires_at = now + delta
-            break
-
-    if expires_at is None:
-        messages.error(request, f'Invalid duration: {duration}.')
-        return redirect(f'/studio/users/tier-override/?email={email}')
-
-    # Deactivate any existing active override for this user
-    TierOverride.objects.filter(
-        user=user,
-        is_active=True,
-    ).update(is_active=False)
-
-    # Create new override
-    TierOverride.objects.create(
-        user=user,
-        original_tier=user.tier,
-        override_tier=override_tier,
-        expires_at=expires_at,
-        granted_by=request.user,
-        is_active=True,
-    )
-
-    messages.success(
+def user_tier_override_page(request, user_id):
+    """Per-user tier override management page."""
+    user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
+    return render(
         request,
-        f'Override created: {user.email} -> {override_tier.name} '
-        f'for {duration} (expires {expires_at.strftime("%Y-%m-%d %H:%M UTC")}).',
+        'studio/users/tier_override.html',
+        _user_override_context(user),
     )
-    return redirect(f'/studio/users/tier-override/?email={email}')
 
 
 @staff_required
-@require_POST
-def tier_override_revoke(request):
-    """Revoke an active tier override."""
-    override_id = request.POST.get('override_id', '').strip()
-    email = request.POST.get('email', '').strip()
+def studio_user_search(request):
+    """Staff-only JSON user search endpoint for Studio autocomplete fields."""
+    query = request.GET.get('q', '').strip()
+    if len(query) < 2:
+        return JsonResponse({'results': []})
 
-    if not override_id:
-        messages.error(request, 'Missing override ID.')
-        return redirect('/studio/users/tier-override/')
+    qs = User.objects.filter(email__icontains=query)
+    if query.isdigit():
+        qs = User.objects.filter(Q(email__icontains=query) | Q(pk=int(query)))
 
-    try:
-        override = TierOverride.objects.get(pk=override_id, is_active=True)
-    except TierOverride.DoesNotExist:
-        messages.error(request, 'Override not found or already inactive.')
-        return redirect(f'/studio/users/tier-override/?email={email}')
+    results = [
+        {
+            'id': user.pk,
+            'email': user.email,
+            'name': (user.get_full_name() or '').strip(),
+        }
+        for user in qs.order_by('email')[:10]
+    ]
+    return JsonResponse({'results': results})
 
-    override.is_active = False
-    override.save(update_fields=['is_active'])
 
-    messages.success(request, f'Override revoked for {override.user.email}.')
-    return redirect(f'/studio/users/tier-override/?email={email}')
+@staff_required
+def legacy_tier_override_page_redirect(request):
+    email = request.GET.get('email', '').strip()
+    if email:
+        user = User.objects.filter(email=email).only('pk').first()
+        if user is not None:
+            return HttpResponsePermanentRedirect(
+                reverse('studio_user_tier_override_page', args=[user.pk])
+            )
+    return HttpResponsePermanentRedirect(reverse('studio_tier_overrides_list'))
+
+
+@staff_required
+def legacy_tier_override_create_redirect(request):
+    email = (request.POST.get('email') or request.GET.get('email') or '').strip()
+    user = User.objects.filter(email=email).only('pk').first()
+    if user is not None:
+        return _legacy_redirect(
+            request,
+            reverse('studio_user_tier_override_create', args=[user.pk]),
+        )
+    return _legacy_redirect(request, reverse('studio_tier_overrides_list'))
+
+
+@staff_required
+def legacy_tier_override_revoke_redirect(request):
+    override_id = (
+        request.POST.get('override_id') or request.GET.get('override_id') or ''
+    ).strip()
+    if override_id:
+        override = TierOverride.objects.filter(pk=override_id).only('user_id').first()
+        if override is not None:
+            return _legacy_redirect(
+                request,
+                reverse('studio_user_tier_override_revoke', args=[override.user_id]),
+            )
+    return _legacy_redirect(request, reverse('studio_tier_overrides_list'))
+
+
+@staff_required
+def legacy_user_tier_override_action_redirect(request, user_id, action):
+    return _legacy_redirect(
+        request,
+        reverse(f'studio_user_tier_override_{action}', args=[user_id]),
+    )

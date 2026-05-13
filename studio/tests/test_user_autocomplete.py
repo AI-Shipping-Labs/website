@@ -159,11 +159,18 @@ class StudioUserAutocompleteSuppressionTest(TestCase):
         enrollments = self.client.get(
             f'/studio/courses/{self.course.pk}/enrollments/',
         )
-        tier_override = self.client.get('/studio/users/tier-override/')
+        tier_override = self.client.get('/studio/tier_overrides/')
 
-        for response in (access, enrollments, tier_override):
+        for response in (access, enrollments):
             email = _find_control(response, 'input', name='email')
             self.assertEqual(email.get('autocomplete'), 'off')
+
+        search = _find_control(
+            tier_override,
+            'input',
+            id='tier-override-user-search',
+        )
+        self.assertEqual(search.get('autocomplete'), 'off')
 
 class PublicAuthAutocompleteGuardTest(TestCase):
     """Public auth forms must not inherit Studio autocomplete suppression."""

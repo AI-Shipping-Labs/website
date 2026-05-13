@@ -8,19 +8,24 @@
   <p class="text-muted-foreground mt-1">Grant temporary tier upgrades to users for trials, promotions, or courtesy access.</p>
 </div>
 
-{# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
-
-{% if error_message %}
-<div class="mb-6">
-  <div class="px-4 py-3 rounded-lg text-sm bg-red-500/20 text-red-400">
-    {{ error_message }}
+<div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-xl">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Search User</h2>
+  <div class="relative">
+    <label for="tier-override-user-search" class="block text-sm font-medium text-foreground mb-1">User</label>
+    <input type="text"
+           id="tier-override-user-search"
+           placeholder="Search by email..."
+           autocomplete="off"
+           data-search-url="{% url 'studio_user_search' %}"
+           class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+           data-testid="tier-override-user-search">
+    <input type="hidden" name="user_id" id="tier-override-user-id">
+    <ul id="tier-override-user-suggestions"
+        class="hidden absolute z-20 mt-1 w-full bg-card border border-border rounded-lg shadow-lg overflow-hidden"
+        data-testid="tier-override-user-suggestions"></ul>
   </div>
 </div>
-{% endif %}
 
-{# Active overrides list (issue #567). Shows every TierOverride with #}
-{# is_active=True and expires_at > now(), ordered soonest-expiring first. #}
-{# TODO: add pagination if the list ever grows past ~100 rows. #}
 <div class="bg-card border border-border rounded-lg overflow-hidden mb-8"
      data-testid="active-overrides-section">
   <div class="px-6 py-4 border-b border-border flex items-center justify-between">
@@ -78,11 +83,11 @@
         <td class="px-6 py-4 text-sm text-muted-foreground"
             data-testid="active-override-set-by">{% if override.granted_by %}{{ override.granted_by.email }}{% else %}-{% endif %}</td>
         <td class="px-6 py-4">
-          <form method="post" action="{% url 'studio_tier_override_revoke' %}"
+          <form method="post" action="{% url 'studio_user_tier_override_revoke' override.user.pk %}"
                 onsubmit="return confirm('Revoke this override? The user will immediately lose upgraded access.');">
             {% csrf_token %}
             <input type="hidden" name="override_id" value="{{ override.pk }}">
-            <input type="hidden" name="email" value="{{ override.user.email }}">
+            <input type="hidden" name="next" value="tier_overrides_list">
             <button type="submit"
                     class="text-sm text-red-400 hover:text-red-300 hover:underline"
                     data-testid="active-override-revoke">
@@ -97,167 +102,65 @@
   {% else %}
   <div class="px-6 py-6 text-sm text-muted-foreground"
        data-testid="active-overrides-empty">
-    No active overrides right now. Use the form below to grant one.
+    No active overrides right now. Use the search above to grant one.
   </div>
   {% endif %}
 </div>
 
-<!-- Search Form -->
-<div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-xl">
-  <h2 class="text-lg font-semibold text-foreground mb-4">Search User</h2>
-  <form method="get" action="{% url 'studio_tier_override' %}" autocomplete="off" class="flex items-end space-x-4">
-    <div class="flex-1">
-      <label class="block text-sm font-medium text-foreground mb-1">User Email (exact match)</label>
-      <input type="email" name="email" value="{{ search_email }}" required placeholder="user@example.com"
-             autocomplete="off"
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-    </div>
-    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-      Search
-    </button>
-  </form>
-</div>
+<script>
+(function() {
+  var input = document.getElementById('tier-override-user-search');
+  var hidden = document.getElementById('tier-override-user-id');
+  var list = document.getElementById('tier-override-user-suggestions');
+  if (!input || !hidden || !list) { return; }
+  var url = input.dataset.searchUrl;
+  var debounce;
 
-{% if searched_user %}
-<!-- User Info -->
-<div class="bg-card border border-border rounded-lg p-6 mb-8">
-  <h2 class="text-lg font-semibold text-foreground mb-4">User Details</h2>
-  <div class="grid grid-cols-2 gap-4 max-w-lg">
-    <div>
-      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</p>
-      <p class="text-sm text-foreground mt-1">{{ searched_user.email }}</p>
-    </div>
-    <div>
-      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Subscription Tier</p>
-      <p class="text-sm text-foreground mt-1">
-        {% if searched_user.tier %}{{ searched_user.tier.name }} (Level {{ searched_user.tier.level }}){% else %}Free (Level 0){% endif %}
-      </p>
-    </div>
-  </div>
-</div>
+  function clearSelection() { hidden.value = ''; }
+  function hideList() { list.classList.add('hidden'); list.innerHTML = ''; }
 
-<!-- Active Override -->
-{% if active_override %}
-<div class="bg-card border border-amber-500/30 rounded-lg p-6 mb-8">
-  <h2 class="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-    <i data-lucide="shield-check" class="w-5 h-5 text-amber-400"></i>
-    Active Override
-  </h2>
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-    <div>
-      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Override Tier</p>
-      <p class="text-sm text-foreground mt-1">{{ active_override.override_tier.name }}</p>
-    </div>
-    <div>
-      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Expires At</p>
-      <p class="text-sm text-foreground mt-1">{{ active_override.expires_at|date:"M d, Y H:i" }} UTC</p>
-    </div>
-    <div>
-      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Granted By</p>
-      <p class="text-sm text-foreground mt-1">{% if active_override.granted_by %}{{ active_override.granted_by.email }}{% else %}-{% endif %}</p>
-    </div>
-    <div>
-      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</p>
-      <p class="text-sm text-foreground mt-1">{{ active_override.created_at|date:"M d, Y H:i" }}</p>
-    </div>
-  </div>
-  <form method="post" action="{% url 'studio_tier_override_revoke' %}"
-        onsubmit="return confirm('Revoke this override? The user will immediately lose upgraded access.');">
-    {% csrf_token %}
-    <input type="hidden" name="override_id" value="{{ active_override.pk }}">
-    <input type="hidden" name="email" value="{{ searched_user.email }}">
-    <button type="submit" class="text-sm text-red-400 hover:text-red-300 hover:underline">
-      Revoke Override
-    </button>
-  </form>
-</div>
-{% endif %}
+  function render(items) {
+    list.innerHTML = '';
+    if (!items.length) { hideList(); return; }
+    items.forEach(function(u) {
+      var li = document.createElement('li');
+      li.className = 'cursor-pointer px-4 py-3 hover:bg-secondary text-sm text-foreground';
+      li.setAttribute('data-testid', 'tier-override-user-suggestion');
+      li.setAttribute('data-user-id', u.id);
+      li.setAttribute('data-email', u.email);
+      var emailSpan = document.createElement('div');
+      emailSpan.className = 'font-medium break-all';
+      emailSpan.textContent = u.email;
+      var meta = document.createElement('div');
+      meta.className = 'text-xs text-muted-foreground';
+      meta.textContent = 'ID ' + u.id + (u.name ? ' - ' + u.name : '');
+      li.appendChild(emailSpan);
+      li.appendChild(meta);
+      li.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        window.location.href = '/studio/users/' + u.id + '/tier_override/';
+      });
+      list.appendChild(li);
+    });
+    list.classList.remove('hidden');
+  }
 
-<!-- Create Override Form -->
-<div class="bg-card border border-border rounded-lg p-6 mb-8">
-  <h2 class="text-lg font-semibold text-foreground mb-4">Create Override</h2>
+  input.addEventListener('input', function() {
+    clearSelection();
+    var q = input.value.trim();
+    if (debounce) { clearTimeout(debounce); }
+    if (q.length < 2) { hideList(); return; }
+    debounce = setTimeout(function() {
+      fetch(url + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+        .then(function(r) { return r.ok ? r.json() : { results: [] }; })
+        .then(function(d) { render(d.results || []); })
+        .catch(function() { hideList(); });
+    }, 200);
+  });
 
-  {% if is_highest_tier %}
-  <div class="px-4 py-3 rounded-lg text-sm bg-blue-500/20 text-blue-400">
-    User is already at the highest tier. No override needed.
-  </div>
-  {% elif available_tiers %}
-  <form method="post" action="{% url 'studio_tier_override_create' %}" id="override-form">
-    {% csrf_token %}
-    <input type="hidden" name="email" value="{{ searched_user.email }}">
-    <input type="hidden" name="duration" id="override-duration" value="">
-
-    <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-2">Target Tier</label>
-      <div class="flex flex-wrap gap-3">
-        {% for tier in available_tiers %}
-        <label class="cursor-pointer">
-          <input type="radio" name="tier_id" value="{{ tier.pk }}" class="peer sr-only" {% if forloop.first %}checked{% endif %}>
-          <span class="inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors peer-checked:border-accent peer-checked:bg-accent/10 peer-checked:text-accent hover:bg-secondary">
-            {{ tier.name }} (Level {{ tier.level }})
-          </span>
-        </label>
-        {% endfor %}
-      </div>
-    </div>
-
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-2">Duration</label>
-      <div class="flex flex-wrap gap-3">
-        {% for label in duration_labels %}
-        <button type="submit" name="duration" value="{{ label }}"
-                class="inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground hover:border-accent">
-          {{ label }}
-        </button>
-        {% endfor %}
-      </div>
-    </div>
-  </form>
-  {% else %}
-  <div class="px-4 py-3 rounded-lg text-sm bg-yellow-500/20 text-yellow-400">
-    No tiers available for override.
-  </div>
-  {% endif %}
-</div>
-
-<!-- Override History -->
-{% if override_history %}
-<div class="bg-card border border-border rounded-lg overflow-hidden">
-  <div class="px-6 py-4 border-b border-border">
-    <h2 class="text-lg font-semibold text-foreground">Override History</h2>
-  </div>
-  <table class="w-full">
-    <thead class="bg-secondary">
-      <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Override Tier</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Original Tier</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Granted By</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Expires</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-border">
-      {% for override in override_history %}
-      <tr class="hover:bg-secondary/50 transition-colors">
-        <td class="px-6 py-4 text-sm text-foreground">{{ override.override_tier.name }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{% if override.original_tier %}{{ override.original_tier.name }}{% else %}None{% endif %}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{% if override.granted_by %}{{ override.granted_by.email }}{% else %}-{% endif %}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ override.created_at|date:"M d, Y H:i" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ override.expires_at|date:"M d, Y H:i" }}</td>
-        <td class="px-6 py-4">
-          {% if override.is_active %}
-          <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Active</span>
-          {% else %}
-          <span class="text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground">Inactive</span>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% endif %}
-
-{% endif %}
+  input.addEventListener('blur', function() {
+    setTimeout(hideList, 150);
+  });
+})();
+</script>
 {% endblock %}

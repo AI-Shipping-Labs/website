@@ -1,7 +1,7 @@
 """End-to-end coverage for the cross-cutting "Active overrides" list on
 the standalone tier-override page (issue #567).
 
-The list lives on /studio/users/tier-override/ and shows every
+The list lives on /studio/tier_overrides/ and shows every
 TierOverride with ``is_active=True`` and ``expires_at > now()``.
 
 Usage:
@@ -113,6 +113,56 @@ def _active_override_for(email):
     return override
 
 
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestTierOverrideUserAutocomplete:
+    """Global tier-overrides page routes staff to per-user override pages."""
+
+    def test_search_filters_matches_and_click_navigates(self, django_server, browser):
+        _ensure_tiers()
+        staff_email = 'autocomplete-admin@test.com'
+        _create_staff_user(staff_email)
+        _clear_users_except_staff(staff_email)
+        _clear_overrides()
+
+        _create_user('learner1@test.com', tier_slug='free')
+        _create_user('learner2@test.com', tier_slug='free')
+        _create_user('partner@example.com', tier_slug='free')
+        target_pk = _user_id_for('partner@example.com')
+
+        context = _auth_context(browser, staff_email)
+        page = context.new_page()
+        page.goto(
+            f'{django_server}/studio/tier_overrides/',
+            wait_until='domcontentloaded',
+        )
+
+        search = page.locator('[data-testid="tier-override-user-search"]')
+        search.fill('learn')
+        suggestions = page.locator('[data-testid="tier-override-user-suggestion"]')
+        suggestions.first.wait_for(state='visible')
+        assert suggestions.count() == 2
+        assert 'learner1@test.com' in suggestions.nth(0).inner_text()
+        assert 'learner2@test.com' in suggestions.nth(1).inner_text()
+        assert 'partner@example.com' not in page.locator(
+            '[data-testid="tier-override-user-suggestions"]',
+        ).inner_text()
+
+        with page.expect_response('**/studio/api/users/search/?q=partner'):
+            search.fill('partner')
+        suggestions.first.wait_for(state='visible')
+        assert suggestions.count() == 1
+        assert 'partner@example.com' in suggestions.first.inner_text()
+        suggestions.first.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert f'/studio/users/{target_pk}/tier_override/' in page.url
+        assert 'partner@example.com' in page.content()
+        assert 'Create Override' in page.content()
+
+        context.close()
+
+
 def _row_emails(page):
     """Return the ordered list of user emails currently in the list."""
     rows = page.locator('[data-testid="active-override-row"]')
@@ -156,7 +206,7 @@ class TestAdminSeesEveryActiveOverrideSortedByExpiry:
         context = _auth_context(browser, staff_email)
         page = context.new_page()
         page.goto(
-            f'{django_server}/studio/users/tier-override/',
+            f'{django_server}/studio/tier_overrides/',
             wait_until='domcontentloaded',
         )
 
@@ -220,7 +270,7 @@ class TestAdminRevokesOverrideFromList:
         context = _auth_context(browser, staff_email)
         page = context.new_page()
         page.goto(
-            f'{django_server}/studio/users/tier-override/',
+            f'{django_server}/studio/tier_overrides/',
             wait_until='domcontentloaded',
         )
 
@@ -237,7 +287,7 @@ class TestAdminRevokesOverrideFromList:
         page.wait_for_load_state('domcontentloaded')
 
         # We land back on the standalone page (with or without ?email).
-        assert '/studio/users/tier-override/' in page.url
+        assert '/studio/tier_overrides/' in page.url
 
         # Success flash mentions the revoked user.
         body = page.content()
@@ -276,7 +326,7 @@ class TestAdminFollowsUserLinkToDetailPage:
         context = _auth_context(browser, staff_email)
         page = context.new_page()
         page.goto(
-            f'{django_server}/studio/users/tier-override/',
+            f'{django_server}/studio/tier_overrides/',
             wait_until='domcontentloaded',
         )
 
@@ -314,7 +364,7 @@ class TestEmptyStateIsFriendly:
         context = _auth_context(browser, staff_email)
         page = context.new_page()
         page.goto(
-            f'{django_server}/studio/users/tier-override/',
+            f'{django_server}/studio/tier_overrides/',
             wait_until='domcontentloaded',
         )
 
@@ -336,8 +386,8 @@ class TestEmptyStateIsFriendly:
         assert page.locator(
             '[data-testid="active-override-row"]',
         ).count() == 0
-        # The existing search-by-email form is still visible below.
-        assert page.locator('form[method="get"] input[name="email"]').count() >= 1
+        assert page.locator('[data-testid="tier-override-user-search"]').count() == 1
+        assert page.locator('form[method="get"] input[name="email"]').count() == 0
 
         context.close()
 
@@ -361,7 +411,7 @@ class TestCreationFlowStillWorks:
         context = _auth_context(browser, staff_email)
         page = context.new_page()
         page.goto(
-            f'{django_server}/studio/users/tier-override/',
+            f'{django_server}/studio/tier_overrides/',
             wait_until='domcontentloaded',
         )
 
@@ -370,16 +420,14 @@ class TestCreationFlowStillWorks:
             '[data-testid="active-overrides-empty"]',
         ).count() == 1
 
-        # Search for the user.
-        page.fill(
-            'form[method="get"] input[name="email"]', 'newgrant@test.com',
-        )
-        page.locator(
-            'form[method="get"] button[type="submit"]',
-        ).first.click()
+        page.fill('[data-testid="tier-override-user-search"]', 'newgrant')
+        suggestion = page.locator('[data-testid="tier-override-user-suggestion"]')
+        suggestion.wait_for(state='visible')
+        suggestion.first.click()
         page.wait_for_load_state('domcontentloaded')
 
-        # User detail + create form render below.
+        assert '/studio/users/' in page.url
+        assert '/tier_override/' in page.url
         body = page.content()
         assert 'newgrant@test.com' in body
         assert 'Create Override' in body
@@ -396,11 +444,13 @@ class TestCreationFlowStillWorks:
         ).click()
         page.wait_for_load_state('domcontentloaded')
 
-        # Redirected back to the standalone page with ?email=...
-        assert '/studio/users/tier-override/' in page.url
-        assert 'newgrant' in page.url
+        assert '/tier_override/' in page.url
+        assert 'newgrant@test.com' in page.content()
 
-        # The new override appears in the cross-cutting list.
+        page.goto(
+            f'{django_server}/studio/tier_overrides/',
+            wait_until='domcontentloaded',
+        )
         assert _row_emails(page) == ['newgrant@test.com']
         row = page.locator(
             '[data-testid="active-override-row"]'
@@ -409,10 +459,6 @@ class TestCreationFlowStillWorks:
         assert 'Main' in row.locator(
             '[data-testid="active-override-effective-tier"]',
         ).inner_text()
-
-        # The per-user Active Override card below the list also shows the
-        # same override (existing behaviour preserved).
-        assert page.get_by_role('heading', name='Active Override', exact=True).count() == 1
 
         # DB sanity: exactly one active row, expiring ~1 month from now.
         override = _active_override_for('newgrant@test.com')
@@ -446,7 +492,7 @@ class TestExpiredButActiveRowsExcluded:
         context = _auth_context(browser, staff_email)
         page = context.new_page()
         page.goto(
-            f'{django_server}/studio/users/tier-override/',
+            f'{django_server}/studio/tier_overrides/',
             wait_until='domcontentloaded',
         )
 

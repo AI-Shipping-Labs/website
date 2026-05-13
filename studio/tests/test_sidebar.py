@@ -158,7 +158,7 @@ class StudioSidebarStructureTest(TestCase):
         # People
         ('/studio/users/', 'Users'),
         ('/studio/imports/', 'Imports'),
-        ('/studio/users/tier-override/', 'Tier overrides'),
+        ('/studio/tier_overrides/', 'Tier overrides'),
         ('/studio/crm/', 'CRM'),
         ('/studio/sprints/', 'Sprints'),
         ('/studio/plans/', 'Plans'),

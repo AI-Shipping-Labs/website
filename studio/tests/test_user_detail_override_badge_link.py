@@ -83,15 +83,11 @@ class OverrideBadgeAnchorRenderedTest(_BadgeLinkTestBase):
         self.assertContains(response, 'data-testid="user-detail-tier-badge"')
         self.assertContains(response, 'data-tier-source="override"')
 
-    def test_anchor_href_matches_reverse_plus_querystring(self):
+    def test_anchor_href_matches_per_user_override_page(self):
         member = self._make_member('href@test.com', tier=self.free)
         self._make_override(member, override_tier=self.main)
         response = self.client.get(f'/studio/users/{member.pk}/')
-        expected = (
-            reverse('studio_tier_override')
-            + '?email=href%40test.com'
-        )
-        # The anchor's href must match the reverse + urlencoded email.
+        expected = reverse('studio_user_tier_override_page', args=[member.pk])
         self.assertContains(
             response,
             f'href="{expected}"',
@@ -110,7 +106,7 @@ class OverrideBadgeAnchorRenderedTest(_BadgeLinkTestBase):
 
 
 class OverrideBadgeEmailUrlEncodedTest(_BadgeLinkTestBase):
-    """Special characters in emails must round-trip via |urlencode."""
+    """Special characters in emails do not affect the pk-based href."""
 
     def test_plus_becomes_percent_2b_in_href(self):
         member = self._make_member(
@@ -119,11 +115,8 @@ class OverrideBadgeEmailUrlEncodedTest(_BadgeLinkTestBase):
         self._make_override(member, override_tier=self.basic)
         response = self.client.get(f'/studio/users/{member.pk}/')
         body = response.content.decode()
-        # Build the exact substring we expect to find on the badge anchor.
         expected_href_attr = (
-            'href="'
-            + reverse('studio_tier_override')
-            + '?email=alex%2Btest%40example.com"'
+            f'href="{reverse("studio_user_tier_override_page", args=[member.pk])}"'
         )
         self.assertIn(expected_href_attr, body)
 
@@ -134,26 +127,9 @@ class OverrideBadgeEmailUrlEncodedTest(_BadgeLinkTestBase):
         anchor_marker = 'data-testid="user-detail-tier-badge-link"'
         idx = body.index(anchor_marker)
         # Inspect the snippet around the badge anchor opening tag.
-        # The href attribute lives BEFORE this testid on the same <a>
-        # element. We grab a slice that comfortably spans the anchor
-        # opening tag and assert on its contents.
         snippet = body[max(0, idx - 400):idx + len(anchor_marker) + 50]
-        self.assertIn(
-            'href="'
-            + reverse('studio_tier_override')
-            + '?email=alex%2Btest%40example.com"',
-            snippet,
-        )
-        # The badge anchor must NOT carry the raw email — only the
-        # encoded form.  If somebody removes |urlencode in the future
-        # this assertion catches it without depending on the history
-        # link's behaviour.
-        self.assertNotIn(
-            'href="'
-            + reverse('studio_tier_override')
-            + '?email=alex+test@example.com"',
-            snippet,
-        )
+        self.assertIn(expected_href_attr, snippet)
+        self.assertNotIn('alex+test@example.com', snippet)
 
 
 class NonOverrideBadgesStayPlainSpansTest(_BadgeLinkTestBase):

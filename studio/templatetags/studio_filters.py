@@ -306,6 +306,8 @@ def studio_sidebar_state(path):
     users_children_active = (
         '/studio/imports/' in p
         or 'tier-override' in p
+        or 'tier_override' in p
+        or 'tier_overrides' in p
         or '/users/new' in p
         or '/users/created' in p
     )

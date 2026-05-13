@@ -37,6 +37,7 @@ from api.views.enrollments import (
     sprint_enrollment_detail,
     sprint_enrollments_collection,
 )
+from api.views.events import event_detail, events_collection
 from api.views.interview_notes import (
     interview_note_detail,
     interview_notes_create,
@@ -65,6 +66,17 @@ from api.views.tier_reconcile import (
 from api.views.weeks import plan_weeks_collection, week_detail
 
 urlpatterns = [
+    # ---- Events (issue #627) ------------------------------------------
+    path(
+        "events",
+        events_collection,
+        name="api_events_collection",
+    ),
+    path(
+        "events/<slug:slug>",
+        event_detail,
+        name="api_event_detail",
+    ),
     # ---- Contacts (issue #431) ----------------------------------------
     path(
         "contacts/import",

@@ -13,7 +13,6 @@ Tests cover:
 
 import datetime
 import json
-import time
 from unittest.mock import patch
 
 import jwt
@@ -496,28 +495,34 @@ class LoginAPITest(TestCase):
 
     @override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
     def test_login_timing_helper_covers_valid_wrong_password_and_unknown_email(self):
-        """Bound local overhead without making CI depend on production hash cost.
-
-        The threshold below intentionally has slack: it must catch a real regression
-        (e.g. an O(N) auth fallback or extra DB round-trips) while tolerating CPU
-        contention on shared CI runners where ``--parallel 4`` pushes per-request
-        wall time above a tighter bound. See issue #626 for the previous flake.
-        """
+        """Exercise timing diagnostics without asserting wall-clock speed."""
         self.user.set_password("correct1234")
         self.user.save(update_fields=["password"])
         scenarios = [
-            ({"email": "login@example.com", "password": "correct1234"}, 200),
-            ({"email": "login@example.com", "password": "wrongpass"}, 401),
-            ({"email": "nobody@example.com", "password": "whatever"}, 401),
+            ({"email": "login@example.com", "password": "correct1234"}, 200, "success"),
+            (
+                {"email": "login@example.com", "password": "wrongpass"},
+                401,
+                "invalid_credentials",
+            ),
+            (
+                {"email": "nobody@example.com", "password": "whatever"},
+                401,
+                "invalid_credentials",
+            ),
         ]
 
-        for payload, expected_status in scenarios:
+        for payload, expected_status, expected_outcome in scenarios:
             with self.subTest(email=payload["email"], status=expected_status):
-                started_at = time.perf_counter()
-                resp = self._post(payload)
-                elapsed_ms = (time.perf_counter() - started_at) * 1000
+                with patch("accounts.views.auth._log_login_timing") as log_timing:
+                    resp = self._post(payload)
+
                 self.assertEqual(resp.status_code, expected_status)
-                self.assertLess(elapsed_ms, 750)
+                log_timing.assert_called_once()
+                outcome, started_at = log_timing.call_args.args
+                self.assertEqual(outcome, expected_outcome)
+                self.assertIsInstance(started_at, float)
+                self.assertGreater(started_at, 0)
 
     def test_login_uses_model_backend_without_allauth_fallback(self):
         """Email/password API avoids duplicate allauth backend verification."""

@@ -59,6 +59,7 @@ from api.views.plans import (
 )
 from api.views.ses_events import ses_events
 from api.views.sprints import sprint_detail, sprints_collection
+from api.views.sync_sources import sync_source_trigger, sync_sources_collection
 from api.views.tier_reconcile import (
     tier_reconcile_apply,
     tier_reconcile_diagnostics,
@@ -76,6 +77,17 @@ urlpatterns = [
         "events/<slug:slug>",
         event_detail,
         name="api_event_detail",
+    ),
+    # ---- Content sync sources (issue #634) ----------------------------
+    path(
+        "sync/sources",
+        sync_sources_collection,
+        name="api_sync_sources_collection",
+    ),
+    path(
+        "sync/sources/<uuid:source_id>/trigger",
+        sync_source_trigger,
+        name="api_sync_source_trigger",
     ),
     # ---- Contacts (issue #431) ----------------------------------------
     path(

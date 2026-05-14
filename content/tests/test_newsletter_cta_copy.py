@@ -153,21 +153,14 @@ class BlogEmptyStateCopyTest(TierSetupMixin, TestCase):
 class PricingFreeTierPostLaunchCTATest(TierSetupMixin, TestCase):
     """Anonymous visitor on /pricing sees the rewritten free-tier CTA."""
 
-    def test_free_tier_cta_says_get_the_newsletter(self):
+    def test_free_tier_cta_links_to_signup(self):
         response = self.client.get("/pricing")
-        # The button text inside the free-tier card.
-        self.assertInHTML(
-            (
-                '<a href="/#newsletter" '
-                'class="block w-full rounded-md px-4 py-3 sm:py-2.5 '
-                'text-center text-sm font-medium transition-colors '
-                'bg-secondary text-foreground hover:bg-secondary/80 '
-                'min-h-[44px] flex items-center justify-center">'
-                "Get the newsletter"
-                "</a>"
-            ),
-            response.content.decode(),
-        )
+        # The free-tier card directs visitors at account creation.
+        self.assertContains(response, 'href="/accounts/register/"')
+        self.assertContains(response, "Create an account")
+        # Old newsletter CTA must be gone.
+        self.assertNotContains(response, 'href="/#newsletter"')
+        self.assertNotContains(response, "Get the newsletter")
 
 
 # ---------------------------------------------------------------

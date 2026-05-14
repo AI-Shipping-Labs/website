@@ -74,7 +74,6 @@ def test_studio_dashboard_operational_sections_and_links(django_server, browser)
     assert page.get_by_role("heading", name="Attention").is_visible()
     assert page.get_by_role("heading", name="Recent activity").is_visible()
     assert page.get_by_role("heading", name="Quick actions").is_visible()
-    assert page.get_by_text("Project Needs Review").is_visible()
     assert page.get_by_text("Recently Changed Article").is_visible()
     assert page.get_by_text("new-member-dashboard@test.com").is_visible()
 

@@ -113,13 +113,13 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
 
         # Verify href before clicking
         href = subscribe_link.get_attribute("href")
-        assert href == "/register/"
+        assert href == "/accounts/register/"
 
         # Click and verify navigation
         subscribe_link.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/register/" in page.url or page.url.endswith(
-            "/register/"
+        assert "/accounts/register/" in page.url or page.url.endswith(
+            "/accounts/register/"
         )
 @pytest.mark.django_db
 class TestScenario2CompareAllFourTiers:
@@ -532,14 +532,14 @@ class TestScenario7FreeSubscribeFlow:
         join_buttons = free_card.locator("a.tier-cta-link")
         assert join_buttons.count() == 0
     def test_free_subscribe_links_to_newsletter(self, django_server, page):
-        """Verify the Create an account button links to /register/."""
+        """Verify the Create an account button links to /accounts/register/."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
         free_card = _get_tier_card_by_name(page, "Free")
         subscribe_link = free_card.locator("a")
         href = subscribe_link.get_attribute("href")
-        assert href == "/register/"
+        assert href == "/accounts/register/"
     def test_free_tier_shows_zero_forever(self, django_server, page):
         """Verify the Free tier card shows 0 with /forever."""
         page.goto(
@@ -556,7 +556,7 @@ class TestScenario7FreeSubscribeFlow:
     def test_subscribe_click_navigates_to_newsletter_section(
         self, django_server
     , page):
-        """Click Create an account and verify navigation to /register/."""
+        """Click Create an account and verify navigation to /accounts/register/."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )

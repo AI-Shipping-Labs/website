@@ -34,6 +34,7 @@ from django.apps.registry import AppRegistryNotReady
 from django.core.cache.backends.base import InvalidCacheBackendError
 from django.core.exceptions import ImproperlyConfigured
 from django.db import DatabaseError
+from django.test.testcases import DatabaseOperationForbidden
 
 _STAMP_CACHE_KEY = 'integration_settings_stamp'
 _STAMP_CACHE_ALIAS = 'django_q'
@@ -41,6 +42,7 @@ _STAMP_CACHE_ALIAS = 'django_q'
 logger = logging.getLogger(__name__)
 
 _DB_CONFIG_EXCEPTIONS = (AppRegistryNotReady, ImproperlyConfigured, DatabaseError)
+_DB_TEST_ISOLATION_EXCEPTIONS = (DatabaseOperationForbidden,)
 _CACHE_STAMP_EXCEPTIONS = (
     InvalidCacheBackendError,
     ImproperlyConfigured,
@@ -115,6 +117,8 @@ def _get_config_uncached(key, default='', *, use_settings=True):
         )
         if db_value:
             return db_value
+    except _DB_TEST_ISOLATION_EXCEPTIONS:
+        pass
     except _DB_CONFIG_EXCEPTIONS:
         logger.warning(
             'Unable to read integration config from database',
@@ -187,6 +191,8 @@ def _populate_cache():
         _cache = dict(IntegrationSetting.objects.values_list('key', 'value'))
         _cache_populated = True
         _cache_stamp = stamp_at_read
+    except _DB_TEST_ISOLATION_EXCEPTIONS:
+        _cache_populated = False
     except _DB_CONFIG_EXCEPTIONS:
         # Failed populate (DB unreachable, schema not migrated yet,
         # etc.) — do NOT mutate the stamp so the next call retries

@@ -7,7 +7,7 @@ from allauth.socialaccount.models import SocialApp
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import OperationalError
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
@@ -115,6 +115,38 @@ class GetConfigTest(TestCase):
         ):
             with self.assertRaises(TypeError):
                 get_config('WORKER_PROGRAMMER_BUG_KEY', 'fallback')
+
+    def test_populate_cache_does_not_swallow_programmer_errors(self):
+        with patch.object(
+            IntegrationSetting.objects,
+            'values_list',
+            side_effect=TypeError('programmer bug'),
+        ):
+            with self.assertRaises(TypeError):
+                get_config('PROGRAMMER_BUG_KEY', 'fallback')
+
+
+class GetConfigSimpleTestCaseFallbackTest(SimpleTestCase):
+    """Fallbacks still work when Django intentionally blocks test DB access."""
+
+    def setUp(self):
+        clear_config_cache()
+
+    def tearDown(self):
+        clear_config_cache()
+
+    @override_settings(SIMPLE_DB_FORBIDDEN_KEY='from_settings')
+    def test_falls_back_to_settings_when_database_access_is_forbidden(self):
+        with self.assertNoLogs('integrations.config', level='WARNING'):
+            result = get_config('SIMPLE_DB_FORBIDDEN_KEY', 'fallback')
+
+        self.assertEqual(result, 'from_settings')
+
+    def test_falls_back_to_default_when_database_access_is_forbidden(self):
+        with self.assertNoLogs('integrations.config', level='WARNING'):
+            result = get_config('SIMPLE_DB_FORBIDDEN_DEFAULT_KEY', 'fallback')
+
+        self.assertEqual(result, 'fallback')
 
 
 class SesSenderConfigTest(TestCase):

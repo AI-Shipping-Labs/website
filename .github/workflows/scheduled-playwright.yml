@@ -159,3 +159,77 @@ jobs:
 
       - name: Run excluded Playwright marker suites
         run: uv run pytest -m "manual_visual or legacy_checkout or slow_platform" playwright_tests/ -v
+
+  notify:
+    name: Scheduled Playwright Failure Issue
+    needs: [changes, playwright-full, playwright-excluded-markers]
+    if: always() && needs.changes.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      issues: write
+
+    steps:
+      - name: Open or update failure issue
+        if: contains(toJSON(needs.*.result), 'failure')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_TITLE: "[CI] Scheduled Playwright full suite failing"
+        shell: bash
+        run: |
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          failed_jobs=$(gh run view "${GITHUB_RUN_ID}" \
+            --json jobs \
+            --jq '.jobs[] | select(.conclusion == "failure") | "- " + .name' || true)
+          if [ -z "${failed_jobs}" ]; then
+            failed_jobs="- Failure details were not available when this notification ran."
+          fi
+
+          body_file="$(mktemp)"
+          cat > "${body_file}" <<EOF
+          Scheduled Playwright failed on \`${GITHUB_REF_NAME}\`.
+
+          Run: ${run_url}
+          Commit: ${GITHUB_SHA}
+          Event: ${GITHUB_EVENT_NAME}
+
+          Failed jobs:
+          ${failed_jobs}
+          EOF
+
+          issue_number=$(gh issue list \
+            --state open \
+            --search "${ISSUE_TITLE} in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${ISSUE_TITLE}\") | .number" \
+            | head -n 1)
+
+          if [ -n "${issue_number}" ]; then
+            gh issue comment "${issue_number}" --body-file "${body_file}"
+          else
+            gh issue create --title "${ISSUE_TITLE}" --body-file "${body_file}"
+          fi
+
+      - name: Close recovered failure issue
+        if: ${{ !contains(toJSON(needs.*.result), 'failure') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_TITLE: "[CI] Scheduled Playwright full suite failing"
+        shell: bash
+        run: |
+          issue_number=$(gh issue list \
+            --state open \
+            --search "${ISSUE_TITLE} in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${ISSUE_TITLE}\") | .number" \
+            | head -n 1)
+
+          if [ -z "${issue_number}" ]; then
+            exit 0
+          fi
+
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          gh issue close "${issue_number}" \
+            --comment "Scheduled Playwright recovered on \`${GITHUB_REF_NAME}\`: ${run_url}"

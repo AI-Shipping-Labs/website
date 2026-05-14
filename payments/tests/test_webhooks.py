@@ -138,11 +138,8 @@ class WebhookSignatureValidationTest(QuietSubscriptionLookupMixin, TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-    @override_settings(
-        STRIPE_CHECKOUT_ENABLED=False,
-        STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET,
-    )
-    def test_checkout_completed_webhook_fulfills_when_local_checkout_disabled(self):
+    @override_settings(STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET)
+    def test_checkout_completed_webhook_fulfills_payment_link_purchase(self):
         """Payment Link checkout webhook still updates access and records idempotency."""
         user = User.objects.create_user(email="payment-link-webhook@test.com")
         basic_tier = Tier.objects.get(slug="basic")

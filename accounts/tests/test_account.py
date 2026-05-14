@@ -404,7 +404,6 @@ class AccountPagePendingCancellationTest(TestCase):
 
 
 @override_settings(
-    STRIPE_CHECKOUT_ENABLED=True,
     STRIPE_CUSTOMER_PORTAL_URL="https://billing.example.test/portal",
 )
 class AccountPageMembershipActionStateTest(TestCase):

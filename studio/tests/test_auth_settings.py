@@ -246,15 +246,13 @@ class IntegrationSaveRegressionTest(TestCase):
         response = self.client.post('/studio/settings/stripe/save/', {
             'STRIPE_SECRET_KEY': 'sk_test_x',
             'STRIPE_WEBHOOK_SECRET': '',
-            'STRIPE_PUBLISHABLE_KEY': 'pk_test_new',
-            'STRIPE_CHECKOUT_ENABLED': 'true',
-            'STRIPE_CUSTOMER_PORTAL_URL': '',
+            'STRIPE_CUSTOMER_PORTAL_URL': 'https://billing.example.test/portal-new',
             'confirm_update': 'on',
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
-            IntegrationSetting.objects.get(key='STRIPE_PUBLISHABLE_KEY').value,
-            'pk_test_new',
+            IntegrationSetting.objects.get(key='STRIPE_CUSTOMER_PORTAL_URL').value,
+            'https://billing.example.test/portal-new',
         )
         # Saving an integration must not create OAuth login rows.
         self.assertEqual(SocialApp.objects.count(), 0)

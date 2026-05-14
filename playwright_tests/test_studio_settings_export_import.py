@@ -44,7 +44,8 @@ def _seed_settings():
         is_secret=True, group="stripe",
     )
     IntegrationSetting.objects.create(
-        key="STRIPE_PUBLISHABLE_KEY", value="pk_live_e2e",
+        key="STRIPE_CUSTOMER_PORTAL_URL",
+        value="https://billing.example.test/portal-e2e",
         is_secret=False, group="stripe",
     )
     SocialApp.objects.create(
@@ -117,7 +118,7 @@ class TestSettingsDownloadAndUpload:
         assert payload["format_version"] == 1
         keys = {entry["key"]: entry["value"] for entry in payload["integration_settings"]}
         assert keys["STRIPE_SECRET_KEY"] == "sk_live_e2e"
-        assert keys["STRIPE_PUBLISHABLE_KEY"] == "pk_live_e2e"
+        assert keys["STRIPE_CUSTOMER_PORTAL_URL"] == "https://billing.example.test/portal-e2e"
         providers = {p["provider"]: p for p in payload["auth_providers"]}
         assert providers["google"]["client_id"] == "goog-e2e-id"
         assert providers["google"]["secret"] == "goog-e2e-secret"
@@ -141,5 +142,8 @@ class TestSettingsDownloadAndUpload:
         # DB now reflects the original values.
         integration_values, google_creds = _read_settings()
         assert integration_values.get("STRIPE_SECRET_KEY") == "sk_live_e2e"
-        assert integration_values.get("STRIPE_PUBLISHABLE_KEY") == "pk_live_e2e"
+        assert (
+            integration_values.get("STRIPE_CUSTOMER_PORTAL_URL")
+            == "https://billing.example.test/portal-e2e"
+        )
         assert google_creds == ("goog-e2e-id", "goog-e2e-secret")

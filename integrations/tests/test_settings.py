@@ -551,3 +551,63 @@ class SettingsDashboardAutofillSuppressionTest(TestCase):
         # standard autocomplete attribute.
         response = self.client.get('/studio/settings/')
         self.assertContains(response, 'data-1p-ignore')
+
+
+class DeadStripeSettingsRetirementTest(TestCase):
+    """Regression: the dead Stripe settings stay retired (issue #642).
+
+    Both flags became dead when the platform moved to Stripe Payment
+    Links + Customer Portal: ``STRIPE_CHECKOUT_ENABLED`` was a noop, and
+    ``STRIPE_PUBLISHABLE_KEY`` is only useful when the frontend runs the
+    Stripe SDK, which it no longer does. These tests fail if either key
+    is reintroduced through the registry, the Django settings module, or
+    the Studio settings page.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff_user = User.objects.create_user(
+            email='admin@test.com', password='testpass', is_staff=True,
+        )
+
+    def _stripe_group_keys(self):
+        for group in INTEGRATION_GROUPS:
+            if group['name'] == 'stripe':
+                return {key_def['key'] for key_def in group['keys']}
+        self.fail("Stripe integration group missing from registry")
+
+    def test_settings_registry_does_not_expose_stripe_checkout_enabled(self):
+        self.assertNotIn('STRIPE_CHECKOUT_ENABLED', self._stripe_group_keys())
+
+    def test_settings_registry_does_not_expose_stripe_publishable_key(self):
+        self.assertNotIn('STRIPE_PUBLISHABLE_KEY', self._stripe_group_keys())
+
+    def test_django_settings_module_does_not_define_stripe_checkout_enabled(self):
+        self.assertFalse(
+            hasattr(settings, 'STRIPE_CHECKOUT_ENABLED'),
+            "STRIPE_CHECKOUT_ENABLED must not be defined on Django settings",
+        )
+
+    def test_django_settings_module_does_not_define_stripe_publishable_key(self):
+        self.assertFalse(
+            hasattr(settings, 'STRIPE_PUBLISHABLE_KEY'),
+            "STRIPE_PUBLISHABLE_KEY must not be defined on Django settings",
+        )
+
+    def test_studio_settings_page_does_not_render_stripe_checkout_enabled_row(self):
+        self.client.login(email='admin@test.com', password='testpass')
+        response = self.client.get('/studio/settings/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        # Per-field rows carry data-field-key="<KEY>". The retired key
+        # must never appear as a field row.
+        self.assertNotIn('data-field-key="STRIPE_CHECKOUT_ENABLED"', body)
+        self.assertNotIn('name="STRIPE_CHECKOUT_ENABLED"', body)
+
+    def test_studio_settings_page_does_not_render_stripe_publishable_key_row(self):
+        self.client.login(email='admin@test.com', password='testpass')
+        response = self.client.get('/studio/settings/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertNotIn('data-field-key="STRIPE_PUBLISHABLE_KEY"', body)
+        self.assertNotIn('name="STRIPE_PUBLISHABLE_KEY"', body)

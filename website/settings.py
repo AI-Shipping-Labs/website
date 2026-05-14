@@ -360,8 +360,6 @@ STRIPE_CUSTOMER_PORTAL_URL = 'https://billing.stripe.com/p/login/14A4gy0F1b610Wd
 # Stripe API keys (set via environment variables in production)
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
-STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
-STRIPE_CHECKOUT_ENABLED = os.getenv('STRIPE_CHECKOUT_ENABLED', 'false').lower() == 'true'
 
 # Zoom API credentials (set via environment variables in production)
 ZOOM_CLIENT_ID = os.environ.get('ZOOM_CLIENT_ID', '')

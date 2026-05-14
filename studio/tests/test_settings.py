@@ -1,11 +1,11 @@
 """Tests for boolean integration setting rendering and save round-trip (issue #340).
 
-Three keys in the integration registry are booleans stored as the literal
-strings ``"true"`` / ``"false"`` — ``STRIPE_CHECKOUT_ENABLED``,
-``SES_WEBHOOK_VALIDATION_ENABLED`` and ``SLACK_ENABLED``. The studio settings
-form renders them as real HTML checkboxes so the operator cannot typo
-``True``, ``1`` or ``yes``. The save view normalises the POST payload back
-to the same lowercase strings so all existing parsers keep working.
+Two keys in the integration registry are booleans stored as the literal
+strings ``"true"`` / ``"false"`` — ``SES_WEBHOOK_VALIDATION_ENABLED`` and
+``SLACK_ENABLED``. The studio settings form renders them as real HTML
+checkboxes so the operator cannot typo ``True``, ``1`` or ``yes``. The
+save view normalises the POST payload back to the same lowercase strings
+so all existing parsers keep working.
 """
 
 import re

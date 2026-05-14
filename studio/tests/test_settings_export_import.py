@@ -179,7 +179,8 @@ class SettingsImportTest(TestCase):
             is_secret=True, group='stripe',
         )
         IntegrationSetting.objects.create(
-            key='STRIPE_PUBLISHABLE_KEY', value='pk_live_xyz',
+            key='STRIPE_CUSTOMER_PORTAL_URL',
+            value='https://billing.example.test/portal',
             is_secret=False, group='stripe',
         )
         SocialApp.objects.create(
@@ -207,8 +208,8 @@ class SettingsImportTest(TestCase):
             'sk_live_xyz',
         )
         self.assertEqual(
-            IntegrationSetting.objects.get(key='STRIPE_PUBLISHABLE_KEY').value,
-            'pk_live_xyz',
+            IntegrationSetting.objects.get(key='STRIPE_CUSTOMER_PORTAL_URL').value,
+            'https://billing.example.test/portal',
         )
         google = SocialApp.objects.get(provider='google')
         self.assertEqual(google.client_id, 'goog-id')

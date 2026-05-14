@@ -131,6 +131,18 @@ INTEGRATION_GROUPS = [
             {'key': 'SITE_BASE_URL', 'is_secret': False, 'description': 'Canonical absolute URL — used for generated links, OAuth callbacks, etc.'},
             {'key': 'SITE_BASE_URL_ALIASES', 'is_secret': False, 'multiline': True, 'description': 'Additional hosts that should not trigger the host-mismatch banner. Comma- or whitespace-separated (newlines work too).'},
             {'key': 'EVENT_DISPLAY_TIMEZONE', 'is_secret': False, 'description': 'Default IANA timezone for public event times when the browser cannot provide one.'},
+            {
+                'key': 'PAYMENT_NOTIFICATION_EMAIL',
+                'is_secret': False,
+                'description': (
+                    'Operator email address that receives an internal notification '
+                    'whenever a Stripe checkout completes (new paid signup, tier '
+                    'upgrade, or course purchase). Leave blank to disable — there '
+                    'is no hard-coded default, so a blank setting means nobody is '
+                    'notified.'
+                ),
+                'optional': True,
+            },
         ],
     },
     {

@@ -21,6 +21,7 @@ htmlcov/
 
 # Agent temp files (screenshots, previews, etc.)
 .tmp/
+fetched/
 
 # Content repo (local clone)
 _content-repo/

@@ -1,12 +1,22 @@
-"""Write-only integration settings API (issue #633).
+"""Integration settings API (issues #633, #640).
 
-Single endpoint, ``POST /api/integrations/settings``, that mutates rows in
-``integrations.models.IntegrationSetting`` for keys present in the
-``integrations.settings_registry.INTEGRATION_GROUPS`` allowlist. The endpoint
-is intentionally write-only: there is no ``GET``/``LIST`` (Studio already
-exposes that surface), no ``DELETE`` method (clearing happens as a side
-effect of an empty-string value, matching Studio parity), and the response
-NEVER echoes any stored or submitted values or key names.
+Single endpoint, ``/api/integrations/settings``, that surfaces the
+``integrations.settings_registry.INTEGRATION_GROUPS`` allowlist:
+
+- ``GET`` (issue #640) lists every registered key with its group, label,
+  description, ``is_secret``/``is_boolean`` flags, a ``configured``
+  boolean, and a ``source`` enum (``db`` / ``env`` / ``django_settings``
+  / ``default`` / ``null``). The response NEVER contains the actual
+  value of any setting — operators learn which keys are set and where
+  the value resolves from, without exposing the value itself.
+- ``POST`` (issue #633) mutates rows in
+  ``integrations.models.IntegrationSetting`` for keys in the same
+  allowlist. The response NEVER echoes stored or submitted values, key
+  names, or the literal substring ``"value"``.
+
+There is no ``DELETE`` / ``PUT`` / ``PATCH`` method — clearing happens
+as a side effect of a POST with an empty-string value, matching Studio
+parity.
 
 Auth model: ``Authorization: Token <key>`` via ``accounts.auth.token_required``
 scoped to staff users (mirrors every other operator API in this codebase, e.g.
@@ -32,7 +42,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.safety import error_response
 from api.utils import require_methods
-from integrations.config import clear_config_cache
+from integrations.config import clear_config_cache, resolve_source
 from integrations.models import IntegrationSetting
 from integrations.settings_registry import INTEGRATION_GROUPS
 
@@ -79,8 +89,65 @@ def _coerce_boolean_value(raw_value):
 
 @token_required
 @csrf_exempt
-@require_methods("POST")
-def integration_settings_set(request):
+@require_methods("GET", "POST")
+def integration_settings(request):
+    """Dispatch GET (list, no values — issue #640) and POST (write — #633).
+
+    Method-based dispatch keeps the URL stable at
+    ``/api/integrations/settings`` (Studio still owns its own UI).
+    Anything other than GET/POST returns 405 via ``require_methods``.
+    """
+    if request.method == "GET":
+        return _integration_settings_list(request)
+    return _integration_settings_set(request)
+
+
+def _integration_settings_list(request):
+    """Return one entry per registered key, NEVER including any value.
+
+    Response shape::
+
+        {"settings": [
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "group": "stripe",
+              "label": "Stripe",
+              "description": "...",
+              "is_secret": true,
+              "is_boolean": false,
+              "configured": true,
+              "source": "db"  # or env / django_settings / default / null
+            },
+            ...
+        ]}
+
+    Ordering follows ``INTEGRATION_GROUPS`` (group order, then key
+    order within each group). ``source`` is resolved by
+    ``integrations.config.resolve_source`` which probes each layer
+    separately — see that function for the no-value-leakage contract.
+    """
+    entries = []
+    for group in INTEGRATION_GROUPS:
+        group_name = group['name']
+        group_label = group['label']
+        for key_def in group['keys']:
+            key = key_def['key']
+            registry_default = key_def.get('default', '')
+            source = resolve_source(key, registry_default=registry_default)
+            entries.append({
+                'key': key,
+                'group': group_name,
+                'label': group_label,
+                'description': key_def.get('description', ''),
+                'is_secret': key_def.get('is_secret', False),
+                'is_boolean': key_def.get('is_boolean', False),
+                'configured': source is not None,
+                'source': source,
+            })
+    return JsonResponse({'settings': entries})
+
+
+def _integration_settings_set(request):
     """Write-only batch update of ``IntegrationSetting`` rows.
 
     Request body shape::

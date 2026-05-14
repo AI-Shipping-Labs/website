@@ -138,6 +138,60 @@ def _get_config_uncached(key, default='', *, use_settings=True):
     return default
 
 
+def resolve_source(key, *, registry_default=''):
+    """Return where the value for ``key`` is currently coming from.
+
+    Mirrors the lookup order in :func:`_get_config_uncached`:
+    DB row with non-empty value, then ``django.conf.settings``, then the
+    process environment, then the registry default. Returns ``None`` when
+    the key is unset everywhere.
+
+    Intentionally split into separate probes — ``exists()``,
+    ``hasattr``, ``in os.environ`` — so the value itself is never bound
+    to a local variable or returned to the caller. The integration
+    settings API uses this on the read path to expose ``configured`` /
+    ``source`` without ever exposing the value (issue #640).
+    """
+    try:
+        from integrations.models import IntegrationSetting  # noqa: PLC0415
+        # Match the "non-empty value counts as configured" rule used by
+        # ``_get_config_uncached`` (which short-circuits on truthy
+        # ``db_value``) and by ``settings_save_group`` (which deletes
+        # the row on empty string).
+        db_configured = (
+            IntegrationSetting.objects
+            .filter(key=key)
+            .exclude(value='')
+            .exists()
+        )
+        if db_configured:
+            return 'db'
+    except _DB_TEST_ISOLATION_EXCEPTIONS:
+        pass
+    except _DB_CONFIG_EXCEPTIONS:
+        logger.warning(
+            'Unable to probe integration config source from database',
+            exc_info=True,
+            extra={'config_key': key},
+        )
+
+    from django.conf import settings  # noqa: PLC0415
+    if (
+        settings.configured
+        and hasattr(settings, key)
+        and getattr(settings, key, None) is not None
+    ):
+        return 'django_settings'
+
+    if key in os.environ:
+        return 'env'
+
+    if registry_default:
+        return 'default'
+
+    return None
+
+
 def site_base_url():
     """Resolved canonical site URL: DB override > env value > default."""
     from django.conf import settings  # noqa: PLC0415

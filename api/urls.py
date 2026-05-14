@@ -38,7 +38,7 @@ from api.views.enrollments import (
     sprint_enrollments_collection,
 )
 from api.views.events import event_detail, events_collection
-from api.views.integration_settings import integration_settings_set
+from api.views.integration_settings import integration_settings
 from api.views.interview_notes import (
     interview_note_detail,
     interview_notes_create,
@@ -79,13 +79,13 @@ urlpatterns = [
         event_detail,
         name="api_event_detail",
     ),
-    # ---- Integration settings (issue #633) ----------------------------
-    # Write-only: POST only. No GET/LIST (Studio dashboard already covers
-    # that surface) and no DELETE method (empty-string value clears a row).
+    # ---- Integration settings (issues #633, #640) ---------------------
+    # GET lists registered keys with metadata + source enum but never the
+    # value itself; POST mutates rows; everything else returns 405.
     path(
         "integrations/settings",
-        integration_settings_set,
-        name="api_integration_settings_set",
+        integration_settings,
+        name="api_integration_settings",
     ),
     # ---- Content sync sources (issue #634) ----------------------------
     path(

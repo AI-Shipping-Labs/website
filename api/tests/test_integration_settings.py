@@ -1,27 +1,33 @@
-"""Tests for the write-only integration settings API (issue #633).
+"""Tests for the integration settings API (issues #633, #640).
 
-The endpoint is ``POST /api/integrations/settings``. It mutates
+The endpoint is ``/api/integrations/settings``. POST (#633) mutates
 ``IntegrationSetting`` rows for keys in
-``integrations.settings_registry.INTEGRATION_GROUPS`` and is gated by a
-staff-scoped ``Authorization: Token <key>`` header.
+``integrations.settings_registry.INTEGRATION_GROUPS``. GET (#640) lists
+every registered key with metadata and a ``source`` enum but NEVER the
+actual value. Both methods are gated by a staff-scoped
+``Authorization: Token <key>`` header.
 
 These tests assert four contracts that must hold simultaneously:
 
 1. Auth — missing / non-staff / unknown token returns 401.
-2. Method — anything other than POST returns 405.
+2. Method — anything other than GET / POST returns 405.
 3. Allowlist — keys outside the registry are rejected all-or-nothing.
-4. No echo — the response NEVER contains key names, stored values, the
-   previous value, the request body, or the literal substring "value".
+4. No echo — neither write responses nor read responses contain the
+   actual value of any setting (verified by string assertion against a
+   planted sentinel and by asserting the substring ``"value"`` never
+   appears).
 """
 
 import json
+import os
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from accounts.models import Token
 from integrations.models import IntegrationSetting
+from integrations.settings_registry import INTEGRATION_GROUPS
 
 User = get_user_model()
 
@@ -109,13 +115,6 @@ class IntegrationSettingsApiTest(TestCase):
         self.assertEqual(response.json(), {"error": "Invalid token"})
 
     # ---- method gating ----------------------------------------------------
-
-    def test_get_returns_405_method_not_allowed(self):
-        response = self.client.get(URL, **self._auth())
-        self.assertEqual(response.status_code, 405)
-        self.assertEqual(response.json(), {"error": "Method not allowed"})
-        # 405 must not leak anything either.
-        self._assert_no_echo(response)
 
     def test_delete_returns_405_method_not_allowed(self):
         response = self.client.delete(URL, **self._auth())
@@ -341,3 +340,278 @@ class IntegrationSettingsApiTest(TestCase):
         # The key name IS allowed to appear (in details.invalid_keys) —
         # that's the only way the caller knows what to fix.
         self.assertIn("DJANGO_SECRET_KEY", body_str)
+
+
+class IntegrationSettingsGetApiTest(TestCase):
+    """GET /api/integrations/settings — list keys + source, no values (#640).
+
+    Separate class from the POST suite because the GET path needs
+    different fixtures (env / settings overrides) and asserting on the
+    same staff token from a different test class keeps the two surfaces
+    independently runnable.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email="staff-integ-api-get@test.com",
+            password="pw",
+            is_staff=True,
+        )
+        cls.member = User.objects.create_user(
+            email="member-integ-api-get@test.com",
+            password="pw",
+        )
+        cls.staff_token = Token.objects.create(user=cls.staff, name="integ-get")
+        cls.non_staff_token = Token(
+            key="non-staff-integ-get-token",
+            user=cls.member,
+            name="legacy-member-token-get",
+        )
+        Token.objects.bulk_create([cls.non_staff_token])
+
+    # ---- helpers ----------------------------------------------------------
+
+    def _auth(self, token=None):
+        if token is None:
+            token = self.staff_token
+        return {"HTTP_AUTHORIZATION": f"Token {token.key}"}
+
+    def _get(self, token=None):
+        return self.client.get(URL, **self._auth(token))
+
+    def _entry_for(self, body, key):
+        for entry in body["settings"]:
+            if entry["key"] == key:
+                return entry
+        raise AssertionError(f"key {key!r} missing from GET response")
+
+    # ---- shape & ordering -------------------------------------------------
+
+    def test_get_lists_all_registry_keys_in_order(self):
+        response = self._get()
+        self.assertEqual(response.status_code, 200)
+
+        body = response.json()
+        self.assertIn("settings", body)
+        entries = body["settings"]
+
+        expected_order = [
+            key_def["key"]
+            for group in INTEGRATION_GROUPS
+            for key_def in group["keys"]
+        ]
+        actual_order = [entry["key"] for entry in entries]
+        self.assertEqual(actual_order, expected_order)
+
+        # Each entry has the documented shape — and crucially no "value"
+        # field. We check on a representative entry (Stripe secret) so
+        # the assertion fails the day someone adds a `value` field by
+        # accident.
+        sample = self._entry_for(body, "STRIPE_SECRET_KEY")
+        self.assertEqual(
+            set(sample.keys()),
+            {
+                "key",
+                "group",
+                "label",
+                "description",
+                "is_secret",
+                "is_boolean",
+                "configured",
+                "source",
+            },
+        )
+        self.assertEqual(sample["group"], "stripe")
+        self.assertEqual(sample["label"], "Stripe")
+        self.assertTrue(sample["is_secret"])
+        self.assertFalse(sample["is_boolean"])
+
+    # ---- auth -------------------------------------------------------------
+
+    def test_get_rejects_unauthenticated(self):
+        response = self.client.get(URL)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            response.json(),
+            {"error": "Authentication token required"},
+        )
+
+    def test_get_rejects_non_staff_token(self):
+        response = self._get(token=self.non_staff_token)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"error": "Invalid token"})
+
+    # ---- no-value-leakage (the core security contract) -------------------
+
+    def test_get_does_not_echo_any_setting_value(self):
+        # Plant a unique sentinel as a DB-stored value for a key that
+        # would otherwise be unset. If the GET handler ever leaks
+        # IntegrationSetting.value into the response, this assertion
+        # catches it.
+        sentinel = "SENTINEL-VALUE-do-NOT-leak-abc123XYZ"
+        IntegrationSetting.objects.create(
+            key="STRIPE_WEBHOOK_SECRET",
+            value=sentinel,
+            is_secret=True,
+            group="stripe",
+            description="",
+        )
+
+        response = self._get()
+        self.assertEqual(response.status_code, 200)
+        body_str = response.content.decode("utf-8")
+        self.assertNotIn(sentinel, body_str)
+
+        # And the entry still correctly reports `source == "db"` and
+        # `configured == True` — the no-leak contract does NOT mean
+        # "pretend it's not set".
+        entry = self._entry_for(response.json(), "STRIPE_WEBHOOK_SECRET")
+        self.assertTrue(entry["configured"])
+        self.assertEqual(entry["source"], "db")
+
+    def test_get_response_does_not_contain_value_substring(self):
+        # The literal substring "value" must never appear in the
+        # response body — neither as a JSON key nor inside any echoed
+        # value. We plant a DB row first so the DB-source branch is
+        # exercised by the same call.
+        IntegrationSetting.objects.create(
+            key="CONTENT_CDN_BASE",
+            value="https://cdn.example.com",
+            is_secret=False,
+            group="s3_content",
+            description="",
+        )
+        response = self._get()
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("value", response.content.decode("utf-8"))
+
+    # ---- source resolution per layer -------------------------------------
+
+    def test_get_marks_db_override_with_source_db(self):
+        # DB row with non-empty value beats every other layer.
+        IntegrationSetting.objects.create(
+            key="CONTENT_CDN_BASE",
+            value="https://cdn.example.com",
+            is_secret=False,
+            group="s3_content",
+            description="",
+        )
+        response = self._get()
+        self.assertEqual(response.status_code, 200)
+        entry = self._entry_for(response.json(), "CONTENT_CDN_BASE")
+        self.assertEqual(entry["source"], "db")
+        self.assertTrue(entry["configured"])
+
+    def test_get_marks_env_only_with_source_env(self):
+        # Pick a key NOT defined as an attribute on django.conf.settings
+        # so the env layer wins (settings layer is skipped).
+        # SLACK_TEAM_ID is in the registry but absent from
+        # website/settings.py and has no registry default — env is the
+        # first hit.
+        env_key = "SLACK_TEAM_ID"
+        with patch.dict(os.environ, {env_key: "T01ABC123"}, clear=False):
+            response = self._get()
+
+        self.assertEqual(response.status_code, 200)
+        entry = self._entry_for(response.json(), env_key)
+        self.assertEqual(entry["source"], "env")
+        self.assertTrue(entry["configured"])
+
+    def test_get_marks_django_settings_with_source_django_settings(self):
+        # Use a registry key NOT normally on django.conf.settings, so
+        # override_settings injecting it cleanly demonstrates the
+        # django_settings branch. SLACK_ANNOUNCEMENTS_CHANNEL_NAME has
+        # no entry in website/settings.py and no registry default —
+        # override_settings is the only source.
+        settings_key = "SLACK_ANNOUNCEMENTS_CHANNEL_NAME"
+        # Defensive: clear env for this key so it doesn't shadow the
+        # settings layer in dev environments where it might be set.
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(settings_key, None)
+            with override_settings(
+                **{settings_key: "#announcements-from-settings"}
+            ):
+                response = self._get()
+
+        self.assertEqual(response.status_code, 200)
+        entry = self._entry_for(response.json(), settings_key)
+        self.assertEqual(entry["source"], "django_settings")
+        self.assertTrue(entry["configured"])
+
+    def test_get_marks_default_value_with_source_default(self):
+        # GITHUB_APP_PRIVATE_KEY_SECRET_ID has a non-empty registry
+        # default ('ai-shipping-labs/github-app-private-key') and is
+        # NOT defined on django.conf.settings — so when nothing
+        # overrides it, the source must resolve to "default".
+        default_key = "GITHUB_APP_PRIVATE_KEY_SECRET_ID"
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(default_key, None)
+            response = self._get()
+
+        self.assertEqual(response.status_code, 200)
+        entry = self._entry_for(response.json(), default_key)
+        self.assertEqual(entry["source"], "default")
+        self.assertTrue(entry["configured"])
+
+    def test_get_marks_unset_with_source_null_and_configured_false(self):
+        # SLACK_TEAM_ID has no registry default, no
+        # django.conf.settings entry, and we clear it from env — so
+        # nothing is configured anywhere. source must be null and
+        # configured must be false.
+        unset_key = "SLACK_TEAM_ID"
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(unset_key, None)
+            response = self._get()
+
+        self.assertEqual(response.status_code, 200)
+        entry = self._entry_for(response.json(), unset_key)
+        self.assertIsNone(entry["source"])
+        self.assertFalse(entry["configured"])
+
+    # ---- POST behaviour MUST be unchanged after adding GET --------------
+
+    def test_existing_post_behavior_unchanged_for_set_success(self):
+        # Same payload and assertions as
+        # test_post_writes_allowed_registry_key — duplicated here so
+        # the GET-tests file fails loudly if the GET addition
+        # accidentally broke the POST happy path.
+        payload = {
+            "updates": [
+                {"key": "CONTENT_CDN_BASE", "value": "https://cdn.example.com"},
+            ],
+        }
+        response = self.client.post(
+            URL,
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"status": "ok", "updated": 1},
+        )
+        row = IntegrationSetting.objects.get(key="CONTENT_CDN_BASE")
+        self.assertEqual(row.value, "https://cdn.example.com")
+
+    def test_existing_post_behavior_unchanged_for_invalid_key(self):
+        # Same contract as test_post_rejects_unknown_key_and_writes_nothing:
+        # invalid_key error code, all-or-nothing, no DB rows written.
+        starting_count = IntegrationSetting.objects.count()
+        response = self.client.post(
+            URL,
+            data=json.dumps({
+                "updates": [{"key": "DJANGO_SECRET_KEY", "value": "x"}],
+            }),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+        self.assertEqual(body["code"], "invalid_key")
+        self.assertEqual(
+            body["details"]["invalid_keys"],
+            ["DJANGO_SECRET_KEY"],
+        )
+        self.assertEqual(IntegrationSetting.objects.count(), starting_count)

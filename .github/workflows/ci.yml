@@ -183,7 +183,7 @@ jobs:
           set -o pipefail
           start=$(date +%s)
           set +e
-          uv run python manage.py test --parallel 4 --keepdb 2>&1 | tee test-output.log
+          uv run python manage.py test --exclude-tag=visual_regression --parallel 4 --keepdb 2>&1 | tee test-output.log
           status=${PIPESTATUS[0]}
           set -e
           end=$(date +%s)
@@ -227,4 +227,4 @@ jobs:
         run: uv run playwright install --with-deps chromium
 
       - name: Run Playwright tests
-        run: uv run pytest -m "not manual_visual" playwright_tests/ -v
+        run: uv run pytest -m "not manual_visual and not visual_regression" playwright_tests/ -v

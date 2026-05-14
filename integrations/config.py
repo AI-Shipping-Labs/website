@@ -25,12 +25,27 @@ The stamp is intentionally opaque (a random uuid hex). We never compare
 the value, only "is it the same string we recorded last time".
 """
 
+import logging
 import os
 import sys
 import uuid
 
+from django.apps.registry import AppRegistryNotReady
+from django.core.cache.backends.base import InvalidCacheBackendError
+from django.core.exceptions import ImproperlyConfigured
+from django.db import DatabaseError
+
 _STAMP_CACHE_KEY = 'integration_settings_stamp'
 _STAMP_CACHE_ALIAS = 'django_q'
+
+logger = logging.getLogger(__name__)
+
+_DB_CONFIG_EXCEPTIONS = (AppRegistryNotReady, ImproperlyConfigured, DatabaseError)
+_CACHE_STAMP_EXCEPTIONS = (
+    InvalidCacheBackendError,
+    ImproperlyConfigured,
+    DatabaseError,
+)
 
 _cache = {}
 _cache_populated = False
@@ -100,8 +115,12 @@ def _get_config_uncached(key, default='', *, use_settings=True):
         )
         if db_value:
             return db_value
-    except Exception:
-        pass
+    except _DB_CONFIG_EXCEPTIONS:
+        logger.warning(
+            'Unable to read integration config from database',
+            exc_info=True,
+            extra={'config_key': key},
+        )
 
     from django.conf import settings  # noqa: PLC0415
     if use_settings and settings.configured:
@@ -146,7 +165,11 @@ def _read_stamp():
     try:
         from django.core.cache import caches  # noqa: PLC0415
         return caches[_STAMP_CACHE_ALIAS].get(_STAMP_CACHE_KEY)
-    except Exception:
+    except _CACHE_STAMP_EXCEPTIONS:
+        logger.debug(
+            'Unable to read integration settings cache stamp',
+            exc_info=True,
+        )
         return None
 
 
@@ -164,11 +187,15 @@ def _populate_cache():
         _cache = dict(IntegrationSetting.objects.values_list('key', 'value'))
         _cache_populated = True
         _cache_stamp = stamp_at_read
-    except Exception:
+    except _DB_CONFIG_EXCEPTIONS:
         # Failed populate (DB unreachable, schema not migrated yet,
         # etc.) — do NOT mutate the stamp so the next call retries
         # rather than locking in a stale stamp.
         _cache_populated = False
+        logger.warning(
+            'Unable to populate integration config cache',
+            exc_info=True,
+        )
 
 
 def clear_config_cache():
@@ -185,7 +212,10 @@ def clear_config_cache():
     try:
         from django.core.cache import caches  # noqa: PLC0415
         caches[_STAMP_CACHE_ALIAS].set(_STAMP_CACHE_KEY, uuid.uuid4().hex)
-    except Exception:
+    except _CACHE_STAMP_EXCEPTIONS:
         # If the shared cache is unreachable we still cleared in-process
         # state, so the calling process at least sees fresh values.
-        pass
+        logger.warning(
+            'Unable to publish integration settings cache stamp',
+            exc_info=True,
+        )

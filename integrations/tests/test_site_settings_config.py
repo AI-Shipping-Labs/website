@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import caches
+from django.db import OperationalError
 from django.test import TestCase
 
 from integrations import config as config_module
@@ -306,16 +307,28 @@ class CrossProcessCacheInvalidationTest(TestCase):
         # working off the latest known stamp).
         with patch.object(
             IntegrationSetting.objects, 'values_list',
-            side_effect=Exception('DB unreachable'),
+            side_effect=OperationalError('DB unreachable'),
         ):
             self._simulate_fresh_process()
-            # Triggering a populate via get_config should not crash.
-            get_config('SITE_BASE_URL', 'fallback')
+            # Triggering a populate via get_config should not crash,
+            # but should log the expected infrastructure failure.
+            with self.assertLogs('integrations.config', level='WARNING'):
+                get_config('SITE_BASE_URL', 'fallback')
             # The cache stayed unpopulated (so the next call will retry).
             self.assertFalse(config_module._cache_populated)
         # Shared stamp survived the failure.
         stamp_after = caches['django_q'].get('integration_settings_stamp')
         self.assertEqual(stamp_after, stamp_before)
+
+    def test_failed_populate_does_not_swallow_programmer_errors(self):
+        with patch.object(
+            IntegrationSetting.objects,
+            'values_list',
+            side_effect=TypeError('programmer bug'),
+        ):
+            self._simulate_fresh_process()
+            with self.assertRaises(TypeError):
+                get_config('SITE_BASE_URL', 'fallback')
 
     def test_site_base_url_helper_picks_up_cross_process_save(self):
         # Same scenario as test_save_in_one_process_visible_in_another

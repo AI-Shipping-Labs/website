@@ -6,6 +6,7 @@ from unittest.mock import patch
 from allauth.socialaccount.models import SocialApp
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import OperationalError
 from django.test import TestCase
 
 from email_app.services.email_classification import (
@@ -67,6 +68,53 @@ class GetConfigTest(TestCase):
         clear_config_cache()
         result2 = get_config('TEST_KEY')
         self.assertEqual(result2, 'db_val')
+
+    def test_worker_uncached_falls_back_to_env_when_db_unavailable(self):
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    'DJANGO_QCLUSTER_PROCESS': 'true',
+                    'WORKER_DB_DOWN_KEY': 'from_env',
+                },
+            ),
+            patch.object(
+                IntegrationSetting.objects,
+                'filter',
+                side_effect=OperationalError('DB unreachable'),
+            ),
+        ):
+            with self.assertLogs('integrations.config', level='WARNING'):
+                result = get_config('WORKER_DB_DOWN_KEY', 'fallback')
+
+        self.assertEqual(result, 'from_env')
+
+    def test_worker_uncached_falls_back_to_default_when_db_unavailable(self):
+        with (
+            patch.dict(os.environ, {'DJANGO_QCLUSTER_PROCESS': 'true'}),
+            patch.object(
+                IntegrationSetting.objects,
+                'filter',
+                side_effect=OperationalError('DB unreachable'),
+            ),
+        ):
+            os.environ.pop('WORKER_DB_DOWN_DEFAULT_KEY', None)
+            with self.assertLogs('integrations.config', level='WARNING'):
+                result = get_config('WORKER_DB_DOWN_DEFAULT_KEY', 'fallback')
+
+        self.assertEqual(result, 'fallback')
+
+    def test_worker_uncached_does_not_swallow_programmer_errors(self):
+        with (
+            patch.dict(os.environ, {'DJANGO_QCLUSTER_PROCESS': 'true'}),
+            patch.object(
+                IntegrationSetting.objects,
+                'filter',
+                side_effect=TypeError('programmer bug'),
+            ),
+        ):
+            with self.assertRaises(TypeError):
+                get_config('WORKER_PROGRAMMER_BUG_KEY', 'fallback')
 
 
 class SesSenderConfigTest(TestCase):

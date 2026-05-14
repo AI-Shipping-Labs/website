@@ -354,7 +354,12 @@ class SettingsDashboardViewTest(TestCase):
         )
 
         body = response.content.decode()
-        self.assertIn('data-testid="settings-status-summary"', body)
+        # `settings-status-summary` was removed from the template in
+        # commit f071234f ("Trim Studio dashboard: drop Setup status,
+        # Next up; split Recent activity"). Per-section cards now convey
+        # the same state. The summary still exists in the view context
+        # and is exercised by
+        # test_dashboard_status_summary_counts_sources_and_risk_groups.
         self.assertIn('data-testid="settings-section-nav"', body)
         self.assertIn('href="#payments"', body)
         self.assertIn('id="payments"', body)

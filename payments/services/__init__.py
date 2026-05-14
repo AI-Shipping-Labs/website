@@ -4,6 +4,7 @@ The active product model is Stripe Payment Links for checkout, Stripe
 webhooks for fulfillment, and Customer Portal for billing management.
 """
 
+import json
 import logging
 from datetime import datetime, timezone
 from smtplib import SMTPException
@@ -13,6 +14,7 @@ from django.core.mail import BadHeaderError, send_mail
 
 from accounts.models import User
 from analytics.models import UserAttribution
+from community.models import CommunityAuditLog
 from integrations.config import get_config
 from payments.exceptions import WebhookPermanentError
 from payments.models import ConversionAttribution, Tier, WebhookEvent
@@ -396,6 +398,120 @@ def handle_subscription_updated(subscription_data):
     elif new_tier_level < 20 and old_tier_level >= 20:
         # Immediate downgrade below Main: remove from community now
         _community_remove(user)
+
+
+def handle_customer_updated(customer_data):
+    """Process a ``customer.updated`` event by syncing the email only.
+
+    When a user edits their billing email in the Stripe Customer Portal,
+    Stripe fires ``customer.updated`` and the new email arrives in
+    ``customer_data["email"]``. Without this handler, the local
+    ``User.email`` drifts away from the email Stripe is sending receipts
+    to, which breaks reconciliation, password resets, and audit trails.
+
+    Scope is intentionally narrow: EMAIL ONLY. ``customer.updated`` can
+    also carry ``name``, ``metadata``, ``phone``, etc., but the local
+    ``User`` model has no name field today and we do not want this
+    handler to silently take ownership of unrelated profile state.
+
+    Behavior:
+
+    - Look up the user by ``stripe_customer_id == customer_data["id"]``.
+      If no match, log INFO and return cleanly (do NOT raise). This
+      mirrors how ``handle_subscription_updated`` treats unknown
+      customers: returning cleanly skips the ``WebhookEvent`` row so a
+      future local signup with the same Stripe customer can still pick
+      the event up via Stripe replay.
+    - If ``customer_data["email"]`` is missing, empty, or already
+      matches ``user.email`` (case-insensitively, after normalize),
+      no-op. No audit log row.
+    - If the new email is taken by a different local user, raise
+      ``WebhookPermanentError``. A unique-collision is not retriable;
+      the dispatcher records a ``failed_permanent`` row so on-call has
+      a trace and Stripe stops retrying.
+    - Otherwise, normalize the new email, save it on ``update_fields``,
+      and write a ``CommunityAuditLog`` row with the old and new email
+      values for traceability.
+    """
+    customer_id = customer_data.get("id", "") or ""
+    new_email_raw = customer_data.get("email", "") or ""
+
+    if not customer_id:
+        logger.info("customer.updated: missing customer id, ignoring")
+        return
+
+    user = User.objects.filter(stripe_customer_id=customer_id).first()
+    if user is None:
+        # Stripe may carry customers that pre-date the local account,
+        # or test-mode customers that never had a local user. Returning
+        # cleanly without recording a WebhookEvent row matches the
+        # existing handle_subscription_updated behavior and keeps the
+        # door open for a later replay once the local user exists.
+        logger.info(
+            "customer.updated: no local user for stripe_customer_id=%s",
+            customer_id,
+        )
+        return
+
+    if not new_email_raw:
+        # Empty / missing email is a no-op. Stripe sends the full
+        # customer object on every customer.updated event, including
+        # cases where only metadata or name changed.
+        return
+
+    new_email = User.objects.normalize_email(new_email_raw)
+    if not new_email:
+        return
+
+    # Case-insensitive compare against the local email to stay idempotent
+    # against pure-case edits (e.g. Stripe normalized the casing).
+    if user.email.lower() == new_email.lower():
+        return
+
+    # Unique-collision: another local user already owns this email.
+    # Raise WebhookPermanentError so the dispatcher records a terminal
+    # failed_permanent row — Stripe stops retrying, on-call can dig in.
+    collision = (
+        User.objects
+        .filter(email__iexact=new_email)
+        .exclude(pk=user.pk)
+        .first()
+    )
+    if collision is not None:
+        CommunityAuditLog.objects.create(
+            user=user,
+            action="email_synced_from_stripe",
+            details=json.dumps({
+                "status": "failed",
+                "reason": "email_collision",
+                "old_email": user.email,
+                "new_email": new_email,
+                "colliding_user_id": collision.pk,
+            }),
+        )
+        raise WebhookPermanentError(
+            f"customer.updated: email collision for stripe_customer_id="
+            f"{customer_id}; another local user already owns {new_email}"
+        )
+
+    old_email = user.email
+    user.email = new_email
+    user.save(update_fields=["email"])
+
+    CommunityAuditLog.objects.create(
+        user=user,
+        action="email_synced_from_stripe",
+        details=json.dumps({
+            "status": "ok",
+            "reason": "customer_updated",
+            "old_email": old_email,
+            "new_email": new_email,
+        }),
+    )
+    logger.info(
+        "customer.updated: synced email user=%s old=%s new=%s",
+        user.pk, old_email, new_email,
+    )
 
 
 def handle_subscription_deleted(subscription_data):

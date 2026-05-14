@@ -21,6 +21,7 @@ class CommunityAuditLog(models.Model):
         ("reactivate", "Reactivate"),
         ("link", "Link"),
         ("check", "Check"),
+        ("email_synced_from_stripe", "Email synced from Stripe"),
     ]
 
     user = models.ForeignKey(
@@ -30,7 +31,7 @@ class CommunityAuditLog(models.Model):
         help_text="The user this action was performed for.",
     )
     action = models.CharField(
-        max_length=20,
+        max_length=32,
         choices=ACTION_CHOICES,
         help_text="Type of community action performed.",
     )

@@ -249,6 +249,7 @@ class HookTasksSlackConfigSkipTest(TestCase):
         SLACK_BOT_TOKEN="xoxb-test",
         SLACK_ENVIRONMENT="development",
         SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+        SLACK_INVITE_URL="",
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
@@ -269,6 +270,7 @@ class HookTasksSlackConfigSkipTest(TestCase):
         SLACK_BOT_TOKEN="xoxb-test",
         SLACK_ENVIRONMENT="development",
         SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+        SLACK_INVITE_URL="",
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
@@ -288,6 +290,7 @@ class HookTasksSlackConfigSkipTest(TestCase):
         SLACK_BOT_TOKEN="xoxb-test",
         SLACK_ENVIRONMENT="development",
         SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+        SLACK_INVITE_URL="",
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
@@ -307,6 +310,7 @@ class HookTasksSlackConfigSkipTest(TestCase):
         SLACK_BOT_TOKEN="",
         SLACK_ENVIRONMENT="development",
         SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+        SLACK_INVITE_URL="",
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
@@ -326,6 +330,7 @@ class HookTasksSlackConfigSkipTest(TestCase):
         SLACK_BOT_TOKEN="   ",
         SLACK_ENVIRONMENT="development",
         SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+        SLACK_INVITE_URL="",
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
@@ -344,6 +349,7 @@ class HookTasksSlackConfigSkipTest(TestCase):
         SLACK_BOT_TOKEN="xoxb-test",
         SLACK_ENVIRONMENT="development",
         SLACK_DEV_COMMUNITY_CHANNEL_IDS=[],
+        SLACK_INVITE_URL="",
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
@@ -363,6 +369,183 @@ class HookTasksSlackConfigSkipTest(TestCase):
         SLACK_BOT_TOKEN="xoxb-test",
         SLACK_ENVIRONMENT="development",
         SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+    )
+    @patch("community.tasks.hooks.get_community_service")
+    def test_enabled_real_slack_errors_still_surface(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_service.invite.side_effect = SlackAPIError(
+            "Slack API error: invalid_auth",
+            method="users.lookupByEmail",
+            error_code="invalid_auth",
+        )
+        mock_get_service.return_value = mock_service
+
+        with self.assertRaises(SlackAPIError):
+            community_invite_task(self.user.pk)
+
+
+class HookTasksInviteEmailFallbackTest(TestCase):
+    """Slack-disabled hooks should still send the invite email when SLACK_INVITE_URL is set.
+
+    Regression coverage for issue #639: the email fallback inside
+    SlackCommunityService.invite / .reactivate only needs SLACK_INVITE_URL,
+    not the Slack API, so gating it behind SLACK_ENABLED was wrong.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(email="fallback@test.com")
+
+    @override_settings(
+        SLACK_ENABLED=False,
+        SLACK_BOT_TOKEN="xoxb-test",
+        SLACK_ENVIRONMENT="development",
+        SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+        SLACK_INVITE_URL="https://join.slack.com/test",
+    )
+    @patch("community.tasks.hooks.get_community_service")
+    @patch("community.services.slack.requests.post")
+    @patch("community.services.slack.send_mail")
+    def test_invite_task_sends_email_when_slack_disabled_and_invite_url_set(
+        self, mock_send_mail, mock_post, mock_get_service
+    ):
+        community_invite_task(self.user.pk)
+
+        mock_send_mail.assert_called_once()
+        kwargs = mock_send_mail.call_args.kwargs
+        self.assertIn(self.user.email, kwargs["recipient_list"])
+        self.assertIn("https://join.slack.com/test", kwargs["message"])
+
+        mock_post.assert_not_called()
+        mock_get_service.assert_not_called()
+
+        log = CommunityAuditLog.objects.get(user=self.user)
+        self.assertEqual(log.action, "invite")
+        details = json.loads(log.details)
+        self.assertEqual(details["status"], "email_sent")
+        self.assertEqual(details["reason"], "slack_api_disabled")
+
+    @override_settings(
+        SLACK_ENABLED=False,
+        SLACK_BOT_TOKEN="xoxb-test",
+        SLACK_ENVIRONMENT="development",
+        SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+        SLACK_INVITE_URL="",
+    )
+    @patch("community.tasks.hooks.get_community_service")
+    @patch("community.services.slack.requests.post")
+    @patch("community.services.slack.send_mail")
+    def test_invite_task_skips_cleanly_when_slack_disabled_and_invite_url_empty(
+        self, mock_send_mail, mock_post, mock_get_service
+    ):
+        with self.assertLogs("community.tasks.hooks", level="WARNING") as logs:
+            community_invite_task(self.user.pk)
+
+        mock_send_mail.assert_not_called()
+        mock_post.assert_not_called()
+        mock_get_service.assert_not_called()
+        self.assertFalse(CommunityAuditLog.objects.filter(user=self.user).exists())
+        self.assertIn("community_invite_task skipped", logs.output[0])
+
+    @override_settings(
+        SLACK_ENABLED=True,
+        SLACK_BOT_TOKEN="xoxb-test",
+        SLACK_ENVIRONMENT="development",
+        SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+        SLACK_INVITE_URL="https://join.slack.com/test",
+    )
+    @patch("community.tasks.hooks.get_community_service")
+    def test_invite_task_runs_full_slack_flow_when_enabled(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        community_invite_task(self.user.pk)
+
+        mock_service.invite.assert_called_once()
+        called_user = mock_service.invite.call_args[0][0]
+        self.assertEqual(called_user.pk, self.user.pk)
+
+    @override_settings(
+        SLACK_ENABLED=False,
+        SLACK_BOT_TOKEN="xoxb-test",
+        SLACK_ENVIRONMENT="development",
+        SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+        SLACK_INVITE_URL="https://join.slack.com/test",
+    )
+    @patch("community.tasks.hooks.get_community_service")
+    @patch("community.services.slack.requests.post")
+    @patch("community.services.slack.send_mail")
+    def test_reactivate_task_sends_email_when_slack_disabled_and_invite_url_set(
+        self, mock_send_mail, mock_post, mock_get_service
+    ):
+        community_reactivate_task(self.user.pk)
+
+        mock_send_mail.assert_called_once()
+        kwargs = mock_send_mail.call_args.kwargs
+        self.assertIn(self.user.email, kwargs["recipient_list"])
+        self.assertIn("https://join.slack.com/test", kwargs["message"])
+
+        mock_post.assert_not_called()
+        mock_get_service.assert_not_called()
+
+        log = CommunityAuditLog.objects.get(user=self.user)
+        self.assertEqual(log.action, "reactivate")
+        details = json.loads(log.details)
+        self.assertEqual(details["status"], "email_sent")
+        self.assertEqual(details["reason"], "slack_api_disabled")
+
+    @override_settings(
+        SLACK_ENABLED=False,
+        SLACK_BOT_TOKEN="xoxb-test",
+        SLACK_ENVIRONMENT="development",
+        SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+        SLACK_INVITE_URL="",
+    )
+    @patch("community.tasks.hooks.get_community_service")
+    @patch("community.services.slack.requests.post")
+    @patch("community.services.slack.send_mail")
+    def test_reactivate_task_skips_cleanly_when_slack_disabled_and_invite_url_empty(
+        self, mock_send_mail, mock_post, mock_get_service
+    ):
+        with self.assertLogs("community.tasks.hooks", level="WARNING") as logs:
+            community_reactivate_task(self.user.pk)
+
+        mock_send_mail.assert_not_called()
+        mock_post.assert_not_called()
+        mock_get_service.assert_not_called()
+        self.assertFalse(CommunityAuditLog.objects.filter(user=self.user).exists())
+        self.assertIn("community_reactivate_task skipped", logs.output[0])
+
+    @override_settings(
+        SLACK_ENABLED=False,
+        SLACK_BOT_TOKEN="xoxb-test",
+        SLACK_ENVIRONMENT="development",
+        SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+        SLACK_INVITE_URL="https://join.slack.com/test",
+    )
+    @patch("community.tasks.hooks.get_community_service")
+    @patch("community.services.slack.requests.post")
+    @patch("community.services.slack.send_mail")
+    def test_remove_task_skip_behavior_unchanged_when_slack_disabled(
+        self, mock_send_mail, mock_post, mock_get_service
+    ):
+        self.user.slack_user_id = "U123"
+        self.user.save(update_fields=["slack_user_id"])
+
+        with self.assertLogs("community.tasks.hooks", level="WARNING") as logs:
+            community_remove_task(self.user.pk)
+
+        mock_send_mail.assert_not_called()
+        mock_post.assert_not_called()
+        mock_get_service.assert_not_called()
+        self.assertFalse(CommunityAuditLog.objects.filter(user=self.user).exists())
+        self.assertIn("community_remove_task skipped", logs.output[0])
+
+    @override_settings(
+        SLACK_ENABLED=True,
+        SLACK_BOT_TOKEN="xoxb-test",
+        SLACK_ENVIRONMENT="development",
+        SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+        SLACK_INVITE_URL="https://join.slack.com/test",
     )
     @patch("community.tasks.hooks.get_community_service")
     def test_enabled_real_slack_errors_still_surface(self, mock_get_service):

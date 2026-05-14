@@ -33,6 +33,9 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from playwright_tests.conftest import (
+    expand_studio_sidebar_section as _expand_studio_sidebar_section,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -152,11 +155,12 @@ class TestStudioWorkshopSidebar:
 
         page.goto(f'{django_server}/studio/', wait_until='domcontentloaded')
 
-        # The link is visible in the sidebar.
-        link = page.locator('aside a:has-text("Workshops")')
+        # The link is visible in the sidebar once the Content section is open.
+        _expand_studio_sidebar_section(page, "content")
+        link = page.locator('#studio-sidebar-nav a[href="/studio/workshops/"]')
         assert link.count() == 1, 'Workshops link missing from sidebar'
 
-        link.first.click()
+        link.click()
         page.wait_for_load_state('domcontentloaded')
 
         assert page.url.rstrip('/').endswith('/studio/workshops')

@@ -1,87 +1,93 @@
-<footer class="border-t border-border bg-card">
-  <div class="mx-auto max-w-7xl px-5 py-10 sm:px-6 sm:py-16 lg:px-8 lg:py-24">
-    {% if not user.is_authenticated %}
-    {# Retained as the single anonymous newsletter placement and /#newsletter anchor target. #}
-    <div id="newsletter" class="mx-auto max-w-2xl">
-      <div class="rounded-2xl border border-border bg-background p-6 sm:p-8 text-center">
-        <h2 class="text-xl font-semibold tracking-tight sm:text-2xl" style="text-wrap: balance;">
-          Build AI in public, with a group.
-        </h2>
-        <p class="mt-3 text-sm text-muted-foreground">
-          Subscribe to stay on top of what's happening in the community and receive updates.
-        </p>
-        <div class="mt-6">
-          <div class="subscribe-form-container" data-redirect-to="">
-            <form class="subscribe-form flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center" novalidate onsubmit="return handleFooterSubscribe(event, this)">
-              <input type="email" name="email" required
-                     placeholder="Enter your email"
-                     class="min-h-[44px] w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent sm:w-auto sm:flex-1 sm:max-w-xs">
-              <button type="submit"
-                      class="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-                Subscribe
-              </button>
-            </form>
-            <p class="footer-subscribe-message mt-2 text-sm hidden"></p>
-            <p class="footer-subscribe-error mt-2 text-sm text-red-400 hidden"></p>
+<footer class="border-t border-border">
+  {% if not user.is_authenticated %}
+  {# Retained as the single anonymous newsletter placement and /#newsletter anchor target. #}
+  <section class="bg-card">
+    <div class="mx-auto max-w-7xl px-5 py-10 sm:px-6 sm:py-16 lg:px-8 lg:py-24">
+      <div id="newsletter" class="mx-auto max-w-2xl">
+        <div class="rounded-2xl border border-border bg-background p-6 sm:p-8 text-center">
+          <h2 class="text-xl font-semibold tracking-tight sm:text-2xl" style="text-wrap: balance;">
+            Build AI in public, with a group.
+          </h2>
+          <p class="mt-3 text-sm text-muted-foreground">
+            Subscribe to stay on top of what's happening in the community and receive updates.
+          </p>
+          <div class="mt-6">
+            <div class="subscribe-form-container" data-redirect-to="">
+              <form class="subscribe-form flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center" novalidate onsubmit="return handleFooterSubscribe(event, this)">
+                <input type="email" name="email" required
+                       placeholder="Enter your email"
+                       class="min-h-[44px] w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent sm:w-auto sm:flex-1 sm:max-w-xs">
+                <button type="submit"
+                        class="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                  Subscribe
+                </button>
+              </form>
+              <p class="footer-subscribe-message mt-2 text-sm hidden"></p>
+              <p class="footer-subscribe-error mt-2 text-sm text-red-400 hidden"></p>
+            </div>
           </div>
         </div>
       </div>
     </div>
-    {% endif %}
+  </section>
+  {% endif %}
 
-    <div class="mt-4 grid gap-6 pt-3 sm:grid-cols-3 sm:gap-3">
-      <div>
-        <a href="/" class="flex items-center gap-2">
-          <img src="/static/rocket-upscale-no-bg-small.png" alt="AI Shipping Labs" class="h-6 w-6">
-          <span class="font-semibold">AI Shipping Labs</span>
-        </a>
-        <p class="mt-2 text-sm text-muted-foreground">
-          Where action-oriented builders turn AI ideas into real projects.
+  <section class="border-t border-border bg-muted">
+    <div class="mx-auto max-w-7xl px-5 py-10 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
+      <div class="grid gap-6 sm:grid-cols-3 sm:gap-3">
+        <div>
+          <a href="/" class="flex items-center gap-2">
+            <img src="/static/rocket-upscale-no-bg-small.png" alt="AI Shipping Labs" class="h-6 w-6">
+            <span class="font-semibold">AI Shipping Labs</span>
+          </a>
+          <p class="mt-2 text-sm text-muted-foreground">
+            Where action-oriented builders turn AI ideas into real projects.
+          </p>
+        </div>
+
+        <div>
+          <h3 class="text-sm font-semibold text-foreground">Community</h3>
+          <ul class="mt-0.5 space-y-0 sm:mt-2">
+            <li>
+              <a href="/about" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">About</a>
+            </li>
+            <li>
+              <a href="{% url 'pricing' %}" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Membership Tiers</a>
+            </li>
+            <li>
+              <a href="/faq" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
+            </li>
+            <li>
+              <a href="{{ stripe_customer_portal_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Manage Subscription</a>
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 class="text-sm font-semibold text-foreground">Legal</h3>
+          <ul class="mt-0.5 space-y-0 sm:mt-2">
+            <li>
+              <a href="/terms/" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Terms of Service</a>
+            </li>
+            <li>
+              <a href="/privacy/" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Privacy Policy</a>
+            </li>
+            <li>
+              <a href="/impressum/" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Impressum</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="mt-8 text-center">
+        <p class="text-sm text-muted-foreground">
+          {{ current_year }} AI Shipping Labs
+          <br>
+          Version {{ VERSION }}
         </p>
       </div>
-
-      <div>
-        <h3 class="text-sm font-semibold text-foreground">Community</h3>
-        <ul class="mt-0.5 space-y-0 sm:mt-2">
-          <li>
-            <a href="/about" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">About</a>
-          </li>
-          <li>
-            <a href="{% url 'pricing' %}" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Membership Tiers</a>
-          </li>
-          <li>
-            <a href="/faq" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
-          </li>
-          <li>
-            <a href="{{ stripe_customer_portal_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Manage Subscription</a>
-          </li>
-        </ul>
-      </div>
-
-      <div>
-        <h3 class="text-sm font-semibold text-foreground">Legal</h3>
-        <ul class="mt-0.5 space-y-0 sm:mt-2">
-          <li>
-            <a href="/terms/" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Terms of Service</a>
-          </li>
-          <li>
-            <a href="/privacy/" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Privacy Policy</a>
-          </li>
-          <li>
-            <a href="/impressum/" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Impressum</a>
-          </li>
-        </ul>
-      </div>
     </div>
-
-    <div class="mt-4 pt-4 text-center">
-      <p class="text-sm text-muted-foreground">
-        {{ current_year }} AI Shipping Labs
-        <br>
-        Version {{ VERSION }}
-      </p>
-    </div>
-  </div>
+  </section>
 
   <script>
   function handleFooterSubscribe(event, form) {

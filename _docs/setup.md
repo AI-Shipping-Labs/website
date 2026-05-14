@@ -25,7 +25,9 @@ On startup, the entrypoint (`scripts/entrypoint_init.py`) runs `manage.py migrat
 
 The deployed version tag is set via the `VERSION` environment variable and displayed in the page footer.
 
-### ECS environment variables
+### Prepare app and infrastructure env
+
+Before the app can boot in ECS, provision the ALB/ECS/ECR/RDS resources above, create the Secrets Manager records below, and make sure the task definition carries the platform environment variables in this section. Most rows here are read at process start, used by Django/ECS directly, or intentionally excluded from Studio; rows that also have Studio overrides call that out explicitly.
 
 Set in the ECS task definition (plain environment variables):
 
@@ -33,11 +35,25 @@ Set in the ECS task definition (plain environment variables):
 |----------|---------|---------|
 | `VERSION` | `20260327-124723-02ce799` | Displayed in the page footer, set automatically by deploy scripts |
 | `DEBUG` | `false` | Django debug mode. Truthy values: `1`, `true`, `yes`. Anything else (including `0`, `false`, `no`, empty) is falsy. Production must set this to `false` to enforce the `SECRET_KEY` guard. |
-| `SLACK_ENVIRONMENT` | `development` on dev, `production` on prod | Slack routing mode. Non-production modes ignore production Slack channel IDs and require dev/test channel overrides before posting. |
 | `ALLOWED_HOSTS` | `dev.aishippinglabs.com` | Comma-separated list of allowed hosts |
 | `CSRF_TRUSTED_ORIGINS` | `https://dev.aishippinglabs.com,https://aishippinglabs.com` | Required for POST requests (login, forms) to work over HTTPS |
-| `GITHUB_APP_ID` | `3143490` | GitHub App ID for content sync |
-| `GITHUB_APP_INSTALLATION_ID` | `117839867` | GitHub App installation ID |
+| `SITE_BASE_URL` | `https://dev.aishippinglabs.com` | Process-start baseline for absolute URLs. Runtime URL generation can be overridden in Studio > Settings > Site. |
+| `RUN_MIGRATIONS` | `true` on web, `false` on worker | Entrypoint dispatch flag. Only the web container runs `migrate`; the worker starts `qcluster`. Set automatically by `deploy/update_task_def.py`. |
+| `SES_ENABLED` | `true` in prod | Required to send transactional/campaign email. Defaults false and fails `manage.py check` when `DEBUG=False`. |
+| `S3_ENABLED` | `true` in prod | Required to upload content-sync images to S3. Defaults false; content sync skips image upload when missing. |
+| `SLACK_ENABLED` | `true` where the Slack bot/imports should run | Startup gate. Studio also has Slack settings, but if this env var is false, Slack token/channel settings are blanked at import time. |
+| `SLACK_ENVIRONMENT` | `development` on dev, `production` on prod | Slack routing mode. Non-production modes ignore production Slack channel IDs and require dev/test channel overrides before posting. Can be managed in Studio for normal routing changes after the startup gate is enabled. |
+| `Q_WORKERS` | `2` | Optional django-q worker count. Defaults to 1 on SQLite, 2 on Postgres. |
+| `EXPECT_WORKER` | `true` | Optional worker-health expectation. Set `false` only for one-off environments that intentionally have no worker. |
+| `IP_HASH_SALT` | random string | Optional salt for analytics IP hashes. Empty means IP hashes are not stored. |
+| `ANALYTICS_COOKIE_DOMAIN` | `.aishippinglabs.com` | Optional analytics cookie domain override. |
+| `EMAIL_BATCH_SIZE` | `200` | Optional campaign-send chunk size. |
+| `IMPORT_WELCOME_EMAILS_PER_HOUR` | `50` | Optional throttle for imported-user welcome emails. |
+| `SES_FROM_EMAIL` | `noreply@aishippinglabs.com` | Optional legacy email sender fallback. Prefer the explicit Studio keys `SES_TRANSACTIONAL_FROM_EMAIL` and `SES_PROMOTIONAL_FROM_EMAIL`. |
+| `SES_UNSUBSCRIBE_EMAIL` | `unsubscribe@aishippinglabs.com` | Optional mailto address for the `List-Unsubscribe` email header. Not rendered in Studio. |
+| `SYNC_QUEUED_THRESHOLD_MINUTES` | `10` | Optional sync watchdog queued threshold. |
+| `SYNC_RUNNING_THRESHOLD_MINUTES` | `30` | Optional sync watchdog running threshold. |
+| `LOGIN_API_SLOW_MS` | `750` | Optional slow-login instrumentation threshold in milliseconds. |
 
 Set via AWS Secrets Manager (injected as ECS secrets):
 
@@ -54,7 +70,15 @@ Fetched at runtime by the Django app (not injected via ECS):
 
 The app fetches this from Secrets Manager automatically if no direct PEM is set. The secret path and region can be configured in Studio with `GITHUB_APP_PRIVATE_KEY_SECRET_ID` and `GITHUB_APP_PRIVATE_KEY_SECRET_REGION`; otherwise the app uses `ai-shipping-labs/github-app-private-key` in `eu-west-1`. Fallback order: Studio PEM → local PEM file → env var → Studio secret path → default Secrets Manager path.
 
-When adding a new environment (e.g. prod), make sure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` include all domains that will submit forms to it. Production should include `aishippinglabs.com,www.aishippinglabs.com,prod.aishippinglabs.com`.
+When adding a new environment, make sure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` include all domains that will submit forms to it. `deploy/update_task_def.py` currently writes `dev.aishippinglabs.com` for dev and `aishippinglabs.com,www.aishippinglabs.com` plus matching HTTPS origins for prod. If `prod.aishippinglabs.com` must keep accepting traffic, add it to the deploy helper and redeploy so the task definition matches reality.
+
+The app also has test-only/internal env controls:
+
+| Variable | Scope | Purpose |
+|----------|-------|---------|
+| `DJANGO_TEST_DB_NAME` | CI/test | File-backed SQLite test DB for `--keepdb` caching. |
+| `Q_SYNC` | test/debug | Runs django-q tasks synchronously when `true`; do not set in ECS services. |
+| `DJANGO_QCLUSTER_PROCESS` | internal | Set by `scripts/entrypoint_init.py` before starting `qcluster`; operators should not set it manually. |
 
 ### GitHub App (content sync)
 
@@ -133,6 +157,39 @@ We deliberately do not use Redis: avoiding the operational dependency is a produ
 
 If you change `CACHES`, also keep `Q_CLUSTER['cache']` pointing at the same named cache. The wiring is asserted in `studio/tests/test_worker_health_cache.py::DjangoQCacheWiringTest`.
 
+## Run the app
+
+For local development:
+
+```bash
+make setup
+make dev
+```
+
+`make dev` starts the web server and the django-q worker using `Procfile.dev`; both use `SITE_BASE_URL=http://localhost:8000`. To run one process at a time:
+
+```bash
+make run
+make worker
+```
+
+For ECS, the same Docker image runs both containers. `scripts/entrypoint_init.py` imports Django once, applies migrations only when `RUN_MIGRATIONS=true`, runs `manage.py check --fail-level ERROR`, then starts gunicorn for the web container or `qcluster` for the worker container. The web container is essential; the worker container is non-essential but should be alive for background jobs and Studio worker health.
+
+After a fresh setup or deploy, register recurring jobs:
+
+```bash
+uv run python manage.py setup_schedules
+```
+
+Verify a running environment:
+
+```bash
+curl -fsSL https://dev.aishippinglabs.com/ping
+curl -fsSL https://aishippinglabs.com/ping
+```
+
+The response body is the deployed `VERSION` tag.
+
 ## CI/CD
 
 Two GitHub Actions workflows handle deployment:
@@ -142,7 +199,7 @@ Two GitHub Actions workflows handle deployment:
 
 Both workflows use `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` GitHub secrets for ECR/ECS access.
 
-## Deploying manually
+## Deploying and redeploying manually
 
 One command to build, push, and deploy:
 
@@ -156,11 +213,43 @@ bash deploy/deploy.sh prod
 
 This runs `deploy/deploy.sh` which generates a tag, logs into ECR, builds the Docker image, pushes it, and updates the ECS service.
 
+Redeploy an existing image tag without rebuilding:
+
+```bash
+# Redeploy an existing tag to dev
+bash deploy/deploy_dev.sh 20260327-124723-02ce799 dev
+
+# Promote or redeploy an existing tag to prod
+CONFIRM_DEPLOY=true bash deploy/deploy_prod.sh 20260327-124723-02ce799
+```
+
+Force ECS to restart tasks on the current task definition, for example after an AWS-side secret value changes but the image/tag does not:
+
+```bash
+aws ecs update-service \
+  --cluster ai-shipping-labs \
+  --service ai-shipping-labs-dev \
+  --force-new-deployment
+```
+
+Use `ai-shipping-labs-prod` for production.
+
+### ECS rollout recovery
+
+`deploy/deploy_dev.sh` waits for `aws ecs wait services-stable`. If the wait times out, the script prints recent service events, running/stopped task reasons, and ALB target health. The common recovery path is:
+
+1. Read the stopped task reason and CloudWatch logs for the new task. Startup failures usually come from missing env-only values: `SECRET_KEY`, `DATABASE_URL`, `SES_ENABLED=true` with `DEBUG=False`, invalid `ALLOWED_HOSTS` / `CSRF_TRUSTED_ORIGINS`, or missing `S3_ENABLED=true` for production content-image uploads.
+2. Fix the ECS task definition, Secrets Manager value, or deploy helper source of truth.
+3. Register a corrected task definition by rerunning `bash deploy/deploy_dev.sh <tag> <env>`, or use `aws ecs update-service --force-new-deployment` if only the referenced secret value changed.
+4. Confirm `/ping` returns the expected `VERSION` tag and check `/studio/worker/` for a live django-q heartbeat.
+
+To roll back, redeploy a previously known-good tag with `deploy_dev.sh` for dev or `CONFIRM_DEPLOY=true deploy_prod.sh` for prod. Prod tags are appended to `.prod-versions`; the current dev tag can be read from `https://dev.aishippinglabs.com/ping`.
+
 ## Deploy scripts
 
 - `deploy/deploy_dev.sh <tag> [env]` — fetches the current ECS task definition, swaps the image tag, registers a new revision, and updates the service. `env` defaults to `dev`.
 - `deploy/deploy_prod.sh [tag]` — promotes a tag to prod. If no tag is given, reads the current dev tag. Requires confirmation.
-- `deploy/update_task_def.py` — helper that updates the image tag plus environment vars such as `VERSION` and `ALLOWED_HOSTS` in a task definition JSON file.
+- `deploy/update_task_def.py` — helper that ensures the worker container exists and updates the image tag plus `VERSION`, `DEBUG`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `SITE_BASE_URL`, and per-container `RUN_MIGRATIONS` in a task definition JSON file.
 
 ## Database access
 

@@ -2,31 +2,42 @@
 
 Audience: operators bringing up a fresh AI Shipping Labs environment. This guide takes you from "code is deployed, DB is migrated, DNS is pointed at the load balancer" to "every feature works (login, payments, email, Slack, content sync, recordings, events)". It assumes cloud provisioning (ECS / RDS / S3 / CloudFront / IAM) is already done; if you need that, see `_docs/setup.md`. Voice is imperative — do this, then this. Replace `{SITE_BASE_URL}` with your actual base URL (for example `https://aishippinglabs.com`).
 
-Resolver order for any setting that lives in both Studio and the environment: Studio (DB) overrides Django settings, which override env vars, which override defaults. So if you set the same key in both places, Studio wins.
+Resolver order for integration settings: Studio (DB) overrides Django settings, and Django settings are usually a process-start snapshot of env vars from `website/settings.py`. If a key is listed in `Studio > Settings`, use Studio for normal operator changes unless a section below explicitly calls out an environment-variable gate.
 
 ## 1. Platform environment variables
 
-These variables are read at process start, before the DB is reachable, or used by Django itself. They CANNOT be set in Studio. Configure them in the platform that runs the container (ECS task definition, AWS Secrets Manager, `.env` for local).
+These variables are read at process start, before the DB is reachable, used directly by Django/ECS, or deliberately excluded from `integrations/settings_registry.py`. They CANNOT be set through Studio. Configure them in the platform that runs the container (ECS task definition, AWS Secrets Manager, GitHub Actions, Docker Compose, or `.env` for local).
 
 | Variable | Required when | Notes |
 |----------|---------------|-------|
 | `SECRET_KEY` | always in prod | Required when `DEBUG=false`. The app raises `ImproperlyConfigured` and exits at import time if it is unset, empty, or equal to the in-tree dev fallback. Generate with `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`. |
 | `DEBUG` | always | Must be `false` in prod. Truthy values: `1`, `true`, `yes`. Anything else (including empty) is falsy. |
+| `DATABASE_URL` | always in prod | PostgreSQL connection string parsed by `dj_database_url`. Default is a local SQLite file. Inject via ECS Secrets Manager in deployed environments. |
 | `ALLOWED_HOSTS` | always | Comma-separated. Default `localhost,127.0.0.1`. Production must list every host that serves the site (e.g. `aishippinglabs.com,www.aishippinglabs.com,prod.aishippinglabs.com`). |
 | `CSRF_TRUSTED_ORIGINS` | always over HTTPS | Comma-separated full origins with scheme (e.g. `https://aishippinglabs.com,https://www.aishippinglabs.com`). Required for any POST over HTTPS — login, forms, and Studio save buttons all break without it. |
-| `SITE_BASE_URL` | always | e.g. `https://aishippinglabs.com`. Used to build absolute URLs in emails, unsubscribe links, calendar invites, password resets, share URLs, OG / canonical meta tags, and provider redirect URIs. Default `https://aishippinglabs.com`. Studio shows an amber banner on every `/studio/` page when the configured host disagrees with the request host (scheme / host / port mismatch) so operators can spot stale env config before it ships outbound links. |
-| `DATABASE_URL` | always in prod | PostgreSQL connection string parsed by `dj_database_url`. Default is a local SQLite file. |
-| `SLACK_ENABLED` | always | Must be set to `true` to enable any Slack integration (bot OR login app credentials read at startup). Off by default to prevent dev environments from posting to real channels. |
+| `SES_ENABLED` | prod email | Must be `true` to send transactional or campaign email. Defaults `false`; forced false under `manage.py test`. `manage.py check --fail-level ERROR` fails in `DEBUG=False` when this is missing. |
+| `S3_ENABLED` | prod content images | Must be `true` to upload synced content images to S3. Defaults `false`; forced false under `manage.py test`. Existing CDN URLs continue to resolve, but new image uploads are skipped. |
+| `SLACK_ENABLED` | prod Slack bot/imports | Must be `true` at process start to let Slack bot/import credentials survive settings import. Studio also has a `SLACK_ENABLED` key, but it cannot undo the startup blanking when this env var is false. |
 | `VERSION` | optional | Build tag shown in the page footer. Set automatically by deploy scripts. |
+| `RUN_MIGRATIONS` | ECS only | `true` on the web container, `false` on the worker container. The single entrypoint runs migrations only when this is `true`; `deploy/update_task_def.py` maintains it. |
 | `Q_WORKERS` | optional | Worker count for django-q. Defaults to 1 on SQLite, 2 on Postgres. |
+| `EXPECT_WORKER` | optional | Set `false` only for one-off environments that intentionally have no django-q worker; suppresses worker liveness warnings/banners. Defaults `true`. |
 | `IP_HASH_SALT` | optional | Salt for SHA-256 hashing client IPs in `CampaignVisit.ip_hash`. Empty leaves `ip_hash` blank. |
 | `ANALYTICS_COOKIE_DOMAIN` | optional | Scope analytics cookies to a domain. Defaults to `SESSION_COOKIE_DOMAIN`. |
 | `EMAIL_BATCH_SIZE` | optional | Recipients per chunked `send_campaign_batch` task. Default 200. |
+| `IMPORT_WELCOME_EMAILS_PER_HOUR` | optional | Rate limit for imported-user welcome emails. Default 50. |
+| `SES_FROM_EMAIL` | optional legacy email fallback | Legacy fallback sender used only when the explicit transactional/promotional sender keys are not configured. Not rendered in Studio; prefer `SES_TRANSACTIONAL_FROM_EMAIL` and `SES_PROMOTIONAL_FROM_EMAIL` in Studio. |
+| `SES_UNSUBSCRIBE_EMAIL` | optional email header | Optional mailto address for the `List-Unsubscribe` email header. Not rendered in Studio. |
 | `SYNC_QUEUED_THRESHOLD_MINUTES` | optional | Watchdog: a sync stuck in `queued` longer than this is flipped to `failed`. Default 10. |
 | `SYNC_RUNNING_THRESHOLD_MINUTES` | optional | Watchdog: a sync stuck in `running` longer than this is flipped to `failed`. Default 30. |
+| `LOGIN_API_SLOW_MS` | optional | Slow-login instrumentation threshold in milliseconds. Default 750. |
 | `GITHUB_APP_PRIVATE_KEY_FILE` | optional | Path to a PEM file. Takes precedence over the `GITHUB_APP_PRIVATE_KEY` env var. The app falls back to the Studio-configured AWS Secrets Manager secret path if neither is set. |
+| `DJANGO_TEST_DB_NAME` | CI/test only | Makes SQLite tests file-backed so `--keepdb` can cache test databases. Used by GitHub Actions. |
+| `Q_SYNC` | test/debug only | Runs django-q tasks synchronously when set to `true`. Do not set in ECS services. |
 
 Test: `curl -I {SITE_BASE_URL}/ping` returns `200 OK`. Then visit `{SITE_BASE_URL}/` and confirm the home page renders without 500 errors.
+
+`SITE_BASE_URL` is also written into ECS task definitions by `deploy/update_task_def.py` as the process-start baseline. Unlike the variables above, it is also a Studio setting; use Studio > Settings > Site for normal runtime URL changes after boot.
 
 ## 2. Sign in to Studio
 
@@ -137,13 +148,11 @@ Keys to set in Studio:
 
 | Key | Source | Notes |
 |-----|--------|-------|
-| `SES_ENABLED` | env var | Set to `true` in prod. Defaults `false` so dev/CI never sends real mail. Forced `false` under `manage.py test`. `manage.py check` fails with `email_app.E001` if `DEBUG=False` and this is not `true`. Issues #509, #521. |
 | `AWS_ACCESS_KEY_ID` | secret | IAM user with `ses:SendEmail` and `ses:SendRawEmail`. Force-blanked when `SES_ENABLED=false` so any code path that slips past the gate cannot authenticate. |
 | `AWS_SECRET_ACCESS_KEY` | secret | Paired with the access key ID. Same force-blank as above. |
 | `AWS_SES_REGION` | non-secret | e.g. `us-east-1`, `eu-west-1`. |
 | `SES_TRANSACTIONAL_FROM_EMAIL` | non-secret | Sender for required account/service email. Defaults to `noreply@aishippinglabs.com`; must be a verified sender (or be on a verified domain) in SES. |
 | `SES_PROMOTIONAL_FROM_EMAIL` | non-secret | Sender for campaigns/newsletters/marketing email. Defaults to `content@aishippinglabs.com`; must be a verified sender (or be on a verified domain) in SES. |
-| `SES_FROM_EMAIL` | non-secret | Legacy fallback sender used only when the explicit transactional/promotional sender key is not configured. |
 | `SES_CONFIGURATION_SET_NAME` | non-secret | Optional SES configuration set name for delivery, open, and click event publishing. |
 | `SES_WEBHOOK_VALIDATION_ENABLED` | non-secret | `true` in prod to validate incoming SNS webhook signatures. |
 
@@ -237,11 +246,12 @@ Provider console: AWS S3 + CloudFront. Bucket policy, CORS, and Origin Access Co
 
 Production deploys MUST set the env var `S3_ENABLED=true` to actually upload images to S3 during content sync. The flag defaults to `false` everywhere — local dev, CI, Playwright, `manage.py test` — so `upload_images_to_s3` short-circuits before constructing any boto3 client and returns a no-op stats dict. Without `S3_ENABLED=true` in prod, content sync still runs but image uploads are skipped (the markdown still resolves to the configured `CONTENT_CDN_BASE`, so existing CDN images keep working). Issue #532.
 
+`S3_ENABLED` is a platform environment variable, not a Studio key.
+
 Keys to set in Studio:
 
 | Key | Source | Notes |
 |-----|--------|-------|
-| `S3_ENABLED` | env var | Set to `true` in prod. Defaults `false` so dev/CI never makes real boto3 round-trips to S3. Forced `false` under `manage.py test`. Issue #532. |
 | `AWS_S3_CONTENT_BUCKET` | non-secret | Bucket name (e.g. `aishippinglabs-content`). |
 | `AWS_S3_CONTENT_REGION` | non-secret | Region of the bucket (e.g. `eu-west-1`). |
 | `CONTENT_CDN_BASE` | non-secret | Public base URL — typically the CloudFront distribution (e.g. `https://cdn.aishippinglabs.com`). Default `/static/content-images` (local dev only). |

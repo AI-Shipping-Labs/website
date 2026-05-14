@@ -61,7 +61,6 @@ from api.views.ses_events import ses_events
 from api.views.sprints import sprint_detail, sprints_collection
 from api.views.sync_sources import sync_source_trigger, sync_sources_collection
 from api.views.tier_reconcile import (
-    stripe_prices_lookup,
     tier_reconcile_apply,
     tier_reconcile_diagnostics,
 )
@@ -294,11 +293,6 @@ urlpatterns = [
         "payments/tier-reconcile",
         tier_reconcile_apply,
         name="api_tier_reconcile_apply",
-    ),
-    path(
-        "payments/stripe-prices",
-        stripe_prices_lookup,
-        name="api_stripe_prices_lookup",
     ),
     # ---- SES bounce / complaint webhook (issue #453) ------------------
     # SNS POSTs notifications here. Auth is the SNS signature, not a

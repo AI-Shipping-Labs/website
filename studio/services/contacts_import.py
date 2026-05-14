@@ -179,14 +179,22 @@ def run_import(parsed, *, email_column, tag, tier, granted_by):
     )
 
 
-def import_contact_rows(rows, *, default_tag="", default_tier=None, granted_by=None):
+def import_contact_rows(
+    rows,
+    *,
+    default_tag="",
+    default_tier=None,
+    granted_by=None,
+    tier_assignment_mode="override",
+):
     """Upsert a batch of contact rows.
 
     Shared between the Studio CSV importer and the ``POST /api/contacts/import``
     endpoint. Each row is a dict with at least ``email``; the API also passes
     per-row ``tags`` (a list, MERGED into the user's existing tags) and
-    ``tier`` (a slug applied as a long-lived ``TierOverride`` if its level
-    is > 0).
+    ``tier``. Studio CSV imports keep the historical ``override`` tier mode;
+    API imports use ``stripe_validate`` so paid tier assignment must match
+    live Stripe and never creates ``TierOverride`` rows.
 
     Optional per-row keys (issue #437):
         first_name / last_name -- last-write-wins on non-empty trimmed input;
@@ -210,6 +218,7 @@ def import_contact_rows(rows, *, default_tag="", default_tier=None, granted_by=N
         default_tier: a ``Tier`` instance applied to every row whose tier is
             not already set per-row. Pass None to leave tiers alone.
         granted_by: ``User`` who initiated the batch (for ``TierOverride``).
+        tier_assignment_mode: ``"override"`` or ``"stripe_validate"``.
 
     Returns an ``ImportResult``. The whole batch runs in a single
     ``transaction.atomic`` so a mid-batch failure rolls back cleanly.
@@ -273,16 +282,6 @@ def import_contact_rows(rows, *, default_tag="", default_tier=None, granted_by=N
             for raw_tag in row.get("tags") or []:
                 _apply_tag(user, normalize_tag(raw_tag))
 
-            # Per-row tier wins over the default tier when both are set; the
-            # default tier still applies when the row has no tier of its own.
-            row_tier_slug = row.get("tier")
-            if row_tier_slug:
-                row_tier = _resolve_tier(row_tier_slug)
-                if row_tier is not None and row_tier.level > 0:
-                    _apply_tier_override(user, row_tier, granted_by)
-            elif apply_default_tier:
-                _apply_tier_override(user, default_tier, granted_by)
-
             # Per-row name / Stripe / Slack writes (issue #437). These are
             # all backwards-compatible: payloads without the keys behave the
             # same as before.
@@ -305,12 +304,33 @@ def import_contact_rows(rows, *, default_tag="", default_tier=None, granted_by=N
                 row_number=row_number,
                 warnings=result.warnings,
             )
-            _sync_stripe_tier_after_customer_id_import(
+            stripe_record = _sync_stripe_tier_after_customer_id_import(
                 user,
                 row,
                 row_number=row_number,
                 warnings=result.warnings,
             )
+
+            # Per-row tier wins over the default tier when both are set; the
+            # default tier still applies when the row has no tier of its own.
+            row_tier_slug = row.get("tier")
+            requested_tier = None
+            if row_tier_slug:
+                requested_tier = _resolve_tier(row_tier_slug)
+            elif apply_default_tier:
+                requested_tier = default_tier
+
+            if requested_tier is not None and requested_tier.level > 0:
+                if tier_assignment_mode == "stripe_validate":
+                    _apply_stripe_validated_tier_assignment(
+                        user,
+                        requested_tier,
+                        stripe_record=stripe_record,
+                        row_number=row_number,
+                        warnings=result.warnings,
+                    )
+                else:
+                    _apply_tier_override(user, requested_tier, granted_by)
             _apply_slack_member(
                 user,
                 row,
@@ -377,16 +397,51 @@ def _apply_write_once_id(
 def _sync_stripe_tier_after_customer_id_import(user, row, *, row_number, warnings):
     raw = row.get("stripe_customer_id")
     if not isinstance(raw, str):
-        return
+        return None
     stripe_customer_id = raw.strip()
     if not stripe_customer_id:
-        return
+        return None
     if user.stripe_customer_id != stripe_customer_id:
-        return
+        return None
 
     record = backfill_user_from_stripe(user)
     if record.status == "warning":
         warnings.append((row_number, record.message, "stripe_sync_warning"))
+    return record
+
+
+def _apply_stripe_validated_tier_assignment(
+    user,
+    requested_tier,
+    *,
+    stripe_record,
+    row_number,
+    warnings,
+):
+    if not user.stripe_customer_id:
+        warnings.append((
+            row_number,
+            requested_tier.slug,
+            "stripe_customer_id_required_for_tier_assignment",
+        ))
+        return
+
+    record = stripe_record or backfill_user_from_stripe(user, dry_run=True)
+    if record.status == "warning":
+        warnings.append((row_number, record.message, "stripe_tier_validation_failed"))
+        return
+
+    stripe_tier = record.new_tier_slug or ""
+    if stripe_tier != requested_tier.slug:
+        warnings.append((
+            row_number,
+            f"requested={requested_tier.slug}; stripe={stripe_tier or 'none'}",
+            "stripe_tier_mismatch",
+        ))
+        return
+
+    if stripe_record is None or stripe_record.status == "dry_run":
+        backfill_user_from_stripe(user)
 
 
 def _apply_slack_member(user, row, *, row_number, warnings):

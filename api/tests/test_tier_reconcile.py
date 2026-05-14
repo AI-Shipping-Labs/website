@@ -29,7 +29,6 @@ User = get_user_model()
 
 DIAGNOSTICS_URL = "/api/payments/tier-reconcile/diagnostics"
 APPLY_URL = "/api/payments/tier-reconcile"
-STRIPE_PRICES_URL = "/api/payments/stripe-prices"
 
 
 class StripePager:
@@ -102,17 +101,6 @@ class TierReconcileTestBase(TestCase):
             data=data,
             content_type="application/json",
             **self._auth_header(),
-        )
-
-    def _post_prices(self, body=None, *, raw_body=None, **headers):
-        data = raw_body if raw_body is not None else json.dumps(body or {})
-        request_headers = self._auth_header()
-        request_headers.update(headers)
-        return self.client.post(
-            STRIPE_PRICES_URL,
-            data=data,
-            content_type="application/json",
-            **request_headers,
         )
 
 
@@ -712,108 +700,3 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         )
         # Confirm we exercised the user we care about.
         self.assertEqual(body["users"][0]["email"], user.email)
-
-
-class StripePricesLookupTest(TierReconcileTestBase):
-    def test_lookup_returns_price_metadata_without_exposing_secret_key(self):
-        def retrieve_price(price_id, **kwargs):
-            self.assertEqual(kwargs["api_key"], "sk_test_reconcile")
-            self.assertEqual(kwargs["expand"], ["product"])
-            return {
-                "id": price_id,
-                "active": True,
-                "currency": "eur",
-                "unit_amount": 5000,
-                "unit_amount_decimal": "5000",
-                "billing_scheme": "per_unit",
-                "lookup_key": "main_monthly",
-                "nickname": "Main monthly",
-                "livemode": True,
-                "recurring": {
-                    "interval": "month",
-                    "interval_count": 1,
-                    "usage_type": "licensed",
-                },
-                "product": {
-                    "id": "prod_main",
-                    "name": "Main",
-                    "active": True,
-                },
-            }
-
-        with patch(
-            "api.views.tier_reconcile.stripe.Price.retrieve",
-            side_effect=retrieve_price,
-        ):
-            response = self._post_prices({
-                "price_ids": ["price_main_live", "price_main_live"],
-            })
-
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(body["count"], 1)
-        self.assertEqual(body["error_count"], 0)
-        self.assertEqual(body["errors"], [])
-        price = body["prices"][0]
-        self.assertEqual(price["id"], "price_main_live")
-        self.assertEqual(price["unit_amount"], 5000)
-        self.assertEqual(price["currency"], "eur")
-        self.assertEqual(price["recurring"]["interval"], "month")
-        self.assertEqual(price["product"]["name"], "Main")
-        self.assertNotIn("api_key", json.dumps(body))
-        self.assertNotIn("sk_test_reconcile", json.dumps(body))
-
-    def test_lookup_reports_stripe_errors_per_price(self):
-        def retrieve_price(price_id, **kwargs):
-            if price_id == "price_missing":
-                raise stripe.InvalidRequestError(
-                    "No such price",
-                    param="id",
-                )
-            return {
-                "id": price_id,
-                "active": True,
-                "currency": "eur",
-                "unit_amount": 1000,
-                "recurring": {},
-                "product": {},
-            }
-
-        with patch(
-            "api.views.tier_reconcile.stripe.Price.retrieve",
-            side_effect=retrieve_price,
-        ):
-            response = self._post_prices({
-                "price_ids": ["price_ok", "price_missing"],
-            })
-
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(body["count"], 1)
-        self.assertEqual(body["error_count"], 1)
-        self.assertEqual(body["prices"][0]["id"], "price_ok")
-        self.assertEqual(body["errors"][0]["id"], "price_missing")
-        self.assertEqual(body["errors"][0]["type"], "InvalidRequestError")
-
-    def test_lookup_validates_request_shape(self):
-        response = self._post_prices({"price_ids": "price_123"})
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["code"], "invalid_type")
-
-        response = self._post_prices({"price_ids": [""]})
-        self.assertEqual(response.status_code, 422)
-        self.assertEqual(response.json()["code"], "validation_error")
-
-    @override_settings(STRIPE_SECRET_KEY="")
-    def test_lookup_requires_configured_stripe_key(self):
-        response = self._post_prices({"price_ids": ["price_123"]})
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.json()["code"], "stripe_not_configured")
-
-    def test_lookup_requires_staff_token(self):
-        response = self.client.post(
-            STRIPE_PRICES_URL,
-            data=json.dumps({"price_ids": ["price_123"]}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 401)

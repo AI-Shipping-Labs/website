@@ -107,7 +107,9 @@ def contacts_import(request):
 
     ``default_tag`` / ``default_tier`` are optional and apply to every row.
     Per-row ``tags`` MERGE into the user's existing tags (idempotent). Per-row
-    ``tier`` (when level > 0) creates a long-lived ``TierOverride``.
+    ``tier`` (when level > 0) is accepted only when live Stripe confirms that
+    the user's active subscription maps to the same tier. Tier overrides are
+    intentionally not available through this endpoint.
 
     Returns ``{created, updated, skipped, malformed, warnings}`` matching the
     fields of ``ImportResult``.
@@ -139,6 +141,7 @@ def contacts_import(request):
         default_tag=default_tag,
         default_tier=default_tier,
         granted_by=request.user,
+        tier_assignment_mode="stripe_validate",
     )
 
     return JsonResponse(

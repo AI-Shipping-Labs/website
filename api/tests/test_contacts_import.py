@@ -85,21 +85,93 @@ class ContactsImportTest(TestCase):
             user = User.objects.get(email=email)
             self.assertIn("campaign-q1", user.tags)
 
-    def test_import_with_default_tier_creates_tier_override(self):
+    def test_import_with_default_tier_requires_stripe_customer_id(self):
         response = self._post({
             "contacts": [{"email": "tiered@test.com"}],
             "default_tier": "main",
         })
         self.assertEqual(response.status_code, 200)
         user = User.objects.get(email="tiered@test.com")
-        override = (
-            TierOverride.objects
-            .filter(user=user, is_active=True)
-            .select_related("override_tier")
-            .first()
+        self.assertFalse(
+            TierOverride.objects.filter(user=user, is_active=True).exists()
         )
-        self.assertIsNotNone(override)
-        self.assertEqual(override.override_tier.slug, "main")
+        self.assertEqual(user.tier.slug, "free")
+        warnings = response.json()["warnings"]
+        self.assertEqual(
+            warnings[0]["reason"],
+            "stripe_customer_id_required_for_tier_assignment",
+        )
+
+    def test_import_with_matching_stripe_tier_sets_direct_tier_not_override(self):
+        main = Tier.objects.get(slug="main")
+
+        def sync_from_stripe(user, **kwargs):
+            user.tier = main
+            user.subscription_id = "sub_MAIN"
+            user.save(update_fields=["tier", "subscription_id"])
+
+            class Record:
+                status = "changed"
+                new_tier_slug = "main"
+                message = "changed: free -> main"
+
+            return Record()
+
+        with mock.patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            side_effect=sync_from_stripe,
+        ):
+            response = self._post({
+                "contacts": [{
+                    "email": "tiered-stripe@test.com",
+                    "stripe_customer_id": "cus_MAIN",
+                }],
+                "default_tier": "main",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        user = User.objects.get(email="tiered-stripe@test.com")
+        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.subscription_id, "sub_MAIN")
+        self.assertFalse(
+            TierOverride.objects.filter(user=user, is_active=True).exists()
+        )
+        self.assertEqual(response.json()["warnings"], [])
+
+    def test_import_refuses_tier_assignment_when_stripe_tier_differs(self):
+        main = Tier.objects.get(slug="main")
+
+        def sync_from_stripe(user, **kwargs):
+            user.tier = main
+            user.save(update_fields=["tier"])
+
+            class Record:
+                status = "changed"
+                new_tier_slug = "main"
+                message = "changed: free -> main"
+
+            return Record()
+
+        with mock.patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            side_effect=sync_from_stripe,
+        ):
+            response = self._post({
+                "contacts": [{
+                    "email": "tier-mismatch@test.com",
+                    "stripe_customer_id": "cus_MAIN",
+                    "tier": "premium",
+                }],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        user = User.objects.get(email="tier-mismatch@test.com")
+        self.assertEqual(user.tier.slug, "main")
+        self.assertFalse(
+            TierOverride.objects.filter(user=user, is_active=True).exists()
+        )
+        warnings = response.json()["warnings"]
+        self.assertEqual(warnings[0]["reason"], "stripe_tier_mismatch")
 
     def test_import_malformed_email_is_warned_not_raised(self):
         response = self._post({

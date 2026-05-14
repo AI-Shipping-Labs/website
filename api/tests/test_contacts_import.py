@@ -241,3 +241,528 @@ class ContactsImportTest(TestCase):
         )
         self.assertEqual(response.status_code, 405)
         self.assertEqual(response.json(), {"error": "Method not allowed"})
+
+
+class ContactsImportAuthTest(TestCase):
+    """Auth gates on ``POST /api/contacts/import`` (issue #636 AC1)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email="staff@test.com",
+            password="testpass",
+            is_staff=True,
+        )
+        cls.token = Token.objects.create(user=cls.staff, name="test")
+
+    def test_import_rejects_unauthenticated_request(self):
+        """Issue #636: no Authorization header -> 401 and no users written."""
+        users_before = User.objects.count()
+        response = self.client.post(
+            "/api/contacts/import",
+            data=json.dumps({"contacts": [{"email": "anon@test.com"}]}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(User.objects.count(), users_before)
+        self.assertFalse(
+            User.objects.filter(email="anon@test.com").exists()
+        )
+
+    def test_import_rejects_non_staff_token(self):
+        """Issue #636: token whose owner lost is_staff -> 401.
+
+        ``Token.clean()`` blocks creating a token for a non-staff user, so we
+        create the token while staff and then flip ``is_staff`` to False --
+        which is exactly the post-revocation drift the decorator must catch.
+        """
+        self.staff.is_staff = False
+        self.staff.save(update_fields=["is_staff"])
+
+        users_before = User.objects.count()
+        response = self.client.post(
+            "/api/contacts/import",
+            data=json.dumps({"contacts": [{"email": "demoted@test.com"}]}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Token {self.token.key}",
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(User.objects.count(), users_before)
+
+
+class ContactsImportStripeValidatedTierTest(TestCase):
+    """Stripe-validated tier assignment branches (issue #636 ACs 2-13)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.main_tier, _ = Tier.objects.get_or_create(
+            slug="main", defaults={"name": "Main", "level": 20},
+        )
+        cls.premium_tier, _ = Tier.objects.get_or_create(
+            slug="premium", defaults={"name": "Premium", "level": 30},
+        )
+        cls.admin = User.objects.create_user(
+            email="admin@test.com",
+            password="testpass",
+            is_staff=True,
+            is_superuser=True,
+        )
+        cls.token = Token.objects.create(user=cls.admin, name="test")
+
+    def _post(self, payload):
+        return self.client.post(
+            "/api/contacts/import",
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Token {self.token.key}",
+        )
+
+    # ------------------------------------------------------------------
+    # AC3 (matching tier via default_tier writes direct tier).
+    # ------------------------------------------------------------------
+
+    def test_import_default_tier_match_writes_direct_tier(self):
+        """default_tier (not per-row tier) + matching Stripe -> direct tier."""
+        main = Tier.objects.get(slug="main")
+
+        def sync_from_stripe(user, **kwargs):
+            user.tier = main
+            user.save(update_fields=["tier"])
+
+            class Record:
+                status = "changed"
+                new_tier_slug = "main"
+                message = "changed: free -> main"
+
+            return Record()
+
+        with mock.patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            side_effect=sync_from_stripe,
+        ):
+            response = self._post({
+                "contacts": [{
+                    "email": "default-match@test.com",
+                    "stripe_customer_id": "cus_DEFAULT",
+                }],
+                "default_tier": "main",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        user = User.objects.get(email="default-match@test.com")
+        self.assertEqual(user.tier.slug, "main")
+        self.assertFalse(
+            TierOverride.objects.filter(user=user, is_active=True).exists()
+        )
+        self.assertEqual(response.json()["warnings"], [])
+
+    # ------------------------------------------------------------------
+    # AC4 (warning value shape on mismatch).
+    # ------------------------------------------------------------------
+
+    def test_import_tier_mismatch_warning_value_includes_both_slugs(self):
+        """Mismatch warning value spells out requested and Stripe slugs."""
+        main = Tier.objects.get(slug="main")
+
+        def sync_from_stripe(user, **kwargs):
+            user.tier = main
+            user.save(update_fields=["tier"])
+
+            class Record:
+                status = "changed"
+                new_tier_slug = "main"
+                message = "changed: free -> main"
+
+            return Record()
+
+        with mock.patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            side_effect=sync_from_stripe,
+        ):
+            response = self._post({
+                "contacts": [{
+                    "email": "mismatch-value@test.com",
+                    "stripe_customer_id": "cus_MAIN",
+                    "tier": "premium",
+                }],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        warnings = response.json()["warnings"]
+        mismatch = next(
+            (w for w in warnings if w["reason"] == "stripe_tier_mismatch"),
+            None,
+        )
+        self.assertIsNotNone(mismatch)
+        self.assertIn("requested=premium", mismatch["value"])
+        self.assertIn("stripe=main", mismatch["value"])
+
+    # ------------------------------------------------------------------
+    # AC5 (Stripe lookup warning short-circuits).
+    # ------------------------------------------------------------------
+
+    def test_import_refuses_tier_when_stripe_returns_warning(self):
+        """Stripe lookup returning status='warning' -> tier unchanged + warning."""
+
+        class Record:
+            status = "warning"
+            new_tier_slug = ""
+            message = (
+                "warning: active Stripe subscription sub_X uses unknown price "
+                "price_abc; tier unchanged"
+            )
+
+        # User already exists with a customer id so the validation branch
+        # reaches the dry-run lookup (no customer-id sync to short-circuit on).
+        user = User.objects.create_user(
+            email="unknown-price@test.com",
+            password=None,
+            stripe_customer_id="cus_WARN",
+        )
+
+        with mock.patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            return_value=Record(),
+        ):
+            response = self._post({
+                "contacts": [{
+                    "email": "unknown-price@test.com",
+                    "tier": "main",
+                }],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "free")
+        self.assertFalse(
+            TierOverride.objects.filter(user=user, is_active=True).exists()
+        )
+        warnings = response.json()["warnings"]
+        self.assertTrue(
+            any(w["reason"] == "stripe_tier_validation_failed" for w in warnings),
+            f"Expected stripe_tier_validation_failed warning in {warnings}",
+        )
+
+    def test_import_refuses_tier_when_stripe_has_no_active_subscription(self):
+        """No active Stripe subscription -> validation failure, tier unchanged."""
+
+        class Record:
+            status = "warning"
+            new_tier_slug = ""
+            message = (
+                "warning: no active Stripe subscription for paid user "
+                "no-sub@test.com; leaving tier free unchanged"
+            )
+
+        user = User.objects.create_user(
+            email="no-sub@test.com",
+            password=None,
+            stripe_customer_id="cus_NOSUB",
+        )
+
+        with mock.patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            return_value=Record(),
+        ):
+            response = self._post({
+                "contacts": [{
+                    "email": "no-sub@test.com",
+                    "tier": "main",
+                }],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "free")
+        warnings = response.json()["warnings"]
+        self.assertTrue(
+            any(w["reason"] == "stripe_tier_validation_failed" for w in warnings),
+        )
+
+    # ------------------------------------------------------------------
+    # AC6 (never creates a TierOverride row, regardless of branch).
+    # ------------------------------------------------------------------
+
+    def test_import_never_creates_tier_override_on_match(self):
+        main = Tier.objects.get(slug="main")
+
+        def sync_from_stripe(user, **kwargs):
+            user.tier = main
+            user.save(update_fields=["tier"])
+
+            class Record:
+                status = "changed"
+                new_tier_slug = "main"
+                message = "changed"
+
+            return Record()
+
+        with mock.patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            side_effect=sync_from_stripe,
+        ):
+            response = self._post({
+                "contacts": [{
+                    "email": "no-override-match@test.com",
+                    "stripe_customer_id": "cus_MATCH",
+                    "tier": "main",
+                }],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        user = User.objects.get(email="no-override-match@test.com")
+        self.assertEqual(
+            TierOverride.objects.filter(user=user, is_active=True).count(),
+            0,
+        )
+
+    def test_import_never_creates_tier_override_on_mismatch(self):
+        main = Tier.objects.get(slug="main")
+
+        def sync_from_stripe(user, **kwargs):
+            user.tier = main
+            user.save(update_fields=["tier"])
+
+            class Record:
+                status = "changed"
+                new_tier_slug = "main"
+                message = "changed"
+
+            return Record()
+
+        with mock.patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            side_effect=sync_from_stripe,
+        ):
+            response = self._post({
+                "contacts": [{
+                    "email": "no-override-mismatch@test.com",
+                    "stripe_customer_id": "cus_MAIN",
+                    "tier": "premium",
+                }],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        user = User.objects.get(email="no-override-mismatch@test.com")
+        self.assertEqual(
+            TierOverride.objects.filter(user=user, is_active=True).count(),
+            0,
+        )
+
+    def test_import_never_creates_tier_override_when_stripe_missing(self):
+        """No stripe_customer_id + paid tier request -> no override row."""
+        response = self._post({
+            "contacts": [{
+                "email": "no-override-missing@test.com",
+                "tier": "main",
+            }],
+        })
+        self.assertEqual(response.status_code, 200)
+        user = User.objects.get(email="no-override-missing@test.com")
+        self.assertEqual(
+            TierOverride.objects.filter(user=user, is_active=True).count(),
+            0,
+        )
+
+    # ------------------------------------------------------------------
+    # AC8 (idempotency of a matching payload).
+    # ------------------------------------------------------------------
+
+    def test_import_matching_payload_is_idempotent(self):
+        """Second identical import: no warnings, no new overrides, no commit re-run.
+
+        After the first call, the user is already on ``main`` and the
+        customer_id is set. The second call must:
+
+        - leave the user on ``main``,
+        - emit no warnings,
+        - not create any ``TierOverride`` rows,
+        - and not re-issue a non-dry-run backfill (validation path's dry-run
+          finds nothing to commit and short-circuits).
+        """
+        main = Tier.objects.get(slug="main")
+
+        # Stateful mock: the very first call (customer-id sync) mutates the
+        # user to match Stripe. Subsequent calls return "skipped"/"dry_run"
+        # because the tier already matches.
+        def sync_from_stripe(user, **kwargs):
+            dry_run = kwargs.get("dry_run", False)
+            already_on_main = (user.tier_id == main.pk)
+
+            if not already_on_main and not dry_run:
+                user.tier = main
+                user.subscription_id = "sub_MAIN"
+                user.save(update_fields=["tier", "subscription_id"])
+
+                class ChangedRecord:
+                    status = "changed"
+                    new_tier_slug = "main"
+                    message = "changed: free -> main"
+
+                return ChangedRecord()
+
+            # Already on the right tier: dry_run and non-dry-run both report
+            # "skipped" (the live backfill returns status="skipped" when
+            # nothing would change).
+            class SkippedRecord:
+                status = "skipped"
+                new_tier_slug = "main"
+                message = "no change: already on main"
+
+            return SkippedRecord()
+
+        payload = {
+            "contacts": [{
+                "email": "idempotent@test.com",
+                "stripe_customer_id": "cus_IDEM",
+                "tier": "main",
+            }],
+        }
+
+        with mock.patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            side_effect=sync_from_stripe,
+        ) as backfill:
+            r1 = self._post(payload)
+            calls_after_first = backfill.call_count
+
+            r2 = self._post(payload)
+            calls_after_second = backfill.call_count
+
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()["warnings"], [])
+
+        user = User.objects.get(email="idempotent@test.com")
+        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(
+            TierOverride.objects.filter(user=user, is_active=True).count(),
+            0,
+        )
+
+        # Second call did the dry-run lookup once, but did NOT re-issue a
+        # non-dry-run backfill once it saw the tier already matched.
+        delta = calls_after_second - calls_after_first
+        self.assertEqual(
+            delta,
+            1,
+            f"Expected exactly 1 backfill call on the idempotent second "
+            f"import (the dry_run validation), got {delta}",
+        )
+
+    # ------------------------------------------------------------------
+    # AC7 (single backfill call when customer_id is newly written).
+    # ------------------------------------------------------------------
+
+    def test_import_calls_backfill_once_when_stripe_customer_id_newly_set(self):
+        """First row sets customer_id AND requests matching tier -> 1 backfill call."""
+        main = Tier.objects.get(slug="main")
+
+        def sync_from_stripe(user, **kwargs):
+            user.tier = main
+            user.save(update_fields=["tier"])
+
+            class Record:
+                status = "changed"
+                new_tier_slug = "main"
+                message = "changed"
+
+            return Record()
+
+        with mock.patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            side_effect=sync_from_stripe,
+        ) as backfill:
+            response = self._post({
+                "contacts": [{
+                    "email": "single-call@test.com",
+                    "stripe_customer_id": "cus_SINGLE",
+                    "tier": "main",
+                }],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        # Exactly one call: the customer-id sync's record is reused by the
+        # validation path, so no second dry_run / commit call fires.
+        self.assertEqual(
+            backfill.call_count,
+            1,
+            f"Expected exactly 1 backfill call, got {backfill.call_count}",
+        )
+
+    def test_import_calls_backfill_with_dry_run_when_customer_id_unchanged(self):
+        """User already has customer_id; tier-only row -> dry_run + commit."""
+        main = Tier.objects.get(slug="main")
+        user = User.objects.create_user(
+            email="existing-cid@test.com",
+            password=None,
+            stripe_customer_id="cus_EXISTING",
+        )
+
+        call_log = []
+
+        def sync_from_stripe(user, **kwargs):
+            dry_run = kwargs.get("dry_run", False)
+            call_log.append({"dry_run": dry_run})
+            if not dry_run:
+                user.tier = main
+                user.save(update_fields=["tier"])
+
+                class ChangedRecord:
+                    status = "changed"
+                    new_tier_slug = "main"
+                    message = "changed: free -> main"
+
+                return ChangedRecord()
+
+            class DryRunRecord:
+                status = "dry_run"
+                new_tier_slug = "main"
+                message = "would change: free -> main"
+
+            return DryRunRecord()
+
+        with mock.patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            side_effect=sync_from_stripe,
+        ):
+            response = self._post({
+                "contacts": [{
+                    "email": "existing-cid@test.com",
+                    "tier": "main",
+                }],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "main")
+        # Exactly two calls: dry_run first (validation), then a real commit
+        # (because the dry_run reported changes pending).
+        self.assertEqual(
+            len(call_log),
+            2,
+            f"Expected 2 backfill calls (dry_run + commit), got {call_log}",
+        )
+        self.assertEqual(call_log[0]["dry_run"], True)
+        self.assertEqual(call_log[1]["dry_run"], False)
+
+    # ------------------------------------------------------------------
+    # AC9 (level-0 short-circuit).
+    # ------------------------------------------------------------------
+
+    def test_import_free_default_tier_does_not_call_stripe(self):
+        """default_tier='free' (level 0) -> no Stripe call, no warning."""
+        free = Tier.objects.get(slug="free")
+        self.assertEqual(free.level, 0)
+
+        with mock.patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+        ) as backfill:
+            response = self._post({
+                "contacts": [{"email": "level-zero@test.com"}],
+                "default_tier": "free",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        backfill.assert_not_called()
+        self.assertEqual(response.json()["warnings"], [])

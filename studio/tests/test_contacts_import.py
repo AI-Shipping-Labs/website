@@ -234,6 +234,35 @@ class RunImportTest(TestCase):
         delta = override.expires_at - timezone.now()
         self.assertGreater(delta.days, 9 * 365)
 
+    def test_studio_csv_import_still_creates_tier_override_for_paid_tier(self):
+        """Issue #636: API path skips overrides, but Studio CSV path must keep
+        creating long-lived overrides for paid tiers picked from the dropdown.
+
+        ``run_import`` calls ``import_contact_rows`` with the default
+        ``tier_assignment_mode='override'``, so the override branch fires
+        regardless of whether the user has a Stripe customer ID. This
+        regression-locks the Studio operator workflow against the API change.
+        """
+        parsed = self._parse(_build_csv(
+            ('email',),
+            ('studio-override@test.com',),
+        ))
+        result = run_import(
+            parsed, email_column='email', tag='', tier=self.main_tier,
+            granted_by=self.staff,
+        )
+        self.assertEqual(result.created, 1)
+        user = User.objects.get(email='studio-override@test.com')
+        # Stripe is never consulted from the Studio path (the user has no
+        # stripe_customer_id) and the long-lived override IS created.
+        self.assertEqual(user.stripe_customer_id, '')
+        override = TierOverride.objects.get(user=user, is_active=True)
+        self.assertEqual(override.override_tier, self.main_tier)
+        self.assertEqual(override.granted_by, self.staff)
+        # The override duration matches _apply_tier_override's ~10y constant.
+        delta = override.expires_at - timezone.now()
+        self.assertGreater(delta.days, 9 * 365)
+
     def test_tier_override_deactivates_existing_active_override(self):
         existing = User.objects.create_user(email='upg@test.com', password='x')
         prior = TierOverride.objects.create(

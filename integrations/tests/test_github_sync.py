@@ -22,6 +22,8 @@ import tempfile
 from datetime import date
 from unittest.mock import MagicMock, patch
 
+from boto3.exceptions import S3UploadFailedError
+from botocore.exceptions import ClientError, NoCredentialsError
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 from django.test import Client, TestCase, override_settings, tag
@@ -2520,13 +2522,120 @@ class S3ImageUploadTest(TestCase):
         mock_paginator = MagicMock()
         mock_paginator.paginate.return_value = [{'Contents': []}]
         mock_s3.get_paginator.return_value = mock_paginator
-        mock_s3.upload_file.side_effect = Exception('Access Denied')
+        mock_s3.upload_file.side_effect = S3UploadFailedError('Access Denied')
 
         result = upload_images_to_s3(self.temp_dir, self.source)
 
         self.assertEqual(result['uploaded'], 0)
         self.assertEqual(len(result['errors']), 1)
         self.assertIn('Access Denied', result['errors'][0]['error'])
+
+    @override_settings(
+        AWS_S3_CONTENT_BUCKET='test-bucket',
+        AWS_S3_CONTENT_REGION='us-east-1',
+        AWS_ACCESS_KEY_ID='fake',
+        AWS_SECRET_ACCESS_KEY='fake',
+    )
+    @patch('integrations.services.github_sync.media.boto3.client')
+    def test_expected_client_creation_error_recorded(self, mock_boto_client):
+        from integrations.services.github import upload_images_to_s3
+
+        mock_boto_client.side_effect = NoCredentialsError()
+
+        result = upload_images_to_s3(self.temp_dir, self.source)
+
+        self.assertEqual(result['uploaded'], 0)
+        self.assertEqual(result['skipped'], 0)
+        self.assertEqual(len(result['errors']), 1)
+        self.assertEqual(result['errors'][0]['file'], '')
+        self.assertIn('Unable to locate credentials', result['errors'][0]['error'])
+
+    @override_settings(
+        AWS_S3_CONTENT_BUCKET='test-bucket',
+        AWS_S3_CONTENT_REGION='us-east-1',
+        AWS_ACCESS_KEY_ID='fake',
+        AWS_SECRET_ACCESS_KEY='fake',
+    )
+    @patch('integrations.services.github_sync.media.boto3.client')
+    def test_expected_list_error_logs_and_uploads_with_empty_etag_index(self, mock_boto_client):
+        from integrations.services.github import upload_images_to_s3
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.side_effect = ClientError(
+            {
+                'Error': {
+                    'Code': 'AccessDenied',
+                    'Message': 'listing denied',
+                },
+            },
+            'ListObjectsV2',
+        )
+        mock_s3.get_paginator.return_value = mock_paginator
+
+        with self.assertLogs('integrations.services.github', level='WARNING') as logs:
+            result = upload_images_to_s3(self.temp_dir, self.source)
+
+        self.assertEqual(result['uploaded'], 1)
+        self.assertEqual(result['skipped'], 0)
+        self.assertEqual(result['errors'], [])
+        self.assertTrue(any('Failed to list S3 objects' in line for line in logs.output))
+        mock_s3.upload_file.assert_called_once()
+
+    @override_settings(
+        AWS_S3_CONTENT_BUCKET='test-bucket',
+        AWS_S3_CONTENT_REGION='us-east-1',
+        AWS_ACCESS_KEY_ID='fake',
+        AWS_SECRET_ACCESS_KEY='fake',
+    )
+    @patch('integrations.services.github_sync.media.boto3.client')
+    def test_unexpected_client_type_error_propagates(self, mock_boto_client):
+        from integrations.services.github import upload_images_to_s3
+
+        mock_boto_client.side_effect = TypeError('bad client argument')
+
+        with self.assertRaises(TypeError):
+            upload_images_to_s3(self.temp_dir, self.source)
+
+    @override_settings(
+        AWS_S3_CONTENT_BUCKET='test-bucket',
+        AWS_S3_CONTENT_REGION='us-east-1',
+        AWS_ACCESS_KEY_ID='fake',
+        AWS_SECRET_ACCESS_KEY='fake',
+    )
+    @patch('integrations.services.github_sync.media.boto3.client')
+    def test_unexpected_list_type_error_propagates(self, mock_boto_client):
+        from integrations.services.github import upload_images_to_s3
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.side_effect = TypeError('bad paginator state')
+        mock_s3.get_paginator.return_value = mock_paginator
+
+        with self.assertRaises(TypeError):
+            upload_images_to_s3(self.temp_dir, self.source)
+
+    @override_settings(
+        AWS_S3_CONTENT_BUCKET='test-bucket',
+        AWS_S3_CONTENT_REGION='us-east-1',
+        AWS_ACCESS_KEY_ID='fake',
+        AWS_SECRET_ACCESS_KEY='fake',
+    )
+    @patch('integrations.services.github_sync.media.boto3.client')
+    def test_unexpected_upload_type_error_propagates(self, mock_boto_client):
+        from integrations.services.github import upload_images_to_s3
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = [{'Contents': []}]
+        mock_s3.get_paginator.return_value = mock_paginator
+        mock_s3.upload_file.side_effect = TypeError('bad upload state')
+
+        with self.assertRaises(TypeError):
+            upload_images_to_s3(self.temp_dir, self.source)
 
 
 class S3KillSwitchTest(TestCase):

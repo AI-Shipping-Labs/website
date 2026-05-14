@@ -6,6 +6,7 @@ import os
 import re
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
 
 from integrations.config import get_config
@@ -139,7 +140,7 @@ def upload_images_to_s3(content_dir, source):
             aws_access_key_id=get_config('AWS_ACCESS_KEY_ID'),
             aws_secret_access_key=get_config('AWS_SECRET_ACCESS_KEY'),
         )
-    except Exception as e:
+    except (BotoCoreError, ClientError) as e:
         logger.warning('Failed to create S3 client: %s', e)
         return {'uploaded': 0, 'skipped': 0, 'errors': [{'file': '', 'error': str(e)}]}
 
@@ -152,7 +153,7 @@ def upload_images_to_s3(content_dir, source):
             for obj in page.get('Contents', []):
                 # ETag is quoted, e.g. '"d41d8cd98f00b204e9800998ecf8427e"'
                 existing_etags[obj['Key']] = obj['ETag'].strip('"')
-    except Exception as e:
+    except (BotoCoreError, ClientError) as e:
         logger.warning('Failed to list S3 objects: %s', e)
 
     for root, dirs, files in os.walk(content_dir):
@@ -184,7 +185,7 @@ def upload_images_to_s3(content_dir, source):
                     },
                 )
                 stats['uploaded'] += 1
-            except Exception as e:
+            except (BotoCoreError, ClientError, boto3.exceptions.S3UploadFailedError) as e:
                 stats['errors'].append({'file': rel_path, 'error': str(e)})
                 logger.warning('Failed to upload %s to S3: %s', rel_path, e)
 
@@ -230,4 +231,3 @@ def _check_broken_image_refs(body, rel_path, repo_name, base_dir, known_images, 
                 'Broken image reference in %s: %s not found in repo',
                 rel_path, img_path,
             )
-

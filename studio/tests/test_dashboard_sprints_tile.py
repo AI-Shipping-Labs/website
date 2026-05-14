@@ -130,6 +130,29 @@ class StudioDashboardSprintsTileQueryCountTest(TestCase):
     two counts are equal. If anyone slips in a per-sprint annotation
     or a per-plan select, the second measurement would be larger and
     this test fails.
+
+    Determinism note: the dashboard route triggers a handful of
+    one-time-per-process cache-miss queries that fire only on the FIRST
+    request after a Python interpreter starts:
+
+    - ``integrations.middleware.RedirectMiddleware`` reads
+      ``Redirect`` via ``cache.get('active_redirects')`` and caches the
+      result in the default ``LocMemCache`` for 5 minutes.
+    - ``integrations.config.get_config`` (called from the site_context
+      and env-mismatch context processors) reads ``IntegrationSetting``
+      once and stashes the rows in a module-level dict.
+
+    Both caches survive ``TestCase`` rollback because they live in
+    process memory, not in the test DB. Without explicit pre-warming
+    the test would observe two extra queries on whichever measurement
+    happened first in the process -- which depends on whether other
+    tests in the same parallel worker ran before us. CI's ``--parallel``
+    scheduler can dispatch us to either a cold or warm worker, so
+    ``baseline_count`` floated between 28 and 30 and the test failed
+    intermittently with both directions of inequality (28 != 30 and
+    28 != 29). We pre-warm via one throwaway ``GET /studio/`` in
+    ``setUp`` so both measurements see the warm-cache state and the
+    assertion observes only view-level query work.
     """
 
     def setUp(self):
@@ -137,6 +160,15 @@ class StudioDashboardSprintsTileQueryCountTest(TestCase):
             email='staff@test.com', password='pw', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='pw')
+        # Pre-warm process-level caches that the dashboard touches via
+        # middleware + context processors so the measured GETs both
+        # start from the same warm state. See class docstring.
+        self._warm_process_caches()
+
+    def _warm_process_caches(self):
+        """Discard one dashboard response purely to populate caches."""
+        response = self.client.get('/studio/')
+        self.assertEqual(response.status_code, 200)
 
     def _measure_dashboard_queries(self):
         from django.db import connection

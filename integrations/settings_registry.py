@@ -20,8 +20,6 @@ INTEGRATION_GROUPS = [
         'keys': [
             {'key': 'STRIPE_SECRET_KEY', 'is_secret': True, 'description': 'Server-side Stripe API key. Get from Stripe Dashboard > Developers > API keys. Without this checkout fails.'},
             {'key': 'STRIPE_WEBHOOK_SECRET', 'is_secret': True, 'description': 'Verifies that webhook callbacks really came from Stripe. Get from Stripe Dashboard > Webhooks > [your endpoint].'},
-            {'key': 'STRIPE_PUBLISHABLE_KEY', 'is_secret': False, 'description': 'Public Stripe key embedded in the frontend. Get from Stripe Dashboard > Developers > API keys.'},
-            {'key': 'STRIPE_CHECKOUT_ENABLED', 'is_secret': False, 'is_boolean': True, 'description': 'Set true to use hosted Stripe Checkout sessions; false to use payment links.'},
             {'key': 'STRIPE_CUSTOMER_PORTAL_URL', 'is_secret': False, 'description': 'Stripe-hosted page where members manage their subscription. Get from Stripe Dashboard > Settings > Billing > Customer portal.'},
             {
                 'key': 'STRIPE_DASHBOARD_ACCOUNT_ID',

@@ -1,8 +1,8 @@
 """Current Stripe product-model tests.
 
-The checkout flag is intentionally ignored for local Checkout Session
-creation. Pricing uses Payment Links, paid members use Customer Portal,
-and legacy mutation APIs return 410.
+Pricing uses Payment Links, paid members use Customer Portal, and
+legacy mutation APIs (``/api/checkout/create``, subscription upgrade /
+downgrade / cancel, course purchase) return 410 unconditionally.
 """
 
 import json
@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from content.models import Course
 from tests.fixtures import TierSetupMixin
@@ -37,8 +37,7 @@ class DeprecatedCheckoutEndpointsTest(TierSetupMixin, TestCase):
     def setUp(self):
         self.client.login(email="flagoff@test.com", password="testpass123")
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_membership_checkout_endpoints_return_410_even_when_flag_enabled(self):
+    def test_membership_checkout_endpoints_return_410(self):
         endpoints = [
             (
                 "create",
@@ -81,8 +80,7 @@ class DeprecatedCheckoutEndpointsTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response.url)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_course_purchase_endpoint_returns_410_even_when_flag_enabled(self):
+    def test_course_purchase_endpoint_returns_410(self):
         response = self.client.post(
             f"/api/courses/{self.course.slug}/purchase",
             content_type="application/json",
@@ -99,8 +97,7 @@ class PricingPaymentLinksTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context["stripe_checkout_enabled"])
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_anonymous_user_sees_payment_links_even_when_checkout_flag_enabled(self):
+    def test_anonymous_user_sees_payment_links(self):
         response = self.client.get("/pricing")
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "/api/checkout/create")

@@ -224,8 +224,6 @@ class StudioUserListStripeIndicatorTest(TestCase):
         post_data = {
             'STRIPE_SECRET_KEY': '',
             'STRIPE_WEBHOOK_SECRET': '',
-            'STRIPE_PUBLISHABLE_KEY': '',
-            'STRIPE_CHECKOUT_ENABLED': 'false',
             'STRIPE_CUSTOMER_PORTAL_URL': '',
             'STRIPE_DASHBOARD_ACCOUNT_ID': 'acct_NEW',
         }

@@ -120,8 +120,6 @@ Keys to set in Studio:
 |-----|--------|-------|
 | `STRIPE_SECRET_KEY` | secret | Stripe Dashboard > Developers > API keys. |
 | `STRIPE_WEBHOOK_SECRET` | secret | Stripe Dashboard > Webhooks > select endpoint > Signing secret. |
-| `STRIPE_PUBLISHABLE_KEY` | non-secret | Same page as the secret key. |
-| `STRIPE_CHECKOUT_ENABLED` | non-secret | `true` to enable Stripe Checkout Sessions. |
 | `STRIPE_CUSTOMER_PORTAL_URL` | non-secret | Customer portal URL from the Billing settings page. |
 | `STRIPE_DASHBOARD_ACCOUNT_ID` | non-secret | Optional. Stripe account ID (e.g. `acct_1T1mfGB7mZrgL7H5`) used to deep-link the per-user Stripe icon on `/studio/users/` to `https://dashboard.stripe.com/<acct>/customers/<cus_id>`. Find it in the Stripe URL when signed in. When blank the icon renders without a link. |
 

@@ -16,7 +16,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase, override_settings, tag
+from django.test import Client, TestCase, tag
 
 from content.access import can_access
 from content.models import Course, CourseAccess, Module, Unit
@@ -267,8 +267,7 @@ class ApiCoursePurchaseTest(TierSetupMixin, TestCase):
             stripe_price_id='price_buy_me',
         )
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_returns_410_even_when_checkout_flag_enabled(self):
+    def test_returns_410(self):
         response = self.client.post('/api/courses/buy-me/purchase')
         self.assertEqual(response.status_code, 410)
         self.assertIn('deprecated', response.json()['error'])

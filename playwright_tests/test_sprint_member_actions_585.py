@@ -482,15 +482,15 @@ class TestLeaveCancelDialog:
 
 
 # --------------------------------------------------------------------------
-# Sub-feature 3: Django admin link
+# Sub-feature 3: user-facing pages hide admin actions
 # --------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestStaffOpensPlanInAdmin:
-    """Staff clicks the per-row admin link and lands on the change page."""
+class TestStaffDoesNotSeePlanAdminActions:
+    """Staff uses Studio for admin actions, not member-facing Plans pages."""
 
-    def test_staff_admin_link_navigates_to_admin_change_page(
+    def test_staff_admin_links_absent_everywhere(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -520,19 +520,19 @@ class TestStaffOpensPlanInAdmin:
             from accounts.models import User as _U
             alex_pk = _U.objects.get(email='alex@test.com').pk
             connection.close()
-            admin_link = page.locator(
-                f'[data-testid="cohort-row-admin-link-{alex_pk}"]',
-            )
-            admin_link.wait_for(state='visible')
-            admin_link.click()
 
-            # Lands on the admin plan change page.
-            page.wait_for_url(
-                f'{django_server}/admin/plans/plan/{plan.pk}/change/',
+            assert page.locator(
+                f'[data-testid="cohort-row-admin-link-{alex_pk}"]',
+            ).count() == 0
+            assert page.locator(
+                '[data-testid^="cohort-row-admin-link-"]',
+            ).count() == 0
+
+            page.goto(
+                f'{django_server}/sprints/{sprint.slug}/plans/{plan.pk}',
+                wait_until='domcontentloaded',
             )
-            # Page rendered (not a 500 / 404).
-            heading_text = page.locator('body').inner_text()
-            assert 'plan' in heading_text.lower()
+            assert page.locator('[data-testid="plan-admin-link"]').count() == 0
         finally:
             context.close()
 

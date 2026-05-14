@@ -109,7 +109,7 @@ class StudioSidebarMobileFixesTest(TestCase):
     # and min-h-[44px] — all six sections.
     # ------------------------------------------------------------------
 
-    SECTIONS = ('events', 'content', 'people', 'planning', 'marketing', 'operations')
+    SECTIONS = ('events', 'content', 'people', 'planning', 'communication', 'tracking', 'operations')
 
     def test_each_section_toggle_uses_lifted_contrast_and_44px(self):
         body = self._dashboard_body()

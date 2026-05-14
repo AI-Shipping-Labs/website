@@ -440,7 +440,12 @@ def _apply_stripe_validated_tier_assignment(
         ))
         return
 
-    if stripe_record is None or stripe_record.status == "dry_run":
+    # Only commit a non-dry-run backfill when (a) the customer-id sync above
+    # didn't already commit one for this row, AND (b) the dry-run lookup
+    # actually shows changes are pending. ``status == "skipped"`` means the
+    # user is already on the matching tier with no metadata to refresh, so
+    # the import stays idempotent and the Stripe API isn't hit twice.
+    if stripe_record is None and record.status == "dry_run":
         backfill_user_from_stripe(user)
 
 

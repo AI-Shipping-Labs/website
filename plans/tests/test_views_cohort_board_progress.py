@@ -50,6 +50,7 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
         cls.cohort_plan = Plan.objects.create(
             member=cls.cohort_member, sprint=cls.sprint,
             visibility='cohort',
+            goal='Ship cohort goal',
             focus_main='Cohort focus text',
         )
         cls.private_member = _make_user('private@test.com')
@@ -91,6 +92,14 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
         self.assertEqual(row['kind'], 'cohort')
         self.assertEqual(row['plan'].pk, self.cohort_plan.pk)
         self.assertContains(response, 'Cohort focus text')
+
+    def test_cohort_row_goal_visible_in_html(self):
+        response, _ = self._get_rows()
+        self.assertContains(
+            response,
+            f'data-testid="cohort-row-goal-{self.cohort_member.pk}"',
+        )
+        self.assertContains(response, 'Ship cohort goal')
 
     def test_private_row_kind_and_focus_not_in_html(self):
         response, rows = self._get_rows()

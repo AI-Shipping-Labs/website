@@ -1,10 +1,8 @@
-"""Tests for the staff-only "Open in Django admin" links (issue #585).
+"""Tests that user-facing plan pages do not render admin actions.
 
-The link MUST render only when ``request.user.is_staff`` is True. It
-appears in three places:
-- ``my_plan_detail.html`` header nav (own plan view, owner is staff).
-- ``member_plan_detail.html`` header nav (teammate plan view).
-- ``cohort_board.html`` per-row, next to each cohort member's name.
+Plan administration belongs in Studio, not in member-facing Plans
+surfaces. Staff may still use Django admin directly, but these pages
+must render the same navigation shape for staff and members.
 """
 
 import datetime
@@ -18,7 +16,7 @@ from plans.models import Plan, Sprint, SprintEnrollment
 User = get_user_model()
 
 
-class StaffAdminLinkOnPlanViewsTest(TestCase):
+class UserFacingPlanViewsNoAdminActionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.sprint = Sprint.objects.create(
@@ -47,7 +45,7 @@ class StaffAdminLinkOnPlanViewsTest(TestCase):
             sprint=cls.sprint, user=cls.staff,
         )
 
-    def test_my_plan_detail_renders_admin_link_for_staff_owner(self):
+    def test_my_plan_detail_hides_admin_link_for_staff_owner(self):
         # Make staff own a plan in this sprint.
         staff_plan = Plan.objects.create(
             member=self.staff, sprint=self.sprint, visibility='private',
@@ -62,8 +60,8 @@ class StaffAdminLinkOnPlanViewsTest(TestCase):
         )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="plan-admin-link"')
-        self.assertContains(
+        self.assertNotContains(response, 'data-testid="plan-admin-link"')
+        self.assertNotContains(
             response,
             f'/admin/plans/plan/{staff_plan.pk}/change/',
         )
@@ -85,7 +83,7 @@ class StaffAdminLinkOnPlanViewsTest(TestCase):
             f'/admin/plans/plan/{self.alex_plan.pk}/change/',
         )
 
-    def test_member_plan_detail_renders_admin_link_for_staff_viewer(self):
+    def test_member_plan_detail_hides_admin_link_for_staff_viewer(self):
         self.client.force_login(self.staff)
         url = reverse(
             'member_plan_detail',
@@ -96,8 +94,8 @@ class StaffAdminLinkOnPlanViewsTest(TestCase):
         )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="plan-admin-link"')
-        self.assertContains(
+        self.assertNotContains(response, 'data-testid="plan-admin-link"')
+        self.assertNotContains(
             response,
             f'/admin/plans/plan/{self.bob_plan.pk}/change/',
         )
@@ -115,24 +113,22 @@ class StaffAdminLinkOnPlanViewsTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="plan-admin-link"')
 
-    def test_cohort_board_per_row_admin_link_for_staff(self):
+    def test_cohort_board_hides_admin_links_for_staff(self):
         self.client.force_login(self.staff)
         url = reverse(
             'cohort_board', kwargs={'sprint_slug': self.sprint.slug},
         )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        # One per-row admin link for each plan-owning member visible
-        # to staff. Alex and Bob both have cohort plans.
-        self.assertContains(
+        self.assertNotContains(
             response,
             f'data-testid="cohort-row-admin-link-{self.alex.pk}"',
         )
-        self.assertContains(
+        self.assertNotContains(
             response,
             f'data-testid="cohort-row-admin-link-{self.bob.pk}"',
         )
-        self.assertContains(
+        self.assertNotContains(
             response,
             f'/admin/plans/plan/{self.alex_plan.pk}/change/',
         )

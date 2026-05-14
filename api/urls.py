@@ -38,6 +38,7 @@ from api.views.enrollments import (
     sprint_enrollments_collection,
 )
 from api.views.events import event_detail, events_collection
+from api.views.integration_settings import integration_settings_set
 from api.views.interview_notes import (
     interview_note_detail,
     interview_notes_create,
@@ -77,6 +78,14 @@ urlpatterns = [
         "events/<slug:slug>",
         event_detail,
         name="api_event_detail",
+    ),
+    # ---- Integration settings (issue #633) ----------------------------
+    # Write-only: POST only. No GET/LIST (Studio dashboard already covers
+    # that surface) and no DELETE method (empty-string value clears a row).
+    path(
+        "integrations/settings",
+        integration_settings_set,
+        name="api_integration_settings_set",
     ),
     # ---- Content sync sources (issue #634) ----------------------------
     path(

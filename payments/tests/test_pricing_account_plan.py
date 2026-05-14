@@ -43,7 +43,8 @@ class PricingAccountPlanStateTest(TestCase):
     def test_anonymous_visitors_keep_public_join_actions(self):
         states, response = self._pricing_states()
 
-        self.assertEqual(states["free"]["action_label"], "Get the newsletter")
+        self.assertEqual(states["free"]["action_label"], "Create an account")
+        self.assertEqual(states["free"]["action_kind"], "signup")
         for slug in ("basic", "main", "premium"):
             self.assertEqual(states[slug]["action_label"], "Join")
             self.assertEqual(states[slug]["action_kind"], "checkout")

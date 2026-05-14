@@ -13,8 +13,8 @@ def build_tier_state(tier, user, active_override):
             return {
                 "badge": "",
                 "note": "",
-                "action_label": "Get the newsletter",
-                "action_kind": "newsletter",
+                "action_label": "Create an account",
+                "action_kind": "signup",
             }
         return {
             "badge": "",

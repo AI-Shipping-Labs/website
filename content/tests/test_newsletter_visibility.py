@@ -60,18 +60,23 @@ class PricingFreeTierCTATest(TierSetupMixin, TestCase):
             email="member@test.com", password="testpass123"
         )
 
-    def test_anonymous_user_sees_free_tier_subscribe_button(self):
+    def test_anonymous_user_sees_free_tier_signup_cta(self):
         response = self.client.get("/pricing")
+        # Post-CTA-swap: free tier directs anonymous visitors at account
+        # signup instead of the newsletter anchor.
         self.assertContains(
             response,
-            '/#newsletter',
-            msg_prefix="Free tier Subscribe link should point to newsletter",
+            'href="/accounts/register/"',
+            msg_prefix="Free tier CTA should link to account signup",
         )
+        self.assertContains(response, "Create an account")
+        self.assertNotContains(response, 'href="/#newsletter"')
 
     def test_authenticated_user_does_not_see_free_tier_subscribe_button(self):
         self.client.login(email="member@test.com", password="testpass123")
         response = self.client.get("/pricing")
-        self.assertNotContains(response, '/#newsletter')
+        self.assertNotContains(response, 'href="/#newsletter"')
+        self.assertNotContains(response, "Create an account")
         self.assertContains(response, "Current free plan")
 
     def test_authenticated_user_still_sees_paid_tier_upgrade_buttons(self):

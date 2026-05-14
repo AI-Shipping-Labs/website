@@ -26,6 +26,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import User
+from email_app.services.email_service import EmailServiceError
 
 JWT_ALGORITHM = "HS256"
 FAST_PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
@@ -616,6 +617,61 @@ class PasswordResetRequestAPITest(TestCase):
     def test_reset_request_url_name(self):
         url = reverse("api_password_reset_request")
         self.assertEqual(url, "/api/password-reset-request")
+
+
+class EmailSendHelperExceptionHandlingTest(TestCase):
+    """Issue #605: email helpers soft-fail only expected EmailService errors."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(email="helper@example.com")
+
+    @patch("email_app.services.email_service.EmailService")
+    def test_send_verification_email_soft_fails_email_service_error(self, service_cls):
+        service_cls.return_value.send.side_effect = EmailServiceError("SES down")
+
+        from accounts.views.auth import _send_verification_email
+
+        with self.assertLogs("accounts.views.auth", level="ERROR") as logs:
+            result = _send_verification_email(self.user)
+
+        self.assertIsNone(result)
+        self.assertIn(
+            f"Failed to send verification email to {self.user.email} (user_id={self.user.pk})",
+            "\n".join(logs.output),
+        )
+
+    @patch("email_app.services.email_service.EmailService")
+    def test_send_verification_email_unexpected_error_propagates(self, service_cls):
+        service_cls.return_value.send.side_effect = RuntimeError("template bug")
+
+        from accounts.views.auth import _send_verification_email
+
+        with self.assertRaisesRegex(RuntimeError, "template bug"):
+            _send_verification_email(self.user)
+
+    @patch("email_app.services.email_service.EmailService")
+    def test_send_password_reset_email_soft_fails_email_service_error(self, service_cls):
+        service_cls.return_value.send.side_effect = EmailServiceError("SES down")
+
+        from accounts.views.auth import _send_password_reset_email
+
+        with self.assertLogs("accounts.views.auth", level="ERROR") as logs:
+            result = _send_password_reset_email(self.user)
+
+        self.assertIsNone(result)
+        self.assertIn(
+            f"Failed to send password reset email to {self.user.email} (user_id={self.user.pk})",
+            "\n".join(logs.output),
+        )
+
+    @patch("email_app.services.email_service.EmailService")
+    def test_send_password_reset_email_unexpected_error_propagates(self, service_cls):
+        service_cls.return_value.send.side_effect = RuntimeError("bad reset context")
+
+        from accounts.views.auth import _send_password_reset_email
+
+        with self.assertRaisesRegex(RuntimeError, "bad reset context"):
+            _send_password_reset_email(self.user)
 
 
 # ── Password Reset API ───────────────────────────────────────────────

@@ -24,6 +24,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
+from email_app.services.email_service import EmailServiceError
+
 User = get_user_model()
 
 JWT_ALGORITHM = "HS256"
@@ -688,6 +690,47 @@ class TokenGenerationTest(TestCase):
         )
         self.assertNotIn("exp", payload)
         self.assertEqual(payload["action"], "unsubscribe")
+
+
+class SubscribeVerificationEmailHelperTest(TestCase):
+    """Issue #605: newsletter email helper narrows best-effort failures."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(email="newsletter-helper@example.com")
+
+    @patch("email_app.services.email_service.EmailService")
+    def test_send_subscribe_verification_email_soft_fails_email_service_error(
+        self, service_cls,
+    ):
+        service_cls.return_value.send.side_effect = EmailServiceError("SES down")
+
+        from email_app.views.newsletter import _send_subscribe_verification_email
+
+        with self.assertLogs("email_app.views.newsletter", level="ERROR") as logs:
+            result = _send_subscribe_verification_email(
+                self.user,
+                redirect_to="/downloads/test",
+            )
+
+        self.assertIsNone(result)
+        self.assertIn(
+            (
+                f"Failed to send verification email to {self.user.email} "
+                f"(user_id={self.user.pk}, redirect_to=/downloads/test)"
+            ),
+            "\n".join(logs.output),
+        )
+
+    @patch("email_app.services.email_service.EmailService")
+    def test_send_subscribe_verification_email_unexpected_error_propagates(
+        self, service_cls,
+    ):
+        service_cls.return_value.send.side_effect = RuntimeError("bad newsletter context")
+
+        from email_app.views.newsletter import _send_subscribe_verification_email
+
+        with self.assertRaisesRegex(RuntimeError, "bad newsletter context"):
+            _send_subscribe_verification_email(self.user)
 
 
 # Issue #513 ----------------------------------------------------------------

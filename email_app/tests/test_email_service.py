@@ -14,6 +14,7 @@ Covers:
 
 from unittest.mock import MagicMock, patch
 
+from botocore.exceptions import ClientError
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
@@ -413,7 +414,15 @@ class EmailServiceSESIntegrationTest(TestCase):
     @patch('email_app.services.email_service.boto3')
     def test_send_ses_error_raises_exception(self, mock_boto3):
         mock_client = MagicMock()
-        mock_client.send_email.side_effect = Exception('SES down')
+        mock_client.send_email.side_effect = ClientError(
+            {
+                'Error': {
+                    'Code': 'ThrottlingException',
+                    'Message': 'SES down',
+                },
+            },
+            'SendEmail',
+        )
         mock_boto3.client.return_value = mock_client
 
         with (
@@ -423,6 +432,15 @@ class EmailServiceSESIntegrationTest(TestCase):
             self.service._send_ses('to@example.com', 'Sub', '<html/>')
         self.assertIn('Failed to send email via SES to to@example.com', logs.output[0])
         self.assertIn('SES send failed', str(ctx.exception))
+
+    @patch('email_app.services.email_service.boto3')
+    def test_send_ses_unexpected_error_propagates(self, mock_boto3):
+        mock_client = MagicMock()
+        mock_client.send_email.side_effect = RuntimeError('bad send kwargs')
+        mock_boto3.client.return_value = mock_client
+
+        with self.assertRaisesRegex(RuntimeError, 'bad send kwargs'):
+            self.service._send_ses('to@example.com', 'Sub', '<html/>')
 
     @override_settings(SES_TRANSACTIONAL_FROM_EMAIL='custom@example.com')
     @patch('email_app.services.email_service.boto3')

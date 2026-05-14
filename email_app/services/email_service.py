@@ -18,6 +18,7 @@ from pathlib import Path
 import boto3
 import frontmatter
 import markdown
+from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
 from django.template import Context, Template
 from django.template.loader import render_to_string
@@ -455,6 +456,6 @@ class EmailService:
         try:
             response = self.ses_client.send_email(**send_kwargs)
             return response.get("MessageId", "")
-        except Exception as e:
+        except (BotoCoreError, ClientError) as e:
             logger.exception("Failed to send email via SES to %s", to_email)
             raise EmailServiceError(f"SES send failed for {to_email}: {e}") from e

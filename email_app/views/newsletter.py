@@ -78,9 +78,9 @@ def _send_subscribe_verification_email(user, redirect_to=None):
     verify_url = f"{site_url}/api/verify-email?token={token}"
     ttl_days = resolve_unverified_ttl_days()
 
-    try:
-        from email_app.services.email_service import EmailService
+    from email_app.services.email_service import EmailService, EmailServiceError
 
+    try:
         service = EmailService()
 
         if redirect_to:
@@ -111,9 +111,12 @@ def _send_subscribe_verification_email(user, redirect_to=None):
                     "ttl_days": ttl_days,
                 },
             )
-    except Exception:
+    except EmailServiceError:
         logger.exception(
-            "Failed to send verification email to %s", user.email
+            "Failed to send verification email to %s (user_id=%s, redirect_to=%s)",
+            user.email,
+            user.pk,
+            redirect_to,
         )
 
 

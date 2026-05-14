@@ -190,9 +190,9 @@ def _send_verification_email(user):
     verify_url = f"{site_url}/api/verify-email?token={token}"
     ttl_days = resolve_unverified_ttl_days()
 
-    try:
-        from email_app.services.email_service import EmailService
+    from email_app.services.email_service import EmailService, EmailServiceError
 
+    try:
         service = EmailService()
         return service.send(
             user,
@@ -203,8 +203,12 @@ def _send_verification_email(user):
                 "ttl_days": ttl_days,
             },
         )
-    except Exception:
-        logger.exception("Failed to send verification email to %s", user.email)
+    except EmailServiceError:
+        logger.exception(
+            "Failed to send verification email to %s (user_id=%s)",
+            user.email,
+            user.pk,
+        )
         return None
 
 
@@ -292,13 +296,17 @@ def _send_password_reset_email(user):
     site_url = site_base_url()
     reset_url = f"{site_url}/api/password-reset?token={token}"
 
-    try:
-        from email_app.services.email_service import EmailService
+    from email_app.services.email_service import EmailService, EmailServiceError
 
+    try:
         service = EmailService()
         service.send(user, "password_reset", {"reset_url": reset_url})
-    except Exception:
-        logger.exception("Failed to send password reset email to %s", user.email)
+    except EmailServiceError:
+        logger.exception(
+            "Failed to send password reset email to %s (user_id=%s)",
+            user.email,
+            user.pk,
+        )
 
 
 @require_POST

@@ -116,13 +116,16 @@ class StudioDashboardTest(TestCase):
         self.assertContains(response, 'Recent Article')
 
     def test_dashboard_shows_pending_projects(self):
+        """The view still surfaces pending projects via context for the
+        attention summary; the dashboard no longer renders the project
+        titles in a 'Next up' panel.
+        """
         Project.objects.create(
             title='Pending Project', slug='pend',
             date=timezone.now().date(), status='pending_review', published=False,
         )
         response = self.client.get('/studio/')
         self.assertEqual(len(response.context['pending_projects']), 1)
-        self.assertContains(response, 'Pending Project')
 
     def test_dashboard_shows_sidebar_navigation(self):
         """The sidebar nav exposes the core content + outreach link labels.
@@ -202,7 +205,6 @@ class StudioDashboardTest(TestCase):
         self.assertContains(response, 'Attention')
         self.assertContains(response, 'Recent activity')
         self.assertContains(response, 'Quick actions')
-        self.assertContains(response, 'Needs Review')
         self.assertContains(
             response,
             f'{reverse("studio_project_list")}?status=pending_review',
@@ -273,7 +275,6 @@ class StudioDashboardTest(TestCase):
         self.assertEqual(list(response.context['recent_users']), [member])
         self.assertContains(response, 'recent-member@test.com')
         self.assertContains(response, 'Recently Edited')
-        self.assertContains(response, 'No upcoming events.')
 
     def test_dashboard_empty_states_render_without_recent_data(self):
         with patch('studio.views.dashboard.get_worker_status', return_value={

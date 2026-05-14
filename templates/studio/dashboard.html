@@ -120,89 +120,44 @@
   </div>
 </section>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-  <section class="bg-card border border-border rounded-lg p-5" data-testid="studio-dashboard-recent-activity" aria-labelledby="recent-activity-heading">
+<h2 id="recent-activity-heading" class="text-lg font-semibold text-foreground mb-4">Recent activity</h2>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6" data-testid="studio-dashboard-recent-activity" aria-labelledby="recent-activity-heading">
+  <section class="bg-card border border-border rounded-lg p-5">
     <div class="flex items-center justify-between gap-3 mb-4">
-      <h2 id="recent-activity-heading" class="text-lg font-semibold text-foreground">Recent activity</h2>
+      <h3 class="text-sm font-medium text-foreground">Recently joined</h3>
       <a href="{% url 'studio_user_list' %}" class="text-sm text-accent hover:underline">Users</a>
     </div>
-
-    <div class="space-y-5">
-      <div>
-        <h3 class="text-sm font-medium text-foreground mb-2">Recently joined</h3>
-        {% if recent_users %}
-          <ul class="divide-y divide-border">
-            {% for user in recent_users %}
-              <li class="py-2 flex items-center justify-between gap-3">
-                <a href="{% url 'studio_user_detail' user_id=user.pk %}" class="text-sm text-foreground hover:text-accent min-w-0 truncate">{{ user.email }}</a>
-                <span class="text-xs text-muted-foreground shrink-0">{{ user.date_joined|date:"M j" }}</span>
-              </li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <p class="text-sm text-muted-foreground rounded-lg border border-border bg-secondary/20 p-3" data-testid="studio-dashboard-recent-users-empty">No users yet.</p>
-        {% endif %}
-      </div>
-
-      <div>
-        <h3 class="text-sm font-medium text-foreground mb-2">Recently changed content</h3>
-        {% if recent_content %}
-          <ul class="divide-y divide-border">
-            {% for item in recent_content %}
-              <li class="py-2 flex items-center justify-between gap-3">
-                <span class="min-w-0">
-                  <a href="{{ item.url }}" class="block text-sm text-foreground hover:text-accent truncate">{{ item.title }}</a>
-                  <span class="block text-xs text-muted-foreground">{{ item.kind }} &middot; {{ item.status }}</span>
-                </span>
-                <span class="text-xs text-muted-foreground shrink-0">{{ item.updated_at|date:"M j" }}</span>
-              </li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <p class="text-sm text-muted-foreground rounded-lg border border-border bg-secondary/20 p-3" data-testid="studio-dashboard-recent-content-empty">No content changes yet.</p>
-        {% endif %}
-      </div>
-    </div>
+    {% if recent_users %}
+      <ul class="divide-y divide-border">
+        {% for user in recent_users %}
+          <li class="py-2 flex items-center justify-between gap-3">
+            <a href="{% url 'studio_user_detail' user_id=user.pk %}" class="text-sm text-foreground hover:text-accent min-w-0 truncate">{{ user.email }}</a>
+            <span class="text-xs text-muted-foreground shrink-0">{{ user.date_joined|date:"M j" }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-muted-foreground rounded-lg border border-border bg-secondary/20 p-3" data-testid="studio-dashboard-recent-users-empty">No users yet.</p>
+    {% endif %}
   </section>
 
-  <section class="bg-card border border-border rounded-lg p-5" aria-labelledby="upcoming-heading">
-    <div class="flex items-center justify-between gap-3 mb-4">
-      <h2 id="upcoming-heading" class="text-lg font-semibold text-foreground">Next up</h2>
-      <a href="{% url 'studio_event_list' %}" class="text-sm text-accent hover:underline">Events</a>
-    </div>
-
-    {% if pending_projects %}
-      <div class="mb-5">
-        <h3 class="text-sm font-medium text-foreground mb-2">Pending projects</h3>
-        <ul class="divide-y divide-border">
-          {% for project in pending_projects %}
-            <li class="py-2 flex items-center justify-between gap-3">
-              <span class="min-w-0">
-                <a href="{% url 'studio_project_review' project_id=project.pk %}" class="block text-sm text-foreground hover:text-accent truncate">{{ project.title }}</a>
-                <span class="block text-xs text-muted-foreground">by {{ project.author|default:"Unknown" }}</span>
-              </span>
-              <span class="text-xs px-2 py-1 rounded-full bg-yellow-500/20 text-yellow-300 shrink-0">Pending</span>
-            </li>
-          {% endfor %}
-        </ul>
-      </div>
+  <section class="bg-card border border-border rounded-lg p-5">
+    <h3 class="text-sm font-medium text-foreground mb-4">Recently changed content</h3>
+    {% if recent_content %}
+      <ul class="divide-y divide-border">
+        {% for item in recent_content %}
+          <li class="py-2 flex items-center justify-between gap-3">
+            <span class="min-w-0">
+              <a href="{{ item.url }}" class="block text-sm text-foreground hover:text-accent truncate">{{ item.title }}</a>
+              <span class="block text-xs text-muted-foreground">{{ item.kind }} &middot; {{ item.status }}</span>
+            </span>
+            <span class="text-xs text-muted-foreground shrink-0">{{ item.updated_at|date:"M j" }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-muted-foreground rounded-lg border border-border bg-secondary/20 p-3" data-testid="studio-dashboard-recent-content-empty">No content changes yet.</p>
     {% endif %}
-
-    <div>
-      <h3 class="text-sm font-medium text-foreground mb-2">Upcoming events</h3>
-      {% if upcoming_events %}
-        <ul class="divide-y divide-border">
-          {% for event in upcoming_events %}
-            <li class="py-2 flex items-center justify-between gap-3">
-              <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="text-sm text-foreground hover:text-accent min-w-0 truncate">{{ event.title }}</a>
-              <span class="text-xs text-muted-foreground shrink-0">{{ event.start_datetime|date:"M j" }}</span>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p class="text-sm text-muted-foreground rounded-lg border border-border bg-secondary/20 p-3" data-testid="studio-dashboard-upcoming-events-empty">No upcoming events.</p>
-      {% endif %}
-    </div>
   </section>
 </div>
 {% endblock %}

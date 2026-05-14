@@ -371,6 +371,32 @@ class ImageURLRewriteTest(TestCase):
         result = rewrite_image_urls(md, 'AI-Shipping-Labs/blog', 'articles')
         self.assertIn('articles/screenshot.png', result)
 
+    @override_settings(CONTENT_CDN_BASE='https://cdn.example.com/content-images')
+    def test_root_relative_public_image_uses_public_repo_path(self):
+        md = '![img](/images/blog/post/screenshot.png)'
+        result = rewrite_image_urls(
+            md, 'AI-Shipping-Labs/ai-shipping-labs.github.io', 'content/blog',
+        )
+        self.assertIn(
+            'https://cdn.example.com/content-images/'
+            'ai-shipping-labs.github.io/public/images/blog/post/screenshot.png',
+            result,
+        )
+        self.assertNotIn('content/blog/images/blog/post', result)
+
+    @override_settings(CONTENT_CDN_BASE='')
+    def test_without_cdn_uses_raw_github_url(self):
+        md = '![img](/images/blog/post/screenshot.png)'
+        result = rewrite_image_urls(
+            md, 'AI-Shipping-Labs/ai-shipping-labs.github.io', 'content/blog',
+        )
+        self.assertIn(
+            'https://raw.githubusercontent.com/'
+            'AI-Shipping-Labs/ai-shipping-labs.github.io/main/'
+            'public/images/blog/post/screenshot.png',
+            result,
+        )
+
     def test_no_images(self):
         md = 'Just some text without images.'
         result = rewrite_image_urls(md, 'test/repo', '')

@@ -655,8 +655,11 @@ class DashboardDisplayTest(TierOverrideTestBase):
         self.admin = self._make_staff(email="dash_admin@example.com")
 
     def test_32_free_user_with_premium_override_dashboard(self):
-        """#32: Free user with Premium override -> tier badge shows
-        'Premium (trial)'."""
+        """#32: Free user with Premium override keeps dashboard context.
+
+        The visible override notice now lives on /account/, not the compact
+        dashboard.
+        """
         user = self._make_user(email="dash32@example.com", password="testpass")
         self._make_override(user, self.premium_tier, granted_by=self.admin)
 
@@ -664,7 +667,11 @@ class DashboardDisplayTest(TierOverrideTestBase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["override_tier_name"], "Premium")
-        self.assertContains(response, "Premium (trial)")
+        self.assertNotContains(response, "Premium (trial)")
+
+        account_response = self.client.get("/account/")
+        self.assertEqual(account_response.status_code, 200)
+        self.assertContains(account_response, "Temporary Premium access")
 
     def test_33_free_user_with_main_override_quick_actions(self):
         """#33: Free user with Main override -> quick actions include Activities."""

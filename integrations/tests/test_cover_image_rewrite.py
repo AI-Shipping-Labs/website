@@ -58,11 +58,11 @@ class RewriteCoverImageUrlTest(TestCase):
         self.assertEqual(result, '')
 
     @override_settings(CONTENT_CDN_BASE='https://cdn.example.com')
-    def test_leading_slash_stripped(self):
+    def test_site_root_image_path_maps_to_public_images(self):
         result = rewrite_cover_image_url(
             '/images/cover.jpg', self.source, 'blog/my-post.md',
         )
-        self.assertEqual(result, 'https://cdn.example.com/content/blog/images/cover.jpg')
+        self.assertEqual(result, 'https://cdn.example.com/content/public/images/cover.jpg')
 
     @override_settings(CONTENT_CDN_BASE='https://cdn.example.com')
     def test_path_normalization_removes_dotdot(self):
@@ -77,6 +77,31 @@ class RewriteCoverImageUrlTest(TestCase):
             'cover.jpg', self.source, 'my-post.md',
         )
         self.assertEqual(result, 'https://cdn.example.com/content/cover.jpg')
+
+    @override_settings(CONTENT_CDN_BASE='https://cdn.example.com')
+    def test_root_relative_public_image_path(self):
+        result = rewrite_cover_image_url(
+            '/images/blog/post/cover.jpg',
+            self.source,
+            'content/blog/my-post.md',
+        )
+        self.assertEqual(
+            result,
+            'https://cdn.example.com/content/public/images/blog/post/cover.jpg',
+        )
+
+    @override_settings(CONTENT_CDN_BASE='')
+    def test_missing_cdn_falls_back_to_raw_github_url(self):
+        result = rewrite_cover_image_url(
+            '/images/blog/post/cover.jpg',
+            self.source,
+            'content/blog/my-post.md',
+        )
+        self.assertEqual(
+            result,
+            'https://raw.githubusercontent.com/AI-Shipping-Labs/content/main/'
+            'public/images/blog/post/cover.jpg',
+        )
 
 
 class ArticleCoverImageSyncTest(TestCase):

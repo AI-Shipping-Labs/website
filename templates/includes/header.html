@@ -237,7 +237,7 @@
           <span data-testid="mobile-notifications-label">Notifications</span>
           <span id="mobile-notification-badge" class="absolute -top-1 -right-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"></span>
         </a>
-        <a href="{% url 'account' %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
+        <a href="{% url 'account' %}" id="mobile-account-link" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Account
         </a>
         {% if user_latest_plan %}

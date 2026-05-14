@@ -13,6 +13,31 @@ from integrations.config import get_config
 from integrations.services.github_sync.common import IMAGE_EXTENSIONS, logger
 
 
+def _image_base_url(repo_name):
+    """Return the public base URL and whether it expects a repo prefix."""
+    cdn_base = get_config('CONTENT_CDN_BASE', '')
+    if cdn_base:
+        return cdn_base.rstrip('/'), True
+    return f'https://raw.githubusercontent.com/{repo_name}/main', False
+
+
+def _repo_short(repo_name):
+    return repo_name.split('/')[-1] if '/' in repo_name else repo_name
+
+
+def _resolve_image_path(path, base_path=''):
+    """Resolve an author image path to the storage path used by sync."""
+    clean_path = path.lstrip('/')
+    if path.startswith('/'):
+        # Static-site content commonly references files under public/ as
+        # root-relative URLs. The S3 uploader preserves repo paths, so map
+        # /images/foo.png to public/images/foo.png.
+        if clean_path.startswith('images/'):
+            return os.path.normpath(os.path.join('public', clean_path))
+        return os.path.normpath(clean_path)
+    return os.path.normpath(os.path.join(base_path, clean_path))
+
+
 def rewrite_image_urls(markdown_text, repo_name, base_path=''):
     """Rewrite relative image URLs in markdown and HTML to absolute storage URLs.
 
@@ -24,17 +49,17 @@ def rewrite_image_urls(markdown_text, repo_name, base_path=''):
     Returns:
         str: Markdown with rewritten image URLs.
     """
-    cdn_base = get_config('CONTENT_CDN_BASE', '/static/content-images')
-    repo_short = repo_name.split('/')[-1] if '/' in repo_name else repo_name
+    image_base, include_repo_prefix = _image_base_url(repo_name)
+    repo_short = _repo_short(repo_name)
 
     def _rewrite_path(path):
         """Rewrite a single image path if it's relative."""
-        if path.startswith(('http://', 'https://')):
+        if path.startswith(('http://', 'https://', 'data:')):
             return path
-        # Strip leading slash for absolute-within-repo paths
-        clean_path = path.lstrip('/')
-        full_path = os.path.normpath(os.path.join(base_path, clean_path))
-        return f'{cdn_base}/{repo_short}/{full_path}'
+        full_path = _resolve_image_path(path, base_path)
+        if include_repo_prefix:
+            return f'{image_base}/{repo_short}/{full_path}'
+        return f'{image_base}/{full_path}'
 
     def replace_md_image(match):
         alt = match.group(1)
@@ -77,12 +102,12 @@ def rewrite_cover_image_url(cover_image, source, rel_path):
     if cover_image.startswith(('http://', 'https://')):
         return cover_image
 
-    cdn_base = get_config('CONTENT_CDN_BASE', '/static/content-images')
-    repo_short = source.repo_name.split('/')[-1] if '/' in source.repo_name else source.repo_name
-    clean_path = cover_image.lstrip('/')
     base_dir = os.path.dirname(rel_path)
-    full_path = os.path.normpath(os.path.join(base_dir, clean_path))
-    return f'{cdn_base}/{repo_short}/{full_path}'
+    full_path = _resolve_image_path(cover_image, base_dir)
+    image_base, include_repo_prefix = _image_base_url(source.repo_name)
+    if include_repo_prefix:
+        return f'{image_base}/{source.short_name}/{full_path}'
+    return f'{image_base}/{full_path}'
 
 
 def _md5_file(filepath, chunk_size=8192):
@@ -220,8 +245,7 @@ def _check_broken_image_refs(body, rel_path, repo_name, base_dir, known_images, 
         img_path = match.group(2)
         if img_path.startswith(('http://', 'https://')):
             continue
-        clean_path = img_path.lstrip('/')
-        resolved = os.path.normpath(os.path.join(base_dir, clean_path))
+        resolved = _resolve_image_path(img_path, base_dir)
         if resolved not in known_images:
             errors.append({
                 'file': rel_path,

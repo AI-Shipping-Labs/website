@@ -41,12 +41,13 @@ class FooterNewsletterTest(TierSetupMixin, TestCase):
             response, 'class="subscribe-form', msg_prefix="footer"
         )
 
-    def test_authenticated_user_still_sees_footer_logo_and_links(self):
+    def test_authenticated_user_still_sees_footer_logo_links_and_version(self):
         self.client.login(email="member@test.com", password="testpass123")
         response = self.client.get("/about")
         self.assertContains(response, "AI Shipping Labs")
         self.assertContains(response, "Community")
-        self.assertContains(response, "All rights reserved")
+        self.assertContains(response, "Version N/A")
+        self.assertNotContains(response, "All rights reserved")
 
 
 class PricingFreeTierCTATest(TierSetupMixin, TestCase):

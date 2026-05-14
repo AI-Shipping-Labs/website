@@ -11,8 +11,7 @@ This file replaces ``accounts/tests/test_profile_view.py``:
   ``/account/profile``.
 - POST persistence / validation target ``POST /account/profile`` and
   assert on the new redirect target ``/account/#profile``.
-- ``MobileHeaderProfileLinkTest`` pins the new ``/account/#profile``
-  ``href`` (anchor scroll target on the consolidated page).
+- ``MobileHeaderAccountLinkTest`` pins the consolidated mobile Account link.
 - ``StudioUserCreateRegressionTest`` is preserved as a smoke check on
   the unrelated user-create form.
 """
@@ -325,29 +324,29 @@ class AccountProfileAccessTest(TestCase):
         self.assertEqual(user.last_name, "Doe")
 
 
-class MobileHeaderProfileLinkTest(TestCase):
-    """Mobile menu Profile link points at the anchored /account/#profile."""
+class MobileHeaderAccountLinkTest(TestCase):
+    """Mobile menu keeps Account as the single profile/account destination."""
 
-    def test_authenticated_mobile_menu_has_anchored_profile_link(self):
+    def test_authenticated_mobile_menu_has_account_link(self):
         user = User.objects.create_user(email="mobile@example.com")
         self.client.force_login(user)
 
         response = self.client.get("/account/")
         content = response.content.decode()
-        # Scope to the mobile-only Profile button so the test is not
-        # satisfied by some unrelated 'Profile' string on the page.
-        idx = content.find('id="mobile-profile-link"')
-        self.assertNotEqual(idx, -1, "mobile-profile-link element missing")
+        idx = content.find('id="mobile-account-link"')
+        self.assertNotEqual(idx, -1, "mobile-account-link element missing")
         tag_end = content.find(">", idx)
         tag_start = content.rfind("<", 0, idx)
         link_tag = content[tag_start:tag_end + 1]
-        self.assertIn('href="/account/#profile"', link_tag)
+        self.assertIn('href="/account/"', link_tag)
+        self.assertNotIn('id="mobile-profile-link"', content)
 
-    def test_anonymous_mobile_menu_has_no_profile_link(self):
+    def test_anonymous_mobile_menu_has_no_account_link(self):
         # Use a public page that includes the header so the anonymous block
         # is rendered. The home page includes the public header.
         response = self.client.get("/")
         content = response.content.decode()
+        self.assertNotIn('id="mobile-account-link"', content)
         self.assertNotIn('id="mobile-profile-link"', content)
 
 

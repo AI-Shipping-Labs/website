@@ -726,6 +726,27 @@ Use these markers to keep default CI focused while preserving opt-in coverage:
 | `manual_visual` | Screenshot generators and tests whose primary output is manual visual review. | Excluded from Deploy Dev and the scheduled default; runnable with `make test-playwright-manual-visual` or scheduled manual dispatch with `include_excluded`. |
 | `legacy_checkout` | Retained local Stripe Checkout/subscription API coverage while the product migrates to Payment Links and the Customer Portal. | Excluded from Deploy Dev and the scheduled default. Do not add or move payment tests under this marker while #604/#612/#613 are active unless that work owns the payment change. |
 | `slow_platform` | SQLite/threading/migration/concurrency tests or equivalent platform-level checks that are valuable but slow or contention-prone. | Excluded from default pytest-marker Playwright runs. For Django `manage.py test`, mirror with `@tag('slow_platform')` when practical so future tag-based runs can exclude it explicitly. |
+| `visual_regression` | Automated CSS class / Tailwind utility / spacing / color / layout-density assertions (`px-5`, `min-h-*`, `bg-card`, `flex-col`, `max-w-7xl`, etc.). Distinct from `manual_visual`: these run unattended, they just shouldn't gate push. | Excluded from `make test`, `make test-core`, `make test-playwright`, `make test-playwright-core`, Deploy Dev, and `ci.yml`. Included in the scheduled Playwright workflow's default run. Run on demand with `make test-visual-regression`. Playwright tests use `@pytest.mark.visual_regression`; Django tests use `@tag('visual_regression')`. |
+
+Policy for class / Tailwind / layout assertions (extends Rule 2, "Assert on
+specific elements, not full HTML body"): if a test asserts a specific Tailwind
+utility class, hex color, `min-h-*`, `py-*`, breakpoint utility, or layout
+density token, it is a visual contract assertion, not a behavior assertion.
+Mark such tests `@pytest.mark.visual_regression` (Playwright) or
+`@tag('visual_regression')` (Django) so push/core CI is not gated on UI
+density iteration, while the scheduled workflow still catches regressions.
+Default new tests away from class-substring asserts and toward
+`data-testid` + behavior assertions per Rule 2. `core` and `visual_regression`
+are intentionally orthogonal: a `core` smoke path should not inspect Tailwind
+classes, so in practice a test should not carry both markers.
+
+When an agent touches a template or layout file with existing class-substring
+assertions, re-tag (or rewrite) the impacted test class as part of that
+change rather than running a one-shot mass migration. The reference pattern
+is `content/tests/test_footer_responsive.py`, where the five Tailwind-asserting
+classes carry `@tag('visual_regression')` and a small sibling class
+(`FooterNewsletterFormMessageHooksTest`) holds the JS-dependent ID-hook
+contracts so they keep running on push.
 
 ### What belongs in `core`
 

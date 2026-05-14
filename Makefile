@@ -1,4 +1,4 @@
-.PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright test-playwright test-playwright-core test-playwright-manual-visual lint lint-fix lint-advisory clean
+.PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory clean
 
 # Default SITE_BASE_URL for local dev so generated links (unsubscribe,
 # calendar invites, password resets, share URLs) point at the running
@@ -47,13 +47,13 @@ seed:
 
 # Run all Django tests
 test:
-	uv run python manage.py test --parallel
+	uv run python manage.py test --exclude-tag=visual_regression --parallel
 
 # Run only the core subset of Django tests (auth, access control, payments,
 # sync happy paths, critical model invariants). Targeted at <45s wall time.
 # See _docs/testing-guidelines.md ("Core test subset") for the tagging policy.
 test-core:
-	uv run python manage.py test --tag=core --parallel
+	uv run python manage.py test --tag=core --exclude-tag=visual_regression --parallel
 
 # Run tests with coverage
 coverage:
@@ -63,7 +63,7 @@ coverage:
 
 # Run the full active Playwright end-to-end suite.
 test-playwright:
-	uv run pytest -m "not legacy_checkout" playwright_tests/ -v
+	uv run pytest -m "not legacy_checkout and not visual_regression" playwright_tests/ -v
 
 # Run only the core subset of Playwright tests (auth, access control, payments,
 # one happy path each for events/courses/sprints/plans, notifications, and
@@ -71,11 +71,29 @@ test-playwright:
 # CI; runs on every push to main via Deploy Dev.
 # See _docs/testing-guidelines.md ("Core Playwright subset") for the tagging policy.
 test-playwright-core:
-	uv run pytest -m core playwright_tests/ -v
+	uv run pytest -m "core and not visual_regression" playwright_tests/ -v
 
 # Run screenshot-generator/manual-review Playwright tests on demand.
 test-playwright-manual-visual:
 	uv run pytest -m manual_visual playwright_tests/ -v
+
+# Run only the visual_regression-tagged tests on demand. The scheduled
+# Playwright workflow includes these in its default run; push/core CI
+# excludes them. See _docs/testing-guidelines.md ("visual_regression").
+# Note: pytest exit code 5 ("no tests collected") is treated as success on
+# the Playwright leg while the Playwright visual_regression suite is empty
+# (only the Django side has migrated tests so far). When the Playwright
+# suite picks up its first ``visual_regression`` test, that test's
+# pass/fail will surface normally.
+test-visual-regression:
+	uv run python manage.py test --tag=visual_regression --parallel
+	@uv run pytest -m visual_regression playwright_tests/ -v; \
+	status=$$?; \
+	if [ $$status -eq 5 ]; then \
+		echo "No Playwright visual_regression tests collected yet; treating as success."; \
+		exit 0; \
+	fi; \
+	exit $$status
 
 # Backwards-compat alias for older muscle-memory: `make playwright` runs the
 # full Playwright suite (same as `make test-playwright`).

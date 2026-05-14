@@ -37,6 +37,7 @@ markers = [
     "manual_visual: screenshot-generator/manual-review Playwright tests excluded from default CI",
     "legacy_checkout: retained local Stripe Checkout/subscription API tests excluded from default CI",
     "slow_platform: SQLite/threading/migration/concurrency tests excluded from default CI",
+    "visual_regression: CSS class / Tailwind utility / layout assertion tests, excluded from default CI and run on the scheduled workflow",
 ]
 
 [tool.coverage.run]

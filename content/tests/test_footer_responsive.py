@@ -11,7 +11,7 @@ Covers:
 
 import re
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 
 def _extract_footer(html):
@@ -21,6 +21,7 @@ def _extract_footer(html):
     return match.group(0)
 
 
+@tag("visual_regression")
 class FooterResponsivePaddingTest(TestCase):
     """Footer uses responsive padding for tighter mobile spacing."""
 
@@ -33,8 +34,14 @@ class FooterResponsivePaddingTest(TestCase):
         self.assertIn("lg:py-24", footer)
 
 
+@tag("visual_regression")
 class FooterNewsletterFormMobileTest(TestCase):
-    """Newsletter subscribe form is usable on mobile viewports."""
+    """Newsletter subscribe form is usable on mobile viewports.
+
+    These are Tailwind utility / layout assertions (flex-col, gap-3, w-full).
+    Logic-level assertions on the JS-dependent message element IDs live in
+    ``FooterNewsletterFormMessageHooksTest`` below so they keep running on push.
+    """
 
     def test_form_uses_flex_col_for_mobile_stacking(self):
         """Form should use flex-col so input and button stack on mobile."""
@@ -59,6 +66,15 @@ class FooterNewsletterFormMobileTest(TestCase):
         classes = input_match.group(1)
         self.assertIn("w-full", classes)
 
+
+class FooterNewsletterFormMessageHooksTest(TestCase):
+    """Newsletter subscribe form exposes the ID hooks the JS depends on.
+
+    These are logic / contract assertions (the JS uses these IDs to populate
+    success and error messages), not visual ones, so they intentionally are
+    NOT tagged ``visual_regression`` and continue to run on every push.
+    """
+
     def test_subscribe_success_message_element_exists(self):
         """Footer should contain the success message element for JS to populate."""
         response = self.client.get("/")
@@ -72,6 +88,7 @@ class FooterNewsletterFormMobileTest(TestCase):
         self.assertIn("footer-subscribe-error", footer)
 
 
+@tag("visual_regression")
 class FooterTapTargetsTest(TestCase):
     """Footer community links balance mobile tap targets with compact desktop rows."""
 
@@ -119,6 +136,7 @@ class FooterTapTargetsTest(TestCase):
         self.assertNotIn('class="mt-4 space-y-1"', footer)
 
 
+@tag("visual_regression")
 class FooterNoHorizontalOverflowTest(TestCase):
     """Footer should not cause horizontal overflow on narrow viewports."""
 
@@ -139,6 +157,7 @@ class FooterNoHorizontalOverflowTest(TestCase):
         self.assertIn("max-w-7xl", footer)
 
 
+@tag("visual_regression")
 class FooterThemeCompatibilityTest(TestCase):
     """Footer works in both light and dark themes."""
 

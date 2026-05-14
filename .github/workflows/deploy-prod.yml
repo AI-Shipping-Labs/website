@@ -95,8 +95,25 @@ jobs:
 
       - name: Commit and push .prod-versions
         run: |
+          set -e
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          # Rebase any commits that landed on main while we were deploying so
+          # our push isn't rejected as a non-fast-forward.
+          git pull --rebase origin main
           git add .prod-versions
+          if git diff --cached --quiet; then
+            echo "No changes to .prod-versions (already on main); skipping commit."
+            exit 0
+          fi
           git commit -m "Update production versions: ${{ github.event.inputs.deployTag || 'auto-detected' }}"
-          git push
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              echo "Push succeeded on attempt ${attempt}."
+              exit 0
+            fi
+            echo "Push attempt ${attempt} failed; rebasing onto latest main and retrying."
+            git pull --rebase origin main
+          done
+          echo "::error ::Failed to push .prod-versions after 5 attempts."
+          exit 1

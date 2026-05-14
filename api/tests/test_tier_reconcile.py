@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from datetime import timezone as datetime_timezone
 from unittest.mock import patch
 
+import stripe
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -528,6 +529,31 @@ class TierReconcileApplyTest(TierReconcileTestBase):
 
         user.refresh_from_db()
         self.assertEqual(user.tier.slug, "main")
+
+    def test_apply_with_stripe_lookup_error_returns_warning_not_500(self):
+        user = self._user("stripe-error@test.com")
+
+        with patch(
+            "payments.services.backfill_tiers.stripe.Subscription.list",
+            side_effect=stripe.InvalidRequestError(
+                "No such customer",
+                param="customer",
+            ),
+        ):
+            response = self._post_apply({
+                "emails": ["stripe-error@test.com"],
+                "dry_run": True,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["processed"], 1)
+        self.assertEqual(body["warnings"], 1)
+        self.assertEqual(body["results"][0]["status"], "warning")
+        self.assertIn("Stripe lookup failed", body["results"][0]["message"])
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "free")
 
     def test_apply_caps_at_max_users_when_emails_omitted(self):
         for index in range(3):

@@ -16,6 +16,7 @@ from accounts.models import TierOverride
 from integrations.config import get_config
 from payments.models import WebhookEvent
 from payments.services.import_stripe import (
+    CONFIGURATION_ERRORS,
     _price_to_tier_map,
     _subscription_period_end,
     _subscription_price_id,
@@ -56,7 +57,19 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None):
         )
 
     price_to_tier = price_to_tier or _price_to_tier_map()
-    subscriptions = _active_subscriptions_for_customer(user.stripe_customer_id)
+    try:
+        subscriptions = _active_subscriptions_for_customer(user.stripe_customer_id)
+    except CONFIGURATION_ERRORS as exc:
+        warning = _stripe_lookup_warning(user.email, exc)
+        return ChangeRecord(
+            user_id=user.pk,
+            email=user.email,
+            stripe_customer_id=user.stripe_customer_id,
+            status="warning",
+            message=warning,
+            old_tier_slug=_tier_slug(user),
+            warnings=[warning],
+        )
     subscription = subscriptions[0] if subscriptions else None
     old_tier_slug = _tier_slug(user)
 
@@ -183,6 +196,13 @@ def _active_subscriptions_for_customer(customer_id):
         reverse=True,
     )
     return subscriptions
+
+
+def _stripe_lookup_warning(email, exc):
+    message = str(exc).splitlines()[0]
+    if not message:
+        message = exc.__class__.__name__
+    return f"warning: Stripe lookup failed for {email}: {message}"
 
 
 def _active_matching_override(user, tier):

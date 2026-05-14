@@ -3,6 +3,7 @@ from datetime import timezone as datetime_timezone
 from io import StringIO
 from unittest.mock import patch
 
+import stripe
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase, override_settings
@@ -188,3 +189,21 @@ class BackfillStripeTiersCommandTest(TestCase):
         user.refresh_from_db()
         self.assertEqual(user.tier.slug, "free")
         self.assertIn("unknown price price_unknown", err.getvalue())
+
+    def test_stripe_lookup_error_logs_warning_without_crashing(self):
+        user = self._user("stripe-error@test.com")
+        err = StringIO()
+
+        with patch(
+            "payments.services.backfill_tiers.stripe.Subscription.list",
+            side_effect=stripe.InvalidRequestError(
+                "No such customer",
+                param="customer",
+            ),
+        ):
+            call_command("backfill_stripe_tiers", stdout=StringIO(), stderr=err)
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "free")
+        self.assertIn("Stripe lookup failed", err.getvalue())
+        self.assertFalse(WebhookEvent.objects.exists())

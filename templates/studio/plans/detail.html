@@ -18,10 +18,17 @@
         {% if plan.shared_at %}· Shared {{ plan.shared_at|date:"Y-m-d" }}{% endif %}
       </p>
     </div>
-    <a href="{% url 'studio_plan_edit' plan_id=plan.pk %}"
-       class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
-      Edit plan
-    </a>
+    <div class="flex items-center gap-2">
+      <a href="/admin/plans/plan/{{ plan.pk }}/change/"
+         class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+         data-testid="studio-plan-django-admin-link">
+        Open in Django admin
+      </a>
+      <a href="{% url 'studio_plan_edit' plan_id=plan.pk %}"
+         class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
+        Edit plan
+      </a>
+    </div>
   </div>
 </div>
 

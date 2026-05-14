@@ -223,6 +223,8 @@ class PlanDetailRenderTest(TestCase):
         )
         response = self.client.get(f'/studio/plans/{plan.pk}/')
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="studio-plan-django-admin-link"')
+        self.assertContains(response, f'/admin/plans/plan/{plan.pk}/change/')
 
         # Every summary field is rendered into a labelled <dd>. Asserting
         # on the data-field container ensures filtering or template

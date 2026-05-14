@@ -53,6 +53,12 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
             goal='Ship cohort goal',
             focus_main='Cohort focus text',
         )
+        cls.summary_goal_member = _make_user('summary-goal@test.com')
+        cls.summary_goal_plan = Plan.objects.create(
+            member=cls.summary_goal_member, sprint=cls.sprint,
+            visibility='cohort',
+            summary_goal='Ship summary goal fallback',
+        )
         cls.private_member = _make_user('private@test.com')
         cls.private_plan = Plan.objects.create(
             member=cls.private_member, sprint=cls.sprint,
@@ -81,6 +87,7 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
             {
                 self.viewer.pk,
                 self.cohort_member.pk,
+                self.summary_goal_member.pk,
                 self.private_member.pk,
                 self.no_plan_member.pk,
             },
@@ -100,6 +107,14 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
             f'data-testid="cohort-row-goal-{self.cohort_member.pk}"',
         )
         self.assertContains(response, 'Ship cohort goal')
+
+    def test_cohort_row_uses_summary_goal_when_short_goal_empty(self):
+        response, _ = self._get_rows()
+        self.assertContains(
+            response,
+            f'data-testid="cohort-row-goal-{self.summary_goal_member.pk}"',
+        )
+        self.assertContains(response, 'Ship summary goal fallback')
 
     def test_private_row_kind_and_focus_not_in_html(self):
         response, rows = self._get_rows()

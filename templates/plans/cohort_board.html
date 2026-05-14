@@ -158,13 +158,13 @@
               </td>
               <td class="px-4 py-4 align-top sm:px-5">
                 {% if row.kind == 'cohort' %}
-                  {% if row.plan.goal %}
-                  <p class="max-w-xl text-sm font-medium leading-relaxed text-foreground line-clamp-2" data-testid="cohort-row-goal-{{ row.member.pk }}">{{ row.plan.goal }}</p>
+                  {% if row.plan.goal or row.plan.summary_goal %}
+                  <p class="max-w-xl text-sm font-medium leading-relaxed text-foreground line-clamp-2" data-testid="cohort-row-goal-{{ row.member.pk }}">{% firstof row.plan.goal row.plan.summary_goal %}</p>
                   {% endif %}
                   {% if row.plan.focus_main %}
-                  <p class="max-w-xl text-sm leading-relaxed text-muted-foreground line-clamp-2 {% if row.plan.goal %}mt-1{% endif %}">{{ row.plan.focus_main }}</p>
+                  <p class="max-w-xl text-sm leading-relaxed text-muted-foreground line-clamp-2 {% if row.plan.goal or row.plan.summary_goal %}mt-1{% endif %}">{{ row.plan.focus_main }}</p>
                   {% else %}
-                  <p class="text-sm text-muted-foreground {% if row.plan.goal %}mt-1{% endif %}">Plan shared with cohort.</p>
+                  <p class="text-sm text-muted-foreground {% if row.plan.goal or row.plan.summary_goal %}mt-1{% endif %}">Plan shared with cohort.</p>
                   {% endif %}
                 {% elif row.kind == 'private' %}
                 <p class="text-sm text-muted-foreground">Progress only; plan details are private.</p>

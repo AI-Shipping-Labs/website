@@ -14,8 +14,8 @@ behaviours that justify a real-browser test:
    redirect to ``/account/#profile``).
 2. A bookmark to the legacy ``/account/profile`` URL still lands the
    member on ``/account/`` via a single ``301`` redirect.
-3. The mobile menu Profile link sends the member to ``/account/#profile``
-   so the page scrolls straight to the name form.
+3. The mobile menu keeps a single Account link rather than duplicating
+   Account and Profile entries for the same settings surface.
 
 Validation, redirect targets, and anonymous-access gating are pinned in
 ``accounts/tests/test_account_view.py`` (faster, more reliable in
@@ -162,10 +162,10 @@ class TestScenarioLegacyProfileBookmarkRedirects:
 
 
 @pytest.mark.django_db(transaction=True)
-class TestScenarioMobileMenuProfileLinkScrollsToForm:
-    """Mobile menu Profile link sends the member to /account/#profile."""
+class TestScenarioMobileMenuAccountLink:
+    """Mobile menu keeps one Account link for account/profile settings."""
 
-    def test_mobile_menu_profile_link_targets_anchor(
+    def test_mobile_menu_account_link_targets_account_page(
         self, django_server, django_db_blocker, browser
     ):
         with django_db_blocker.unblock():
@@ -177,25 +177,25 @@ class TestScenarioMobileMenuProfileLinkScrollsToForm:
             # 390 px viewport mirrors the spec scenario (mobile breakpoint
             # at which the mobile menu becomes the only nav surface).
             page.set_viewport_size({"width": 390, "height": 844})
-            # Start on a non-account page so the mobile-menu Profile tap
+            # Start on a non-account page so the mobile-menu Account tap
             # actually triggers a navigation.
             page.goto(
                 f"{django_server}/about",
                 wait_until="domcontentloaded",
             )
 
-            # Open the mobile menu; the Profile link is only visible
+            # Open the mobile menu; the Account link is only visible
             # inside the slide-out drawer.
             page.locator("#mobile-menu-btn").click()
-            mobile_link = page.locator("#mobile-profile-link")
+            mobile_link = page.locator('#mobile-menu a[href="/account/"]').first
             mobile_link.wait_for(state="visible")
-            assert mobile_link.get_attribute("href") == "/account/#profile"
+            assert mobile_link.inner_text().strip() == "Account"
 
             mobile_link.click()
-            page.wait_for_url(f"{django_server}/account/#profile")
+            page.wait_for_url(f"{django_server}/account/")
 
-            # The Profile card with the name form is present on the
-            # destination page (the anchor is what the spec calls out).
+            # The Profile card with the name form is still present on the
+            # destination account page.
             section = page.locator("#profile-section")
             section.wait_for(state="visible")
             assert section.is_visible()

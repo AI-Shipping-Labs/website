@@ -25,10 +25,11 @@ class FooterResponsivePaddingTest(TestCase):
     """Footer uses responsive padding for tighter mobile spacing."""
 
     def test_footer_outer_div_has_responsive_padding(self):
-        """Footer wrapper should use py-10 sm:py-16 lg:py-24 pattern."""
+        """Footer wrapper should match the site content container padding."""
         response = self.client.get("/")
         footer = _extract_footer(response.content.decode())
-        self.assertIn("py-10 sm:py-16", footer)
+        self.assertIn("px-5 py-10", footer)
+        self.assertIn("sm:px-6 sm:py-16", footer)
         self.assertIn("lg:py-24", footer)
 
 
@@ -75,7 +76,7 @@ class FooterTapTargetsTest(TestCase):
     """Footer community links balance mobile tap targets with compact desktop rows."""
 
     def test_footer_about_link_preserves_mobile_tap_target(self):
-        """The About link keeps a 44px minimum tap target below sm."""
+        """The About link uses compact mobile footer row spacing."""
         response = self.client.get("/")
         footer = _extract_footer(response.content.decode())
         about_match = re.search(
@@ -83,8 +84,8 @@ class FooterTapTargetsTest(TestCase):
         )
         self.assertIsNotNone(about_match, "About link not found in footer")
         classes = about_match.group(1)
-        self.assertIn("min-h-[44px]", classes)
-        self.assertIn("py-2", classes)
+        self.assertIn("min-h-0", classes)
+        self.assertIn("py-0.5", classes)
 
     def test_footer_about_link_uses_inline_flex(self):
         """About link should use inline-flex items-center for vertical centering."""
@@ -107,15 +108,14 @@ class FooterTapTargetsTest(TestCase):
         )
         self.assertIsNotNone(faq_match, "FAQ link not found in footer")
         classes = faq_match.group(1)
-        self.assertIn("min-h-[44px]", classes)
-        self.assertIn("sm:min-h-0", classes)
-        self.assertIn("sm:py-1", classes)
+        self.assertIn("min-h-0", classes)
+        self.assertIn("py-0.5", classes)
 
     def test_footer_link_lists_remove_extra_row_gaps(self):
         """Community and Legal link lists should not add gaps between tap rows."""
         response = self.client.get("/")
         footer = _extract_footer(response.content.decode())
-        self.assertIn('class="mt-3 space-y-0 sm:mt-4"', footer)
+        self.assertIn('class="mt-0.5 space-y-0 sm:mt-2"', footer)
         self.assertNotIn('class="mt-4 space-y-1"', footer)
 
 

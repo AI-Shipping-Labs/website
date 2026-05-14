@@ -153,13 +153,12 @@ class TestThemeRowSymmetricAcrossAuthStates:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 2: Resources sub-links sit under a left rule and clear 44 px
-# tap targets.
+# Scenario 2: Resources sub-links sit under a left rule and use compact rows.
 # ---------------------------------------------------------------------------
 
 
 class TestResourcesAccordionGroupingAndTapTargets:
-    def test_resources_sublinks_carry_left_rule_and_44px_height(
+    def test_resources_sublinks_carry_left_rule_and_compact_height(
         self, django_server, browser
     ):
         _create_user(email=MEMBER_EMAIL, tier_slug="free")
@@ -171,7 +170,7 @@ class TestResourcesAccordionGroupingAndTapTargets:
             _open_drawer(page)
             _expand(page, "resources")
 
-            # Every sub-link in the expanded list is at least 44 px tall.
+            # Every sub-link in the expanded list uses the compact mobile rhythm.
             link_heights = page.evaluate(
                 """
                 () => {
@@ -184,9 +183,9 @@ class TestResourcesAccordionGroupingAndTapTargets:
             )
             assert link_heights, "Resources accordion must render sub-links"
             for height in link_heights:
-                assert height >= 44, (
+                assert 31 <= height <= 36, (
                     f"Resources sub-link is {height}px tall, "
-                    "must be >= 44px for tap target"
+                    "expected compact 32px-ish footer/header rhythm"
                 )
 
             # The container holding the sub-links carries a left border.

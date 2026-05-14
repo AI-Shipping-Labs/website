@@ -1,5 +1,5 @@
 <footer class="border-t border-border bg-card">
-  <div class="mx-auto max-w-7xl px-6 py-10 sm:py-16 lg:px-8 lg:py-24">
+  <div class="mx-auto max-w-7xl px-5 py-10 sm:px-6 sm:py-16 lg:px-8 lg:py-24">
     {% if not user.is_authenticated %}
     {# Retained as the single anonymous newsletter placement and /#newsletter anchor target. #}
     <div id="newsletter" class="mx-auto max-w-2xl">
@@ -29,55 +29,56 @@
     </div>
     {% endif %}
 
-    <div class="mt-16 grid gap-8 border-t border-border pt-8 sm:grid-cols-3">
+    <div class="mt-4 grid gap-6 pt-3 sm:grid-cols-3 sm:gap-3">
       <div>
         <a href="/" class="flex items-center gap-2">
           <img src="/static/rocket-upscale-no-bg-small.png" alt="AI Shipping Labs" class="h-6 w-6">
           <span class="font-semibold">AI Shipping Labs</span>
         </a>
-        <p class="mt-4 text-sm text-muted-foreground">
+        <p class="mt-2 text-sm text-muted-foreground">
           Where action-oriented builders turn AI ideas into real projects.
         </p>
       </div>
 
       <div>
         <h3 class="text-sm font-semibold text-foreground">Community</h3>
-        <ul class="mt-3 space-y-0 sm:mt-4">
+        <ul class="mt-0.5 space-y-0 sm:mt-2">
           <li>
-            <a href="/about" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-1">About</a>
+            <a href="/about" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">About</a>
           </li>
           <li>
-            <a href="{% url 'pricing' %}" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-1">Membership Tiers</a>
+            <a href="{% url 'pricing' %}" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Membership Tiers</a>
           </li>
           <li>
-            <a href="/faq" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-1">FAQ</a>
+            <a href="/faq" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
           </li>
           <li>
-            <a href="{{ stripe_customer_portal_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-1">Manage Subscription</a>
+            <a href="{{ stripe_customer_portal_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Manage Subscription</a>
           </li>
         </ul>
       </div>
 
       <div>
         <h3 class="text-sm font-semibold text-foreground">Legal</h3>
-        <ul class="mt-3 space-y-0 sm:mt-4">
+        <ul class="mt-0.5 space-y-0 sm:mt-2">
           <li>
-            <a href="/terms/" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-1">Terms of Service</a>
+            <a href="/terms/" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Terms of Service</a>
           </li>
           <li>
-            <a href="/privacy/" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-1">Privacy Policy</a>
+            <a href="/privacy/" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Privacy Policy</a>
           </li>
           <li>
-            <a href="/impressum/" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-1">Impressum</a>
+            <a href="/impressum/" class="inline-flex min-h-0 items-center py-0.5 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground">Impressum</a>
           </li>
         </ul>
       </div>
     </div>
 
-    <div class="mt-8 border-t border-border pt-8 text-center">
+    <div class="mt-4 pt-4 text-center">
       <p class="text-sm text-muted-foreground">
-        &copy; {{ current_year }} AI Shipping Labs. All rights reserved.
-        (version {{ VERSION }})
+        {{ current_year }} AI Shipping Labs
+        <br>
+        Version {{ VERSION }}
       </p>
     </div>
   </div>

@@ -3,7 +3,6 @@
 Covers:
 - Anonymous users see the public marketing homepage (no change)
 - Authenticated users see the personalized dashboard at /
-- Welcome banner with user name and tier badge
 - Continue learning section with in-progress courses
 - Upcoming events section with registered events
 - Recent content section with accessible articles/recordings
@@ -78,72 +77,48 @@ class HomepageRoutingTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertTemplateNotUsed(response, 'home.html')
 
-    def test_authenticated_user_sees_welcome_banner(self):
+    def test_authenticated_user_sees_dashboard_content_without_welcome_card(self):
         self.client.login(email='test@example.com', password='testpass123')
         response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('Welcome back', content)
-        self.assertIn('Alice', content)
+        self.assertIn('Continue Learning', content)
+        self.assertNotIn('Welcome back', content)
 
 
 # ============================================================
-# Welcome Banner
+# Removed Welcome Card
 # ============================================================
 
 
-class WelcomeBannerTest(TierSetupMixin, TestCase):
-    """Test the welcome banner section of the dashboard."""
+class RemovedWelcomeCardTest(TierSetupMixin, TestCase):
+    """The dashboard no longer renders the old welcome/account upgrade card."""
 
-    def test_shows_first_name(self):
+    def test_does_not_show_first_name_welcome_card(self):
         User.objects.create_user(
             email='alice@example.com', password='testpass',
             first_name='Alice',
         )
         self.client.login(email='alice@example.com', password='testpass')
         response = self.client.get('/')
-        self.assertContains(response, 'Welcome back, Alice')
+        self.assertNotContains(response, 'Welcome back, Alice')
 
-    def test_shows_welcome_without_first_name(self):
+    def test_does_not_show_generic_welcome_card(self):
         User.objects.create_user(
             email='noname@example.com', password='testpass',
         )
         self.client.login(email='noname@example.com', password='testpass')
         response = self.client.get('/')
-        self.assertContains(response, 'Welcome back')
-        # Should not have a trailing comma without a name
-        self.assertNotContains(response, 'Welcome back,')
+        self.assertNotContains(response, 'Welcome back')
 
-    def test_shows_tier_badge_free(self):
+    def test_free_label_is_not_rendered_as_standalone_dashboard_badge(self):
         User.objects.create_user(
             email='free@example.com', password='testpass',
         )
         self.client.login(email='free@example.com', password='testpass')
         response = self.client.get('/')
-        self.assertContains(response, 'Free')
+        self.assertNotContains(response, '>Free<')
 
-    def test_shows_tier_badge_main(self):
-        user = User.objects.create_user(
-            email='main@example.com', password='testpass',
-        )
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main@example.com', password='testpass')
-        response = self.client.get('/')
-        content = response.content.decode()
-        self.assertIn('Main', content)
-
-    def test_shows_tier_badge_premium(self):
-        user = User.objects.create_user(
-            email='prem@example.com', password='testpass',
-        )
-        user.tier = self.premium_tier
-        user.save()
-        self.client.login(email='prem@example.com', password='testpass')
-        response = self.client.get('/')
-        content = response.content.decode()
-        self.assertIn('Premium', content)
-
-    def test_has_account_link(self):
+    def test_account_link_remains_available_in_header(self):
         User.objects.create_user(
             email='acct@example.com', password='testpass',
         )
@@ -151,13 +126,13 @@ class WelcomeBannerTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertContains(response, 'Account')
 
-    def test_has_upgrade_link(self):
+    def test_upgrade_link_is_not_rendered_in_removed_welcome_card(self):
         User.objects.create_user(
             email='upgrade@example.com', password='testpass',
         )
         self.client.login(email='upgrade@example.com', password='testpass')
         response = self.client.get('/')
-        self.assertContains(response, 'Upgrade')
+        self.assertNotContains(response, 'Upgrade')
 
 
 # ============================================================
@@ -904,7 +879,8 @@ class DashboardTemplateTest(TierSetupMixin, TestCase):
 
     def test_dashboard_includes_footer(self):
         response = self.client.get('/')
-        self.assertContains(response, 'All rights reserved')
+        self.assertContains(response, 'AI Shipping Labs')
+        self.assertContains(response, 'Version')
 
     def test_dashboard_has_all_sections(self):
         response = self.client.get('/')
@@ -1054,7 +1030,7 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertIn('Continue Learning', content)
-        self.assertIn('Welcome back', content)
+        self.assertNotIn('Welcome back', content)
 
     def test_auto_linking_note_shown(self):
         """The join card includes a note about automatic linking."""
@@ -1115,15 +1091,13 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         self.assertTrue(response.context['show_slack_join'])
         self.assertFalse(response.context['slack_connected'])
 
-    def test_slack_section_position_below_welcome_above_continue(self):
-        """The Slack section appears between Welcome Banner and Continue Learning."""
+    def test_slack_section_position_above_continue(self):
+        """The Slack section appears before Continue Learning."""
         self._create_user('main-pos@test.com', tier=self.main_tier)
         self.client.login(email='main-pos@test.com', password='testpass')
         with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
             response = self.client.get('/')
         content = response.content.decode()
-        pos_welcome = content.index('Welcome back')
         pos_slack = content.index('Join our Slack community')
         pos_continue = content.index('Continue Learning')
-        self.assertLess(pos_welcome, pos_slack)
         self.assertLess(pos_slack, pos_continue)

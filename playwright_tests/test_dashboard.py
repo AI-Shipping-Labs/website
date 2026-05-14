@@ -3,7 +3,7 @@ Playwright E2E tests for the Logged-in User Home Dashboard (Issue #104).
 
 Tests cover browser-valued BDD scenarios from the issue:
 - Anonymous visitor still sees the public marketing homepage
-- Free member sees personalized dashboard with tier badge after login
+- Free member sees personalized dashboard after login
 - Free member with no activity sees helpful empty states that guide next steps
 - Basic member resumes an in-progress course from the dashboard
 - Main member sees upcoming registered events and navigates to event detail
@@ -11,7 +11,7 @@ Tests cover browser-valued BDD scenarios from the issue:
 - Free member discovers gated content in recent content and finds the upgrade path
 - Premium member sees active polls and navigates to vote
 - Dashboard omits the duplicate notifications card while the header bell remains
-- Free member uses the Upgrade link in the welcome banner to explore paid tiers
+- Dashboard omits the removed welcome-card upgrade link
 
 Usage:
     uv run pytest playwright_tests/test_dashboard.py -v
@@ -356,8 +356,8 @@ class TestScenario1AnonymousVisitorSeesPublicHomepage:
         1. Navigate to /
         Then: The public marketing homepage loads with the hero section,
               tier cards, testimonials, and newsletter signup.
-        Then: No personalized dashboard sections (welcome banner,
-              continue learning, upcoming events) are shown.
+        Then: No personalized dashboard sections (continue learning,
+              upcoming events) are shown.
         2. Click 'View Membership Tiers' in the hero section
         Then: The page scrolls to the tiers section showing Free,
               Basic, Main, and Premium options."""
@@ -408,29 +408,25 @@ class TestScenario1AnonymousVisitorSeesPublicHomepage:
         assert "Main" in tiers_text
         assert "Premium" in tiers_text
 # -------------------------------------------------------------------
-# Scenario 2: Free member sees personalized dashboard with tier
-#              badge after login
+# Scenario 2: Free member sees personalized dashboard after login
 # -------------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
 class TestScenario2FreeMemberSeesDashboard:
-    """Free member sees personalized dashboard with tier badge
-    after login."""
+    """Free member sees personalized dashboard after login."""
 
     @pytest.mark.core
-    def test_free_member_dashboard_with_welcome_and_badge(
+    def test_free_member_dashboard_without_marketing_homepage(
         self, django_server
     , browser):
         """Given: A user logged in as free@test.com (Free tier,
         first name 'Alex').
         1. Navigate to /
-        Then: The dashboard loads with 'Welcome back, Alex' and a
-              'Free' tier badge.
+        Then: The dashboard loads with member-only sections.
         Then: The marketing homepage hero, testimonials, and tier
               cards are not shown.
-        2. Click the 'Account' link in the welcome banner.
-        Then: User navigates to /account/ showing their Free tier
-              membership details."""
+        2. Open the account menu and click Account.
+        Then: User navigates to /account/."""
         _clear_dashboard_data()
         _create_user(
             "free@test.com",
@@ -447,24 +443,20 @@ class TestScenario2FreeMemberSeesDashboard:
         )
         body = page.content()
 
-        # Then: Dashboard with welcome and tier badge
-        assert "Welcome back" in body
-        assert "Alex" in body
-        assert "Free" in body
+        # Then: Dashboard without the old welcome/tier card
+        assert "Welcome back" not in body
+        assert "Continue Learning" in body
+        assert "Quick Actions" in body
 
         # Then: Marketing homepage elements NOT shown
         assert "Turn AI ideas into" not in body
         assert "View Membership Tiers" not in body
 
-        # Step 2: Click the "Account" link in the
-        # welcome banner (not the mobile menu version)
-        welcome_section = page.locator(
-            'section:has(h1:has-text("Welcome back"))'
-        )
-        account_link = welcome_section.locator(
-            'a:has-text("Account")'
-        )
-        account_link.click()
+        # Step 2: Click the account-menu Account link.
+        page.locator("#account-menu-trigger").click()
+        page.locator("#account-menu-dropdown").get_by_role(
+            "menuitem", name="Account"
+        ).click()
         page.wait_for_load_state("domcontentloaded")
 
         # Then: Navigates to /account/
@@ -1088,27 +1080,20 @@ class TestScenario10CompletedUnitsWithoutEnrollment:
         assert "Progress Without Enrollment" not in learning_text
         assert "Browse Courses" in learning_text
 # -------------------------------------------------------------------
-# Scenario 11: Free member uses the Upgrade link in the welcome
-#               banner to explore paid tiers
+# Scenario 11: Removed welcome-card upgrade link
 # -------------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
-class TestScenario11FreeMemberUpgradeLink:
-    """Free member uses the Upgrade link in the welcome banner to
-    explore paid tiers."""
+class TestScenario11RemovedWelcomeUpgradeLink:
+    """Dashboard no longer renders the old welcome-card Upgrade link."""
 
     @pytest.mark.core
-    def test_upgrade_link_navigates_to_pricing(
+    def test_dashboard_omits_removed_upgrade_card(
         self, django_server
     , browser):
         """Given: A user logged in as free@test.com (Free tier).
         1. Navigate to /
-        Then: The welcome banner shows an 'Upgrade' button alongside
-              the 'Account' link.
-        2. Click the 'Upgrade' link.
-        Then: User navigates to the tiers section where they can
-              compare Basic, Main, and Premium options and their
-              pricing."""
+        Then: The old welcome-card Upgrade CTA is absent."""
         _clear_dashboard_data()
         _create_user("free@test.com", tier_slug="free")
 
@@ -1121,31 +1106,5 @@ class TestScenario11FreeMemberUpgradeLink:
         )
         body = page.content()
 
-        # Then: Welcome banner has both Account and Upgrade
-        assert "Account" in body
-        assert "Upgrade" in body
-
-        # Both links are in the welcome banner section
-        welcome_section = page.locator(
-            'section:has(h1:has-text("Welcome back"))'
-        )
-        welcome_text = welcome_section.inner_text()
-        assert "Account" in welcome_text
-        assert "Upgrade" in welcome_text
-
-        # Step 2: Click "Upgrade"
-        upgrade_link = welcome_section.locator(
-            'a:has-text("Upgrade")'
-        )
-        assert upgrade_link.count() >= 1
-        upgrade_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: Navigates to /pricing
-        assert "/pricing" in page.url
-        pricing_body = page.content()
-
-        # Tier options are shown
-        assert "Basic" in pricing_body
-        assert "Main" in pricing_body
-        assert "Premium" in pricing_body
+        assert "Welcome back" not in body
+        assert "Upgrade" not in body

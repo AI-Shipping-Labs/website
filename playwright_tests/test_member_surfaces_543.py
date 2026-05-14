@@ -115,7 +115,7 @@ def test_member_surfaces_default_ci_smoke(
     _seed_member_notifications(user)
 
     member_routes = [
-        ("/", "Welcome back, Alex"),
+        ("/", "Continue Learning"),
         ("/account/", "Account"),
         ("/notifications", "Notifications"),
     ]
@@ -160,7 +160,7 @@ def test_member_surfaces_have_consistent_frames_screenshots(
     _seed_member_notifications(user)
 
     member_routes = [
-        ("dashboard", "/", "Welcome back, Alex"),
+        ("dashboard", "/", "Continue Learning"),
         ("account", "/account/", "Account"),
         ("notifications", "/notifications", "Notifications"),
     ]

@@ -166,8 +166,8 @@
   </nav>
 
   <div class="border-t border-border bg-background md:hidden hidden max-h-[calc(100vh-5rem)] overflow-y-auto" id="mobile-menu">
-    <div class="space-y-1 px-6 py-4">
-      <div class="flex items-center justify-between py-2 mb-2 border-b border-border pb-3" data-testid="mobile-theme-row">
+    <div class="space-y-0 px-6 py-3">
+      <div class="mb-1 flex items-center justify-between border-b border-border py-1 pb-2" data-testid="mobile-theme-row">
         <span class="text-sm text-muted-foreground">Theme</span>
         <button type="button"
                 data-testid="theme-toggle"
@@ -178,41 +178,41 @@
           <svg class="theme-icon-moon h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
         </button>
       </div>
-      <div class="py-2">
-        <button type="button" id="mobile-about-toggle" data-testid="mobile-nav-about-trigger" aria-expanded="false" aria-controls="mobile-about-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
+      <div class="py-0.5">
+        <button type="button" id="mobile-about-toggle" data-testid="mobile-nav-about-trigger" aria-expanded="false" aria-controls="mobile-about-list" class="flex w-full min-h-[36px] items-center justify-between rounded-md px-2 py-1 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
           About
           <svg class="h-4 w-4 transition-transform" id="mobile-about-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="ml-4 mt-1 space-y-0.5 border-l border-border pl-4 hidden" id="mobile-about-list" data-testid="mobile-nav-about-menu">
-          <a href="/about" data-testid="mobile-nav-about-link-about" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">About</a>
-          <a href="/about#team" data-testid="mobile-nav-about-link-team" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Team</a>
-          <a href="/faq" data-testid="mobile-nav-about-link-faq" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">FAQ</a>
+        <div class="ml-3 mt-0.5 space-y-0 border-l border-border pl-3 hidden" id="mobile-about-list" data-testid="mobile-nav-about-menu">
+          <a href="/about" data-testid="mobile-nav-about-link-about" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">About</a>
+          <a href="/about#team" data-testid="mobile-nav-about-link-team" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Team</a>
+          <a href="/faq" data-testid="mobile-nav-about-link-faq" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">FAQ</a>
         </div>
       </div>
-      <div class="py-2">
-        <button type="button" id="mobile-community-toggle" data-testid="mobile-nav-community-trigger" aria-expanded="false" aria-controls="mobile-community-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
+      <div class="py-0.5">
+        <button type="button" id="mobile-community-toggle" data-testid="mobile-nav-community-trigger" aria-expanded="false" aria-controls="mobile-community-list" class="flex w-full min-h-[36px] items-center justify-between rounded-md px-2 py-1 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
           Community
           <svg class="h-4 w-4 transition-transform" id="mobile-community-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="ml-4 mt-1 space-y-0.5 border-l border-border pl-4 hidden" id="mobile-community-list" data-testid="mobile-nav-community-menu">
-          <a href="/pricing" data-testid="mobile-nav-community-link-membership" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Membership</a>
-          <a href="/sprints" data-testid="mobile-nav-community-link-sprints" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Community Sprints</a>
-          <a href="/events" data-testid="mobile-nav-community-link-events" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Events</a>
+        <div class="ml-3 mt-0.5 space-y-0 border-l border-border pl-3 hidden" id="mobile-community-list" data-testid="mobile-nav-community-menu">
+          <a href="/pricing" data-testid="mobile-nav-community-link-membership" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Membership</a>
+          <a href="/sprints" data-testid="mobile-nav-community-link-sprints" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Community Sprints</a>
+          <a href="/events" data-testid="mobile-nav-community-link-events" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Events</a>
         </div>
       </div>
-      <div class="py-2">
-        <button type="button" id="mobile-resources-toggle" data-testid="mobile-nav-resources-trigger" aria-expanded="false" aria-controls="mobile-resources-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
+      <div class="py-0.5">
+        <button type="button" id="mobile-resources-toggle" data-testid="mobile-nav-resources-trigger" aria-expanded="false" aria-controls="mobile-resources-list" class="flex w-full min-h-[36px] items-center justify-between rounded-md px-2 py-1 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
           Resources
           <svg class="h-4 w-4 transition-transform" id="mobile-resources-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="ml-4 mt-1 space-y-0.5 border-l border-border pl-4 hidden" id="mobile-resources-list" data-testid="mobile-nav-resources-menu">
-          <a href="/blog" data-testid="mobile-nav-resources-link-blog" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Blog</a>
-          <a href="/courses" data-testid="mobile-nav-resources-link-courses" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Courses</a>
-          <a href="/workshops" data-testid="mobile-nav-resources-link-workshops" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Workshops</a>
-          <a href="/learning-path/ai-engineer" data-testid="mobile-nav-resources-link-learning-paths" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Learning Paths</a>
-          <a href="/projects" data-testid="mobile-nav-resources-link-projects" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Project Ideas</a>
-          <a href="/interview" data-testid="mobile-nav-resources-link-interview" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Interview Prep</a>
-          <a href="/resources" data-testid="mobile-nav-resources-link-curated-links" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Curated Links</a>
+        <div class="ml-3 mt-0.5 space-y-0 border-l border-border pl-3 hidden" id="mobile-resources-list" data-testid="mobile-nav-resources-menu">
+          <a href="/blog" data-testid="mobile-nav-resources-link-blog" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Blog</a>
+          <a href="/courses" data-testid="mobile-nav-resources-link-courses" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Courses</a>
+          <a href="/workshops" data-testid="mobile-nav-resources-link-workshops" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Workshops</a>
+          <a href="/learning-path/ai-engineer" data-testid="mobile-nav-resources-link-learning-paths" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Learning Paths</a>
+          <a href="/projects" data-testid="mobile-nav-resources-link-projects" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Project Ideas</a>
+          <a href="/interview" data-testid="mobile-nav-resources-link-interview" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Interview Prep</a>
+          <a href="/resources" data-testid="mobile-nav-resources-link-curated-links" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Curated Links</a>
         </div>
       </div>
       {% if user.is_authenticated %}
@@ -239,9 +239,6 @@
         </a>
         <a href="{% url 'account' %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Account
-        </a>
-        <a href="/account/#profile" id="mobile-profile-link" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
-          Profile
         </a>
         {% if user_latest_plan %}
         <a href="{% url 'my_plan_detail' sprint_slug=user_latest_plan.sprint.slug plan_id=user_latest_plan.pk %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-header-plan-link">

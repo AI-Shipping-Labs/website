@@ -16,6 +16,7 @@ from payments.exceptions import WebhookPermanentError
 from payments.models import WebhookEvent
 from payments.services import (
     handle_checkout_completed,
+    handle_customer_updated,
     handle_invoice_payment_failed,
     handle_subscription_deleted,
     handle_subscription_updated,
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 # Map of Stripe event types to handler functions
 EVENT_HANDLERS = {
     "checkout.session.completed": handle_checkout_completed,
+    "customer.updated": handle_customer_updated,
     "customer.subscription.updated": handle_subscription_updated,
     "customer.subscription.deleted": handle_subscription_deleted,
     "invoice.payment_failed": handle_invoice_payment_failed,

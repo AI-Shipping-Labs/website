@@ -4,7 +4,7 @@ Covers the structural expectations the spec calls out:
 
 - Top utility row order (``Back to website`` then theme toggle), placed
   above the section groups.
-- The six collapsible sections render in the expected order with the
+- The seven collapsible sections render in the expected order with the
   expected labels.
 - Every existing nav link is still present and points at the same URL,
   identified by ``href`` plus link text.
@@ -97,7 +97,7 @@ class StudioSidebarStructureTest(TestCase):
     # Section order + labels
     # ------------------------------------------------------------------
 
-    def test_six_section_headers_render_in_expected_order(self):
+    def test_seven_section_headers_render_in_expected_order(self):
         response = self._get_studio_dashboard()
         body = response.content.decode()
 
@@ -109,7 +109,8 @@ class StudioSidebarStructureTest(TestCase):
             'aria-controls="studio-section-content"',
             'aria-controls="studio-section-people"',
             'aria-controls="studio-section-planning"',
-            'aria-controls="studio-section-marketing"',
+            'aria-controls="studio-section-communication"',
+            'aria-controls="studio-section-tracking"',
             'aria-controls="studio-section-operations"',
         ]
         positions = [body.find(needle) for needle in expected_order]
@@ -169,11 +170,12 @@ class StudioSidebarStructureTest(TestCase):
         # Events
         ('/studio/events/', 'Events'),
         ('/studio/event-series/', 'Event series'),
+        # Communication
         ('/studio/notifications/', 'Notifications'),
-        # Marketing
         ('/studio/campaigns/', 'Email campaigns'),
         ('/studio/email-templates/', 'Email templates'),
         ('/studio/announcement/', 'Site banner'),
+        # Tracking
         ('/studio/utm-campaigns/', 'UTM links'),
         ('/studio/utm-analytics/', 'UTM analytics'),
         # Operations
@@ -261,9 +263,12 @@ class StudioSidebarStructureTest(TestCase):
 
         # Events' <ul> is un-hidden on the dashboard (default open section).
         self.assertIn('id="studio-section-events" class="space-y-1 mt-1"', body)
-        # The other five sections render with the ``hidden`` class on
+        # The other six sections render with the ``hidden`` class on
         # /studio/ (which is not in any section's deep path).
-        for slug in ('content', 'people', 'planning', 'marketing', 'operations'):
+        for slug in (
+            'content', 'people', 'planning',
+            'communication', 'tracking', 'operations',
+        ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -279,8 +284,11 @@ class StudioSidebarStructureTest(TestCase):
             'aria-expanded="true"\n                  aria-controls="studio-section-events"',
             body,
         )
-        # The five collapsed sections render aria-expanded="false".
-        for slug in ('content', 'people', 'planning', 'marketing', 'operations'):
+        # The six collapsed sections render aria-expanded="false".
+        for slug in (
+            'content', 'people', 'planning',
+            'communication', 'tracking', 'operations',
+        ):
             self.assertIn(
                 f'aria-expanded="false"\n                  aria-controls="studio-section-{slug}"',
                 body,
@@ -299,9 +307,12 @@ class StudioSidebarStructureTest(TestCase):
 
         # People <ul> is NOT hidden — section auto-expanded server-side.
         self.assertIn('id="studio-section-people" class="space-y-1 mt-1"', body)
-        # Content / Events / Planning / Marketing / Operations remain collapsed —
+        # Content / Events / Planning / Communication / Tracking / Operations remain collapsed —
         # Events no longer stays open once another section is active.
-        for slug in ('content', 'events', 'planning', 'marketing', 'operations'):
+        for slug in (
+            'content', 'events', 'planning',
+            'communication', 'tracking', 'operations',
+        ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -317,7 +328,10 @@ class StudioSidebarStructureTest(TestCase):
         self.assertIn('id="studio-section-content" class="space-y-1 mt-1"', body)
         # Events collapses back to hidden because Content is the active
         # section now (Events is only the dashboard default).
-        for slug in ('events', 'people', 'planning', 'marketing', 'operations'):
+        for slug in (
+            'events', 'people', 'planning',
+            'communication', 'tracking', 'operations',
+        ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -333,7 +347,10 @@ class StudioSidebarStructureTest(TestCase):
         # the Events section's deep path.
         self.assertIn('id="studio-section-events" class="space-y-1 mt-1"', body)
         # All other sections are collapsed.
-        for slug in ('content', 'people', 'planning', 'marketing', 'operations'):
+        for slug in (
+            'content', 'people', 'planning',
+            'communication', 'tracking', 'operations',
+        ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -350,14 +367,32 @@ class StudioSidebarStructureTest(TestCase):
         self.assertNotIn('id="studio-users-children"', body)
         self.assertNotIn('data-studio-users-toggle', body)
 
-    def test_visiting_marketing_page_expands_marketing_section(self):
+    def test_visiting_communication_page_expands_communication_section(self):
         self.client.login(email='staff@test.com', password='pw')
         response = self.client.get('/studio/campaigns/')
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
 
-        self.assertIn('id="studio-section-marketing" class="space-y-1 mt-1"', body)
-        for slug in ('content', 'people', 'planning', 'events', 'operations'):
+        self.assertIn(
+            'id="studio-section-communication" class="space-y-1 mt-1"', body,
+        )
+        for slug in ('content', 'people', 'planning', 'events', 'tracking', 'operations'):
+            self.assertIn(
+                f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
+                body,
+            )
+
+    def test_visiting_tracking_page_expands_tracking_section(self):
+        self.client.login(email='staff@test.com', password='pw')
+        response = self.client.get('/studio/utm-analytics/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+
+        self.assertIn('id="studio-section-tracking" class="space-y-1 mt-1"', body)
+        for slug in (
+            'content', 'people', 'planning',
+            'events', 'communication', 'operations',
+        ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -385,7 +420,10 @@ class StudioSidebarStructureTest(TestCase):
             'aria-expanded="true"\n                  aria-controls="studio-section-planning"',
             body,
         )
-        for slug in ('content', 'people', 'events', 'marketing', 'operations'):
+        for slug in (
+            'content', 'people', 'events',
+            'communication', 'tracking', 'operations',
+        ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -402,7 +440,10 @@ class StudioSidebarStructureTest(TestCase):
             'aria-expanded="true"\n                  aria-controls="studio-section-planning"',
             body,
         )
-        for slug in ('content', 'people', 'events', 'marketing', 'operations'):
+        for slug in (
+            'content', 'people', 'events',
+            'communication', 'tracking', 'operations',
+        ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,

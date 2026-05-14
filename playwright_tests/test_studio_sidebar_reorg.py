@@ -1,9 +1,9 @@
 """End-to-end tests for the reorganised Studio sidebar (issues #570, #576).
 
 The Studio sidebar is split into a small top utility row
-(``Back to website`` + theme toggle), a Dashboard link, and six
-collapsible sections — Events, Content, People, Planning, Marketing,
-Operations.
+(``Back to website`` + theme toggle), a Dashboard link, and seven
+collapsible sections — Events, Content, People, Planning, Communication,
+Tracking, Operations.
 The section that contains the current page auto-expands server-side; on
 the dashboard only Events is open (#576 moved Events to the top and
 flipped the dashboard default from Content to Events).
@@ -110,8 +110,8 @@ class TestStaffLandsInStudio:
         )
 
         # Section toggles render in the order: Events, Content, People,
-        # Planning, Marketing, Operations. Bounding-box y-positions are strictly
-        # increasing.
+        # Planning, Communication, Tracking, Operations. Bounding-box
+        # y-positions are strictly increasing.
         section_ys = [
             _section_button(page, slug).bounding_box()["y"]
             for slug in (
@@ -119,7 +119,8 @@ class TestStaffLandsInStudio:
                 "content",
                 "people",
                 "planning",
-                "marketing",
+                "communication",
+                "tracking",
                 "operations",
             )
         ]
@@ -127,16 +128,19 @@ class TestStaffLandsInStudio:
             f"Sections out of order; y-positions: {section_ys}"
         )
 
-        # Events is expanded — its three child links are visible.
-        for label in ["Events", "Event series", "Notifications"]:
+        # Events is expanded — its child links are visible.
+        for label in ["Events", "Event series"]:
             link = page.locator(
                 f'#studio-section-events a:has(span:text-is("{label}"))'
             )
             assert link.count() == 1
             assert link.is_visible(), f"{label!r} should be visible in expanded Events"
 
-        # The other five sections are collapsed — their <ul> bodies are not visible.
-        for slug in ("content", "people", "planning", "marketing", "operations"):
+        # The other six sections are collapsed — their <ul> bodies are not visible.
+        for slug in (
+            "content", "people", "planning",
+            "communication", "tracking", "operations",
+        ):
             ul = _section_list(page, slug)
             assert ul.count() == 1
             assert not ul.is_visible(), (
@@ -247,7 +251,10 @@ class TestPeopleAutoExpands:
 
         # All other sections collapsed — Events also collapses now that
         # another section is active (#576).
-        for slug in ("content", "events", "planning", "marketing", "operations"):
+        for slug in (
+            "content", "events", "planning",
+            "communication", "tracking", "operations",
+        ):
             assert not _section_list(page, slug).is_visible()
 
 
@@ -429,13 +436,17 @@ class TestPlanningSection:
         )
         assert "bg-secondary" in (sprints_link.get_attribute("class") or "")
 
-        for slug in ("content", "events", "people", "marketing", "operations"):
+        for slug in (
+            "content", "events", "people",
+            "communication", "tracking", "operations",
+        ):
             assert not _section_list(page, slug).is_visible()
 
         people_y = _section_button(page, "people").bounding_box()["y"]
         planning_y = planning_button.bounding_box()["y"]
-        marketing_y = _section_button(page, "marketing").bounding_box()["y"]
-        assert people_y < planning_y < marketing_y
+        communication_y = _section_button(page, "communication").bounding_box()["y"]
+        tracking_y = _section_button(page, "tracking").bounding_box()["y"]
+        assert people_y < planning_y < communication_y < tracking_y
 
     def test_plans_deep_link_expands_planning_and_highlights_plans(
         self, django_server, browser
@@ -461,7 +472,7 @@ class TestPlanningSection:
         assert "bg-secondary" in (plans_link.get_attribute("class") or "")
         assert not _section_list(page, "people").is_visible()
 
-    def test_dashboard_shows_planning_between_people_and_marketing(
+    def test_dashboard_shows_planning_between_people_and_communication(
         self, django_server, browser
     ):
         _ensure_tiers()
@@ -478,8 +489,9 @@ class TestPlanningSection:
 
         people_y = _section_button(page, "people").bounding_box()["y"]
         planning_y = planning.bounding_box()["y"]
-        marketing_y = _section_button(page, "marketing").bounding_box()["y"]
-        assert people_y < planning_y < marketing_y
+        communication_y = _section_button(page, "communication").bounding_box()["y"]
+        tracking_y = _section_button(page, "tracking").bounding_box()["y"]
+        assert people_y < planning_y < communication_y < tracking_y
 
         _section_button(page, "people").click()
         people_labels = page.locator("#studio-section-people a span").all_inner_texts()
@@ -594,10 +606,11 @@ class TestBackToWebsite:
 
 @pytest.mark.django_db(transaction=True)
 class TestRenamedLabels:
-    """Operators see the new labels (Email campaigns, Site banner,
-    UTM links, UTM analytics, Operations) and never the old ones."""
+    """Operators see Communication, Tracking, and the renamed labels."""
 
-    def test_marketing_labels_match_spec(self, django_server, browser):
+    def test_communication_and_tracking_labels_match_spec(
+        self, django_server, browser,
+    ):
         _ensure_tiers()
         _create_staff_user("admin@test.com")
 
@@ -606,25 +619,33 @@ class TestRenamedLabels:
         page.set_viewport_size({"width": 1280, "height": 800})
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
 
-        # Expand Marketing.
-        _section_button(page, "marketing").click()
+        _section_button(page, "communication").click()
+        _section_button(page, "tracking").click()
 
-        # Inside the Marketing section, the visible link labels are
-        # exactly the five renamed items.
-        marketing_labels = [
+        communication_labels = [
             t.strip()
             for t in page.locator(
-                "#studio-section-marketing a span"
+                "#studio-section-communication a span"
             ).all_inner_texts()
             if t.strip()
         ]
-        assert marketing_labels == [
+        tracking_labels = [
+            t.strip()
+            for t in page.locator(
+                "#studio-section-tracking a span"
+            ).all_inner_texts()
+            if t.strip()
+        ]
+        assert communication_labels == [
+            "Notifications",
             "Email campaigns",
             "Email templates",
             "Site banner",
+        ], communication_labels
+        assert tracking_labels == [
             "UTM links",
             "UTM analytics",
-        ], marketing_labels
+        ], tracking_labels
 
         # Old labels must not appear as <span> link labels anywhere
         # in the sidebar. We use ``text-is`` for an exact match (it is
@@ -787,7 +808,10 @@ class TestEventsAsDashboardDefault:
         assert _section_button(page, "events").get_attribute(
             "aria-expanded"
         ) == "true"
-        for slug in ("content", "people", "planning", "marketing", "operations"):
+        for slug in (
+            "content", "people", "planning",
+            "communication", "tracking", "operations",
+        ):
             assert _section_button(page, slug).get_attribute(
                 "aria-expanded"
             ) == "false"
@@ -833,8 +857,10 @@ class TestContentPageCollapsesEvents:
             '#studio-section-events a[href="/studio/events/"]'
         ).is_visible()
 
-        # People, Planning, Marketing, Operations are also collapsed.
-        for slug in ("people", "planning", "marketing", "operations"):
+        # People, Planning, Communication, Tracking, Operations are collapsed.
+        for slug in (
+            "people", "planning", "communication", "tracking", "operations",
+        ):
             assert not _section_list(page, slug).is_visible()
 
 
@@ -874,7 +900,10 @@ class TestEventsPageKeepsEventsExpanded:
             event_series_link.get_attribute("class") or ""
         )
 
-        for slug in ("content", "people", "planning", "marketing", "operations"):
+        for slug in (
+            "content", "people", "planning",
+            "communication", "tracking", "operations",
+        ):
             assert not _section_list(page, slug).is_visible()
 
 

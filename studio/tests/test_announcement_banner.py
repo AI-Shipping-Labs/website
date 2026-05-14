@@ -242,7 +242,7 @@ class StudioAnnouncementSidebarTest(TestCase):
     """The Studio sidebar should expose the site banner entry.
 
     Issue #570 renamed this nav item from ``Announcement`` to
-    ``Site banner`` and moved it under the new ``Marketing`` section.
+    ``Site banner``. It now lives under ``Communication``.
     The URL is unchanged.
     """
 

@@ -620,15 +620,14 @@ class SidebarTest(TestCase):
         _staff_login(self.client)
 
     def test_dashboard_sidebar_has_utm_links(self):
-        """Issue #570 folded the legacy ``Analytics`` section into
-        ``Marketing`` and renamed the link labels. Both UTM URLs are still
-        reachable from the sidebar; the labels are now ``UTM links`` and
-        ``UTM analytics``.
+        """The Tracking section exposes UTM links and analytics.
+
+        Both UTM URLs are still reachable from the sidebar; the labels are
+        ``UTM links`` and ``UTM analytics``.
         """
         response = self.client.get('/studio/')
         self.assertEqual(response.status_code, 200)
-        # The new Marketing section toggle hosts the UTM links.
-        self.assertContains(response, 'aria-controls="studio-section-marketing"')
+        self.assertContains(response, 'aria-controls="studio-section-tracking"')
         # Both URLs are still routed from the sidebar (unchanged).
         self.assertContains(response, 'href="/studio/utm-campaigns/"')
         self.assertContains(response, 'href="/studio/utm-analytics/"')

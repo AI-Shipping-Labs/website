@@ -449,8 +449,10 @@ class TestScenario10SidebarEntry:
         page = context.new_page()
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
 
-        # Sidebar contains both "Campaigns" (email) and "UTM Campaigns" entries
-        _expand_studio_sidebar_section(page, "marketing")
+        # Sidebar keeps email campaigns under Communication and UTM links
+        # under Tracking.
+        _expand_studio_sidebar_section(page, "communication")
+        _expand_studio_sidebar_section(page, "tracking")
         utm_link = page.locator('aside a[href="/studio/utm-campaigns/"]').first
         utm_link.wait_for(state="visible")
         email_link = page.locator('aside a[href="/studio/campaigns/"]').first

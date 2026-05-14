@@ -290,9 +290,9 @@ class TestScenario9StaffConfiguresAndPublishes:
         staff_ctx = _auth_context(browser, "staff-publish@test.com")
         staff_page = staff_ctx.new_page()
 
-        # Sidebar shows Site banner entry under Marketing.
+        # Sidebar shows Site banner entry under Communication.
         staff_page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
-        _expand_studio_sidebar_section(staff_page, "marketing")
+        _expand_studio_sidebar_section(staff_page, "communication")
         ann_link = staff_page.locator('a[href="/studio/announcement/"]')
         assert ann_link.count() >= 1
 

@@ -344,13 +344,15 @@ def studio_sidebar_state(path):
         '/events/' in p
         or p == '/studio/events'
         or 'event-series' in p
-        or 'notifications' in p
     )
-    marketing_active = (
-        ('/campaigns' in p and 'utm-campaigns' not in p)
+    communication_active = (
+        'notifications' in p
+        or ('/campaigns' in p and 'utm-campaigns' not in p)
         or '/email-templates' in p
         or '/announcement' in p
-        or 'utm-campaigns' in p
+    )
+    tracking_active = (
+        'utm-campaigns' in p
         or 'utm-analytics' in p
     )
     operations_active = (
@@ -368,7 +370,8 @@ def studio_sidebar_state(path):
         content_active
         or people_active
         or planning_active
-        or marketing_active
+        or communication_active
+        or tracking_active
         or operations_active
     )
     events_expanded = events_active or not any_other_section_active
@@ -379,7 +382,8 @@ def studio_sidebar_state(path):
         'planning_active': planning_active,
         'events_active': events_active,
         'events_expanded': events_expanded,
-        'marketing_active': marketing_active,
+        'communication_active': communication_active,
+        'tracking_active': tracking_active,
         'operations_active': operations_active,
     }
 

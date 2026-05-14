@@ -247,13 +247,6 @@ double-rendering. See issue #347.
                 <span>Event series</span>
               </a>
             </li>
-            <li>
-              <a href="{% url 'studio_notification_log' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'notifications' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="bell" class="w-4 h-4"></i>
-                <span>Notifications</span>
-              </a>
-            </li>
           </ul>
         </div>
 
@@ -401,20 +394,27 @@ double-rendering. See issue #347.
           </ul>
         </div>
 
-        <!-- Marketing Section -->
+        <!-- Communication Section -->
         <div>
           <button type="button"
                   data-studio-section-toggle
-                  aria-expanded="{% if state.marketing_active %}true{% else %}false{% endif %}"
-                  aria-controls="studio-section-marketing"
+                  aria-expanded="{% if state.communication_active %}true{% else %}false{% endif %}"
+                  aria-controls="studio-section-communication"
                   class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-foreground/70 hover:text-foreground hover:bg-secondary transition-colors min-h-[44px]">
             <span class="flex items-center space-x-3">
-              <i data-lucide="megaphone" class="w-4 h-4"></i>
-              <span>Marketing</span>
+              <i data-lucide="messages-square" class="w-4 h-4"></i>
+              <span>Communication</span>
             </span>
             <i data-lucide="chevron-down" class="studio-section-chevron w-4 h-4 transition-transform"></i>
           </button>
-          <ul id="studio-section-marketing" class="space-y-1 mt-1{% if not state.marketing_active %} hidden{% endif %}">
+          <ul id="studio-section-communication" class="space-y-1 mt-1{% if not state.communication_active %} hidden{% endif %}">
+            <li>
+              <a href="{% url 'studio_notification_log' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'notifications' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="bell" class="w-4 h-4"></i>
+                <span>Notifications</span>
+              </a>
+            </li>
             <li>
               <a href="{% url 'studio_campaign_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/campaigns' in request.path and 'utm-campaigns' not in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
@@ -436,6 +436,23 @@ double-rendering. See issue #347.
                 <span>Site banner</span>
               </a>
             </li>
+          </ul>
+        </div>
+
+        <!-- Tracking Section -->
+        <div>
+          <button type="button"
+                  data-studio-section-toggle
+                  aria-expanded="{% if state.tracking_active %}true{% else %}false{% endif %}"
+                  aria-controls="studio-section-tracking"
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-foreground/70 hover:text-foreground hover:bg-secondary transition-colors min-h-[44px]">
+            <span class="flex items-center space-x-3">
+              <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+              <span>Tracking</span>
+            </span>
+            <i data-lucide="chevron-down" class="studio-section-chevron w-4 h-4 transition-transform"></i>
+          </button>
+          <ul id="studio-section-tracking" class="space-y-1 mt-1{% if not state.tracking_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_utm_campaign_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'utm-campaigns' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">

@@ -129,6 +129,8 @@ Webhook endpoint to register in Stripe: `{SITE_BASE_URL}/api/webhooks/payments` 
 
 Webhook events: see #113 / Stripe documentation for the exact event list. Minimum events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`.
 
+Operator payment notification (issue #645): set `PAYMENT_NOTIFICATION_EMAIL` under `Studio > Settings > Site` to receive an internal email whenever a Stripe checkout completes (new paid signup, tier upgrade, or course purchase). The setting is non-secret, plain string, and has NO hard-coded default — leave it blank to disable notifications entirely; populated with an address it sends one plain-text mail per non-duplicate webhook from `DEFAULT_FROM_EMAIL`. Failures to send are logged at WARNING and never break the webhook handler. Idempotency rides on the existing `WebhookEvent` row guard, so Stripe retries of the same event never produce duplicate emails.
+
 Test: visit `{SITE_BASE_URL}/pricing`, click a paid tier, complete checkout in Stripe test mode, confirm the user's tier updates on `{SITE_BASE_URL}/account/`.
 
 ## 5. Email (Amazon SES)

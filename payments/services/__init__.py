@@ -120,6 +120,7 @@ def handle_checkout_completed(session_data):
     client_reference_id = session_data.get("client_reference_id")
     metadata = session_data.get("metadata", {})
     tier_slug = metadata.get("tier_slug", "")
+    session_id = session_data.get("id", "")
 
     # Check if this is an individual course purchase
     course_id = metadata.get("course_id")
@@ -129,6 +130,7 @@ def handle_checkout_completed(session_data):
 
     # Look up user: first by client_reference_id (user PK), then by email
     user = None
+    was_new_user = False
     if client_reference_id:
         user = User.objects.filter(pk=client_reference_id).first()
     if user is None and customer_email:
@@ -141,6 +143,7 @@ def handle_checkout_completed(session_data):
         from analytics.request_context import set_stripe_user_creation
         set_stripe_user_creation()
         user = User.objects.create_user(email=customer_email)
+        was_new_user = True
 
     if user is None:
         logger.error(
@@ -167,6 +170,10 @@ def handle_checkout_completed(session_data):
             session_data.get("id"),
         )
         return
+
+    # Remember the previous tier so we can tell upgrade-vs-new-paid-user
+    # apart when building the operator notification email below.
+    previous_tier = user.tier
 
     # Update user fields
     user.tier = tier
@@ -225,6 +232,113 @@ def handle_checkout_completed(session_data):
     if tier.level >= 20:
         _community_invite(user)
 
+    # Best-effort operator notification. Runs after every successful
+    # tier change so the configured recipient (issue #645) sees who
+    # joined and whether they are new or upgrading. Failures here MUST
+    # NOT break the webhook — the user has already paid.
+    _send_payment_notification_email(
+        event_id=session_id,
+        user=user,
+        was_new_user=was_new_user,
+        tier=tier,
+        previous_tier=previous_tier,
+        course=None,
+        stripe_customer_id=customer_id,
+    )
+
+
+def _send_payment_notification_email(
+    event_id,
+    user,
+    was_new_user,
+    tier,
+    previous_tier,
+    course,
+    stripe_customer_id,
+):
+    """Notify the configured operator that a checkout has completed.
+
+    Best-effort: when ``PAYMENT_NOTIFICATION_EMAIL`` is unset or empty
+    we no-op silently. When the value IS set, we send a single plain
+    text mail via :func:`django.core.mail.send_mail`. The handler MUST
+    survive transport errors — the user has already paid, so a missing
+    notification is a logging concern, not a payment concern. We catch
+    a broad ``Exception`` here for that reason (mirrors the Slack-invite
+    email pattern in ``community/services/slack.py``).
+
+    Idempotency is handled at the webhook-dispatch layer by the
+    ``WebhookEvent`` row; this helper does not add a second guard.
+
+    Args:
+        event_id: Stripe checkout session id (``cs_...``). Acts as the
+            traceability handle on the receiving side — it is the same
+            value stored in ``WebhookEvent.payload['data']['object']['id']``.
+        user: The ``User`` whose checkout completed.
+        was_new_user: ``True`` iff the user was created by this checkout.
+        tier: The ``Tier`` purchased, or ``None`` for course purchases.
+        previous_tier: The ``Tier`` the user held before this checkout,
+            or ``None`` for new users / course purchases.
+        course: The ``Course`` purchased, or ``None`` for tier checkouts.
+        stripe_customer_id: ``cus_...`` for traceability.
+    """
+    recipient = get_config("PAYMENT_NOTIFICATION_EMAIL", "")
+    if not recipient:
+        return
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    if course is not None:
+        subject = f"[AISL] Course purchase: {user.email}"
+        body_lines = [
+            f"User email: {user.email}",
+            f"New user: {'yes' if was_new_user else 'no'}",
+            f"Course slug: {course.slug}",
+            f"Course title: {course.title}",
+            f"Stripe customer id: {stripe_customer_id}",
+            f"Stripe session id: {event_id}",
+            f"Timestamp (UTC): {timestamp}",
+        ]
+    else:
+        tier_slug = tier.slug if tier is not None else ""
+        tier_label = getattr(tier, "name", "") or getattr(tier, "label", "") or tier_slug
+        if was_new_user:
+            subject = f"[AISL] New paid signup: {user.email}"
+        else:
+            subject = f"[AISL] Tier upgrade: {user.email} -> {tier_slug}"
+        body_lines = [
+            f"User email: {user.email}",
+            f"New user: {'yes' if was_new_user else 'no'}",
+            f"Tier slug: {tier_slug}",
+            f"Tier label: {tier_label}",
+        ]
+        if previous_tier is not None:
+            body_lines.append(f"Previous tier: {previous_tier.slug}")
+        body_lines.extend([
+            f"Stripe customer id: {stripe_customer_id}",
+            f"Stripe session id: {event_id}",
+            f"Timestamp (UTC): {timestamp}",
+        ])
+
+    message = "\n".join(body_lines)
+
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=None,  # Uses DEFAULT_FROM_EMAIL
+            recipient_list=[recipient],
+            fail_silently=False,
+        )
+    except Exception:
+        logger.warning(
+            "Failed to send payment notification email to %s for user=%s "
+            "session=%s",
+            recipient,
+            user.email,
+            event_id,
+            exc_info=True,
+        )
+
 
 def _handle_course_purchase(session_data, course_id):
     """Handle a one-time course purchase from checkout.session.completed.
@@ -241,6 +355,7 @@ def _handle_course_purchase(session_data, course_id):
 
     # Look up user
     user = None
+    was_new_user = False
     if client_reference_id:
         user = User.objects.filter(pk=client_reference_id).first()
     if user is None and metadata.get("user_id"):
@@ -311,6 +426,18 @@ def _handle_course_purchase(session_data, course_id):
             user.email,
             session_id,
         )
+
+    # Best-effort operator notification for the course purchase (issue
+    # #645). Tier is unchanged for a one-off course buy.
+    _send_payment_notification_email(
+        event_id=session_id,
+        user=user,
+        was_new_user=was_new_user,
+        tier=None,
+        previous_tier=None,
+        course=course,
+        stripe_customer_id=customer_id,
+    )
 
 
 def handle_subscription_updated(subscription_data):

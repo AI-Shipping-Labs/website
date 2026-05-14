@@ -149,10 +149,11 @@ class StudioDashboardTest(TestCase):
             )
 
     def test_dashboard_sidebar_has_sections(self):
-        """The reorganised sidebar (issue #570) renders the five new
-        collapsible section toggles, replacing the legacy
+        """The reorganised sidebar renders collapsible section toggles
+        for the live navigation groupings. The legacy
         ``Members``/``Events & Outreach``/``Users``/``System``/``Analytics``
-        flat sections.
+        flat sections are gone; the marketing section was further split
+        into communication and tracking.
         """
         response = self.client.get('/studio/')
         content = response.content.decode()
@@ -160,7 +161,9 @@ class StudioDashboardTest(TestCase):
             'content',
             'people',
             'events',
-            'marketing',
+            'planning',
+            'communication',
+            'tracking',
             'operations',
         ):
             self.assertIn(

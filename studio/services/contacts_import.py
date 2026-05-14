@@ -26,6 +26,7 @@ from django.utils import timezone
 from accounts.models import TierOverride
 from accounts.utils.tags import normalize_tag
 from payments.models import Tier
+from payments.services.backfill_tiers import backfill_user_from_stripe
 
 User = get_user_model()
 
@@ -304,6 +305,12 @@ def import_contact_rows(rows, *, default_tag="", default_tier=None, granted_by=N
                 row_number=row_number,
                 warnings=result.warnings,
             )
+            _sync_stripe_tier_after_customer_id_import(
+                user,
+                row,
+                row_number=row_number,
+                warnings=result.warnings,
+            )
             _apply_slack_member(
                 user,
                 row,
@@ -365,6 +372,21 @@ def _apply_write_once_id(
         return
     setattr(user, user_attr, trimmed)
     user.save(update_fields=[user_attr])
+
+
+def _sync_stripe_tier_after_customer_id_import(user, row, *, row_number, warnings):
+    raw = row.get("stripe_customer_id")
+    if not isinstance(raw, str):
+        return
+    stripe_customer_id = raw.strip()
+    if not stripe_customer_id:
+        return
+    if user.stripe_customer_id != stripe_customer_id:
+        return
+
+    record = backfill_user_from_stripe(user)
+    if record.status == "warning":
+        warnings.append((row_number, record.message, "stripe_sync_warning"))
 
 
 def _apply_slack_member(user, row, *, row_number, warnings):

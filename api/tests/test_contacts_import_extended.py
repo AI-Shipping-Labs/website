@@ -14,12 +14,14 @@ import csv
 import io
 import json
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import Token
+from payments.models import Tier
 
 User = get_user_model()
 
@@ -121,17 +123,82 @@ class ContactsImportExtendedFieldsTest(TestCase):
         # Sanity: blank by default.
         self.assertEqual(existing.stripe_customer_id, "")
 
-        response = self._post({
-            "contacts": [{
-                "email": "stripe@test.com",
-                "stripe_customer_id": "cus_ABC",
-            }],
-        })
+        with patch("studio.services.contacts_import.backfill_user_from_stripe"):
+            response = self._post({
+                "contacts": [{
+                    "email": "stripe@test.com",
+                    "stripe_customer_id": "cus_ABC",
+                }],
+            })
         self.assertEqual(response.status_code, 200)
         existing.refresh_from_db()
         self.assertEqual(existing.stripe_customer_id, "cus_ABC")
         # Identical-write should never produce a conflict warning.
         self.assertEqual(response.json()["warnings"], [])
+
+    def test_import_syncs_tier_after_setting_stripe_customer_id(self):
+        existing = User.objects.create_user(
+            email="stripe-sync@test.com",
+            password=None,
+        )
+        main = Tier.objects.get(slug="main")
+
+        def sync_from_stripe(user):
+            user.tier = main
+            user.subscription_id = "sub_SYNCED"
+            user.save(update_fields=["tier", "subscription_id"])
+
+            class Record:
+                status = "changed"
+                message = "changed: free -> main"
+
+            return Record()
+
+        with patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            side_effect=sync_from_stripe,
+        ) as mock_backfill:
+            response = self._post({
+                "contacts": [{
+                    "email": "stripe-sync@test.com",
+                    "stripe_customer_id": "cus_SYNC",
+                }],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        existing.refresh_from_db()
+        self.assertEqual(existing.stripe_customer_id, "cus_SYNC")
+        self.assertEqual(existing.tier.slug, "main")
+        self.assertEqual(existing.subscription_id, "sub_SYNCED")
+        mock_backfill.assert_called_once()
+        self.assertEqual(response.json()["warnings"], [])
+
+    def test_import_reports_stripe_sync_warning_after_customer_id(self):
+        existing = User.objects.create_user(
+            email="stripe-warning@test.com",
+            password=None,
+        )
+
+        class Record:
+            status = "warning"
+            message = "warning: active Stripe subscription uses unknown price"
+
+        with patch(
+            "studio.services.contacts_import.backfill_user_from_stripe",
+            return_value=Record(),
+        ):
+            response = self._post({
+                "contacts": [{
+                    "email": "stripe-warning@test.com",
+                    "stripe_customer_id": "cus_WARN",
+                }],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        existing.refresh_from_db()
+        self.assertEqual(existing.stripe_customer_id, "cus_WARN")
+        warnings = response.json()["warnings"]
+        self.assertEqual(warnings[0]["reason"], "stripe_sync_warning")
 
     def test_import_does_not_overwrite_existing_stripe_customer_id(self):
         existing = User.objects.create_user(
@@ -168,12 +235,13 @@ class ContactsImportExtendedFieldsTest(TestCase):
             stripe_customer_id="cus_SAME",
         )
 
-        response = self._post({
-            "contacts": [{
-                "email": "same@test.com",
-                "stripe_customer_id": "cus_SAME",
-            }],
-        })
+        with patch("studio.services.contacts_import.backfill_user_from_stripe"):
+            response = self._post({
+                "contacts": [{
+                    "email": "same@test.com",
+                    "stripe_customer_id": "cus_SAME",
+                }],
+            })
         self.assertEqual(response.status_code, 200)
         existing.refresh_from_db()
         self.assertEqual(existing.stripe_customer_id, "cus_SAME")

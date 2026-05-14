@@ -14,6 +14,7 @@ Stripe from accidental no-arg pulls. Operators above the cap should batch
 via the explicit ``emails`` list on the apply endpoint.
 """
 
+import stripe
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from django.utils import timezone
@@ -23,12 +24,14 @@ from accounts.auth import token_required
 from accounts.models import TierOverride
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
+from integrations.config import get_config
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from payments.services.import_stripe import _price_to_tier_map
 
 User = get_user_model()
 
 MAX_USERS_PER_REQUEST = 500
+MAX_PRICE_IDS_PER_REQUEST = 50
 
 
 def _eligible_users_queryset():
@@ -342,6 +345,135 @@ def tier_reconcile_apply(request):
             "warnings": warnings,
             "dry_run": dry_run_raw,
             "results": results,
+        },
+        status=200,
+    )
+
+
+def _stripe_attr(obj, key, default=None):
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _serialize_stripe_price(price):
+    recurring = _stripe_attr(price, "recurring") or {}
+    product = _stripe_attr(price, "product")
+    transform_quantity = _stripe_attr(price, "transform_quantity") or {}
+
+    return {
+        "id": _stripe_attr(price, "id", ""),
+        "active": bool(_stripe_attr(price, "active", False)),
+        "currency": _stripe_attr(price, "currency", ""),
+        "unit_amount": _stripe_attr(price, "unit_amount"),
+        "unit_amount_decimal": _stripe_attr(price, "unit_amount_decimal"),
+        "billing_scheme": _stripe_attr(price, "billing_scheme", ""),
+        "lookup_key": _stripe_attr(price, "lookup_key", "") or "",
+        "nickname": _stripe_attr(price, "nickname", "") or "",
+        "livemode": bool(_stripe_attr(price, "livemode", False)),
+        "recurring": {
+            "interval": _stripe_attr(recurring, "interval", "") or "",
+            "interval_count": _stripe_attr(recurring, "interval_count"),
+            "usage_type": _stripe_attr(recurring, "usage_type", "") or "",
+        },
+        "product": {
+            "id": _stripe_attr(product, "id", "") if product else "",
+            "name": _stripe_attr(product, "name", "") if product else "",
+            "active": bool(_stripe_attr(product, "active", False)) if product else False,
+        },
+        "transform_quantity": {
+            "divide_by": _stripe_attr(transform_quantity, "divide_by"),
+            "round": _stripe_attr(transform_quantity, "round", "") or "",
+        },
+    }
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+def stripe_prices_lookup(request):
+    """``POST /api/payments/stripe-prices``.
+
+    Body: ``{"price_ids": ["price_..."]}``
+
+    Uses the configured ``STRIPE_SECRET_KEY`` server-side to inspect Stripe
+    Price metadata without exposing the key through Studio or the API.
+    """
+    data, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return error_response(
+            "Body must be valid JSON",
+            "invalid_json",
+        )
+    if not isinstance(data, dict):
+        return error_response(
+            "Body must be a JSON object",
+            "invalid_type",
+            details={"field": "body", "expected": "object"},
+        )
+
+    price_ids_raw = data.get("price_ids")
+    if not isinstance(price_ids_raw, list):
+        return error_response(
+            "price_ids must be a list of strings",
+            "invalid_type",
+            details={"field": "price_ids", "expected": "list"},
+        )
+    if len(price_ids_raw) > MAX_PRICE_IDS_PER_REQUEST:
+        return error_response(
+            f"Too many price IDs to inspect in one request (max {MAX_PRICE_IDS_PER_REQUEST}).",
+            "too_many_price_ids",
+            status=429,
+        )
+
+    price_ids = []
+    seen = set()
+    for index, value in enumerate(price_ids_raw):
+        if not isinstance(value, str) or not value.strip():
+            return error_response(
+                "Each price_ids entry must be a non-empty string",
+                "validation_error",
+                status=422,
+                details={"field": f"price_ids[{index}]"},
+            )
+        price_id = value.strip()
+        if price_id in seen:
+            continue
+        seen.add(price_id)
+        price_ids.append(price_id)
+
+    secret_key = get_config("STRIPE_SECRET_KEY", "")
+    if not secret_key:
+        return error_response(
+            "STRIPE_SECRET_KEY is not configured",
+            "stripe_not_configured",
+            status=503,
+        )
+
+    prices = []
+    errors = []
+    for price_id in price_ids:
+        try:
+            price = stripe.Price.retrieve(
+                price_id,
+                api_key=secret_key,
+                expand=["product"],
+            )
+        except stripe.StripeError as exc:
+            errors.append({
+                "id": price_id,
+                "type": exc.__class__.__name__,
+                "message": str(exc).splitlines()[0],
+            })
+            continue
+        prices.append(_serialize_stripe_price(price))
+
+    return JsonResponse(
+        {
+            "count": len(prices),
+            "error_count": len(errors),
+            "prices": prices,
+            "errors": errors,
         },
         status=200,
     )

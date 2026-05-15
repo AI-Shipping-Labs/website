@@ -103,4 +103,51 @@
   // Exposed globally so the form's inline onsubmit="return handleRegister(event)"
   // (defined in _register_form.html) finds it.
   window.handleRegister = handleRegister;
+
+  // Compact OAuth disclosure (issue #654). The pricing free-tier card
+  // renders the inline register partial with compact=True, which wraps
+  // the OAuth provider buttons behind a "More sign-in options" toggle.
+  // The toggle button only exists in compact mode, so this initializer
+  // is a no-op on the expanded variant (course detail, workshop pages
+  // paywall, standalone register page).
+  function initOauthDisclosure() {
+    var toggles = document.querySelectorAll(
+      '[data-testid="inline-register-oauth-toggle"]'
+    );
+    for (var i = 0; i < toggles.length; i++) {
+      var toggle = toggles[i];
+      if (toggle.dataset.disclosureWired === 'true') {
+        continue;
+      }
+      toggle.dataset.disclosureWired = 'true';
+      toggle.addEventListener('click', function (event) {
+        var btn = event.currentTarget;
+        var controlsId = btn.getAttribute('aria-controls');
+        var block = controlsId ? document.getElementById(controlsId) : null;
+        if (!block) {
+          return;
+        }
+        var isHidden = block.hasAttribute('hidden');
+        if (isHidden) {
+          block.removeAttribute('hidden');
+          btn.setAttribute('aria-expanded', 'true');
+        } else {
+          block.setAttribute('hidden', '');
+          btn.setAttribute('aria-expanded', 'false');
+        }
+        var chevron = btn.querySelector(
+          '[data-testid="inline-register-oauth-chevron"]'
+        );
+        if (chevron) {
+          chevron.classList.toggle('rotate-180', isHidden);
+        }
+      });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initOauthDisclosure);
+  } else {
+    initOauthDisclosure();
+  }
 })();

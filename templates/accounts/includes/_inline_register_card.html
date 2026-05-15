@@ -14,6 +14,11 @@ Expected context:
   oauth_slack_enabled     — boolean
   inline_heading          — optional heading text
   inline_subtitle         — optional subtitle text
+  compact                 — optional boolean (default False). When True,
+                            the OAuth divider + provider buttons are
+                            tucked behind a "More sign-in options"
+                            disclosure (#654). Renders nothing if no
+                            OAuth provider is enabled.
 
 The surface template MUST also include in extra_scripts:
 
@@ -35,7 +40,30 @@ authNextUrl from the #auth-next-url script block.
   {% endif %}
 
   {% include "accounts/includes/_register_form.html" %}
+  {% if compact %}
+    {% if oauth_google_enabled or oauth_github_enabled or oauth_slack_enabled %}
+    {% comment %}
+    Compact disclosure — issue #654. The OAuth block stays gated by the
+    same provider flags as the expanded variant, so when no provider is
+    enabled neither the toggle button nor the OAuth markup renders.
+    {% endcomment %}
+    <div class="mt-6" data-testid="inline-register-oauth-disclosure">
+      <button type="button"
+              class="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+              data-testid="inline-register-oauth-toggle"
+              aria-expanded="false"
+              aria-controls="inline-register-oauth-block">
+        <span>More sign-in options</span>
+        <i data-lucide="chevron-down" class="h-4 w-4 transition-transform" data-testid="inline-register-oauth-chevron" aria-hidden="true"></i>
+      </button>
+      <div id="inline-register-oauth-block" hidden data-testid="inline-register-oauth-block">
+        {% include "accounts/includes/_oauth_providers.html" with oauth_action="Sign up" oauth_divider_text="sign up with" %}
+      </div>
+    </div>
+    {% endif %}
+  {% else %}
   {% include "accounts/includes/_oauth_providers.html" with oauth_action="Sign up" oauth_divider_text="sign up with" %}
+  {% endif %}
   {% include "accounts/includes/_legal_footer.html" with legal_action="creating an account" %}
   {# Issue #653: opt-in disclosure for the implicit newsletter subscription #}
   {# that comes with a free account. Inline-card surfaces suppress the footer #}

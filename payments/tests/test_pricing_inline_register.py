@@ -83,3 +83,75 @@ class PricingInlineRegisterTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="inline-register-card"')
         self.assertNotContains(response, 'id="register-email"')
+
+
+class PricingInlineRegisterCompactTest(TestCase):
+    """Issue #654: /pricing renders the inline register card in compact
+    mode so the free-tier slot stops dwarfing the Basic/Main/Premium
+    siblings on a 1440-wide grid.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.User = get_user_model()
+        cls.free = Tier.objects.get(slug="free")
+
+    def _free_card_html(self, response):
+        """Slice out just the free-tier card so we don't false-positive
+        on toggle buttons elsewhere on the page (header, footer)."""
+        body = response.content.decode()
+        free_start = body.index('data-tier-card="free"')
+        # The next tier card opens with another ``data-tier-card=``
+        # attribute — slice up to it.
+        next_card = body.find('data-tier-card=', free_start + 1)
+        end = next_card if next_card != -1 else len(body)
+        return body[free_start:end]
+
+    def test_anonymous_pricing_uses_compact_variant(self):
+        """The free-tier card on /pricing renders the compact toggle
+        and keeps the OAuth block hidden until the visitor expands it."""
+        app = SocialApp.objects.create(
+            provider='google', name='Google',
+            client_id='google-cid', secret='google-secret',
+        )
+        app.sites.add(Site.objects.get_current())
+
+        response = self.client.get("/pricing")
+        self.assertEqual(response.status_code, 200)
+        free_card = self._free_card_html(response)
+        # Compact toggle is inside the free-tier card.
+        self.assertIn(
+            'data-testid="inline-register-oauth-toggle"', free_card,
+        )
+        self.assertIn("More sign-in options", free_card)
+        # OAuth wrapper is hidden by default.
+        self.assertIn('id="inline-register-oauth-block"', free_card)
+        block_segment = free_card.split(
+            'id="inline-register-oauth-block"', 1,
+        )[1]
+        opening_tag = block_segment.split('>', 1)[0]
+        self.assertIn('hidden', opening_tag)
+        # The OAuth markup itself is still rendered (inside the hidden
+        # wrapper) — clicking the toggle reveals it without re-render.
+        self.assertIn("Sign up with Google", free_card)
+
+    def test_anonymous_pricing_compact_with_no_oauth_no_toggle(self):
+        """No SocialApp configured → no toggle button on /pricing.
+
+        Compact mode must not leave an orphan "More sign-in options"
+        button when OAuth would have been empty.
+        """
+        response = self.client.get("/pricing")
+        self.assertEqual(response.status_code, 200)
+        free_card = self._free_card_html(response)
+        # Inline card is still present (email + password form).
+        self.assertIn('data-testid="inline-register-card"', free_card)
+        self.assertIn('id="register-email"', free_card)
+        # No toggle button, no disclosure wrapper.
+        self.assertNotIn(
+            'data-testid="inline-register-oauth-toggle"', free_card,
+        )
+        self.assertNotIn("More sign-in options", free_card)
+        self.assertNotIn(
+            'data-testid="inline-register-oauth-disclosure"', free_card,
+        )

@@ -88,3 +88,130 @@ class InlineRegisterPartialTest(TestCase):
             '/accounts/github/login/?next=/pricing',
             html,
         )
+
+
+class InlineRegisterCompactVariantTest(TestCase):
+    """Issue #654: the inline register card grows a ``compact`` flag.
+
+    When ``compact=True``, the OAuth divider + provider buttons are
+    tucked behind a "More sign-in options" disclosure so the free-tier
+    card on /pricing stops dwarfing its Basic/Main/Premium siblings.
+    Course detail and workshop pages paywall stay on the default
+    expanded variant where the wider container can absorb the form.
+    """
+
+    template = "accounts/includes/_inline_register_card.html"
+
+    def _seed_provider(self, provider, name):
+        app = SocialApp.objects.create(
+            provider=provider,
+            name=name,
+            client_id=f"{provider}-cid",
+            secret=f"{provider}-secret",
+        )
+        app.sites.add(Site.objects.get_current())
+        return app
+
+    def test_compact_false_renders_oauth_expanded(self):
+        """``compact=False`` (default) keeps the legacy expanded layout —
+        no toggle button, OAuth divider rendered inline."""
+        self._seed_provider("google", "Google")
+        html = render_to_string(self.template, {
+            "next_url": "/courses/demo",
+            "oauth_google_enabled": True,
+            "compact": False,
+        })
+        self.assertNotIn('data-testid="inline-register-oauth-toggle"', html)
+        self.assertNotIn(
+            'data-testid="inline-register-oauth-disclosure"', html,
+        )
+        # OAuth block is present and NOT wrapped by a hidden container.
+        self.assertIn("Sign up with Google", html)
+        self.assertNotIn(
+            'id="inline-register-oauth-block"', html,
+        )
+
+    def test_compact_true_renders_toggle_button(self):
+        """With ``compact=True`` and one provider enabled, the toggle
+        button renders and the OAuth block is wrapped in a hidden
+        container — collapsed by default."""
+        self._seed_provider("google", "Google")
+        html = render_to_string(self.template, {
+            "next_url": "/pricing",
+            "oauth_google_enabled": True,
+            "compact": True,
+        })
+        self.assertIn('data-testid="inline-register-oauth-toggle"', html)
+        self.assertIn("More sign-in options", html)
+        # OAuth block wrapper exists with the hidden attribute.
+        self.assertIn(
+            'id="inline-register-oauth-block"', html,
+        )
+        # The wrapper carries the ``hidden`` HTML attribute so the
+        # OAuth markup is collapsed before JS runs.
+        block_segment = html.split('id="inline-register-oauth-block"', 1)[1]
+        # The opening tag's attribute list runs up to the next ``>``;
+        # ``hidden`` must appear there (not inside the nested OAuth markup).
+        opening_tag = block_segment.split('>', 1)[0]
+        self.assertIn('hidden', opening_tag)
+        # OAuth content is inside the wrapper.
+        self.assertIn("Sign up with Google", html)
+        # Initial aria-expanded is false on the toggle.
+        self.assertIn('aria-expanded="false"', html)
+
+    def test_compact_true_with_no_oauth_hides_toggle(self):
+        """When no SocialApp is configured, the toggle button must NOT
+        render — there is nothing behind it. Matches today's hide-when-
+        empty behavior of the expanded OAuth partial."""
+        html = render_to_string(self.template, {
+            "next_url": "/pricing",
+            "oauth_google_enabled": False,
+            "oauth_github_enabled": False,
+            "oauth_slack_enabled": False,
+            "compact": True,
+        })
+        self.assertNotIn(
+            'data-testid="inline-register-oauth-toggle"', html,
+        )
+        self.assertNotIn("More sign-in options", html)
+        self.assertNotIn(
+            'data-testid="inline-register-oauth-disclosure"', html,
+        )
+        self.assertNotIn("Sign up with Google", html)
+
+    def test_compact_default_is_false(self):
+        """No ``compact`` key in context means the partial renders the
+        legacy expanded variant — no toggle button, OAuth inline."""
+        self._seed_provider("google", "Google")
+        html = render_to_string(self.template, {
+            "next_url": "/courses/demo",
+            "oauth_google_enabled": True,
+        })
+        self.assertNotIn(
+            'data-testid="inline-register-oauth-toggle"', html,
+        )
+        # OAuth still visible inline.
+        self.assertIn("Sign up with Google", html)
+
+    def test_compact_toggle_aria_attributes(self):
+        """The toggle button must wire ``aria-controls`` to the OAuth
+        block ``id`` for screen readers — the disclosure pattern from
+        the WAI-ARIA Authoring Practices."""
+        self._seed_provider("google", "Google")
+        html = render_to_string(self.template, {
+            "next_url": "/pricing",
+            "oauth_google_enabled": True,
+            "compact": True,
+        })
+        # Pull out the toggle button's opening tag.
+        toggle_idx = html.index('data-testid="inline-register-oauth-toggle"')
+        # Find the enclosing ``<button`` tag start.
+        button_start = html.rfind('<button', 0, toggle_idx)
+        button_end = html.index('>', toggle_idx)
+        button_tag = html[button_start:button_end + 1]
+        self.assertIn('aria-expanded="false"', button_tag)
+        self.assertIn(
+            'aria-controls="inline-register-oauth-block"', button_tag,
+        )
+        # And the controlled element exists with that id.
+        self.assertIn('id="inline-register-oauth-block"', html)

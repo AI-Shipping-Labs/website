@@ -127,8 +127,14 @@
               inline register card so anonymous visitors can register
               without leaving /pricing. The form/OAuth/legal partials are
               shared with the standalone register page.
+
+              Issue #654: pass compact=True so OAuth providers are tucked
+              behind a "More sign-in options" disclosure — keeps the free
+              tier card height in line with Basic/Main/Premium siblings.
+              Course detail and workshop pages paywall stay on the
+              default expanded variant.
             {% endcomment %}
-            {% include "accounts/includes/_inline_register_card.html" %}
+            {% include "accounts/includes/_inline_register_card.html" with compact=True %}
             {% elif item.state.action_kind == 'portal' %}
             <a href="{{ stripe_customer_portal_url }}"
                class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80 min-h-[44px] flex items-center justify-center"

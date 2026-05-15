@@ -783,13 +783,19 @@ class TestScenario9FreeCourseAnonymousSignupCTA:
         # CTA block shows "Sign up free to start this course"
         assert "Sign up free to start this course" in body
 
-        # "Sign Up Free" button links to /accounts/signup
-        signup_btn = page.locator(
-            'a:has-text("Sign Up Free")'
+        # Issue #652 replaced the "Sign Up Free" anchor with the inline
+        # register card on free-anon course pages. Assert the card is
+        # rendered and its sign-in link carries next= back here.
+        inline_card = page.locator(
+            "[data-testid='inline-register-card']"
         )
-        assert signup_btn.count() >= 1
-        href = signup_btn.first.get_attribute("href")
-        assert "/accounts/signup" in href
+        assert inline_card.count() == 1
+        login_link = inline_card.locator("#login-link")
+        href = login_link.get_attribute("href")
+        assert href is not None
+        assert href.startswith("/accounts/login/")
+        assert "next=" in href
+        assert "courses/python-basics" in href
 
         # No "Unlock with" text
         assert "Unlock with" not in body

@@ -260,16 +260,23 @@ class TestScenario2AnonymousLandingPageSignupCTA:
         assert "Day 6: Publish Your Agent" in body
         assert "Day 7: Share Results and Peer Review" in body
 
-        # Sign up free CTA
+        # Sign up free CTA — issue #652 replaced the "Sign Up Free"
+        # anchor with an inline-register card on free-anon course pages.
+        # The cta_message text "Sign up free to start this course" still
+        # appears above the card; assert the card is rendered and ready.
         assert "sign up free" in body.lower()
-        signup_btn = page.locator(
-            'a:has-text("Sign Up Free")'
+        inline_card = page.locator(
+            "[data-testid='inline-register-card']"
         )
-        assert signup_btn.count() >= 1
-
-        # Step 2: Click the Sign Up Free CTA
-        href = signup_btn.first.get_attribute("href")
-        assert "/accounts/" in href
+        assert inline_card.count() == 1
+        assert inline_card.locator("#register-email").count() == 1
+        # The card's Sign-in link carries next= back to this course page
+        # so existing users land back here after auth.
+        login_link = inline_card.locator("#login-link")
+        href = login_link.get_attribute("href")
+        assert href is not None
+        assert href.startswith("/accounts/login/")
+        assert "next=" in href
 # ---------------------------------------------------------------
 # Scenario 3: Anonymous visitor can preview Day 1 content
 # ---------------------------------------------------------------

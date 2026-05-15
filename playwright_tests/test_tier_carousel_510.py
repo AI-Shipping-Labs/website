@@ -309,7 +309,14 @@ def test_pricing_main_dominant_and_badge_visible_on_mobile(django_server, page):
     basic_h = _get_card_height(page, "basic")
     premium_h = _get_card_height(page, "premium")
     assert main_h > 0
-    for slug, h in (("free", free_h), ("basic", basic_h), ("premium", premium_h)):
+    # Issue #652 replaced the Free tier's "Create an account" button
+    # with an inline registration form (email + password + OAuth +
+    # legal). The Free card is now intentionally taller than the
+    # paid-tier cards because it renders a full form, not a CTA. The
+    # "Main is dominant" check therefore only compares against the
+    # paid peers (Basic, Premium) whose shape Main is meant to outsize.
+    assert free_h > 0, "free card not found"
+    for slug, h in (("basic", basic_h), ("premium", premium_h)):
         assert h > 0, f"{slug} card not found"
         assert main_h >= 1.20 * h, (
             f"Main ({main_h}px) must be >=1.20x {slug} ({h}px) on mobile"

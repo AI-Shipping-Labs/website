@@ -1018,11 +1018,14 @@ class TestScenario12DiscoverSubscribeFromPricing:
         """Given an anonymous visitor comparing membership options.
         1. Navigate to /pricing
         2. Find the Free tier card
-        Then: The Free tier card includes a CTA that leads toward
-              the newsletter signup.
-        3. Follow the Free tier's CTA
-        Then: The visitor arrives at the newsletter section on the
-              homepage (/#newsletter) or /subscribe."""
+
+        Issue #652 replaced the Free-tier "Create an account" button
+        with an inline registration card; signing up no longer requires
+        leaving /pricing. The free-tier signup grants implicit
+        newsletter access (see opt-in disclosure rendered by the
+        inline-register partial), so this scenario now verifies the
+        inline CTA is present and discoverable.
+        """
         _ensure_tiers()
 
         # Step 1: Navigate to /pricing
@@ -1030,7 +1033,6 @@ class TestScenario12DiscoverSubscribeFromPricing:
             f"{django_server}/pricing",
             wait_until="domcontentloaded",
         )
-        page.content()
 
         # Step 2: Find the Free tier card
         # The pricing grid has tier cards
@@ -1049,28 +1051,20 @@ class TestScenario12DiscoverSubscribeFromPricing:
 
         assert free_card is not None, "Free tier card not found"
 
-        # Then: Free tier has a CTA link
-        free_cta = free_card.locator("a")
-        assert free_cta.count() >= 1
-
-        # The CTA now sends free-tier discoverers to account signup.
-        cta_href = free_cta.first.get_attribute("href")
-        assert "/accounts/register/" in cta_href, (
-            f"Free tier CTA should link to /accounts/register/, "
-            f"got: {cta_href}"
+        # Then: Free tier surfaces the inline-register card (no nav).
+        inline_card = free_card.locator(
+            "[data-testid='inline-register-card']"
         )
-
-        # Step 3: Follow the Free tier's CTA
-        free_cta.first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: Arrives at the newsletter section or subscribe
-        current_url = page.url
-        assert (
-            "newsletter" in current_url
-            or "/subscribe" in current_url
-            or page.url.endswith("/")  # homepage with #newsletter
-        ), (
-            f"Expected newsletter or subscribe page, "
-            f"got: {current_url}"
+        assert inline_card.count() == 1, (
+            "Free tier should render the inline-register card "
+            "(#652) so visitors can sign up without leaving /pricing"
+        )
+        # And it surfaces the implicit newsletter opt-in disclosure
+        # (#653) so the newsletter-subscription side-effect is explicit.
+        opt_in = inline_card.locator(
+            "[data-testid='inline-register-opt-in']"
+        )
+        assert opt_in.count() == 1
+        assert "newsletter" in opt_in.inner_text().lower() or (
+            "community updates" in opt_in.inner_text().lower()
         )

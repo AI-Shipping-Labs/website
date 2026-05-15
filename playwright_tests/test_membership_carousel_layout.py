@@ -138,9 +138,10 @@ def test_pricing_mobile_carousel_free_copy_and_desktop_grid(django_server, page)
     _assert_main_centered(page, '[data-testid="pricing-tier-carousel"]')
     free_card = page.locator('[data-tier-card="free"]')
     expect(free_card).to_contain_text("Newsletter and open resources")
-    expect(free_card.get_by_role("link", name="Create an account")).to_have_attribute(
-        "href", "/accounts/register/"
-    )
+    # Issue #652: the Free tier CTA is now the inline-register card,
+    # not a navigational "Create an account" anchor.
+    expect(free_card.locator('[data-testid="inline-register-card"]')).to_be_visible()
+    expect(free_card.locator("#register-email")).to_be_visible()
     _screenshot(page, '[data-testid="pricing-tier-carousel"]', "pricing-mobile-anon")
 
     page.set_viewport_size(DESKTOP)

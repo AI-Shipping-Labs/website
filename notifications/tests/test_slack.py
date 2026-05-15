@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import requests
 from django.test import TestCase, override_settings
 
-from content.models import Article
+from content.models import Article, Workshop
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from notifications.services.slack_announcements import (
@@ -60,6 +60,25 @@ class BuildSlackBlocksTest(TestCase):
         _, blocks = _build_slack_blocks('article', article)
         text = blocks[0]['text']['text']
         self.assertIn('...', text)
+
+    def test_build_slack_blocks_workshop_label(self):
+        """text_fallback starts with 'New workshop:' and mrkdwn_text starts
+        with '*New workshop:*' (issue #647)."""
+        workshop = Workshop.objects.create(
+            title='RAG Bootcamp', slug='rag-bootcamp',
+            date=date(2026, 1, 1), status='published',
+            description='Hands-on RAG.',
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        text_fallback, blocks = _build_slack_blocks('workshop', workshop)
+        self.assertEqual(text_fallback, 'New workshop: RAG Bootcamp')
+        self.assertTrue(
+            blocks[0]['text']['text'].startswith('*New workshop:*'),
+            f'mrkdwn_text should start with *New workshop:* but was: '
+            f'{blocks[0]["text"]["text"]!r}',
+        )
 
 
 @override_settings(SLACK_ENABLED=True)

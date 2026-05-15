@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from content.models import Article, Course, Download
+from content.models import Article, Course, Download, Workshop
 from events.models import Event
 from notifications.models import EventReminderLog, Notification
 from notifications.services.notification_service import NotificationService
@@ -153,6 +153,129 @@ class NotificationServiceNotifyTest(TestCase):
         )
         NotificationService.notify('article', article.pk)
         mock_slack.assert_called_once_with('article', article)
+
+    # --- Workshop notification tests (issue #647) ---
+
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_notify_workshop_creates_notifications_for_all_users_when_open(
+        self, mock_slack,
+    ):
+        """A published workshop with landing_required_level=0 notifies every
+        active user (free + basic + main)."""
+        workshop = Workshop.objects.create(
+            title='Build a RAG App', slug='build-a-rag-app',
+            date=date(2026, 1, 1), status='published',
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        NotificationService.notify('workshop', workshop.pk)
+        self.assertEqual(Notification.objects.count(), 3)
+
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_notify_workshop_with_basic_landing_filters_out_free(
+        self, mock_slack,
+    ):
+        """A workshop with landing_required_level=10 notifies basic + main
+        but NOT free."""
+        workshop = Workshop.objects.create(
+            title='Basic Landing Workshop', slug='basic-landing-workshop',
+            date=date(2026, 1, 1), status='published',
+            landing_required_level=10,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        NotificationService.notify('workshop', workshop.pk)
+
+        users_notified = set(
+            Notification.objects.values_list('user__email', flat=True),
+        )
+        self.assertIn('basic@example.com', users_notified)
+        self.assertIn('main@example.com', users_notified)
+        self.assertNotIn('free@example.com', users_notified)
+
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_notify_workshop_with_main_landing_filters_out_free_and_basic(
+        self, mock_slack,
+    ):
+        """A workshop with landing_required_level=20 notifies main only."""
+        workshop = Workshop.objects.create(
+            title='Main Only Workshop', slug='main-only-workshop',
+            date=date(2026, 1, 1), status='published',
+            landing_required_level=20,
+            pages_required_level=20,
+            recording_required_level=20,
+        )
+        NotificationService.notify('workshop', workshop.pk)
+
+        users_notified = set(
+            Notification.objects.values_list('user__email', flat=True),
+        )
+        self.assertEqual(users_notified, {'main@example.com'})
+
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_notify_workshop_uses_workshop_url(self, mock_slack):
+        """Notification.url is /workshops/<slug> and title starts with
+        'New workshop:'."""
+        workshop = Workshop.objects.create(
+            title='URL Workshop', slug='url-workshop',
+            date=date(2026, 1, 1), status='published',
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        NotificationService.notify('workshop', workshop.pk)
+        n = Notification.objects.filter(user=self.free_user).first()
+        self.assertEqual(n.url, '/workshops/url-workshop')
+        self.assertEqual(n.title, 'New workshop: URL Workshop')
+        self.assertEqual(n.notification_type, 'new_content')
+        self.assertFalse(n.read)
+
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_notify_workshop_uses_workshop_description_for_body(
+        self, mock_slack,
+    ):
+        """Notification.body is the first 200 chars of Workshop.description."""
+        long_desc = 'A great workshop. ' * 30  # > 200 chars
+        workshop = Workshop.objects.create(
+            title='Desc Workshop', slug='desc-workshop',
+            date=date(2026, 1, 1), status='published',
+            description=long_desc,
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        NotificationService.notify('workshop', workshop.pk)
+        n = Notification.objects.filter(user=self.free_user).first()
+        self.assertEqual(n.body, long_desc[:200])
+        self.assertEqual(len(n.body), 200)
+
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_notify_workshop_calls_slack_announcement(self, mock_slack):
+        """post_slack_announcement is called once with ('workshop', workshop)."""
+        workshop = Workshop.objects.create(
+            title='Slack Workshop', slug='slack-workshop',
+            date=date(2026, 1, 1), status='published',
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        NotificationService.notify('workshop', workshop.pk)
+        mock_slack.assert_called_once_with('workshop', workshop)
+
+    def test_notify_workshop_nonexistent_id_does_not_crash(self):
+        """NotificationService.notify('workshop', 99999) logs and creates
+        zero notifications."""
+        with self.assertLogs(
+            'notifications.services.notification_service',
+            level='ERROR',
+        ) as logs:
+            NotificationService.notify('workshop', 99999)
+        self.assertIn(
+            'Failed to load content for notify: workshop/99999',
+            logs.output[0],
+        )
+        self.assertEqual(Notification.objects.count(), 0)
 
     def test_notify_unknown_content_type_does_not_crash(self):
         """Unknown content types should be handled gracefully."""

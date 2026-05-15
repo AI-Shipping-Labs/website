@@ -73,19 +73,38 @@ class IntegrationDocsHelpIconRenderTest(TestCase):
     def test_key_without_docs_url_has_no_help_icon(self):
         """Keys without ``docs_url`` in the registry get no (?) link.
 
-        Adding ``docs_url`` for every group is a follow-up; until then
-        the Studio page must not render dead (?) icons for keys whose
+        Issue #649 wired every key in the live registry to a docs URL,
+        so this scenario no longer occurs in production. We still
+        cover the negative branch by injecting a synthetic registry
+        whose entries are intentionally missing ``docs_url`` — the
+        Studio template must not render dead (?) icons for keys whose
         docs page does not exist.
         """
-        response = self.client.get('/studio/settings/')
+        from unittest.mock import patch
+
+        synthetic_registry = [
+            {
+                'name': 'phantom',
+                'label': 'Phantom',
+                'keys': [
+                    {
+                        'key': 'PHANTOM_NO_DOCS_KEY',
+                        'is_secret': False,
+                        'description': 'Synthetic key without docs_url.',
+                    },
+                ],
+            },
+        ]
+        with patch('studio.views.settings.INTEGRATION_GROUPS', synthetic_registry):
+            response = self.client.get('/studio/settings/')
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
 
-        # SLACK_ENABLED is a known boolean key with no docs_url in this
-        # commit. There must be no ``data-docs-link`` anchor for it.
+        # The (?) anchor uses data-docs-link="<KEY>". The synthetic key
+        # has no docs_url so the anchor must not render.
         self.assertNotRegex(
             body,
-            r'data-docs-link="SLACK_ENABLED"',
+            r'data-docs-link="PHANTOM_NO_DOCS_KEY"',
         )
 
 
@@ -130,14 +149,37 @@ class IntegrationDocsViewTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_group_without_authored_doc_returns_404(self):
-        """A registered group whose markdown file does not yet exist 404s.
+        """A registered group whose markdown file is missing returns 404.
 
-        This is the steady state for every non-Stripe group until the
-        follow-up commits land. Studio must not 500 just because the
-        markdown isn't authored yet.
+        Issue #649 authored docs pages for every group that exists
+        today, so this scenario no longer occurs in the live registry.
+        We still cover the missing-file branch by registering a
+        synthetic group ("phantom") and asking the view to serve it —
+        the file is intentionally absent on disk. Studio must not 500
+        when a registry entry is added before its docs page lands.
         """
+        from unittest.mock import patch
+
+        from integrations.settings_registry import INTEGRATION_GROUPS
+
         self.client.login(email='docs-view@test.com', password='testpass')
-        # ``auth`` is in INTEGRATION_GROUPS but has no markdown file
-        # authored under _docs/integrations/auth.md in this commit.
-        response = self.client.get('/studio/docs/integrations/auth')
+        synthetic_registry = [
+            *INTEGRATION_GROUPS,
+            {
+                'name': 'phantom',
+                'label': 'Phantom',
+                'keys': [
+                    {
+                        'key': 'PHANTOM_TOKEN',
+                        'is_secret': True,
+                        'description': 'Synthetic key without an authored doc.',
+                    },
+                ],
+            },
+        ]
+        with patch(
+            'studio.views.integration_docs.INTEGRATION_GROUPS',
+            synthetic_registry,
+        ):
+            response = self.client.get('/studio/docs/integrations/phantom')
         self.assertEqual(response.status_code, 404)

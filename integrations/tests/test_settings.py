@@ -611,3 +611,25 @@ class DeadStripeSettingsRetirementTest(TestCase):
         body = response.content.decode()
         self.assertNotIn('data-field-key="STRIPE_PUBLISHABLE_KEY"', body)
         self.assertNotIn('name="STRIPE_PUBLISHABLE_KEY"', body)
+
+
+class IntegrationRegistryDocsCoverageTest(SimpleTestCase):
+    """Every registered key must point at an authored docs page (issue #649).
+
+    Issue #641 introduced the optional ``docs_url`` field; issue #649
+    authors the remaining 9 docs pages and wires every key. Once every
+    key has a ``docs_url``, that becomes the contract — adding a new
+    integration key without a docs section regresses the operator
+    onboarding flow because the Studio (?) icon stops rendering for it.
+    """
+
+    def test_every_registered_key_has_docs_url(self):
+        missing = []
+        for group in INTEGRATION_GROUPS:
+            for entry in group['keys']:
+                if not entry.get('docs_url'):
+                    missing.append(f"{group['name']}.{entry['key']}")
+        self.assertEqual(
+            missing, [],
+            f"Keys without docs_url: {missing}",
+        )

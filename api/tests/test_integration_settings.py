@@ -606,11 +606,33 @@ class IntegrationSettingsGetApiTest(TestCase):
         shape without per-entry conditionals; an empty string means
         "docs not yet authored", matching the Studio template's
         truthiness check that hides the (?) icon.
+
+        Issue #649 wired every live registry key to a docs URL, so the
+        empty-string branch is now only reachable when a new key is
+        added before its docs section lands. We cover that scenario by
+        injecting a synthetic registry whose key intentionally has no
+        ``docs_url``.
         """
-        response = self._get()
+        synthetic_registry = [
+            {
+                'name': 'phantom',
+                'label': 'Phantom',
+                'keys': [
+                    {
+                        'key': 'PHANTOM_NO_DOCS_KEY',
+                        'is_secret': False,
+                        'description': 'Synthetic key without docs_url.',
+                    },
+                ],
+            },
+        ]
+        with patch(
+            'api.views.integration_settings.INTEGRATION_GROUPS',
+            synthetic_registry,
+        ):
+            response = self._get()
         self.assertEqual(response.status_code, 200)
-        # SLACK_ENABLED has not yet received a docs_url in this commit.
-        entry = self._entry_for(response.json(), "SLACK_ENABLED")
+        entry = self._entry_for(response.json(), "PHANTOM_NO_DOCS_KEY")
         self.assertEqual(entry["docs_url"], "")
 
     # ---- POST behaviour MUST be unchanged after adding GET --------------

@@ -420,6 +420,7 @@ class IntegrationSettingsGetApiTest(TestCase):
                 "is_boolean",
                 "configured",
                 "source",
+                "docs_url",
             },
         )
         self.assertEqual(sample["group"], "stripe")
@@ -568,6 +569,49 @@ class IntegrationSettingsGetApiTest(TestCase):
         entry = self._entry_for(response.json(), unset_key)
         self.assertIsNone(entry["source"])
         self.assertFalse(entry["configured"])
+
+    # ---- docs_url (issue #641) -------------------------------------------
+
+    def test_get_includes_docs_url_for_stripe_keys(self):
+        """Each Stripe key declares a per-anchor docs_url; the API surfaces it.
+
+        The registry stores the path as
+        ``_docs/integrations/stripe.md#<anchor>``. The GET endpoint
+        passes the raw registry value through unchanged — Studio rewrites
+        it to a /studio/docs/... URL at render time. External
+        automation calling this API can use the path to deep-link into a
+        rendered docs page or to locate the markdown source.
+        """
+        response = self._get()
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+
+        for key in (
+            "STRIPE_SECRET_KEY",
+            "STRIPE_WEBHOOK_SECRET",
+            "STRIPE_CUSTOMER_PORTAL_URL",
+            "STRIPE_DASHBOARD_ACCOUNT_ID",
+        ):
+            with self.subTest(key=key):
+                entry = self._entry_for(body, key)
+                self.assertEqual(
+                    entry["docs_url"],
+                    f"_docs/integrations/stripe.md#{key.lower()}",
+                )
+
+    def test_get_returns_empty_docs_url_for_unauthored_keys(self):
+        """Keys with no ``docs_url`` in the registry come back as ''.
+
+        The field is always present so external clients can rely on the
+        shape without per-entry conditionals; an empty string means
+        "docs not yet authored", matching the Studio template's
+        truthiness check that hides the (?) icon.
+        """
+        response = self._get()
+        self.assertEqual(response.status_code, 200)
+        # SLACK_ENABLED has not yet received a docs_url in this commit.
+        entry = self._entry_for(response.json(), "SLACK_ENABLED")
+        self.assertEqual(entry["docs_url"], "")
 
     # ---- POST behaviour MUST be unchanged after adding GET --------------
 

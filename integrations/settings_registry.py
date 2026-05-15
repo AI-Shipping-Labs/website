@@ -7,6 +7,13 @@ Each ``description`` is a short answer to: what does it do, where do I
 get it, what breaks without it. Kept to one sentence so the dashboard
 stays scannable. See issue #322 for the locked rewrites.
 
+Each key MAY optionally define ``docs_url`` (issue #641) — a relative
+path inside ``_docs/`` (e.g. ``_docs/integrations/stripe.md#stripe_webhook_secret``)
+pointing at a per-key section in the integration docs. Studio resolves
+this to a routed page at ``/studio/docs/integrations/<group>#<anchor>``
+and renders a (?) icon next to the key. Entries without ``docs_url``
+keep working — the icon simply isn't rendered for them.
+
 NOTE: ``_docs/configuration.md`` references the count and names of these
 groups in the Studio sign-in section ("confirm 10 integration groups are
 listed (...)"). When adding, removing, or renaming a group here, update
@@ -18,9 +25,24 @@ INTEGRATION_GROUPS = [
         'name': 'stripe',
         'label': 'Stripe',
         'keys': [
-            {'key': 'STRIPE_SECRET_KEY', 'is_secret': True, 'description': 'Server-side Stripe API key. Get from Stripe Dashboard > Developers > API keys. Without this checkout fails.'},
-            {'key': 'STRIPE_WEBHOOK_SECRET', 'is_secret': True, 'description': 'Verifies that webhook callbacks really came from Stripe. Get from Stripe Dashboard > Webhooks > [your endpoint].'},
-            {'key': 'STRIPE_CUSTOMER_PORTAL_URL', 'is_secret': False, 'description': 'Stripe-hosted page where members manage their subscription. Get from Stripe Dashboard > Settings > Billing > Customer portal.'},
+            {
+                'key': 'STRIPE_SECRET_KEY',
+                'is_secret': True,
+                'description': 'Server-side Stripe API key. Get from Stripe Dashboard > Developers > API keys. Without this checkout fails.',
+                'docs_url': '_docs/integrations/stripe.md#stripe_secret_key',
+            },
+            {
+                'key': 'STRIPE_WEBHOOK_SECRET',
+                'is_secret': True,
+                'description': 'Verifies that webhook callbacks really came from Stripe. Get from Stripe Dashboard > Webhooks > [your endpoint].',
+                'docs_url': '_docs/integrations/stripe.md#stripe_webhook_secret',
+            },
+            {
+                'key': 'STRIPE_CUSTOMER_PORTAL_URL',
+                'is_secret': False,
+                'description': 'Stripe-hosted page where members manage their subscription. Get from Stripe Dashboard > Settings > Billing > Customer portal.',
+                'docs_url': '_docs/integrations/stripe.md#stripe_customer_portal_url',
+            },
             {
                 'key': 'STRIPE_DASHBOARD_ACCOUNT_ID',
                 'is_secret': False,
@@ -30,6 +52,7 @@ INTEGRATION_GROUPS = [
                     'you are signed in to your account. Optional — when blank, the '
                     'Stripe icon next to a user is shown but not clickable.'
                 ),
+                'docs_url': '_docs/integrations/stripe.md#stripe_dashboard_account_id',
             },
         ],
     },

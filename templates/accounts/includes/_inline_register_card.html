@@ -37,4 +37,14 @@ authNextUrl from the #auth-next-url script block.
   {% include "accounts/includes/_register_form.html" %}
   {% include "accounts/includes/_oauth_providers.html" with oauth_action="Sign up" oauth_divider_text="sign up with" %}
   {% include "accounts/includes/_legal_footer.html" with legal_action="creating an account" %}
+  {# Issue #653: opt-in disclosure for the implicit newsletter subscription #}
+  {# that comes with a free account. Inline-card surfaces suppress the footer #}
+  {# newsletter form, so we make the implicit opt-in explicit here. The line #}
+  {# is NOT rendered on the standalone /accounts/register/ page (which uses #}
+  {# _auth_card.html + _register_form.html directly, not this partial). #}
+  <div class="mt-3 text-center" data-testid="inline-register-opt-in">
+    <p class="text-xs text-muted-foreground">
+      By signing up free, you'll receive community updates. You can unsubscribe at any time.
+    </p>
+  </div>
 </div>

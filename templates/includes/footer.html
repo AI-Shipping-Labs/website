@@ -1,6 +1,9 @@
 <footer class="border-t border-border">
-  {% if not user.is_authenticated %}
+  {% if not user.is_authenticated and not hide_footer_newsletter %}
   {# Retained as the single anonymous newsletter placement and /#newsletter anchor target. #}
+  {# Issue #653: suppressed on surfaces that already render the inline registration form #}
+  {# (course detail free-anon, workshop pages paywall, pricing free tier) via the #}
+  {# `hide_footer_newsletter` per-view context flag — those visitors get a single signup CTA. #}
   <section class="bg-card">
     <div class="mx-auto max-w-7xl px-5 py-10 sm:px-6 sm:py-16 lg:px-8 lg:py-24">
       <div id="newsletter" class="mx-auto max-w-2xl">

@@ -18,6 +18,7 @@
         Back to Courses
       </a>
 
+      {% if course.cover_image_url %}
       <div class="mb-8 overflow-hidden rounded-lg">
         {% if course.is_free %}
           {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-detail-preview" preview_access_label="Free" preview_instructor=course.primary_instructor.name preview_tags=course.tags preview_image_loading="eager" preview_decorative_fallback=True %}
@@ -27,6 +28,7 @@
           {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-detail-preview" preview_instructor=course.primary_instructor.name preview_tags=course.tags preview_image_loading="eager" preview_decorative_fallback=True %}
         {% endif %}
       </div>
+      {% endif %}
 
       <header class="mb-12">
         <div class="mb-4 flex items-center gap-2">

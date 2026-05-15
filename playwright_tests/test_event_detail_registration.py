@@ -191,7 +191,9 @@ class TestPostRegistrationConfirmation:
 
 @pytest.mark.django_db(transaction=True)
 class TestEventDetailCoverImage:
-    """Issue #484: cover image renders when set, falls back otherwise."""
+    """Issue #484 + #651: cover image renders when set; when missing,
+    no hero block (neither image nor fallback) is rendered on the
+    detail page."""
 
     def test_cover_image_renders_when_set(self, django_server, page):
         _clear_events()
@@ -211,7 +213,10 @@ class TestEventDetailCoverImage:
             '[data-testid="event-cover-fallback"]'
         ).count() == 0
 
-    def test_decorative_fallback_when_no_cover(self, django_server, page):
+    def test_no_hero_block_when_no_cover(self, django_server, page):
+        """Issue #651: empty cover_image_url renders neither image nor
+        decorative fallback — the back-link is followed directly by
+        the event title."""
         _clear_events()
         _create_event(slug="nocov-evt", title="No Cover Event")
         page.goto(
@@ -220,7 +225,7 @@ class TestEventDetailCoverImage:
         )
         assert page.locator(
             '[data-testid="event-cover-fallback"]'
-        ).count() == 1
+        ).count() == 0
         assert page.locator(
             '[data-testid="event-cover-image"]'
         ).count() == 0

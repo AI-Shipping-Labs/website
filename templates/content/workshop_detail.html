@@ -142,6 +142,19 @@
         {% endif %}
       </div>
 
+      {% comment %}
+        Issue #646: workshop-level Materials section. Rendered only when
+        `can_show_materials` is True; the view resolves both the list
+        (workshop materials win over event materials) and the gate
+        (workshop -> pages_required_level, event -> recording_required_level).
+        When the visitor is below the pages gate, the paywall card below
+        is the single CTA — we deliberately do NOT render materials and
+        a paywall together.
+      {% endcomment %}
+      {% if can_show_materials %}
+        {% include "events/_recording_materials.html" with materials=resolved_materials section_class="mb-12" materials_testid="workshop-materials" %}
+      {% endif %}
+
       <!-- Pages-level paywall (only when pages are gated). Surfaces a
            single, prominent CTA so the visitor doesn't have to click into
            a page to learn that they need to upgrade. Issue #571 fix:

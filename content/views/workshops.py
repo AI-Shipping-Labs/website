@@ -217,6 +217,36 @@ def _build_landing_context(workshop, user):
     }
 
 
+def _resolve_materials_for_render(workshop, can_access_pages,
+                                   can_access_recording):
+    """Compute the materials list + ``can_show_materials`` flag for a render.
+
+    Issue #646: materials are gated against the level that authored
+    them. Workshop-level materials (``Workshop.materials`` non-empty)
+    gate against ``pages_required_level``. Event-level materials
+    (the fallback) gate against ``recording_required_level``. This
+    prevents an event-only materials list from leaking through a
+    looser workshop pages gate.
+
+    Returns ``(materials, can_show)`` where ``materials`` is the
+    resolved list (already filtered by the right gate) and ``can_show``
+    is a boolean templates can branch on. When ``materials`` is empty
+    or the user fails the gate, ``can_show`` is False and the partial
+    short-circuits the heading entirely.
+    """
+    source = workshop.materials_source
+    if source == 'workshop':
+        materials = workshop.materials
+        can_show = bool(materials) and can_access_pages
+    elif source == 'event':
+        materials = workshop.event.materials
+        can_show = bool(materials) and can_access_recording
+    else:
+        materials = []
+        can_show = False
+    return materials, can_show
+
+
 def workshop_detail(request, slug):
     """Landing page: description, metadata, links to video and tutorial.
 
@@ -231,10 +261,17 @@ def workshop_detail(request, slug):
     first_page = pages[0] if pages else None
 
     context = _build_landing_context(workshop, user)
+    materials, can_show_materials = _resolve_materials_for_render(
+        workshop,
+        context['can_access_pages'],
+        context['can_access_recording'],
+    )
     context.update({
         'pages': pages,
         'first_page': first_page,
         'event': workshop.event,
+        'resolved_materials': materials,
+        'can_show_materials': can_show_materials,
     })
     return render(request, 'content/workshop_detail.html', context)
 
@@ -358,6 +395,12 @@ def workshop_video(request, slug):
                 embed_start_seconds,
             )
 
+    materials, can_show_materials = _resolve_materials_for_render(
+        workshop,
+        context['can_access_pages'],
+        context['can_access_recording'],
+    )
+
     context.update({
         'embed_start_seconds': embed_start_seconds,
         'recording_timestamps': timestamps_with_pages,
@@ -365,6 +408,8 @@ def workshop_video(request, slug):
         'video_id': video_id,
         'video_source_type': video_source_type,
         'recording_embed_url_with_start': recording_embed_url_with_start,
+        'resolved_materials': materials,
+        'can_show_materials': can_show_materials,
     })
 
     status = 200

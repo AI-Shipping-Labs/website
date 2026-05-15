@@ -77,6 +77,53 @@ def _extract_workshop_folder_date(folder_name):
         return None
 
 
+def _validate_workshop_materials(raw, yaml_rel_path):
+    """Validate workshop-level ``materials:`` and return a normalized list.
+
+    Issue #646. Each item must be a dict with at least ``title`` (str)
+    and ``url`` (str). ``type`` is optional. On bad shape, raises
+    ``ValueError`` with the file path so the caller's ``except`` arm
+    records the error in ``stats['errors']`` and skips the workshop
+    (same failure mode as other workshop yaml errors).
+
+    Accepts ``None``, missing key, or empty list as "no materials" and
+    returns ``[]`` so callers can write the value verbatim.
+    """
+    if raw in (None, ''):
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(
+            f'workshop.yaml `materials:` must be a list of {{title, url, '
+            f'type}} dicts, got {type(raw).__name__} ({yaml_rel_path}).'
+        )
+    cleaned = []
+    for idx, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise ValueError(
+                f'workshop.yaml `materials[{idx}]` must be a dict with '
+                f'`title` and `url`, got {type(item).__name__} '
+                f'({yaml_rel_path}).'
+            )
+        title = item.get('title')
+        url = item.get('url')
+        if not isinstance(title, str) or not title.strip():
+            raise ValueError(
+                f'workshop.yaml `materials[{idx}]` is missing a non-empty '
+                f'`title` ({yaml_rel_path}).'
+            )
+        if not isinstance(url, str) or not url.strip():
+            raise ValueError(
+                f'workshop.yaml `materials[{idx}]` is missing a non-empty '
+                f'`url` ({yaml_rel_path}).'
+            )
+        normalized = {'title': title.strip(), 'url': url.strip()}
+        type_ = item.get('type')
+        if isinstance(type_, str) and type_.strip():
+            normalized['type'] = type_.strip()
+        cleaned.append(normalized)
+    return cleaned
+
+
 def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
                         known_images=None, cross_workshop_lookup=None,
                         workshops_repo_name=None):
@@ -263,6 +310,17 @@ def _sync_single_workshop(
             source, yaml_rel_path,
         )
 
+        # Issue #646: top-level ``materials:`` key on the workshop yaml.
+        # Workshop-scoped materials are gated by ``pages_required_level``;
+        # they coexist with (and override) ``recording.materials`` which
+        # continues to populate ``Event.materials`` further down. Fail
+        # closed on a bad shape (string, missing title/url) so a malformed
+        # entry doesn't leak through silently. Empty/missing key is fine
+        # — the resolution rule falls back to ``Event.materials``.
+        workshop_materials = _validate_workshop_materials(
+            data.get('materials'), yaml_rel_path,
+        )
+
         # Issue #304: build the page lookup once and reuse it for the
         # landing-description copy_file resolution AND the per-page
         # rewriting in _sync_workshop_pages. The lookup includes virtual
@@ -304,6 +362,7 @@ def _sync_single_workshop(
             'pages_required_level': pages_required_level,
             'recording_required_level': recording_required_level,
             'code_repo_url': data.get('code_repo_url', '') or '',
+            'materials': workshop_materials,
             'source_repo': source.repo_name,
             'source_path': rel_path,
             'source_commit': commit_sha,

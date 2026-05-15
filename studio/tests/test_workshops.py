@@ -317,6 +317,47 @@ class StudioWorkshopDetailTest(TestCase):
         self.assertNotContains(response, 'Edit on GitHub')
         self.assertNotContains(response, 'data-testid="resync-source-button"')
 
+    def test_studio_workshop_detail_shows_resolved_materials_from_workshop(self):
+        """Issue #646: Studio surfaces resolved materials with a source label."""
+        Workshop.objects.filter(pk=self.workshop.pk).update(
+            materials=[{'title': 'Deck', 'url': 'https://example.com/deck'}],
+        )
+        # The linked event has its own materials too — must NOT show.
+        self.event.materials = [
+            {'title': 'Recording notes',
+             'url': 'https://example.com/notes'},
+        ]
+        self.event.save()
+
+        response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
+
+        self.assertContains(response, 'data-testid="studio-workshop-materials"')
+        self.assertContains(response, 'Deck')
+        self.assertContains(response, 'from workshop')
+        self.assertNotContains(response, 'Recording notes')
+
+    def test_studio_workshop_detail_shows_resolved_materials_from_event(self):
+        """When Workshop.materials is empty, surface event materials with the
+        ``from linked event`` label so staff know where to edit them."""
+        Workshop.objects.filter(pk=self.workshop.pk).update(materials=[])
+        self.event.materials = [
+            {'title': 'EventOnly', 'url': 'https://example.com/event'},
+        ]
+        self.event.save()
+
+        response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
+
+        self.assertContains(response, 'EventOnly')
+        self.assertContains(response, 'from linked event')
+
+    def test_studio_workshop_detail_shows_no_materials_when_empty(self):
+        Workshop.objects.filter(pk=self.workshop.pk).update(
+            materials=[], event=None,
+        )
+        response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
+        self.assertContains(response, 'data-testid="studio-workshop-materials"')
+        self.assertContains(response, 'No materials')
+
     def test_does_not_show_page_body(self):
         # Page body is not shown — only the source link.
         response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')

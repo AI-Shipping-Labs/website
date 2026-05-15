@@ -48,7 +48,8 @@
       <!-- Landing gate failed: don't even tease the recording. Fall back
            to the same upgrade card the landing uses. -->
       {% include "content/_gated_access_card.html" with gated_card_testid="video-landing-paywall" gated_icon="lock" gated_heading=landing_cta_message gated_description="The workshop landing page must be unlocked before the recording is available." required_tier_name=landing_tier_name gated_cta_url=landing_cta_url gated_cta_label=landing_cta_label gated_cta_testid="video-landing-upgrade-cta" %}
-      {% elif not can_access_recording %}
+      {% else %}
+      {% if not can_access_recording %}
       <!-- Recording-specific paywall. Issue #515 ports the course-unit
            teaser-with-fade pattern: locked-video thumbnail + truncated
            description with fade-out + a pinned sign-in / upgrade card.
@@ -118,8 +119,21 @@
       {% endif %}
 
       {% if event %}
-        {% include "events/_recording_materials.html" with materials=event.materials section_class="mt-12" materials_testid="video-materials" %}
         {% include "events/_recording_transcript.html" with transcript_text=event.transcript_text section_class="mt-12" transcript_testid="video-transcript" %}
+      {% endif %}
+
+      {% endif %}
+
+      {% comment %}
+        Issue #646: workshop-level materials are not behind the recording
+        gate, so they render in both the recording-paywalled and
+        recording-accessible branches. The view computes
+        `can_show_materials` against the right gate (pages for
+        workshop-level, recording for event-level) so the leak-under-
+        looser-gate case is closed.
+      {% endcomment %}
+      {% if can_show_materials %}
+        {% include "events/_recording_materials.html" with materials=resolved_materials section_class="mt-12" materials_testid="video-materials" %}
       {% endif %}
 
       {% endif %}

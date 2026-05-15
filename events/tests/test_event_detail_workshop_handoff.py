@@ -104,6 +104,30 @@ class EventDetailWorkshopHandoffTest(TestCase):
         self.assertNotContains(response, 'Materials</h2>')
         self.assertNotContains(response, 'https://example.com/slides.pdf')
 
+    def test_event_detail_omits_materials_even_when_linked_workshop_has_materials(self):
+        """Issue #646: the event detail page never renders Materials.
+
+        Even when the linked workshop has its own ``Workshop.materials``
+        populated, the event detail page must continue to surface only
+        the workshop writeup CTA — never an inline materials list.
+        Issue #426 boundary holds.
+        """
+        self.workshop.materials = [
+            {'title': 'WorkshopOnlyDoc',
+             'url': 'https://example.com/workshop-only.pdf'},
+        ]
+        self.workshop.save()
+        response = self.client.get('/events/linked-workshop-event')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Materials</h2>')
+        self.assertNotContains(
+            response, 'https://example.com/workshop-only.pdf',
+        )
+        # And the writeup CTA still points at the workshop.
+        self.assertContains(
+            response, 'data-testid="event-workshop-writeup"',
+        )
+
     def test_linked_event_shows_workshop_writeup_cta(self):
         response = self.client.get('/events/linked-workshop-event')
         self.assertContains(

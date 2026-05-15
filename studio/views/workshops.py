@@ -124,10 +124,31 @@ def workshop_detail(request, workshop_id):
         for page in pages
     ]
 
+    # Issue #646: surface the resolved materials list (read-only) with
+    # a "from workshop" / "from linked event" source label per item so
+    # staff can audit what readers will see.
+    source = workshop.materials_source
+    source_label = ''
+    if source == 'workshop':
+        source_label = 'from workshop'
+    elif source == 'event':
+        source_label = 'from linked event'
+    resolved_materials = [
+        {
+            'title': item.get('title', '') if isinstance(item, dict) else '',
+            'url': item.get('url', '') if isinstance(item, dict) else '',
+            'type': item.get('type', '') if isinstance(item, dict) else '',
+            'source_label': source_label,
+        }
+        for item in workshop.resolved_materials
+    ]
+
     return render(request, 'studio/workshops/detail.html', {
         'workshop': workshop,
         'pages_with_urls': pages_with_urls,
         'github_edit_url': get_github_edit_url(workshop),
+        'resolved_materials': resolved_materials,
+        'materials_source': source,
     })
 
 

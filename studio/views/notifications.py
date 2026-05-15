@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from content.models import Article, Course, Download
+from content.models import Article, Course, Download, Workshop
 from events.models import Event
 from notifications.models import Notification
 from notifications.services import NotificationService, post_slack_announcement
@@ -28,6 +28,7 @@ CONTENT_TYPE_MAP = {
     'event': (Event, 'event_id'),
     'download': (Download, 'download_id'),
     'course': (Course, 'course_id'),
+    'workshop': (Workshop, 'workshop_id'),
 }
 
 
@@ -42,6 +43,8 @@ def _is_content_published(content_type, content):
     elif content_type == 'event':
         return content.status in ('upcoming', 'completed')
     elif content_type == 'course':
+        return content.status == 'published'
+    elif content_type == 'workshop':
         return content.status == 'published'
     return False
 
@@ -204,3 +207,17 @@ def course_notify(request, course_id):
 @require_POST
 def course_announce_slack(request, course_id):
     return _announce_slack(request, 'course', course_id)
+
+
+# --- Workshop endpoints ---
+
+@staff_required
+@require_POST
+def workshop_notify(request, workshop_id):
+    return _notify_content(request, 'workshop', workshop_id)
+
+
+@staff_required
+@require_POST
+def workshop_announce_slack(request, workshop_id):
+    return _announce_slack(request, 'workshop', workshop_id)

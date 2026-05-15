@@ -22,6 +22,7 @@ from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils.html import format_html
 from django.views.decorators.http import require_POST
 
@@ -233,6 +234,14 @@ def workshop_edit(request, workshop_id):
         'form_errors': form_errors,
         'tier_level_choices': TIER_LEVEL_CHOICES,
         'github_edit_url': get_github_edit_url(workshop),
+        'notify_url': reverse(
+            'studio_workshop_notify',
+            kwargs={'workshop_id': workshop.pk},
+        ),
+        'announce_url': reverse(
+            'studio_workshop_announce_slack',
+            kwargs={'workshop_id': workshop.pk},
+        ),
     })
 
 

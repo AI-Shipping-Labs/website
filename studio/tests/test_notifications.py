@@ -17,7 +17,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.models import Article, Course, Download
+from content.models import Article, Course, Download, Workshop
 from events.models import Event
 from notifications.models import Notification
 
@@ -420,6 +420,145 @@ class StudioCourseNotifyTest(TestCase):
         self.course.status = 'draft'
         self.course.save()
         response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+        self.assertNotContains(response, 'Notify subscribers')
+        self.assertNotContains(response, 'Post to Slack')
+
+
+class StudioWorkshopNotifyTest(TestCase):
+    """Test notify and announce for workshops (issue #647)."""
+
+    def setUp(self):
+        self.client = Client()
+        self.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        self.client.login(email='staff@test.com', password='testpass')
+        self.workshop = Workshop.objects.create(
+            title='Published Workshop',
+            slug='published-workshop',
+            date=timezone.now().date(),
+            status='published',
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+
+    def test_notify_creates_notifications(self):
+        """POST to workshop notify creates notifications for eligible users."""
+        User.objects.create_user(email='u1@test.com', password='p', is_active=True)
+        User.objects.create_user(email='u2@test.com', password='p', is_active=True)
+
+        response = self.client.post(
+            f'/studio/workshops/{self.workshop.pk}/notify',
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn('notified', data)
+        self.assertGreaterEqual(data['notified'], 1)
+
+    def test_duplicate_notify_returns_409(self):
+        """Second POST within 24h returns 409 with 'Already notified'."""
+        self.client.post(f'/studio/workshops/{self.workshop.pk}/notify')
+        response = self.client.post(
+            f'/studio/workshops/{self.workshop.pk}/notify',
+        )
+        self.assertEqual(response.status_code, 409)
+        data = response.json()
+        self.assertIn('Already notified', data['error'])
+
+    def test_notify_requires_post(self):
+        """GET to notify returns 405."""
+        response = self.client.get(
+            f'/studio/workshops/{self.workshop.pk}/notify',
+        )
+        self.assertEqual(response.status_code, 405)
+
+    def test_notify_requires_staff(self):
+        """Non-staff authenticated user gets 403."""
+        self.client.logout()
+        User.objects.create_user(
+            email='regular@test.com', password='testpass', is_staff=False,
+        )
+        self.client.login(email='regular@test.com', password='testpass')
+        response = self.client.post(
+            f'/studio/workshops/{self.workshop.pk}/notify',
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_notify_redirected(self):
+        """Anonymous user gets 302 to /accounts/login/."""
+        self.client.logout()
+        response = self.client.post(
+            f'/studio/workshops/{self.workshop.pk}/notify',
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response.url)
+
+    @patch('studio.views.notifications.post_slack_announcement')
+    def test_announce_slack_returns_json(self, mock_slack):
+        """POST to announce-slack with mock returns {'posted': True}."""
+        mock_slack.return_value = True
+        response = self.client.post(
+            f'/studio/workshops/{self.workshop.pk}/announce-slack',
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['posted'])
+
+    def test_announce_slack_requires_post(self):
+        """GET to announce-slack returns 405."""
+        response = self.client.get(
+            f'/studio/workshops/{self.workshop.pk}/announce-slack',
+        )
+        self.assertEqual(response.status_code, 405)
+
+    def test_announce_slack_requires_staff(self):
+        """Non-staff gets 403."""
+        self.client.logout()
+        User.objects.create_user(
+            email='regular@test.com', password='testpass', is_staff=False,
+        )
+        self.client.login(email='regular@test.com', password='testpass')
+        response = self.client.post(
+            f'/studio/workshops/{self.workshop.pk}/announce-slack',
+        )
+        self.assertEqual(response.status_code, 403)
+
+
+class StudioWorkshopFormButtonsTest(TestCase):
+    """Test that notify/slack buttons appear only on published workshops
+    (issue #647)."""
+
+    def setUp(self):
+        self.client = Client()
+        self.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def test_buttons_visible_on_published_workshop(self):
+        """Published workshop edit page shows notify and slack buttons."""
+        workshop = Workshop.objects.create(
+            title='Pub Workshop', slug='pub-workshop',
+            date=timezone.now().date(), status='published',
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        response = self.client.get(f'/studio/workshops/{workshop.pk}/edit')
+        self.assertContains(response, 'Notify subscribers')
+        self.assertContains(response, 'Post to Slack')
+
+    def test_buttons_hidden_on_draft_workshop(self):
+        """Draft workshop edit page does NOT show notify or slack buttons."""
+        workshop = Workshop.objects.create(
+            title='Draft Workshop', slug='draft-workshop',
+            date=timezone.now().date(), status='draft',
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        response = self.client.get(f'/studio/workshops/{workshop.pk}/edit')
         self.assertNotContains(response, 'Notify subscribers')
         self.assertNotContains(response, 'Post to Slack')
 

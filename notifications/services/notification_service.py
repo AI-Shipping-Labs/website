@@ -64,6 +64,15 @@ CONTENT_TYPE_CONFIG = {
         'level_field': 'required_level',
         'published_filter': {'status': 'open'},
     },
+    'workshop': {
+        'app_label': 'content',
+        'model_name': 'Workshop',
+        'title_template': 'New workshop: {title}',
+        # The notification deep-links to Workshop.get_absolute_url() (the
+        # landing page), so the audience must clear the landing gate.
+        'level_field': 'landing_required_level',
+        'published_filter': {'status': 'published'},
+    },
 }
 
 

@@ -42,6 +42,7 @@ def _build_slack_blocks(content_type, content):
         'recording': 'New recording',
         'download': 'New download',
         'poll': 'New poll',
+        'workshop': 'New workshop',
     }
     type_label = type_labels.get(content_type, 'New content')
     title = content.title

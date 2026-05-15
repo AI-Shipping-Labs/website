@@ -169,6 +169,10 @@
     </div>
   </form>
 
+  {% if workshop.status == 'published' %}
+  {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True %}
+  {% endif %}
+
 </div>
 {% endblock %}
 

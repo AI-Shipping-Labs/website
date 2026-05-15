@@ -1076,3 +1076,29 @@ class WorkshopPagesPaywallInlineRegisterTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/anon-pages')
         self.assertNotContains(response, 'data-testid="workshop-pages-paywall"')
         self.assertNotContains(response, 'data-testid="inline-register-card"')
+
+    def test_anonymous_pages_paywall_uses_expanded_variant_not_compact(self):
+        """Issue #654 regression: the workshop pages paywall keeps the
+        expanded inline register variant — the paywall card is wide
+        enough to absorb the OAuth divider + provider buttons inline,
+        and only /pricing tucks them behind a toggle.
+        """
+        from allauth.socialaccount.models import SocialApp
+        from django.contrib.sites.models import Site
+
+        app = SocialApp.objects.create(
+            provider='google', name='Google',
+            client_id='google-cid', secret='google-secret',
+        )
+        app.sites.add(Site.objects.get_current())
+        response = self.client.get('/workshops/anon-pages')
+        self.assertEqual(response.status_code, 200)
+        # OAuth visible without clicking a toggle.
+        self.assertContains(response, 'Sign up with Google')
+        self.assertNotContains(
+            response, 'data-testid="inline-register-oauth-toggle"',
+        )
+        self.assertNotContains(
+            response, 'data-testid="inline-register-oauth-disclosure"',
+        )
+        self.assertNotContains(response, 'More sign-in options')

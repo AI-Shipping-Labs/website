@@ -280,10 +280,19 @@ class TestInlineRegisterCard:
             _configure_oauth("google")
 
         page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+        # Issue #654: /pricing renders the inline card in compact mode,
+        # which tucks OAuth providers behind a "More sign-in options"
+        # disclosure. Click the toggle so the Google button is reachable
+        # — the href assertions below stay authoritative for the
+        # ?next=/pricing round-trip regardless of disclosure mechanism.
+        free_card = page.locator('[data-tier-card="free"]')
+        free_card.locator(
+            '[data-testid="inline-register-oauth-toggle"]',
+        ).click()
         google_button = page.get_by_role(
             "link", name="Sign up with Google", exact=True
         )
-        assert google_button.is_visible()
+        google_button.wait_for(state="visible")
         href = google_button.get_attribute("href")
         assert href is not None
         assert href.startswith("/accounts/google/login/")

@@ -1628,3 +1628,28 @@ class CourseDetailInlineRegisterTest(TierSetupMixin, TestCase):
             response,
             '/accounts/google/login/?next=/courses/demo-course',
         )
+
+    def test_free_course_anonymous_uses_expanded_variant_not_compact(self):
+        """Issue #654 regression: course detail keeps the expanded
+        variant of the inline register card. The OAuth button is
+        visible without clicking a disclosure — only /pricing tucks
+        OAuth behind a toggle.
+        """
+        from allauth.socialaccount.models import SocialApp
+        from django.contrib.sites.models import Site
+
+        app = SocialApp.objects.create(
+            provider='google', name='Google',
+            client_id='google-cid', secret='google-secret',
+        )
+        app.sites.add(Site.objects.get_current())
+        response = self.client.get('/courses/demo-course')
+        # OAuth button is rendered inline — no toggle in front of it.
+        self.assertContains(response, 'Sign up with Google')
+        self.assertNotContains(
+            response, 'data-testid="inline-register-oauth-toggle"',
+        )
+        self.assertNotContains(
+            response, 'data-testid="inline-register-oauth-disclosure"',
+        )
+        self.assertNotContains(response, 'More sign-in options')

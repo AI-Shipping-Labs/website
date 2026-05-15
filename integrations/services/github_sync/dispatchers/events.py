@@ -258,7 +258,10 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
         if filename.endswith(('.yaml', '.yml')):
             try:
                 yaml_data = _parse_yaml_file(os.path.join(repo_dir, rel_path))
-            except Exception:
+            except (ValueError, OSError):
+                # Discovery pass only — a bad yaml here will be reported
+                # by the main loop below. ``_parse_yaml_file`` wraps
+                # ``yaml.YAMLError`` as ``ValueError``.
                 continue
             recap_file = yaml_data.get('recap_file') or yaml_data.get('recap-file')
             if recap_file and not os.path.isabs(recap_file):
@@ -310,7 +313,12 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
                 rendered_recap = _render_event_recap_file(
                     repo_dir, rel_path, data, source, rel_path,
                 )
-            except Exception as exc:
+            except (ValueError, OSError) as exc:
+                # ``ValueError`` covers frontmatter / path-validation /
+                # YAML parse failures; ``OSError`` covers missing files
+                # and read errors. Other exception types (template
+                # syntax bugs, etc.) propagate to the outer per-file
+                # handler which records them into ``stats['errors']``.
                 msg = f'Error rendering recap for {rel_path}: {exc}'
                 logger.warning(msg)
                 stats['errors'].append({'file': rel_path, 'error': msg})
@@ -441,10 +449,16 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
             )
 
         except Exception as e:
+            # Intentional broad catch: a single malformed event file must
+            # not abort the whole sync; the error is recorded into
+            # ``stats['errors']`` and surfaced in the SyncLog row.
             fallback_slug = os.path.splitext(filename)[0]
             try:
                 failed_slug = data.get('slug', fallback_slug)
-            except Exception:
+            except (AttributeError, TypeError):
+                # ``data`` may be ``None`` or a non-dict yaml top level
+                # (the parser raised before normalising). Both cases are
+                # safe to treat as "no slug" and fall back to filename.
                 failed_slug = fallback_slug
             failed_slugs.add(failed_slug)
             stats['errors'].append({'file': rel_path, 'error': str(e)})

@@ -5,7 +5,7 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 
-from django.db import IntegrityError
+from django.db import DatabaseError, IntegrityError
 from django.utils import timezone
 
 from integrations.models import ContentSource, SyncLog
@@ -156,6 +156,11 @@ def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
         )
         _finish_successful_sync(source, sync_log, prepared, pipeline_result)
     except Exception as e:
+        # Intentional broad catch: this is the worker-task boundary for a
+        # single repo sync. Any unhandled failure here (clone, S3 upload,
+        # dispatcher bug, DB hiccup) must be turned into a "failed"
+        # SyncLog row rather than crashing the Django-Q worker, otherwise
+        # the lock + queue state drift and on-call has no audit row.
         _mark_sync_failed(source, sync_log, e, prepared)
     finally:
         _cleanup_prepared_repo(prepared)
@@ -609,7 +614,10 @@ def _resolve_workshops_repo_name(source):
             .values_list('repo_name', flat=True)
             .first()
         )
-    except Exception:
+    except DatabaseError:
+        # Lookup is a defensive secondary path; if the DB is briefly
+        # unreachable we fall through to the production default. Other
+        # exception classes (programming errors, etc.) should propagate.
         candidate = None
     return candidate or _DEFAULT_WORKSHOPS_REPO
 
@@ -656,9 +664,11 @@ def _build_cross_workshop_lookup(workshop_dirs, repo_dir, errors=None):
         yaml_path = os.path.join(workshop_path, 'workshop.yaml')
         try:
             data = _parse_yaml_file(yaml_path)
-        except Exception:
+        except (ValueError, OSError):
             # Unparseable workshop.yaml is reported elsewhere by the
-            # workshop dispatcher; here we just skip.
+            # workshop dispatcher; here we just skip. ``_parse_yaml_file``
+            # wraps ``yaml.YAMLError`` as ``ValueError``; ``OSError``
+            # covers missing/unreadable files on disk.
             continue
         if not isinstance(data, dict):
             continue
@@ -696,7 +706,10 @@ def _build_cross_workshop_lookup(workshop_dirs, repo_dir, errors=None):
                 continue
             try:
                 metadata, _ = _parse_markdown_file(page_path)
-            except Exception:
+            except (ValueError, OSError):
+                # A bad workshop page just means cross-workshop links
+                # can't resolve to it; the page's own dispatcher will
+                # surface the parse error.
                 continue
             page_title = metadata.get('title')
             if not page_title:

@@ -407,7 +407,11 @@ def _resolve_course_description(course_data, course_dir, course_ignore_patterns)
         return ''
     try:
         _, readme_body = _parse_markdown_file(readme_path)
-    except Exception as e:
+    except (ValueError, OSError) as e:
+        # ``ValueError`` covers frontmatter parse failures
+        # (``_parse_markdown_file`` wraps ``yaml.YAMLError`` as
+        # ``ValueError``); ``OSError`` covers missing/unreadable files.
+        # Other exception types propagate.
         logger.warning('Failed to read course README at %s: %s', readme_path, e)
         return ''
     if readme_body and readme_body.strip():
@@ -702,7 +706,10 @@ def _build_workshop_page_lookup(
         # to this file. We don't want link rewriting to ever fail the sync.
         try:
             metadata, _ = _parse_markdown_file(filepath)
-        except Exception:
+        except (ValueError, OSError):
+            # ``ValueError`` covers frontmatter parse failures;
+            # ``OSError`` covers IO. Anything else is a real bug and
+            # should propagate to the outer per-file handler.
             continue
 
         title = metadata.get('title')
@@ -824,10 +831,12 @@ def _resolve_workshop_landing_copy(
         body, error = resolve_copy_file_content(
             workshop_dir, explicit_copy_file, default='README.md',
         )
-    except Exception as e:
+    except (ValueError, OSError) as e:
         # Treat parse failure on a resolved copy_file as an error so authors
         # notice. The helper does not catch IO/parse errors itself — that is
-        # a caller policy decision.
+        # a caller policy decision. ``ValueError`` covers YAML/frontmatter
+        # parse failures surfaced through ``_read_markdown_body``;
+        # ``OSError`` covers missing or unreadable files.
         attempted = (
             explicit_copy_file.strip()
             if isinstance(explicit_copy_file, str) and explicit_copy_file

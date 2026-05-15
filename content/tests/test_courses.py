@@ -1499,3 +1499,115 @@ class ApiCourseDetailQueryGuardTest(TierSetupMixin, TestCase):
                 f'prefetched relation has likely returned. Issue #287.'
             ),
         )
+
+
+# ── Inline register card on course detail (issue #652) ─────────────────
+
+
+class CourseDetailInlineRegisterTest(TierSetupMixin, TestCase):
+    """Anonymous visitors on a free course see the inline register card
+    in place of the legacy "Sign Up Free" button. Paid courses keep the
+    "View Pricing" button. Logged-in users see neither.
+
+    Issue #652.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.free_course = Course.objects.create(
+            title='Demo Course',
+            slug='demo-course',
+            status='published',
+            required_level=LEVEL_OPEN,
+        )
+        cls.free_module = Module.objects.create(
+            course=cls.free_course,
+            title='Module',
+            slug='module',
+            sort_order=1,
+        )
+        Unit.objects.create(
+            module=cls.free_module,
+            title='Lesson',
+            slug='lesson',
+            sort_order=1,
+        )
+
+        cls.paid_course = Course.objects.create(
+            title='Premium Course',
+            slug='premium-course',
+            status='published',
+            required_level=LEVEL_PREMIUM,
+        )
+        Module.objects.create(
+            course=cls.paid_course,
+            title='Premium Module',
+            slug='premium-module',
+            sort_order=1,
+        )
+
+    def test_free_course_anonymous_shows_inline_form(self):
+        """The free-anon CTA renders the inline register card and drops
+        the legacy "Sign Up Free" button text."""
+        response = self.client.get('/courses/demo-course')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="inline-register-card"')
+        self.assertContains(response, 'id="register-email"')
+        self.assertContains(response, 'id="register-password"')
+        self.assertContains(response, 'id="register-password-confirm"')
+        # Legacy CTA button text and target route must be gone on this
+        # surface.
+        self.assertNotContains(response, '>Sign Up Free<')
+        self.assertNotContains(response, '/accounts/signup/?next=')
+        # Guard against Django comment leaks — multi-line ``{# #}``
+        # tags don't terminate so they leak into rendered HTML.
+        self.assertNotContains(response, '{# ')
+
+    def test_free_course_anonymous_inline_form_has_next_url(self):
+        """The login link inside the inline card carries ?next= the
+        course URL so the visitor returns to the same page after
+        authenticating."""
+        response = self.client.get('/courses/demo-course')
+        self.assertContains(response, '/accounts/login/?next=/courses/demo-course')
+
+    def test_paid_course_anonymous_still_shows_view_pricing(self):
+        """Premium-gated course keeps the "View Pricing" upgrade CTA and
+        does NOT render the inline form."""
+        response = self.client.get('/courses/premium-course')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'View Pricing')
+        self.assertContains(response, 'href="/pricing"')
+        self.assertNotContains(response, 'data-testid="inline-register-card"')
+        self.assertNotContains(response, 'id="register-email"')
+
+    def test_authenticated_user_sees_no_inline_form(self):
+        """A logged-in free-tier user reading a free course never sees
+        the inline register card."""
+        user = User.objects.create_user(
+            email='free@test.com', password='testpass',
+        )
+        user.tier = self.free_tier
+        user.save()
+        self.client.force_login(user)
+        response = self.client.get('/courses/demo-course')
+        self.assertNotContains(response, 'data-testid="inline-register-card"')
+        self.assertNotContains(response, 'id="register-email"')
+
+    def test_inline_form_passes_oauth_context(self):
+        """With a configured SocialApp, the inline card renders OAuth
+        provider buttons routed back to the course URL."""
+        from allauth.socialaccount.models import SocialApp
+        from django.contrib.sites.models import Site
+
+        app = SocialApp.objects.create(
+            provider='google', name='Google',
+            client_id='google-cid', secret='google-secret',
+        )
+        app.sites.add(Site.objects.get_current())
+        response = self.client.get('/courses/demo-course')
+        self.assertContains(response, 'Sign up with Google')
+        self.assertContains(
+            response,
+            '/accounts/google/login/?next=/courses/demo-course',
+        )

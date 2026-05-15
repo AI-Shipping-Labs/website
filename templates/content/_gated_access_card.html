@@ -13,6 +13,12 @@ Main / Premium / Free) and we render the public-facing label here so the
 copy reads "Basic or above required" / "Main or above required" /
 "Premium required" — never "Premium+" or "Premium or above" (Premium has
 no higher public tier to upgrade to).
+
+Issue #652: when ``signup_inline=True`` and the visitor is anonymous,
+the secondary "Create free account" link is replaced by the inline
+register card so the visitor can sign up without leaving the page. The
+parent template/view is responsible for loading the inline-register JS
+in the extra_scripts block.
 {% endcomment %}
 <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="{{ gated_card_testid }}">
   <div class="mb-4">
@@ -46,13 +52,19 @@ no higher public tier to upgrade to).
     {{ gated_cta_label }}
   </a>
   {% if signup_cta_url %}
-  <div class="mt-4">
-    <a href="{{ signup_cta_url }}"
-       class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-       data-testid="teaser-signup-cta">
-      <i data-lucide="user-plus" class="h-4 w-4"></i>
-      {{ signup_cta_label }}
-    </a>
-  </div>
+    {% if signup_inline %}
+    <div class="mt-6" data-testid="teaser-signup-cta">
+      {% include "accounts/includes/_inline_register_card.html" %}
+    </div>
+    {% else %}
+    <div class="mt-4">
+      <a href="{{ signup_cta_url }}"
+         class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+         data-testid="teaser-signup-cta">
+        <i data-lucide="user-plus" class="h-4 w-4"></i>
+        {{ signup_cta_label }}
+      </a>
+    </div>
+    {% endif %}
   {% endif %}
 </div>

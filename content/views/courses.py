@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
+from accounts.oauth_context import get_oauth_provider_context
 from content.access import (
     LEVEL_MAIN,
     build_gating_context,
@@ -192,6 +193,15 @@ def course_detail(request, slug):
         'user_is_enrolled': user_is_enrolled,
         'next_unit_for_user': next_unit_for_user,
     }
+    # Issue #652: free-anon course detail surfaces render the inline
+    # register card instead of the legacy "Sign Up Free" button. Pass
+    # the OAuth provider flags and the round-trip URL so the inline
+    # card's _register_form / _oauth_providers / _legal_footer
+    # partials render with the right context. The flags are cheap
+    # (single SocialApp query) so we add them unconditionally.
+    if course.is_free and not user.is_authenticated:
+        context.update(get_oauth_provider_context())
+        context['next_url'] = course_url
     if gating.get('gated_reason') == 'unverified_email':
         context.update(gating)
     elif gating.get('gated_reason'):

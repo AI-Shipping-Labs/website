@@ -97,7 +97,12 @@ def notification_log(request):
 
 
 def _notify_content(request, content_type, content_id):
-    """Handle the notify subscribers POST for any content type."""
+    """Handle the notify subscribers POST for any content type.
+
+    Returns JSON ``{"notified": N, "emailed": M}`` (issue #655). ``M`` is
+    always ``0`` for content types without an ``email_template`` so the
+    response shape is uniform across types.
+    """
     model_class = CONTENT_TYPE_MAP[content_type][0]
     content = get_object_or_404(model_class, pk=content_id)
 
@@ -108,16 +113,11 @@ def _notify_content(request, content_type, content_id):
             status=409,
         )
 
-    # Count notifications before
-    count_before = Notification.objects.count()
-
-    NotificationService.notify(content_type, content_id)
-
-    # Count notifications after
-    count_after = Notification.objects.count()
-    notified = count_after - count_before
-
-    return JsonResponse({'notified': notified})
+    result = NotificationService.notify(content_type, content_id)
+    return JsonResponse({
+        'notified': result.get('notified', 0),
+        'emailed': result.get('emailed', 0),
+    })
 
 
 def _announce_slack(request, content_type, content_id):

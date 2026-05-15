@@ -38,7 +38,8 @@ function notifySubscribers() {
   .then(function(res) {
     status.style.display = 'block';
     if (res.ok) {
-      status.textContent = 'Notified ' + res.data.notified + ' subscribers';
+      var emailedCount = (typeof res.data.emailed === 'number') ? res.data.emailed : 0;
+      status.textContent = 'Notified ' + res.data.notified + ' subscribers and emailed ' + emailedCount;
       status.className = 'mt-3 text-sm text-green-500';
     } else if (res.status === 409) {
       status.textContent = 'Already notified in the last 24 hours \u2014 sending again would duplicate notifications';

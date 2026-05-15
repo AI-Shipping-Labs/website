@@ -612,6 +612,134 @@ class EmailPreferencesAPITest(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    # Issue #655: workshop_emails preference round-trips.
+
+    def test_email_preferences_accepts_workshop_emails_field(self):
+        """POST workshop_emails=False persists the flag and the response
+        echoes back only the updated field."""
+        original_unsubscribed = self.user.unsubscribed
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"workshop_emails": False}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertFalse(data["workshop_emails"])
+        self.assertNotIn("newsletter", data)
+
+        self.user.refresh_from_db()
+        self.assertFalse(
+            self.user.email_preferences.get("workshop_emails"),
+        )
+        # unsubscribed must NOT be touched when only workshop_emails was set.
+        self.assertEqual(self.user.unsubscribed, original_unsubscribed)
+
+    def test_email_preferences_accepts_combined_payload(self):
+        """Combined newsletter + workshop_emails payload updates both
+        fields in a single save."""
+        with patch.object(
+            type(self.user), "save", autospec=True, side_effect=type(self.user).save,
+        ) as mock_save:
+            response = self.client.post(
+                self.url,
+                data=json.dumps({
+                    "newsletter": True,
+                    "workshop_emails": False,
+                }),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertTrue(data["newsletter"])
+        self.assertFalse(data["workshop_emails"])
+
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.unsubscribed)
+        self.assertTrue(self.user.email_preferences.get("newsletter"))
+        self.assertFalse(self.user.email_preferences.get("workshop_emails"))
+
+        # One save call carrying both fields in update_fields.
+        save_calls = [
+            call for call in mock_save.call_args_list
+            if call.kwargs.get("update_fields") is not None
+        ]
+        self.assertEqual(len(save_calls), 1, save_calls)
+        update_fields = set(save_calls[0].kwargs["update_fields"])
+        self.assertIn("email_preferences", update_fields)
+        self.assertIn("unsubscribed", update_fields)
+
+    def test_email_preferences_workshop_emails_default_true_in_context(self):
+        """A brand-new user with empty ``email_preferences`` defaults to
+        ``workshop_emails_enabled=True`` in the account context."""
+        fresh = User.objects.create_user(email="default@example.com")
+        self.assertEqual(fresh.email_preferences, {})
+        self.client.force_login(fresh)
+        response = self.client.get("/account/")
+        self.assertTrue(response.context["workshop_emails_enabled"])
+
+    def test_email_preferences_rejects_empty_payload(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_email_preferences_rejects_non_bool_workshop_emails(self):
+        """A string value for workshop_emails is not a boolean and must
+        be rejected -- it would silently coerce to truthy via the old
+        ``data.get`` path."""
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"workshop_emails": "yes"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+
+class AccountPageWorkshopEmailsToggleTest(TestCase):
+    """Issue #655: the Email Preferences card carries a workshop
+    announcements toggle row alongside the existing newsletter row."""
+
+    def test_account_page_renders_workshop_emails_toggle(self):
+        user = User.objects.create_user(email="wstoggle@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+
+        self.assertContains(response, 'id="workshop-emails-toggle"')
+        self.assertContains(response, 'id="workshop-emails-status"')
+        self.assertContains(response, "Workshop announcements")
+        self.assertContains(
+            response,
+            "Receive an email when staff publish a new workshop you have access to.",
+        )
+
+    def test_default_workshop_emails_toggle_is_on(self):
+        user = User.objects.create_user(email="wstoggle-on@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+
+        self.assertTrue(response.context["workshop_emails_enabled"])
+        self.assertContains(response, "You will receive workshop announcement emails.")
+
+    def test_opted_out_workshop_emails_toggle_is_off(self):
+        user = User.objects.create_user(email="wstoggle-off@example.com")
+        user.email_preferences = {"workshop_emails": False}
+        user.save(update_fields=["email_preferences"])
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+
+        self.assertFalse(response.context["workshop_emails_enabled"])
+        self.assertContains(
+            response, "You will not receive workshop announcement emails.",
+        )
+
+
 class AccountPageEmailPreferencesDisplayTest(TestCase):
     """Tests for email preferences display on account page."""
 

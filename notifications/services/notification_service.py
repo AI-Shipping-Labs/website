@@ -72,6 +72,10 @@ CONTENT_TYPE_CONFIG = {
         # landing page), so the audience must clear the landing gate.
         'level_field': 'landing_required_level',
         'published_filter': {'status': 'published'},
+        # Issue #655: workshop announcements fan out as a third channel
+        # via EmailService. Other content types stay bell+Slack-only
+        # until their own opt-out + audience story is designed.
+        'email_template': 'workshop_announcement',
     },
 }
 
@@ -114,6 +118,98 @@ def _get_body(content):
     return ''
 
 
+def get_email_eligible_users(content_type, content):
+    """Return the email-eligible audience for a content notification.
+
+    Starts from the tier-eligible notification audience (same base as the
+    bell channel) and applies the email-specific filters required for
+    promotional sends (issue #655):
+
+    - ``unsubscribed=False`` -- ``EmailService`` would skip these anyway
+      for promotional kinds, but pre-filtering keeps the operator counter
+      accurate.
+    - ``email_verified=True`` -- unverified addresses don't receive
+      promotional mail (prevents bouncing on un-confirmed addresses).
+    - ``email_preferences.get('workshop_emails', True) is not False`` --
+      per-content-type opt-out. Default is opted-in when the key is
+      missing or the JSONField is empty.
+    """
+    config = CONTENT_TYPE_CONFIG.get(content_type)
+    if not config:
+        return User.objects.none()
+
+    required_level = getattr(content, config['level_field'], 0)
+    base = _get_eligible_users(required_level).filter(
+        unsubscribed=False,
+        email_verified=True,
+    )
+
+    # The per-channel opt-out lives inside the JSONField. The intent is:
+    # exclude rows where ``email_preferences['workshop_emails']`` is
+    # explicitly ``False``; KEEP rows where the key is missing entirely
+    # (default opted-in, the new-account case).
+    #
+    # SQLite + Django's JSONField ``__key=False`` filter also matches
+    # rows where the key is absent, which would drop opted-in users. So
+    # we collect the explicit-False user ids in Python and exclude by pk
+    # -- portable across SQLite and Postgres without an extra round-trip
+    # for empty preferences.
+    opted_out_ids = [
+        pk for pk, prefs in
+        User.objects.filter(
+            is_active=True,
+            email_preferences__has_key='workshop_emails',
+        ).values_list('pk', 'email_preferences')
+        if prefs.get('workshop_emails') is False
+    ]
+    if opted_out_ids:
+        return base.exclude(pk__in=opted_out_ids)
+    return base
+
+
+def _send_email_channel(email_template, content_type, content):
+    """Fan out the workshop-style email channel and return the success count.
+
+    Builds the context dict once and iterates over
+    :func:`get_email_eligible_users`, calling ``EmailService().send`` per
+    user inside a try/except. A single failure logs a WARNING with the
+    user email and content slug, then continues to the next recipient so
+    one bad address does not block the rest of the announcement.
+    """
+    from email_app.services.email_service import EmailService
+
+    slug = getattr(content, 'slug', '')
+    workshop_url = (
+        content.get_absolute_url()
+        if hasattr(content, 'get_absolute_url') else ''
+    )
+    context = {
+        'workshop_title': content.title,
+        'workshop_slug': slug,
+        'workshop_description': _get_body(content),
+        'workshop_url': workshop_url,
+    }
+
+    service = EmailService()
+    sent = 0
+    for user in get_email_eligible_users(content_type, content):
+        try:
+            log = service.send(user, email_template, context)
+        except Exception:
+            logger.warning(
+                'Failed to send "%s" email to %s for %s/%s',
+                email_template, user.email, content_type, slug,
+                exc_info=True,
+            )
+            continue
+        # EmailService.send returns None for skipped recipients (e.g.
+        # globally unsubscribed users for promotional mail). Don't count
+        # those as successful sends.
+        if log is not None:
+            sent += 1
+    return sent
+
+
 class NotificationService:
     """Service for creating notifications and dispatching to channels."""
 
@@ -121,15 +217,27 @@ class NotificationService:
     def notify(content_type, content_id):
         """Create on-platform notifications for eligible users and post to Slack.
 
+        For content types with an ``email_template`` configured (workshops
+        only, issue #655), also fans out a direct email to every
+        email-eligible subscriber.
+
         Args:
             content_type: One of 'article', 'course', 'event', 'recording',
-                         'download', 'poll'.
+                         'download', 'poll', 'workshop'.
             content_id: Primary key of the content object.
+
+        Returns:
+            ``{"notified": int, "emailed": int}`` -- ``emailed`` is always
+            ``0`` for content types without an ``email_template`` so the
+            shape stays uniform across types. Returns the same dict shape
+            (with both zero) on unknown content types or load failures.
         """
+        result = {"notified": 0, "emailed": 0}
+
         config = CONTENT_TYPE_CONFIG.get(content_type)
         if not config:
             logger.warning('Unknown content_type for notify: %s', content_type)
-            return
+            return result
 
         try:
             content = _get_content_object(content_type, content_id)
@@ -138,7 +246,7 @@ class NotificationService:
                 'Failed to load content for notify: %s/%s',
                 content_type, content_id,
             )
-            return
+            return result
 
         title = config['title_template'].format(title=content.title)
         body = _get_body(content)
@@ -163,6 +271,7 @@ class NotificationService:
                 'Created %d notifications for %s/%s',
                 len(notifications), content_type, content_id,
             )
+        result["notified"] = len(notifications)
 
         # Post to Slack #announcements
         try:
@@ -173,6 +282,19 @@ class NotificationService:
                 'Failed to post Slack announcement for %s/%s',
                 content_type, content_id,
             )
+
+        # Issue #655: direct-email channel for content types that opt in
+        # via the ``email_template`` config key. Failures on a single
+        # recipient must not block the rest of the fan-out.
+        email_template = config.get('email_template')
+        if email_template:
+            result["emailed"] = _send_email_channel(
+                email_template,
+                content_type,
+                content,
+            )
+
+        return result
 
     @staticmethod
     def create_event_reminder(event, user, interval, title, body):

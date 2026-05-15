@@ -222,6 +222,27 @@
         <p class="text-sm text-foreground mt-4" id="newsletter-status">
           {% if newsletter_subscribed %}You are subscribed to newsletters.{% else %}You are unsubscribed from newsletters.{% endif %}
         </p>
+
+        <!-- Issue #655: per-content-type opt-out for workshop announcements. -->
+        <div class="flex items-center justify-between mt-6 pt-6 border-t border-border">
+          <div>
+            <p class="text-foreground font-medium">Workshop announcements</p>
+            <p class="text-sm text-muted-foreground mt-1">Receive an email when staff publish a new workshop you have access to.</p>
+          </div>
+          <div class="touch-target-toggle">
+            <button type="button"
+                    id="workshop-emails-toggle"
+                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors {% if workshop_emails_enabled %}bg-accent{% else %}bg-secondary{% endif %}"
+                    onclick="toggleWorkshopEmails()"
+                    aria-label="Toggle workshop announcement emails">
+              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full shadow ring-0 transition-transform {% if workshop_emails_enabled %}translate-x-5 bg-accent-foreground{% else %}translate-x-0 bg-foreground{% endif %}" id="workshop-emails-toggle-dot"></span>
+            </button>
+          </div>
+        </div>
+
+        <p class="text-sm text-foreground mt-4" id="workshop-emails-status">
+          {% if workshop_emails_enabled %}You will receive workshop announcement emails.{% else %}You will not receive workshop announcement emails.{% endif %}
+        </p>
       </div>
 
       <!-- Display Preferences Section -->
@@ -341,6 +362,47 @@ function getCsrfToken() {
     }
   }
   return '';
+}
+
+// Workshop announcements toggle (issue #655)
+function toggleWorkshopEmails() {
+  var toggle = document.getElementById('workshop-emails-toggle');
+  var dot = document.getElementById('workshop-emails-toggle-dot');
+  var status = document.getElementById('workshop-emails-status');
+  var isCurrentlyEnabled = dot.classList.contains('translate-x-5');
+  var newValue = !isCurrentlyEnabled;
+
+  fetch('/account/api/email-preferences', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrfToken(),
+    },
+    body: JSON.stringify({ workshop_emails: newValue }),
+  })
+  .then(function(resp) { return resp.json(); })
+  .then(function(data) {
+    if (data.status === 'ok') {
+      if (data.workshop_emails) {
+        dot.classList.add('translate-x-5', 'bg-accent-foreground');
+        dot.classList.remove('translate-x-0', 'bg-foreground');
+        toggle.classList.add('bg-accent');
+        toggle.classList.remove('bg-secondary');
+        status.textContent = 'You will receive workshop announcement emails.';
+      } else {
+        dot.classList.remove('translate-x-5', 'bg-accent-foreground');
+        dot.classList.add('translate-x-0', 'bg-foreground');
+        toggle.classList.remove('bg-accent');
+        toggle.classList.add('bg-secondary');
+        status.textContent = 'You will not receive workshop announcement emails.';
+      }
+    } else {
+      alert(data.error || 'Failed to update preferences');
+    }
+  })
+  .catch(function() {
+    alert('An error occurred. Please try again.');
+  });
 }
 
 // Newsletter toggle

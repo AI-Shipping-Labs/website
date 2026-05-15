@@ -35,6 +35,7 @@ TRANSACTIONAL_EMAIL_TYPES = {
 
 PROMOTIONAL_EMAIL_TYPES = {
     "campaign",
+    "workshop_announcement",
 }
 
 

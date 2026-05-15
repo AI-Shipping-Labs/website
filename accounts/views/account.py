@@ -173,6 +173,12 @@ def _render_account_page(
         "billing_period_end": user.billing_period_end,
         "email_preferences": user.email_preferences,
         "newsletter_subscribed": not user.unsubscribed,
+        # Issue #655: per-content-type opt-out. Default is ON (opted in)
+        # when the key is missing from the JSONField -- new accounts and
+        # any account that has never touched the toggle.
+        "workshop_emails_enabled": user.email_preferences.get(
+            "workshop_emails", True
+        ),
         "timezone_options": build_timezone_options(),
         "preferred_timezone_label": get_timezone_label(user.preferred_timezone),
         "active_override": active_override,
@@ -212,10 +218,13 @@ def account_view(request):
 @login_required
 @require_POST
 def email_preferences_view(request):
-    """Update email preferences (newsletter subscribe/unsubscribe).
+    """Update email preferences.
 
-    Expects JSON body with:
-        newsletter: bool - True to subscribe, False to unsubscribe
+    Issue #655: accepts either or both of ``newsletter`` (boolean) and
+    ``workshop_emails`` (boolean) in a single JSON body. At least one
+    known boolean key must be present, otherwise returns 400.
+
+    The response echoes back only the fields that were updated.
     """
     try:
         data = json.loads(request.body)
@@ -223,18 +232,34 @@ def email_preferences_view(request):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     newsletter = data.get("newsletter")
-    if newsletter is None:
-        return JsonResponse({"error": "newsletter field is required"}, status=400)
+    workshop_emails = data.get("workshop_emails")
+
+    newsletter_provided = isinstance(newsletter, bool)
+    workshop_emails_provided = isinstance(workshop_emails, bool)
+
+    if not newsletter_provided and not workshop_emails_provided:
+        return JsonResponse(
+            {"error": "newsletter or workshop_emails boolean field is required"},
+            status=400,
+        )
 
     user = request.user
-    user.unsubscribed = not newsletter
-    user.email_preferences["newsletter"] = newsletter
-    user.save(update_fields=["unsubscribed", "email_preferences"])
+    update_fields = ["email_preferences"]
+    response = {"status": "ok"}
 
-    return JsonResponse({
-        "status": "ok",
-        "newsletter": newsletter,
-    })
+    if newsletter_provided:
+        user.unsubscribed = not newsletter
+        user.email_preferences["newsletter"] = newsletter
+        update_fields.append("unsubscribed")
+        response["newsletter"] = newsletter
+
+    if workshop_emails_provided:
+        user.email_preferences["workshop_emails"] = workshop_emails
+        response["workshop_emails"] = workshop_emails
+
+    user.save(update_fields=update_fields)
+
+    return JsonResponse(response)
 
 
 @login_required

@@ -167,6 +167,9 @@ class StudioArticleNotifyTest(TestCase):
         # Should have notified at least user1 and user2 (plus the staff user)
         self.assertIn('notified', data)
         self.assertGreaterEqual(data['notified'], 2)
+        # Issue #655: non-workshop notify includes ``emailed: 0`` for a
+        # uniform response shape (no email channel is wired for articles).
+        self.assertEqual(data['emailed'], 0)
 
     def test_duplicate_notify_returns_409(self):
         """If already notified in the last 24h, return 409."""
@@ -283,6 +286,7 @@ class StudioRecordingNotifyTest(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn('notified', data)
+        self.assertEqual(data['emailed'], 0)
 
     def test_notify_requires_post(self):
         response = self.client.get(f'/studio/recordings/{self.recording.pk}/notify')
@@ -325,6 +329,7 @@ class StudioEventNotifyTest(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn('notified', data)
+        self.assertEqual(data['emailed'], 0)
 
     def test_notify_requires_post(self):
         response = self.client.get(f'/studio/events/{self.event.pk}/notify')
@@ -366,6 +371,7 @@ class StudioDownloadNotifyTest(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn('notified', data)
+        self.assertEqual(data['emailed'], 0)
 
     def test_notify_requires_post(self):
         response = self.client.get(f'/studio/downloads/{self.download.pk}/notify')
@@ -406,6 +412,7 @@ class StudioCourseNotifyTest(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn('notified', data)
+        self.assertEqual(data['emailed'], 0)
 
     def test_notify_requires_post(self):
         response = self.client.get(f'/studio/courses/{self.course.pk}/notify')
@@ -455,6 +462,51 @@ class StudioWorkshopNotifyTest(TestCase):
         data = response.json()
         self.assertIn('notified', data)
         self.assertGreaterEqual(data['notified'], 1)
+
+    def test_notify_workshop_response_includes_emailed_count(self):
+        """Issue #655: workshop notify response carries both counts."""
+        response = self.client.post(
+            f'/studio/workshops/{self.workshop.pk}/notify',
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn('notified', data)
+        self.assertIn('emailed', data)
+        self.assertIsInstance(data['emailed'], int)
+
+    def test_second_notify_within_24h_does_not_send_extra_emails(self):
+        """Issue #655: the 24h dedupe also blocks duplicate email fanout.
+        The second POST returns 409 and ``EmailLog`` is unchanged."""
+        from email_app.models import EmailLog
+
+        # Create one verified opted-in user so the first call queues an
+        # email (the staff user is verified=False by default so it does
+        # not land in the email audience).
+        recipient = User.objects.create_user(
+            email='recipient@test.com',
+            password='p',
+            is_active=True,
+        )
+        recipient.email_verified = True
+        recipient.save(update_fields=['email_verified'])
+
+        first = self.client.post(
+            f'/studio/workshops/{self.workshop.pk}/notify',
+        )
+        self.assertEqual(first.status_code, 200)
+        emailed_after_first = EmailLog.objects.filter(
+            email_type='workshop_announcement',
+        ).count()
+
+        second = self.client.post(
+            f'/studio/workshops/{self.workshop.pk}/notify',
+        )
+        self.assertEqual(second.status_code, 409)
+
+        emailed_after_second = EmailLog.objects.filter(
+            email_type='workshop_announcement',
+        ).count()
+        self.assertEqual(emailed_after_first, emailed_after_second)
 
     def test_duplicate_notify_returns_409(self):
         """Second POST within 24h returns 409 with 'Already notified'."""

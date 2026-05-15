@@ -1,0 +1,27 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{{ group_label }} integration setup{% endblock %}
+
+{% block studio_content %}
+<div class="max-w-3xl mx-auto py-8 px-4">
+  <nav class="text-xs text-gray-400 mb-4">
+    <a href="{% url 'studio_settings' %}" class="hover:text-gray-200">Settings</a>
+    <span class="mx-1">/</span>
+    <span>Docs</span>
+    <span class="mx-1">/</span>
+    <span class="text-gray-200">{{ group_label }}</span>
+  </nav>
+
+  <article data-integration-docs="{{ group }}"
+           class="prose prose-invert prose-sm max-w-none
+                  prose-headings:text-foreground prose-headings:font-semibold
+                  prose-h1:text-2xl prose-h2:text-xl prose-h2:mt-8 prose-h2:border-b prose-h2:border-border prose-h2:pb-2
+                  prose-h3:text-base prose-h3:mt-6
+                  prose-p:text-gray-200 prose-li:text-gray-200
+                  prose-code:text-amber-300 prose-code:before:content-none prose-code:after:content-none
+                  prose-pre:bg-gray-800 prose-pre:border prose-pre:border-border prose-pre:rounded
+                  prose-a:text-accent">
+    {{ rendered_html|safe }}
+  </article>
+</div>
+{% endblock %}

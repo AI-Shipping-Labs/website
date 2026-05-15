@@ -68,6 +68,7 @@ from studio.views.event_series import (
 )
 from studio.views.events import event_create, event_create_zoom, event_edit, event_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
+from studio.views.integration_docs import integration_docs
 from studio.views.member_notes import (
     member_note_create,
     member_note_delete,
@@ -628,6 +629,16 @@ urlpatterns = [
         name='studio_settings_save_auth',
     ),
     path('settings/<str:group_name>/save/', settings_save_group, name='studio_settings_save'),
+
+    # Integration setup docs (issue #641). Each integration setting may
+    # carry a ``docs_url`` pointing at ``_docs/integrations/<group>.md``;
+    # the Studio template rewrites that to this route and the (?) icon
+    # links here in a new tab.
+    path(
+        'docs/integrations/<str:group>',
+        integration_docs,
+        name='studio_integration_docs',
+    ),
 
     # Worker Status
     path('worker/', worker_status, name='studio_worker'),

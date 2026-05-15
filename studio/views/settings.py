@@ -99,6 +99,38 @@ def _section_id_for_group_name(group_name):
     return OTHER_SECTION['id']
 
 
+def _resolve_docs_url(raw_docs_url):
+    """Rewrite a registry ``docs_url`` to a Studio-routed URL.
+
+    The registry stores docs paths as
+    ``_docs/integrations/<group>.md#<anchor>``. Studio serves the
+    rendered markdown at ``/studio/docs/integrations/<group>`` and
+    preserves the fragment identifier client-side, so we just rewrite
+    the path prefix and keep the anchor.
+
+    Returns an empty string for unrecognised inputs so the template can
+    treat "no docs link" identically to "key has no docs_url yet".
+    """
+    if not raw_docs_url:
+        return ''
+    prefix = '_docs/integrations/'
+    if not raw_docs_url.startswith(prefix):
+        return ''
+    remainder = raw_docs_url[len(prefix):]
+    if '#' in remainder:
+        filename, anchor = remainder.split('#', 1)
+        anchor_part = f'#{anchor}'
+    else:
+        filename = remainder
+        anchor_part = ''
+    if not filename.endswith('.md'):
+        return ''
+    group_name = filename[:-len('.md')]
+    if not group_name:
+        return ''
+    return f'/studio/docs/integrations/{group_name}{anchor_part}'
+
+
 def _build_group_context(group_def, db_settings):
     """Build template context for a single integration group.
 
@@ -147,6 +179,12 @@ def _build_group_context(group_def, db_settings):
             'current_value': current_value,
             'source': source,
             'env_value': env_value,
+            # Studio-routed URL for the (?) help-icon link (issue #641).
+            # Built from the optional registry ``docs_url`` which encodes
+            # ``_docs/integrations/<group>.md#<anchor>``. Empty string
+            # when the key has no docs entry yet, so the template can
+            # simply check truthiness.
+            'docs_url': _resolve_docs_url(key_def.get('docs_url', '')),
         })
 
     if keys_set == total_keys:

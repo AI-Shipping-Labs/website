@@ -116,7 +116,8 @@ def _integration_settings_list(request):
               "is_secret": true,
               "is_boolean": false,
               "configured": true,
-              "source": "db"  # or env / django_settings / default / null
+              "source": "db",  # or env / django_settings / default / null
+              "docs_url": "_docs/integrations/stripe.md#stripe_secret_key"
             },
             ...
         ]}
@@ -125,6 +126,11 @@ def _integration_settings_list(request):
     order within each group). ``source`` is resolved by
     ``integrations.config.resolve_source`` which probes each layer
     separately — see that function for the no-value-leakage contract.
+
+    ``docs_url`` (issue #641) is the per-key human-readable setup doc.
+    It is a path inside ``_docs/`` — never a setting value — so it does
+    not break the no-value-echo contract. Keys without authored docs
+    yet receive an empty string so the field is always present.
     """
     entries = []
     for group in INTEGRATION_GROUPS:
@@ -143,6 +149,7 @@ def _integration_settings_list(request):
                 'is_boolean': key_def.get('is_boolean', False),
                 'configured': source is not None,
                 'source': source,
+                'docs_url': key_def.get('docs_url', ''),
             })
     return JsonResponse({'settings': entries})
 

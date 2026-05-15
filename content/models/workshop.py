@@ -153,6 +153,16 @@ class Workshop(
         max_length=500, blank=True, default='',
         help_text='GitHub folder URL with the workshop code.',
     )
+    materials = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            'List of {title, url, type} dicts. Falls back to linked '
+            'Event.materials when empty. Authored in workshop.yaml under '
+            'a top-level `materials:` key. Issue #646: this is the '
+            'workshop-scoped source of truth, gated against '
+            'pages_required_level (not recording_required_level).'
+        ),
+    )
     event = models.OneToOneField(
         'events.Event',
         on_delete=models.SET_NULL,
@@ -261,6 +271,46 @@ class Workshop(
     def user_can_access_recording(self, user):
         """Return True when ``user`` may watch the workshop recording."""
         return _can_access_level(user, self.recording_required_level)
+
+    @property
+    def resolved_materials(self):
+        """Return the materials list to render for this workshop.
+
+        Issue #646: a workshop has its own ``materials`` JSON field for
+        the workshop-scoped source of truth. When that field is empty,
+        we fall back to the linked event's materials so existing
+        workshops keep rendering their recording-side materials without
+        a YAML rewrite. When the workshop has no event either, the
+        return value is the empty list.
+
+        Note: the level gate that materials display under depends on
+        which branch wins here — workshop-level materials gate against
+        ``pages_required_level``, event-level materials gate against
+        ``recording_required_level``. Views compute this in
+        ``can_show_materials``; this property only resolves *which* list
+        to show.
+        """
+        if isinstance(self.materials, list) and len(self.materials) > 0:
+            return self.materials
+        if self.event_id and self.event and self.event.materials:
+            return self.event.materials
+        return []
+
+    @property
+    def materials_source(self):
+        """Return ``'workshop'``, ``'event'``, or ``''`` for the materials origin.
+
+        Mirrors :attr:`resolved_materials` but identifies which storage
+        won the fall-through. Used by the Studio detail page so staff
+        can audit whether each material came from the workshop yaml or
+        from the linked event. Returns ``''`` when there are no
+        materials anywhere.
+        """
+        if isinstance(self.materials, list) and len(self.materials) > 0:
+            return 'workshop'
+        if self.event_id and self.event and self.event.materials:
+            return 'event'
+        return ''
 
 
 class WorkshopPage(

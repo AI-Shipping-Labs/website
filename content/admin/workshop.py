@@ -58,7 +58,7 @@ class WorkshopAdmin(admin.ModelAdmin):
             ),
         }),
         ('Linking', {
-            'fields': ('event', 'code_repo_url'),
+            'fields': ('event', 'code_repo_url', 'materials'),
         }),
         ('Source / Timestamps', {
             'fields': (

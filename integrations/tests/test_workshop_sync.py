@@ -1945,3 +1945,165 @@ class WorkshopPageAccessOverrideSyncTest(_WorkshopSyncFixtureBase):
         # Row still exists, with its original required_level untouched.
         page_reloaded = WorkshopPage.objects.get(pk=page_pk)
         self.assertEqual(page_reloaded.required_level, 0)
+
+
+class WorkshopSyncMaterialsTest(_WorkshopSyncFixtureBase):
+    """Issue #646: workshop-level ``materials:`` parsing and validation.
+
+    - Top-level ``materials:`` on workshop.yaml populates
+      ``Workshop.materials``.
+    - ``recording.materials`` continues to populate ``Event.materials``
+      unchanged; both blocks can coexist on the same yaml.
+    - Bad shape (string instead of dict, missing title/url) fails the
+      workshop sync with an error in ``stats['errors']`` and no
+      Workshop row written.
+    """
+
+    def test_sync_populates_workshop_materials_from_yaml(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml=(
+                'materials:\n'
+                '  - { title: "Slides", url: "https://example.com/slides", type: "slides" }\n'
+                '  - { title: "Repo",   url: "https://github.com/example/repo" }\n'
+            ),
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(len(workshop.materials), 2)
+        self.assertEqual(workshop.materials[0]['title'], 'Slides')
+        self.assertEqual(
+            workshop.materials[0]['url'], 'https://example.com/slides',
+        )
+        self.assertEqual(workshop.materials[0]['type'], 'slides')
+        self.assertEqual(workshop.materials[1]['title'], 'Repo')
+        # type is optional and omitted here.
+        self.assertNotIn('type', workshop.materials[1])
+
+    def test_sync_keeps_event_materials_from_recording_block(self):
+        """Both ``materials:`` (workshop-level) and ``recording.materials:``
+        (event-level) can coexist and are written to different stores."""
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml=(
+                'materials:\n'
+                '  - { title: "WorkshopDoc", url: "https://example.com/ws-doc" }\n'
+                'recording:\n'
+                '  url: https://www.youtube.com/watch?v=abc\n'
+                '  required_level: 20\n'
+                '  materials:\n'
+                '    - { title: "RecordingDoc", url: "https://example.com/rec-doc" }\n'
+            ),
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(len(workshop.materials), 1)
+        self.assertEqual(workshop.materials[0]['title'], 'WorkshopDoc')
+
+        event = Event.objects.get(slug='demo')
+        self.assertEqual(len(event.materials), 1)
+        self.assertEqual(event.materials[0]['title'], 'RecordingDoc')
+
+        # Resolution rule prefers workshop-level even when event has its own.
+        self.assertEqual(
+            workshop.resolved_materials[0]['title'], 'WorkshopDoc',
+        )
+
+    def test_sync_workshop_with_empty_materials_falls_back_to_event(self):
+        """Empty ``materials:`` (or omitted) -> resolved_materials uses event."""
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml=(
+                'recording:\n'
+                '  url: https://www.youtube.com/watch?v=abc\n'
+                '  required_level: 20\n'
+                '  materials:\n'
+                '    - { title: "OnlyEventDoc", url: "https://example.com/ev" }\n'
+            ),
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.materials, [])
+        # resolved_materials picks up the event materials.
+        self.assertEqual(len(workshop.resolved_materials), 1)
+        self.assertEqual(
+            workshop.resolved_materials[0]['title'], 'OnlyEventDoc',
+        )
+
+    def test_sync_rejects_workshop_with_malformed_materials_item(self):
+        folder = '2026/2026-04-21-demo'
+        # A bare string instead of a dict in the materials list.
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml=(
+                'materials:\n'
+                '  - "not-a-dict"\n'
+            ),
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertTrue(
+            any('materials' in (e.get('error') or '') for e in sync_log.errors),
+            f'Expected a materials error in sync_log.errors, got: '
+            f'{sync_log.errors}',
+        )
+        # Workshop row is not written (whole workshop skipped on
+        # validation error, matching other yaml errors).
+        self.assertFalse(Workshop.objects.filter(slug='demo').exists())
+
+    def test_sync_rejects_workshop_materials_missing_url(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml=(
+                'materials:\n'
+                '  - { title: "MissingURL" }\n'
+            ),
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertTrue(
+            any('url' in (e.get('error') or '') for e in sync_log.errors),
+            f'Expected a url-missing error in sync_log.errors, got: '
+            f'{sync_log.errors}',
+        )
+        self.assertFalse(Workshop.objects.filter(slug='demo').exists())
+
+    def test_sync_rejects_workshop_materials_missing_title(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml=(
+                'materials:\n'
+                '  - { url: "https://example.com/notitle" }\n'
+            ),
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertTrue(
+            any('title' in (e.get('error') or '') for e in sync_log.errors),
+            f'Expected a title-missing error in sync_log.errors, got: '
+            f'{sync_log.errors}',
+        )
+        self.assertFalse(Workshop.objects.filter(slug='demo').exists())

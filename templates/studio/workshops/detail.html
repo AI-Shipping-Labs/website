@@ -163,6 +163,35 @@
     {% endif %}
   </div>
 
+  {% comment %}
+    Issue #646: resolved materials audit card. Workshop-level wins
+    over event-level; the source label tells staff which storage
+    supplied each row so they can find the right place to edit.
+  {% endcomment %}
+  <div class="bg-card border border-border rounded-lg p-6" data-testid="studio-workshop-materials">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Materials</h2>
+    {% if resolved_materials %}
+    <ul class="space-y-2 text-sm">
+      {% for material in resolved_materials %}
+      <li class="flex flex-wrap items-center gap-2" data-testid="studio-workshop-material-row">
+        <span class="text-foreground">{{ material.title }}</span>
+        {% if material.url %}
+        <a href="{{ material.url }}" target="_blank" rel="noopener noreferrer"
+           class="text-xs text-accent hover:underline break-all">{{ material.url }}</a>
+        {% endif %}
+        {% if material.type %}
+        <span class="inline-block text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground">{{ material.type }}</span>
+        {% endif %}
+        <span class="inline-block text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300"
+              data-testid="material-source-label">{{ material.source_label }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-muted-foreground">&mdash; No materials. Add them under a top-level <code>materials:</code> key in <code>workshop.yaml</code>, or on the linked event's recording block.</p>
+    {% endif %}
+  </div>
+
   <!-- Code repo -->
   {% if workshop.code_repo_url %}
   <div class="bg-card border border-border rounded-lg p-6">

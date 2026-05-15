@@ -51,6 +51,7 @@ def _create_workshop(
     with_event=True,
     recording_url='https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     materials=None,
+    workshop_materials=None,
     code_repo_url='https://github.com/example/repo',
     description='Workshop description body.',
     instructor='Alexey',
@@ -58,7 +59,13 @@ def _create_workshop(
     cover_image_url='',
     tags=None,
 ):
-    """Create a workshop with optional linked event + pages."""
+    """Create a workshop with optional linked event + pages.
+
+    ``materials`` populates ``Event.materials`` (legacy/recording side).
+    ``workshop_materials`` (issue #646) populates the workshop-scoped
+    ``Workshop.materials`` field so tests can exercise the unified
+    rendering and gating rules.
+    """
     from django.utils import timezone
     from django.utils.text import slugify
 
@@ -90,6 +97,7 @@ def _create_workshop(
         code_repo_url=code_repo_url,
         cover_image_url=cover_image_url,
         tags=tags or [],
+        materials=workshop_materials or [],
         event=event,
     )
     if instructor:
@@ -620,3 +628,318 @@ class TestDraftWorkshopHidden:
             f'{django_server}/workshops/draft-ws/tutorial/intro',
         )
         assert response is not None and response.status == 404
+
+
+# ----------------------------------------------------------------------
+# Issue #646: Unified workshop/event materials.
+# Workshop-level materials live on Workshop.materials (gated by pages
+# level) and fall back to Event.materials (gated by recording level)
+# when empty. The shared partial _recording_materials.html is the only
+# renderer; the testid differs by page (workshop-materials on the
+# landing, video-materials on the video page).
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestWorkshopMaterialsUnification:
+    @pytest.mark.core
+    def test_reader_sees_materials_on_landing_without_recording(
+        self, django_server, page,
+    ):
+        """Anonymous visitor sees workshop-level materials on a recording-less
+        workshop landing page. The Materials section uses the
+        ``workshop-materials`` testid (preserves the existing test
+        contract for the landing renderer).
+        """
+        _clear_workshops()
+        _create_workshop(
+            slug='materials-only-workshop',
+            title='Materials-Only Workshop',
+            landing=0, pages=0, recording=0,
+            with_event=False,
+            workshop_materials=[
+                {'title': 'Slides',
+                 'url': 'https://example.com/slides.pdf'},
+                {'title': 'Repo',
+                 'url': 'https://github.com/example/repo',
+                 'type': 'code'},
+            ],
+        )
+
+        page.goto(
+            f'{django_server}/workshops/materials-only-workshop',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        # Heading and both rows rendered via the shared partial.
+        assert 'Materials</h2>' in body
+        assert 'data-testid="workshop-materials"' in body
+        assert 'Slides' in body
+        assert 'Repo' in body
+        # External-link links open in a new tab.
+        slides_link = page.locator(
+            'a:has-text("Slides")',
+        ).first
+        assert slides_link.get_attribute('href') == (
+            'https://example.com/slides.pdf'
+        )
+        assert slides_link.get_attribute('target') == '_blank'
+
+    @pytest.mark.core
+    def test_reader_sees_materials_on_video_when_authorized(
+        self, django_server, browser,
+    ):
+        """A user with main tier (clears recording=20) sees event-side
+        materials on the workshop video page under the ``video-materials``
+        testid."""
+        _clear_workshops()
+        _create_workshop(
+            slug='recorded-workshop',
+            title='Recorded Workshop',
+            landing=0, pages=0, recording=20,
+            with_event=True,
+            materials=[
+                {'title': 'Cheat sheet',
+                 'url': 'https://example.com/cheat.pdf'},
+            ],
+        )
+        _create_user('main@test.com', tier_slug='main')
+
+        ctx = _auth_context(browser, 'main@test.com')
+        p = ctx.new_page()
+        p.goto(
+            f'{django_server}/workshops/recorded-workshop/video',
+            wait_until='domcontentloaded',
+        )
+        body = p.content()
+        assert 'data-testid="video-player"' in body
+        assert 'data-testid="video-materials"' in body
+        assert 'Cheat sheet' in body
+        assert 'https://example.com/cheat.pdf' in body
+        ctx.close()
+
+    @pytest.mark.core
+    def test_workshop_materials_override_event_materials(
+        self, django_server, page,
+    ):
+        """Workshop.materials shadow the linked event's materials on both
+        the landing and the video page."""
+        _clear_workshops()
+        _create_workshop(
+            slug='override-workshop',
+            title='Override Workshop',
+            landing=0, pages=0, recording=0,
+            with_event=True,
+            materials=[
+                {'title': 'OLD',
+                 'url': 'https://example.com/old'},
+            ],
+            workshop_materials=[
+                {'title': 'NEW',
+                 'url': 'https://example.com/new'},
+            ],
+        )
+
+        page.goto(
+            f'{django_server}/workshops/override-workshop',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        assert 'NEW' in body
+        assert 'https://example.com/new' in body
+        assert 'OLD' not in body
+        assert 'https://example.com/old' not in body
+
+        page.goto(
+            f'{django_server}/workshops/override-workshop/video',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        assert 'NEW' in body
+        assert 'OLD' not in body
+        assert 'https://example.com/old' not in body
+
+    @pytest.mark.core
+    def test_free_visitor_paywalled_out_of_materials_behind_pages_gate(
+        self, django_server, page,
+    ):
+        """When the pages gate trips, the Materials section must be
+        suppressed entirely — the paywall card is the single CTA."""
+        _clear_workshops()
+        _create_workshop(
+            slug='paid-pages-workshop',
+            title='Paid Pages Workshop',
+            landing=0, pages=10, recording=20,
+            with_event=False,
+            workshop_materials=[
+                {'title': 'Locked',
+                 'url': 'https://example.com/locked'},
+            ],
+        )
+
+        page.goto(
+            f'{django_server}/workshops/paid-pages-workshop',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        assert 'data-testid="workshop-title"' in body
+        assert 'data-testid="workshop-pages-paywall"' in body
+        # Materials block (heading + testid + url) must NOT render.
+        assert 'data-testid="workshop-materials"' not in body
+        assert 'Materials</h2>' not in body
+        assert 'https://example.com/locked' not in body
+
+    @pytest.mark.core
+    def test_materials_render_when_only_recording_is_paywalled(
+        self, django_server, page,
+    ):
+        """A workshop with pages=0 and recording>0 lets anonymous visitors
+        see workshop-level materials on the video page. The recording
+        embed is replaced by a teaser; the workshop-level materials
+        still render because they gate against the pages level."""
+        _clear_workshops()
+        _create_workshop(
+            slug='recording-paywall-workshop',
+            title='Recording Paywall Workshop',
+            landing=0, pages=0, recording=20,
+            with_event=True,
+            workshop_materials=[
+                {'title': 'Workbook',
+                 'url': 'https://example.com/workbook'},
+            ],
+        )
+
+        page.goto(
+            f'{django_server}/workshops/recording-paywall-workshop/video',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        # Recording is paywalled (either a teaser or a bare paywall card).
+        assert 'data-testid="video-player"' not in body
+        # Materials section still shows.
+        assert 'data-testid="video-materials"' in body
+        assert 'Workbook' in body
+        assert 'https://example.com/workbook' in body
+
+    def test_no_materials_anywhere_shows_no_materials_section(
+        self, django_server, page,
+    ):
+        """A bare workshop (no workshop-level materials, no event materials)
+        renders without a Materials heading on landing or video."""
+        _clear_workshops()
+        _create_workshop(
+            slug='bare-workshop',
+            title='Bare Workshop',
+            landing=0, pages=0, recording=0,
+            with_event=False,
+            workshop_materials=[],
+        )
+
+        page.goto(
+            f'{django_server}/workshops/bare-workshop',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        assert 'data-testid="workshop-materials"' not in body
+        assert 'Materials</h2>' not in body
+
+        page.goto(
+            f'{django_server}/workshops/bare-workshop/video',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        assert 'data-testid="video-materials"' not in body
+        assert 'Materials</h2>' not in body
+
+    def test_linked_event_detail_does_not_render_materials(
+        self, django_server, page,
+    ):
+        """Issue #426 boundary: even when the workshop and the event both
+        have materials, the event detail page surfaces only the workshop
+        writeup CTA — no inline Materials block."""
+        _clear_workshops()
+        _create_workshop(
+            slug='linked-mat-workshop',
+            title='Linked Materials Workshop',
+            landing=0, pages=0, recording=0,
+            with_event=True,
+            materials=[
+                {'title': 'EVENT-DOC',
+                 'url': 'https://example.com/event-doc'},
+            ],
+            workshop_materials=[
+                {'title': 'WS-DOC',
+                 'url': 'https://example.com/ws-doc'},
+            ],
+        )
+
+        # The event slug is `{workshop_slug}-event` in this helper.
+        page.goto(
+            f'{django_server}/events/linked-mat-workshop-event',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        assert 'data-testid="event-workshop-writeup"' in body
+        assert '/workshops/linked-mat-workshop' in body
+        # No Materials heading + no material URL on the event detail page.
+        assert 'Materials</h2>' not in body
+        assert 'https://example.com/event-doc' not in body
+        assert 'https://example.com/ws-doc' not in body
+
+    def test_staff_audits_resolved_materials_in_studio(
+        self, django_server, browser,
+    ):
+        """Staff visiting the Studio workshop detail page sees the
+        resolved materials list with a source label per item."""
+        from playwright_tests.conftest import create_staff_user
+
+        _clear_workshops()
+        ws_with_workshop_mat = _create_workshop(
+            slug='audit-workshop',
+            title='Audit Workshop',
+            landing=0, pages=0, recording=0,
+            with_event=True,
+            materials=[
+                {'title': 'Recording notes',
+                 'url': 'https://example.com/notes'},
+            ],
+            workshop_materials=[
+                {'title': 'Deck',
+                 'url': 'https://example.com/deck'},
+            ],
+        )
+        ws_with_event_only = _create_workshop(
+            slug='audit-workshop-2',
+            title='Audit Workshop 2',
+            landing=0, pages=0, recording=0,
+            with_event=True,
+            materials=[
+                {'title': 'EventOnly',
+                 'url': 'https://example.com/event-only'},
+            ],
+            workshop_materials=[],
+        )
+        create_staff_user(email='studio@test.com')
+
+        ctx = _auth_context(browser, 'studio@test.com')
+        p = ctx.new_page()
+
+        p.goto(
+            f'{django_server}/studio/workshops/{ws_with_workshop_mat.pk}/',
+            wait_until='domcontentloaded',
+        )
+        body = p.content()
+        assert 'data-testid="studio-workshop-materials"' in body
+        assert 'Deck' in body
+        assert 'from workshop' in body
+        # Workshop-level wins — event-only material name is not shown.
+        assert 'Recording notes' not in body
+
+        p.goto(
+            f'{django_server}/studio/workshops/{ws_with_event_only.pk}/',
+            wait_until='domcontentloaded',
+        )
+        body = p.content()
+        assert 'EventOnly' in body
+        assert 'from linked event' in body
+        ctx.close()

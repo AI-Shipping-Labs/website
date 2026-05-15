@@ -66,4 +66,10 @@ def pricing(request):
     if not user.is_authenticated:
         context.update(get_oauth_provider_context())
         context["next_url"] = request.path
+        # Issue #653: the free-tier card always renders the inline
+        # register form for anonymous visitors, so the footer newsletter
+        # block would duplicate the signup CTA. Suppress the footer
+        # block on /pricing for anonymous users; authenticated users
+        # already never see it.
+        context["hide_footer_newsletter"] = True
     return render(request, "payments/pricing.html", context)

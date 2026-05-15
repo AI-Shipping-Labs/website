@@ -202,6 +202,12 @@ def course_detail(request, slug):
     if course.is_free and not user.is_authenticated:
         context.update(get_oauth_provider_context())
         context['next_url'] = course_url
+        # Issue #653: suppress the footer newsletter CTA on the free-anon
+        # branch so the inline register card is the only signup form on
+        # the page. Free registration already implies newsletter opt-in
+        # (a disclosure line in the inline card makes this explicit), so
+        # the footer block would create a competing form.
+        context['hide_footer_newsletter'] = True
     if gating.get('gated_reason') == 'unverified_email':
         context.update(gating)
     elif gating.get('gated_reason'):

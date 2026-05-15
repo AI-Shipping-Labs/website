@@ -287,6 +287,13 @@ def workshop_detail(request, slug):
     if context.get('pages_signup_cta_url') and not user.is_authenticated:
         context.update(get_oauth_provider_context())
         context['next_url'] = workshop.get_absolute_url()
+        # Issue #653: suppress the footer newsletter form on the same
+        # branch — the inline register card from #652 is the only signup
+        # path the visitor should see on this surface. Anonymous visitors
+        # on landing-paywalled (paid) workshops still see the footer
+        # newsletter; the flag is set only when the inline form actually
+        # renders.
+        context['hide_footer_newsletter'] = True
     return render(request, 'content/workshop_detail.html', context)
 
 

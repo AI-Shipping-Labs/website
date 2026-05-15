@@ -27,6 +27,11 @@ def _community_invite(user):
             ),
         )
     except Exception:
+        # Intentional broad catch: an enqueue failure (Redis down,
+        # django-q schema mismatch, DB hiccup, settings drift) must NOT
+        # break the webhook caller — the user's payment has already
+        # been recorded. The community invite is best-effort and can be
+        # re-driven by support tooling.
         _services.logger.exception(
             "Failed to enqueue community invite for user=%s", user.email,
         )
@@ -46,6 +51,8 @@ def _community_reactivate(user):
             ),
         )
     except Exception:
+        # Intentional broad catch: see ``_community_invite``. The
+        # webhook caller already committed the tier upgrade.
         _services.logger.exception(
             "Failed to enqueue community reactivate for user=%s", user.email,
         )
@@ -65,6 +72,8 @@ def _community_remove(user):
             ),
         )
     except Exception:
+        # Intentional broad catch: see ``_community_invite``. The
+        # webhook caller already committed the downgrade.
         _services.logger.exception(
             "Failed to enqueue community remove for user=%s", user.email,
         )
@@ -84,6 +93,9 @@ def _community_schedule_removal(user):
             ),
         )
     except Exception:
+        # Intentional broad catch: see ``_community_invite``. The
+        # webhook caller already committed the cancel-at-period-end
+        # state; on-call can replay the schedule manually if needed.
         _services.logger.exception(
             "Failed to schedule community removal for user=%s", user.email,
         )

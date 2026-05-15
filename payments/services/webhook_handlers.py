@@ -148,6 +148,11 @@ def handle_checkout_completed(session_data):
             amount_eur=None,  # derived inside the helper from tier + billing_period
         )
     except Exception:
+        # Intentional broad catch: an attribution write must NEVER undo
+        # the tier/customer/subscription update above — the user's payment
+        # is the source of truth. Any failure (DB integrity, missing
+        # UserAttribution, dashboard bookkeeping bug) becomes a logged
+        # warning, not a propagated error.
         _services.logger.exception(
             "Failed to record ConversionAttribution for user=%s session=%s",
             user.email,
@@ -255,7 +260,14 @@ def _send_payment_notification_email(
             recipient_list=[recipient],
             fail_silently=False,
         )
-    except Exception:
+    except (BadHeaderError, OSError, SMTPException):
+        # Mirrors the narrowed catch in ``handle_invoice_payment_failed``
+        # below. ``SMTPException`` covers SMTP-protocol failures,
+        # ``OSError`` covers connection-level failures (DNS, broken
+        # socket), and ``BadHeaderError`` covers Django's defense
+        # against header-injection in the subject. A misconfigured
+        # backend (``ImproperlyConfigured``) or template bug should
+        # surface, not be swallowed.
         _services.logger.warning(
             "Failed to send payment notification email to %s for user=%s "
             "session=%s",
@@ -346,6 +358,12 @@ def _handle_course_purchase(session_data, course_id):
             amount_eur=course_amount_eur,
         )
     except Exception:
+        # Intentional broad catch: the ``CourseAccess`` write above is
+        # the source of truth for the user's purchase; attribution is
+        # bookkeeping for the conversion dashboard. Any failure here
+        # (DB integrity, decimal -> int rounding, etc.) must not
+        # propagate, otherwise Stripe will retry the webhook and the
+        # idempotent ``get_or_create`` above will keep firing.
         _services.logger.exception(
             "Failed to record ConversionAttribution for course purchase "
             "user=%s session=%s",

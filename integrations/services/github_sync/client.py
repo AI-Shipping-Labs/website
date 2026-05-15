@@ -45,6 +45,14 @@ def _fetch_github_app_private_key_from_secrets_manager(secret_id, region):
         return _secrets_manager_pem_cache[cache_key]
     try:
         import boto3  # noqa: PLC0415
+        from botocore.exceptions import BotoCoreError, ClientError  # noqa: PLC0415
+    except ImportError as e:
+        logger.warning(
+            'Failed to fetch secret %s: boto3/botocore not installed (%s)',
+            secret_id, e,
+        )
+        return ''
+    try:
         client = boto3.client(
             'secretsmanager',
             region_name=region,
@@ -52,7 +60,7 @@ def _fetch_github_app_private_key_from_secrets_manager(secret_id, region):
         value = client.get_secret_value(
             SecretId=secret_id,
         )['SecretString']
-    except Exception as e:
+    except (BotoCoreError, ClientError) as e:
         logger.warning(
             'Failed to fetch secret %s: %s',
             secret_id, e,

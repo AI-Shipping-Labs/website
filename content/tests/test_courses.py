@@ -496,6 +496,17 @@ class CoursesListViewTest(TestCase):
         self.assertContains(response, 'group block focus-visible:outline-none')
         self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
 
+    def test_course_catalog_card_still_uses_fallback(self):
+        """Issue #651 regression guard: detail pages no longer render
+        the decorative fallback when cover_image_url is empty, but
+        listing cards still do — a grid of cards needs a visual anchor
+        per row.
+        """
+        response = self.client.get('/courses')
+        self.assertContains(
+            response, 'data-testid="course-card-preview-fallback"',
+        )
+
 
 # ============================================================
 # View Tests: /courses/{slug} detail
@@ -607,18 +618,24 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
         self.assertIn('Setup', content)
         self.assertIn('Deep Dive', content)
 
-    def test_missing_cover_uses_decorative_preview(self):
+    def test_course_detail_without_cover_renders_no_preview_block(self):
+        """Issue #651: when cover_image_url is empty, the course detail
+        page renders neither the preview image nor the decorative
+        fallback. The page should start at the back-link / title block
+        directly, with no leading visual placeholder.
+        """
         response = self.client.get('/courses/detail-course')
-        self.assertContains(response, 'data-testid="course-detail-preview-fallback"')
+        self.assertNotContains(response, 'data-testid="course-detail-preview"')
         self.assertNotContains(
-            response,
-            '<h3 class="line-clamp-2 break-words text-base font-semibold '
-            'leading-snug text-foreground sm:text-lg">Detail Course</h3>',
-            html=True,
+            response, 'data-testid="course-detail-preview-fallback"',
         )
-        self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
+        self.assertNotContains(
+            response, 'data-testid="course-detail-preview-image"',
+        )
 
-    def test_cover_image_uses_preview_with_alt_text(self):
+    def test_course_detail_with_cover_renders_image(self):
+        """Issue #651: when a cover URL is set, the image renders with
+        the expected alt text and no fallback element."""
         self.course.cover_image_url = 'https://example.com/detail-cover.jpg'
         self.course.save()
         response = self.client.get('/courses/detail-course')

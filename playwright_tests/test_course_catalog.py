@@ -307,15 +307,18 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
             f"{django_server}/courses/advanced-mlops",
             wait_until="domcontentloaded",
         )
-        detail_fallback = page.locator(
+        # Issue #651: detail pages no longer render the decorative
+        # fallback when cover_image_url is empty. The hero block is
+        # omitted entirely so the page starts at the back-link / title.
+        assert page.locator(
             '[data-testid="course-detail-preview-fallback"]'
-        )
-        assert detail_fallback.count() == 1
-        assert "Advanced MLOps" not in detail_fallback.inner_text()
-        # Decorative fallback omits the access label entirely on detail pages.
-        # Issue #481: legacy "Main+" shorthand is gone everywhere.
-        assert "Main+" not in detail_fallback.inner_text()
-        assert "Main or above" not in detail_fallback.inner_text()
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="course-detail-preview-image"]'
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="course-detail-preview"]'
+        ).count() == 0
 
         # "Join the discussion" link removed (see #151)
         discussion_link = page.locator(
@@ -384,11 +387,16 @@ class TestIssue480MobileCourseCards:
         page.wait_for_load_state("domcontentloaded")
         assert "/courses/python-ai-engineering" in page.url
 
-        detail_fallback = page.locator(
+        # Issue #651: detail page renders no hero block when
+        # cover_image_url is empty (regression of the previous
+        # decorative fallback). Card on /courses still renders the
+        # fallback — see assertion on `fallback` above.
+        assert page.locator(
             '[data-testid="course-detail-preview-fallback"]',
-        )
-        assert detail_fallback.count() == 1
-        assert title not in detail_fallback.inner_text()
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="course-detail-preview-image"]',
+        ).count() == 0
         page.locator("main").screenshot(
             path=str(tmp_path / "issue-480-courses-mobile-detail.png"),
         )

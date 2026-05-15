@@ -1,16 +1,16 @@
 {% comment %}
   Issue #484: cover image header. Renders the optional `cover_image_url`
-  field when populated; falls back to a decorative gradient block so the
-  layout retains a visual anchor for events that have no image yet.
+  field when populated.
+
+  Issue #651: when no cover image is set, render nothing (no decorative
+  fallback). Detail pages start directly at the back-link / title block
+  rather than leading with an empty placeholder. Card surfaces in
+  listings still use the decorative fallback because a grid needs a
+  visual anchor — only this detail-page hero was changed.
 {% endcomment %}
 {% if event.cover_image_url %}
 <div class="mb-8" data-testid="event-cover-image">
   <img src="{{ event.cover_image_url }}" alt="{{ event.title }}"
        class="max-h-[400px] w-full rounded-lg border border-border object-cover">
-</div>
-{% else %}
-<div class="mb-8 flex h-32 w-full items-center justify-center rounded-lg border border-border bg-gradient-to-br from-accent/15 via-secondary to-secondary sm:h-40"
-     data-testid="event-cover-fallback" aria-hidden="true">
-  <i data-lucide="calendar" class="h-10 w-10 text-accent/70"></i>
 </div>
 {% endif %}

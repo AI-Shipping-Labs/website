@@ -1128,9 +1128,11 @@ class EventsListRegisteredBadgeTest(TestCase):
 
 
 class EventDetailCoverImageTest(TestCase):
-    """Issue #484: event detail page renders cover image with fallback."""
+    """Issue #484 + #651: event detail page renders cover image when
+    set, and renders no hero block at all when cover_image_url is
+    empty."""
 
-    def test_cover_image_renders_when_set(self):
+    def test_event_detail_with_cover_renders_image(self):
         Event.objects.create(
             title='With Cover',
             slug='with-cover',
@@ -1143,7 +1145,10 @@ class EventDetailCoverImageTest(TestCase):
         self.assertContains(response, 'https://cdn.example.com/cover.jpg')
         self.assertNotContains(response, 'data-testid="event-cover-fallback"')
 
-    def test_decorative_fallback_renders_when_no_cover(self):
+    def test_event_detail_without_cover_renders_no_hero(self):
+        """Issue #651: empty cover_image_url renders neither an image
+        nor a decorative fallback — the page starts at the back-link
+        and title directly."""
         Event.objects.create(
             title='No Cover',
             slug='no-cover',
@@ -1151,8 +1156,8 @@ class EventDetailCoverImageTest(TestCase):
             status='upcoming',
         )
         response = self.client.get('/events/no-cover')
-        self.assertContains(response, 'data-testid="event-cover-fallback"')
         self.assertNotContains(response, 'data-testid="event-cover-image"')
+        self.assertNotContains(response, 'data-testid="event-cover-fallback"')
 
 
 class EventDetailInstructorTest(TestCase):

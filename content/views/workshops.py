@@ -23,8 +23,10 @@ from urllib.parse import urlencode
 from django.http import Http404, HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
+from accounts.oauth_context import get_oauth_provider_context
 from content.access import (
     LEVEL_BASIC,
     LEVEL_OPEN,
@@ -247,12 +249,18 @@ def _resolve_materials_for_render(workshop, can_access_pages,
     return materials, can_show
 
 
+@ensure_csrf_cookie
 def workshop_detail(request, slug):
     """Landing page: description, metadata, links to video and tutorial.
 
     The landing is always rendered for SEO — anonymous visitors see title
     and description even when ``landing_required_level > 0``, with the
     body replaced by an upgrade card.
+
+    Issue #652: ``@ensure_csrf_cookie`` guarantees the CSRF cookie is
+    set on the landing page so the inline register form (shown on the
+    pages-paywall for anonymous visitors) can POST to /api/register
+    without a 403.
     """
     workshop = _resolve_workshop(slug)
     user = request.user
@@ -273,6 +281,12 @@ def workshop_detail(request, slug):
         'resolved_materials': materials,
         'can_show_materials': can_show_materials,
     })
+    # Issue #652: when the pages paywall renders the anonymous-on-registered
+    # branch (signup CTA visible), surface the inline register card. The
+    # OAuth flags and round-trip URL feed the shared partial chain.
+    if context.get('pages_signup_cta_url') and not user.is_authenticated:
+        context.update(get_oauth_provider_context())
+        context['next_url'] = workshop.get_absolute_url()
     return render(request, 'content/workshop_detail.html', context)
 
 

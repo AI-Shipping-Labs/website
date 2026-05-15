@@ -122,10 +122,13 @@
               {{ item.state.action_label }}
             </span>
             {% elif item.state.action_kind == 'signup' %}
-            <a href="{% url 'account_register' %}"
-               class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80 min-h-[44px] flex items-center justify-center">
-              {{ item.state.action_label }}
-            </a>
+            {% comment %}
+              Issue #652: replace the "Create an account" button with the
+              inline register card so anonymous visitors can register
+              without leaving /pricing. The form/OAuth/legal partials are
+              shared with the standalone register page.
+            {% endcomment %}
+            {% include "accounts/includes/_inline_register_card.html" %}
             {% elif item.state.action_kind == 'portal' %}
             <a href="{{ stripe_customer_portal_url }}"
                class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80 min-h-[44px] flex items-center justify-center"
@@ -153,6 +156,15 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{% comment %}
+  Issue #652: load the inline register handler for the free-tier card
+  when an anonymous visitor sees the signup CTA.
+{% endcomment %}
+{% if not user.is_authenticated %}
+<script src="/static/js/accounts/auth-helpers.js"></script>
+{{ next_url|json_script:"auth-next-url" }}
+<script src="/static/js/accounts/inline-register.js"></script>
+{% endif %}
 <script>
 // Billing toggle (annual/monthly)
 var isAnnual = true;

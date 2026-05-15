@@ -163,7 +163,14 @@
            the partial below renders Sign In + Create-a-free-account
            CTAs and no tier-required pill. -->
       {% if not can_access_pages %}
-      {% include "content/_gated_access_card.html" with gated_card_testid="workshop-pages-paywall" gated_icon="book-open" gated_heading=pages_cta_message gated_description=pages_gated_description required_tier_name=pages_required_tier_name gated_cta_url=pages_cta_url gated_cta_label=pages_cta_label gated_cta_testid="workshop-pages-upgrade-cta" signup_cta_url=pages_signup_cta_url signup_cta_label=pages_signup_cta_label %}
+      {% comment %}
+        Issue #652: when the pages paywall surfaces the signup CTA
+        (anonymous on registered-level pages), render the inline
+        register card in place of the "Create free account" button via
+        signup_inline=True. The view populates next_url + oauth_* in
+        the same branch.
+      {% endcomment %}
+      {% include "content/_gated_access_card.html" with gated_card_testid="workshop-pages-paywall" gated_icon="book-open" gated_heading=pages_cta_message gated_description=pages_gated_description required_tier_name=pages_required_tier_name gated_cta_url=pages_cta_url gated_cta_label=pages_cta_label gated_cta_testid="workshop-pages-upgrade-cta" signup_cta_url=pages_signup_cta_url signup_cta_label=pages_signup_cta_label signup_inline=True %}
       {% endif %}
 
       {% endif %}
@@ -176,4 +183,13 @@
 
 {% block extra_scripts %}
 {% include "_partials/mermaid_script.html" %}
+{% comment %}
+  Issue #652: inline register card on the workshop pages paywall when
+  the signup branch is active for an anonymous visitor.
+{% endcomment %}
+{% if pages_signup_cta_url and not user.is_authenticated %}
+<script src="/static/js/accounts/auth-helpers.js"></script>
+{{ next_url|json_script:"auth-next-url" }}
+<script src="/static/js/accounts/inline-register.js"></script>
+{% endif %}
 {% endblock %}

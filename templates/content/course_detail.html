@@ -291,29 +291,32 @@
       <!-- CTA for unauthorized users -->
       {% if gated_reason == "unverified_email" %}
       {% include "content/_verify_email_required.html" %}
+      {% elif is_free_course and not user_authenticated %}
+      {% comment %}
+        Issue #652: free course + anonymous visitor — inline the
+        registration form so the visitor signs up without leaving the
+        course page. Backend register_api round-trips ``next`` so the
+        "Return to where you left off." link points back here.
+      {% endcomment %}
+      <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
+        <div class="mb-4">
+          <i data-lucide="user-plus" class="mx-auto h-10 w-10 text-accent"></i>
+        </div>
+        <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
+        <p class="mt-2 mb-6 text-sm text-muted-foreground">Create a free account to access all lessons in this course.</p>
+        {% include "accounts/includes/_inline_register_card.html" %}
+      </div>
       {% elif cta_message %}
       <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
         <div class="mb-4">
-          {% if is_free_course and not user_authenticated %}
-          <i data-lucide="user-plus" class="mx-auto h-10 w-10 text-accent"></i>
-          {% else %}
           <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
-          {% endif %}
         </div>
         <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
-        {% if is_free_course and not user_authenticated %}
-        <p class="mt-2 text-sm text-muted-foreground">Create a free account to access all lessons in this course.</p>
-        {% else %}
         <p class="mt-2 text-sm text-muted-foreground">Get full access to this course and more with a membership.</p>
-        {% endif %}
         <a href="{{ cta_url }}"
            class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
           <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-          {% if is_free_course and not user_authenticated %}
-          Sign Up Free
-          {% else %}
           View Pricing
-          {% endif %}
         </a>
       </div>
       {% endif %}
@@ -326,6 +329,17 @@
 {% block extra_scripts %}
 {{ block.super }}
 {% include "_partials/mermaid_script.html" %}
+{% comment %}
+  Issue #652: inline register card on free-anon course detail. The two
+  scripts and the json_script payload feed the shared inline-register.js
+  handler. Rendered for every visitor (cost is negligible — empty body
+  on logged-in / paid-course pages where the card isn't shown).
+{% endcomment %}
+{% if is_free_course and not user_authenticated %}
+<script src="/static/js/accounts/auth-helpers.js"></script>
+{{ next_url|json_script:"auth-next-url" }}
+<script src="/static/js/accounts/inline-register.js"></script>
+{% endif %}
 <script>
   function getCsrfToken() {
     var cookies = document.cookie.split(';');

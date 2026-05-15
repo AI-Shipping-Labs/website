@@ -287,12 +287,21 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
             '/accounts/login/?next=%2Fworkshops%2Freg-ws',
         )
         self.assertContains(response, 'Sign In')
-        self.assertContains(response, 'Create a free account')
+        # Issue #652: the legacy "Create a free account" secondary
+        # button was replaced by the inline register card. The wrapper
+        # testid (`teaser-signup-cta`) is retained but now scopes the
+        # inline card instead of a link button. The signup URL still
+        # lives in the view context for back-compat but no longer
+        # renders as a button on this surface.
+        self.assertContains(response, 'data-testid="teaser-signup-cta"')
+        self.assertContains(response, 'data-testid="inline-register-card"')
+        # The inline card's login link still carries the workshop next
+        # URL (un-encoded slashes are fine — Django's urlencode filter
+        # only encodes the special chars allauth's view will normalize).
         self.assertContains(
             response,
-            '/accounts/signup/?next=%2Fworkshops%2Freg-ws',
+            '/accounts/login/?next=/workshops/reg-ws',
         )
-        self.assertContains(response, 'data-testid="teaser-signup-cta"')
         # The broken "Upgrade to Free" copy and the /pricing CTA must be
         # gone on this surface (the regression the PM rejected). The
         # tier pill is also dropped — there's no tier to display when
@@ -989,3 +998,81 @@ class WorkshopPageGetAbsoluteUrlTest(TestCase):
             self.page.get_absolute_url(),
             '/workshops/abs-url/tutorial/page',
         )
+
+
+# ── Inline register card on workshop pages paywall (issue #652) ────────
+
+
+class WorkshopPagesPaywallInlineRegisterTest(TierSetupMixin, TestCase):
+    """Anonymous visitors on a workshop with the registered-default
+    pages gate see the inline register card in the pages paywall slot
+    (in place of the legacy "Create a free account" link). Issue #652.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # ``pages_required_level=5`` (LEVEL_REGISTERED) is the registered
+        # wall — anonymous users get the Sign-In CTA + the inline register
+        # card; logged-in free users get through to the pages.
+        cls.workshop = _make_workshop(
+            slug='anon-pages',
+            title='Anon Pages Workshop',
+            landing=0,
+            pages=5,
+            recording=20,
+        )
+        _make_page(cls.workshop, 'intro', 'Intro', 1)
+
+    def test_anonymous_pages_paywall_shows_inline_form(self):
+        response = self.client.get('/workshops/anon-pages')
+        self.assertEqual(response.status_code, 200)
+        # Paywall card is rendered.
+        self.assertContains(response, 'data-testid="workshop-pages-paywall"')
+        # Inline register card replaces the "Create a free account" button.
+        self.assertContains(response, 'data-testid="inline-register-card"')
+        self.assertContains(response, 'id="register-email"')
+        # Login link inside the inline card carries ?next=workshop URL.
+        self.assertContains(
+            response,
+            '/accounts/login/?next=/workshops/anon-pages',
+        )
+        # The legacy secondary button must NOT be rendered when signup_inline
+        # is True.
+        body = response.content.decode()
+        paywall_start = body.index('data-testid="workshop-pages-paywall"')
+        # Scan a generous window past the start so we capture the full
+        # card markup including OAuth/legal partials inside the inline
+        # register card.
+        paywall_window = body[paywall_start:paywall_start + 6000]
+        # The user-plus icon button used to live inside the card; it
+        # must be gone when signup_inline replaces the link.
+        self.assertNotIn(
+            '<i data-lucide="user-plus" class="h-4 w-4"></i>',
+            paywall_window,
+        )
+
+    def test_anonymous_pages_paywall_loads_inline_register_js(self):
+        """Surface template loads /static/js/accounts/inline-register.js
+        so the form's onsubmit handler resolves."""
+        response = self.client.get('/workshops/anon-pages')
+        self.assertContains(response, '/static/js/accounts/inline-register.js')
+        self.assertContains(response, 'auth-next-url')
+        # Guard against Django comment leaks — multi-line ``{# #}``
+        # tags don't terminate so they leak into rendered HTML.
+        self.assertNotContains(response, '{# ')
+
+    def test_authenticated_user_does_not_see_inline_form(self):
+        """A logged-in free user passes the registered wall and never
+        sees the pages paywall (and therefore no inline card)."""
+        User = get_user_model()
+        user = User.objects.create_user(
+            email='reg@test.com', password='testpass',
+        )
+        user.tier = self.free_tier
+        user.email_verified = True
+        user.save(update_fields=['tier', 'email_verified'])
+        self.client.force_login(user)
+        response = self.client.get('/workshops/anon-pages')
+        self.assertNotContains(response, 'data-testid="workshop-pages-paywall"')
+        self.assertNotContains(response, 'data-testid="inline-register-card"')

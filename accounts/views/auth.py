@@ -6,7 +6,6 @@ import logging
 import time
 
 import jwt
-from allauth.socialaccount.models import SocialApp
 from django.conf import settings
 from django.contrib.auth import login, logout
 from django.contrib.auth.backends import ModelBackend
@@ -18,6 +17,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from accounts.models import User
+from accounts.oauth_context import get_oauth_provider_context
 from accounts.return_context import (
     append_next,
     get_next_url,
@@ -49,15 +49,14 @@ EMAIL_PASSWORD_BACKEND = ModelBackend()
 INVALID_LOGIN_ERROR = "Invalid email or password"
 
 
+# Issue #652: the canonical implementation now lives in
+# ``accounts.oauth_context.get_oauth_provider_context`` so course, workshop
+# and pricing views can populate the same flags for the inline register card
+# without importing from a sibling view module. The private alias is kept so
+# tests that patch ``accounts.views.auth._oauth_provider_context`` keep
+# working.
 def _oauth_provider_context():
-    configured_providers = set(
-        SocialApp.objects.exclude(client_id='').values_list('provider', flat=True)
-    )
-    return {
-        'oauth_google_enabled': 'google' in configured_providers,
-        'oauth_github_enabled': 'github' in configured_providers,
-        'oauth_slack_enabled': 'slack' in configured_providers,
-    }
+    return get_oauth_provider_context()
 
 
 def _log_login_timing(outcome, started_at):

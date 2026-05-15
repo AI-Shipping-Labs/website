@@ -4,6 +4,7 @@ from django.conf import settings
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+from accounts.oauth_context import get_oauth_provider_context
 from content.access import get_active_override
 from integrations.config import get_config
 from payments.models import Tier
@@ -58,4 +59,11 @@ def pricing(request):
         "prefilled_email": prefilled_email,
         "stripe_customer_portal_url": get_config("STRIPE_CUSTOMER_PORTAL_URL", ""),
     }
+    # Issue #652: anonymous visitors see the free-tier card render its
+    # signup CTA as an inline register form. Pass the OAuth provider
+    # flags and the round-trip URL so the inline partial picks up the
+    # same context the standalone register page uses.
+    if not user.is_authenticated:
+        context.update(get_oauth_provider_context())
+        context["next_url"] = request.path
     return render(request, "payments/pricing.html", context)

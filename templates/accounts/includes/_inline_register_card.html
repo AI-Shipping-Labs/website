@@ -1,0 +1,40 @@
+{% comment %}
+Inline registration card partial — issue #652.
+
+Replaces the standalone "Sign Up Free" button on free-anon CTA
+surfaces (course detail, workshop pages-level paywall, pricing free
+tier) with the same form/OAuth/legal block the standalone register
+page renders. Reuses the existing partials so the form fields, OAuth
+buttons, and legal copy stay authoritative in one place.
+
+Expected context:
+  next_url                — URL to return to after registration (current page)
+  oauth_google_enabled    — boolean, gated on a SocialApp row
+  oauth_github_enabled    — boolean
+  oauth_slack_enabled     — boolean
+  inline_heading          — optional heading text
+  inline_subtitle         — optional subtitle text
+
+The surface template MUST also include in extra_scripts:
+
+  <script src="/static/js/accounts/auth-helpers.js"></script>
+  {{ next_url|json_script:"auth-next-url" }}
+  <script src="/static/js/accounts/inline-register.js"></script>
+
+so the form's onsubmit handler resolves. The shared JS reads
+authNextUrl from the #auth-next-url script block.
+{% endcomment %}
+<div class="mx-auto max-w-md rounded-lg border border-border bg-card p-5 sm:p-6 text-left" data-testid="inline-register-card">
+  {% if inline_heading %}
+  <div class="text-center mb-6">
+    <h3 class="text-xl font-semibold tracking-tight text-foreground" data-testid="inline-register-heading">{{ inline_heading }}</h3>
+    {% if inline_subtitle %}
+    <p class="mt-1 text-sm text-muted-foreground">{{ inline_subtitle }}</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% include "accounts/includes/_register_form.html" %}
+  {% include "accounts/includes/_oauth_providers.html" with oauth_action="Sign up" oauth_divider_text="sign up with" %}
+  {% include "accounts/includes/_legal_footer.html" with legal_action="creating an account" %}
+</div>

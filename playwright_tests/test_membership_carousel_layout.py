@@ -138,8 +138,8 @@ def test_pricing_mobile_carousel_free_copy_and_desktop_grid(django_server, page)
     _assert_main_centered(page, '[data-testid="pricing-tier-carousel"]')
     free_card = page.locator('[data-tier-card="free"]')
     expect(free_card).to_contain_text("Newsletter and open resources")
-    expect(free_card.get_by_role("link", name="Get the newsletter")).to_have_attribute(
-        "href", "/#newsletter"
+    expect(free_card.get_by_role("link", name="Create an account")).to_have_attribute(
+        "href", "/accounts/register/"
     )
     _screenshot(page, '[data-testid="pricing-tier-carousel"]', "pricing-mobile-anon")
 

@@ -1053,13 +1053,10 @@ class TestScenario12DiscoverSubscribeFromPricing:
         free_cta = free_card.locator("a")
         assert free_cta.count() >= 1
 
-        # The CTA should link to /#newsletter or /subscribe
+        # The CTA now sends free-tier discoverers to account signup.
         cta_href = free_cta.first.get_attribute("href")
-        assert (
-            "newsletter" in cta_href
-            or "/subscribe" in cta_href
-        ), (
-            f"Free tier CTA should link to newsletter, "
+        assert "/accounts/register/" in cta_href, (
+            f"Free tier CTA should link to /accounts/register/, "
             f"got: {cta_href}"
         )
 

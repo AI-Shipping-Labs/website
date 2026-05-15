@@ -564,7 +564,7 @@ class TestScenario7FreeSubscribeFlow:
         subscribe_link = free_card.locator("a")
         subscribe_link.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "newsletter" in page.url
+        assert "/accounts/register/" in page.url
 @pytest.mark.django_db
 class TestScenario8MainTierVisualDistinction:
     """

@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from integrations.config import get_config
-from payments.models import WebhookEvent
+from payments.models import Tier, WebhookEvent
 from payments.services.import_stripe import (
     CONFIGURATION_ERRORS,
     _price_to_tier_map,
@@ -38,14 +38,31 @@ class ChangeRecord:
     metadata_saved: bool = False
     audit_event_id: str = ""
     warnings: list[str] = field(default_factory=list)
+    # Force-mode audit signals (issue #660). Populated only when the
+    # apply-side reconcile sweeps more than the single matching override
+    # and/or overwrites a non-null billing_period_end.
+    deactivated_override_ids: list[int] = field(default_factory=list)
+    billing_period_end_overwritten: bool = False
 
     @property
     def changed(self):
         return self.status == "changed"
 
 
-def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None):
-    """Sync one user's direct tier fields from their active Stripe subscription."""
+def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=False):
+    """Sync one user's direct tier fields from their active Stripe subscription.
+
+    When ``force=True`` and the user has an active Stripe subscription that
+    resolves to a tier, every active ``TierOverride`` on the user is
+    deactivated (not just the one matching the resolved tier), and
+    ``user.billing_period_end`` is overwritten with Stripe's current
+    ``current_period_end`` even when it is already populated.
+
+    Force is only ever honored when Stripe says the user is actively paying.
+    Users with no ``stripe_customer_id`` or no active subscription are
+    returned with their existing ``skipped`` / ``warning`` outcome and no
+    writes occur — force never escalates a non-Stripe user.
+    """
     if not user.stripe_customer_id:
         return ChangeRecord(
             user_id=user.pk,
@@ -98,7 +115,7 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None):
         )
 
     price_id = _subscription_price_id(subscription)
-    tier = price_to_tier.get(price_id)
+    tier = _resolve_subscription_tier(subscription, price_id, price_to_tier)
     subscription_id = _get(subscription, "id", "") or ""
     period_end = _subscription_period_end(subscription)
 
@@ -119,10 +136,38 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None):
             warnings=[warning],
         )
 
-    override = _active_matching_override(user, tier)
-    metadata_saved = _subscription_metadata_would_change(user, subscription_id, period_end)
+    # Override planning. In non-force mode we only touch the override that
+    # matches the resolved tier (today's behaviour). In force mode we sweep
+    # every active override on the user.
+    if force:
+        sweep_overrides = list(_active_overrides_for_user(user))
+    else:
+        matching_override = _active_matching_override(user, tier)
+        sweep_overrides = [matching_override] if matching_override else []
+
+    override_deactivated = bool(sweep_overrides)
+    deactivated_override_ids = [override.pk for override in sweep_overrides]
+
+    # Subscription-id metadata behaves the same in both modes: write only
+    # when the local field is empty. Force only widens billing_period_end.
+    subscription_id_would_change = bool(subscription_id and not user.subscription_id)
+    if force:
+        billing_period_end_would_change = bool(
+            period_end and user.billing_period_end != period_end
+        )
+        billing_period_end_overwritten = bool(
+            period_end
+            and user.billing_period_end is not None
+            and user.billing_period_end != period_end
+        )
+    else:
+        billing_period_end_would_change = bool(
+            period_end and user.billing_period_end is None
+        )
+        billing_period_end_overwritten = False
+
+    metadata_saved = subscription_id_would_change or billing_period_end_would_change
     tier_changed = user.tier_id != tier.pk
-    override_deactivated = override is not None
 
     if not tier_changed and not override_deactivated and not metadata_saved:
         return ChangeRecord(
@@ -155,6 +200,8 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None):
         price_id=price_id,
         override_deactivated=override_deactivated,
         metadata_saved=metadata_saved,
+        deactivated_override_ids=deactivated_override_ids,
+        billing_period_end_overwritten=billing_period_end_overwritten,
     )
 
     if dry_run:
@@ -165,20 +212,86 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None):
     if tier_changed:
         user.tier = tier
         update_fields.append("tier")
-    if subscription_id and not user.subscription_id:
+    if subscription_id_would_change:
         user.subscription_id = subscription_id
         update_fields.append("subscription_id")
-    if period_end and user.billing_period_end is None:
+    if billing_period_end_would_change:
         user.billing_period_end = period_end
         update_fields.append("billing_period_end")
     if update_fields:
         user.save(update_fields=update_fields)
-    if override:
+    for override in sweep_overrides:
         override.is_active = False
         override.save(update_fields=["is_active"])
 
     record.audit_event_id = _write_audit_row(record)
     return record
+
+
+def _resolve_subscription_tier(subscription, price_id, price_to_tier):
+    """Resolve a Stripe subscription to a local ``Tier`` row.
+
+    Resolution order (issue #660):
+
+    1. ``subscription.items.data[0].price.metadata.tier_slug``
+    2. ``subscription.items.data[0].price.product.metadata.tier_slug``
+       (the subscription list call already expands ``data.items.data.price.product``
+       so this read does not trigger a second API call).
+    3. ``price_to_tier[price_id]`` — the legacy DB lookup, preserved as a
+       fallback for backwards compatibility.
+
+    Returns ``None`` if all three paths fail.
+    """
+    items = _get(subscription, "items", {}) or {}
+    data = _get(items, "data", []) or []
+    first_item = data[0] if data else {}
+    price = _get(first_item, "price", {}) or {}
+
+    price_metadata = _get(price, "metadata", {}) or {}
+    price_slug = _normalize_slug(price_metadata.get("tier_slug"))
+    if price_slug:
+        tier = _tier_by_slug(price_slug)
+        if tier is not None:
+            return tier
+
+    product = _get(price, "product", {}) or {}
+    # Stripe sometimes returns the product as an id string when not expanded.
+    if not isinstance(product, dict):
+        product = {}
+    product_metadata = _get(product, "metadata", {}) or {}
+    product_slug = _normalize_slug(product_metadata.get("tier_slug"))
+    if product_slug:
+        tier = _tier_by_slug(product_slug)
+        if tier is not None:
+            return tier
+
+    return price_to_tier.get(price_id)
+
+
+def _normalize_slug(value):
+    if not isinstance(value, str):
+        return ""
+    return value.strip()
+
+
+def _tier_by_slug(slug):
+    try:
+        return Tier.objects.get(slug=slug)
+    except Tier.DoesNotExist:
+        return None
+
+
+def _active_overrides_for_user(user):
+    """All active, unexpired ``TierOverride`` rows for a user (force-mode sweep)."""
+    return (
+        TierOverride.objects
+        .filter(
+            user_id=user.pk,
+            is_active=True,
+            expires_at__gt=timezone.now(),
+        )
+        .order_by("-created_at")
+    )
 
 
 def _active_subscriptions_for_customer(customer_id):
@@ -188,7 +301,9 @@ def _active_subscriptions_for_customer(customer_id):
         customer=customer_id,
         status="active",
         limit=100,
-        expand=["data.items.data.price"],
+        # Expand price.product so the metadata-first resolver can read
+        # product.metadata.tier_slug without a second API call (issue #660).
+        expand=["data.items.data.price.product"],
     )
     subscriptions = list(response.auto_paging_iter())
     subscriptions.sort(
@@ -219,13 +334,6 @@ def _active_matching_override(user, tier):
     )
 
 
-def _subscription_metadata_would_change(user, subscription_id, period_end):
-    return bool(
-        (subscription_id and not user.subscription_id)
-        or (period_end and user.billing_period_end is None)
-    )
-
-
 def _tier_slug(user):
     if user.tier_id and user.tier:
         return user.tier.slug
@@ -244,20 +352,27 @@ def _change_message(old_slug, new_slug, *, override_deactivated, metadata_saved,
 
 def _write_audit_row(record):
     event_id = f"backfill_stripe_tiers:user:{record.user_id}:{timezone.now().timestamp()}"
+    payload = {
+        "user_id": record.user_id,
+        "email": record.email,
+        "stripe_customer_id": record.stripe_customer_id,
+        "old_tier_slug": record.old_tier_slug,
+        "new_tier_slug": record.new_tier_slug,
+        "subscription_id": record.subscription_id,
+        "price_id": record.price_id,
+        "override_deactivated": record.override_deactivated,
+        "metadata_saved": record.metadata_saved,
+    }
+    # Additive force-mode signals (issue #660): always present so prod
+    # operators can audit force-mode sweeps. Backwards compatible — keys
+    # are additive on top of the existing schema.
+    payload["deactivated_override_ids"] = list(record.deactivated_override_ids)
+    payload["deactivated_override_count"] = len(record.deactivated_override_ids)
+    payload["billing_period_end_overwritten"] = record.billing_period_end_overwritten
     WebhookEvent.objects.create(
         stripe_event_id=event_id,
         event_type="backfill_stripe_tiers",
-        payload={
-            "user_id": record.user_id,
-            "email": record.email,
-            "stripe_customer_id": record.stripe_customer_id,
-            "old_tier_slug": record.old_tier_slug,
-            "new_tier_slug": record.new_tier_slug,
-            "subscription_id": record.subscription_id,
-            "price_id": record.price_id,
-            "override_deactivated": record.override_deactivated,
-            "metadata_saved": record.metadata_saved,
-        },
+        payload=payload,
     )
     return event_id
 

@@ -45,19 +45,24 @@ def subscription(
     price_id="price_main_monthly",
     current_period_end=1_800_000_000,
     price_metadata=None,
-    product_metadata=None,
+    unit_amount=None,
+    interval=None,
 ):
     """Build a fake Stripe subscription payload.
 
-    ``price_metadata`` / ``product_metadata`` mirror the structure Stripe
-    returns when the subscription list call expands
-    ``data.items.data.price.product`` (issue #660 resolver fallback chain).
+    ``price_metadata`` mirrors what Stripe returns when the subscription
+    list call expands ``data.items.data.price``. ``unit_amount`` (cents)
+    and ``interval`` drive the amount-based resolver fallback for prices
+    without ``tier_slug`` metadata.
     """
     price_obj = {
         "id": price_id,
         "metadata": dict(price_metadata or {}),
-        "product": {"metadata": dict(product_metadata or {})},
     }
+    if unit_amount is not None:
+        price_obj["unit_amount"] = unit_amount
+    if interval is not None:
+        price_obj["recurring"] = {"interval": interval}
     return {
         "id": subscription_id,
         "status": "active",

@@ -29,19 +29,27 @@ def subscription(
     price_id="price_main_monthly",
     current_period_end=1_800_000_000,
     price_metadata=None,
-    product_metadata=None,
+    unit_amount=None,
+    interval=None,
 ):
     """Build a fake Stripe subscription payload.
 
-    ``price_metadata`` / ``product_metadata`` mirror the structure Stripe
-    returns when the subscription list call expands
-    ``data.items.data.price.product`` (issue #660 resolver fallback chain).
+    ``price_metadata`` mirrors what Stripe returns when the subscription
+    list call expands ``data.items.data.price`` (the resolver reads
+    ``price.metadata.tier_slug`` for the metadata-first path).
+
+    ``unit_amount`` (in cents) and ``interval`` (``"month"`` / ``"year"``)
+    drive the amount-based fallback that resolves prices created out-of-band
+    on the Stripe dashboard without our ``tier_slug`` metadata.
     """
     price_obj = {
         "id": price_id,
         "metadata": dict(price_metadata or {}),
-        "product": {"metadata": dict(product_metadata or {})},
     }
+    if unit_amount is not None:
+        price_obj["unit_amount"] = unit_amount
+    if interval is not None:
+        price_obj["recurring"] = {"interval": interval}
     return {
         "id": subscription_id,
         "status": "active",
@@ -245,14 +253,36 @@ class BackfillStripeTiersCommandTest(TestCase):
         # No "unknown price" warning should be emitted.
         self.assertNotIn("unknown price", err.getvalue())
 
-    def test_resolver_falls_back_to_product_metadata_when_price_metadata_missing(self):
-        user = self._user("metadata-product@test.com")
+    def test_resolver_falls_back_to_amount_and_interval_when_metadata_and_db_miss(self):
+        """Price has no metadata and isn't in the DB map, but its
+        ``unit_amount`` matches ``Tier.price_eur_month`` for ``main``.
+        """
+        user = self._user("amount-match@test.com")
 
         with self._patch_subscriptions({
             user.stripe_customer_id: [
                 subscription(
                     price_id="price_regenerated_unknown",
-                    product_metadata={"tier_slug": "main"},
+                    unit_amount=5000,
+                    interval="month",
+                )
+            ]
+        }):
+            call_command("backfill_stripe_tiers", stdout=StringIO())
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "main")
+
+    def test_resolver_amount_match_works_for_yearly_prices(self):
+        """Yearly prices match ``Tier.price_eur_year * 100`` rather than monthly."""
+        user = self._user("amount-yearly@test.com")
+
+        with self._patch_subscriptions({
+            user.stripe_customer_id: [
+                subscription(
+                    price_id="price_regenerated_yearly",
+                    unit_amount=50000,  # €500 / year = main
+                    interval="year",
                 )
             ]
         }):
@@ -314,9 +344,10 @@ class BackfillStripeTiersCommandTest(TestCase):
         user.refresh_from_db()
         self.assertEqual(user.tier.slug, "main")
 
-    def test_subscription_list_call_expands_product_metadata(self):
-        """The Stripe ``expand`` list must include the product so we don't
-        need a second API call to read product metadata.
+    def test_subscription_list_expand_path_stays_under_stripe_4_level_limit(self):
+        """Stripe rejects expansions deeper than 4 levels. The list call
+        must expand ``data.items.data.price`` and stop there — expanding
+        ``data.items.data.price.product`` would fail every request.
         """
         self._user("expand@test.com")
 
@@ -328,7 +359,11 @@ class BackfillStripeTiersCommandTest(TestCase):
 
         stripe_list.assert_called_once()
         _, kwargs = stripe_list.call_args
-        self.assertIn(
-            "data.items.data.price.product",
-            kwargs.get("expand", []),
-        )
+        expand = kwargs.get("expand", [])
+        self.assertIn("data.items.data.price", expand)
+        for entry in expand:
+            self.assertLessEqual(
+                entry.count("."),
+                3,
+                msg=f"expand entry {entry!r} is >4 levels deep; Stripe will reject it",
+            )

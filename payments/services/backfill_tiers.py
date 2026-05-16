@@ -231,16 +231,24 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=
 def _resolve_subscription_tier(subscription, price_id, price_to_tier):
     """Resolve a Stripe subscription to a local ``Tier`` row.
 
-    Resolution order (issue #660):
+    Resolution order:
 
-    1. ``subscription.items.data[0].price.metadata.tier_slug``
-    2. ``subscription.items.data[0].price.product.metadata.tier_slug``
-       (the subscription list call already expands ``data.items.data.price.product``
-       so this read does not trigger a second API call).
-    3. ``price_to_tier[price_id]`` — the legacy DB lookup, preserved as a
-       fallback for backwards compatibility.
+    1. ``subscription.items.data[0].price.metadata.tier_slug`` (declarative
+       label that travels with the price object, set by
+       ``stripe_create_products``).
+    2. ``price_to_tier[price_id]`` — the DB ``Tier.stripe_price_id_*`` map.
+    3. Amount + interval match: ``price.unit_amount`` against
+       ``Tier.price_eur_month * 100`` or ``Tier.price_eur_year * 100``
+       (currency-agnostic; cents only). Robust to Stripe price regenerations,
+       which is exactly the case that the original DB-only lookup misses.
 
     Returns ``None`` if all three paths fail.
+
+    Note on product-level metadata: a fallback to
+    ``price.product.metadata.tier_slug`` would require expanding
+    ``data.items.data.price.product``, which is 5 levels deep — Stripe rejects
+    expansions past 4 levels. A separate ``Product.retrieve`` per user is
+    avoided because amount-based matching already covers the same case.
     """
     items = _get(subscription, "items", {}) or {}
     data = _get(items, "data", []) or []
@@ -254,18 +262,31 @@ def _resolve_subscription_tier(subscription, price_id, price_to_tier):
         if tier is not None:
             return tier
 
-    product = _get(price, "product", {}) or {}
-    # Stripe sometimes returns the product as an id string when not expanded.
-    if not isinstance(product, dict):
-        product = {}
-    product_metadata = _get(product, "metadata", {}) or {}
-    product_slug = _normalize_slug(product_metadata.get("tier_slug"))
-    if product_slug:
-        tier = _tier_by_slug(product_slug)
-        if tier is not None:
-            return tier
+    tier = price_to_tier.get(price_id)
+    if tier is not None:
+        return tier
 
-    return price_to_tier.get(price_id)
+    return _tier_by_amount_interval(price)
+
+
+def _tier_by_amount_interval(price):
+    """Match a Stripe price to a ``Tier`` row by ``unit_amount`` + interval.
+
+    ``Tier.price_eur_month`` / ``price_eur_year`` are integer EUR values; Stripe
+    ``unit_amount`` is integer cents. Match when ``unit_amount == price_eur_* * 100``
+    for the corresponding ``recurring.interval``. Returns ``None`` if the price
+    has no recurring interval, no amount, or no tier matches.
+    """
+    unit_amount = _get(price, "unit_amount")
+    if not isinstance(unit_amount, int) or unit_amount <= 0:
+        return None
+    recurring = _get(price, "recurring", {}) or {}
+    interval = _get(recurring, "interval")
+    if interval == "month":
+        return Tier.objects.filter(price_eur_month=unit_amount // 100).first()
+    if interval == "year":
+        return Tier.objects.filter(price_eur_year=unit_amount // 100).first()
+    return None
 
 
 def _normalize_slug(value):
@@ -301,9 +322,11 @@ def _active_subscriptions_for_customer(customer_id):
         customer=customer_id,
         status="active",
         limit=100,
-        # Expand price.product so the metadata-first resolver can read
-        # product.metadata.tier_slug without a second API call (issue #660).
-        expand=["data.items.data.price.product"],
+        # 4 levels deep — Stripe rejects 5-level expansions. The resolver
+        # reads ``price.metadata.tier_slug`` from this payload and falls
+        # back to amount + interval matching for prices that lack metadata
+        # (e.g. prices created out-of-band on the Stripe dashboard).
+        expand=["data.items.data.price"],
     )
     subscriptions = list(response.auto_paging_iter())
     subscriptions.sort(

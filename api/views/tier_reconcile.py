@@ -178,7 +178,7 @@ def _normalize_apply_status(status):
     return status
 
 
-def _serialize_apply_result(email, record, *, status):
+def _serialize_apply_result(email, record, *, status, billing_period_end):
     return {
         "email": email,
         "status": status,
@@ -189,7 +189,14 @@ def _serialize_apply_result(email, record, *, status):
         "saved_metadata": record.metadata_saved,
         "audit_event_id": record.audit_event_id or "",
         "message": record.message,
+        "billing_period_end": billing_period_end,
     }
+
+
+def _billing_period_end_iso(user):
+    if user is None or user.billing_period_end is None:
+        return None
+    return user.billing_period_end.isoformat()
 
 
 @token_required
@@ -200,14 +207,22 @@ def tier_reconcile_apply(request):
 
     Body (JSON object):
 
-        {"emails": ["user@example.com"], "dry_run": false}
+        {"emails": ["user@example.com"], "dry_run": false, "force": false}
 
-    Both fields are optional. When ``emails`` is omitted the endpoint
+    All fields are optional. When ``emails`` is omitted the endpoint
     processes every user with a non-empty ``stripe_customer_id`` (capped
     at ``MAX_USERS_PER_REQUEST``; above the cap returns 429
     ``too_many_users``). When ``dry_run`` is true the underlying service
     runs in dry-run mode and the per-row status is normalized from
     ``"dry_run"`` to ``"would_change"`` so clients don't special-case it.
+
+    When ``force`` is true and Stripe says the user is actively paying,
+    every active ``TierOverride`` on the user is deactivated (not only the
+    one matching the resolved tier) and ``user.billing_period_end`` is
+    overwritten with Stripe's ``current_period_end`` even when it is
+    already populated. ``force`` is ignored for users with no
+    ``stripe_customer_id`` or no active subscription — it never escalates
+    a non-Stripe user.
 
     Per-row ``status`` is one of ``"changed"``, ``"would_change"``,
     ``"skipped"``, ``"warning"``, ``"not_found"``. Top-level counters
@@ -243,6 +258,14 @@ def tier_reconcile_apply(request):
             "dry_run must be a boolean",
             "invalid_type",
             details={"field": "dry_run", "expected": "bool"},
+        )
+
+    force_raw = data.get("force", False)
+    if not isinstance(force_raw, bool):
+        return error_response(
+            "force must be a boolean",
+            "invalid_type",
+            details={"field": "force", "expected": "bool"},
         )
 
     requested_emails = None
@@ -311,6 +334,7 @@ def tier_reconcile_apply(request):
                 "saved_metadata": False,
                 "audit_event_id": "",
                 "message": f"not found: no user with email {original_email} and a Stripe customer ID",
+                "billing_period_end": None,
             })
             continue
 
@@ -318,12 +342,19 @@ def tier_reconcile_apply(request):
             user,
             dry_run=dry_run_raw,
             price_to_tier=price_to_tier,
+            force=force_raw,
         )
         normalized_status = _normalize_apply_status(record.status)
+        # Re-read from DB on apply (non-dry-run) so the response reflects
+        # what was actually written. In dry-run mode the in-memory user
+        # already shows the unchanged value.
+        if not dry_run_raw and normalized_status == "changed":
+            user.refresh_from_db(fields=["billing_period_end"])
         results.append(_serialize_apply_result(
             user.email,
             record,
             status=normalized_status,
+            billing_period_end=_billing_period_end_iso(user),
         ))
         processed += 1
         if normalized_status in ("changed", "would_change"):

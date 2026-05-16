@@ -28,12 +28,25 @@ def subscription(
     *,
     price_id="price_main_monthly",
     current_period_end=1_800_000_000,
+    price_metadata=None,
+    product_metadata=None,
 ):
+    """Build a fake Stripe subscription payload.
+
+    ``price_metadata`` / ``product_metadata`` mirror the structure Stripe
+    returns when the subscription list call expands
+    ``data.items.data.price.product`` (issue #660 resolver fallback chain).
+    """
+    price_obj = {
+        "id": price_id,
+        "metadata": dict(price_metadata or {}),
+        "product": {"metadata": dict(product_metadata or {})},
+    }
     return {
         "id": subscription_id,
         "status": "active",
         "current_period_end": current_period_end,
-        "items": {"data": [{"price": {"id": price_id}}]},
+        "items": {"data": [{"price": price_obj}]},
     }
 
 
@@ -207,3 +220,115 @@ class BackfillStripeTiersCommandTest(TestCase):
         self.assertEqual(user.tier.slug, "free")
         self.assertIn("Stripe lookup failed", err.getvalue())
         self.assertFalse(WebhookEvent.objects.exists())
+
+    # ------------------------------------------------------------------
+    # Metadata-first tier resolver (issue #660 — Change 1).
+    # ------------------------------------------------------------------
+
+    def test_resolver_prefers_price_metadata_tier_slug_over_db_map(self):
+        """Unknown price ID but ``price.metadata.tier_slug`` set: resolves anyway."""
+        user = self._user("metadata-price@test.com")
+        err = StringIO()
+
+        with self._patch_subscriptions({
+            user.stripe_customer_id: [
+                subscription(
+                    price_id="price_regenerated_unknown",
+                    price_metadata={"tier_slug": "main"},
+                )
+            ]
+        }):
+            call_command("backfill_stripe_tiers", stdout=StringIO(), stderr=err)
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "main")
+        # No "unknown price" warning should be emitted.
+        self.assertNotIn("unknown price", err.getvalue())
+
+    def test_resolver_falls_back_to_product_metadata_when_price_metadata_missing(self):
+        user = self._user("metadata-product@test.com")
+
+        with self._patch_subscriptions({
+            user.stripe_customer_id: [
+                subscription(
+                    price_id="price_regenerated_unknown",
+                    product_metadata={"tier_slug": "main"},
+                )
+            ]
+        }):
+            call_command("backfill_stripe_tiers", stdout=StringIO())
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "main")
+
+    def test_resolver_falls_back_to_db_map_when_both_metadata_paths_missing(self):
+        """Empty metadata, but price ID matches the local map: today's behaviour."""
+        user = self._user("dbmap@test.com")
+
+        with self._patch_subscriptions({
+            user.stripe_customer_id: [
+                subscription(price_id="price_main_monthly")
+            ]
+        }):
+            call_command("backfill_stripe_tiers", stdout=StringIO())
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "main")
+
+    def test_resolver_warns_when_all_three_paths_miss(self):
+        """All resolver steps miss: warning_unknown_price, no writes."""
+        user = self._user("nothing-resolves@test.com")
+        err = StringIO()
+
+        with self._patch_subscriptions({
+            user.stripe_customer_id: [
+                subscription(price_id="price_unknown_xyz"),
+            ]
+        }):
+            call_command("backfill_stripe_tiers", stdout=StringIO(), stderr=err)
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "free")
+        self.assertIn("unknown price price_unknown_xyz", err.getvalue())
+        # No tier change, so no audit row.
+        self.assertFalse(WebhookEvent.objects.exists())
+
+    def test_resolver_ignores_unknown_metadata_tier_slug_and_falls_through(self):
+        """Metadata names a slug that doesn't match any Tier row.
+
+        The resolver must fall through to the next step rather than blow
+        up. With price_id in the DB map, we should still succeed.
+        """
+        user = self._user("unknown-meta-slug@test.com")
+
+        with self._patch_subscriptions({
+            user.stripe_customer_id: [
+                subscription(
+                    price_id="price_main_monthly",
+                    price_metadata={"tier_slug": "no-such-tier"},
+                )
+            ]
+        }):
+            call_command("backfill_stripe_tiers", stdout=StringIO())
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "main")
+
+    def test_subscription_list_call_expands_product_metadata(self):
+        """The Stripe ``expand`` list must include the product so we don't
+        need a second API call to read product metadata.
+        """
+        self._user("expand@test.com")
+
+        with patch(
+            "payments.services.backfill_tiers.stripe.Subscription.list",
+        ) as stripe_list:
+            stripe_list.return_value = StripePager([subscription()])
+            call_command("backfill_stripe_tiers", stdout=StringIO())
+
+        stripe_list.assert_called_once()
+        _, kwargs = stripe_list.call_args
+        self.assertIn(
+            "data.items.data.price.product",
+            kwargs.get("expand", []),
+        )

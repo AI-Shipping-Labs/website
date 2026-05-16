@@ -44,12 +44,25 @@ def subscription(
     *,
     price_id="price_main_monthly",
     current_period_end=1_800_000_000,
+    price_metadata=None,
+    product_metadata=None,
 ):
+    """Build a fake Stripe subscription payload.
+
+    ``price_metadata`` / ``product_metadata`` mirror the structure Stripe
+    returns when the subscription list call expands
+    ``data.items.data.price.product`` (issue #660 resolver fallback chain).
+    """
+    price_obj = {
+        "id": price_id,
+        "metadata": dict(price_metadata or {}),
+        "product": {"metadata": dict(product_metadata or {})},
+    }
     return {
         "id": subscription_id,
         "status": "active",
         "current_period_end": current_period_end,
-        "items": {"data": [{"price": {"id": price_id}}]},
+        "items": {"data": [{"price": price_obj}]},
     }
 
 
@@ -354,6 +367,33 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
         )
         self.assertEqual(response.status_code, 405)
         self.assertEqual(response.json(), {"error": "Method not allowed"})
+
+    def test_diagnostics_reports_set_direct_tier_when_price_metadata_resolves_unknown_price(self):
+        """Issue #660 — diagnostics half of the metadata-first resolver.
+
+        Subscription price ID is not in the local DB map, but
+        ``price.metadata.tier_slug`` carries a valid slug. The diagnostic
+        must report ``set_direct_tier`` and ``stripe_active_tier = "main"``
+        (not ``warning_unknown_price`` / ``"unknown"``).
+        """
+        user = self._user("metadata-resolves@test.com")
+
+        with patch_subscriptions({
+            user.stripe_customer_id: [
+                subscription(
+                    price_id="price_regenerated_unknown",
+                    price_metadata={"tier_slug": "main"},
+                )
+            ]
+        }):
+            response = self._get_diagnostics()
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["count"], 1)
+        entry = body["users"][0]
+        self.assertEqual(entry["action_needed"], "set_direct_tier")
+        self.assertEqual(entry["stripe_active_tier"], "main")
 
 
 class TierReconcileApplyTest(TierReconcileTestBase):
@@ -674,6 +714,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
                 "saved_metadata",
                 "audit_event_id",
                 "message",
+                "billing_period_end",
             },
         )
 
@@ -700,3 +741,280 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         )
         # Confirm we exercised the user we care about.
         self.assertEqual(body["users"][0]["email"], user.email)
+
+    # ------------------------------------------------------------------
+    # Force flag (issue #660 — Change 2).
+    # ------------------------------------------------------------------
+
+    def _create_two_overrides(self, user, matching_tier, other_tier):
+        """Two active TierOverride rows for the user: one matching the
+        resolved Stripe tier, one for a different tier.
+        """
+        matching = TierOverride.objects.create(
+            user=user,
+            original_tier=self.free,
+            override_tier=matching_tier,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+        other = TierOverride.objects.create(
+            user=user,
+            original_tier=self.free,
+            override_tier=other_tier,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+        return matching, other
+
+    def test_apply_with_force_deactivates_all_active_overrides_not_just_matching(self):
+        basic = Tier.objects.get(slug="basic")
+        user = self._user("force-sweep@test.com")
+        matching, other = self._create_two_overrides(user, self.main, basic)
+
+        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+            response = self._post_apply({
+                "emails": [user.email],
+                "force": True,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["results"][0]["deactivated_override"], True)
+
+        matching.refresh_from_db()
+        other.refresh_from_db()
+        self.assertFalse(matching.is_active)
+        self.assertFalse(other.is_active)
+
+    def test_apply_without_force_only_deactivates_matching_override(self):
+        basic = Tier.objects.get(slug="basic")
+        user = self._user("noforce-keep-other@test.com")
+        matching, other = self._create_two_overrides(user, self.main, basic)
+
+        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+            response = self._post_apply({"emails": [user.email]})
+
+        self.assertEqual(response.status_code, 200)
+        matching.refresh_from_db()
+        other.refresh_from_db()
+        self.assertFalse(matching.is_active)
+        # Non-matching override stays active under today's behaviour.
+        self.assertTrue(other.is_active)
+
+    def test_apply_with_force_overwrites_existing_billing_period_end(self):
+        stripe_period = 1_800_000_456
+        pre_existing = datetime.fromtimestamp(
+            1_700_000_000,
+            tz=datetime_timezone.utc,
+        )
+        user = self._user(
+            "force-overwrite@test.com",
+            tier=self.main,
+            subscription_id="sub_active",
+            billing_period_end=pre_existing,
+        )
+
+        with patch_subscriptions({
+            user.stripe_customer_id: [
+                subscription(current_period_end=stripe_period),
+            ]
+        }):
+            response = self._post_apply({
+                "emails": [user.email],
+                "force": True,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["results"][0]["status"], "changed")
+        expected = datetime.fromtimestamp(stripe_period, tz=datetime_timezone.utc)
+        self.assertEqual(body["results"][0]["billing_period_end"], expected.isoformat())
+
+        user.refresh_from_db()
+        self.assertEqual(user.billing_period_end, expected)
+
+    def test_apply_without_force_does_not_overwrite_existing_billing_period_end(self):
+        stripe_period = 1_800_000_456
+        pre_existing = datetime.fromtimestamp(
+            1_700_000_000,
+            tz=datetime_timezone.utc,
+        )
+        user = self._user(
+            "noforce-keep-bpe@test.com",
+            tier=self.main,
+            subscription_id="sub_active",
+            billing_period_end=pre_existing,
+        )
+
+        with patch_subscriptions({
+            user.stripe_customer_id: [
+                subscription(current_period_end=stripe_period),
+            ]
+        }):
+            response = self._post_apply({"emails": [user.email]})
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        # Pre-existing value left untouched (today's behaviour).
+        self.assertEqual(user.billing_period_end, pre_existing)
+
+    def test_apply_with_force_and_no_stripe_customer_id_is_still_skipped_no_writes(self):
+        """User with no Stripe customer ID is excluded by
+        ``_eligible_users_queryset``, so the per-row result is
+        ``not_found`` and no writes occur regardless of force.
+        """
+        plain = User.objects.create_user(email="plain@test.com", password="x")
+        override = TierOverride.objects.create(
+            user=plain,
+            original_tier=self.free,
+            override_tier=self.main,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+
+        with patch_subscriptions({}) as stripe_list:
+            response = self._post_apply({
+                "emails": [plain.email],
+                "force": True,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        # The eligible queryset excludes users without stripe_customer_id,
+        # so they surface as not_found rather than skipped.
+        self.assertEqual(body["results"][0]["status"], "not_found")
+        # No Stripe call for non-Stripe users.
+        self.assertEqual(stripe_list.call_count, 0)
+
+        override.refresh_from_db()
+        plain.refresh_from_db()
+        self.assertTrue(override.is_active)
+        self.assertEqual(plain.tier.slug, "free")
+        self.assertFalse(
+            WebhookEvent.objects.filter(
+                event_type="backfill_stripe_tiers",
+            ).exists()
+        )
+
+    def test_apply_with_force_and_no_active_subscription_does_not_sweep_overrides(self):
+        user = self._user("force-nosub@test.com", tier=self.main)
+        override = TierOverride.objects.create(
+            user=user,
+            original_tier=self.free,
+            override_tier=self.main,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+
+        with patch_subscriptions({user.stripe_customer_id: []}):
+            response = self._post_apply({
+                "emails": [user.email],
+                "force": True,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["results"][0]["status"], "warning")
+        self.assertEqual(body["warnings"], 1)
+
+        override.refresh_from_db()
+        # Force must NOT escalate a user with no active subscription —
+        # the override stays active.
+        self.assertTrue(override.is_active)
+        self.assertFalse(
+            WebhookEvent.objects.filter(
+                event_type="backfill_stripe_tiers",
+            ).exists()
+        )
+
+    def test_apply_with_force_and_dry_run_reports_changes_but_writes_nothing(self):
+        basic = Tier.objects.get(slug="basic")
+        user = self._user("force-dryrun@test.com")
+        matching, other = self._create_two_overrides(user, self.main, basic)
+
+        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+            response = self._post_apply({
+                "emails": [user.email],
+                "force": True,
+                "dry_run": True,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["dry_run"])
+        self.assertEqual(body["results"][0]["status"], "would_change")
+        # The response must report that overrides would be deactivated
+        # even though we didn't write to the DB.
+        self.assertEqual(body["results"][0]["deactivated_override"], True)
+
+        matching.refresh_from_db()
+        other.refresh_from_db()
+        user.refresh_from_db()
+        self.assertTrue(matching.is_active)
+        self.assertTrue(other.is_active)
+        self.assertEqual(user.tier.slug, "free")
+        self.assertFalse(
+            WebhookEvent.objects.filter(
+                event_type="backfill_stripe_tiers",
+            ).exists()
+        )
+
+    def test_apply_with_force_not_a_bool_returns_400_invalid_type_no_stripe_call(self):
+        self._user("paid@test.com")
+
+        with patch_subscriptions({}) as stripe_list:
+            response = self._post_apply({"force": "yes"})
+
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+        self.assertEqual(body["code"], "invalid_type")
+        self.assertEqual(body["details"]["field"], "force")
+        self.assertEqual(stripe_list.call_count, 0)
+
+    def test_apply_response_includes_billing_period_end_per_row(self):
+        """Every per-row apply result carries ``billing_period_end``.
+
+        For a user that just got their tier set, the value is an ISO-8601
+        string. For a ``not_found`` row (no such user) the value is ``None``.
+        """
+        period_end = 1_800_000_789
+        user = self._user("bpe-iso@test.com")
+
+        with patch_subscriptions({
+            user.stripe_customer_id: [
+                subscription(current_period_end=period_end),
+            ]
+        }):
+            response = self._post_apply({
+                "emails": [user.email, "nobody@example.com"],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        rows_by_email = {row["email"]: row for row in response.json()["results"]}
+        self.assertIn("billing_period_end", rows_by_email[user.email])
+        self.assertEqual(
+            rows_by_email[user.email]["billing_period_end"],
+            datetime.fromtimestamp(period_end, tz=datetime_timezone.utc).isoformat(),
+        )
+        self.assertIn("billing_period_end", rows_by_email["nobody@example.com"])
+        self.assertIsNone(rows_by_email["nobody@example.com"]["billing_period_end"])
+
+    def test_apply_with_force_records_swept_override_count_in_audit_row(self):
+        basic = Tier.objects.get(slug="basic")
+        user = self._user("force-audit@test.com")
+        matching, other = self._create_two_overrides(user, self.main, basic)
+
+        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+            response = self._post_apply({
+                "emails": [user.email],
+                "force": True,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        audit = WebhookEvent.objects.get(event_type="backfill_stripe_tiers")
+        payload = audit.payload
+        # Backwards-compat keys remain a superset of the documented schema.
+        self.assertEqual(payload["override_deactivated"], True)
+        # New additive keys carry the force-mode signals so operators can
+        # audit which overrides were swept.
+        self.assertEqual(payload["deactivated_override_count"], 2)
+        self.assertEqual(
+            sorted(payload["deactivated_override_ids"]),
+            sorted([matching.pk, other.pk]),
+        )

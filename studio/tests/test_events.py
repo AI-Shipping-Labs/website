@@ -177,7 +177,13 @@ class StudioEventCreateTest(StaffUserMixin, TestCase):
         self.assertFalse(bool(event.source_repo))
 
     def test_post_created_event_uses_defaults(self):
-        """Status defaults to draft; required_level to 0; timezone to Berlin."""
+        """Status defaults to draft; required_level to 0; timezone to admin TZ.
+
+        Issue #665: when the admin has no ``preferred_timezone`` set
+        (the default for the StaffUserMixin fixture) the form picker
+        falls back to ``settings.TIME_ZONE`` (UTC), never the historical
+        'Europe/Berlin' hardcode.
+        """
         self.client.post('/studio/events/new', {
             'title': 'Defaults Check',
             'event_date': '10/06/2026',
@@ -186,7 +192,7 @@ class StudioEventCreateTest(StaffUserMixin, TestCase):
         event = Event.objects.get(title='Defaults Check')
         self.assertEqual(event.status, 'draft')
         self.assertEqual(event.required_level, 0)
-        self.assertEqual(event.timezone, 'Europe/Berlin')
+        self.assertEqual(event.timezone, 'UTC')
         self.assertEqual(event.platform, 'zoom')
         self.assertEqual(event.kind, 'standard')
         self.assertTrue(event.published)
@@ -290,11 +296,15 @@ class StudioEventEditTest(StaffUserMixin, TestCase):
 
     def setUp(self):
         self.client.login(**self.staff_credentials)
+        # Issue #665: pin the stored TZ to UTC so the naive datetime
+        # (interpreted as UTC under USE_TZ=True) renders unchanged in
+        # the edit form's date/time inputs.
         self.event = Event.objects.create(
             title='Edit Event', slug='edit-event',
             start_datetime=datetime(2026, 6, 1, 10, 0),
             end_datetime=datetime(2026, 6, 1, 11, 30),
             status='draft',
+            timezone='UTC',
         )
 
     def test_edit_form_returns_200(self):
@@ -372,14 +382,15 @@ class StudioEventEditTest(StaffUserMixin, TestCase):
         self.assertEqual(self.event.tags, ['event', 'live', 'workshop'])
 
     def test_edit_event_saves_correct_datetimes(self):
-        """Editing with time=09:00 and duration=3 saves correctly."""
+        """Editing with time=09:00 in UTC + duration=3 stores 09:00 UTC start."""
         self.client.post(f'/studio/events/{self.event.pk}/edit', {
             'title': 'Edit Event',
             'slug': 'edit-event',
             'event_date': '01/06/2026',
             'event_time': '09:00',
             'duration_hours': '3',
-            'timezone': 'Europe/Berlin',
+            # Issue #665: form posts the IANA name; storage is UTC.
+            'timezone': 'UTC',
             'status': 'draft',
             'required_level': '0',
         })
@@ -391,6 +402,34 @@ class StudioEventEditTest(StaffUserMixin, TestCase):
         self.assertEqual(self.event.start_datetime.minute, 0)
         self.assertEqual(self.event.end_datetime.hour, 12)
         self.assertEqual(self.event.end_datetime.minute, 0)
+        self.assertEqual(self.event.timezone, 'UTC')
+
+    def test_edit_event_in_new_york_persists_utc_instant(self):
+        """Posting tz=America/New_York stores the equivalent UTC instant.
+
+        Issue #665 acceptance: date=15/06/2027, time=14:30,
+        tz=America/New_York persists start_datetime = 2027-06-15T18:30Z
+        and event.timezone='America/New_York'.
+        """
+        self.client.post(f'/studio/events/{self.event.pk}/edit', {
+            'title': 'Edit Event',
+            'slug': 'edit-event',
+            'event_date': '15/06/2027',
+            'event_time': '14:30',
+            'duration_hours': '1',
+            'timezone': 'America/New_York',
+            'status': 'draft',
+            'required_level': '0',
+        })
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.timezone, 'America/New_York')
+        # UTC instant equivalent to 2027-06-15T14:30 in NYC (DST, UTC-4).
+        from datetime import UTC
+        from datetime import datetime as _dt
+        self.assertEqual(
+            self.event.start_datetime,
+            _dt(2027, 6, 15, 18, 30, tzinfo=UTC),
+        )
 
     def test_edit_event_status_transitions(self):
         """Test status can be changed from draft to upcoming."""
@@ -598,9 +637,17 @@ class StudioEventCreateZoomTest(StaffUserMixin, TestCase):
 
 
 class StudioEventDateTimeParsingTest(TestCase):
-    """Test the _parse_event_datetime helper function directly."""
+    """Test the _parse_event_datetime helper function directly.
 
-    def test_parse_valid_date_time_duration(self):
+    Issue #665: the parser now takes a TZ argument and returns
+    timezone-aware UTC datetimes. The local wall-clock value is
+    interpreted in that TZ before being converted.
+    """
+
+    def test_parse_in_utc_returns_aware_utc(self):
+        from datetime import UTC
+        from datetime import datetime as _dt
+
         from django.http import QueryDict
 
         from studio.views.events import _parse_event_datetime
@@ -610,9 +657,27 @@ class StudioEventDateTimeParsingTest(TestCase):
         data['event_time'] = '14:30'
         data['duration_hours'] = '2'
 
-        start_dt, end_dt = _parse_event_datetime(data)
-        self.assertEqual(start_dt, datetime(2026, 3, 15, 14, 30))
-        self.assertEqual(end_dt, datetime(2026, 3, 15, 16, 30))
+        start_dt, end_dt = _parse_event_datetime(data, 'UTC')
+        self.assertEqual(start_dt, _dt(2026, 3, 15, 14, 30, tzinfo=UTC))
+        self.assertEqual(end_dt, _dt(2026, 3, 15, 16, 30, tzinfo=UTC))
+
+    def test_parse_in_new_york_converts_to_utc(self):
+        """14:30 in NYC on 15/06/2027 is 18:30 UTC (DST)."""
+        from datetime import UTC
+        from datetime import datetime as _dt
+
+        from django.http import QueryDict
+
+        from studio.views.events import _parse_event_datetime
+
+        data = QueryDict(mutable=True)
+        data['event_date'] = '15/06/2027'
+        data['event_time'] = '14:30'
+        data['duration_hours'] = '1'
+
+        start_dt, end_dt = _parse_event_datetime(data, 'America/New_York')
+        self.assertEqual(start_dt, _dt(2027, 6, 15, 18, 30, tzinfo=UTC))
+        self.assertEqual(end_dt, _dt(2027, 6, 15, 19, 30, tzinfo=UTC))
 
     def test_parse_empty_duration_defaults_to_1_hour(self):
         from django.http import QueryDict
@@ -624,9 +689,8 @@ class StudioEventDateTimeParsingTest(TestCase):
         data['event_time'] = '09:00'
         data['duration_hours'] = ''
 
-        start_dt, end_dt = _parse_event_datetime(data)
-        self.assertEqual(start_dt, datetime(2026, 6, 20, 9, 0))
-        self.assertEqual(end_dt, datetime(2026, 6, 20, 10, 0))
+        start_dt, end_dt = _parse_event_datetime(data, 'UTC')
+        self.assertEqual((end_dt - start_dt).total_seconds(), 3600)
 
     def test_parse_fractional_duration(self):
         from django.http import QueryDict
@@ -638,9 +702,8 @@ class StudioEventDateTimeParsingTest(TestCase):
         data['event_time'] = '10:00'
         data['duration_hours'] = '1.5'
 
-        start_dt, end_dt = _parse_event_datetime(data)
-        self.assertEqual(start_dt, datetime(2026, 1, 1, 10, 0))
-        self.assertEqual(end_dt, datetime(2026, 1, 1, 11, 30))
+        start_dt, end_dt = _parse_event_datetime(data, 'UTC')
+        self.assertEqual((end_dt - start_dt).total_seconds(), 1.5 * 3600)
 
 
 class StudioEventFormContextTest(TestCase):
@@ -649,44 +712,59 @@ class StudioEventFormContextTest(TestCase):
     def test_context_for_new_event(self):
         from studio.views.events import _event_form_context
 
-        context = _event_form_context(None)
+        context = _event_form_context(None, 'UTC')
         self.assertEqual(context['event_date'], '')
         self.assertEqual(context['event_time'], '')
         self.assertEqual(context['duration_hours'], '1')
 
-    def test_context_for_existing_event_with_end(self):
+    def test_context_for_existing_event_renders_in_event_tz(self):
+        """Stored UTC instant is rendered in event.timezone for the picker."""
+        from datetime import UTC
+        from datetime import datetime as _dt
+
         from studio.views.events import _event_form_context
 
+        # 18:30 UTC on 2027-06-15 is 14:30 in America/New_York.
         event = Event.objects.create(
             title='Test', slug='test-ctx',
-            start_datetime=datetime(2026, 6, 1, 10, 0),
-            end_datetime=datetime(2026, 6, 1, 11, 30),
+            start_datetime=_dt(2027, 6, 15, 18, 30, tzinfo=UTC),
+            end_datetime=_dt(2027, 6, 15, 20, 0, tzinfo=UTC),
+            timezone='America/New_York',
         )
-        context = _event_form_context(event)
-        self.assertEqual(context['event_date'], '01/06/2026')
-        self.assertEqual(context['event_time'], '10:00')
+        context = _event_form_context(event, 'UTC')
+        self.assertEqual(context['event_date'], '15/06/2027')
+        self.assertEqual(context['event_time'], '14:30')
         self.assertEqual(context['duration_hours'], '1.5')
+        self.assertEqual(context['timezone_value'], 'America/New_York')
 
     def test_context_for_existing_event_without_end(self):
+        from datetime import UTC
+        from datetime import datetime as _dt
+
         from studio.views.events import _event_form_context
 
         event = Event.objects.create(
             title='Test', slug='test-ctx-no-end',
-            start_datetime=datetime(2026, 6, 1, 10, 0),
+            start_datetime=_dt(2026, 6, 1, 10, 0, tzinfo=UTC),
             end_datetime=None,
+            timezone='UTC',
         )
-        context = _event_form_context(event)
+        context = _event_form_context(event, 'UTC')
         self.assertEqual(context['event_date'], '01/06/2026')
         self.assertEqual(context['event_time'], '10:00')
         self.assertEqual(context['duration_hours'], '1')
 
     def test_context_for_whole_number_duration(self):
+        from datetime import UTC
+        from datetime import datetime as _dt
+
         from studio.views.events import _event_form_context
 
         event = Event.objects.create(
             title='Test', slug='test-ctx-whole',
-            start_datetime=datetime(2026, 6, 1, 10, 0),
-            end_datetime=datetime(2026, 6, 1, 12, 0),
+            start_datetime=_dt(2026, 6, 1, 10, 0, tzinfo=UTC),
+            end_datetime=_dt(2026, 6, 1, 12, 0, tzinfo=UTC),
+            timezone='UTC',
         )
-        context = _event_form_context(event)
+        context = _event_form_context(event, 'UTC')
         self.assertEqual(context['duration_hours'], '2')

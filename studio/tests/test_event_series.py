@@ -321,7 +321,10 @@ class StudioEventEditOriginGatingTest(StaffMixin, TestCase):
                 'duration_hours': '2',
                 'platform': 'zoom',
                 'status': 'upcoming',
-                'timezone': 'Europe/Berlin',
+                # Issue #665: keep storage in UTC to match the typed
+                # wall-clock value; the picker round-trip is covered in
+                # studio.tests.test_events.
+                'timezone': 'UTC',
                 'required_level': '0',
                 'tags': '',
                 'location': '',

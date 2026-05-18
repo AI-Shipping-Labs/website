@@ -50,41 +50,13 @@
                   class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ form_values.description }}</textarea>
       </div>
 
-      <div class="grid grid-cols-3 gap-4">
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1" for="start-date-input">Start date (dd/mm/yyyy)</label>
-          <input id="start-date-input" type="text" name="start_date" value="{{ form_values.start_date }}" required
-                 placeholder="dd/mm/yyyy"
-                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-          {% if errors.start_date %}<p class="text-xs text-red-400 mt-1" data-testid="error-start-date">{{ errors.start_date }}</p>{% endif %}
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1" for="start-time-input">Start time (HH:MM)</label>
-          <input id="start-time-input" type="text" name="start_time" value="{{ form_values.start_time }}" required
-                 placeholder="18:00" pattern="[0-2][0-9]:[0-5][0-9]"
-                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-          {% if errors.start_time %}<p class="text-xs text-red-400 mt-1" data-testid="error-start-time">{{ errors.start_time }}</p>{% endif %}
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1" for="duration-input">Duration (hours)</label>
-          <input id="duration-input" type="number" name="duration_hours" value="{{ form_values.duration_hours }}" step="0.5" min="0.5"
-                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-          {% if errors.duration_hours %}<p class="text-xs text-red-400 mt-1" data-testid="error-duration">{{ errors.duration_hours }}</p>{% endif %}
-        </div>
-      </div>
+      {% include "studio/_partials/datetime_picker.html" with instance_id="series" date_name="start_date" time_name="start_time" duration_name="duration_hours" tz_name="timezone" date_value=form_values.start_date time_value=form_values.start_time duration_value=form_values.duration_hours tz_value=timezone_value tz_label=timezone_label tz_options=timezone_options date_label="Start date (dd/mm/yyyy)" time_label="Start time (HH:MM)" required=True error_date=errors.start_date error_time=errors.start_time error_duration=errors.duration_hours error_timezone=errors.timezone error_date_testid="error-start-date" error_time_testid="error-start-time" error_duration_testid="error-duration" %}
 
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1" for="occurrences-input">Occurrences (1–{{ max_occurrences }})</label>
-          <input id="occurrences-input" type="number" name="occurrences" value="{{ form_values.occurrences }}" required min="1" max="{{ max_occurrences }}"
-                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-          {% if errors.occurrences %}<p class="text-xs text-red-400 mt-1" data-testid="error-occurrences">{{ errors.occurrences }}</p>{% endif %}
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1" for="timezone-input">Timezone</label>
-          <input id="timezone-input" type="text" name="timezone" value="{{ form_values.timezone }}"
-                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-        </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1" for="occurrences-input">Occurrences (1–{{ max_occurrences }})</label>
+        <input id="occurrences-input" type="number" name="occurrences" value="{{ form_values.occurrences }}" required min="1" max="{{ max_occurrences }}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        {% if errors.occurrences %}<p class="text-xs text-red-400 mt-1" data-testid="error-occurrences">{{ errors.occurrences }}</p>{% endif %}
       </div>
 
       <div class="grid grid-cols-3 gap-4">
@@ -125,13 +97,4 @@
   </form>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  flatpickr('#start-date-input', {
-    dateFormat: 'd/m/Y',
-    allowInput: true,
-    theme: 'dark'
-  });
-});
-</script>
 {% endblock %}

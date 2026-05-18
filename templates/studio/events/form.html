@@ -120,31 +120,7 @@
       <p class="text-xs text-muted-foreground mt-1">Enter the external join URL for this event (e.g. YouTube, Discord).</p>
     </div>
 
-    <div class="grid grid-cols-3 gap-4">
-      <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Date (dd/mm/yyyy)</label>
-        <input type="text" name="event_date" id="event-date-picker" value="{{ event_date }}" required
-               placeholder="dd/mm/yyyy"
-               {% if is_synced %}disabled{% endif %}
-               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-        {% if errors.event_date %}<p class="text-xs text-red-400 mt-1" data-testid="error-event-date">{{ errors.event_date }}</p>{% endif %}
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Time (HH:MM, 24h)</label>
-        <input type="text" name="event_time" id="event-time-input" value="{{ event_time }}" required
-               placeholder="14:30" pattern="[0-2][0-9]:[0-5][0-9]"
-               {% if is_synced %}disabled{% endif %}
-               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-        {% if errors.event_time %}<p class="text-xs text-red-400 mt-1" data-testid="error-event-time">{{ errors.event_time }}</p>{% endif %}
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Duration (hours)</label>
-        <input type="number" name="duration_hours" id="event-duration-input" value="{{ duration_hours }}"
-               step="0.5" min="0.5" placeholder="1"
-               {% if is_synced %}disabled{% endif %}
-               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-      </div>
-    </div>
+    {% include "studio/_partials/datetime_picker.html" with instance_id="event" date_name="event_date" time_name="event_time" duration_name="duration_hours" tz_name="timezone" date_value=event_date time_value=event_time duration_value=duration_hours tz_value=timezone_value tz_label=timezone_label tz_options=timezone_options disabled=is_synced required=True error_date=errors.event_date error_time=errors.event_time error_timezone=errors.timezone %}
 
     {% if event %}
     <div id="datetime-summary" class="text-sm text-muted-foreground bg-secondary rounded-lg px-4 py-2">
@@ -154,12 +130,6 @@
     {% endif %}
 
     <div class="grid grid-cols-2 gap-4">
-      <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Timezone</label>
-        <input type="text" name="timezone" value="{% if event %}{{ event.timezone|default:'Europe/Berlin' }}{% else %}{{ form_values.timezone|default:'Europe/Berlin' }}{% endif %}"
-               {% if is_synced %}disabled{% endif %}
-               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-      </div>
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Max Participants (blank = unlimited)</label>
         <input type="number" name="max_participants" value="{% if event.max_participants %}{{ event.max_participants }}{% else %}{{ form_values.max_participants|default:'' }}{% endif %}"
@@ -263,17 +233,6 @@
 </aside>
 {% endif %}
 </div>
-
-<!-- Initialize flatpickr on the date field -->
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  flatpickr('#event-date-picker', {
-    dateFormat: 'd/m/Y',
-    allowInput: true,
-    theme: 'dark'
-  });
-});
-</script>
 
 {% if event %}
 <script>

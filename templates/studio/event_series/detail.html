@@ -103,25 +103,14 @@
           data-testid="add-occurrence-form">
       {% csrf_token %}
       <h2 class="text-sm font-medium text-foreground">Add another occurrence</h2>
-      <p class="text-xs text-muted-foreground">Creates one more event in this series with the next available position.</p>
-      <div class="grid grid-cols-3 gap-3">
-        <div>
-          <label class="block text-xs font-medium text-foreground mb-1" for="add-start-date">Start date</label>
-          <input id="add-start-date" type="text" name="start_date" placeholder="dd/mm/yyyy" required
-                 class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-foreground mb-1" for="add-duration">Duration (hours)</label>
-          <input id="add-duration" type="number" name="duration_hours" value="1" step="0.5" min="0.5"
-                 class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
-        </div>
-        <div class="flex items-end">
-          <button type="submit"
-                  class="inline-flex items-center justify-center rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
-                  data-testid="add-occurrence-submit">
-            Add
-          </button>
-        </div>
+      <p class="text-xs text-muted-foreground">Creates one more event in this series with the next available position. Inherits the series start time ({{ series.start_time|time:"H:i" }}).</p>
+      {% include "studio/_partials/datetime_picker.html" with instance_id="add" date_name="start_date" duration_name="duration_hours" tz_name="timezone" date_value="" duration_value="1" tz_value=timezone_value tz_label=timezone_label tz_options=timezone_options show_time=False date_label="Start date" %}
+      <div class="mt-3">
+        <button type="submit"
+                class="inline-flex items-center justify-center rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
+                data-testid="add-occurrence-submit">
+          Add
+        </button>
       </div>
     </form>
   </div>
@@ -164,9 +153,4 @@
   </aside>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  flatpickr('#add-start-date', { dateFormat: 'd/m/Y', allowInput: true, theme: 'dark' });
-});
-</script>
 {% endblock %}

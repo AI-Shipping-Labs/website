@@ -1,0 +1,159 @@
+{% comment %}
+  Shared Studio datetime picker (issue #665).
+
+  Renders a date input (flatpickr dd/mm/yyyy) + time input (HH:MM) +
+  timezone <select> + live GMT offset label, used by:
+    - templates/studio/events/form.html
+    - templates/studio/event_series/form.html
+    - templates/studio/event_series/detail.html (add-occurrence form)
+
+  Parameters (all optional unless noted):
+    date_name      (str)  field name for the date input (default 'event_date')
+    time_name      (str)  field name for the time input (default 'event_time')
+    duration_name  (str)  field name for the duration input
+                          (default 'duration_hours'). Pass '' to hide it.
+    tz_name        (str)  field name for the timezone <select>
+                          (default 'timezone')
+    date_value     (str)  pre-populated dd/mm/yyyy date
+    time_value     (str)  pre-populated HH:MM time
+    duration_value (str)  pre-populated duration in hours (default '1')
+    tz_value       (str)  currently selected timezone (IANA name)
+    tz_label       (str)  current GMT offset label for tz_value
+    tz_options     (list) timezone option list from build_timezone_options()
+    show_date      (bool) render the date input (default True)
+    show_time      (bool) render the time input (default True)
+    show_duration  (bool) render the duration input (default True)
+    show_timezone  (bool) render the timezone select (default True)
+    disabled       (bool) disable all inputs (default False)
+    date_label     (str)  label override for the date input
+    time_label     (str)  label override for the time input
+    duration_label (str)  label override for the duration input
+    tz_label_text  (str)  label override for the timezone select
+    instance_id    (str)  unique suffix for input ids (default 'main')
+    error_date     (str)  error message for date
+    error_time     (str)  error message for time
+    error_duration (str)  error message for duration
+    error_timezone (str)  error message for timezone
+{% endcomment %}
+
+{% with id_suffix=instance_id|default:"main" %}
+{% with dname=date_name|default:"event_date" %}
+{% with tname=time_name|default:"event_time" %}
+{% with durname=duration_name|default:"duration_hours" %}
+{% with tzname=tz_name|default:"timezone" %}
+
+<div class="studio-datetime-picker grid grid-cols-1 sm:grid-cols-3 gap-4"
+     data-testid="studio-datetime-picker">
+  {% if show_date|default_if_none:True %}
+  <div class="min-w-0">
+    <label class="block text-sm font-medium text-foreground mb-1"
+           for="dtp-{{ id_suffix }}-date">{{ date_label|default:"Date (dd/mm/yyyy)" }}</label>
+    <input type="text"
+           name="{{ dname }}"
+           id="dtp-{{ id_suffix }}-date"
+           data-testid="dtp-{{ id_suffix }}-date"
+           value="{{ date_value|default:'' }}"
+           placeholder="dd/mm/yyyy"
+           {% if required %}required{% endif %}
+           {% if disabled %}disabled{% endif %}
+           class="studio-datetime-picker-date w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if disabled %} opacity-60{% endif %}">
+    {% if error_date %}<p class="text-xs text-red-400 mt-1" data-testid="{{ error_date_testid|default:'error-event-date' }}">{{ error_date }}</p>{% endif %}
+  </div>
+  {% endif %}
+
+  {% if show_time|default_if_none:True %}
+  <div class="min-w-0">
+    <label class="block text-sm font-medium text-foreground mb-1"
+           for="dtp-{{ id_suffix }}-time">{{ time_label|default:"Time (HH:MM, 24h)" }}</label>
+    <input type="text"
+           name="{{ tname }}"
+           id="dtp-{{ id_suffix }}-time"
+           data-testid="dtp-{{ id_suffix }}-time"
+           value="{{ time_value|default:'' }}"
+           placeholder="14:30"
+           pattern="[0-2][0-9]:[0-5][0-9]"
+           {% if required %}required{% endif %}
+           {% if disabled %}disabled{% endif %}
+           class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if disabled %} opacity-60{% endif %}">
+    {% if error_time %}<p class="text-xs text-red-400 mt-1" data-testid="{{ error_time_testid|default:'error-event-time' }}">{{ error_time }}</p>{% endif %}
+  </div>
+  {% endif %}
+
+  {% if show_duration|default_if_none:True %}
+  <div class="min-w-0">
+    <label class="block text-sm font-medium text-foreground mb-1"
+           for="dtp-{{ id_suffix }}-duration">{{ duration_label|default:"Duration (hours)" }}</label>
+    <input type="number"
+           name="{{ durname }}"
+           id="dtp-{{ id_suffix }}-duration"
+           data-testid="dtp-{{ id_suffix }}-duration"
+           value="{{ duration_value|default:'1' }}"
+           step="0.5" min="0.5" placeholder="1"
+           {% if disabled %}disabled{% endif %}
+           class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if disabled %} opacity-60{% endif %}">
+    {% if error_duration %}<p class="text-xs text-red-400 mt-1" data-testid="{{ error_duration_testid|default:'error-duration' }}">{{ error_duration }}</p>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% if show_timezone|default_if_none:True %}
+<div class="studio-datetime-picker-tz mt-3">
+  <label class="block text-sm font-medium text-foreground mb-1"
+         for="dtp-{{ id_suffix }}-tz">{{ tz_label_text|default:"Timezone" }}</label>
+  <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+    <select name="{{ tzname }}"
+            id="dtp-{{ id_suffix }}-tz"
+            data-testid="dtp-{{ id_suffix }}-tz"
+            {% if disabled %}disabled{% endif %}
+            class="studio-select w-full sm:flex-1 bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if disabled %} opacity-60{% endif %}">
+      {% for option in tz_options %}
+      <option value="{{ option.value }}" data-offset-label="{{ option.label }}"{% if option.value == tz_value %} selected{% endif %}>{{ option.label }}</option>
+      {% endfor %}
+      {% if not tz_options %}
+      <option value="{{ tz_value|default:'UTC' }}" selected>{{ tz_value|default:'UTC' }}</option>
+      {% endif %}
+    </select>
+    <span class="text-xs text-muted-foreground sm:whitespace-nowrap"
+          data-testid="dtp-{{ id_suffix }}-tz-label">{{ tz_label|default:tz_value|default:'UTC' }}</span>
+  </div>
+  {% if error_timezone %}<p class="text-xs text-red-400 mt-1" data-testid="{{ error_timezone_testid|default:'error-timezone' }}">{{ error_timezone }}</p>{% endif %}
+</div>
+{% endif %}
+
+<script>
+(function() {
+  // Initialize flatpickr on the date input (Flatpickr is loaded by the host page).
+  document.addEventListener('DOMContentLoaded', function() {
+    var dateInput = document.getElementById('dtp-{{ id_suffix }}-date');
+    if (dateInput && typeof flatpickr === 'function') {
+      flatpickr(dateInput, {
+        dateFormat: 'd/m/Y',
+        allowInput: true,
+        theme: 'dark'
+      });
+    }
+
+    // Live-update the offset label next to the timezone <select> as the
+    // admin changes the chooser. Luma-style feedback.
+    var tzSelect = document.getElementById('dtp-{{ id_suffix }}-tz');
+    var tzLabel = document.querySelector(
+      '[data-testid="dtp-{{ id_suffix }}-tz-label"]'
+    );
+    if (tzSelect && tzLabel) {
+      tzSelect.addEventListener('change', function() {
+        var opt = tzSelect.options[tzSelect.selectedIndex];
+        var label = opt && opt.getAttribute('data-offset-label');
+        if (label) {
+          tzLabel.textContent = label;
+        }
+      });
+    }
+  });
+})();
+</script>
+
+{% endwith %}
+{% endwith %}
+{% endwith %}
+{% endwith %}
+{% endwith %}

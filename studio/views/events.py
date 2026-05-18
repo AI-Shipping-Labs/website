@@ -2,13 +2,20 @@
 
 import logging
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
+from accounts.services.timezones import (
+    build_timezone_options,
+    get_timezone_label,
+    is_valid_timezone,
+)
 from events.models import Event
 from events.models.event import EXTERNAL_HOST_CHOICES
 from integrations.services.zoom import create_meeting
@@ -31,7 +38,22 @@ def _coerce_external_host(raw):
     return value if value in _VALID_EXTERNAL_HOSTS else ''
 
 
-def _parse_event_datetime(post_data):
+def _default_timezone_for(user):
+    """Return the admin's preferred TZ when valid, else ``settings.TIME_ZONE``.
+
+    Issue #665. New Studio forms default the timezone chooser to the
+    logged-in admin's profile timezone; if it isn't set (or is somehow
+    invalid), fall back to the project's ``TIME_ZONE`` (UTC). Never
+    return the historical 'Europe/Berlin' fallback — the issue
+    explicitly removes that hardcode.
+    """
+    candidate = getattr(user, 'preferred_timezone', '') or ''
+    if candidate and is_valid_timezone(candidate):
+        return candidate
+    return settings.TIME_ZONE or 'UTC'
+
+
+def _parse_event_datetime(post_data, tz_name):
     """Parse separate date, time, and duration fields into start/end datetimes.
 
     Expects POST fields:
@@ -39,7 +61,10 @@ def _parse_event_datetime(post_data):
     - event_time: HH:MM (24-hour)
     - duration_hours: float (optional, default 1)
 
-    Returns (start_datetime, end_datetime) as naive datetime objects.
+    Returns ``(start_utc, end_utc)`` as timezone-aware UTC datetimes. The
+    wall-clock ``(date, time)`` pair is interpreted in ``tz_name`` and
+    then converted to UTC (issue #665). When ``tz_name`` is missing or
+    invalid we fall back to UTC so a bad chooser value cannot lose data.
     """
     date_str = post_data.get('event_date', '').strip()
     time_str = post_data.get('event_time', '').strip()
@@ -51,26 +76,47 @@ def _parse_event_datetime(post_data):
 
     # Parse time (HH:MM)
     hour, minute = time_str.split(':')
-    start_dt = parsed_date.replace(hour=int(hour), minute=int(minute))
+    local_naive = parsed_date.replace(hour=int(hour), minute=int(minute))
+
+    # Localize and convert to UTC. is_valid_timezone() guards the lookup
+    # so a tampered tz value falls back to UTC instead of raising.
+    zone_name = tz_name if (tz_name and is_valid_timezone(tz_name)) else 'UTC'
+    local_aware = local_naive.replace(tzinfo=ZoneInfo(zone_name))
+    start_utc = local_aware.astimezone(ZoneInfo('UTC'))
 
     # Parse duration (default 1 hour)
     duration = float(duration_str) if duration_str else 1.0
-    end_dt = start_dt + timedelta(hours=duration)
+    end_utc = start_utc + timedelta(hours=duration)
 
-    return start_dt, end_dt
+    return start_utc, end_utc
 
 
-def _event_form_context(event):
-    """Build template context for the event form with pre-populated date/time/duration."""
+def _event_form_context(event, default_tz):
+    """Build template context for the event form.
+
+    The Date and Time inputs are pre-populated by rendering the stored
+    UTC instant in the event's own timezone (issue #665) so the
+    round-trip preserves the wall-clock value the admin originally
+    typed. ``default_tz`` is the fallback for events with no
+    ``timezone`` set.
+    """
     context = {
         'event': event,
         'event_date': '',
         'event_time': '',
         'duration_hours': '1',
+        'timezone_value': default_tz,
     }
     if event and event.start_datetime:
-        context['event_date'] = event.start_datetime.strftime('%d/%m/%Y')
-        context['event_time'] = event.start_datetime.strftime('%H:%M')
+        tz_name = event.timezone or default_tz
+        if not is_valid_timezone(tz_name):
+            tz_name = 'UTC'
+        context['timezone_value'] = tz_name
+
+        local_start = _render_in_tz(event.start_datetime, tz_name)
+        context['event_date'] = local_start.strftime('%d/%m/%Y')
+        context['event_time'] = local_start.strftime('%H:%M')
+
         if event.end_datetime:
             delta = event.end_datetime - event.start_datetime
             hours = delta.total_seconds() / 3600
@@ -82,6 +128,17 @@ def _event_form_context(event):
         else:
             context['duration_hours'] = '1'
     return context
+
+
+def _render_in_tz(dt, tz_name):
+    """Return ``dt`` rendered in ``tz_name``. Accepts naive (= UTC) or aware."""
+    zone = ZoneInfo(tz_name) if is_valid_timezone(tz_name) else ZoneInfo('UTC')
+    if dt.tzinfo is None:
+        # Treat naive as UTC (Django settings have USE_TZ=True, TIME_ZONE='UTC').
+        aware = dt.replace(tzinfo=ZoneInfo('UTC'))
+    else:
+        aware = dt
+    return aware.astimezone(zone)
 
 
 @staff_required
@@ -116,6 +173,7 @@ def event_create(request):
     Issue #574.
     """
     errors = {}
+    default_tz = _default_timezone_for(request.user)
     form_values = {
         'title': '',
         'slug': '',
@@ -123,7 +181,8 @@ def event_create(request):
         'event_date': '',
         'event_time': '',
         'duration_hours': '1',
-        'timezone': 'Europe/Berlin',
+        # Issue #665: default to admin's preferred TZ, never 'Europe/Berlin'.
+        'timezone': default_tz,
         'platform': 'zoom',
         'status': 'draft',
         'required_level': '0',
@@ -141,7 +200,15 @@ def event_create(request):
         title = form_values['title']
         slug = form_values['slug'] or slugify(title)
         description = form_values['description']
-        timezone_value = form_values['timezone'] or 'Europe/Berlin'
+        # Resolve the timezone from the POST; fall back to the admin
+        # default. Reject a tampered/unknown IANA name with a field
+        # error (issue #665).
+        posted_tz = form_values['timezone'] or default_tz
+        if posted_tz and not is_valid_timezone(posted_tz):
+            errors['timezone'] = 'Unknown timezone.'
+            timezone_value = default_tz
+        else:
+            timezone_value = posted_tz
         platform = form_values['platform'] or 'zoom'
         status = form_values['status'] or 'draft'
         location = form_values['location']
@@ -155,7 +222,9 @@ def event_create(request):
         start_dt = None
         end_dt = None
         try:
-            start_dt, end_dt = _parse_event_datetime(request.POST)
+            start_dt, end_dt = _parse_event_datetime(
+                request.POST, timezone_value,
+            )
         except (ValueError, AttributeError):
             if not form_values['event_date']:
                 errors['event_date'] = 'Date is required (dd/mm/yyyy).'
@@ -202,6 +271,8 @@ def event_create(request):
             event.save()
             return redirect('studio_event_edit', event_id=event.pk)
 
+    # Determine TZ value used for the shared picker partial.
+    tz_value = form_values['timezone'] or default_tz
     context = {
         'event': None,
         'is_synced': False,
@@ -212,6 +283,9 @@ def event_create(request):
         'event_time': form_values['event_time'],
         'duration_hours': form_values['duration_hours'] or '1',
         'external_host_choices': EXTERNAL_HOST_CHOICES,
+        'timezone_value': tz_value,
+        'timezone_label': get_timezone_label(tz_value) or tz_value,
+        'timezone_options': build_timezone_options(),
     }
     return render(request, 'studio/events/form.html', context)
 
@@ -221,6 +295,7 @@ def event_edit(request, event_id):
     """Edit an existing event (read-only for synced content fields)."""
     event = get_object_or_404(Event, pk=event_id)
     synced = is_synced(event)
+    default_tz = _default_timezone_for(request.user)
 
     if request.method == 'POST':
         if synced:
@@ -251,10 +326,37 @@ def event_edit(request, event_id):
             event.description = request.POST.get('description', '')
             platform = request.POST.get('platform', 'zoom')
             event.platform = platform
-            start_dt, end_dt = _parse_event_datetime(request.POST)
+            # Issue #665: resolve TZ from the POST; reject unknown names.
+            posted_tz = (request.POST.get('timezone') or '').strip()
+            if not posted_tz:
+                posted_tz = event.timezone or default_tz
+            if posted_tz and not is_valid_timezone(posted_tz):
+                # Round-trip the form with a field-level error so the
+                # admin can fix the chooser; don't silently coerce.
+                context = _event_form_context(event, default_tz)
+                context['form_action'] = 'edit'
+                context['is_synced'] = synced
+                context['github_edit_url'] = get_github_edit_url(event)
+                context['notify_url'] = reverse(
+                    'studio_event_notify', kwargs={'event_id': event.pk},
+                )
+                context['announce_url'] = reverse(
+                    'studio_event_announce_slack',
+                    kwargs={'event_id': event.pk},
+                )
+                context['form_values'] = {}
+                context['errors'] = {'timezone': 'Unknown timezone.'}
+                context['external_host_choices'] = EXTERNAL_HOST_CHOICES
+                tz_value = context['timezone_value']
+                context['timezone_label'] = (
+                    get_timezone_label(tz_value) or tz_value
+                )
+                context['timezone_options'] = build_timezone_options()
+                return render(request, 'studio/events/form.html', context)
+            start_dt, end_dt = _parse_event_datetime(request.POST, posted_tz)
             event.start_datetime = start_dt
             event.end_datetime = end_dt
-            event.timezone = request.POST.get('timezone', 'Europe/Berlin')
+            event.timezone = posted_tz
             event.location = request.POST.get('location', '')
             max_p = request.POST.get('max_participants', '')
             event.max_participants = int(max_p) if max_p else None
@@ -278,7 +380,7 @@ def event_edit(request, event_id):
             event.save()
         return redirect('studio_event_edit', event_id=event.pk)
 
-    context = _event_form_context(event)
+    context = _event_form_context(event, default_tz)
     context['form_action'] = 'edit'
     context['is_synced'] = synced
     context['github_edit_url'] = get_github_edit_url(event)
@@ -290,6 +392,9 @@ def event_edit(request, event_id):
     context['form_values'] = {}
     context['errors'] = {}
     context['external_host_choices'] = EXTERNAL_HOST_CHOICES
+    tz_value = context['timezone_value']
+    context['timezone_label'] = get_timezone_label(tz_value) or tz_value
+    context['timezone_options'] = build_timezone_options()
     return render(request, 'studio/events/form.html', context)
 
 

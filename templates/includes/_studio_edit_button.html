@@ -1,0 +1,16 @@
+{# Floating "Edit in Studio" button. Server-side gated on ``request.user.is_staff``. #}
+{# Renders nothing for non-staff or when ``obj.get_studio_edit_url()`` returns None/empty. #}
+{# Usage: {% include "includes/_studio_edit_button.html" with obj=<model_instance> %} #}
+{% if request.user.is_staff %}
+{% with studio_edit_url=obj.get_studio_edit_url %}
+{% if studio_edit_url %}
+<a href="{{ studio_edit_url }}"
+   data-testid="studio-edit-button"
+   aria-label="Edit in Studio"
+   class="fixed right-4 top-20 z-40 inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-sm hover:bg-secondary transition-colors">
+  <i data-lucide="pencil" class="h-3.5 w-3.5" aria-hidden="true"></i>
+  <span>Edit in Studio</span>
+</a>
+{% endif %}
+{% endwith %}
+{% endif %}

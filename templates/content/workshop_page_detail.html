@@ -10,6 +10,7 @@
 
 {% block body %}
 {% include "includes/header.html" %}
+{% include "includes/_studio_edit_button.html" with obj=workshop %}
 <main class="min-h-screen pt-24">
   {% if not is_gated %}
   {% include "content/reader/_prepaint.html" %}

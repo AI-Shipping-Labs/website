@@ -72,6 +72,9 @@ class Project(
     def get_absolute_url(self):
         return f'/projects/{self.slug}'
 
+    def get_studio_edit_url(self):
+        return f'/studio/projects/{self.pk}/review'
+
     def formatted_date(self):
         return self.date.strftime('%B %d, %Y')
 

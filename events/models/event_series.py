@@ -96,6 +96,9 @@ class EventSeries(TimestampedModelMixin, models.Model):
         # A follow-up issue may flip the public path to ``/events/series/``.
         return f'/events/groups/{self.slug}'
 
+    def get_studio_edit_url(self):
+        return f'/studio/event-series/{self.pk}/'
+
     @property
     def event_count(self):
         return self.events.count()

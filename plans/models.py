@@ -130,6 +130,9 @@ class Sprint(TimestampedModelMixin, models.Model):
     def __str__(self):
         return self.name
 
+    def get_studio_edit_url(self):
+        return f'/studio/sprints/{self.pk}/edit'
+
 
 class SprintEnrollment(TimestampedModelMixin, models.Model):
     """Authoritative membership row for a sprint (issue #443).

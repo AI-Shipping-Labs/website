@@ -13,8 +13,10 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import datetime as _dt
+from datetime import timezone as _tz
 from smtplib import SMTPException
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.core import mail
 from django.test import TestCase, override_settings, tag
@@ -40,10 +42,22 @@ class QuietSubscriptionLookupMixin:
 
     def setUp(self):
         super().setUp()
+        # The 3-step resolver fallback in ``handle_checkout_completed``
+        # (issue #663) reaches Stripe via ``_get_stripe_client``. Tests
+        # that don't exercise the resolver still need the call to be a
+        # no-op rather than a network request, so we stub the client to
+        # raise StripeError, which the helper catches and turns into a
+        # ``None`` subscription (the existing fallback).
+        import stripe as _stripe_mod
+        quiet_client = patch(
+            "payments.services._get_stripe_client",
+            side_effect=_stripe_mod.AuthenticationError("test-stub: no real Stripe"),
+        )
         patchers = [
             patch("payments.services._get_subscription_period_end", return_value=None),
             patch("payments.services._get_subscription_price_id", return_value=""),
             patch("payments.services._tier_from_subscription", return_value=None),
+            quiet_client,
         ]
         for patcher in patchers:
             patcher.start()
@@ -460,6 +474,275 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         # Tier should remain unchanged (free)
         user.refresh_from_db()
         self.assertEqual(user.tier.slug, "free")
+
+
+def _resolver_subscription(
+    subscription_id="sub_resolver",
+    *,
+    price_id="price_unknown_xyz",
+    current_period_end=1_800_000_000,
+    price_metadata=None,
+    unit_amount=None,
+    interval=None,
+):
+    """Build the Stripe-subscription payload returned by ``retrieve``.
+
+    Mirrors the helper in ``test_backfill_stripe_tiers.py`` /
+    ``api/tests/test_tier_reconcile.py`` so the 3-step resolver inputs are
+    identical in shape across the webhook, backfill, and reconcile tests.
+    """
+    price_obj = {
+        "id": price_id,
+        "metadata": dict(price_metadata or {}),
+    }
+    if unit_amount is not None:
+        price_obj["unit_amount"] = unit_amount
+    if interval is not None:
+        price_obj["recurring"] = {"interval": interval}
+    return {
+        "id": subscription_id,
+        "status": "active",
+        "current_period_end": current_period_end,
+        "items": {"data": [{"price": price_obj}]},
+    }
+
+
+def _stripe_client_returning(subscription_payload):
+    """Build a ``MagicMock`` Stripe client whose ``subscriptions.retrieve``
+    returns the given payload.
+
+    Returned from ``side_effect`` on the ``_get_stripe_client`` patch so
+    every call to the helper hands back a fresh client bound to the same
+    payload.
+    """
+    def factory(*args, **kwargs):
+        client = MagicMock()
+        client.subscriptions.retrieve.return_value = subscription_payload
+        return client
+    return factory
+
+
+@tag('core')
+@override_settings(STRIPE_SECRET_KEY="sk_test_resolver")
+class CheckoutCompletedResolverFallbackTest(TestCase):
+    """3-step resolver fallback inside ``handle_checkout_completed`` (#663).
+
+    The session has no ``tier_slug`` metadata (Payment-Link case). The
+    handler must fall back to:
+
+      1. ``price.metadata.tier_slug``
+      2. ``Tier.stripe_price_id_*`` map
+      3. ``price.unit_amount`` + ``recurring.interval``
+
+    and write tier/customer/subscription/period-end whenever any step
+    resolves.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.main = Tier.objects.get(slug="main")
+        cls.basic = Tier.objects.get(slug="basic")
+        cls.main.stripe_price_id_yearly = "price_main_yearly"
+        cls.main.save(update_fields=["stripe_price_id_yearly"])
+
+    def setUp(self):
+        super().setUp()
+        # The post-resolution path calls ``_get_subscription_period_end``
+        # and ``_get_subscription_price_id``; both reach real Stripe in
+        # the absence of a stub. We replace them with deterministic
+        # values driven by the mocked subscription payload so the tests
+        # never touch the network.
+        self._period_end_patcher = patch(
+            "payments.services._get_subscription_period_end",
+            return_value=None,
+        )
+        self._period_end_mock = self._period_end_patcher.start()
+        self.addCleanup(self._period_end_patcher.stop)
+        self._price_id_patcher = patch(
+            "payments.services._get_subscription_price_id",
+            return_value="",
+        )
+        self._price_id_patcher.start()
+        self.addCleanup(self._price_id_patcher.stop)
+
+    def _expect_period_end(self, period_end):
+        """Configure the patched ``_get_subscription_period_end`` to
+        return the timestamp the test wants written on the user. Mirrors
+        what Stripe would return for the same payload, but without the
+        network round-trip.
+        """
+        self._period_end_mock.return_value = _dt.fromtimestamp(
+            period_end, tz=_tz.utc,
+        )
+
+    def _session_data(self, *, subscription_id="sub_resolver", metadata=None):
+        return {
+            "id": "cs_payment_link_resolver",
+            "customer": "cus_resolver",
+            "customer_details": {"email": "payer@test.com"},
+            "subscription": subscription_id,
+            "client_reference_id": None,
+            "metadata": metadata if metadata is not None else {},
+        }
+
+    def test_checkout_resolves_tier_from_price_metadata_when_session_metadata_empty(
+        self,
+    ):
+        """Step 1 of the resolver: ``price.metadata.tier_slug``."""
+        user = User.objects.create_user(email="payer@test.com")
+        period_end = 1_810_000_000
+        sub_payload = _resolver_subscription(
+            subscription_id="sub_meta",
+            price_id="price_truly_unknown",
+            current_period_end=period_end,
+            price_metadata={"tier_slug": "main"},
+        )
+        self._expect_period_end(period_end)
+
+        with patch(
+            "payments.services._get_stripe_client",
+            side_effect=_stripe_client_returning(sub_payload),
+        ):
+            handle_checkout_completed(
+                self._session_data(subscription_id="sub_meta"),
+            )
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier, self.main)
+        self.assertEqual(user.stripe_customer_id, "cus_resolver")
+        self.assertEqual(user.subscription_id, "sub_meta")
+        self.assertEqual(
+            user.billing_period_end,
+            _dt.fromtimestamp(period_end, tz=_tz.utc),
+        )
+
+    def test_checkout_resolves_tier_from_price_id_map_when_session_metadata_empty(self):
+        """Step 2 of the resolver: ``Tier.stripe_price_id_*`` map."""
+        user = User.objects.create_user(email="payer@test.com")
+        period_end = 1_815_000_000
+        sub_payload = _resolver_subscription(
+            subscription_id="sub_dbmap",
+            price_id="price_main_yearly",  # in the DB map via setUpTestData
+            current_period_end=period_end,
+        )
+        self._expect_period_end(period_end)
+
+        with patch(
+            "payments.services._get_stripe_client",
+            side_effect=_stripe_client_returning(sub_payload),
+        ):
+            handle_checkout_completed(
+                self._session_data(subscription_id="sub_dbmap"),
+            )
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier, self.main)
+        self.assertEqual(user.subscription_id, "sub_dbmap")
+        self.assertEqual(user.stripe_customer_id, "cus_resolver")
+        self.assertEqual(
+            user.billing_period_end,
+            _dt.fromtimestamp(period_end, tz=_tz.utc),
+        )
+
+    def test_checkout_resolves_tier_from_amount_and_interval_when_price_id_unknown(self):
+        """Step 3 (the casraysa case): unit_amount + interval match.
+
+        Stripe returns ``unit_amount=50000`` (500 EUR cents) and
+        ``interval="year"``; ``main`` has ``price_eur_year=500`` per the
+        seed migration, so the resolver picks ``main``.
+        """
+        user = User.objects.create_user(email="payer@test.com")
+        period_end = 1_820_000_000
+        sub_payload = _resolver_subscription(
+            subscription_id="sub_amount",
+            price_id="price_dashboard_only",
+            current_period_end=period_end,
+            unit_amount=50000,
+            interval="year",
+        )
+        self._expect_period_end(period_end)
+
+        with patch(
+            "payments.services._get_stripe_client",
+            side_effect=_stripe_client_returning(sub_payload),
+        ):
+            handle_checkout_completed(
+                self._session_data(subscription_id="sub_amount"),
+            )
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier, self.main)
+        self.assertEqual(user.subscription_id, "sub_amount")
+        self.assertEqual(user.stripe_customer_id, "cus_resolver")
+        self.assertEqual(
+            user.billing_period_end,
+            _dt.fromtimestamp(period_end, tz=_tz.utc),
+        )
+
+    def test_checkout_logs_session_subscription_and_price_when_all_resolver_steps_fail(
+        self,
+    ):
+        """When every resolver step misses, the error log carries the
+        full triage triplet: ``session_id``, ``subscription_id``, and
+        ``price_id``.
+        """
+        user = User.objects.create_user(email="payer@test.com")
+        sub_payload = _resolver_subscription(
+            subscription_id="sub_truly_unknown",
+            price_id="price_truly_unknown",
+            unit_amount=99999,
+            interval="month",
+        )
+
+        with patch(
+            "payments.services._get_stripe_client",
+            side_effect=_stripe_client_returning(sub_payload),
+        ):
+            with self.assertLogs("payments.services", level="ERROR") as logs:
+                handle_checkout_completed(self._session_data(
+                    subscription_id="sub_truly_unknown",
+                ))
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "free")
+        joined = "\n".join(logs.output)
+        self.assertIn("Could not determine tier", joined)
+        self.assertIn("cs_payment_link_resolver", joined)
+        self.assertIn("sub_truly_unknown", joined)
+        self.assertIn("price_truly_unknown", joined)
+
+    def test_session_metadata_tier_slug_keeps_precedence_over_resolver(self):
+        """Session-metadata ``tier_slug`` wins even when the Stripe
+        subscription's price would resolve to a different tier.
+
+        Documents that the 3-step resolver is a fallback for empty
+        session metadata, never an override of an explicit operator
+        signal. ``basic`` here was set by the user/operator on the
+        Checkout Session metadata, so it must win over ``main`` from
+        the Stripe price.
+        """
+        user = User.objects.create_user(email="payer@test.com")
+
+        # Patch ``_retrieve_subscription_with_price`` directly so we can
+        # assert the resolver fallback was NOT taken — when session
+        # metadata already provides a valid tier the handler must never
+        # call into the resolver path.
+        with patch(
+            "payments.services.webhook_handlers._retrieve_subscription_with_price",
+        ) as retrieve_mock:
+            handle_checkout_completed(
+                self._session_data(
+                    subscription_id="sub_metadata_wins",
+                    metadata={"tier_slug": "basic"},
+                ),
+            )
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier, self.basic)
+        # Resolver helper was never invoked because session metadata
+        # already supplied a valid tier (resolver is a fallback, not an
+        # override).
+        self.assertEqual(retrieve_mock.call_count, 0)
 
 
 @tag('core')

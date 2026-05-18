@@ -1,19 +1,16 @@
-"""Tests for the integration-docs (?) help-icon links (issue #641).
+"""Tests for the integration-docs (?) help-icon links (issue #641, #664).
 
 The Studio settings page renders a small (?) link next to each
 integration setting whose registry entry carries a ``docs_url``. The
-link target is a Studio-routed view that reads the markdown file under
-``_docs/integrations/<group>.md`` at request time and renders it to
-HTML.
+link target is the markdown file on GitHub
+(``https://github.com/AI-Shipping-Labs/website/blob/main/_docs/integrations/<group>.md#<anchor>``)
+which GitHub renders natively. This avoids shipping ``_docs/`` into the
+container (``.dockerignore`` excludes it) and keeps the (?) icons
+working in production (issue #664).
 
 Covered here:
 - The (?) icon renders only for keys that have a ``docs_url``, and the
-  href points at ``/studio/docs/integrations/<group>#<anchor>``.
-- The doc-serving view returns 200 for a known group, renders the
-  per-key headings as anchored sections, and refuses unknown groups
-  with 404.
-- Path traversal via the ``<group>`` URL segment cannot escape the
-  ``_docs/integrations/`` directory.
+  href points at the GitHub blob URL with the per-key anchor.
 """
 
 import re
@@ -37,7 +34,7 @@ class IntegrationDocsHelpIconRenderTest(TestCase):
         self.client.login(email='docs-admin@test.com', password='testpass')
 
     def test_stripe_webhook_secret_field_has_help_icon_link(self):
-        """The STRIPE_WEBHOOK_SECRET row carries a (?) link at the docs anchor."""
+        """The STRIPE_WEBHOOK_SECRET row carries a (?) link at the GitHub docs anchor."""
         response = self.client.get('/studio/settings/')
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
@@ -54,10 +51,14 @@ class IntegrationDocsHelpIconRenderTest(TestCase):
         )
         opening_tag = match.group(0)
 
-        # The href is the Studio-routed docs URL with the per-key
-        # anchor — not the raw ``_docs/`` path stored in the registry.
+        # The href is the GitHub blob URL with the per-key anchor — not
+        # the raw ``_docs/`` path stored in the registry. Linking to
+        # GitHub avoids shipping ``_docs/`` into the container (which
+        # ``.dockerignore`` excludes) and keeps the (?) icons working
+        # in production (issue #664).
         self.assertIn(
-            'href="/studio/docs/integrations/stripe#stripe_webhook_secret"',
+            'href="https://github.com/AI-Shipping-Labs/website/blob/main/'
+            '_docs/integrations/stripe.md#stripe_webhook_secret"',
             opening_tag,
         )
         # The link opens in a new tab and is keyboard-discoverable as a
@@ -107,79 +108,14 @@ class IntegrationDocsHelpIconRenderTest(TestCase):
             r'data-docs-link="PHANTOM_NO_DOCS_KEY"',
         )
 
+    def test_internal_docs_route_is_removed(self):
+        """``/studio/docs/integrations/<group>`` no longer exists (issue #664).
 
-class IntegrationDocsViewTest(TestCase):
-    """The doc-serving view at ``/studio/docs/integrations/<group>``."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff_user = User.objects.create_user(
-            email='docs-view@test.com', password='testpass', is_staff=True,
-        )
-        cls.non_staff_user = User.objects.create_user(
-            email='member-docs@test.com', password='testpass', is_staff=False,
-        )
-
-    def test_staff_sees_rendered_markdown_with_anchors(self):
-        self.client.login(email='docs-view@test.com', password='testpass')
-        response = self.client.get('/studio/docs/integrations/stripe')
-        self.assertEqual(response.status_code, 200)
-        body = response.content.decode()
-
-        # Each per-key heading becomes an ``id``-bearing element so the
-        # ``#anchor`` fragment in the (?) link lines up.
-        self.assertIn('id="stripe_webhook_secret"', body)
-        self.assertIn('id="stripe_secret_key"', body)
-        self.assertIn('id="stripe_customer_portal_url"', body)
-        self.assertIn('id="stripe_dashboard_account_id"', body)
-        # The Purpose / Without-it framing from the docs source is the
-        # value the issue explicitly asks for — assert at least one
-        # sentence of it survives the markdown round-trip.
-        self.assertIn('Purpose', body)
-        self.assertIn('Without it', body)
-
-    def test_non_staff_cannot_view_integration_docs(self):
-        self.client.login(email='member-docs@test.com', password='testpass')
-        response = self.client.get('/studio/docs/integrations/stripe')
-        self.assertEqual(response.status_code, 403)
-
-    def test_unknown_group_returns_404(self):
-        self.client.login(email='docs-view@test.com', password='testpass')
-        response = self.client.get('/studio/docs/integrations/not-a-real-group')
-        self.assertEqual(response.status_code, 404)
-
-    def test_group_without_authored_doc_returns_404(self):
-        """A registered group whose markdown file is missing returns 404.
-
-        Issue #649 authored docs pages for every group that exists
-        today, so this scenario no longer occurs in the live registry.
-        We still cover the missing-file branch by registering a
-        synthetic group ("phantom") and asking the view to serve it —
-        the file is intentionally absent on disk. Studio must not 500
-        when a registry entry is added before its docs page lands.
+        The internal doc-serving view was removed because
+        ``.dockerignore`` excluded ``_docs/`` from the container image,
+        causing every (?) click to 404 in production. The (?) icons now
+        link straight at GitHub instead.
         """
-        from unittest.mock import patch
-
-        from integrations.settings_registry import INTEGRATION_GROUPS
-
-        self.client.login(email='docs-view@test.com', password='testpass')
-        synthetic_registry = [
-            *INTEGRATION_GROUPS,
-            {
-                'name': 'phantom',
-                'label': 'Phantom',
-                'keys': [
-                    {
-                        'key': 'PHANTOM_TOKEN',
-                        'is_secret': True,
-                        'description': 'Synthetic key without an authored doc.',
-                    },
-                ],
-            },
-        ]
-        with patch(
-            'studio.views.integration_docs.INTEGRATION_GROUPS',
-            synthetic_registry,
-        ):
-            response = self.client.get('/studio/docs/integrations/phantom')
+        self.client.login(email='docs-admin@test.com', password='testpass')
+        response = self.client.get('/studio/docs/integrations/stripe')
         self.assertEqual(response.status_code, 404)

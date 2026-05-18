@@ -9,10 +9,13 @@ stays scannable. See issue #322 for the locked rewrites.
 
 Each key MAY optionally define ``docs_url`` (issue #641) — a relative
 path inside ``_docs/`` (e.g. ``_docs/integrations/stripe.md#stripe_webhook_secret``)
-pointing at a per-key section in the integration docs. Studio resolves
-this to a routed page at ``/studio/docs/integrations/<group>#<anchor>``
-and renders a (?) icon next to the key. Entries without ``docs_url``
-keep working — the icon simply isn't rendered for them.
+pointing at a per-key section in the integration docs. Studio rewrites
+this to the GitHub blob URL
+(``https://github.com/AI-Shipping-Labs/website/blob/main/_docs/integrations/<group>.md#<anchor>``)
+and renders a (?) icon next to the key. Linking to GitHub (rather than
+serving the markdown internally) avoids shipping ``_docs/`` into the
+container — ``.dockerignore`` excludes it (issue #664). Entries without
+``docs_url`` keep working — the icon simply isn't rendered for them.
 
 NOTE: ``_docs/configuration.md`` references the count and names of these
 groups in the Studio sign-in section ("confirm 10 integration groups are

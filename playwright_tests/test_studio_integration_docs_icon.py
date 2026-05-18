@@ -1,16 +1,23 @@
-"""Playwright coverage for the integration setup docs (?) icon (issue #641).
+"""Playwright coverage for the integration setup docs (?) icon (issue #641, #664).
 
 Each registered setting whose ``docs_url`` is authored gets a small (?)
 help-icon link rendered next to its description in Studio. The link
-opens the per-key section of ``_docs/integrations/<group>.md`` in a new
-tab. This file verifies:
+opens the per-key section of ``_docs/integrations/<group>.md`` on
+GitHub in a new tab — linking to GitHub avoids shipping ``_docs/``
+into the container (``.dockerignore`` excludes it), which was the root
+cause of the production 404s reported in issue #664.
+
+This file verifies:
 
 - The (?) icon for ``STRIPE_WEBHOOK_SECRET`` is reachable by keyboard
   tabbing through the form, and Enter activates it.
-- Its href fragment matches the per-key anchor on the docs page, and
-  the rendered docs page actually exposes that anchor as an ``id``.
+- Its href points at the GitHub blob URL with the per-key anchor.
 - The link declares ``target="_blank"`` and ``rel="noopener
   noreferrer"`` so it opens in a new tab without window.opener access.
+
+We deliberately do NOT navigate to the GitHub URL — doing so would
+hit github.com from CI. Asserting the ``href`` and ``target`` is the
+contract we own.
 """
 
 import os
@@ -30,7 +37,7 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 @pytest.mark.django_db(transaction=True)
 class TestStudioIntegrationDocsIcon:
     @pytest.mark.core
-    def test_help_icon_is_keyboard_reachable_and_points_at_anchor(
+    def test_help_icon_is_keyboard_reachable_and_points_at_github(
         self, django_server, browser
     ):
         _create_staff_user("admin@test.com")
@@ -45,10 +52,14 @@ class TestStudioIntegrationDocsIcon:
         icon = page.locator('a[data-docs-link="STRIPE_WEBHOOK_SECRET"]')
         icon.wait_for(state="visible")
 
-        # The href is the Studio-routed URL with the per-key fragment.
+        # The href is the GitHub blob URL with the per-key fragment.
+        # Linking to GitHub (rather than serving the markdown from the
+        # container) is the fix for issue #664 — ``_docs/`` is excluded
+        # by ``.dockerignore`` so the in-container view 404'd.
         href = icon.get_attribute("href")
         assert href == (
-            "/studio/docs/integrations/stripe#stripe_webhook_secret"
+            "https://github.com/AI-Shipping-Labs/website/blob/main/"
+            "_docs/integrations/stripe.md#stripe_webhook_secret"
         ), f"unexpected docs link href: {href!r}"
 
         # Opens in a new tab; no window.opener access from the docs page.
@@ -63,7 +74,7 @@ class TestStudioIntegrationDocsIcon:
         # has many fields and walking Tab through all of them flakes on
         # exact counts). What we want to verify is that it IS focusable
         # at all — i.e. it's a real anchor, not a div with a click
-        # handler — and that pressing Enter activates it.
+        # handler.
         icon.focus()
         focused_attr = page.evaluate(
             "document.activeElement.getAttribute('data-docs-link')"
@@ -72,22 +83,8 @@ class TestStudioIntegrationDocsIcon:
             "(?) icon is not keyboard-focusable"
         )
 
-        # Activating the link with Enter opens a new tab — fetch the
-        # rendered docs page directly to confirm the anchor target
-        # exists. (We don't drive the new-tab open here because
-        # ``target=_blank`` in headless Playwright creates a popup that
-        # the parent page must explicitly await; the link contract is
-        # already covered by the href + target assertions above.)
-        docs_response = context.request.get(
-            f"{django_server}/studio/docs/integrations/stripe"
-        )
-        assert docs_response.status == 200
-        body = docs_response.text()
-        assert 'id="stripe_webhook_secret"' in body, (
-            "docs page is missing the per-key anchor"
-        )
-        # The 6-section template authored for issue #641 is present.
-        assert "Purpose" in body
-        assert "Without it" in body
+        # We deliberately do NOT navigate to the GitHub URL — doing so
+        # would hit github.com from CI. The link contract (correct
+        # href + target=_blank) is already covered above.
 
         context.close()

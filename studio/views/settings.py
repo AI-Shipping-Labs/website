@@ -99,14 +99,21 @@ def _section_id_for_group_name(group_name):
     return OTHER_SECTION['id']
 
 
+GITHUB_DOCS_BASE_URL = (
+    'https://github.com/AI-Shipping-Labs/website/blob/main/_docs/integrations'
+)
+
+
 def _resolve_docs_url(raw_docs_url):
-    """Rewrite a registry ``docs_url`` to a Studio-routed URL.
+    """Rewrite a registry ``docs_url`` to a public GitHub blob URL.
 
     The registry stores docs paths as
-    ``_docs/integrations/<group>.md#<anchor>``. Studio serves the
-    rendered markdown at ``/studio/docs/integrations/<group>`` and
-    preserves the fragment identifier client-side, so we just rewrite
-    the path prefix and keep the anchor.
+    ``_docs/integrations/<group>.md#<anchor>``. Serving those files
+    internally requires shipping ``_docs/`` into the container, which
+    ``.dockerignore`` excludes (issue #664). Instead, link the (?) icon
+    straight at the markdown on GitHub — the repo is public, GitHub
+    renders markdown natively, and the per-key anchors already match
+    GitHub's slug algorithm (lowercase, underscores preserved).
 
     Returns an empty string for unrecognised inputs so the template can
     treat "no docs link" identically to "key has no docs_url yet".
@@ -128,7 +135,7 @@ def _resolve_docs_url(raw_docs_url):
     group_name = filename[:-len('.md')]
     if not group_name:
         return ''
-    return f'/studio/docs/integrations/{group_name}{anchor_part}'
+    return f'{GITHUB_DOCS_BASE_URL}/{group_name}.md{anchor_part}'
 
 
 def _build_group_context(group_def, db_settings):

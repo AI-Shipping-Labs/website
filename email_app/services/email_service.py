@@ -13,6 +13,7 @@ body that supports Django template variables.
 
 import logging
 import re
+from datetime import datetime
 from pathlib import Path
 
 import boto3
@@ -23,6 +24,7 @@ from django.conf import settings
 from django.template import Context, Template
 from django.template.loader import render_to_string
 
+from accounts.services.timezones import format_user_datetime
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
     EmailClassificationError,
@@ -211,6 +213,16 @@ class EmailService:
             "site_name": getattr(settings, "SITE_NAME", "AI Shipping Labs"),
         }
         full_context.update(context)
+
+        # Issue #666 guardrail: future email senders may forget to pre-format
+        # the event_datetime and pass a raw ``datetime`` instead. Convert
+        # any ``datetime`` value in the context to the recipient's timezone
+        # via the shared helper so the rendered body is correct regardless
+        # of caller hygiene. Strings are passed through unchanged so the
+        # existing pre-formatted callers keep working.
+        for key, value in list(full_context.items()):
+            if isinstance(value, datetime):
+                full_context[key] = format_user_datetime(value, user)
 
         # Render subject as Django template
         subject_template = Template(subject_source)

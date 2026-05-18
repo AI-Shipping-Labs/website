@@ -272,6 +272,9 @@ class Event(
     def get_absolute_url(self):
         return f'/events/{self.slug}'
 
+    def get_studio_edit_url(self):
+        return f'/studio/events/{self.pk}/edit'
+
     def get_recording_url(self):
         """Returns the canonical URL for viewing the event (and its recording, if present)."""
         return f'/events/{self.slug}'

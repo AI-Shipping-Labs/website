@@ -120,6 +120,9 @@ class Course(
     def get_absolute_url(self):
         return f'/courses/{self.slug}'
 
+    def get_studio_edit_url(self):
+        return f'/studio/courses/{self.pk}/edit'
+
     def save(self, *args, **kwargs):
         from content.utils.linkify import linkify_urls
         from content.utils.tags import normalize_tags
@@ -377,6 +380,9 @@ class Unit(SyncedContentIdentityMixin, SourceMetadataMixin, models.Model):
         """Return URL for this unit's page."""
         course = self.module.course
         return f'/courses/{course.slug}/{self.module.slug}/{self.slug}'
+
+    def get_studio_edit_url(self):
+        return f'/studio/units/{self.pk}/edit'
 
     @property
     def effective_required_level(self):

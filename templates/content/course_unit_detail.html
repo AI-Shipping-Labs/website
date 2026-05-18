@@ -10,6 +10,7 @@
 
 {% block body %}
 {% include "includes/header.html" %}
+{% include "includes/_studio_edit_button.html" with obj=unit %}
 <main class="min-h-screen pt-24">
   {% if is_gated %}
   <!-- Gated: user does not have access. Issue #248: render a teaser

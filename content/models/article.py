@@ -67,6 +67,9 @@ class Article(
     def get_absolute_url(self):
         return f'/blog/{self.slug}'
 
+    def get_studio_edit_url(self):
+        return f'/studio/articles/{self.pk}/edit'
+
     def formatted_date(self):
         return self.date.strftime('%B %d, %Y')
 

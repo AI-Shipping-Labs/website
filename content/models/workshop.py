@@ -180,6 +180,9 @@ class Workshop(
         """Forward-compat URL for the (not-yet-built) public workshop page."""
         return f'/workshops/{self.slug}'
 
+    def get_studio_edit_url(self):
+        return f'/studio/workshops/{self.pk}/edit'
+
     def clean(self):
         """Validate the three-gate chain landing <= pages <= recording."""
         super().clean()

@@ -32,6 +32,11 @@
               <p class="text-sm text-muted-foreground mt-1" data-testid="series-event-date">
                 {{ event.start_datetime|date:"l, M d, Y · H:i" }} {{ event.timezone }}
               </p>
+              {# Issue #668: per-occurrence social-proof chip. View annotates #}
+              {# _attendee_count so this renders in a single SQL pass. #}
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                {% include "events/_event_attendee_count.html" %}
+              </div>
             </div>
             <div class="text-sm">
               <span class="inline-flex items-center rounded bg-secondary px-2 py-1 text-xs font-medium text-muted-foreground">

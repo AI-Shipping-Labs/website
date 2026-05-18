@@ -38,6 +38,16 @@
   </div>
 
   {% comment %}
+    Issue #668: social-proof attendee-count chip sits on its own row
+    directly under the time/location line. Placed before the
+    instructors row so the value prop "who is teaching" stays the most
+    prominent secondary signal.
+  {% endcomment %}
+  <div class="mt-3 flex flex-wrap items-center gap-2">
+    {% include "events/_event_attendee_count.html" %}
+  </div>
+
+  {% comment %}
     Issue #484: speaker/instructor row sits directly under the time +
     location line so the value prop (who is teaching this) is visible
     before scrolling. Renders nothing when no instructors are linked.

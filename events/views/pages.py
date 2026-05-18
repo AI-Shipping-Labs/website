@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+from accounts.services.timezones import format_user_datetime
 from content.access import (
     build_gating_context,
     can_access,
@@ -484,7 +485,12 @@ def _resolve_cancel_state(slug, token):
         'event': event,
         'event_url': event_url,
         'registration': registration,
-        'event_datetime': event.formatted_start(),
+        # Issue #666: render in the registered user's preferred timezone.
+        # The visitor here is anonymous (token-authorized) so we look the
+        # user up off the registration, NOT ``request.user``.
+        'event_datetime': format_user_datetime(
+            event.start_datetime, registration.user,
+        ),
     }
 
 

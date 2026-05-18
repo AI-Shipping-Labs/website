@@ -44,7 +44,10 @@ PREVIEW_CONTEXTS = {
     'event_registration': {
         'user_name': 'Ada',
         'event_title': 'AI Shipping Workshop',
-        'event_datetime': 'March 21, 2026 at 6:00 PM UTC',
+        # Issue #666: real sends produce "<formatted time> <tz label>" via
+        # accounts.services.timezones.format_user_datetime. Mirror that
+        # shape here so the Studio preview matches what users will see.
+        'event_datetime': 'March 21, 2026, 18:00 Europe/Berlin',
         # Match the real send shape: {site}/events/{slug}/join.
         'join_url': 'https://aishippinglabs.com/events/community-lunch/join',
         # Issue #588: real send mints a JWT-signed cancel URL. The
@@ -95,7 +98,8 @@ PREVIEW_CONTEXTS = {
     'event_reminder': {
         'user_name': 'Ada',
         'event_title': 'AI Shipping Workshop',
-        'event_datetime': 'March 21, 2026 at 6:00 PM UTC',
+        # Issue #666: see note on event_registration above.
+        'event_datetime': 'March 21, 2026, 18:00 Europe/Berlin',
         'event_url': 'https://zoom.us/j/123',
     },
     'lead_magnet_delivery': {

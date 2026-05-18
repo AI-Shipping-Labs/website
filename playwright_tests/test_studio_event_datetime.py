@@ -82,12 +82,17 @@ class TestScenario2StaffEditsEventPrePopulated:
         _clear_events()
         _create_staff_user("staff-edit@test.com")
 
+        # Issue #665: pin timezone='UTC' so the stored naive instant
+        # (treated as UTC under USE_TZ=True) renders unchanged in the
+        # picker. Otherwise the default 'Europe/Berlin' timezone would
+        # render 10:00 UTC as 12:00 local.
         event = _create_event(
             title="Pre-Populated Event",
             slug="pre-populated-event",
             start_datetime=datetime(2026, 6, 1, 10, 0),
             end_datetime=datetime(2026, 6, 1, 11, 30),
             status="draft",
+            timezone="UTC",
         )
 
         context = _auth_context(browser, "staff-edit@test.com")

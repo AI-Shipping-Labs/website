@@ -19,14 +19,21 @@ file moved from ``studio/views/event_groups.py`` to
 
 import logging
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
+from accounts.services.timezones import (
+    build_timezone_options,
+    get_timezone_label,
+    is_valid_timezone,
+)
 from events.models import Event, EventSeries
 from studio.decorators import staff_required
+from studio.views.events import _default_timezone_for
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +45,18 @@ def _parse_date_str(date_str):
     """Parse dd/mm/yyyy into a ``date``."""
     day, month, year = date_str.split('/')
     return datetime(int(year), int(month), int(day)).date()
+
+
+def _localize_to_utc(local_date, local_time, tz_name):
+    """Combine ``(date, time)`` interpreted in ``tz_name`` and convert to UTC.
+
+    Issue #665. The Studio picker captures wall-clock values in the
+    admin's chosen timezone; storage is always UTC so the calendar
+    arithmetic on member events stays stable across DST.
+    """
+    zone = ZoneInfo(tz_name) if is_valid_timezone(tz_name) else ZoneInfo('UTC')
+    local_aware = datetime.combine(local_date, local_time).replace(tzinfo=zone)
+    return local_aware.astimezone(ZoneInfo('UTC'))
 
 
 def _generate_unique_slug(base, used=None):
@@ -82,6 +101,7 @@ def event_series_create(request):
     date is authoritative. ``day_of_week`` is derived from the date.
     """
     errors = {}
+    default_tz = _default_timezone_for(request.user)
     form_values = {
         'name': '',
         'slug': '',
@@ -90,7 +110,8 @@ def event_series_create(request):
         'start_time': '',
         'duration_hours': '1',
         'occurrences': '6',
-        'timezone': 'Europe/Berlin',
+        # Issue #665: default to admin's preferred TZ, never 'Europe/Berlin'.
+        'timezone': default_tz,
         'required_level': '0',
         'kind': 'standard',
         'platform': 'zoom',
@@ -107,7 +128,13 @@ def event_series_create(request):
         start_time_str = form_values['start_time']
         duration_str = form_values['duration_hours'] or '1'
         occurrences_str = form_values['occurrences'] or '0'
-        timezone_value = form_values['timezone'] or 'Europe/Berlin'
+        # Issue #665: validate the TZ; reject unknown IANA names.
+        posted_tz = form_values['timezone'] or default_tz
+        if posted_tz and not is_valid_timezone(posted_tz):
+            errors['timezone'] = 'Unknown timezone.'
+            timezone_value = default_tz
+        else:
+            timezone_value = posted_tz
         required_level_str = form_values['required_level'] or '0'
         kind = form_values['kind'] or 'standard'
         platform = form_values['platform'] or 'zoom'
@@ -175,9 +202,9 @@ def event_series_create(request):
 
                 used_slugs = set()
                 for i in range(1, occurrences + 1):
-                    event_start = datetime.combine(
-                        start_date + timedelta(days=7 * (i - 1)),
-                        start_time,
+                    occurrence_date = start_date + timedelta(days=7 * (i - 1))
+                    event_start = _localize_to_utc(
+                        occurrence_date, start_time, timezone_value,
                     )
                     event_end = event_start + timedelta(hours=duration_hours)
 
@@ -203,10 +230,14 @@ def event_series_create(request):
                     )
             return redirect('studio_event_series_detail', series_id=series.pk)
 
+    tz_value = form_values['timezone'] or default_tz
     return render(request, 'studio/event_series/form.html', {
         'form_values': form_values,
         'errors': errors,
         'max_occurrences': MAX_OCCURRENCES,
+        'timezone_value': tz_value,
+        'timezone_label': get_timezone_label(tz_value) or tz_value,
+        'timezone_options': build_timezone_options(),
     })
 
 
@@ -230,9 +261,16 @@ def event_series_detail(request, series_id):
     events = series.events.all().order_by(
         'series_position', 'start_datetime',
     )
+    # Issue #665: the add-occurrence form inherits the series' TZ; show
+    # it in the picker so the admin sees the active zone next to the
+    # date input.
+    tz_value = series.timezone or _default_timezone_for(request.user)
     return render(request, 'studio/event_series/detail.html', {
         'series': series,
         'events': events,
+        'timezone_value': tz_value,
+        'timezone_label': get_timezone_label(tz_value) or tz_value,
+        'timezone_options': build_timezone_options(),
     })
 
 
@@ -249,10 +287,14 @@ def event_series_add_occurrence(request, series_id):
     except (ValueError, AttributeError):
         # Re-render the detail page with a flash-style error.
         events = series.events.all().order_by('series_position', 'start_datetime')
+        tz_value = series.timezone or _default_timezone_for(request.user)
         return render(request, 'studio/event_series/detail.html', {
             'series': series,
             'events': events,
             'add_error': 'Start date is required (dd/mm/yyyy).',
+            'timezone_value': tz_value,
+            'timezone_label': get_timezone_label(tz_value) or tz_value,
+            'timezone_options': build_timezone_options(),
         }, status=400)
 
     try:
@@ -269,7 +311,18 @@ def event_series_add_occurrence(request, series_id):
     )
     next_pos = (max_pos or 0) + 1
 
-    event_start = datetime.combine(start_date, series.start_time)
+    # Issue #665: combine the picked date with the series' start_time in
+    # the chosen TZ (defaults to the series' TZ; admin can override per
+    # occurrence) and convert to UTC for storage. A tampered TZ value
+    # falls back to the series TZ.
+    posted_tz = (request.POST.get('timezone') or '').strip()
+    occurrence_tz = (
+        posted_tz if posted_tz and is_valid_timezone(posted_tz)
+        else (series.timezone or 'UTC')
+    )
+    event_start = _localize_to_utc(
+        start_date, series.start_time, occurrence_tz,
+    )
     event_end = event_start + timedelta(hours=duration_hours)
 
     base_slug = f'{series.slug}-session-{next_pos}'
@@ -283,7 +336,7 @@ def event_series_add_occurrence(request, series_id):
         platform='zoom',
         start_datetime=event_start,
         end_datetime=event_end,
-        timezone=series.timezone,
+        timezone=occurrence_tz,
         status='draft',
         required_level=0,
         origin='studio',

@@ -23,6 +23,7 @@ import json
 from datetime import datetime, timezone
 from smtplib import SMTPException
 
+import stripe
 from django.core.mail import BadHeaderError
 
 from accounts.models import User
@@ -30,6 +31,11 @@ from community.models import CommunityAuditLog
 from payments import services as _services
 from payments.exceptions import WebhookPermanentError
 from payments.models import Tier
+from payments.services.import_stripe import (
+    CONFIGURATION_ERRORS,
+    _price_to_tier_map,
+    _subscription_price_id,
+)
 
 
 def handle_checkout_completed(session_data):
@@ -79,21 +85,42 @@ def handle_checkout_completed(session_data):
         )
         return
 
-    # Look up the purchased tier
+    # Look up the purchased tier. Session-metadata ``tier_slug`` keeps
+    # precedence (today's behaviour); the resolver below is a fallback
+    # for the Payment-Link case where the session has no ``tier_slug``
+    # and the live Stripe price ID is not mapped on any ``Tier`` row.
     tier = None
     if tier_slug:
         tier = Tier.objects.filter(slug=tier_slug).first()
 
-    # If tier not found via metadata, try to look up from subscription
+    # If tier not found via metadata, fall back to the 3-step resolver
+    # (metadata -> price-id map -> unit_amount + interval) — same chain
+    # used by ``backfill_user_from_stripe`` so webhook and reconcile
+    # paths make identical decisions (issue #663).
+    resolved_subscription = None
     if tier is None and subscription_id:
-        tier = _services._tier_from_subscription(subscription_id)
+        resolved_subscription = _retrieve_subscription_with_price(subscription_id)
+        if resolved_subscription is not None:
+            price_id_for_resolve = _subscription_price_id(resolved_subscription)
+            tier = _services.resolve_subscription_tier(
+                resolved_subscription,
+                price_id_for_resolve,
+                _price_to_tier_map(),
+            )
 
     if tier is None:
+        # Pull price_id off the retrieved subscription (when present) so
+        # on-call has enough context to diagnose unmapped live prices.
+        # Falls back to "" when the subscription retrieve failed.
+        price_id_for_log = ""
+        if resolved_subscription is not None:
+            price_id_for_log = _subscription_price_id(resolved_subscription)
         _services.logger.error(
             "checkout.session.completed: Could not determine tier. "
-            "tier_slug=%s, session_id=%s",
-            tier_slug,
-            session_data.get("id"),
+            "session_id=%s, subscription_id=%s, price_id=%s",
+            session_id,
+            subscription_id,
+            price_id_for_log,
         )
         return
 
@@ -679,3 +706,34 @@ def handle_invoice_payment_failed(invoice_data):
         "invoice.payment_failed: notified user=%s (tier NOT revoked)",
         user.email,
     )
+
+
+def _retrieve_subscription_with_price(subscription_id):
+    """Retrieve a Stripe subscription with ``items.data.price`` expanded.
+
+    Returns the subscription payload (dict or ``StripeObject``) so the
+    3-step resolver can read both ``price.metadata.tier_slug`` and
+    ``price.unit_amount`` / ``recurring.interval`` from it. Returns
+    ``None`` if Stripe is unreachable, the secret key is missing, the
+    subscription does not exist, or the SDK raises any other
+    ``StripeError`` — the webhook caller logs and falls back to a
+    "could not determine tier" branch in that case.
+
+    The expand depth matches ``backfill_tiers._active_subscriptions_for_customer``:
+    ``items.data.price`` is 3 levels deep (well under Stripe's 4-level
+    cap on a single retrieve, since the ``data.`` prefix used in the
+    ``list`` form is implicit here).
+    """
+    try:
+        client = _services._get_stripe_client()
+        return client.subscriptions.retrieve(
+            subscription_id,
+            params={"expand": ["items.data.price"]},
+        )
+    except (stripe.StripeError, *CONFIGURATION_ERRORS):
+        _services.logger.exception(
+            "checkout.session.completed: failed to retrieve subscription %s "
+            "with expanded price",
+            subscription_id,
+        )
+        return None

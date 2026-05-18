@@ -14,13 +14,29 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from integrations.config import get_config
-from payments.models import Tier, WebhookEvent
+from payments.models import WebhookEvent
+from payments.services import tier_resolution as _tier_resolution
 from payments.services.import_stripe import (
     CONFIGURATION_ERRORS,
     _price_to_tier_map,
     _subscription_period_end,
     _subscription_price_id,
 )
+
+# Backwards-compatible re-exports. Tests historically patched
+# ``payments.services.backfill_tiers._resolve_subscription_tier`` /
+# ``_tier_by_amount_interval``; keeping these names bound on the module
+# preserves those patch points after the resolver moved to
+# ``payments.services.tier_resolution``.
+_resolve_subscription_tier = _tier_resolution.resolve_subscription_tier
+_tier_by_amount_interval = _tier_resolution.tier_by_amount_interval
+
+__all__ = [
+    "ChangeRecord",
+    "backfill_user_from_stripe",
+    "_resolve_subscription_tier",
+    "_tier_by_amount_interval",
+]
 
 
 @dataclass
@@ -226,80 +242,6 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=
 
     record.audit_event_id = _write_audit_row(record)
     return record
-
-
-def _resolve_subscription_tier(subscription, price_id, price_to_tier):
-    """Resolve a Stripe subscription to a local ``Tier`` row.
-
-    Resolution order:
-
-    1. ``subscription.items.data[0].price.metadata.tier_slug`` (declarative
-       label that travels with the price object, set by
-       ``stripe_create_products``).
-    2. ``price_to_tier[price_id]`` — the DB ``Tier.stripe_price_id_*`` map.
-    3. Amount + interval match: ``price.unit_amount`` against
-       ``Tier.price_eur_month * 100`` or ``Tier.price_eur_year * 100``
-       (currency-agnostic; cents only). Robust to Stripe price regenerations,
-       which is exactly the case that the original DB-only lookup misses.
-
-    Returns ``None`` if all three paths fail.
-
-    Note on product-level metadata: a fallback to
-    ``price.product.metadata.tier_slug`` would require expanding
-    ``data.items.data.price.product``, which is 5 levels deep — Stripe rejects
-    expansions past 4 levels. A separate ``Product.retrieve`` per user is
-    avoided because amount-based matching already covers the same case.
-    """
-    items = _get(subscription, "items", {}) or {}
-    data = _get(items, "data", []) or []
-    first_item = data[0] if data else {}
-    price = _get(first_item, "price", {}) or {}
-
-    price_metadata = _get(price, "metadata", {}) or {}
-    price_slug = _normalize_slug(price_metadata.get("tier_slug"))
-    if price_slug:
-        tier = _tier_by_slug(price_slug)
-        if tier is not None:
-            return tier
-
-    tier = price_to_tier.get(price_id)
-    if tier is not None:
-        return tier
-
-    return _tier_by_amount_interval(price)
-
-
-def _tier_by_amount_interval(price):
-    """Match a Stripe price to a ``Tier`` row by ``unit_amount`` + interval.
-
-    ``Tier.price_eur_month`` / ``price_eur_year`` are integer EUR values; Stripe
-    ``unit_amount`` is integer cents. Match when ``unit_amount == price_eur_* * 100``
-    for the corresponding ``recurring.interval``. Returns ``None`` if the price
-    has no recurring interval, no amount, or no tier matches.
-    """
-    unit_amount = _get(price, "unit_amount")
-    if not isinstance(unit_amount, int) or unit_amount <= 0:
-        return None
-    recurring = _get(price, "recurring", {}) or {}
-    interval = _get(recurring, "interval")
-    if interval == "month":
-        return Tier.objects.filter(price_eur_month=unit_amount // 100).first()
-    if interval == "year":
-        return Tier.objects.filter(price_eur_year=unit_amount // 100).first()
-    return None
-
-
-def _normalize_slug(value):
-    if not isinstance(value, str):
-        return ""
-    return value.strip()
-
-
-def _tier_by_slug(slug):
-    try:
-        return Tier.objects.get(slug=slug)
-    except Tier.DoesNotExist:
-        return None
 
 
 def _active_overrides_for_user(user):

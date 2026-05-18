@@ -178,7 +178,14 @@ def _normalize_apply_status(status):
     return status
 
 
-def _serialize_apply_result(email, record, *, status, billing_period_end):
+def _serialize_apply_result(
+    email,
+    record,
+    *,
+    status,
+    billing_period_end,
+    stripe_customer_id="",
+):
     return {
         "email": email,
         "status": status,
@@ -190,6 +197,7 @@ def _serialize_apply_result(email, record, *, status, billing_period_end):
         "audit_event_id": record.audit_event_id or "",
         "message": record.message,
         "billing_period_end": billing_period_end,
+        "stripe_customer_id": stripe_customer_id,
     }
 
 
@@ -207,7 +215,12 @@ def tier_reconcile_apply(request):
 
     Body (JSON object):
 
-        {"emails": ["user@example.com"], "dry_run": false, "force": false}
+        {
+          "emails": ["user@example.com"],
+          "customer_ids": {"user@example.com": "cus_..."},
+          "dry_run": false,
+          "force": false
+        }
 
     All fields are optional. When ``emails`` is omitted the endpoint
     processes every user with a non-empty ``stripe_customer_id`` (capped
@@ -223,6 +236,18 @@ def tier_reconcile_apply(request):
     already populated. ``force`` is ignored for users with no
     ``stripe_customer_id`` or no active subscription — it never escalates
     a non-Stripe user.
+
+    ``customer_ids`` (issue #663) lets the operator recover users whose
+    local ``stripe_customer_id`` is empty. Order of operations: for each
+    email in ``customer_ids``, if the local user exists and has an empty
+    ``stripe_customer_id``, the endpoint writes the provided ``cus_...``
+    BEFORE calling ``backfill_user_from_stripe`` so the eligible queryset
+    no longer excludes them. The endpoint does NOT search Stripe by email
+    — the operator must supply the customer id. To prevent destructive
+    writes, when the local user already has a different non-empty
+    ``stripe_customer_id`` the endpoint returns a ``warning`` row with
+    ``customer_id_mismatch`` and skips the user; the existing id is
+    preserved.
 
     Per-row ``status`` is one of ``"changed"``, ``"would_change"``,
     ``"skipped"``, ``"warning"``, ``"not_found"``. Top-level counters
@@ -268,6 +293,32 @@ def tier_reconcile_apply(request):
             details={"field": "force", "expected": "bool"},
         )
 
+    customer_ids_raw = data.get("customer_ids", None)
+    if customer_ids_raw is not None and not isinstance(customer_ids_raw, dict):
+        return error_response(
+            "customer_ids must be an object mapping email to cus_id",
+            "invalid_type",
+            details={"field": "customer_ids", "expected": "object"},
+        )
+    customer_ids_by_lower_email: dict[str, str] = {}
+    if customer_ids_raw is not None:
+        for key, value in customer_ids_raw.items():
+            if not isinstance(key, str) or not key.strip():
+                return error_response(
+                    "customer_ids keys must be non-empty email strings",
+                    "validation_error",
+                    status=422,
+                    details={"field": "customer_ids"},
+                )
+            if not isinstance(value, str) or not value.strip():
+                return error_response(
+                    "customer_ids values must be non-empty cus_... strings",
+                    "validation_error",
+                    status=422,
+                    details={"field": f"customer_ids[{key}]"},
+                )
+            customer_ids_by_lower_email[key.strip().lower()] = value.strip()
+
     requested_emails = None
     if emails_raw is not None:
         for index, value in enumerate(emails_raw):
@@ -295,6 +346,28 @@ def tier_reconcile_apply(request):
                 lowered = user.email.lower()
                 if lowered in normalized and lowered not in users_by_email:
                     users_by_email[lowered] = user
+
+        # ``customer_ids`` (issue #663): when the operator supplied a
+        # cus_id for an email whose local user is missing from the
+        # eligible queryset (because ``stripe_customer_id`` is empty),
+        # fall back to a broader lookup so the apply loop can pre-write
+        # the customer id before backfill. Users with no local row at
+        # all still surface as ``not_found`` in the loop below.
+        if customer_ids_by_lower_email:
+            missing = [
+                lowered for lowered in customer_ids_by_lower_email
+                if lowered not in users_by_email
+            ]
+            if missing:
+                broader = (
+                    User.objects.filter(email__in=missing)
+                    .select_related("tier")
+                )
+                for user in broader:
+                    lowered = user.email.lower()
+                    if lowered in missing and lowered not in users_by_email:
+                        users_by_email[lowered] = user
+
         targets = []
         seen = set()
         for original in requested_emails:
@@ -335,8 +408,55 @@ def tier_reconcile_apply(request):
                 "audit_event_id": "",
                 "message": f"not found: no user with email {original_email} and a Stripe customer ID",
                 "billing_period_end": None,
+                "stripe_customer_id": "",
             })
             continue
+
+        # Pre-write customer id when the operator supplied one and the
+        # local user has no Stripe linkage yet (#663). When the user
+        # already owns a different non-empty customer id, refuse to
+        # overwrite — stomping the existing id is destructive.
+        supplied_customer_id = customer_ids_by_lower_email.get(
+            original_email.lower(),
+        ) or customer_ids_by_lower_email.get(user.email.lower())
+        if supplied_customer_id:
+            existing = user.stripe_customer_id or ""
+            if existing and existing != supplied_customer_id:
+                warning_msg = (
+                    f"warning: customer_id_mismatch — supplied "
+                    f"{supplied_customer_id} but user already has {existing}; "
+                    f"refusing to overwrite"
+                )
+                results.append({
+                    "email": user.email,
+                    "status": "warning",
+                    "from": _current_tier_slug(user),
+                    "to": None,
+                    "subscription_id": user.subscription_id or "",
+                    "deactivated_override": False,
+                    "saved_metadata": False,
+                    "audit_event_id": "",
+                    "message": warning_msg,
+                    "billing_period_end": _billing_period_end_iso(user),
+                    "stripe_customer_id": existing,
+                })
+                processed += 1
+                warnings += 1
+                continue
+            if not existing:
+                if dry_run_raw:
+                    # In dry-run mode the user row must NOT be mutated.
+                    # We still want backfill to PREVIEW what Stripe would
+                    # return, so the supplied id is set on the in-memory
+                    # instance only — backfill_user_from_stripe will use
+                    # it to call Stripe but the dry_run guard inside the
+                    # service skips every write.
+                    user.stripe_customer_id = supplied_customer_id
+                else:
+                    User.objects.filter(pk=user.pk).update(
+                        stripe_customer_id=supplied_customer_id,
+                    )
+                    user.refresh_from_db()
 
         record = backfill_user_from_stripe(
             user,
@@ -355,6 +475,7 @@ def tier_reconcile_apply(request):
             record,
             status=normalized_status,
             billing_period_end=_billing_period_end_iso(user),
+            stripe_customer_id=user.stripe_customer_id or "",
         ))
         processed += 1
         if normalized_status in ("changed", "would_change"):

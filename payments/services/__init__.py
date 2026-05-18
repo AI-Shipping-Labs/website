@@ -67,6 +67,10 @@ from .subscriptions import (  # noqa: E402
     downgrade_subscription,
     upgrade_subscription,
 )
+from .tier_resolution import (  # noqa: E402
+    resolve_subscription_tier,
+    tier_by_amount_interval,
+)
 from .webhook_handlers import (  # noqa: E402
     _handle_course_purchase,
     _send_payment_notification_email,
@@ -90,6 +94,9 @@ __all__ = [
     "verify_webhook_signature",
     "is_event_already_processed",
     "record_processed_event",
+    # Tier resolver (3-step: metadata -> price-id map -> amount + interval)
+    "resolve_subscription_tier",
+    "tier_by_amount_interval",
     # Deprecated direct mutators (raise RuntimeError)
     "create_checkout_session",
     "upgrade_subscription",

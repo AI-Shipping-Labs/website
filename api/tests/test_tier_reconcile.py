@@ -720,6 +720,10 @@ class TierReconcileApplyTest(TierReconcileTestBase):
                 "audit_event_id",
                 "message",
                 "billing_period_end",
+                # Added in issue #663 so on-call can see what
+                # ``customer_ids`` recovery wrote (or which existing
+                # cus_id the user already had).
+                "stripe_customer_id",
             },
         )
 
@@ -1023,3 +1027,202 @@ class TierReconcileApplyTest(TierReconcileTestBase):
             sorted(payload["deactivated_override_ids"]),
             sorted([matching.pk, other.pk]),
         )
+
+    # ------------------------------------------------------------------
+    # customer_ids recovery (issue #663 — Layer 2).
+    # ------------------------------------------------------------------
+
+    def test_apply_with_customer_ids_recovers_user_with_empty_stripe_customer_id(self):
+        """Casraysa case: user exists but has no Stripe linkage.
+
+        The operator supplies ``customer_ids`` so the apply endpoint can
+        write ``stripe_customer_id`` BEFORE invoking the backfill. After
+        the call, the user has a tier, a subscription id, and a
+        billing period end — without any manual prod shell write.
+        """
+        user = User.objects.create_user(
+            email="casraysa@test.com",
+            password="x",
+            stripe_customer_id="",
+        )
+
+        with patch_subscriptions({
+            "cus_recovered": [subscription("sub_recovered")],
+        }):
+            response = self._post_apply({
+                "emails": [user.email],
+                "customer_ids": {user.email: "cus_recovered"},
+                "force": True,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["processed"], 1)
+        self.assertEqual(body["changed"], 1)
+        row = body["results"][0]
+        self.assertEqual(row["status"], "changed")
+        self.assertEqual(row["from"], "free")
+        self.assertEqual(row["to"], "main")
+        self.assertEqual(row["subscription_id"], "sub_recovered")
+        self.assertIsNotNone(row["billing_period_end"])
+        # Response carries the customer id we just wrote so the on-call
+        # can confirm the recovery succeeded end-to-end.
+        self.assertEqual(row["stripe_customer_id"], "cus_recovered")
+
+        user.refresh_from_db()
+        self.assertEqual(user.stripe_customer_id, "cus_recovered")
+        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.subscription_id, "sub_recovered")
+
+    def test_apply_with_customer_ids_does_not_overwrite_existing_customer_id(self):
+        """Stomping a non-empty ``stripe_customer_id`` is destructive.
+
+        When the user already has ``cus_old`` and the operator supplies
+        a different ``cus_new``, the endpoint must return a warning row
+        with ``customer_id_mismatch``, preserve the existing id, and
+        skip the Stripe call entirely.
+        """
+        user = self._user("existing-id@test.com")  # cus_existing-id
+        original_customer_id = user.stripe_customer_id
+
+        with patch_subscriptions({}) as stripe_list:
+            response = self._post_apply({
+                "emails": [user.email],
+                "customer_ids": {user.email: "cus_attempted_overwrite"},
+            })
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["processed"], 1)
+        self.assertEqual(body["warnings"], 1)
+        row = body["results"][0]
+        self.assertEqual(row["status"], "warning")
+        self.assertIn("customer_id_mismatch", row["message"])
+        self.assertEqual(row["stripe_customer_id"], original_customer_id)
+
+        # No Stripe call should have happened — the mismatch short-circuits.
+        self.assertEqual(stripe_list.call_count, 0)
+        user.refresh_from_db()
+        self.assertEqual(user.stripe_customer_id, original_customer_id)
+
+    def test_apply_without_customer_ids_is_unchanged_behaviour(self):
+        """When ``customer_ids`` is omitted entirely, the response shape
+        and writes must be identical to today's behaviour.
+        """
+        user = self._user("nochange@test.com")
+
+        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+            response = self._post_apply({"emails": [user.email]})
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["processed"], 1)
+        self.assertEqual(body["changed"], 1)
+        row = body["results"][0]
+        self.assertEqual(row["status"], "changed")
+        self.assertEqual(row["from"], "free")
+        self.assertEqual(row["to"], "main")
+        # The new ``stripe_customer_id`` field reflects today's existing
+        # value, not an injected one.
+        self.assertEqual(row["stripe_customer_id"], user.stripe_customer_id)
+
+    def test_apply_with_customer_ids_not_an_object_returns_400_invalid_type(self):
+        self._user("paid@test.com")
+
+        with patch_subscriptions({}) as stripe_list:
+            response = self._post_apply({
+                "emails": ["paid@test.com"],
+                "customer_ids": ["paid@test.com", "cus_x"],
+            })
+
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+        self.assertEqual(body["code"], "invalid_type")
+        self.assertEqual(body["details"]["field"], "customer_ids")
+        self.assertEqual(stripe_list.call_count, 0)
+
+    def test_apply_with_customer_ids_non_string_value_returns_422(self):
+        self._user("paid@test.com")
+
+        with patch_subscriptions({}) as stripe_list:
+            response = self._post_apply({
+                "emails": ["paid@test.com"],
+                "customer_ids": {"paid@test.com": 123},
+            })
+
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertEqual(stripe_list.call_count, 0)
+
+    def test_apply_with_customer_ids_empty_string_value_returns_422(self):
+        self._user("paid@test.com")
+
+        with patch_subscriptions({}) as stripe_list:
+            response = self._post_apply({
+                "emails": ["paid@test.com"],
+                "customer_ids": {"paid@test.com": ""},
+            })
+
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertEqual(stripe_list.call_count, 0)
+
+    def test_apply_with_customer_ids_for_unknown_email_returns_not_found(self):
+        """Operator supplies a customer id for an email with no local
+        user. The endpoint must NOT create a user — it returns
+        ``not_found`` and makes no Stripe call.
+        """
+        with patch_subscriptions({}) as stripe_list:
+            response = self._post_apply({
+                "emails": ["ghost@test.com"],
+                "customer_ids": {"ghost@test.com": "cus_ghost"},
+            })
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["processed"], 0)
+        self.assertEqual(len(body["results"]), 1)
+        row = body["results"][0]
+        self.assertEqual(row["status"], "not_found")
+        self.assertEqual(row["email"], "ghost@test.com")
+        # No Stripe call because no user was iterated.
+        self.assertEqual(stripe_list.call_count, 0)
+        # No user was created.
+        self.assertFalse(
+            User.objects.filter(email__iexact="ghost@test.com").exists(),
+        )
+
+    def test_apply_with_customer_ids_dry_run_does_not_write_stripe_customer_id(self):
+        """In dry-run mode, the pre-write must be a no-op. Otherwise
+        dry-run leaks a destructive side effect on the user row.
+
+        The response still previews the would-change row so operators
+        can confirm the recovery before re-running with ``dry_run=False``.
+        """
+        user = User.objects.create_user(
+            email="dryrun-recover@test.com",
+            password="x",
+            stripe_customer_id="",
+        )
+
+        with patch_subscriptions({
+            "cus_dryrun": [subscription("sub_dryrun")],
+        }):
+            response = self._post_apply({
+                "emails": [user.email],
+                "customer_ids": {user.email: "cus_dryrun"},
+                "dry_run": True,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        # Response previews the recovery (would_change), no DB write.
+        self.assertEqual(body["dry_run"], True)
+        self.assertEqual(body["results"][0]["status"], "would_change")
+        self.assertEqual(body["results"][0]["to"], "main")
+
+        user.refresh_from_db()
+        # The user's stripe_customer_id is unchanged in dry-run.
+        self.assertEqual(user.stripe_customer_id, "")

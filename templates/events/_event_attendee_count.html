@@ -1,0 +1,41 @@
+{% comment %}
+Issue #668: social-proof chip showing how many people are going
+(or attended, for past events).
+
+Required context:
+  event - Event instance. Uses ``event.attendee_count`` (prefers the
+          ``_attendee_count`` annotation when present, otherwise the
+          ``registration_count`` property).
+
+Copy rules:
+  Upcoming (status == 'upcoming'):
+    0           -> "Be the first to sign up"
+    1           -> "1 person is going"
+    n (n >= 2)  -> "{n} people are going"
+  Past (status in {'completed', 'cancelled'}):
+    0           -> chip hidden (no social proof to show)
+    1           -> "1 person attended"
+    n (n >= 2)  -> "{n} people attended"
+  Draft         -> chip hidden (draft events 404 for non-staff)
+
+The wrapping {% if %} keeps the surrounding flex/gap container clean
+when no chip is rendered (past+0, draft).
+{% endcomment %}
+{% if event.status == 'upcoming' or event.status == 'completed' or event.status == 'cancelled' %}
+{% with count=event.attendee_count %}
+{% if event.status == 'upcoming' or count > 0 %}
+<span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground"
+      data-testid="event-attendee-count">
+  <i data-lucide="users" class="h-3 w-3"></i>
+  {% if event.is_upcoming %}
+    {% if count == 0 %}Be the first to sign up
+    {% elif count == 1 %}1 person is going
+    {% else %}{{ count }} people are going{% endif %}
+  {% else %}
+    {% if count == 1 %}1 person attended
+    {% else %}{{ count }} people attended{% endif %}
+  {% endif %}
+</span>
+{% endif %}
+{% endwith %}
+{% endif %}

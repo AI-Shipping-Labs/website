@@ -3,6 +3,7 @@ from datetime import date
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db.models import Count
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -388,7 +389,13 @@ def event_series_public(request, slug):
     series before publishing.
     """
     series = get_object_or_404(EventSeries, slug=slug)
-    events = series.events.all().order_by('series_position', 'start_datetime')
+    # Issue #668: annotate Count('registrations') so the attendee-count
+    # chip on every card resolves from the SELECT, not from N follow-up
+    # `COUNT(*)` queries. The template reads `event.attendee_count`,
+    # which prefers the annotation when set.
+    events = series.events.annotate(
+        _attendee_count=Count('registrations'),
+    ).order_by('series_position', 'start_datetime')
     if not request.user.is_staff:
         events = events.exclude(status='draft')
 

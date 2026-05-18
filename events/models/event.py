@@ -362,6 +362,20 @@ class Event(
         return self.registrations.count()
 
     @property
+    def attendee_count(self):
+        """Return attendee count, preferring an annotated value when present.
+
+        Issue #668: callers may annotate ``Count('registrations')`` onto
+        the queryset as ``_attendee_count`` to render the social-proof
+        chip on list-style pages (e.g. the event series view) without an
+        N+1. The detail view does not annotate; it falls back to the
+        single-row ``registration_count`` property.
+        """
+        if hasattr(self, '_attendee_count'):
+            return self._attendee_count
+        return self.registration_count
+
+    @property
     def spots_remaining(self):
         """Return spots remaining if max_participants is set, else None."""
         if self.max_participants is None:

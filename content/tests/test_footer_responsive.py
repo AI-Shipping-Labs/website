@@ -162,12 +162,36 @@ class FooterThemeCompatibilityTest(TestCase):
     """Footer works in both light and dark themes."""
 
     def test_footer_uses_theme_aware_background(self):
-        """Footer should use theme-aware bg-card class."""
+        """Footer's newsletter CTA uses ``bg-card`` and link grid uses ``bg-muted``.
+
+        The footer is split into two sibling ``<section>`` elements: the
+        anonymous newsletter CTA (``bg-card``) and the always-rendered
+        link grid (``bg-muted``). Both must use theme-aware background
+        tokens so light and dark themes render correctly.
+        """
         response = self.client.get("/")
         footer = _extract_footer(response.content.decode())
-        footer_tag = re.search(r'<footer[^>]*class="([^"]*)"', footer)
-        self.assertIsNotNone(footer_tag, "Footer tag not found")
-        self.assertIn("bg-card", footer_tag.group(1))
+        sections = re.findall(
+            r'<section[^>]*class="([^"]*)"', footer
+        )
+        self.assertGreaterEqual(
+            len(sections),
+            2,
+            "Expected at least two <section> elements in the footer "
+            "(newsletter CTA + link grid)",
+        )
+        newsletter_section_classes = sections[0]
+        link_grid_section_classes = sections[1]
+        self.assertIn(
+            "bg-card",
+            newsletter_section_classes,
+            "Newsletter CTA section must use bg-card for theme-aware background",
+        )
+        self.assertIn(
+            "bg-muted",
+            link_grid_section_classes,
+            "Link grid section must use bg-muted for theme-aware background",
+        )
 
     def test_footer_links_use_theme_foreground_colors(self):
         """Footer links should use muted-foreground for theme compatibility."""

@@ -4,6 +4,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+from community.services.slack_links import build_slack_profile_url
 from content.access import get_active_override, get_user_level
 from content.models import (
     Article,
@@ -21,6 +22,7 @@ from content.models import (
 from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from content.tier_config import get_tiers_with_features
 from events.models import Event
+from integrations.config import get_config
 from plans.dashboard import (
     build_active_sprint_opportunities_context,
     build_sprint_plan_card_context,
@@ -263,6 +265,12 @@ def _dashboard(request):
         slack_invite_url and has_qualifying_tier and not user.slack_member
     )
     slack_connected = bool(has_qualifying_tier and user.slack_member)
+    # Issue #700: surface the user's Slack ID + deep-link to their Slack
+    # profile from the shared partial used by both /dashboard and /account.
+    slack_user_id = user.slack_user_id or ''
+    slack_profile_url = build_slack_profile_url(
+        slack_user_id, get_config('SLACK_TEAM_ID', ''),
+    )
 
     context = {
         'tier_name': tier_name,
@@ -278,6 +286,8 @@ def _dashboard(request):
         'show_slack_join': show_slack_join,
         'slack_connected': slack_connected,
         'slack_invite_url': slack_invite_url,
+        'slack_user_id': slack_user_id,
+        'slack_profile_url': slack_profile_url,
     }
     # Sprint plan card (issue #442). Same context keys as the Account
     # page so the duplicated card markup reads identically.

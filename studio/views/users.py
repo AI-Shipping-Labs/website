@@ -51,6 +51,7 @@ from accounts.utils.tags import (
 from accounts.utils.tags import (
     remove_tag as _remove_tag_from_user,
 )
+from community.services.slack_links import build_slack_profile_url
 from content.models import Enrollment, UserCourseProgress
 from crm.models import CRMRecord
 from integrations.config import get_config
@@ -96,18 +97,6 @@ USER_LIST_PAGE_SIZE = 50
 # Used to validate the manual edit form (issue #561) so operators cannot save
 # a typo like "u-foo" or "cus_*" that would break the deep-link silently.
 SLACK_USER_ID_PATTERN = re.compile(r'^[UW][A-Z0-9]{2,}$')
-
-
-def _build_slack_profile_url(slack_user_id, slack_team_id):
-    """Return the canonical web URL for a member's Slack profile, or ''.
-
-    Mirrors the Stripe pattern: requires BOTH the per-user ID and the
-    workspace team ID. When either is empty we return the empty string so
-    template callers can branch on truthiness alone.
-    """
-    if not slack_user_id or not slack_team_id:
-        return ''
-    return f'https://app.slack.com/client/{slack_team_id}/{slack_user_id}'
 
 
 def _normalize_filter(value):
@@ -861,7 +850,7 @@ def user_detail(request, user_id):
     # Studio, ``slack_profile_url`` is the empty string and the template
     # renders a non-clickable label instead of an "Open in Slack" anchor.
     slack_team_id = get_config('SLACK_TEAM_ID', '')
-    slack_profile_url = _build_slack_profile_url(
+    slack_profile_url = build_slack_profile_url(
         user.slack_user_id, slack_team_id,
     )
 

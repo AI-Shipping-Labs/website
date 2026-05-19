@@ -30,7 +30,8 @@ from accounts.services.timezones import (
     get_timezone_label,
     is_valid_timezone,
 )
-from content.access import get_active_override
+from community.services.slack_links import build_slack_profile_url
+from content.access import LEVEL_MAIN, get_active_override
 from integrations.config import get_config
 from payments.models import Tier
 from payments.tier_state import build_tier_state
@@ -152,6 +153,24 @@ def _render_account_page(
         and active_override is None
     )
 
+    # Slack community card (issue #700). Same gating rule as the
+    # dashboard: raw ``user.tier.level >= LEVEL_MAIN`` — admin tier
+    # overrides do NOT grant Slack workspace access.
+    slack_invite_url = getattr(settings, "SLACK_INVITE_URL", "")
+    has_qualifying_slack_tier = bool(
+        user.tier_id and user.tier.level >= LEVEL_MAIN
+    )
+    show_slack_join = bool(
+        slack_invite_url
+        and has_qualifying_slack_tier
+        and not user.slack_member
+    )
+    slack_connected = bool(has_qualifying_slack_tier and user.slack_member)
+    slack_user_id = user.slack_user_id or ""
+    slack_profile_url = build_slack_profile_url(
+        slack_user_id, get_config("SLACK_TEAM_ID", ""),
+    )
+
     context = {
         "tier": tier,
         "pending_tier": pending_tier,
@@ -190,6 +209,13 @@ def _render_account_page(
             if profile_form_last_name is None
             else profile_form_last_name
         ),
+        # Slack community card (issue #700). Consumed by the shared
+        # ``includes/_slack_account_card.html`` partial.
+        "show_slack_join": show_slack_join,
+        "slack_connected": slack_connected,
+        "slack_invite_url": slack_invite_url,
+        "slack_user_id": slack_user_id,
+        "slack_profile_url": slack_profile_url,
     }
 
     # Issue #581: the Sprint plan card was removed from /account/. The

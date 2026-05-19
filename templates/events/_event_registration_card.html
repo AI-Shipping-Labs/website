@@ -95,20 +95,28 @@
       </div>
     {% else %}
       <div class="text-center" data-testid="event-anonymous-cta">
-        <p class="text-lg font-semibold text-foreground">A free account is required to register</p>
-        <p class="mt-2 text-sm text-muted-foreground">
-          Sign in or create a free account to save your spot. We'll send your
-          calendar invite and confirmation by email, and add you to occasional
-          newsletter updates about new events. You can unsubscribe at any time.
+        <p class="text-lg font-semibold text-foreground">This event is for {{ required_tier_name }} members</p>
+        <p class="mt-2 text-sm text-muted-foreground" data-testid="event-anonymous-cta-body">
+          {% if required_tier_name == "Premium" %}
+          Registering for this event requires a Premium membership.
+          {% else %}
+          Registering for this event requires a {{ required_tier_name }} membership or above.
+          {% endif %}
+          Already a member?
+          <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}" class="text-accent hover:underline">Sign in</a>
+          to register. New here?
+          <a href="/pricing" class="text-accent hover:underline">View membership options</a>.
         </p>
         <div class="mt-4 flex flex-wrap items-center justify-center gap-3">
-          <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}"
-             class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-            Sign in to register
+          <a href="/pricing"
+             class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+             data-testid="event-anonymous-pricing-cta">
+            View membership options
           </a>
-          <a href="/accounts/signup/?next={{ event.get_absolute_url|urlencode }}"
-             class="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
-            Create free account
+          <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}"
+             class="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+             data-testid="event-anonymous-signin-cta">
+            Sign in
           </a>
         </div>
       </div>
@@ -123,9 +131,9 @@
       <p class="text-lg font-semibold text-foreground">Upgrade to {{ required_tier_name }} to attend</p>
       <p class="mt-2 text-sm text-muted-foreground" data-testid="event-required-tier-label">
         {% if required_tier_name == "Premium" %}
-        This event requires a Premium membership.
+        Registering for this event requires a Premium membership.
         {% else %}
-        This event requires a {{ required_tier_name }} membership or above.
+        Registering for this event requires a {{ required_tier_name }} membership or above.
         {% endif %}
       </p>
       <a href="/pricing"

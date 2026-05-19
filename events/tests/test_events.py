@@ -23,7 +23,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
+from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import Instructor
 from events.models import Event, EventInstructor, EventRegistration
 from tests.fixtures import TierSetupMixin
@@ -627,9 +627,12 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/events/gated-event')
         self.assertContains(response, 'Upgrade to Main to attend')
         # Issue #481: Main event copy still uses "or above" because Main
-        # is not the highest tier.
+        # is not the highest tier. Issue #671: copy starts with
+        # "Registering for this event" to stay consistent with the
+        # anonymous-on-paid CTA.
         self.assertContains(
-            response, 'This event requires a Main membership or above.',
+            response,
+            'Registering for this event requires a Main membership or above.',
         )
 
     def test_premium_event_drops_or_above_suffix(self):
@@ -657,7 +660,8 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/events/premium-event')
         self.assertContains(response, 'Upgrade to Premium to attend')
         self.assertContains(
-            response, 'This event requires a Premium membership.',
+            response,
+            'Registering for this event requires a Premium membership.',
         )
         self.assertNotContains(response, 'Premium membership or above')
         # And the lock badge in the header is "Premium" (no "+").
@@ -1530,9 +1534,16 @@ class EventDetailAnonymousFlowTest(TestCase):
         )
         resp = self.client.get('/events/gated-detail')
         self.assertNotContains(resp, 'event-anonymous-email-form')
-        # Falls back to the existing tier-upgrade CTA.
+        # Falls back to the tier-aware anonymous CTA (issue #671).
         self.assertContains(resp, 'event-anonymous-cta')
-        self.assertContains(resp, 'Sign in to register')
+        # The misleading "free account is required" copy is gone.
+        self.assertNotContains(resp, 'free account is required')
+        # New tier-aware copy names the required tier and links to /pricing.
+        self.assertContains(resp, 'This event is for Main members')
+        self.assertContains(
+            resp, 'Registering for this event requires a Main membership or above',
+        )
+        self.assertContains(resp, 'View membership options')
 
     def test_confirmation_block_renders_for_registered_query_param(self):
         resp = self.client.get(
@@ -1558,3 +1569,183 @@ class EventDetailAnonymousFlowTest(TestCase):
             resp, 'event-anonymous-registered-confirmation',
         )
         self.assertContains(resp, 'event-anonymous-email-form')
+
+
+class EventAnonymousPaidCopyTest(TestCase):
+    """Issue #671: the anonymous CTA on a tier-gated upcoming event must
+    name the required tier and point at /pricing. The misleading "free
+    account is required" copy must be gone.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.basic_event = Event.objects.create(
+            title='Basic-tier event',
+            slug='basic-paid-event',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            required_level=LEVEL_BASIC,
+        )
+        cls.main_event = Event.objects.create(
+            title='Main-tier event',
+            slug='main-paid-event',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            required_level=LEVEL_MAIN,
+        )
+        cls.premium_event = Event.objects.create(
+            title='Premium-tier event',
+            slug='premium-paid-event',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            required_level=LEVEL_PREMIUM,
+        )
+
+    def test_basic_event_anonymous_cta_names_tier(self):
+        resp = self.client.get('/events/basic-paid-event')
+        self.assertContains(resp, 'data-testid="event-anonymous-cta"')
+        self.assertContains(resp, 'This event is for Basic members')
+        self.assertContains(
+            resp,
+            'Registering for this event requires a Basic membership or above',
+        )
+        # The misleading copy is gone.
+        self.assertNotContains(resp, 'free account is required')
+        self.assertNotContains(resp, 'A free account is required to register')
+
+    def test_main_event_anonymous_cta_names_tier(self):
+        resp = self.client.get('/events/main-paid-event')
+        self.assertContains(resp, 'This event is for Main members')
+        self.assertContains(
+            resp,
+            'Registering for this event requires a Main membership or above',
+        )
+        self.assertNotContains(resp, 'free account is required')
+
+    def test_premium_event_anonymous_cta_drops_or_above(self):
+        resp = self.client.get('/events/premium-paid-event')
+        self.assertContains(resp, 'This event is for Premium members')
+        self.assertContains(
+            resp,
+            'Registering for this event requires a Premium membership.',
+        )
+        # Premium is the highest tier — "or above" must NOT appear.
+        self.assertNotContains(resp, 'Premium membership or above')
+
+    def test_anonymous_paid_cta_has_pricing_link(self):
+        resp = self.client.get('/events/main-paid-event')
+        html = resp.content.decode()
+        # The primary CTA is "View membership options" linking to /pricing.
+        self.assertIn(
+            'data-testid="event-anonymous-pricing-cta"', html,
+        )
+        self.assertIn('href="/pricing"', html)
+        self.assertIn('View membership options', html)
+
+    def test_anonymous_paid_cta_has_signin_link_preserving_next(self):
+        resp = self.client.get('/events/main-paid-event')
+        html = resp.content.decode()
+        # Secondary CTA: "Sign in" preserving ?next= to the event URL.
+        self.assertIn(
+            'data-testid="event-anonymous-signin-cta"', html,
+        )
+        self.assertIn(
+            '/accounts/login/?next=/events/main-paid-event', html,
+        )
+
+    def test_anonymous_paid_cta_does_not_offer_signup(self):
+        """Issue #671: the new copy does not push anonymous visitors to
+        create a free account on a paid event — that was the bug."""
+        resp = self.client.get('/events/main-paid-event')
+        html = resp.content.decode()
+        # The legacy "Create free account" CTA pointing at /accounts/signup
+        # must be gone for tier-gated events. (The /accounts/login link
+        # for the "Sign in" CTA is allowed.)
+        self.assertNotIn('/accounts/signup/', html)
+        self.assertNotIn('Create free account', html)
+
+    def test_template_source_has_no_free_account_string(self):
+        """Acceptance criterion: the literal "free account is required"
+        substring must not appear anywhere in the registration card."""
+        from pathlib import Path
+
+        template_path = (
+            Path(__file__).resolve().parent.parent.parent
+            / 'templates' / 'events' / '_event_registration_card.html'
+        )
+        body = template_path.read_text()
+        self.assertNotIn('free account is required', body)
+
+    def test_free_event_anonymous_keeps_email_form(self):
+        """Regression check: anonymous visitor on a free event must still
+        see the inline email-only signup form (unchanged from issue #513).
+        """
+        Event.objects.create(
+            title='Free event',
+            slug='free-event-regression',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            required_level=LEVEL_OPEN,
+        )
+        resp = self.client.get('/events/free-event-regression')
+        self.assertContains(resp, 'event-anonymous-email-form')
+        # The new paid-event CTA must not leak into free events.
+        self.assertNotContains(resp, 'event-anonymous-cta')
+        self.assertNotContains(resp, 'This event is for')
+
+
+class EventUnderTierCopyConsistencyTest(TierSetupMixin, TestCase):
+    """Issue #671: the authenticated-under-tier copy must phrase the
+    requirement identically to the anonymous-on-paid copy so users see
+    one consistent message regardless of auth state.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.main_event = Event.objects.create(
+            title='Main event',
+            slug='under-tier-main',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            required_level=LEVEL_MAIN,
+        )
+        cls.premium_event = Event.objects.create(
+            title='Premium event',
+            slug='under-tier-premium',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            required_level=LEVEL_PREMIUM,
+        )
+
+    def _login_at(self, tier):
+        user = User.objects.create_user(
+            email=f'u-{tier.slug}@test.com',
+            password='pass',
+            email_verified=True,
+        )
+        user.tier = tier
+        user.save()
+        self.client.login(email=user.email, password='pass')
+        return user
+
+    def test_free_user_on_main_event_sees_registering_copy(self):
+        self._login_at(self.free_tier)
+        response = self.client.get('/events/under-tier-main')
+        self.assertContains(response, 'Upgrade to Main to attend')
+        self.assertContains(
+            response,
+            'Registering for this event requires a Main membership or above.',
+        )
+        self.assertNotContains(response, 'free account')
+        self.assertContains(response, 'href="/pricing"')
+
+    def test_basic_user_on_premium_event_drops_or_above(self):
+        self._login_at(self.basic_tier)
+        response = self.client.get('/events/under-tier-premium')
+        self.assertContains(response, 'Upgrade to Premium to attend')
+        self.assertContains(
+            response,
+            'Registering for this event requires a Premium membership.',
+        )
+        self.assertNotContains(response, 'Premium membership or above')

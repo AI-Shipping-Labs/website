@@ -779,13 +779,14 @@ class EventReminderServiceTest(TestCase):
         self.assertEqual(Notification.objects.count(), 1)
 
     def test_different_interval_creates_new_reminder(self):
+        # Issue #706: the second window switched from '1h' to '20m'.
         NotificationService.create_event_reminder(
             event=self.event, user=self.user, interval='24h',
             title='24h', body='24h',
         )
         result = NotificationService.create_event_reminder(
-            event=self.event, user=self.user, interval='1h',
-            title='1h', body='1h',
+            event=self.event, user=self.user, interval='20m',
+            title='20m', body='20m',
         )
         self.assertIsNotNone(result)
         self.assertEqual(Notification.objects.count(), 2)

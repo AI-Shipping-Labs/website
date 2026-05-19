@@ -293,7 +293,7 @@
         </div>
         <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
         <p class="mt-2 mb-6 text-sm text-muted-foreground">Create a free account to access all lessons in this course.</p>
-        {% include "accounts/includes/_inline_register_card.html" %}
+        {% include "accounts/includes/_inline_register_card.html" with collapse_email=True %}
       </div>
       {% elif cta_message %}
       <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">

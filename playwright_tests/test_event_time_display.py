@@ -198,14 +198,15 @@ def test_logged_in_preference_wins_over_browser_timezone(
 ):
     with django_db_blocker.unblock():
         _clear_events_settings_and_users()
-        _create_fixed_event()
+        event = _create_fixed_event()
         _create_user('ny@timezone.test', preferred_timezone='America/New_York')
 
     context = _auth_context(browser, 'ny@timezone.test', django_db_blocker)
     page = context.new_page()
     _stub_browser_timezone(page, 'Europe/Berlin')
 
-    page.goto(f'{django_server}/events/local-time-event', wait_until='domcontentloaded')
+    # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+    page.goto(f'{django_server}{event.get_absolute_url()}', wait_until='domcontentloaded')
 
     assert (
         'April 13, 2026, 12:30-14:00 America/New_York'
@@ -222,7 +223,7 @@ def test_member_clears_timezone_and_uses_browser_timezone(
 ):
     with django_db_blocker.unblock():
         _clear_events_settings_and_users()
-        _create_fixed_event()
+        event = _create_fixed_event()
         _create_user('clear@timezone.test', preferred_timezone='America/New_York')
 
     context = _auth_context(browser, 'clear@timezone.test', django_db_blocker)
@@ -234,7 +235,8 @@ def test_member_clears_timezone_and_uses_browser_timezone(
         'Using browser timezone.'
     )
 
-    page.goto(f'{django_server}/events/local-time-event', wait_until='domcontentloaded')
+    # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+    page.goto(f'{django_server}{event.get_absolute_url()}', wait_until='domcontentloaded')
     assert (
         'April 13, 2026, 18:30-20:00 Europe/Berlin'
         in page.get_by_test_id('event-time-row').inner_text()
@@ -253,7 +255,7 @@ def test_invalid_account_timezone_does_not_change_preference(
 ):
     with django_db_blocker.unblock():
         _clear_events_settings_and_users()
-        _create_fixed_event()
+        event = _create_fixed_event()
         _create_user('invalid@timezone.test', preferred_timezone='Europe/Berlin')
 
     context = _auth_context(browser, 'invalid@timezone.test', django_db_blocker)
@@ -266,7 +268,8 @@ def test_invalid_account_timezone_does_not_change_preference(
     )
     assert response.status == 400
 
-    page.goto(f'{django_server}/events/local-time-event', wait_until='domcontentloaded')
+    # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+    page.goto(f'{django_server}{event.get_absolute_url()}', wait_until='domcontentloaded')
     assert (
         'April 13, 2026, 18:30-20:00 Europe/Berlin'
         in page.get_by_test_id('event-time-row').inner_text()
@@ -280,10 +283,11 @@ def test_anonymous_berlin_visitor_sees_browser_local_time_without_controls(
 ):
     with django_db_blocker.unblock():
         _clear_events_settings_and_users()
-        _create_fixed_event()
+        event = _create_fixed_event()
     _stub_browser_timezone(page, 'Europe/Berlin')
 
-    page.goto(f'{django_server}/events/local-time-event', wait_until='domcontentloaded')
+    # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+    page.goto(f'{django_server}{event.get_absolute_url()}', wait_until='domcontentloaded')
 
     assert (
         'April 13, 2026, 18:30-20:00 Europe/Berlin'
@@ -299,10 +303,11 @@ def test_anonymous_new_york_visitor_sees_browser_local_time(
 ):
     with django_db_blocker.unblock():
         _clear_events_settings_and_users()
-        _create_fixed_event()
+        event = _create_fixed_event()
     _stub_browser_timezone(page, 'America/New_York')
 
-    page.goto(f'{django_server}/events/local-time-event', wait_until='domcontentloaded')
+    # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+    page.goto(f'{django_server}{event.get_absolute_url()}', wait_until='domcontentloaded')
 
     time_text = page.get_by_test_id('event-time-row').inner_text()
     assert 'April 13, 2026, 12:30-14:00 America/New_York' in time_text
@@ -315,12 +320,13 @@ def test_unavailable_browser_timezone_uses_studio_default(
 ):
     with django_db_blocker.unblock():
         _clear_events_settings_and_users()
-        _create_fixed_event(slug='default-timezone-event')
+        event = _create_fixed_event(slug='default-timezone-event')
         _set_default_timezone('Europe/Berlin')
     _stub_browser_timezone(page, None)
 
+    # Issue #673: canonical URL is ``/events/<id>/<slug>``.
     page.goto(
-        f'{django_server}/events/default-timezone-event',
+        f'{django_server}{event.get_absolute_url()}',
         wait_until='domcontentloaded',
     )
 
@@ -337,21 +343,22 @@ def test_completed_zoom_location_hidden_but_upcoming_zoom_kept(
 ):
     with django_db_blocker.unblock():
         _clear_events_settings_and_users()
-        _create_fixed_event(
+        completed_event = _create_fixed_event(
             slug='completed-zoom-event',
             status='completed',
             location='Zoom',
         )
-        _create_fixed_event(
+        upcoming_event = _create_fixed_event(
             slug='upcoming-zoom-event',
             status='upcoming',
             location='Zoom',
         )
 
-    page.goto(f'{django_server}/events/completed-zoom-event', wait_until='domcontentloaded')
+    # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+    page.goto(f'{django_server}{completed_event.get_absolute_url()}', wait_until='domcontentloaded')
     assert 'Zoom' not in page.locator('article header').inner_text()
 
-    page.goto(f'{django_server}/events/upcoming-zoom-event', wait_until='domcontentloaded')
+    page.goto(f'{django_server}{upcoming_event.get_absolute_url()}', wait_until='domcontentloaded')
     assert 'Zoom' in page.locator('article header').inner_text()
 
 
@@ -377,8 +384,9 @@ def test_registered_member_keeps_upcoming_zoom_attendance_flow(
 
     context = _auth_context(browser, 'registered@timezone.test', django_db_blocker)
     page = context.new_page()
+    # Issue #673: canonical URL is ``/events/<id>/<slug>``.
     page.goto(
-        f'{django_server}/events/registered-upcoming-zoom-event',
+        f'{django_server}{event.get_absolute_url()}',
         wait_until='domcontentloaded',
     )
 

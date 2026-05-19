@@ -107,7 +107,7 @@ class TestJustEndedEventMovesToPast:
     ):
         _clear_events()
         _ensure_tiers()
-        _create_event(
+        event = _create_event(
             slug="today-just-ended",
             title="Today Just Ended",
             start_offset=timedelta(minutes=-90),
@@ -135,8 +135,9 @@ class TestJustEndedEventMovesToPast:
         assert "Today Just Ended" not in upcoming_section.inner_text()
 
         # Detail page shows the Completed badge.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/today-just-ended",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         badges_row = page.locator("h1").first.locator(
@@ -359,7 +360,7 @@ class TestCancelledEventNotFlipped:
     ):
         _clear_events()
         _ensure_tiers()
-        _create_event(
+        event = _create_event(
             slug="was-cancelled",
             title="Was Cancelled",
             status="cancelled",
@@ -369,8 +370,9 @@ class TestCancelledEventNotFlipped:
 
         _run_cron()
 
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/was-cancelled",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 

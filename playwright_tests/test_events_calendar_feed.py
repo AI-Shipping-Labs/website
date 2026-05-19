@@ -410,7 +410,7 @@ class TestExternalEventsAreMarkedInFeed:
         _clear_events()
         _ensure_tiers()
         future = timezone.now() + timedelta(days=2)
-        _create_event(
+        event = _create_event(
             slug="maven-llm",
             title="LLM Engineering Cohort",
             external_host="Maven",
@@ -428,7 +428,8 @@ class TestExternalEventsAreMarkedInFeed:
         # LOCATION is the partner name.
         assert "LOCATION:Maven" in text
         # URL still points at the platform detail page.
-        assert "/events/maven-llm" in text
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        assert event.get_absolute_url() in text
 
 
 # --- Scenario 7: gating exclusion (extra, mirrors spec acceptance) -------

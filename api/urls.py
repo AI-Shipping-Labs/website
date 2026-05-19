@@ -58,6 +58,11 @@ from api.views.plans import (
     sprint_plans_bulk_import,
     sprint_plans_collection,
 )
+from api.views.redirects import (
+    redirect_detail,
+    redirects_bulk_upsert,
+    redirects_collection,
+)
 from api.views.ses_events import ses_events
 from api.views.sprints import sprint_detail, sprints_collection
 from api.views.sync_sources import sync_source_trigger, sync_sources_collection
@@ -97,6 +102,24 @@ urlpatterns = [
         "sync/sources/<uuid:source_id>/trigger",
         sync_source_trigger,
         name="api_sync_source_trigger",
+    ),
+    # ---- URL redirects (issue #674) -----------------------------------
+    # Register the ``bulk`` literal BEFORE the ``<int:id>`` capture so the
+    # literal does not collide with the integer converter.
+    path(
+        "redirects/bulk",
+        redirects_bulk_upsert,
+        name="api_redirects_bulk_upsert",
+    ),
+    path(
+        "redirects",
+        redirects_collection,
+        name="api_redirects_collection",
+    ),
+    path(
+        "redirects/<int:redirect_id>",
+        redirect_detail,
+        name="api_redirect_detail",
     ),
     # ---- Contacts (issue #431) ----------------------------------------
     path(

@@ -105,12 +105,29 @@ def _build_attribution(user, **overrides):
 
 
 def _configure_tier_prices(slug, monthly_price_id, yearly_price_id):
-    """Set Stripe price IDs on a seeded Tier so price_id lookup works."""
+    """Set Stripe price IDs and EUR prices on a seeded Tier.
+
+    Since #684, the bootstrap migration only seeds slug/level/name; the
+    yaml content sync writes prices and Stripe IDs. Conversion-attribution
+    tests need both numeric prices (for ``amount_eur`` / ``mrr_eur``
+    assertions) and Stripe price IDs (for price-ID lookup), so this helper
+    seeds the post-sync state directly.
+    """
+    _SEED_PRICES = {
+        "basic": (20, 200),
+        "main": (50, 500),
+        "premium": (100, 1000),
+    }
     tier = Tier.objects.get(slug=slug)
     tier.stripe_price_id_monthly = monthly_price_id
     tier.stripe_price_id_yearly = yearly_price_id
+    if slug in _SEED_PRICES:
+        tier.price_eur_month, tier.price_eur_year = _SEED_PRICES[slug]
     tier.save(update_fields=[
-        "stripe_price_id_monthly", "stripe_price_id_yearly",
+        "stripe_price_id_monthly",
+        "stripe_price_id_yearly",
+        "price_eur_month",
+        "price_eur_year",
     ])
     return tier
 

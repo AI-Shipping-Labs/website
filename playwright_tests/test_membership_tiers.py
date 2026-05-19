@@ -18,17 +18,133 @@ Usage:
 import pytest
 from django.conf import settings
 
+# Use transactional django_db so the autouse tier-seeding fixture writes
+# survive into the running Django server's connection. With the default
+# (non-transactional) mode, the fixture's INSERTs roll back before the
+# server thread queries the table.
+pytestmark = pytest.mark.django_db(transaction=True)
+
 VIEWPORT = {"width": 1280, "height": 720}
 
-# Expected tier order and data based on the seed migration (0003_seed_tiers.py)
+# Since #684, the bootstrap migration only seeds slug/level/name. Tests in
+# this module assert against prices, descriptions, and cumulative feature
+# lists, so they seed the post-yaml-sync state explicitly via the fixture
+# below. The values mirror the canonical tiers.yaml content.
 EXPECTED_TIERS = [
-    {"name": "Free", "slug": "free", "monthly": None, "annual": None},
-    {"name": "Basic", "slug": "basic", "monthly": 20, "annual": 200},
-    {"name": "Main", "slug": "main", "monthly": 50, "annual": 500},
-    {"name": "Premium", "slug": "premium", "monthly": 100, "annual": 1000},
+    {
+        "name": "Free",
+        "slug": "free",
+        "level": 0,
+        "price_eur_month": None,
+        "price_eur_year": None,
+        "monthly": None,
+        "annual": None,
+        "description": (
+            "Subscribe to the newsletter and access open content. "
+            "No payment required."
+        ),
+        "features": [
+            "Newsletter emails",
+            "Access to open content",
+        ],
+    },
+    {
+        "name": "Basic",
+        "slug": "basic",
+        "level": 10,
+        "price_eur_month": 20,
+        "price_eur_year": 200,
+        "monthly": 20,
+        "annual": 200,
+        "description": (
+            "Access curated educational content, tutorials, and research. "
+            "Perfect for self-directed builders who learn at their own pace."
+        ),
+        "features": [
+            "Exclusive articles",
+            "Tutorials with code examples",
+            "AI tool breakdowns",
+            "Research notes",
+            "Curated social posts",
+        ],
+    },
+    {
+        "name": "Main",
+        "slug": "main",
+        "level": 20,
+        "price_eur_month": 50,
+        "price_eur_year": 500,
+        "monthly": 50,
+        "annual": 500,
+        "description": (
+            "Everything in Basic, plus the structure, accountability, "
+            "and peer support to ship your AI projects consistently."
+        ),
+        "features": [
+            "Everything in Basic",
+            "Slack community access",
+            "Group coding sessions",
+            "Project-based learning",
+            "Community hackathons",
+            "Career discussions",
+            "Personal brand guidance",
+            "Topic voting",
+        ],
+    },
+    {
+        "name": "Premium",
+        "slug": "premium",
+        "level": 30,
+        "price_eur_month": 100,
+        "price_eur_year": 1000,
+        "monthly": 100,
+        "annual": 1000,
+        "description": (
+            "Everything in Main, plus structured learning paths through "
+            "mini-courses and personalized career guidance."
+        ),
+        "features": [
+            "Everything in Main",
+            "All mini-courses",
+            "Mini-course topic voting",
+            "Resume/LinkedIn/GitHub teardowns",
+        ],
+    },
 ]
 
 STRIPE_LINKS = settings.STRIPE_PAYMENT_LINKS
+
+
+def _seed_full_tier_state():
+    """Populate every editable Tier column with the canonical post-sync values.
+
+    Mirrors what running ``sync_content`` against a yaml file containing
+    all five tier-data fields produces. Tests in this module assert
+    against prices, descriptions, and feature bullets; #684's bootstrap
+    migration no longer seeds them.
+    """
+    from django.db import connection
+
+    from payments.models import Tier
+
+    for entry in EXPECTED_TIERS:
+        defaults = {
+            "name": entry["name"],
+            "level": entry["level"],
+            "price_eur_month": entry["price_eur_month"],
+            "price_eur_year": entry["price_eur_year"],
+            "description": entry["description"],
+            "features": entry["features"],
+        }
+        Tier.objects.update_or_create(slug=entry["slug"], defaults=defaults)
+    connection.close()
+
+
+@pytest.fixture(autouse=True)
+def _seed_tier_data(django_server, django_db_blocker):
+    """Auto-seed full tier state for every test in this module."""
+    with django_db_blocker.unblock():
+        _seed_full_tier_state()
 
 
 def _get_tier_cards(page):
@@ -52,7 +168,7 @@ def _get_tier_card_by_name(page, tier_name):
     raise ValueError(f"Tier card '{tier_name}' not found")
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenario1AnonymousBrowsesFreeSubscribe:
     """
     Scenario 1: Anonymous visitor browses pricing to understand what they get
@@ -134,7 +250,7 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
         # users who already have an account land back here after auth.
         login_link = inline_card.locator("#login-link")
         assert login_link.get_attribute("href") == "/accounts/login/?next=/pricing"
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenario2CompareAllFourTiers:
     """
     Scenario 2: Prospective member compares all four tiers to decide which
@@ -248,7 +364,7 @@ class TestScenario2CompareAllFourTiers:
             card = _get_tier_card_by_name(page, tier_name)
             cta = card.locator("a.tier-cta-link")
             assert cta.inner_text().strip() == "Join"
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenario3BillingToggle:
     """
     Scenario 3: Cost-conscious visitor compares annual and monthly billing.
@@ -386,7 +502,7 @@ class TestScenario3BillingToggle:
         assert "/year" in premium_card.locator(
             ".tier-period"
         ).inner_text()
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenario4MainMonthlyStripeLink:
     """
     Scenario 4: Visitor selects Main (monthly) and is sent to the correct
@@ -424,7 +540,7 @@ class TestScenario4MainMonthlyStripeLink:
         join_button = main_card.locator("a.tier-cta-link")
         assert join_button.get_attribute("data-tier") is None
         assert join_button.get_attribute("href").startswith("https://buy.stripe.com/")
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenario5AnnualStripeLinksSwap:
     """
     Scenario 5: Visitor switches between annual and monthly billing and verifies
@@ -494,7 +610,7 @@ class TestScenario5AnnualStripeLinksSwap:
                 f"{tier_name} href {href} does not match "
                 f"data-link-monthly {monthly_attr}"
             )
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenario6PremiumAnnualStripeLink:
     """
     Scenario 6: Visitor picks Premium (annual) and confirms it leads to
@@ -536,7 +652,7 @@ class TestScenario6PremiumAnnualStripeLink:
         monthly_link = cta.get_attribute("data-link-monthly")
         annual_link = cta.get_attribute("data-link-annual")
         assert monthly_link != annual_link
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenario7FreeSubscribeFlow:
     """
     Scenario 7: Free-tier subscriber clicks Create an account and starts
@@ -608,7 +724,7 @@ class TestScenario7FreeSubscribeFlow:
         submit_btn = inline_card.locator("#register-submit")
         assert submit_btn.is_visible()
         assert submit_btn.is_enabled()
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenario8MainTierVisualDistinction:
     """
     Scenario 8: Visitor confirms the Main tier is visually distinguished as
@@ -663,7 +779,7 @@ class TestScenario8MainTierVisualDistinction:
             cta = card.locator("a.tier-cta-link")
             cta_classes = cta.get_attribute("class")
             assert "bg-secondary" in cta_classes
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenario9CumulativeFeatureLists:
     """
     Scenario 9: All tier feature lists accurately reflect the cumulative
@@ -743,7 +859,7 @@ class TestScenario9CumulativeFeatureLists:
             assert expected in features_text, (
                 f"Premium tier missing feature: {expected}"
             )
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenario10RapidToggleStressTest:
     """
     Scenario 10: Visitor rapidly toggles billing multiple times and prices

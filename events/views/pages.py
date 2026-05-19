@@ -1,5 +1,5 @@
 import calendar as cal_module
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -272,7 +272,62 @@ def event_join_redirect(request, slug):
             'reason': 'no_url',
         })
 
-    # Record click and redirect
+    # Issue #704: time-gate the redirect to Zoom so a participant landing
+    # on the platform Join link well before ``start_datetime`` does not
+    # auto-start the Zoom cloud recording. Branches:
+    #   - delta > 10 min -> too-early page (HTTP 200)
+    #   - 5 min < delta <= 10 min -> live countdown page (HTTP 200)
+    #   - delta <= 5 min AND now is still inside the live window -> 302
+    #   - now is past the live-window cutoff -> 'past' unavailable page
+    # The live window is ``[start, end_datetime]`` when ``end_datetime``
+    # is set, otherwise ``[start, start + 3h]`` (grace covers extended
+    # Q&A on a 60-120 min workshop that hasn't been completed by cron
+    # yet).
+    now = timezone.now()
+    delta = event.start_datetime - now
+    end_or_grace_cutoff = (
+        event.end_datetime
+        if event.end_datetime
+        else event.start_datetime + timedelta(hours=3)
+    )
+
+    if now > end_or_grace_cutoff:
+        # Past the live window — treat as a past event even if the cron
+        # has not yet flipped ``status`` to ``completed``.
+        return render(request, 'events/join_unavailable.html', {
+            'event': event,
+            'reason': 'past',
+        })
+
+    if delta > timedelta(minutes=10):
+        return render(request, 'events/join_too_early.html', {
+            'event': event,
+            'event_start_local': format_user_datetime(
+                event.start_datetime, request.user,
+            ),
+        })
+
+    if delta > timedelta(minutes=5):
+        # Server-rendered initial seconds counts down to ``start - 5 min``.
+        # The inline JS ticks the visible timer every 1s; the meta refresh
+        # re-evaluates this branch every 30s so the next request 302s
+        # once the join window opens.
+        seconds_until_open = max(
+            int((delta - timedelta(minutes=5)).total_seconds()),
+            0,
+        )
+        return render(request, 'events/join_countdown.html', {
+            'event': event,
+            'event_start_local': format_user_datetime(
+                event.start_datetime, request.user,
+            ),
+            'seconds_until_open': seconds_until_open,
+            'minutes_until_open': seconds_until_open // 60,
+            'remaining_seconds': seconds_until_open % 60,
+        })
+
+    # delta <= 5 min AND now <= end_or_grace_cutoff: record click and
+    # redirect to Zoom.
     EventJoinClick.objects.create(event=event, user=request.user)
     return redirect(event.zoom_join_url)
 

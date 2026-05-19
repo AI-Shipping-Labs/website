@@ -6,12 +6,27 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
+from freezegun import freeze_time
 
 from content.models import Workshop
 from events.models import Event, EventJoinClick, EventRegistration
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
+
+
+def _move_event_to(event, *, start_offset, end_offset=None):
+    """Move an event so ``start_datetime = now + start_offset``.
+
+    Used by tests that need to land inside one of the join-redirect time
+    windows (issue #704). ``end_offset`` is optional; when omitted, the
+    event keeps its existing ``end_datetime``.
+    """
+    now = timezone.now()
+    event.start_datetime = now + start_offset
+    if end_offset is not None:
+        event.end_datetime = now + end_offset
+    event.save(update_fields=['start_datetime', 'end_datetime'])
 
 
 class EventJoinRedirectTest(TierSetupMixin, TestCase):
@@ -94,7 +109,13 @@ class EventJoinRedirectTest(TierSetupMixin, TestCase):
             EventRegistration.objects.create(event=event, user=cls.user)
 
     def test_join_redirect_records_click_and_redirects(self):
-        """Registered user for upcoming event with join URL gets 302 to Zoom."""
+        """Registered user for upcoming event with join URL gets 302 to Zoom.
+
+        Issue #704: the redirect only fires inside the join window, so
+        we move the event to ``now + 1 min`` (well inside the
+        ``delta <= 5 min`` branch).
+        """
+        _move_event_to(self.upcoming_event, start_offset=timedelta(minutes=1))
         self.client.login(email='member@example.com', password='testpass123')
         response = self.client.get('/events/upcoming-event/join')
         self.assertEqual(response.status_code, 302)
@@ -186,7 +207,12 @@ class EventJoinRedirectTest(TierSetupMixin, TestCase):
         )
 
     def test_multiple_clicks_tracked(self):
-        """Each visit creates a new click record."""
+        """Each visit creates a new click record.
+
+        Issue #704: the event must be inside the join window for any
+        click to be recorded.
+        """
+        _move_event_to(self.upcoming_event, start_offset=timedelta(minutes=1))
         self.client.login(email='member@example.com', password='testpass123')
         self.client.get('/events/upcoming-event/join')
         self.client.get('/events/upcoming-event/join')
@@ -197,6 +223,204 @@ class EventJoinRedirectTest(TierSetupMixin, TestCase):
             ).count(),
             3,
         )
+
+
+class EventJoinTimeWindowTest(TierSetupMixin, TestCase):
+    """Time-gate the /events/<slug>/join redirect (issue #704).
+
+    The view branches on ``timezone.now()`` vs ``event.start_datetime``
+    and ``event.end_datetime``:
+
+    - ``delta > 10 min``                       -> too-early page
+    - ``5 min < delta <= 10 min``              -> countdown page
+    - ``delta <= 5 min`` AND inside live window -> 302 + EventJoinClick
+    - ``now > end_or_grace_cutoff``            -> 'past' unavailable page
+    """
+
+    EVENT_START = '2026-03-01T15:00:00Z'
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.user = User.objects.create_user(
+            email='time@example.com',
+            password='testpass123',
+        )
+        cls.event = Event.objects.create(
+            title='Window Event',
+            slug='window-event',
+            start_datetime=datetime.datetime(
+                2026, 3, 1, 15, 0, 0, tzinfo=datetime.UTC,
+            ),
+            status='upcoming',
+            zoom_join_url='https://zoom.us/j/stub',
+        )
+        EventRegistration.objects.create(event=cls.event, user=cls.user)
+
+    def _login(self):
+        self.client.login(email='time@example.com', password='testpass123')
+
+    @freeze_time('2026-03-01T14:30:00Z')  # 30 min before start
+    def test_too_early_page_when_more_than_10_min_before(self):
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_too_early.html')
+        self.assertNotIn('Location', response)
+        self.assertEqual(EventJoinClick.objects.count(), 0)
+        self.assertContains(response, 'data-testid="event-join-too-early"')
+        self.assertContains(response, 'Window Event')
+        # The "Back to event details" link points at the canonical
+        # id+slug URL via Event.get_absolute_url().
+        self.assertContains(
+            response, f'href="{self.event.get_absolute_url()}"',
+        )
+
+    @freeze_time('2026-03-01T14:52:00Z')  # 8 min before start
+    def test_countdown_page_in_5_to_10_min_window(self):
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_countdown.html')
+        self.assertNotIn('Location', response)
+        self.assertEqual(EventJoinClick.objects.count(), 0)
+        self.assertContains(response, 'data-testid="event-join-countdown"')
+        self.assertContains(
+            response, 'data-testid="event-join-countdown-timer"',
+        )
+
+    @freeze_time('2026-03-01T14:52:00Z')  # 8 min before start
+    def test_countdown_page_contains_exactly_one_meta_refresh(self):
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        body = response.content.decode()
+        # Exact-match the tag the AC names; assertContains with count=1
+        # would also catch this but we want to assert against the raw
+        # attribute pair to avoid matching unrelated meta tags.
+        self.assertEqual(
+            body.count('<meta http-equiv="refresh" content="30">'),
+            1,
+        )
+
+    @freeze_time('2026-03-01T14:52:00Z')  # 8 min before start -> 3 min to open
+    def test_countdown_timer_initial_text_matches_remaining(self):
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        # delta_to_open = 8 min - 5 min = 3 min 0 sec.
+        self.assertContains(response, '>3 min 0 sec</span>')
+
+    @freeze_time('2026-03-01T14:56:00Z')  # 4 min before start
+    def test_redirect_to_zoom_within_5_min(self):
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], 'https://zoom.us/j/stub')
+        self.assertEqual(
+            EventJoinClick.objects.filter(
+                event=self.event, user=self.user,
+            ).count(),
+            1,
+        )
+
+    @freeze_time('2026-03-01T15:01:00Z')  # 1 min after start, no end_datetime
+    def test_redirect_during_live_event_with_no_end_datetime(self):
+        """Event is live (3-hour grace covers it)."""
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], 'https://zoom.us/j/stub')
+
+    @freeze_time('2026-03-01T19:00:00Z')  # 4 hours after start, no end_datetime
+    def test_past_grace_cutoff_renders_unavailable_when_no_end_datetime(self):
+        """Past the 3-hour grace window: 'past' unavailable page renders."""
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_unavailable.html')
+        self.assertContains(response, 'This event has ended')
+        self.assertEqual(EventJoinClick.objects.count(), 0)
+
+    def test_redirect_at_one_minute_before_end_when_end_is_set(self):
+        """When ``end_datetime`` is set it is the cutoff."""
+        # Move the event so it starts 90 min ago and ends in 1 minute,
+        # i.e. the live window is still open.
+        _move_event_to(
+            self.event,
+            start_offset=timedelta(minutes=-90),
+            end_offset=timedelta(minutes=1),
+        )
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], 'https://zoom.us/j/stub')
+
+    def test_past_cutoff_when_end_datetime_in_past(self):
+        """After ``end_datetime`` the 'past' page renders."""
+        _move_event_to(
+            self.event,
+            start_offset=timedelta(hours=-2),
+            end_offset=timedelta(minutes=-31),
+        )
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_unavailable.html')
+        self.assertContains(response, 'This event has ended')
+        self.assertEqual(EventJoinClick.objects.count(), 0)
+
+    @freeze_time('2026-03-01T14:56:00Z')  # 4 min before start
+    def test_non_registered_user_still_redirected_to_detail_inside_window(self):
+        """Unregistered branch wins even inside the redirect window."""
+        User.objects.create_user(
+            email='outsider@example.com',
+            password='testpass123',
+        )
+        self.client.login(email='outsider@example.com', password='testpass123')
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response['Location'], self.event.get_absolute_url(),
+        )
+        self.assertEqual(EventJoinClick.objects.count(), 0)
+
+    @freeze_time('2026-03-01T14:56:00Z')
+    def test_completed_event_still_unavailable_inside_window(self):
+        """``status='completed'`` overrides the time-window logic."""
+        self.event.status = 'completed'
+        self.event.save(update_fields=['status'])
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_unavailable.html')
+        self.assertContains(response, 'This event has ended')
+
+    @freeze_time('2026-03-01T14:56:00Z')
+    def test_empty_zoom_url_still_unavailable_inside_window(self):
+        """An empty ``zoom_join_url`` overrides the time-window logic."""
+        self.event.zoom_join_url = ''
+        self.event.save(update_fields=['zoom_join_url'])
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_unavailable.html')
+        self.assertContains(response, 'The join link is not available yet')
+
+    @freeze_time('2026-03-01T14:30:00Z')
+    def test_too_early_page_uses_user_preferred_timezone(self):
+        """``format_user_datetime`` renders in the registered user's TZ."""
+        self.user.preferred_timezone = 'Europe/Berlin'
+        self.user.save(update_fields=['preferred_timezone'])
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        # 15:00 UTC == 16:00 Berlin (CET, +01:00) on 2026-03-01.
+        self.assertContains(response, '16:00 Europe/Berlin')
+
+    @freeze_time('2026-03-01T14:30:00Z')
+    def test_too_early_page_falls_back_to_utc_for_user_without_tz(self):
+        """No ``preferred_timezone`` -> the suffix is the literal 'UTC'."""
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertContains(response, '15:00 UTC')
 
 
 class EventJoinClickCountPropertyTest(TestCase):

@@ -355,3 +355,33 @@ new workspace.
 
 Test vs live: n/a. Each workspace has its own team ID; pin it to the
 environment that uses that workspace.
+
+## STAFF_SIGNUP_NOTIFY_CHANNEL_ID
+
+Purpose: Single Slack channel ID where the bot posts an internal
+heads-up every time a paid signup completes (Basic and above). Read
+by `community/services/staff_notifications.py::notify_paid_signup`.
+Separate from `SLACK_ANNOUNCEMENTS_CHANNEL_ID` — that channel is
+public/member-visible content announcements; this one is the
+founder-only signup feed.
+
+Without it (blank): The Slack post is skipped silently. The email
+sides of the heads-up (welcome to user, internal email to staff)
+still fire if their setting is configured.
+
+Where to find it: Right click the channel in Slack > "View channel
+details" > copy the ID at the bottom. Pick a private channel only
+the founders are in — the post contains the new user's email and
+Stripe customer link.
+
+Prereqs:
+- `SLACK_ENABLED` must be true.
+- `SLACK_BOT_TOKEN` must be set.
+- The bot must be a member of the channel.
+
+Rotation: Permanent for the channel. Replace the value when you cut
+over to a new founder-feed channel.
+
+Test vs live: Single key in v1 — no dev/test channel splits. If you
+need a non-production channel, point this key at the staging channel
+in the staging environment's settings.

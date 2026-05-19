@@ -53,6 +53,22 @@ EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {"email_verification", "password_reset"}
 VERIFY_FOOTER_TOKEN_EXPIRY_HOURS = 24 * 7
 
 
+def _normalize_cc(cc):
+    """Normalize a ``cc`` argument into a list of non-empty email strings.
+
+    Accepts ``None``, a single string, or any iterable of strings.
+    Empty / whitespace-only entries are filtered out. Returns ``[]`` when
+    nothing usable remains — callers MUST check truthiness before
+    putting ``CcAddresses`` on the SES payload (SES rejects an empty
+    list with a validation error).
+    """
+    if not cc:
+        return []
+    if isinstance(cc, str):
+        cc = [cc]
+    return [c.strip() for c in cc if c and c.strip()]
+
+
 class EmailServiceError(Exception):
     """Raised when email sending fails."""
 
@@ -82,7 +98,7 @@ class EmailService:
             )
         return self._ses_client
 
-    def send(self, user, template_name, context=None):
+    def send(self, user, template_name, context=None, cc=None):
         """Send a transactional email to a user.
 
         Args:
@@ -93,6 +109,11 @@ class EmailService:
                 accept the staleness — refresh from DB if needed.
             template_name: Name of the email template (e.g. 'welcome').
             context: Dict of template variables to render the template with.
+            cc: Optional CC recipient(s). Either a single string email
+                address or a list/tuple of strings. ``None`` or empty
+                values send without a CC. Issue #703: lets the
+                co-founder welcome put a staff mailbox on CC so the new
+                user sees who else is on the thread.
 
         Returns:
             EmailLog instance for the sent email.
@@ -154,16 +175,27 @@ class EmailService:
             full_html,
             email_kind=email_kind,
             unsubscribe_url=unsubscribe_url,
+            cc=cc,
         )
 
-        # Log the send
+        # Log the send. Internal sends to an ad-hoc recipient surrogate
+        # (issue #703 staff signup heads-up) pass an object that is NOT
+        # a saved User row — those can't satisfy the EmailLog FK and we
+        # explicitly do not want a Studio "emails sent" entry for them.
+        # Detect by ``_meta`` presence + a non-falsy pk; anything else
+        # is a surrogate and we skip the log write.
+        from django.db.models import Model
+
         from email_app.models import EmailLog
 
-        email_log = EmailLog.objects.create(
-            user=user,
-            email_type=template_name,
-            ses_message_id=ses_message_id,
-        )
+        if isinstance(user, Model) and getattr(user, "pk", None):
+            email_log = EmailLog.objects.create(
+                user=user,
+                email_type=template_name,
+                ses_message_id=ses_message_id,
+            )
+        else:
+            email_log = None
 
         logger.info(
             'Sent "%s" email to %s (SES message ID: %s)',
@@ -392,6 +424,7 @@ class EmailService:
         *,
         email_kind="transactional",
         unsubscribe_url=None,
+        cc=None,
     ):
         """Send an email via Amazon SES v2 SendEmail API.
 
@@ -401,6 +434,9 @@ class EmailService:
             html_body: Full HTML email body.
             unsubscribe_url: Optional one-click unsubscribe URL for
                 campaign-style mail.
+            cc: Optional CC recipient(s) (string or list). Empty values
+                are treated as "no CC" and the ``CcAddresses`` key is
+                omitted from the SES payload.
 
         Returns:
             str: SES message ID.
@@ -408,15 +444,19 @@ class EmailService:
         Raises:
             EmailServiceError: If SES API call fails.
         """
+        cc_list = _normalize_cc(cc)
+
         # Issue #509: kill-switch for tests / local dev. When SES_ENABLED is
         # False the gate short-circuits BEFORE the boto3 client is built, so
         # no real network call is made and production sender reputation is
         # never touched. The synthetic message id is intentionally
         # recognisable in EmailLog queries during incident response.
         if not getattr(settings, "SES_ENABLED", False):
+            cc_label = f" cc={cc_list}" if cc_list else ""
             logger.info(
-                "SES disabled - skipping send to %s (subject=%s)",
+                "SES disabled - skipping send to %s%s (subject=%s)",
                 to_email,
+                cc_label,
                 subject,
             )
             # Local dev affordance: when DEBUG is on, print the email's
@@ -454,11 +494,12 @@ class EmailService:
         if headers:
             content["Simple"]["Headers"] = headers
 
+        destination = {"ToAddresses": [to_email]}
+        if cc_list:
+            destination["CcAddresses"] = cc_list
         send_kwargs = {
             "FromEmailAddress": from_email,
-            "Destination": {
-                "ToAddresses": [to_email],
-            },
+            "Destination": destination,
             "Content": content,
         }
         configuration_set_name = get_config("SES_CONFIGURATION_SET_NAME", "").strip()

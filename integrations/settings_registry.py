@@ -128,6 +128,18 @@ INTEGRATION_GROUPS = [
             {'key': 'SLACK_BOT_TOKEN', 'is_secret': True, 'description': 'Slack bot user OAuth token (xoxb-...). Used to post announcements and read community channel events.', 'docs_url': '_docs/integrations/slack.md#slack_bot_token'},
             {'key': 'SLACK_COMMUNITY_CHANNEL_IDS', 'is_secret': False, 'description': 'Comma-separated channel IDs the bot watches for community signals (mentions, reactions).', 'docs_url': '_docs/integrations/slack.md#slack_community_channel_ids'},
             {'key': 'SLACK_ANNOUNCEMENTS_CHANNEL_ID', 'is_secret': False, 'description': 'Channel ID where the bot posts new content and event announcements.', 'docs_url': '_docs/integrations/slack.md#slack_announcements_channel_id'},
+            {
+                'key': 'STAFF_SIGNUP_NOTIFY_CHANNEL_ID',
+                'is_secret': False,
+                'description': (
+                    'Slack channel ID where the bot posts an internal heads-up '
+                    'every time a paid signup completes (Basic and above). '
+                    'Leave blank to skip the Slack post; the staff email side '
+                    'still runs.'
+                ),
+                'optional': True,
+                'docs_url': '_docs/integrations/slack.md#staff_signup_notify_channel_id',
+            },
             {'key': 'SLACK_DEV_COMMUNITY_CHANNEL_IDS', 'is_secret': False, 'description': 'Development-only community channel IDs. Used only when SLACK_ENVIRONMENT=development.', 'docs_url': '_docs/integrations/slack.md#slack_dev_community_channel_ids'},
             {'key': 'SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID', 'is_secret': False, 'description': 'Development-only announcement channel ID. Used only when SLACK_ENVIRONMENT=development.', 'docs_url': '_docs/integrations/slack.md#slack_dev_announcements_channel_id'},
             {'key': 'SLACK_TEST_COMMUNITY_CHANNEL_IDS', 'is_secret': False, 'description': 'Test-only community channel IDs. Used only when SLACK_ENVIRONMENT=test.', 'docs_url': '_docs/integrations/slack.md#slack_test_community_channel_ids'},
@@ -168,6 +180,18 @@ INTEGRATION_GROUPS = [
                 ),
                 'optional': True,
                 'docs_url': '_docs/integrations/site.md#payment_notification_email',
+            },
+            {
+                'key': 'STAFF_SIGNUP_NOTIFY_EMAIL',
+                'is_secret': False,
+                'description': (
+                    'Single staff mailbox put on CC of the co-founder welcome '
+                    'email AND used as the To address on the structured '
+                    'internal heads-up email. Leave blank to skip both staff '
+                    'emails; the user still receives the welcome (without CC).'
+                ),
+                'optional': True,
+                'docs_url': '_docs/integrations/site.md#staff_signup_notify_email',
             },
         ],
     },

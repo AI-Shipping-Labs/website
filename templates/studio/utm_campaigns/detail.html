@@ -26,7 +26,8 @@
     <p class="mt-3 text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 max-w-2xl whitespace-pre-line">{{ campaign.notes }}</p>
     {% endif %}
   </div>
-  <div class="flex items-center space-x-2">
+  <div class="flex items-center space-x-2" data-testid="studio-header-actions">
+    {% include "studio/includes/_admin_link.html" with obj=campaign %}
     <a href="{% url 'studio_utm_campaign_edit' campaign_id=campaign.pk %}"
        class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
       Edit

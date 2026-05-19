@@ -162,7 +162,7 @@ class TestStudioUserCrmOverview:
         )
 
         impersonate = page.locator('[data-testid="user-detail-impersonate"]')
-        admin_link = page.locator('[data-testid="user-detail-django-admin"]')
+        admin_link = page.locator('[data-testid="studio-open-in-admin"]')
         assert impersonate.is_visible()
         assert admin_link.is_visible()
         assert (
@@ -182,7 +182,7 @@ class TestStudioUserCrmOverview:
         admin_link.focus()
         assert page.evaluate(
             "document.activeElement.getAttribute('data-testid')"
-        ) == "user-detail-django-admin"
+        ) == "studio-open-in-admin"
 
         # Account-data sections present (issue #560): profile,
         # membership, tags, and the new CRM card. Plans and notes are
@@ -238,7 +238,7 @@ class TestStudioUserCrmOverview:
         # rendered inline (issue #560).
         assert page.locator('[data-testid="user-detail-header"]').is_visible()
         assert page.locator('[data-testid="user-detail-impersonate"]').is_visible()
-        assert page.locator('[data-testid="user-detail-django-admin"]').is_visible()
+        assert page.locator('[data-testid="studio-open-in-admin"]').is_visible()
         assert page.locator('[data-testid="user-tags-section"]').is_visible()
         assert page.locator('[data-testid="user-crm-section"]').is_visible()
         assert page.locator(

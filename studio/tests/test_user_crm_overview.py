@@ -141,15 +141,16 @@ class UserDetailHeaderActionsTest(TestCase):
 
     def test_detail_header_links_to_django_admin_change_page(self):
         response = self.client.get(f'/studio/users/{self.member.pk}/')
-        self.assertContains(response, 'data-testid="user-detail-django-admin"')
+        # Issue #702 generalised the per-template hand-built link into a
+        # shared partial; the chip now carries
+        # ``data-testid="studio-open-in-admin"`` and the visible label
+        # is "Open in Django admin".
+        self.assertContains(response, 'data-testid="studio-open-in-admin"')
         self.assertContains(
             response,
             f'href="/admin/accounts/user/{self.member.pk}/change/"',
         )
-        # Issue #586 renamed the visible label from "Django Admin" to
-        # "View in Django admin" for parity with other Studio
-        # consolidated action rows.
-        self.assertContains(response, 'View in Django admin')
+        self.assertContains(response, 'Open in Django admin')
 
     def test_detail_does_not_add_destructive_studio_actions(self):
         # Phase 1 keeps destructive actions in Django Admin only. The

@@ -1,0 +1,27 @@
+{% load admin_links %}
+{% comment %}
+  "Open in Django admin" chip (issue #702). Renders inside the
+  studio-header-actions row alongside "View on site" / "Edit on GitHub".
+
+  Self-suppresses when the underlying model is NOT registered in Django
+  admin (admin_change_url returns ''), so callers can include this
+  unconditionally — no per-template skip list.
+
+  No template-level is_staff gate is needed: Studio is already staff-gated
+  at the view layer (studio/decorators.py::staff_required) and the admin
+  target is staff-gated by Django admin's own auth. A redundant template
+  gate would just be dead code.
+
+  Usage:
+    {% include "studio/includes/_admin_link.html" with obj=<model_instance> %}
+{% endcomment %}
+{% admin_change_url obj as admin_url %}
+{% if admin_url %}
+<a href="{{ admin_url }}"
+   data-testid="studio-open-in-admin"
+   title="Open in Django admin"
+   class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1">
+  <i data-lucide="wrench" class="w-4 h-4"></i>
+  <span>Open in Django admin</span>
+</a>
+{% endif %}

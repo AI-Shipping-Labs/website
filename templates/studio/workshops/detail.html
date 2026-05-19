@@ -15,6 +15,7 @@
       <h1 class="text-2xl font-semibold text-foreground break-all" data-testid="workshop-title">{{ workshop.title }}</h1>
     </div>
     <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
+      {% include "studio/includes/_admin_link.html" with obj=workshop %}
       <a href="{{ workshop.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
          data-testid="view-on-site"
          class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1">

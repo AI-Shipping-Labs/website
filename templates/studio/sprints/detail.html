@@ -12,7 +12,8 @@
       <h1 class="text-2xl font-semibold text-foreground">{{ sprint.name }}</h1>
       <p class="text-sm text-muted-foreground mt-1 font-mono">{{ sprint.slug }}</p>
     </div>
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2" data-testid="studio-header-actions">
+      {% include "studio/includes/_admin_link.html" with obj=sprint %}
       <a href="{% url 'studio_sprint_add_member' sprint_id=sprint.pk %}"
          class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
          data-testid="sprint-add-member-link">

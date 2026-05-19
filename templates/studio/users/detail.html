@@ -29,7 +29,8 @@
 {% comment %}
   Consolidated action row (issue #586). Two buttons only:
   - Login as user (POST to studio_impersonate). Primary accent.
-  - View in Django admin (link). Secondary bordered.
+  - Open in Django admin (link, shared partial since issue #702).
+    Secondary bordered.
   The previous "View as user" button POSTed to the same impersonate
   endpoint as Login as user; it was a duplicate action with no
   distinct behavior and has been removed.
@@ -44,12 +45,7 @@
       Login as user
     </button>
   </form>
-  <a href="{{ django_admin_url }}"
-     data-testid="user-detail-django-admin"
-     title="Open Django Admin for destructive or admin-only edits"
-     class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
-    View in Django admin
-  </a>
+  {% include "studio/includes/_admin_link.html" with obj=detail_user %}
 </div>
 
 <!-- Profile / contact context -->

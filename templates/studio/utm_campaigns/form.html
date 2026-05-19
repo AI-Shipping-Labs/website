@@ -7,9 +7,18 @@
   <a href="{% url 'studio_utm_campaign_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
     &larr; Back to UTM Campaigns
   </a>
-  <h1 class="text-2xl font-semibold text-foreground mt-2">
-    {% if form_action == 'edit' %}Edit Campaign{% else %}New UTM Campaign{% endif %}
-  </h1>
+  <header class="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold text-foreground">
+        {% if form_action == 'edit' %}Edit Campaign{% else %}New UTM Campaign{% endif %}
+      </h1>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
+      {% if form_action == 'edit' and campaign %}
+      {% include "studio/includes/_admin_link.html" with obj=campaign %}
+      {% endif %}
+    </div>
+  </header>
 </div>
 
 {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}

@@ -4,8 +4,10 @@ Locks the structural contract the issue spec lays out:
 
 - Header is identity-only (no buttons).
 - A single action row sits directly under the header with exactly two
-  controls: ``Login as user`` (POST -> studio_impersonate) and
-  ``View in Django admin`` (link).
+  controls: ``Login as user`` (POST -> studio_impersonate) and the
+  shared ``Open in Django admin`` chip (link). The shared chip uses
+  ``data-testid="studio-open-in-admin"`` after issue #702 generalised
+  the hand-built link into a partial.
 - The duplicate ``View as user`` button is removed.
 - Profile and Membership sit in their own full-width section cards
   (no ``lg:grid-cols-2`` grid wrapper between them).
@@ -91,7 +93,7 @@ class HeaderAndActionRowTest(_Base586):
         self.assertNotIn('data-testid="user-detail-actions"', header_slice)
         self.assertNotIn('data-testid="user-detail-impersonate"', header_slice)
         self.assertNotIn(
-            'data-testid="user-detail-django-admin"', header_slice,
+            'data-testid="studio-open-in-admin"', header_slice,
         )
 
     def test_action_row_immediately_after_header_with_two_controls(self):
@@ -108,18 +110,19 @@ class HeaderAndActionRowTest(_Base586):
         profile_open = body.index('data-testid="user-detail-profile-section"')
         self.assertLess(actions_open, profile_open)
 
-        # Action row contains Login as user (impersonate) + View in
-        # Django admin (link). Exactly those two testids.
+        # Action row contains Login as user (impersonate) + the shared
+        # "Open in Django admin" chip (issue #702). Exactly those two
+        # testids.
         actions_close = body.index('</div>', actions_open)
         actions_slice = body[actions_open:actions_close]
         self.assertEqual(
             actions_slice.count('data-testid="user-detail-impersonate"'), 1,
         )
         self.assertEqual(
-            actions_slice.count('data-testid="user-detail-django-admin"'), 1,
+            actions_slice.count('data-testid="studio-open-in-admin"'), 1,
         )
         self.assertIn('Login as user', actions_slice)
-        self.assertIn('View in Django admin', actions_slice)
+        self.assertIn('Open in Django admin', actions_slice)
 
     def test_view_as_user_button_is_removed_page_wide(self):
         member = self._make_member('noview@test.com', tier=self.free)
@@ -142,11 +145,13 @@ class HeaderAndActionRowTest(_Base586):
 
     def test_django_admin_link_uses_secondary_label(self):
         # Issue #586 renamed the visible label from "Django Admin" to
-        # "View in Django admin" for parity with other Studio detail
-        # action rows.
+        # "View in Django admin"; issue #702 generalised the chip into
+        # a shared partial and changed the label to "Open in Django
+        # admin" so every Studio detail/edit surface uses the same
+        # affordance.
         member = self._make_member('djl@test.com', tier=self.free)
         response = self.client.get(f'/studio/users/{member.pk}/')
-        self.assertContains(response, 'View in Django admin')
+        self.assertContains(response, 'Open in Django admin')
         self.assertContains(
             response,
             f'href="/admin/accounts/user/{member.pk}/change/"',

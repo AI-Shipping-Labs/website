@@ -86,10 +86,13 @@ class TestAnonymousRegistrationCopy:
     def test_anonymous_sees_email_only_form(self, django_server, page):
         _clear_events()
         _ensure_tiers()
-        _create_event(slug="anon-evt", title="Anon Event")
+        event = _create_event(slug="anon-evt", title="Anon Event")
 
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``; old
+        # slug-only URLs 404 by design.
+        event_path = event.get_absolute_url()
         response = page.goto(
-            f"{django_server}/events/anon-evt",
+            f"{django_server}{event_path}",
             wait_until="domcontentloaded",
         )
         assert response.status == 200
@@ -105,14 +108,14 @@ class TestAnonymousRegistrationCopy:
         assert page.locator('#event-anon-email').count() == 1
         assert page.locator('#event-anon-submit-btn').count() == 1
 
-        # Returning-user sign-in link preserves the event slug.
+        # Returning-user sign-in link preserves the canonical event URL.
         login = page.locator(
-            'a[href="/accounts/login/?next=/events/anon-evt"]'
+            f'a[href="/accounts/login/?next={event_path}"]'
         )
         assert login.count() == 1
         # The legacy "Create free account" button is gone for free events.
         assert page.locator(
-            'a[href="/accounts/signup/?next=/events/anon-evt"]'
+            f'a[href="/accounts/signup/?next={event_path}"]'
         ).count() == 0
 
 
@@ -132,8 +135,9 @@ class TestPostRegistrationConfirmation:
 
         context = _auth_context(browser, "reg484@test.com")
         page = context.new_page()
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/reg484-evt",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
@@ -180,6 +184,8 @@ class TestPostRegistrationConfirmation:
         _create_event(slug="ics-evt", title="ICS Event")
 
         # Public download — no auth needed for non-draft events.
+        # Issue #673: ``/events/<slug>/calendar.ics`` (slug-keyed) is the
+        # intentional ICS surface — kept on slug for email/.ics emails.
         response = urllib.request.urlopen(
             f"{django_server}/events/ics-evt/calendar.ics", timeout=5,
         )
@@ -199,13 +205,13 @@ class TestEventDetailCoverImage:
 
     def test_cover_image_renders_when_set(self, django_server, page):
         _clear_events()
-        _create_event(
+        event = _create_event(
             slug="img-evt",
             title="Image Event",
             cover_image_url="https://cdn.example.com/cover.jpg",
         )
         page.goto(
-            f"{django_server}/events/img-evt",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         assert page.locator(
@@ -220,9 +226,9 @@ class TestEventDetailCoverImage:
         decorative fallback — the back-link is followed directly by
         the event title."""
         _clear_events()
-        _create_event(slug="nocov-evt", title="No Cover Event")
+        event = _create_event(slug="nocov-evt", title="No Cover Event")
         page.goto(
-            f"{django_server}/events/nocov-evt",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         assert page.locator(
@@ -250,14 +256,14 @@ class TestAnonymousPaidEventCopy:
         (Main-tier, anonymous visitor)."""
         _clear_events()
         _ensure_tiers()
-        _create_event(
+        event = _create_event(
             slug="solving-a-real-ai-engineer-take-home-assignment-live-fixture",
             title="Solving a real AI engineer take-home assignment (live)",
             required_level=20,  # LEVEL_MAIN
         )
 
         response = page.goto(
-            f"{django_server}/events/solving-a-real-ai-engineer-take-home-assignment-live-fixture",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         assert response.status == 200
@@ -300,14 +306,14 @@ class TestAnonymousPaidEventCopy:
     ):
         _clear_events()
         _ensure_tiers()
-        _create_event(
+        event = _create_event(
             slug="paid-main-pricing-flow",
             title="Paid Main Pricing Flow",
             required_level=20,
         )
 
         page.goto(
-            f"{django_server}/events/paid-main-pricing-flow",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         page.locator(
@@ -325,14 +331,14 @@ class TestAnonymousPaidEventCopy:
         """
         _clear_events()
         _ensure_tiers()
-        _create_event(
+        event = _create_event(
             slug="free-fixture-event",
             title="Free Fixture Event",
             required_level=0,
         )
 
         page.goto(
-            f"{django_server}/events/free-fixture-event",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         # Email form is present.
@@ -357,14 +363,14 @@ class TestAnonymousPaidEventCopy:
         """
         _clear_events()
         _ensure_tiers()
-        _create_event(
+        event = _create_event(
             slug="premium-fixture-event",
             title="Premium Fixture Event",
             required_level=30,  # LEVEL_PREMIUM
         )
 
         page.goto(
-            f"{django_server}/events/premium-fixture-event",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         card = page.locator('[data-testid="event-anonymous-cta"]')
@@ -391,7 +397,7 @@ class TestUnderTierCopyConsistency:
         _clear_events()
         _ensure_tiers()
         _create_user("free671@test.com", tier_slug="free")
-        _create_event(
+        event = _create_event(
             slug="solving-a-real-ai-engineer-take-home-assignment-live-fixture",
             title="Solving a real AI engineer take-home assignment (live)",
             required_level=20,  # LEVEL_MAIN
@@ -400,7 +406,7 @@ class TestUnderTierCopyConsistency:
         context = _auth_context(browser, "free671@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/events/solving-a-real-ai-engineer-take-home-assignment-live-fixture",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
@@ -433,7 +439,7 @@ class TestUnderTierCopyConsistency:
         _clear_events()
         _ensure_tiers()
         _create_user("basic671@test.com", tier_slug="basic")
-        _create_event(
+        event = _create_event(
             slug="premium-fixture-event",
             title="Premium Fixture Event",
             required_level=30,
@@ -442,7 +448,7 @@ class TestUnderTierCopyConsistency:
         context = _auth_context(browser, "basic671@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/events/premium-fixture-event",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 

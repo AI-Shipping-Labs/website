@@ -119,17 +119,19 @@ class TestLogoutReturnContext:
         with django_db_blocker.unblock():
             _reset_fixtures()
             create_user("logout-ctx@test.com", password=DEFAULT_PASSWORD)
-            _seed_event()
+            event = _seed_event()
 
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        event_path = event.get_absolute_url()
         context = auth_context(browser, "logout-ctx@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/events/logout-ctx-event",
+            f"{django_server}{event_path}",
             wait_until="domcontentloaded",
         )
         _logout_via_header(page)
         page.wait_for_url(
-            f"{django_server}/events/logout-ctx-event", timeout=10000
+            f"{django_server}{event_path}", timeout=10000
         )
         # The header now shows the anonymous "Sign in" button, not the
         # account avatar trigger.

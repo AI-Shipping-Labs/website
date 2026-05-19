@@ -133,8 +133,9 @@ def _build_fixtures():
         },
     )
 
-    # Event for /events/<slug>.
-    Event.objects.update_or_create(
+    # Event for the canonical event detail URL.
+    # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+    event, _ = Event.objects.update_or_create(
         slug=EVENT_SLUG,
         defaults={
             "title": "Matrix PR Event",
@@ -152,12 +153,14 @@ def _build_fixtures():
     assert User.objects.filter(email=USER_EMAIL).exists()
 
     cert_id = str(cert.id)
+    event_path = event.get_absolute_url()
     connection.close()
 
     return {
         "course_slug": course.slug,
         "article_slug": ARTICLE_SLUG,
         "event_slug": EVENT_SLUG,
+        "event_path": event_path,
         "certificate_id": cert_id,
     }
 
@@ -183,7 +186,7 @@ def _matrix_urls(fx):
         ("home",                     "/",                                                False),
         ("course-detail",            f"/courses/{fx['course_slug']}",                    False),
         ("article-detail",           f"/blog/{fx['article_slug']}",                      False),
-        ("event-detail",             f"/events/{fx['event_slug']}",                      False),
+        ("event-detail",             fx['event_path'],                                   False),
         ("pricing",                  "/pricing",                                         False),
         ("account",                  "/account/",                                        True),
         ("peer-review-submit",       f"/courses/{fx['course_slug']}/submit",             True),

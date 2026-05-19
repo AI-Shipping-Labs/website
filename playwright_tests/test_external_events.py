@@ -114,7 +114,7 @@ class TestAnonymousSpotsMavenAndRegistersOffPlatform:
         _create_event(
             slug="community-live", title="Live coding session",
         )
-        _create_event(
+        maven_event = _create_event(
             slug="llm-eng-cohort",
             title="LLM Engineering Cohort",
             external_host="Maven",
@@ -141,8 +141,9 @@ class TestAnonymousSpotsMavenAndRegistersOffPlatform:
         assert "Hosted on Maven" in pills.first.inner_text()
 
         # Drill into the Maven event detail page.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/llm-eng-cohort",
+            f"{django_server}{maven_event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
@@ -184,7 +185,7 @@ class TestFreeMemberSeesNoPaywallOnExternalEvent:
         _clear_events()
         _ensure_tiers()
         _create_user("free572@test.com", tier_slug="free")
-        _create_event(
+        dtc_event = _create_event(
             slug="dtc-live",
             title="DataTalksClub Live",
             external_host="DataTalksClub",
@@ -205,8 +206,9 @@ class TestFreeMemberSeesNoPaywallOnExternalEvent:
         assert "Hosted on DataTalksClub" in pill.first.inner_text()
 
         # Detail page does NOT show the upgrade gate.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/dtc-live",
+            f"{django_server}{dtc_event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         # The Main+ paywall normally renders the text "Upgrade to Main".
@@ -332,8 +334,10 @@ class TestStaffAddsExternalEventViaStudio:
         assert host_input.input_value() == "Luma"
 
         # Public detail page shows the pill + Join button.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        event.refresh_from_db()
         page.goto(
-            f"{django_server}/events/luma-meetup-jan",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         pill = page.locator(
@@ -394,8 +398,9 @@ class TestClearingExternalHostRevertsToCommunityFlow:
 
         # Public detail: external pill is gone and the community
         # registration card is back.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/was-maven",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         assert page.locator(
@@ -423,15 +428,16 @@ class TestExternalEventWithoutJoinUrlShowsComingSoon:
     ):
         _clear_events()
         _ensure_tiers()
-        _create_event(
+        tba_event = _create_event(
             slug="maven-tba",
             title="Maven event TBA",
             external_host="Maven",
             zoom_join_url="",
         )
 
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         response = page.goto(
-            f"{django_server}/events/maven-tba",
+            f"{django_server}{tba_event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         assert response.status == 200
@@ -522,7 +528,7 @@ class TestExternalAnonymousNoEmailRegistrationForm:
     ):
         _clear_events()
         _ensure_tiers()
-        _create_event(
+        luma_event = _create_event(
             slug="luma-anon",
             title="Luma meetup anonymous",
             external_host="Luma",
@@ -530,8 +536,9 @@ class TestExternalAnonymousNoEmailRegistrationForm:
             required_level=0,
         )
 
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         response = page.goto(
-            f"{django_server}/events/luma-anon",
+            f"{django_server}{luma_event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         assert response.status == 200
@@ -608,8 +615,10 @@ class TestStaffAssignsPartnerHostViaDropdown:
             '[data-testid="studio-event-external-host"]',
         ).input_value() == "Maven"
 
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        event.refresh_from_db()
         page.goto(
-            f"{django_server}/events/cohort-579a",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         pill = page.locator('[data-testid="event-detail-external-badge"]')
@@ -656,8 +665,10 @@ class TestStaffSwitchesEventBackToCommunity:
             '[data-testid="studio-event-external-host"]',
         ).input_value() == ""
 
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        event.refresh_from_db()
         page.goto(
-            f"{django_server}/events/was-luma-579",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         assert page.locator(
@@ -720,7 +731,7 @@ class TestPartnerLabelsAreConsistentAcrossSite:
     ):
         _clear_events()
         _ensure_tiers()
-        _create_event(
+        maven_event = _create_event(
             slug="maven-579d",
             title="Maven cohort 579d",
             external_host="Maven",
@@ -750,8 +761,9 @@ class TestPartnerLabelsAreConsistentAcrossSite:
             "Hosted on DataTalksClub", "Hosted on Maven",
         ]
 
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/maven-579d",
+            f"{django_server}{maven_event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         detail_pill = page.locator(

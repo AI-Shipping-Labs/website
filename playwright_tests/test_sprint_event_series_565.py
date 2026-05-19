@@ -352,12 +352,20 @@ class TestMemberSeesMeetingSchedule:
             '[data-testid="sprint-meeting-schedule-location"]'
         ).first.wait_for(state="visible")
 
-        # Click the first occurrence -> lands on /events/<first-slug>.
+        # Click the first occurrence -> lands on the canonical
+        # ``/events/<id>/may-oh-session-...`` URL (issue #673).
         first_link = page.locator(
             '[data-testid="sprint-meeting-schedule-link"]'
         ).first
         href = first_link.get_attribute("href")
-        assert href is not None and href.startswith("/events/may-oh-session-")
+        assert href is not None
+        # Canonical URL is ``/events/<id>/<slug>``; slug starts with
+        # ``may-oh-session-``.
+        import re as _re
+        assert _re.match(
+            r"^/events/\d+/may-oh-session-",
+            href,
+        ), f"unexpected event URL shape: {href!r}"
         first_link.click()
         page.wait_for_url(f"{django_server}{href}")
 

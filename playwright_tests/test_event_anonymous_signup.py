@@ -118,8 +118,10 @@ class TestAnonymousEventSignup:
                 slug="anon-672-evt-tz", title="Anon 672 TZ Event",
             )
 
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        event_path = event.get_absolute_url()
         page.goto(
-            f"{django_server}/events/{event.slug}",
+            f"{django_server}{event_path}",
             wait_until="domcontentloaded",
         )
 
@@ -155,7 +157,7 @@ class TestAnonymousEventSignup:
         # The JS redirects with ?registered=<email>. Wait for that.
         page.wait_for_url(
             lambda url: (
-                f"/events/{event.slug}" in url
+                event_path in url
                 and "registered=" in url
             ),
             timeout=10000,
@@ -201,9 +203,11 @@ class TestAnonymousEventSignup:
             )
             _seed_existing_anon_registration(email, event)
 
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        event_path = event.get_absolute_url()
         # Use a fresh page (no cookies from the first registration).
         page.goto(
-            f"{django_server}/events/{event.slug}",
+            f"{django_server}{event_path}",
             wait_until="domcontentloaded",
         )
 
@@ -212,7 +216,7 @@ class TestAnonymousEventSignup:
 
         page.wait_for_url(
             lambda url: (
-                f"/events/{event.slug}" in url
+                event_path in url
                 and "registered=" in url
             ),
             timeout=10000,

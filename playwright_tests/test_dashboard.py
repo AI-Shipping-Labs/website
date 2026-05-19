@@ -689,8 +689,9 @@ class TestScenario5MainMemberSeesUpcomingEvents:
         view_event_links.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # Then: Navigates to the event detail page
-        assert "/events/ai-workshop-prompt-engineering" in page.url
+        # Then: Navigates to the event detail page.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        assert event1.get_absolute_url() in page.url
         event_body = page.content()
         assert "AI Workshop: Prompt Engineering" in event_body
 # -------------------------------------------------------------------

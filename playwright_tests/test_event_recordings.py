@@ -490,7 +490,7 @@ class TestScenario5NavigateFromDetailToFilteredListing:
         into the recording, then uses the back link to return to the
         full listing."""
         _clear_recordings()
-        _create_recording(
+        recording = _create_recording(
             title="Building Chatbots",
             slug="building-chatbots",
             description="How to build chatbots with LLMs.",
@@ -507,9 +507,10 @@ class TestScenario5NavigateFromDetailToFilteredListing:
             date=datetime.date(2026, 2, 14),
         )
 
-        # Step 1: Navigate to recording detail page
+        # Step 1: Navigate to recording detail page.
+        # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/building-chatbots",
+            f"{django_server}{recording.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         body = page.content()

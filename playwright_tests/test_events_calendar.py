@@ -155,7 +155,7 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
 
         now = timezone.now()
 
-        _create_event(
+        upcoming_event = _create_event(
             title="AI Prompt Engineering Workshop",
             slug="ai-prompt-engineering-workshop",
             description="Learn prompt engineering for AI models.",
@@ -204,13 +204,13 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
         assert "Intro to LLMs" in past_text
 
         # Step 2: Click on "AI Prompt Engineering Workshop"
-        page.click(
-            'a[href="/events/ai-prompt-engineering-workshop"]'
-        )
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        event_url = upcoming_event.get_absolute_url()
+        page.click(f'a[href="{event_url}"]')
         page.wait_for_load_state("domcontentloaded")
 
         # Then: Visitor lands on the detail page
-        assert "/events/ai-prompt-engineering-workshop" in page.url
+        assert event_url in page.url
         body = page.content()
 
         # Title, description, location, timezone, and tags
@@ -244,22 +244,24 @@ class TestScenario2AnonymousDirectedToSignIn:
         _clear_events()
         _ensure_tiers()
 
-        _create_event(
+        event = _create_event(
             title="Open Workshop",
             slug="open-workshop",
             required_level=0,
             status="upcoming",
         )
 
-        # Step 1: Navigate to /events/open-workshop
+        # Step 1: Navigate to the canonical event URL.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        event_path = event.get_absolute_url()
         response = page.goto(
-            f"{django_server}/events/open-workshop",
+            f"{django_server}{event_path}",
             wait_until="domcontentloaded",
         )
 
         # Then: Event detail page loads (HTTP 200, no redirect)
         assert response.status == 200
-        assert "/events/open-workshop" in page.url
+        assert event_path in page.url
 
         # The email-only registration form is the entry point.
         form = page.locator('[data-testid="event-anonymous-email-form"]')
@@ -303,7 +305,7 @@ class TestScenario3EligibleMemberRegisters:
         _ensure_tiers()
         _create_user("free@test.com", tier_slug="free")
 
-        _create_event(
+        event = _create_event(
             title="Coding Session",
             slug="coding-session",
             required_level=0,
@@ -313,9 +315,10 @@ class TestScenario3EligibleMemberRegisters:
 
         context = _auth_context(browser, "free@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /events/coding-session
+        # Step 1: Navigate to the canonical event URL.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/coding-session",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -380,9 +383,10 @@ class TestScenario4RegisteredMemberCancels:
 
         context = _auth_context(browser, "free@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /events/cancel-test
+        # Step 1: Navigate to the canonical event URL.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/cancel-test",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -448,9 +452,10 @@ class TestScenario5FullEventCapacity:
 
         context = _auth_context(browser, "free@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /events/full-workshop
+        # Step 1: Navigate to the canonical event URL.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/full-workshop",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -481,7 +486,7 @@ class TestScenario6FreeMemberGatedEventUpgradePath:
         _ensure_tiers()
         _create_user("free@test.com", tier_slug="free")
 
-        _create_event(
+        event = _create_event(
             title="Premium Masterclass",
             slug="premium-masterclass",
             description="An exclusive premium masterclass.",
@@ -491,9 +496,10 @@ class TestScenario6FreeMemberGatedEventUpgradePath:
 
         context = _auth_context(browser, "free@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /events/premium-masterclass
+        # Step 1: Navigate to the canonical event URL.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/premium-masterclass",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -548,9 +554,10 @@ class TestScenario7ZoomLinkVisibleBeforeEvent:
 
         context = _auth_context(browser, "free@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /events/imminent-workshop
+        # Step 1: Navigate to the canonical event URL.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/imminent-workshop",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -601,9 +608,10 @@ class TestScenario8ZoomLinkHiddenFarFromEvent:
 
         context = _auth_context(browser, "free@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /events/future-workshop
+        # Step 1: Navigate to the canonical event URL.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/future-workshop",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -640,7 +648,7 @@ class TestScenario9CompletedEventNoInlineRecording:
         _ensure_tiers()
 
         now = timezone.now()
-        _create_event(
+        event = _create_event(
             title="Past Workshop",
             slug="past-workshop",
             description="A workshop that already happened.",
@@ -649,9 +657,10 @@ class TestScenario9CompletedEventNoInlineRecording:
             recording_url="https://www.youtube.com/watch?v=past123",
         )
 
-        # Step 1: Navigate to /events/past-workshop
+        # Step 1: Navigate to the canonical event URL.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/past-workshop",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
@@ -686,7 +695,7 @@ class TestScenario10CompletedEventNoRecording:
         _ensure_tiers()
 
         now = timezone.now()
-        _create_event(
+        event = _create_event(
             title="Unrecorded Session",
             slug="unrecorded-session",
             description="A session without a recording.",
@@ -694,9 +703,10 @@ class TestScenario10CompletedEventNoRecording:
             status="completed",
         )
 
-        # Step 1: Navigate to /events/unrecorded-session
+        # Step 1: Navigate to the canonical event URL.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/unrecorded-session",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -730,7 +740,7 @@ class TestScenario11DraftEventsNotVisible:
         _clear_events()
         _ensure_tiers()
 
-        _create_event(
+        draft = _create_event(
             title="Secret Draft Event",
             slug="secret-draft",
             status="draft",
@@ -756,9 +766,12 @@ class TestScenario11DraftEventsNotVisible:
         # The public event is visible
         assert "Public Event" in body
 
-        # Step 2: Navigate directly to /events/secret-draft
+        # Step 2: Navigate directly to the draft event's canonical URL.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``; direct
+        # access still 404s for drafts because the event_detail view
+        # filters out draft status for anonymous visitors.
         response = page.goto(
-            f"{django_server}/events/secret-draft",
+            f"{django_server}/events/{draft.id}/{draft.slug}",
             wait_until="domcontentloaded",
         )
 

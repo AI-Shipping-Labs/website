@@ -165,7 +165,7 @@ def _seed_listings():
     )
 
     start_dt = timezone.now() + datetime.timedelta(days=7)
-    Event.objects.create(
+    sample_event = Event.objects.create(
         title='Sample Event',
         slug='sample-event',
         description='Sample event.',
@@ -203,6 +203,8 @@ def _seed_listings():
         body_markdown='# Theory Questions',
     )
 
+    # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
+    event_path = sample_event.get_absolute_url()
     connection.close()
     return {
         'article_slug': 'sample-article',
@@ -212,6 +214,7 @@ def _seed_listings():
         'tutorial_slug': 'sample-tutorial',
         'workshop_slug': 'sample-workshop',
         'event_slug': 'sample-event',
+        'event_path': event_path,
         'poll_uuid': str(poll.id),
     }
 
@@ -306,7 +309,7 @@ DETAIL_MEDIUM = [
     ('/courses/{course_slug}', 'max-w-5xl'),
     ('/courses/{course_slug}/{module_slug}', 'max-w-5xl'),
     ('/workshops/{workshop_slug}', 'max-w-5xl'),
-    ('/events/{event_slug}', 'max-w-5xl'),
+    ('{event_path}', 'max-w-5xl'),
     ('/vote/{poll_uuid}', 'max-w-5xl'),
 ]
 

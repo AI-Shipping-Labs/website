@@ -339,10 +339,12 @@ class TestLoginReturnContext:
             )
             event = _seed_event()
 
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        event_path = event.get_absolute_url()
         context = auth_context(browser, "free@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/events/{event.slug}",
+            f"{django_server}{event_path}",
             wait_until="domcontentloaded",
         )
         page.click('[data-testid="account-menu-trigger"]')
@@ -353,7 +355,7 @@ class TestLoginReturnContext:
             '[data-testid="account-menu-dropdown"] a:has-text("Log out")'
         )
         page.wait_for_url(
-            f"{django_server}/events/{event.slug}", timeout=10000
+            f"{django_server}{event_path}", timeout=10000
         )
         # User is now anonymous; header shows Sign-in button.
         assert page.locator(

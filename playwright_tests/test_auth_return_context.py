@@ -93,15 +93,18 @@ class TestAuthReturnContext:
         with django_db_blocker.unblock():
             _reset_fixtures()
             _seed_user()
-            _seed_event()
+            event = _seed_event()
 
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``; the
+        # registration card mints the login link with this ``next`` path.
+        event_path = event.get_absolute_url()
         page.goto(
-            f"{django_server}/accounts/login/?next=/events/return-ctx-event",
+            f"{django_server}/accounts/login/?next={event_path}",
             wait_until="domcontentloaded",
         )
         _login(page)
 
-        page.wait_for_url(f"{django_server}/events/return-ctx-event", timeout=10000)
+        page.wait_for_url(f"{django_server}{event_path}", timeout=10000)
         assert "Return Context Event" in page.content()
         assert "Register for this event" in page.content()
 

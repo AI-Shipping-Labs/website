@@ -1361,7 +1361,7 @@ class TestScenario12FreeMemberGatedEvent:
         but no registration button. Instead they see an upgrade CTA."""
         _clear_all_content()
         _create_user("free@test.com", tier_slug="free")
-        _create_event(
+        event = _create_event(
             title="Main Gated Workshop",
             slug="main-gated-workshop",
             description="An exclusive Main-level live workshop.",
@@ -1372,8 +1372,9 @@ class TestScenario12FreeMemberGatedEvent:
 
         context = _auth_context(browser, "free@test.com")
         page = context.new_page()
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/main-gated-workshop",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 

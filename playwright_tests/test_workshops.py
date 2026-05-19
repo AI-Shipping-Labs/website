@@ -858,7 +858,7 @@ class TestWorkshopMaterialsUnification:
         have materials, the event detail page surfaces only the workshop
         writeup CTA — no inline Materials block."""
         _clear_workshops()
-        _create_workshop(
+        ws = _create_workshop(
             slug='linked-mat-workshop',
             title='Linked Materials Workshop',
             landing=0, pages=0, recording=0,
@@ -873,9 +873,10 @@ class TestWorkshopMaterialsUnification:
             ],
         )
 
-        # The event slug is `{workshop_slug}-event` in this helper.
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``. The
+        # helper creates an event linked to this workshop.
         page.goto(
-            f'{django_server}/events/linked-mat-workshop-event',
+            f'{django_server}{ws.event.get_absolute_url()}',
             wait_until='domcontentloaded',
         )
         body = page.content()

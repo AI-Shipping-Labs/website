@@ -1,6 +1,6 @@
 """Middleware for URL redirects and trailing slash removal."""
 
-from django.core.cache import cache, caches
+from django.core.cache import caches
 from django.http import HttpResponsePermanentRedirect, HttpResponseRedirect
 
 
@@ -72,21 +72,34 @@ REDIRECT_CACHE_TIMEOUT = 300  # 5 minutes
 
 
 def get_active_redirects():
-    """Return a dict of active redirects, cached for performance."""
-    redirects = cache.get(REDIRECT_CACHE_KEY)
+    """Return a dict of active redirects, cached for performance.
+
+    The result is cached in the cross-process ``django_q`` cache
+    (DatabaseCache in production, LocMemCache in tests). The default
+    Django cache is ``LocMemCache``, which is per-process: each gunicorn
+    worker maintains its own copy, so a ``clear_redirect_cache()`` call
+    from Studio would only invalidate the worker that handled the POST.
+    Using a cross-process backend ensures any toggle / delete in Studio
+    propagates to every worker on the next request. See issue #695.
+    """
+    redirects = caches['django_q'].get(REDIRECT_CACHE_KEY)
     if redirects is None:
         from integrations.models import Redirect
         redirects = {
             r.source_path: (r.target_path, r.redirect_type)
             for r in Redirect.objects.filter(is_active=True)
         }
-        cache.set(REDIRECT_CACHE_KEY, redirects, REDIRECT_CACHE_TIMEOUT)
+        caches['django_q'].set(REDIRECT_CACHE_KEY, redirects, REDIRECT_CACHE_TIMEOUT)
     return redirects
 
 
 def clear_redirect_cache():
-    """Clear the redirect cache. Call after any redirect model change."""
-    cache.delete(REDIRECT_CACHE_KEY)
+    """Clear the cross-process redirect cache.
+
+    Call after any redirect model change so every worker refetches on
+    the next request.
+    """
+    caches['django_q'].delete(REDIRECT_CACHE_KEY)
 
 
 class RedirectMiddleware:

@@ -215,3 +215,190 @@ class InlineRegisterCompactVariantTest(TestCase):
         )
         # And the controlled element exists with that id.
         self.assertIn('id="inline-register-oauth-block"', html)
+
+
+class InlineRegisterCollapseEmailVariantTest(TestCase):
+    """Issue #687: the inline register card grows a ``collapse_email``
+    flag used by free course detail pages.
+
+    When ``collapse_email=True`` and at least one OAuth provider is
+    configured, the email/password/confirm form is wrapped in a hidden
+    block and revealed by a "Sign up with your email" toggle rendered
+    below the OAuth row. When no OAuth provider is configured the form
+    renders expanded (no dead-end card with nothing to click).
+
+    The flag is independent of ``compact``; pricing and gated-access
+    surfaces must keep their existing rendering.
+    """
+
+    template = "accounts/includes/_inline_register_card.html"
+
+    def _seed_provider(self, provider, name):
+        app = SocialApp.objects.create(
+            provider=provider,
+            name=name,
+            client_id=f"{provider}-cid",
+            secret=f"{provider}-secret",
+        )
+        app.sites.add(Site.objects.get_current())
+        return app
+
+    def test_collapse_email_default_is_false(self):
+        """No ``collapse_email`` key in context means the legacy
+        expanded layout — no email toggle button rendered."""
+        self._seed_provider("google", "Google")
+        html = render_to_string(self.template, {
+            "next_url": "/courses/demo",
+            "oauth_google_enabled": True,
+        })
+        self.assertNotIn(
+            'data-testid="inline-register-email-toggle"', html,
+        )
+        self.assertNotIn(
+            'id="inline-register-email-block"', html,
+        )
+
+    def test_collapse_email_false_renders_form_expanded(self):
+        """Explicit ``collapse_email=False`` keeps the legacy layout."""
+        self._seed_provider("google", "Google")
+        html = render_to_string(self.template, {
+            "next_url": "/courses/demo",
+            "oauth_google_enabled": True,
+            "collapse_email": False,
+        })
+        self.assertNotIn(
+            'data-testid="inline-register-email-toggle"', html,
+        )
+        # Email form is rendered (not inside a hidden block).
+        self.assertIn('id="register-email"', html)
+        self.assertNotIn(
+            'id="inline-register-email-block"', html,
+        )
+
+    def test_collapse_email_true_with_oauth_renders_toggle_and_hidden_block(self):
+        """With ``collapse_email=True`` and one provider enabled, the
+        email form is wrapped in a hidden block with a toggle button
+        above it. The OAuth row is rendered inline (not hidden)."""
+        self._seed_provider("google", "Google")
+        html = render_to_string(self.template, {
+            "next_url": "/courses/demo",
+            "oauth_google_enabled": True,
+            "collapse_email": True,
+        })
+        # Toggle button is present with the spec'd label.
+        self.assertIn('data-testid="inline-register-email-toggle"', html)
+        self.assertIn("Sign up with your email", html)
+        # Email block wrapper exists with the ``hidden`` attribute on
+        # its opening tag (not inside the nested form).
+        self.assertIn('id="inline-register-email-block"', html)
+        block_segment = html.split('id="inline-register-email-block"', 1)[1]
+        opening_tag = block_segment.split('>', 1)[0]
+        self.assertIn('hidden', opening_tag)
+        # Form fields are still in the DOM (just inside the hidden block).
+        self.assertIn('id="register-email"', html)
+        self.assertIn('id="register-password"', html)
+        self.assertIn('id="register-password-confirm"', html)
+        # OAuth row is rendered inline (not behind a compact toggle).
+        self.assertIn("Sign up with Google", html)
+        self.assertNotIn(
+            'data-testid="inline-register-oauth-toggle"', html,
+        )
+
+    def test_collapse_email_true_oauth_renders_before_toggle(self):
+        """OAuth row must appear ABOVE the email toggle in the DOM so
+        the visitor sees the social buttons first."""
+        self._seed_provider("google", "Google")
+        html = render_to_string(self.template, {
+            "next_url": "/courses/demo",
+            "oauth_google_enabled": True,
+            "collapse_email": True,
+        })
+        google_idx = html.index("Sign up with Google")
+        toggle_idx = html.index(
+            'data-testid="inline-register-email-toggle"',
+        )
+        self.assertLess(google_idx, toggle_idx)
+
+    def test_collapse_email_toggle_aria_attributes(self):
+        """Toggle button must be a `<button type="button">` with the
+        ARIA disclosure pattern wired up (aria-expanded, aria-controls).
+        """
+        self._seed_provider("google", "Google")
+        html = render_to_string(self.template, {
+            "next_url": "/courses/demo",
+            "oauth_google_enabled": True,
+            "collapse_email": True,
+        })
+        toggle_idx = html.index('data-testid="inline-register-email-toggle"')
+        button_start = html.rfind('<button', 0, toggle_idx)
+        button_end = html.index('>', toggle_idx)
+        button_tag = html[button_start:button_end + 1]
+        self.assertIn('type="button"', button_tag)
+        self.assertIn('aria-expanded="false"', button_tag)
+        self.assertIn(
+            'aria-controls="inline-register-email-block"', button_tag,
+        )
+
+    def test_collapse_email_true_without_oauth_renders_form_expanded(self):
+        """Dead-end guard: if no OAuth provider is configured AND
+        ``collapse_email=True``, render the email form expanded (no
+        toggle) so the visitor still has a clear path to sign up."""
+        html = render_to_string(self.template, {
+            "next_url": "/courses/demo",
+            "oauth_google_enabled": False,
+            "oauth_github_enabled": False,
+            "oauth_slack_enabled": False,
+            "collapse_email": True,
+        })
+        # No toggle.
+        self.assertNotIn(
+            'data-testid="inline-register-email-toggle"', html,
+        )
+        self.assertNotIn(
+            'id="inline-register-email-block"', html,
+        )
+        # Form is rendered (visible, not hidden).
+        self.assertIn('id="register-email"', html)
+        self.assertIn('id="register-password"', html)
+        self.assertIn('id="register-password-confirm"', html)
+
+    def test_collapse_email_does_not_affect_pricing_compact_variant(self):
+        """The collapse_email flag is orthogonal to ``compact``.
+        Pricing keeps using compact=True without collapse_email, so the
+        OAuth disclosure (#654) renders and the email form is inline.
+        """
+        self._seed_provider("google", "Google")
+        html = render_to_string(self.template, {
+            "next_url": "/pricing",
+            "oauth_google_enabled": True,
+            "compact": True,
+        })
+        # No #687 toggle/block on the pricing variant.
+        self.assertNotIn(
+            'data-testid="inline-register-email-toggle"', html,
+        )
+        self.assertNotIn(
+            'id="inline-register-email-block"', html,
+        )
+        # The compact #654 toggle and block are still present.
+        self.assertIn(
+            'data-testid="inline-register-oauth-toggle"', html,
+        )
+        self.assertIn('id="inline-register-oauth-block"', html)
+        # Email form is rendered inline (no hidden wrapper).
+        self.assertIn('id="register-email"', html)
+
+    def test_collapse_email_legal_and_newsletter_rendered(self):
+        """Both legal footer and newsletter opt-in must render
+        regardless of disclosure state — they don't move."""
+        self._seed_provider("google", "Google")
+        html = render_to_string(self.template, {
+            "next_url": "/courses/demo",
+            "oauth_google_enabled": True,
+            "collapse_email": True,
+        })
+        self.assertIn(
+            'data-testid="inline-register-opt-in', html,
+        )
+        # Legal footer copy from _legal_footer.html mentions Terms.
+        self.assertIn("By creating an account", html)

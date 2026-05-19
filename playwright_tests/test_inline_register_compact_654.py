@@ -184,11 +184,13 @@ class TestInlineRegisterCompactVariant:
         assert ("next=/pricing" in href
                 or f"next={quote('/pricing', safe='')}" in href)
 
-    def test_free_course_keeps_expanded_variant_with_visible_oauth(
+    def test_free_course_collapses_email_with_visible_oauth(
         self, django_server, page, django_db_blocker,
     ):
-        """Course detail surfaces still render the expanded variant —
-        OAuth provider buttons are visible immediately, no toggle."""
+        """Course detail surfaces now collapse the email form behind a
+        "Sign up with your email" toggle (#687). OAuth provider buttons
+        are visible immediately; the compact "More sign-in options"
+        toggle (#654) is still absent on this surface."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -201,17 +203,27 @@ class TestInlineRegisterCompactVariant:
         )
         card = page.locator('[data-testid="inline-register-card"]')
         assert card.is_visible()
-        assert card.locator("#register-email").is_visible()
+        # Issue #687 inverted this surface: the email input is in the
+        # DOM but inside the ``hidden`` block, so it is NOT visible
+        # until the toggle is clicked.
+        assert card.locator("#register-email").is_visible() is False
         # OAuth button visible without clicking anything.
         google_button = card.get_by_role(
             "link", name="Sign up with Google", exact=True,
         )
         assert google_button.is_visible()
-        # No compact toggle on this surface.
+        # No compact (#654) toggle on this surface — that one belongs
+        # to /pricing.
         assert (
             card.locator(
                 '[data-testid="inline-register-oauth-toggle"]',
             ).count() == 0
+        )
+        # The new (#687) email toggle IS on this surface.
+        assert (
+            card.locator(
+                '[data-testid="inline-register-email-toggle"]',
+            ).count() == 1
         )
 
     def test_pricing_with_no_oauth_shows_no_toggle(

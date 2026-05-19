@@ -19,6 +19,15 @@ Expected context:
                             tucked behind a "More sign-in options"
                             disclosure (#654). Renders nothing if no
                             OAuth provider is enabled.
+  collapse_email          — optional boolean (default False). When True
+                            AND at least one OAuth provider is enabled,
+                            the email/password/confirm form is wrapped
+                            in a ``hidden`` block and revealed by a
+                            "Sign up with your email" toggle button
+                            rendered below the OAuth row (#687). When
+                            no OAuth provider is configured the form
+                            renders expanded (no dead-end state).
+                            Independent of ``compact``.
 
 The surface template MUST also include in extra_scripts:
 
@@ -39,6 +48,38 @@ authNextUrl from the #auth-next-url script block.
   </div>
   {% endif %}
 
+  {% if collapse_email %}
+    {% if oauth_google_enabled or oauth_github_enabled or oauth_slack_enabled %}
+    {% comment %}
+    Collapse-email disclosure — issue #687. On free course detail pages
+    the email/password/confirm form is hidden behind a "Sign up with your
+    email" toggle so OAuth wins by default. The OAuth row renders first,
+    then the toggle, then the (initially hidden) email form block. When
+    no OAuth provider is configured this branch is skipped — see the
+    ``{% else %}`` below — to avoid a dead-end card with no visible CTA.
+    {% endcomment %}
+    {% include "accounts/includes/_oauth_providers.html" with oauth_action="Sign up" oauth_divider_text="sign up with" %}
+    <div class="mt-4">
+      <button type="button"
+              class="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+              data-testid="inline-register-email-toggle"
+              aria-expanded="false"
+              aria-controls="inline-register-email-block">
+        <i data-lucide="mail" class="h-4 w-4" aria-hidden="true"></i>
+        <span>Sign up with your email</span>
+      </button>
+    </div>
+    <div id="inline-register-email-block" hidden data-testid="inline-register-email-block" class="mt-4">
+      {% include "accounts/includes/_register_form.html" %}
+    </div>
+    {% else %}
+    {% comment %}
+    No OAuth provider configured — render the email form expanded so the
+    visitor still has a clear path forward (no dead-end card).
+    {% endcomment %}
+    {% include "accounts/includes/_register_form.html" %}
+    {% endif %}
+  {% else %}
   {% include "accounts/includes/_register_form.html" %}
   {% if compact %}
     {% if oauth_google_enabled or oauth_github_enabled or oauth_slack_enabled %}
@@ -63,6 +104,7 @@ authNextUrl from the #auth-next-url script block.
     {% endif %}
   {% else %}
   {% include "accounts/includes/_oauth_providers.html" with oauth_action="Sign up" oauth_divider_text="sign up with" %}
+  {% endif %}
   {% endif %}
   {% include "accounts/includes/_legal_footer.html" with legal_action="creating an account" %}
   {# Issue #653: opt-in disclosure for the implicit newsletter subscription #}

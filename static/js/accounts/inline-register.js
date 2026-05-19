@@ -145,9 +145,58 @@
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initOauthDisclosure);
-  } else {
+  // Collapse-email disclosure (issue #687). Free course detail pages
+  // render the inline register partial with collapse_email=True, which
+  // hides the email/password/confirm form behind a "Sign up with your
+  // email" toggle so the OAuth buttons are the visible default CTA.
+  // The toggle button is absent on other surfaces (pricing free tier,
+  // gated articles, standalone /accounts/register), so this initializer
+  // is a no-op on those pages.
+  function initEmailDisclosure() {
+    var toggles = document.querySelectorAll(
+      '[data-testid="inline-register-email-toggle"]'
+    );
+    for (var i = 0; i < toggles.length; i++) {
+      var toggle = toggles[i];
+      if (toggle.dataset.disclosureWired === 'true') {
+        continue;
+      }
+      toggle.dataset.disclosureWired = 'true';
+      toggle.addEventListener('click', function (event) {
+        var btn = event.currentTarget;
+        var controlsId = btn.getAttribute('aria-controls');
+        var block = controlsId ? document.getElementById(controlsId) : null;
+        if (!block) {
+          return;
+        }
+        var isHidden = block.hasAttribute('hidden');
+        if (isHidden) {
+          block.removeAttribute('hidden');
+          btn.setAttribute('aria-expanded', 'true');
+          // Focus management: drop keyboard / screen-reader users into
+          // the email input on expand so they can start typing right
+          // away. On collapse we deliberately leave focus on the toggle
+          // — stealing it would surprise the visitor.
+          var emailInput = document.getElementById('register-email');
+          if (emailInput) {
+            emailInput.focus();
+          }
+        } else {
+          block.setAttribute('hidden', '');
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+  }
+
+  function initDisclosures() {
     initOauthDisclosure();
+    initEmailDisclosure();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDisclosures);
+  } else {
+    initDisclosures();
   }
 })();

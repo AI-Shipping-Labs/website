@@ -298,18 +298,32 @@ class NotificationService:
 
     @staticmethod
     def create_event_reminder(event, user, interval, title, body):
-        """Create an event reminder notification if not already sent.
+        """Create an event reminder notification + email if not already sent.
+
+        Issue #706: in addition to the in-app bell, fan out an
+        ``event_reminder`` email via ``EmailService.send``. The
+        ``EventReminderLog`` row is the single dedup gate for both
+        channels — once a row exists for ``(event, user, interval)``,
+        neither the bell nor the email fires again. Persist the log
+        row and the ``Notification`` row BEFORE the email send so a
+        5xx from SES or a missing template does not roll back dedup
+        (the next 15-min tick would otherwise re-send the bell and
+        re-attempt the email).
 
         Args:
             event: Event model instance.
             user: User model instance.
-            interval: '24h' or '1h'.
+            interval: '24h' or '20m' (issue #706 — formerly '1h').
             title: Notification title.
             body: Notification body.
 
         Returns:
             Notification if created, None if already sent.
         """
+        from django.urls import reverse
+
+        from email_app.services.email_service import EmailService
+        from integrations.config import site_base_url
         from notifications.models import EventReminderLog
 
         # Check for existing reminder
@@ -328,4 +342,29 @@ class NotificationService:
             url=event.get_absolute_url(),
             notification_type='event_reminder',
         )
+
+        # Best-effort email send. Failures must NOT raise out of this
+        # function — the dedup row is already persisted, so the next
+        # tick would skip this user entirely. Log loudly for ops.
+        try:
+            base_url = site_base_url()
+            event_url = f"{base_url}{reverse('event_join', kwargs={'slug': event.slug})}"
+            EmailService().send(
+                user,
+                'event_reminder',
+                {
+                    'event_title': event.title,
+                    # Pass raw datetime — EmailService auto-formats via
+                    # ``format_user_datetime`` in the recipient's zone
+                    # (issue #666 guardrail).
+                    'event_datetime': event.start_datetime,
+                    'event_url': event_url,
+                },
+            )
+        except Exception:
+            logger.exception(
+                'Failed to send event_reminder email to %s for event %s',
+                user.email, event.slug,
+            )
+
         return notification

@@ -72,7 +72,7 @@ class EventReminderLog(models.Model):
     )
     interval = models.CharField(
         max_length=10,
-        help_text='Reminder interval: "24h" or "1h".',
+        help_text='Reminder interval: "24h" or "20m".',
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

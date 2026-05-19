@@ -1,6 +1,7 @@
 """
-Event reminder job: checks for events starting in ~24h and ~1h,
-creates reminder notifications for registered users (deduplicated).
+Event reminder job: checks for events starting in ~24h and ~20 min,
+creates reminder notifications for registered users (deduplicated)
+and sends the templated email via EmailService.
 
 Called as a background job every 15 minutes via Django-Q2.
 """
@@ -17,11 +18,15 @@ def check_event_reminders():
     """Check for upcoming events and create reminder notifications.
 
     Runs every 15 minutes. Checks two windows:
-    - Events starting in ~24 hours (23.75h to 24.25h from now)
-    - Events starting in ~1 hour (0.75h to 1.25h from now)
+    - Events starting in ~24 hours (23h45m to 24h15m from now): bell +
+      email + Slack announcement.
+    - Events starting in ~20 minutes (15m to 25m from now): bell + email
+      only (no Slack — keeps the channel quiet).
 
-    Creates deduplicated notifications for registered users.
-    Posts Slack reminder for 24h window only (per spec: 1h = no Slack).
+    Creates deduplicated notifications (and emails) for registered users
+    via :func:`NotificationService.create_event_reminder`. Posts a Slack
+    reminder for the 24h window only (issue #706: 20-min reminders are
+    bell + email only to keep #announcements quiet).
     """
     from events.models import Event, EventRegistration
     from notifications.services.notification_service import NotificationService
@@ -33,9 +38,11 @@ def check_event_reminders():
     window_24h_start = now + timedelta(hours=23, minutes=45)
     window_24h_end = now + timedelta(hours=24, minutes=15)
 
-    # 1-hour reminder window
-    window_1h_start = now + timedelta(minutes=45)
-    window_1h_end = now + timedelta(hours=1, minutes=15)
+    # 20-minute reminder window (issue #706 — replaces the prior 1h window).
+    # Cron fires every 15 min; a 10-min-wide window with 5-min margins
+    # guarantees each event is caught exactly once before start.
+    window_20m_start = now + timedelta(minutes=15)
+    window_20m_end = now + timedelta(minutes=25)
 
     # Events in 24h window
     events_24h = Event.objects.filter(
@@ -75,14 +82,14 @@ def check_event_reminders():
                 'Failed to post Slack reminder for event %s', event.slug,
             )
 
-    # Events in 1h window
-    events_1h = Event.objects.filter(
+    # Events in 20-minute window
+    events_20m = Event.objects.filter(
         status='upcoming',
-        start_datetime__gte=window_1h_start,
-        start_datetime__lte=window_1h_end,
+        start_datetime__gte=window_20m_start,
+        start_datetime__lte=window_20m_end,
     )
 
-    for event in events_1h:
+    for event in events_20m:
         registrations = EventRegistration.objects.filter(
             event=event,
         ).select_related('user')
@@ -92,8 +99,8 @@ def check_event_reminders():
             result = NotificationService.create_event_reminder(
                 event=event,
                 user=reg.user,
-                interval='1h',
-                title=f'Starting soon: {event.title} starts in 1 hour',
+                interval='20m',
+                title=f'Starting soon: {event.title} starts in 20 minutes',
                 body=f'{event.title} is starting soon! '
                      f'Get ready to join at {event.formatted_start()}.',
             )
@@ -102,6 +109,6 @@ def check_event_reminders():
 
         if count > 0:
             logger.info(
-                'Created %d 1h reminders for event %s', count, event.slug,
+                'Created %d 20-min reminders for event %s', count, event.slug,
             )
-        # No Slack post for 1h reminders per spec
+        # No Slack post for 20-min reminders per spec (issue #706).

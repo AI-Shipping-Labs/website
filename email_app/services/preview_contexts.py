@@ -100,7 +100,10 @@ PREVIEW_CONTEXTS = {
         'event_title': 'AI Shipping Workshop',
         # Issue #666: see note on event_registration above.
         'event_datetime': 'March 21, 2026, 18:00 Europe/Berlin',
-        'event_url': 'https://zoom.us/j/123',
+        # Issue #706: ``event_url`` is the platform-side join redirect
+        # (#704 time-gates it). Single CTA, matches the real send shape:
+        # {site}/events/{slug}/join.
+        'event_url': 'https://aishippinglabs.com/events/ai-shipping-workshop/join',
     },
     'event_rescheduled': {
         'user_name': 'Ada',

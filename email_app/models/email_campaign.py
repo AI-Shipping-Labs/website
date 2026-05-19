@@ -95,6 +95,14 @@ class EmailCampaign(models.Model):
         default=0,
         help_text='Number of recipients.',
     )
+    is_archived = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text=(
+            'Whether the campaign is archived (hidden from default list views). '
+            'API callers flip this via PATCH; there is no DELETE endpoint.'
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

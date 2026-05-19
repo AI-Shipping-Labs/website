@@ -94,6 +94,17 @@
         </p>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
+        {# Test worker smoke-test (issue #697): one-click confirmation that #}
+        {# the worker is consuming jobs after a deploy or restart. #}
+        <form method="post" action="{% url 'studio_worker_test_smoke' %}" class="{% studio_list_class 'action_form' %}">
+          {% csrf_token %}
+          <button type="submit"
+                  class="{% studio_action_class 'async' %}"
+                  data-action="test-worker"
+                  data-testid="test-worker-button">
+            Test worker
+          </button>
+        </form>
         {% if queue_depth > 0 %}
           <form method="post" action="{% url 'studio_worker_drain_queue' %}" class="{% studio_list_class 'action_form' %}"
                 onsubmit="return confirm('Delete {{ queue_depth }} pending task{{ queue_depth|pluralize }}? This cannot be undone.');">

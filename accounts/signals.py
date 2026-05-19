@@ -1,5 +1,7 @@
 from django.utils import timezone
 
+from accounts.utils.names import set_name_from_external
+
 
 def mark_email_verified_on_social_login(sender, request, sociallogin, **kwargs):
     """Mark the user's email as verified when logging in via OAuth.
@@ -88,3 +90,59 @@ def set_slack_user_id_on_social_signup(sender, request, sociallogin, **kwargs):
     if not user.pk:
         return
     _apply_slack_oauth_membership(user, sociallogin)
+
+
+def populate_name_from_social(sender, request, sociallogin, **kwargs):
+    """Populate ``first_name`` / ``last_name`` from an OAuth identity (issue #699).
+
+    Wired to both ``pre_social_login`` (existing account re-signing in)
+    and ``social_account_added`` (new social signup). Reads
+    provider-specific claims from ``sociallogin.account.extra_data``:
+
+    - Google (OIDC): ``given_name`` + ``family_name``, with a fallback
+      to the combined ``name`` when only that is present.
+    - GitHub: ``name`` (single string — GitHub does not split it).
+    - Slack (OIDC): ``given_name`` + ``family_name``, with a fallback
+      to the combined ``name`` when only that is present.
+
+    The helper refuses to overwrite a value the user already has, so
+    re-signing in is a safe no-op for users whose names are already set.
+    """
+    user = sociallogin.user
+    if not user.pk:
+        return
+
+    provider = sociallogin.account.provider
+    extra = sociallogin.account.extra_data or {}
+
+    given = (extra.get("given_name") or "").strip()
+    family = (extra.get("family_name") or "").strip()
+    combined = (extra.get("name") or "").strip()
+
+    changed = False
+    if provider == "github":
+        # GitHub only fills ``name`` and never splits it.
+        if combined:
+            changed = set_name_from_external(
+                user, full_name=combined, source="oauth:github",
+            )
+    elif provider in ("google", "slack"):
+        if given or family:
+            changed = set_name_from_external(
+                user,
+                first=given,
+                last=family,
+                source=f"oauth:{provider}",
+            )
+        elif combined:
+            # Some IdP responses only carry the combined ``name`` —
+            # fall through to splitting it rather than no-op.
+            changed = set_name_from_external(
+                user, full_name=combined, source=f"oauth:{provider}",
+            )
+    else:
+        # Unknown provider: ignore. We deliberately do not guess.
+        return
+
+    if changed:
+        user.save(update_fields=["first_name", "last_name"])

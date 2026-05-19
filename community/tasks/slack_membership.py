@@ -18,6 +18,7 @@ import time
 from django.utils import timezone
 
 from accounts.models import User
+from accounts.utils.names import set_name_from_external
 from community.models import CommunityAuditLog
 from community.services import get_community_service
 
@@ -179,6 +180,13 @@ def refresh_slack_membership(
             if uid and not user.slack_user_id:
                 user.slack_user_id = uid
                 update_fields.append('slack_user_id')
+            # Backfill first_name/last_name from the Slack profile if
+            # those fields are still empty locally (issue #699).
+            # Best-effort: a probe failure must NEVER break the
+            # membership update — the user is in Slack, that's the
+            # source of truth here.
+            if _backfill_name_from_slack(service, user):
+                update_fields.extend(['first_name', 'last_name'])
             user.save(update_fields=update_fields)
             _set_slack_member_tag(user, True)
             members += 1
@@ -213,3 +221,52 @@ def models_q_null_or_old(cutoff):
     """
     from django.db.models import Q
     return Q(slack_checked_at__isnull=True) | Q(slack_checked_at__lt=cutoff)
+
+
+def _backfill_name_from_slack(service, user):
+    """Backfill ``first_name`` / ``last_name`` from the Slack user profile.
+
+    Issue #699. Skipped silently if the service does not expose
+    ``lookup_user_profile_by_email`` (defensive — keeps tests with
+    minimal mocks working), if the profile lookup fails, or if the
+    user already has a non-empty name.
+
+    Falls back to splitting ``real_name`` via ``full_name=`` when the
+    Slack profile's ``first_name`` / ``last_name`` are both blank
+    (some workspaces only fill ``real_name``).
+
+    Returns:
+        bool: ``True`` if the in-memory user was mutated; ``False``
+        otherwise. Caller folds ``first_name`` / ``last_name`` into
+        its existing ``update_fields`` list when this returns True.
+    """
+    lookup = getattr(service, "lookup_user_profile_by_email", None)
+    if not callable(lookup):
+        return False
+    try:
+        profile = lookup(user.email)
+    except Exception:
+        logger.warning(
+            "Slack profile lookup failed for %s; skipping name backfill",
+            user.email,
+            exc_info=True,
+        )
+        return False
+    # Require a concrete dict — MagicMock services in tests that didn't
+    # opt into a profile mock will fall through this guard so they
+    # don't accidentally write garbage to first_name / last_name.
+    if not isinstance(profile, dict):
+        return False
+
+    first = (profile.get("first_name") or "").strip()
+    last = (profile.get("last_name") or "").strip()
+    if first or last:
+        return set_name_from_external(
+            user, first=first, last=last, source="slack_probe",
+        )
+    real_name = (profile.get("real_name") or "").strip()
+    if real_name:
+        return set_name_from_external(
+            user, full_name=real_name, source="slack_probe",
+        )
+    return False

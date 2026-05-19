@@ -39,6 +39,20 @@ class EmailCampaign(models.Model):
         (SLACK_FILTER_NO, 'Non-members only'),
     ]
 
+    # Issue #692: email-verification audience selector. Default
+    # ``verified_only`` keeps the historical filter (only users with
+    # ``email_verified=True`` receive the campaign). ``everyone`` drops
+    # that filter for legitimate broadcasts (major announcements,
+    # billing changes, terms updates) where reaching the full non-
+    # unsubscribed audience is desired. ``unsubscribed=False`` is
+    # ALWAYS enforced in both modes -- never relaxed.
+    AUDIENCE_VERIFICATION_VERIFIED_ONLY = 'verified_only'
+    AUDIENCE_VERIFICATION_EVERYONE = 'everyone'
+    AUDIENCE_VERIFICATION_CHOICES = [
+        (AUDIENCE_VERIFICATION_VERIFIED_ONLY, 'Verified only'),
+        (AUDIENCE_VERIFICATION_EVERYONE, 'Everyone (including unverified)'),
+    ]
+
     subject = models.CharField(max_length=255)
     body = models.TextField(
         help_text='Campaign body in markdown or HTML.',
@@ -81,6 +95,15 @@ class EmailCampaign(models.Model):
             '"no" sends only to non-members. Issue #358.'
         ),
     )
+    audience_verification = models.CharField(
+        max_length=20,
+        choices=AUDIENCE_VERIFICATION_CHOICES,
+        default=AUDIENCE_VERIFICATION_VERIFIED_ONLY,
+        help_text=(
+            'Whether to require email_verified=True. "everyone" drops the '
+            'verified-only filter; unsubscribed=False is always enforced.'
+        ),
+    )
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -117,8 +140,9 @@ class EmailCampaign(models.Model):
         Returns a queryset of users where ALL of the following hold:
         - effective tier level >= target_min_level
           (base tier or active override)
-        - unsubscribed = False
-        - email_verified = True
+        - unsubscribed = False (always enforced; never relaxed)
+        - email_verified = True UNLESS
+          ``audience_verification == 'everyone'`` (issue #692)
         - if ``target_tags_any`` is non-empty: ``user.tags`` contains at
           least one of those tags.
         - if ``target_tags_none`` is non-empty: ``user.tags`` contains
@@ -129,10 +153,13 @@ class EmailCampaign(models.Model):
         reproduces the exact pre-#357 behavior.
         """
         User = get_user_model()
+        verification_filter = {}
+        if self.audience_verification != self.AUDIENCE_VERIFICATION_EVERYONE:
+            verification_filter['email_verified'] = True
         base_qs = (
             User.objects.filter(
                 unsubscribed=False,
-                email_verified=True,
+                **verification_filter,
             )
             .filter(
                 Q(tier__level__gte=self.target_min_level)

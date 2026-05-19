@@ -35,12 +35,16 @@ WRITABLE_FIELDS = {
     "target_tags_any",
     "target_tags_none",
     "slack_filter",
+    "audience_verification",
     "is_archived",
 }
 
 VALID_STATUSES = {value for value, _label in EmailCampaign.STATUS_CHOICES}
 VALID_TARGET_LEVELS = {value for value, _label in EmailCampaign.TARGET_LEVEL_CHOICES}
 VALID_SLACK_FILTERS = {value for value, _label in EmailCampaign.SLACK_FILTER_CHOICES}
+VALID_AUDIENCE_VERIFICATIONS = {
+    value for value, _label in EmailCampaign.AUDIENCE_VERIFICATION_CHOICES
+}
 
 
 def _iso(value):
@@ -56,6 +60,7 @@ def _serialize_campaign(campaign):
         "target_tags_any": list(campaign.target_tags_any or []),
         "target_tags_none": list(campaign.target_tags_none or []),
         "slack_filter": campaign.slack_filter,
+        "audience_verification": campaign.audience_verification,
         "status": campaign.status,
         "is_archived": campaign.is_archived,
         "sent_at": _iso(campaign.sent_at),
@@ -138,6 +143,14 @@ def _collect_campaign_values(data, *, existing=None):
         if slack_filter not in VALID_SLACK_FILTERS:
             errors["slack_filter"] = "Unknown slack filter."
         values["slack_filter"] = slack_filter
+
+    if "audience_verification" in data:
+        audience_verification = _coerce_optional_text(
+            data["audience_verification"]
+        )
+        if audience_verification not in VALID_AUDIENCE_VERIFICATIONS:
+            errors["audience_verification"] = "Unknown audience verification."
+        values["audience_verification"] = audience_verification
 
     for field in ("target_tags_any", "target_tags_none"):
         if field in data:

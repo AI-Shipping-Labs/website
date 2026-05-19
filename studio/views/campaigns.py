@@ -172,6 +172,9 @@ def campaign_create(request):
         slack_filter = _normalize_slack_filter(
             request.POST.get("slack_filter", "")
         )
+        audience_verification = _normalize_audience_verification(
+            request.POST.get("audience_verification", "")
+        )
 
         campaign = EmailCampaign.objects.create(
             subject=subject,
@@ -180,6 +183,7 @@ def campaign_create(request):
             target_tags_any=target_tags_any,
             target_tags_none=target_tags_none,
             slack_filter=slack_filter,
+            audience_verification=audience_verification,
             status="draft",
         )
         messages.success(
@@ -211,6 +215,18 @@ def _normalize_slack_filter(value):
     return EmailCampaign.SLACK_FILTER_ANY
 
 
+def _normalize_audience_verification(value):
+    """Map raw form value to a valid audience_verification choice (issue #692).
+
+    Unknown values fall back to the safe default (``verified_only``) so a
+    typo in the POST body cannot relax the historical recipient filter.
+    """
+    valid = {choice[0] for choice in EmailCampaign.AUDIENCE_VERIFICATION_CHOICES}
+    if value in valid:
+        return value
+    return EmailCampaign.AUDIENCE_VERIFICATION_VERIFIED_ONLY
+
+
 @staff_required
 def campaign_edit(request, campaign_id):
     """Edit a draft campaign.
@@ -238,6 +254,9 @@ def campaign_edit(request, campaign_id):
         slack_filter = _normalize_slack_filter(
             request.POST.get("slack_filter", "")
         )
+        audience_verification = _normalize_audience_verification(
+            request.POST.get("audience_verification", "")
+        )
 
         campaign.subject = subject
         campaign.body = body
@@ -245,6 +264,7 @@ def campaign_edit(request, campaign_id):
         campaign.target_tags_any = target_tags_any
         campaign.target_tags_none = target_tags_none
         campaign.slack_filter = slack_filter
+        campaign.audience_verification = audience_verification
         campaign.save(update_fields=[
             "subject",
             "body",
@@ -252,6 +272,7 @@ def campaign_edit(request, campaign_id):
             "target_tags_any",
             "target_tags_none",
             "slack_filter",
+            "audience_verification",
         ])
 
         messages.success(
@@ -460,6 +481,7 @@ def campaign_duplicate(request, campaign_id):
         target_tags_any=list(campaign.target_tags_any or []),
         target_tags_none=list(campaign.target_tags_none or []),
         slack_filter=campaign.slack_filter,
+        audience_verification=campaign.audience_verification,
         status="draft",
     )
     messages.success(

@@ -99,6 +99,24 @@
         Filters by verified Slack workspace membership (issue #358). Use "Non-members" to nudge users to join.
       </p>
     </div>
+
+    {# Issue #692: email-verification audience selector. Default verified_only matches historical behavior. #}
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Email verification</label>
+      <select name="audience_verification" data-testid="campaign-audience-verification" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="verified_only" {% if not campaign.audience_verification or campaign.audience_verification == 'verified_only' %}selected{% endif %}>Verified only</option>
+        <option value="everyone" {% if campaign.audience_verification == 'everyone' %}selected{% endif %}>Everyone (including unverified)</option>
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">
+        Default is verified-only. "Everyone" includes users who never verified their email (OAuth signups, Stripe-direct, legacy imports). Unsubscribed users are always excluded.
+      </p>
+      {# Warning is rendered server-side from the saved value; the live preview-count helper at the top updates on save. #}
+      {% if campaign.audience_verification == 'everyone' %}
+      <p class="text-xs mt-2 px-3 py-2 rounded border border-yellow-700/40 bg-yellow-900/20 text-yellow-200" data-testid="campaign-audience-verification-warning">
+        Warning: sending to unverified addresses may hurt deliverability. Proceed only if you understand the risk.
+      </p>
+      {% endif %}
+    </div>
   </div>
 
   <div class="flex items-center space-x-4">

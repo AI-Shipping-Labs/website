@@ -21,8 +21,8 @@ sets ``RUN_MIGRATIONS=true``; the worker container (cloned from web with
 ``command`` overridden in ``deploy/update_task_def.py``) does not. We use
 that env var as the dispatch flag:
 
-* web (RUN_MIGRATIONS=true)  -> migrate, check, gunicorn
-* worker (RUN_MIGRATIONS!=true) -> check, qcluster
+* web (RUN_MIGRATIONS=true)  -> migrate, check, register schedules, gunicorn
+* worker (RUN_MIGRATIONS!=true) -> check, register schedules, qcluster
 
 The worker still benefits from the single-process boot: only one settings
 import, no Secrets Manager / RDS round trips before django-q starts
@@ -32,12 +32,52 @@ The ``django_q_cache`` table (used by the worker-heartbeat
 ``DatabaseCache`` backend) is created by an ``email_app`` migration, so
 it lands during ``migrate`` on the web container rather than on every
 boot.
+
+Schedule registration (issue #708)
+==================================
+
+``setup_schedules`` registers the django-q ``Schedule`` rows that drive
+recurring tasks (``complete-finished-events``, ``health-check``,
+``event-reminders``, etc.). We run it on every container boot for BOTH
+web and worker — running on web alone is not enough because web and worker
+start in parallel from the same image (see issue #336), and at any given
+moment either tier may be the one whose boot lands first. The command is
+idempotent (uses ``update_or_create`` via ``jobs.tasks.schedule``), so
+running it twice produces exactly one row per schedule.
+
+Failures here MUST NOT crash the container: a regression in
+``setup_schedules`` (e.g. a bad task path) cannot be allowed to take the
+web tier down. We log and continue.
 """
 
+import logging
 import os
 import sys
 
 import django
+
+logger = logging.getLogger(__name__)
+
+
+def _register_schedules():
+    """Register recurring django-q schedules. Idempotent and fail-safe.
+
+    Runs on every container boot for both web and worker variants. Wrapped
+    in a broad ``except`` because schedule registration is non-critical for
+    serving requests or running the qcluster — a failure here must not
+    prevent the container from starting. See issue #708.
+    """
+    from django.core.management import call_command
+
+    print("Register recurring job schedules", flush=True)
+    try:
+        call_command("setup_schedules", verbosity=0)
+    except Exception:
+        # Log the traceback but keep booting. A bad schedule entry cannot
+        # be allowed to take the web tier down; the worst-case fallout is
+        # that one cron does not fire until the next deploy, which is
+        # still better than a crash loop.
+        logger.exception("setup_schedules failed during entrypoint boot")
 
 
 def main():
@@ -75,6 +115,12 @@ def main():
     # runs.
     print("Run Django system checks (fail on Error level)", flush=True)
     call_command("check", "--fail-level", "ERROR")
+
+    # Issue #708: register the django-q schedules (including
+    # ``complete-finished-events``) on every boot for both web and worker.
+    # Idempotent; failures are logged and swallowed so a bad schedule
+    # cannot crash the container.
+    _register_schedules()
 
     if run_migrations:
         # Web container -> hand off to gunicorn IN THIS PROCESS.

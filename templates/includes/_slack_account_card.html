@@ -1,0 +1,66 @@
+{% comment %}
+  Shared Slack join / connected card (issue #700).
+
+  Renders one of two states based on context flags:
+
+  - ``show_slack_join``: render the Join Slack CTA. Requires
+    ``slack_invite_url`` to be set.
+  - ``slack_connected``: render the connected confirmation, with the
+    user's ``slack_user_id`` in monospace and an optional "Open in
+    Slack" anchor when ``slack_profile_url`` is non-empty.
+
+  When both flags are false (Free / Basic tier, or Main+ with the
+  invite URL missing) the partial renders nothing — matching the
+  pre-refactor dashboard behaviour.
+
+  Context keys consumed:
+    show_slack_join, slack_connected, slack_invite_url,
+    slack_user_id, slack_profile_url
+{% endcomment %}
+{% load accounts_extras %}
+{% if show_slack_join %}
+<section class="mb-8" data-testid="slack-account-card">
+  <div class="rounded-lg border border-border bg-card p-5 sm:p-6">
+    <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+      <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-secondary">
+        <i data-lucide="message-square" class="h-5 w-5 text-accent"></i>
+      </div>
+      <div class="flex-1">
+        <h2 class="text-lg font-semibold text-foreground">Join our Slack community</h2>
+        <p class="mt-1 text-sm text-muted-foreground">Connect with other builders in our private Slack workspace.</p>
+        <p class="mt-2 text-xs text-muted-foreground">Already joined? It may take up to an hour for your account to be linked automatically.</p>
+      </div>
+      <a href="{{ slack_invite_url }}" target="_blank" rel="noopener" class="{% button_classes 'secondary' 'shrink-0' %}" data-testid="slack-account-card-join">
+        <i data-lucide="message-square" class="h-4 w-4"></i>
+        Join Slack
+      </a>
+    </div>
+  </div>
+</section>
+{% elif slack_connected %}
+<section class="mb-8" data-testid="slack-account-card">
+  <div class="rounded-lg border border-border bg-card p-5 sm:p-6">
+    <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+      <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-green-500/10">
+        <i data-lucide="check-circle" class="h-5 w-5 text-green-400"></i>
+      </div>
+      <div class="flex-1">
+        <h2 class="text-lg font-semibold text-foreground">Connected to Slack</h2>
+        <p class="mt-1 text-sm text-muted-foreground">You are a member of the AI Shipping Labs community workspace.</p>
+        {% if slack_user_id %}
+        <p class="mt-3 text-sm text-muted-foreground" data-testid="slack-account-card-id-row">
+          Slack ID:
+          {% if slack_profile_url %}
+          <a href="{{ slack_profile_url }}" target="_blank" rel="noopener"
+             class="font-mono text-accent hover:underline"
+             data-testid="slack-account-card-profile-link">{{ slack_user_id }}</a>
+          {% else %}
+          <span class="font-mono text-foreground" data-testid="slack-account-card-id-value">{{ slack_user_id }}</span>
+          {% endif %}
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}

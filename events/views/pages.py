@@ -139,6 +139,7 @@ def events_calendar(request, year=None, month=None):
         'today': today,
         'events_list': events,
         'agenda_days': agenda_days,
+        'subscribe_urls': build_subscribe_urls(),
     }
     return render(request, 'events/events_calendar.html', context)
 

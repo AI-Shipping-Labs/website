@@ -19,10 +19,11 @@
         </p>
       </div>
 
-      <!-- View Toggle -->
-      <div class="flex gap-2 mb-6">
+      <!-- View Toggle + Subscribe CTA -->
+      <div class="flex flex-wrap items-center gap-2 mb-6" data-testid="events-view-toggle-row">
         <a href="{% url 'events_list' %}" class="px-3 py-1 rounded bg-secondary text-muted-foreground text-sm hover:bg-secondary/80 transition-colors">List</a>
         <a href="{% url 'events_calendar' %}" class="px-3 py-1 rounded bg-accent text-accent-foreground text-sm">Calendar</a>
+        {% include "events/_subscribe_popover.html" %}
       </div>
 
       <!-- Month Navigation -->

@@ -633,16 +633,23 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
             response, 'data-testid="course-detail-preview-image"',
         )
 
-    def test_course_detail_with_cover_renders_image(self):
-        """Issue #651: when a cover URL is set, the image renders with
-        the expected alt text and no fallback element."""
+    def test_course_detail_with_cover_renders_no_hero_block(self):
+        """Issue #688: the on-page cover-image hero is removed from the
+        course detail template unconditionally. When a cover URL is set,
+        the page renders neither the preview image, nor the preview
+        wrapper, nor the decorative fallback. (`cover_image_url` still
+        feeds OG tags and JSON-LD via `seo_tags`; see test_seo.py.)
+        """
         self.course.cover_image_url = 'https://example.com/detail-cover.jpg'
         self.course.save()
         response = self.client.get('/courses/detail-course')
-        self.assertContains(response, 'data-testid="course-detail-preview-image"')
-        self.assertContains(response, 'https://example.com/detail-cover.jpg')
-        self.assertContains(response, 'alt="Cover image for Detail Course"')
-        self.assertNotContains(response, 'data-testid="course-detail-preview-fallback"')
+        self.assertNotContains(response, 'data-testid="course-detail-preview"')
+        self.assertNotContains(
+            response, 'data-testid="course-detail-preview-image"',
+        )
+        self.assertNotContains(
+            response, 'data-testid="course-detail-preview-fallback"',
+        )
 
 
 @tag('core')

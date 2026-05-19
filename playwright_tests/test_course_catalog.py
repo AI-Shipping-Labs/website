@@ -297,11 +297,32 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
         assert "python" in body
         assert "ai" in body
 
-        detail_cover = page.locator(
+        # Issue #688: the cover-image hero is removed from the course
+        # detail template unconditionally — even when cover_image_url
+        # is set. The image still drives OG / JSON-LD output (see SEO
+        # tests) but no longer renders inline on the page.
+        assert page.locator(
             '[data-testid="course-detail-preview-image"]'
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="course-detail-preview"]'
+        ).count() == 0
+
+        # H1 with the course title sits within the first 800px of a
+        # 1280x800 viewport (the hero used to push it below the fold).
+        page.set_viewport_size({"width": 1280, "height": 800})
+        page.goto(
+            f"{django_server}/courses/intro-to-ml",
+            wait_until="domcontentloaded",
         )
-        assert detail_cover.count() == 1
-        assert detail_cover.get_attribute("alt") == "Cover image for Intro to ML"
+        h1 = page.get_by_role("heading", level=1, name="Intro to ML")
+        assert h1.count() == 1
+        box = h1.bounding_box()
+        assert box is not None
+        assert box["y"] + box["height"] <= 800, (
+            f"H1 must sit above the fold on a 1280x800 viewport, "
+            f"got y={box['y']} height={box['height']}"
+        )
 
         page.goto(
             f"{django_server}/courses/advanced-mlops",

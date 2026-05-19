@@ -43,7 +43,8 @@
         <ul class="divide-y divide-border" data-testid="sprint-meeting-schedule-list">
           {% for ev in event_series_events %}
           <li class="py-3" data-testid="sprint-meeting-schedule-row">
-            <a href="{% url 'event_detail' slug=ev.slug %}"
+            {# Issue #673 — event_detail is keyed on id+slug; go through get_absolute_url. #}
+            <a href="{{ ev.get_absolute_url }}"
                class="block hover:bg-secondary/50 -mx-2 px-2 rounded-md transition-colors {% if ev.is_past %}text-muted-foreground{% else %}text-foreground{% endif %}"
                data-testid="sprint-meeting-schedule-link">
               <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">

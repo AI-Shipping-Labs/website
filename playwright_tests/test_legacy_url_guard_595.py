@@ -104,13 +104,23 @@ def _login_admin_via_browser(page, base_url, email, password=ADMIN_PASSWORD):
 
 @pytest.mark.django_db(transaction=True)
 class TestScenario1OaiArticleLinksToEventsRecording:
-    """Reader clicks the inline 'Skills.md from Scratch' link and lands
-    on the workshop recording at ``/events/coding-agent-skills-commands``
-    with HTTP 200 — NOT a 404. This proves the content-repo fix landed
-    AND that the article body now uses the canonical ``/events/`` URL.
+    """Reader clicks the inline 'Skills.md from Scratch' link and the
+    article body uses the canonical ``/events/`` prefix (not the
+    retired ``/event-recordings/`` one). This proves the content-repo
+    legacy-URL rewrite is still in effect after issue #673.
+
+    Issue #673: ``/events/<slug>`` (slug-only) now 404s — the canonical
+    URL is ``/events/<id>/<slug>`` and operators handle the one
+    currently-active event with a manual ``Redirect`` row. This test
+    therefore checks the article-body rewrite still produces
+    ``/events/`` (not ``/event-recordings/``) — it no longer verifies
+    the link resolves to a 200, since the canonical surface is keyed
+    on id.
     """
 
-    def test_skills_link_opens_events_recording(self, django_server, page):
+    def test_skills_link_in_article_uses_events_prefix(
+        self, django_server, page,
+    ):
         _clear_articles()
         _clear_events()
         _create_event(
@@ -140,24 +150,12 @@ class TestScenario1OaiArticleLinksToEventsRecording:
             'article a:has-text("Skills.md from Scratch")'
         ).first
         link.wait_for()
-        # Pre-flight: the href in the rendered article points at
-        # /events/, not /event-recordings/.
+        # The href in the rendered article points at /events/,
+        # not /event-recordings/.
         href = link.get_attribute('href')
         assert href == '/events/coding-agent-skills-commands', (
             f'Expected /events/ link in article body, got {href!r}'
         )
-
-        with page.expect_navigation(wait_until='domcontentloaded') as nav_info:
-            link.click()
-        response = nav_info.value
-        assert response.status == 200
-        assert page.url.endswith('/events/coding-agent-skills-commands')
-
-        # The recording detail page must render the recording title — not
-        # a 404 template.
-        body = page.content()
-        assert 'Skills.md from Scratch' in body
-        assert 'Page not found' not in body
 
 
 # ---------------------------------------------------------------------------

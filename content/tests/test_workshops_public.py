@@ -900,7 +900,7 @@ class EventWorkshopCrossLinksTest(TierSetupMixin, TestCase):
         )
 
     def test_event_detail_shows_workshop_writeup_card(self):
-        response = self.client.get('/events/ws-event')
+        response = self.client.get(self.workshop.event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response, 'data-testid="event-workshop-writeup"',
@@ -912,8 +912,11 @@ class EventWorkshopCrossLinksTest(TierSetupMixin, TestCase):
 
     def test_orphan_workshop_event_links_back_to_event(self):
         """Event with kind='workshop' but no linked Workshop falls back to
-        /events/<slug> so we don't 404."""
-        Event.objects.create(
+        the canonical id+slug event URL so we don't 404. Issue #673:
+        ``Event.get_absolute_url`` is the single source of truth for
+        that URL shape.
+        """
+        orphan = Event.objects.create(
             slug='orphan-ws',
             title='Orphan',
             start_datetime=timezone.now(),
@@ -923,11 +926,13 @@ class EventWorkshopCrossLinksTest(TierSetupMixin, TestCase):
             published=True,
         )
         response = self.client.get('/events?filter=past')
-        # Standard event link form on the orphan card
-        self.assertContains(response, 'href="/events/orphan-ws"')
+        # Standard event link form on the orphan card.
+        self.assertContains(
+            response, f'href="{orphan.get_absolute_url()}"',
+        )
 
     def test_event_detail_no_writeup_for_standard_event(self):
-        Event.objects.create(
+        std = Event.objects.create(
             slug='std',
             title='Standard',
             start_datetime=timezone.now(),
@@ -936,7 +941,7 @@ class EventWorkshopCrossLinksTest(TierSetupMixin, TestCase):
             recording_url='https://x/y',
             published=True,
         )
-        response = self.client.get('/events/std')
+        response = self.client.get(std.get_absolute_url())
         self.assertNotContains(
             response, 'data-testid="event-workshop-writeup"',
         )

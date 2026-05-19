@@ -156,6 +156,10 @@ def _upsert_synced_event_content(
         detail=lambda event, action: {
             'title': defaults.get('title', event.title),
             'slug': detail_slug or event.slug or slug,
+            # Issue #673: include the integer primary key so the Studio
+            # sync history can render the canonical
+            # ``/events/<id>/<slug>`` link without a follow-up DB hit.
+            'id': event.pk,
             'action': action,
             'content_type': 'event',
         },
@@ -481,6 +485,9 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
         detail=lambda ev, action: {
             'title': ev.title,
             'slug': ev.slug,
+            # Issue #673: include the id so the Studio history link can
+            # render the canonical id+slug URL.
+            'id': ev.pk,
             'action': action,
             'content_type': 'event',
         },

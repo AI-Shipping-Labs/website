@@ -61,12 +61,13 @@ class TestAttendeeCountChip:
     ):
         _clear_events()
         _ensure_tiers()
-        _create_event_with_registrations(
+        event = _create_event_with_registrations(
             'popular-ai-meetup', 'Popular AI Meetup', count=5,
         )
 
+        # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
         response = page.goto(
-            f'{django_server}/events/popular-ai-meetup',
+            f'{django_server}{event.get_absolute_url()}',
             wait_until='domcontentloaded',
         )
         assert response.status == 200

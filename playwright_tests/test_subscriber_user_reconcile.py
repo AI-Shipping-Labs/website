@@ -180,8 +180,9 @@ class TestAnonymousEventRegistrationE2E:
             required_level=0,
         )
 
+        # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
         page.goto(
-            f"{django_server}/events/community-call",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
@@ -259,7 +260,7 @@ class TestAnonymousEventRegistrationE2E:
         )
 
         page.goto(
-            f"{django_server}/events/community-call-existing",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         page.fill('#event-anon-email', emails[0])
@@ -296,7 +297,7 @@ class TestAnonymousEventRegistrationE2E:
         emails = ["gate-attempt@test.com"]
         _clear_events_and_users(emails)
         _ensure_tiers()
-        _create_event(
+        event = _create_event(
             slug="main-only",
             title="Main Only Workshop",
             required_level=20,  # LEVEL_MAIN
@@ -305,7 +306,7 @@ class TestAnonymousEventRegistrationE2E:
         # The detail page must NOT show the email-only form for gated
         # events.
         page.goto(
-            f"{django_server}/events/main-only",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         assert page.locator(
@@ -360,7 +361,7 @@ class TestAnonymousRegistrantSignsInLater:
         context = _auth_context(browser, emails[0])
         page = context.new_page()
         page.goto(
-            f"{django_server}/events/post-anon-event",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 

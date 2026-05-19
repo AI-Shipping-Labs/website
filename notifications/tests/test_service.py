@@ -364,9 +364,10 @@ class NotificationServiceNotifyTest(TestCase):
             urls_by_title['New course: Course For Main'],
             '/courses/course-for-main',
         )
+        # Issue #673: events resolve to ``/events/<id>/<slug>``.
         self.assertEqual(
             urls_by_title['Upcoming event: Event For Main'],
-            '/events/event-for-main',
+            event.get_absolute_url(),
         )
         self.assertEqual(
             urls_by_title['New download: Download For Main'],

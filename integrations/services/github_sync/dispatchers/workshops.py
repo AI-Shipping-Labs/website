@@ -582,6 +582,9 @@ def _cleanup_generated_empty_workshop_event(workshop, source, stats):
         stats['items_detail'].append({
             'title': event.title,
             'slug': event.slug,
+            # Issue #673: include the id so the Studio sync history can
+            # render the canonical ``/events/<id>/<slug>`` link.
+            'id': event.pk,
             'action': 'deleted',
             'content_type': 'event',
         })

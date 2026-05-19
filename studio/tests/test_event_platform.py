@@ -257,9 +257,10 @@ class CustomURLPublicEventDetailTest(TestCase):
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='user@test.com', password='pass')
 
-        response = self.client.get('/events/youtube-event')
+        response = self.client.get(event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
-        # Join link now uses /events/{slug}/join redirect instead of raw URL
+        # Join link still uses /events/{slug}/join redirect — slug-keyed
+        # sibling routes are intentionally unchanged by issue #673.
         self.assertContains(response, '/events/youtube-event/join')
 
     def test_custom_url_event_join_link_works(self):
@@ -279,9 +280,10 @@ class CustomURLPublicEventDetailTest(TestCase):
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='user2@test.com', password='pass')
 
-        response = self.client.get('/events/discord-event-public')
+        response = self.client.get(event.get_absolute_url())
         content = response.content.decode()
-        # Join link now uses /events/{slug}/join redirect instead of raw URL
+        # Join link still uses /events/{slug}/join redirect (slug-keyed
+        # sibling route unchanged by issue #673).
         self.assertIn('/events/discord-event-public/join', content)
 
     def test_zoom_event_still_works(self):
@@ -302,6 +304,7 @@ class CustomURLPublicEventDetailTest(TestCase):
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='user3@test.com', password='pass')
 
-        response = self.client.get('/events/zoom-detail-event')
-        # Join link now uses /events/{slug}/join redirect instead of raw URL
+        response = self.client.get(event.get_absolute_url())
+        # Join link still uses /events/{slug}/join redirect (slug-keyed
+        # sibling route unchanged by issue #673).
         self.assertContains(response, '/events/zoom-detail-event/join')

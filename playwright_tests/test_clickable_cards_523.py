@@ -264,7 +264,7 @@ class TestHomepageRecordingCardBodyClick:
         self, django_server, page,
     ):
         _clear_all()
-        _create_recording(
+        recording = _create_recording(
             slug='workshop-recording',
             title='Workshop Recording',
             description='A great recorded workshop session.',
@@ -276,7 +276,8 @@ class TestHomepageRecordingCardBodyClick:
         page.locator('text="A great recorded workshop session."').first.click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert '/events/workshop-recording' in page.url
+        # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
+        assert recording.get_absolute_url() in page.url
 
 
 # ---------------------------------------------------------------

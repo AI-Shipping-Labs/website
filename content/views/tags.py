@@ -51,7 +51,11 @@ CONTENT_TYPES = [
         'date_field': 'start_datetime',
         'type_label': 'Event',
         'type_color': 'bg-yellow-500/20 text-yellow-400',
-        'url_func': lambda obj: f'/events/{obj.slug}',
+        # Issue #673: route the tag-results event link through
+        # ``Event.get_absolute_url`` so it follows the canonical
+        # ``/events/<id>/<slug>`` shape, the same single source of
+        # truth used everywhere else.
+        'url_func': lambda obj: obj.get_absolute_url(),
     },
 ]
 

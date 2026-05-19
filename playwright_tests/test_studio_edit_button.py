@@ -79,7 +79,7 @@ class TestStudioEditButtonOnEventDetail:
         context = _auth_context(browser, "staff@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/events/event-with-typo",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
@@ -106,12 +106,12 @@ class TestStudioEditButtonOnEventDetail:
     def test_anonymous_does_not_see_button(self, django_server, page):
         _clear_events()
         _ensure_tiers()
-        _create_event(
+        event = _create_event(
             slug="event-with-typo", title="Event With Typo",
         )
 
         response = page.goto(
-            f"{django_server}/events/event-with-typo",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         assert response.status == 200
@@ -130,14 +130,14 @@ class TestStudioEditButtonOnEventDetail:
         _clear_events()
         _ensure_tiers()
         _create_user("free@test.com", tier_slug="free")
-        _create_event(
+        event = _create_event(
             slug="event-with-typo", title="Event With Typo",
         )
 
         context = _auth_context(browser, "free@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/events/event-with-typo",
+            f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 

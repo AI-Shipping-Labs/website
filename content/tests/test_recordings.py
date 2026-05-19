@@ -135,8 +135,20 @@ class EventRecordingFieldsTest(TestCase):
         self.assertIsNotNone(event.created_at)
 
     def test_get_recording_url(self):
+        """Issue #673: helper returns canonical ``/events/<id>/<slug>``."""
+        event = Event.objects.create(
+            title='Rec', slug='my-recording',
+            start_datetime=timezone.now(),
+        )
+        self.assertEqual(
+            event.get_recording_url(),
+            f'/events/{event.id}/my-recording',
+        )
+
+    def test_get_recording_url_unsaved_returns_empty_string(self):
+        """Issue #673: unsaved row has no id, helper returns ''."""
         event = Event(slug='my-recording')
-        self.assertEqual(event.get_recording_url(), '/events/my-recording')
+        self.assertEqual(event.get_recording_url(), '')
 
     def test_formatted_date(self):
         event = Event(start_datetime=timezone.make_aware(
@@ -381,38 +393,38 @@ class RecordingDetailDisplayTest(TestCase):
         )
 
     def test_status_code_200(self):
-        response = self.client.get('/events/detail-workshop')
+        response = self.client.get(self.recording.get_absolute_url())
         self.assertEqual(response.status_code, 200)
 
     def test_template_used(self):
-        response = self.client.get('/events/detail-workshop')
+        response = self.client.get(self.recording.get_absolute_url())
         self.assertTemplateUsed(response, 'events/event_detail.html')
 
     def test_shows_title(self):
-        response = self.client.get('/events/detail-workshop')
+        response = self.client.get(self.recording.get_absolute_url())
         self.assertContains(response, 'Detail Workshop')
 
     def test_shows_description(self):
-        response = self.client.get('/events/detail-workshop')
+        response = self.client.get(self.recording.get_absolute_url())
         self.assertContains(response, 'Workshop for detail testing')
 
     def test_shows_date(self):
-        response = self.client.get('/events/detail-workshop')
+        response = self.client.get(self.recording.get_absolute_url())
         self.assertContains(response, 'July 20, 2025')
 
     def test_shows_tags(self):
-        response = self.client.get('/events/detail-workshop')
+        response = self.client.get(self.recording.get_absolute_url())
         self.assertContains(response, 'python')
         self.assertContains(response, 'agents')
 
     def test_tags_are_clickable_links(self):
-        response = self.client.get('/events/detail-workshop')
+        response = self.client.get(self.recording.get_absolute_url())
         content = response.content.decode()
         self.assertIn('href="/events?filter=past&amp;tag=python"', content)
         self.assertIn('href="/events?filter=past&amp;tag=agents"', content)
 
     def test_omits_inline_recording_block(self):
-        response = self.client.get('/events/detail-workshop')
+        response = self.client.get(self.recording.get_absolute_url())
         # No inline recording UI: no embed wrapper, no chapters, no
         # materials, no transcript, no core tools / learning objectives /
         # outcome sections.
@@ -433,17 +445,18 @@ class RecordingDetailDisplayTest(TestCase):
         self.assertNotContains(response, 'Expected Outcome')
         self.assertNotContains(response, 'A working API deployment')
 
-    def test_404_for_nonexistent_slug(self):
-        response = self.client.get('/events/nonexistent')
+    def test_404_for_nonexistent_id(self):
+        """Issue #673: unknown id 404s on the canonical route."""
+        response = self.client.get('/events/99999/nonexistent')
         self.assertEqual(response.status_code, 404)
 
     def test_draft_status_404(self):
-        _create_recording_event('drafted-detail', status='draft')
-        response = self.client.get('/events/drafted-detail')
+        draft = _create_recording_event('drafted-detail', status='draft')
+        response = self.client.get(draft.get_absolute_url())
         self.assertEqual(response.status_code, 404)
 
     def test_title_tag_format(self):
-        response = self.client.get('/events/detail-workshop')
+        response = self.client.get(self.recording.get_absolute_url())
         content = response.content.decode()
         self.assertIn('<title>Detail Workshop | AI Shipping Labs</title>', content)
 
@@ -482,7 +495,7 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_open_recording_announcement_only(self):
-        response = self.client.get('/events/open-recording')
+        response = self.client.get(self.open_recording.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         # Announcement copy is visible.
         self.assertContains(response, 'Open description')
@@ -494,7 +507,7 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_gated_recording_no_paywall_on_event_page(self):
-        response = self.client.get('/events/gated-recording')
+        response = self.client.get(self.gated_recording.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         # No recording, no materials, no recording-specific paywall copy.
         self.assertNotContains(response, 'youtube.com/embed')
@@ -508,7 +521,7 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         user.tier = self.main_tier
         user.save()
         self.client.login(email='main@test.com', password='testpass')
-        response = self.client.get('/events/gated-recording')
+        response = self.client.get(self.gated_recording.get_absolute_url())
         # Even an authorized member sees no inline recording on the event
         # detail page; they reach the recording via the workshop CTA.
         self.assertNotContains(response, 'youtube.com/embed')

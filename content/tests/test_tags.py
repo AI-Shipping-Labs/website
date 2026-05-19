@@ -727,7 +727,7 @@ class TagRuleInjectionRecordingTest(TestCase):
         )
 
     def test_tag_rule_not_rendered_on_event_detail(self):
-        response = self.client.get('/events/ai-recording')
+        response = self.client.get(self.recording.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'tag-rule-component')
         self.assertNotContains(response, 'AI Roadmap')

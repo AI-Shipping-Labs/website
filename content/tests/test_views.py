@@ -224,7 +224,7 @@ class RecordingDetailViewTest(TestCase):
         )
 
     def test_recording_detail_template(self):
-        response = self.client.get('/events/workshop-detail')
+        response = self.client.get(self.recording.get_absolute_url())
         self.assertTemplateUsed(response, 'events/event_detail.html')
 
     def test_recording_detail_contains_content(self):
@@ -233,7 +233,7 @@ class RecordingDetailViewTest(TestCase):
         # learning objectives, expected outcome, materials, timestamps)
         # are not rendered here — they live on the linked Workshop's
         # video page.
-        response = self.client.get('/events/workshop-detail')
+        response = self.client.get(self.recording.get_absolute_url())
         self.assertEqual(response.context['event'], self.recording)
         self.assertContains(response, 'Workshop description')
         self.assertNotContains(response, 'Core Tools')
@@ -243,7 +243,8 @@ class RecordingDetailViewTest(TestCase):
         self.assertNotContains(response, 'https://example.com/slides')
 
     def test_recording_detail_404(self):
-        response = self.client.get('/events/nonexistent')
+        # Issue #673: unknown event id 404s on the canonical route.
+        response = self.client.get('/events/99999/nonexistent')
         self.assertEqual(response.status_code, 404)
 
 

@@ -46,7 +46,7 @@ class StudioEditButtonEventDetailTest(TestCase):
     def test_staff_sees_button(self):
         _staff_user()
         self.client.login(email='staff@test.com', password='pw')
-        response = self.client.get(f'/events/{self.event.slug}')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, STUDIO_BUTTON_TESTID, count=1)
         self.assertContains(
@@ -54,7 +54,7 @@ class StudioEditButtonEventDetailTest(TestCase):
         )
 
     def test_anonymous_does_not_see_button(self):
-        response = self.client.get(f'/events/{self.event.slug}')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, STUDIO_BUTTON_TESTID)
         self.assertNotContains(response, '/studio/')
@@ -62,7 +62,7 @@ class StudioEditButtonEventDetailTest(TestCase):
     def test_free_user_does_not_see_button(self):
         _free_user()
         self.client.login(email='free@test.com', password='pw')
-        response = self.client.get(f'/events/{self.event.slug}')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, STUDIO_BUTTON_TESTID)
         self.assertNotContains(response, '/studio/')

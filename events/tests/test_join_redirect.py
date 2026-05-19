@@ -168,7 +168,11 @@ class EventJoinRedirectTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_join_redirect_unregistered_user_redirected_to_detail(self):
-        """Authenticated but unregistered user is redirected to event detail."""
+        """Authenticated but unregistered user is redirected to event detail.
+
+        Issue #673: redirects through the canonical ``/events/<id>/<slug>``
+        URL via ``Event.get_absolute_url``.
+        """
         User.objects.create_user(
             email='unregistered@example.com',
             password='testpass123',
@@ -176,7 +180,10 @@ class EventJoinRedirectTest(TierSetupMixin, TestCase):
         self.client.login(email='unregistered@example.com', password='testpass123')
         response = self.client.get('/events/upcoming-event/join')
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/events/upcoming-event')
+        self.assertEqual(
+            response['Location'],
+            self.upcoming_event.get_absolute_url(),
+        )
 
     def test_multiple_clicks_tracked(self):
         """Each visit creates a new click record."""

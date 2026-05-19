@@ -156,10 +156,11 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
             'data-testid="sprint-meeting-schedule-row"',
             count=3,
         )
-        # Each occurrence links to /events/<slug>.
-        self.assertContains(response, f'/events/{self.event_1.slug}')
-        self.assertContains(response, f'/events/{self.event_2.slug}')
-        self.assertContains(response, f'/events/{self.event_3.slug}')
+        # Issue #673: each occurrence links to the canonical
+        # ``/events/<id>/<slug>`` URL via ``Event.get_absolute_url``.
+        self.assertContains(response, self.event_1.get_absolute_url())
+        self.assertContains(response, self.event_2.get_absolute_url())
+        self.assertContains(response, self.event_3.get_absolute_url())
         # Heading appears.
         self.assertContains(response, 'Meeting schedule')
 

@@ -89,12 +89,18 @@ class EventViewOnSiteTest(ViewOnSiteTestMixin, TestCase):
 
     def test_list_has_view_on_site_link(self):
         response = self.client.get('/studio/events/')
-        self.assertContains(response, 'href="/events/my-event"')
+        # Issue #673: View-on-site link points to the canonical
+        # ``/events/<id>/<slug>`` URL via ``Event.get_absolute_url``.
+        self.assertContains(
+            response, f'href="{self.event.get_absolute_url()}"',
+        )
         self.assertContains(response, 'target="_blank"')
 
     def test_edit_has_view_on_site_link(self):
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
-        self.assertContains(response, 'href="/events/my-event"')
+        self.assertContains(
+            response, f'href="{self.event.get_absolute_url()}"',
+        )
         self.assertContains(response, 'target="_blank"')
 
 
@@ -129,7 +135,10 @@ class RecordingLinkedWorkshopViewOnSiteTest(ViewOnSiteTestMixin, TestCase):
         self.assertContains(response, 'href="/workshops/my-workshop"')
         self.assertContains(response, 'target="_blank"')
         # Must NOT link out to the announcement-only event detail page.
-        self.assertNotContains(response, 'href="/events/my-recording"')
+        # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
+        self.assertNotContains(
+            response, f'href="{self.recording.get_absolute_url()}"',
+        )
 
     def test_edit_has_view_on_site_link(self):
         response = self.client.get(
@@ -137,7 +146,9 @@ class RecordingLinkedWorkshopViewOnSiteTest(ViewOnSiteTestMixin, TestCase):
         )
         self.assertContains(response, 'href="/workshops/my-workshop"')
         self.assertContains(response, 'target="_blank"')
-        self.assertNotContains(response, 'href="/events/my-recording"')
+        self.assertNotContains(
+            response, f'href="{self.recording.get_absolute_url()}"',
+        )
 
 
 class RecordingNoWorkshopNoViewOnSiteLinkTest(ViewOnSiteTestMixin, TestCase):
@@ -160,8 +171,11 @@ class RecordingNoWorkshopNoViewOnSiteLinkTest(ViewOnSiteTestMixin, TestCase):
         response = self.client.get('/studio/recordings/')
         self.assertEqual(response.status_code, 200)
         # The recording row still renders, but with no public link.
+        # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
         self.assertContains(response, 'Orphan Recording')
-        self.assertNotContains(response, 'href="/events/orphan-recording"')
+        self.assertNotContains(
+            response, f'href="{self.recording.get_absolute_url()}"',
+        )
         self.assertNotContains(response, 'href="/workshops/')
 
     def test_edit_has_no_view_on_site_link(self):
@@ -170,7 +184,9 @@ class RecordingNoWorkshopNoViewOnSiteLinkTest(ViewOnSiteTestMixin, TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Orphan Recording')
-        self.assertNotContains(response, 'href="/events/orphan-recording"')
+        self.assertNotContains(
+            response, f'href="{self.recording.get_absolute_url()}"',
+        )
         self.assertNotContains(response, 'href="/workshops/')
 
 

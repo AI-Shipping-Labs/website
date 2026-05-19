@@ -9,6 +9,7 @@ from events.views.pages import (
     cancel_registration_page,
     event_calendar_ics,
     event_detail,
+    event_detail_no_slug_redirect,
     event_join_redirect,
     event_series_public,
     events_calendar,
@@ -19,9 +20,9 @@ from events.views.pages import (
 urlpatterns = [
     path('events', events_list, name='events_list'),
     # Issue #578: ``events/calendar.ics`` is registered BEFORE the
-    # ``events/<slug>`` route below so the literal ``calendar.ics``
-    # isn't swallowed by the slug converter. Same pattern as
-    # ``events/groups/<slug>``.
+    # ``events/<slug>`` join/calendar.ics/cancel routes below so the
+    # literal ``calendar.ics`` isn't swallowed by the slug converter.
+    # Same pattern as ``events/groups/<slug>``.
     path(
         'events/calendar.ics',
         events_calendar_feed,
@@ -33,10 +34,9 @@ urlpatterns = [
         events_calendar,
         name='events_calendar_month',
     ),
-    # Issue #564: ``events/groups/<slug>`` is registered BEFORE
-    # ``events/<slug>`` so the literal ``groups`` prefix isn't swallowed
-    # by the slug converter on the event-detail route below. Same
-    # pattern as ``workshops/resync/``.
+    # Issue #564: ``events/groups/<slug>`` is registered BEFORE the
+    # other slug routes so the literal ``groups`` prefix isn't swallowed
+    # by the slug converter. Same pattern as ``workshops/resync/``.
     #
     # TODO(#575): the public URL still uses ``/events/groups/<slug>`` to
     # avoid breaking external bookmarks during the EventGroup ->
@@ -53,6 +53,15 @@ urlpatterns = [
         event_series_public,
         name='event_series_public_trailing',
     ),
+    # Issue #673: slug-keyed sibling routes for join, .ics download, and
+    # cancel-registration intentionally stay on ``events/<slug>/<verb>``.
+    # They are not user-bookmarkable surfaces (URLs minted server-side
+    # into emails and the registration card), so the cost of moving them
+    # to id+slug is higher than the benefit. They must be registered
+    # BEFORE the new ``events/<int:event_id>/<slug:slug>`` canonical
+    # route below — a 3-segment URL like ``/events/foo/join`` should
+    # always reach the join redirect, not be interpreted as an
+    # event-detail attempt.
     path('events/<slug:slug>/join', event_join_redirect, name='event_join'),
     path(
         'events/<slug:slug>/calendar.ics',
@@ -64,7 +73,25 @@ urlpatterns = [
         cancel_registration_page,
         name='event_cancel_registration',
     ),
-    path('events/<slug:slug>', event_detail, name='event_detail'),
+    # Issue #673: canonical event detail. ``event_id`` is the lookup key;
+    # ``slug`` is purely cosmetic. The view verifies the slug matches the
+    # stored value and 301s to the canonical form on a mismatch.
+    path(
+        'events/<int:event_id>/<slug:slug>',
+        event_detail,
+        name='event_detail',
+    ),
+    # Issue #673: id-only route redirects to the canonical id+slug URL.
+    # ``/events/<id>/`` (with the trailing slash) is normalised first
+    # by the site-wide ``RemoveTrailingSlashMiddleware`` (a 301 to
+    # ``/events/<id>``), then this view 301s on to the canonical
+    # id+slug URL — two cheap permanent redirects rather than a custom
+    # trailing-slash variant.
+    path(
+        'events/<int:event_id>',
+        event_detail_no_slug_redirect,
+        name='event_detail_no_slug',
+    ),
     # API endpoints for registration
     path(
         'api/events/<slug:slug>/register',

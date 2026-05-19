@@ -134,17 +134,19 @@ class BuildVeventTest(TestCase):
         self.assertEqual(build_vevent(self.external).get('sequence'), 2)
 
     def test_url_points_at_public_detail_page_not_join(self):
+        # Issue #673: detail URL is ``/events/<id>/<slug>``.
         vevent = build_vevent(self.community)
         self.assertEqual(
             str(vevent.get('url')),
-            'https://aishippinglabs.com/events/community-evt',
+            f'https://aishippinglabs.com{self.community.get_absolute_url()}',
         )
 
     def test_location_is_detail_url_for_community_events(self):
+        # Issue #673: detail URL is ``/events/<id>/<slug>``.
         vevent = build_vevent(self.community)
         self.assertEqual(
             str(vevent.get('location')),
-            'https://aishippinglabs.com/events/community-evt',
+            f'https://aishippinglabs.com{self.community.get_absolute_url()}',
         )
 
     def test_location_is_external_host_for_external_events(self):
@@ -152,11 +154,12 @@ class BuildVeventTest(TestCase):
         self.assertEqual(str(vevent.get('location')), 'Maven')
 
     def test_description_includes_join_line(self):
+        # Issue #673: join line links to canonical ``/events/<id>/<slug>``.
         vevent = build_vevent(self.community)
         description = str(vevent.get('description'))
         self.assertIn('A normal community session.', description)
         self.assertIn(
-            'Join: https://aishippinglabs.com/events/community-evt',
+            f'Join: https://aishippinglabs.com{self.community.get_absolute_url()}',
             description,
         )
 
@@ -174,8 +177,9 @@ class BuildVeventTest(TestCase):
         # 2000 chars of body + the "\n\nJoin: ..." suffix.
         self.assertIn('a' * 2000, description)
         self.assertNotIn('a' * 2001, description)
+        # Issue #673: join line uses the canonical id+slug URL.
         self.assertIn(
-            'Join: https://aishippinglabs.com/events/long-desc-evt',
+            f'Join: https://aishippinglabs.com{event.get_absolute_url()}',
             description,
         )
 

@@ -148,7 +148,8 @@
             </p>
             {% endif %}
             {# Issue #523 — keyboard-focus ring on the wrapping <a>. #}
-            <a href="/events/{{ event.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
+            {# Issue #673 — single source of truth for the event URL is event.get_absolute_url. #}
+            <a href="{{ event.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}">
               <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2 mb-2 flex-wrap">
@@ -249,7 +250,8 @@
             {% if event.kind == 'workshop' and event.workshop %}
             <a href="{{ event.workshop.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="past-card-workshop-link">
             {% else %}
-            <a href="/events/{{ event.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
+            {# Issue #673 — canonical event URL via get_absolute_url. #}
+            <a href="{{ event.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}">
             {% endif %}
               <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div class="min-w-0 flex-1">
@@ -330,7 +332,8 @@
             {% if event.kind == 'workshop' and event.workshop %}
             <a href="{{ event.workshop.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="past-card-workshop-link">
             {% else %}
-            <a href="/events/{{ event.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
+            {# Issue #673 — canonical event URL via get_absolute_url. #}
+            <a href="{{ event.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}">
             {% endif %}
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0 flex-1">

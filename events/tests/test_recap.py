@@ -29,7 +29,7 @@ class EventRecapViewTest(TestCase):
         # supplied via content sync replaces the description on completed
         # events, so the recording embed (when present) is now part of the
         # recap markup itself rather than a templated inline block.
-        Event.objects.create(
+        event = Event.objects.create(
             title='Launch',
             slug='launch',
             description='Original launch description',
@@ -39,7 +39,7 @@ class EventRecapViewTest(TestCase):
             timestamps=[{'time_seconds': 0, 'label': 'Intro'}],
             recap_html='<h2>Watch the recording</h2>',
         )
-        response = self.client.get('/events/launch')
+        response = self.client.get(event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'events/event_detail.html')
         self.assertContains(response, 'Launch')
@@ -55,13 +55,13 @@ class EventRecapViewTest(TestCase):
         )
 
     def test_event_detail_omits_recap_html_when_absent(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='No Recap',
             slug='no-recap',
             start_datetime=timezone.now(),
             status='completed',
         )
-        response = self.client.get('/events/no-recap')
+        response = self.client.get(event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Watch the recording')
 
@@ -73,20 +73,22 @@ class EventRecapViewTest(TestCase):
             status='completed',
             recap_html='<h2>Watch the recording</h2>',
         )
+        # The legacy ``/recap`` sub-route was retired; the slug-only
+        # legacy URL (without an id segment) returns 404 too.
         response = self.client.get('/events/launch/recap')
         self.assertEqual(response.status_code, 404)
 
 
 class EventDetailRecapLinkTest(TestCase):
     def test_upcoming_event_with_synced_recap_still_shows_normal_event_page(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='Has Recap',
             slug='has-recap',
             start_datetime=timezone.now(),
             status='upcoming',
             recap_html='<h2>Summary</h2>',
         )
-        response = self.client.get('/events/has-recap')
+        response = self.client.get(event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         # Issue #513: anonymous CTA on free events was replaced with the
@@ -97,13 +99,13 @@ class EventDetailRecapLinkTest(TestCase):
         self.assertNotIn('/events/has-recap/recap', content)
 
     def test_event_detail_hides_recap_link_when_no_rendered_recap(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='No Recap',
             slug='no-recap-event',
             start_datetime=timezone.now(),
             status='upcoming',
         )
-        response = self.client.get('/events/no-recap-event')
+        response = self.client.get(event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertNotIn('View event recap', content)

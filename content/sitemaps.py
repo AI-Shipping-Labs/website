@@ -4,7 +4,7 @@ Django sitemaps for all public content.
 Includes:
 - Published articles with required_level=0
 - All published courses (always public)
-- All events (upcoming/completed, including recordings) at /events/<slug>
+- All events (upcoming/completed, including recordings) at /events/<id>/<slug>
 - Published projects with required_level=0
 - Published tutorials with required_level=0
 - Tag pages (index + individual tags)

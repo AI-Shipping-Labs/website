@@ -460,16 +460,22 @@ class TestScenario449UnverifiedSignupFreeArticle:
 
         page.locator('text="Free Article Requires Verification"').first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert page.locator('[data-testid="verify-email-required-card"]').is_visible()
+        verify_card = page.get_by_test_id("verify-email-required-card")
+        assert verify_card.is_visible()
         body = page.content()
         assert "unverified@test.com" in body
         assert "Full article body after verification" not in body
         assert 'data-testid="gated-access-card"' not in body
-        assert page.get_by_role("button", name="Resend verification email").is_visible()
+        # Scope to the verify-email card: the global banner (issue #698) also
+        # renders a "Resend verification email" button on every authenticated
+        # page, so an unscoped get_by_role would match two elements.
+        assert verify_card.get_by_role(
+            "button", name="Resend verification email"
+        ).is_visible()
         assert page.locator('a[href="/pricing"]').count() > 0
 
         article_url = page.url
-        page.get_by_role("button", name="Resend verification email").click()
+        verify_card.get_by_role("button", name="Resend verification email").click()
         page.wait_for_load_state("domcontentloaded")
         assert page.url == article_url
         assert "Verification email sent." in page.content()

@@ -5,9 +5,11 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
+from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone as djtimezone
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
@@ -16,8 +18,9 @@ from accounts.services.timezones import (
     get_timezone_label,
     is_valid_timezone,
 )
-from events.models import Event
+from events.models import Event, EventRegistration
 from events.models.event import EXTERNAL_HOST_CHOICES
+from events.tasks.notify_reschedule import enqueue_reschedule_notice
 from integrations.services.zoom import create_meeting
 from studio.decorators import staff_required
 from studio.utils import get_github_edit_url, is_synced
@@ -139,6 +142,62 @@ def _render_in_tz(dt, tz_name):
     else:
         aware = dt
     return aware.astimezone(zone)
+
+
+def _maybe_notify_reschedule(request, event, old_start):
+    """Issue #670: enqueue rescheduling notices after a date-changing save.
+
+    Trigger rules (all must hold):
+
+    - ``old_start`` and ``event.start_datetime`` are both non-null.
+    - ``old_start > now()`` — past events are excluded; emailing
+      "this event has been rescheduled" for an event that already
+      happened is worse than silence.
+    - ``abs(new - old).total_seconds() >= 60`` — the form parser
+      zeros seconds, so anything smaller is a no-op re-save and must
+      not enqueue.
+
+    When the trigger fires:
+
+    - Bumps ``event.ics_sequence`` and persists it so the re-issued
+      ``.ics`` carries a higher SEQUENCE than the original registration
+      invite — calendar clients then overwrite the existing entry
+      instead of creating a duplicate.
+    - Enqueues the two-stage fan-out task with the ISO-encoded
+      ``old_start`` (Django-Q arguments must be JSON-serialisable).
+    - Flashes a success message with the PRE-FILTER registration count
+      (admins see the audience size, not the deliveries — that way a
+      user toggling ``unsubscribed`` between save and send doesn't
+      produce a discrepancy in the flash).
+    """
+    if old_start is None or event.start_datetime is None:
+        return
+    if abs((event.start_datetime - old_start).total_seconds()) < 60:
+        return
+    now = djtimezone.now()
+    if old_start <= now:
+        return
+    # Admin moved an upcoming event into the past: the email would
+    # advertise a time the recipient cannot reach.
+    if event.start_datetime <= now:
+        return
+
+    # Bump SEQUENCE before the fan-out so the per-user .ics already
+    # carries the new value. ics_sequence is a PositiveIntegerField
+    # so a single increment is enough; the previous registration
+    # invite carried the pre-bump value.
+    event.ics_sequence = (event.ics_sequence or 0) + 1
+    event.save(update_fields=['ics_sequence'])
+
+    count = EventRegistration.objects.filter(event=event).count()
+    if count > 0:
+        enqueue_reschedule_notice(event.pk, old_start.isoformat())
+
+    label = 'attendee' if count == 1 else 'attendees'
+    messages.success(
+        request,
+        f'Rescheduling notice sent to {count} registered {label}.',
+    )
 
 
 @staff_required
@@ -321,6 +380,15 @@ def event_edit(request, event_id):
 
             event.save()
         else:
+            # Issue #670: snapshot the persisted start time BEFORE we
+            # mutate the in-memory event. The Studio form re-parses
+            # date+time+duration into UTC on every save, so a no-op
+            # re-save still hits ``event.save()`` — we use
+            # field-level comparison after save to decide whether to
+            # notify, not "did the form do a write?" semantics.
+            old_event = Event.objects.get(pk=event.pk)
+            old_start = old_event.start_datetime
+
             event.title = request.POST.get('title', '').strip()
             event.slug = request.POST.get('slug', '').strip() or slugify(event.title)
             event.description = request.POST.get('description', '')
@@ -378,6 +446,13 @@ def event_edit(request, event_id):
                 event.zoom_meeting_id = ''
 
             event.save()
+
+            # Issue #670: detect a meaningful start-time change and
+            # notify registered attendees. The trigger fires only when
+            # both old and new starts are non-null, both are in the
+            # future, and the delta is >= 60s. End-only edits and
+            # past-event edits stay silent.
+            _maybe_notify_reschedule(request, event, old_start)
         return redirect('studio_event_edit', event_id=event.pk)
 
     context = _event_form_context(event, default_tz)

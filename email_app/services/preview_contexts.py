@@ -102,6 +102,21 @@ PREVIEW_CONTEXTS = {
         'event_datetime': 'March 21, 2026, 18:00 Europe/Berlin',
         'event_url': 'https://zoom.us/j/123',
     },
+    'event_rescheduled': {
+        'user_name': 'Ada',
+        'event_title': 'AI Shipping Workshop',
+        # Issue #670: both times pre-formatted via format_user_datetime in
+        # the recipient's preferred timezone. Mirror that shape here.
+        'old_event_datetime': 'March 21, 2026, 18:00 Europe/Berlin',
+        'new_event_datetime': 'March 28, 2026, 18:00 Europe/Berlin',
+        'join_url': (
+            'https://aishippinglabs.com/events/community-lunch/join'
+        ),
+        'cancel_url': (
+            'https://aishippinglabs.com/events/community-lunch/'
+            'cancel-registration?token=preview-token'
+        ),
+    },
     'lead_magnet_delivery': {
         'user_name': 'Ada',
         'resource_title': 'AI Cheat Sheet',

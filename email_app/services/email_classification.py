@@ -30,6 +30,7 @@ TRANSACTIONAL_EMAIL_TYPES = {
     "email_verification_reminder",
     "password_reset",
     "event_registration",
+    "event_rescheduled",
     "welcome_imported",
 }
 

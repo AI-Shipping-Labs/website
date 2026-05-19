@@ -5,6 +5,7 @@
 {% login_url as header_login_url %}
 <header id="site-header" class="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
   {% include "includes/announcement_banner.html" %}
+  {% include "includes/_unverified_email_banner.html" %}
   <nav class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4 lg:px-8">
     <a href="/" class="flex max-w-[calc(100%-3.5rem)] items-center gap-2 min-w-0 md:max-w-none">
       <img src="/static/rocket-upscale-no-bg-small.png" alt="AI Shipping Labs" class="h-8 w-8 flex-shrink-0">

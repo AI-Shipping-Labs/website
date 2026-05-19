@@ -136,8 +136,9 @@ class StudioDashboardSprintsTileQueryCountTest(TestCase):
     request after a Python interpreter starts:
 
     - ``integrations.middleware.RedirectMiddleware`` reads
-      ``Redirect`` via ``cache.get('active_redirects')`` and caches the
-      result in the default ``LocMemCache`` for 5 minutes.
+      ``Redirect`` via ``caches['django_q'].get('active_redirects')``
+      and caches the result for 5 minutes. In tests this backend is
+      ``LocMemCache`` (cross-process ``DatabaseCache`` in prod).
     - ``integrations.config.get_config`` (called from the site_context
       and env-mismatch context processors) reads ``IntegrationSetting``
       once and stashes the rows in a module-level dict.

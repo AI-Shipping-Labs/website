@@ -305,6 +305,76 @@ class EventsListPageTest(TestCase):
         self.assertContains(response, 'Zoom')
 
 
+class EventsListMarkdownRenderingTest(TestCase):
+    """Regression tests for issue #707.
+
+    The events list cards used to render `event.description` (raw markdown)
+    instead of `event.description_html` (rendered + striptags-cleaned), so
+    markdown link syntax like `[anchor](https://...)` appeared as literal
+    text on the upcoming/past cards. Cards apply `striptags|truncatechars`
+    because the whole card is a single clickable <a> and HTML5 forbids
+    nested anchors.
+    """
+
+    def _decode_card_html(self, response):
+        return response.content.decode()
+
+    def test_upcoming_card_renders_markdown_link_as_plain_text(self):
+        Event.objects.create(
+            title='Upcoming Markdown Event',
+            slug='upcoming-md-link-event',
+            description='In the [previous workshop](https://example.com/foo) we covered backend setup',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+        )
+        response = self.client.get('/events')
+        body = self._decode_card_html(response)
+        # Anchor text survives as plain text
+        self.assertIn('previous workshop', body)
+        # Raw markdown syntax must not leak through
+        self.assertNotIn('[previous workshop]', body)
+        self.assertNotIn('](https://example.com/foo)', body)
+        # striptags should have removed the rendered <a> tag too
+        self.assertNotIn('<a href="https://example.com/foo"', body)
+
+    def test_past_card_renders_markdown_link_as_plain_text(self):
+        # /events?filter=past only surfaces completed events that are
+        # published AND have a non-empty recording_url — see
+        # events.views.pages.events_list for the query.
+        Event.objects.create(
+            title='Past Markdown Event',
+            slug='past-md-link-event',
+            description='In the [previous workshop](https://example.com/foo) we covered backend setup',
+            start_datetime=timezone.now() - timedelta(days=7),
+            status='completed',
+            published=True,
+            recording_url='https://example.com/recording',
+        )
+        response = self.client.get('/events?filter=past')
+        body = self._decode_card_html(response)
+        self.assertIn('previous workshop', body)
+        self.assertNotIn('[previous workshop]', body)
+        self.assertNotIn('](https://example.com/foo)', body)
+        self.assertNotIn('<a href="https://example.com/foo"', body)
+
+    def test_upcoming_card_renders_bold_and_italic_as_plain_text(self):
+        Event.objects.create(
+            title='Upcoming Emphasis Event',
+            slug='upcoming-emph-event',
+            description='This is **bold** and _italic_ text',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+        )
+        response = self.client.get('/events')
+        body = self._decode_card_html(response)
+        # Plain words survive
+        self.assertIn('bold', body)
+        self.assertIn('italic', body)
+        # Raw markdown emphasis markers must not leak through
+        self.assertNotIn('**bold**', body)
+        self.assertNotIn('_italic_', body)
+
+
 class EventsListTierBadgeTest(TierSetupMixin, TestCase):
     """Test tier badge on events list."""
 

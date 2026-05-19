@@ -53,6 +53,7 @@ def _create_event(
     cover_image_url="",
     start_datetime=None,
     status="upcoming",
+    required_level=0,
 ):
     from events.models import Event
 
@@ -65,6 +66,7 @@ def _create_event(
         start_datetime=start_datetime,
         status=status,
         cover_image_url=cover_image_url,
+        required_level=required_level,
     )
     connection.close()
     return event
@@ -229,6 +231,231 @@ class TestEventDetailCoverImage:
         assert page.locator(
             '[data-testid="event-cover-image"]'
         ).count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+class TestAnonymousPaidEventCopy:
+    """Issue #671: anonymous visitors on a tier-gated event must see
+    tier-aware copy that names the required tier and points at /pricing
+    BEFORE pushing them to create an account. The misleading "free
+    account is required" copy is gone.
+    """
+
+    @pytest.mark.core
+    def test_anonymous_main_event_shows_tier_aware_copy(
+        self, django_server, page
+    ):
+        """Mirrors the live event at
+        /events/solving-a-real-ai-engineer-take-home-assignment-live
+        (Main-tier, anonymous visitor)."""
+        _clear_events()
+        _ensure_tiers()
+        _create_event(
+            slug="solving-a-real-ai-engineer-take-home-assignment-live-fixture",
+            title="Solving a real AI engineer take-home assignment (live)",
+            required_level=20,  # LEVEL_MAIN
+        )
+
+        response = page.goto(
+            f"{django_server}/events/solving-a-real-ai-engineer-take-home-assignment-live-fixture",
+            wait_until="domcontentloaded",
+        )
+        assert response.status == 200
+
+        card = page.locator('[data-testid="event-anonymous-cta"]')
+        assert card.count() == 1
+        card_text = card.inner_text()
+
+        # Heading names the tier.
+        assert "This event is for Main members" in card_text
+        # Body sentence names the tier and links to pricing.
+        assert "requires a Main membership or above" in card_text
+        # The misleading old copy is gone.
+        assert "free account" not in card_text.lower()
+        assert "create a free account" not in card_text.lower()
+
+        # Primary CTA: "View membership options" -> /pricing
+        pricing_cta = card.locator(
+            '[data-testid="event-anonymous-pricing-cta"]'
+        )
+        assert pricing_cta.count() == 1
+        assert pricing_cta.get_attribute("href") == "/pricing"
+        assert "View membership options" in pricing_cta.inner_text()
+
+        # Secondary CTA: "Sign in" preserving ?next= to event URL.
+        signin_cta = card.locator(
+            '[data-testid="event-anonymous-signin-cta"]'
+        )
+        assert signin_cta.count() == 1
+        signin_href = signin_cta.get_attribute("href")
+        assert signin_href.startswith("/accounts/login/?next=")
+        assert (
+            "solving-a-real-ai-engineer-take-home-assignment-live-fixture"
+            in signin_href
+        )
+        assert signin_cta.inner_text().strip() == "Sign in"
+
+    def test_clicking_view_membership_options_lands_on_pricing(
+        self, django_server, page
+    ):
+        _clear_events()
+        _ensure_tiers()
+        _create_event(
+            slug="paid-main-pricing-flow",
+            title="Paid Main Pricing Flow",
+            required_level=20,
+        )
+
+        page.goto(
+            f"{django_server}/events/paid-main-pricing-flow",
+            wait_until="domcontentloaded",
+        )
+        page.locator(
+            '[data-testid="event-anonymous-pricing-cta"]'
+        ).click()
+        page.wait_for_url(f"{django_server}/pricing")
+        # Smoke check: the pricing page renders without an error.
+        assert "Pricing" in page.title() or "pricing" in page.url
+
+    def test_anonymous_free_event_still_shows_email_form(
+        self, django_server, page
+    ):
+        """Regression check: free events keep the inline email-only
+        signup form (issue #513) and never show the tier-aware copy.
+        """
+        _clear_events()
+        _ensure_tiers()
+        _create_event(
+            slug="free-fixture-event",
+            title="Free Fixture Event",
+            required_level=0,
+        )
+
+        page.goto(
+            f"{django_server}/events/free-fixture-event",
+            wait_until="domcontentloaded",
+        )
+        # Email form is present.
+        assert page.locator(
+            '[data-testid="event-anonymous-email-form"]'
+        ).count() == 1
+        # Tier-aware copy must NOT appear on a free event.
+        assert page.locator(
+            '[data-testid="event-anonymous-cta"]'
+        ).count() == 0
+        # The registration card must not link to /pricing on a free event.
+        card = page.locator(
+            '[data-testid="event-registration-card"]'
+        )
+        assert card.locator('a[href="/pricing"]').count() == 0
+
+    def test_anonymous_premium_event_drops_or_above(
+        self, django_server, page
+    ):
+        """Premium is the highest public tier, so the body must NOT say
+        "Premium membership or above" — there's nothing higher.
+        """
+        _clear_events()
+        _ensure_tiers()
+        _create_event(
+            slug="premium-fixture-event",
+            title="Premium Fixture Event",
+            required_level=30,  # LEVEL_PREMIUM
+        )
+
+        page.goto(
+            f"{django_server}/events/premium-fixture-event",
+            wait_until="domcontentloaded",
+        )
+        card = page.locator('[data-testid="event-anonymous-cta"]')
+        card_text = card.inner_text()
+
+        assert "This event is for Premium members" in card_text
+        assert "requires a Premium membership" in card_text
+        # The "or above" suffix must be dropped for Premium.
+        assert "Premium membership or above" not in card_text
+
+
+@pytest.mark.django_db(transaction=True)
+class TestUnderTierCopyConsistency:
+    """Issue #671: authenticated user under the required tier sees the
+    same phrasing as the anonymous-on-paid CTA — "Registering for this
+    event requires a {tier} membership or above." and the Premium case
+    drops "or above".
+    """
+
+    @pytest.mark.core
+    def test_free_user_on_main_event_sees_consistent_copy(
+        self, django_server, browser
+    ):
+        _clear_events()
+        _ensure_tiers()
+        _create_user("free671@test.com", tier_slug="free")
+        _create_event(
+            slug="solving-a-real-ai-engineer-take-home-assignment-live-fixture",
+            title="Solving a real AI engineer take-home assignment (live)",
+            required_level=20,  # LEVEL_MAIN
+        )
+
+        context = _auth_context(browser, "free671@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/events/solving-a-real-ai-engineer-take-home-assignment-live-fixture",
+            wait_until="domcontentloaded",
+        )
+
+        card = page.locator(
+            '[data-testid="event-registration-card"]'
+        )
+        card_text = card.inner_text()
+
+        # Heading: upgrade to the named tier.
+        assert "Upgrade to Main to attend" in card_text
+        # Body: same "Registering for this event requires…" phrasing as
+        # the anonymous-on-paid CTA.
+        assert (
+            "requires a Main membership or above" in card_text
+        )
+        # "free account" must not appear anywhere in the under-tier card.
+        assert "free account" not in card_text.lower()
+
+        # The View Pricing button is the upgrade CTA.
+        pricing_link = card.locator('a[href="/pricing"]')
+        assert pricing_link.count() >= 1
+        # Click the View Pricing button and land on /pricing.
+        pricing_link.first.click()
+        page.wait_for_url(f"{django_server}/pricing")
+        context.close()
+
+    def test_basic_user_on_premium_event_drops_or_above(
+        self, django_server, browser
+    ):
+        _clear_events()
+        _ensure_tiers()
+        _create_user("basic671@test.com", tier_slug="basic")
+        _create_event(
+            slug="premium-fixture-event",
+            title="Premium Fixture Event",
+            required_level=30,
+        )
+
+        context = _auth_context(browser, "basic671@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/events/premium-fixture-event",
+            wait_until="domcontentloaded",
+        )
+
+        card = page.locator(
+            '[data-testid="event-registration-card"]'
+        )
+        card_text = card.inner_text()
+
+        assert "Upgrade to Premium to attend" in card_text
+        assert "requires a Premium membership" in card_text
+        # No double-up: Premium is highest, so "or above" must be dropped.
+        assert "Premium membership or above" not in card_text
+        context.close()
 
 
 # Suppress unused-import warnings for the import-only modules above.

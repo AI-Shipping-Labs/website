@@ -39,11 +39,15 @@ class StripePager:
         return iter(self.items)
 
 
+_UNSET = object()
+
+
 def subscription(
     subscription_id="sub_active",
     *,
     price_id="price_main_monthly",
     current_period_end=1_800_000_000,
+    item_current_period_end=_UNSET,
     price_metadata=None,
     unit_amount=None,
     interval=None,
@@ -54,6 +58,12 @@ def subscription(
     list call expands ``data.items.data.price``. ``unit_amount`` (cents)
     and ``interval`` drive the amount-based resolver fallback for prices
     without ``tier_slug`` metadata.
+
+    ``current_period_end`` controls the subscription-level field; pass
+    ``None`` to drop it (issue #685: Stripe moved the field onto each
+    Subscription Item in recent API versions). ``item_current_period_end``
+    attaches a ``current_period_end`` field to the Subscription Item when
+    set.
     """
     price_obj = {
         "id": price_id,
@@ -63,12 +73,17 @@ def subscription(
         price_obj["unit_amount"] = unit_amount
     if interval is not None:
         price_obj["recurring"] = {"interval": interval}
-    return {
+    item = {"price": price_obj}
+    if item_current_period_end is not _UNSET:
+        item["current_period_end"] = item_current_period_end
+    sub = {
         "id": subscription_id,
         "status": "active",
-        "current_period_end": current_period_end,
-        "items": {"data": [{"price": price_obj}]},
+        "items": {"data": [item]},
     }
+    if current_period_end is not None:
+        sub["current_period_end"] = current_period_end
+    return sub
 
 
 def patch_subscriptions(subscriptions_by_customer):
@@ -975,6 +990,34 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         self.assertEqual(body["code"], "invalid_type")
         self.assertEqual(body["details"]["field"], "force")
         self.assertEqual(stripe_list.call_count, 0)
+
+    def test_apply_surfaces_item_level_billing_period_end_when_subscription_level_absent(self):
+        """Issue #685 — Stripe moved ``current_period_end`` onto each
+        Subscription Item in recent API versions. The reconcile apply
+        path must surface the item-level value in both the JSON response
+        and the persisted user row when the top-level field is missing.
+        """
+        item_period = 1_810_633_817  # 2027-05-18 09:50:17 UTC
+        user = self._user("item-only@test.com")
+
+        with patch_subscriptions({
+            user.stripe_customer_id: [
+                subscription(
+                    current_period_end=None,
+                    item_current_period_end=item_period,
+                )
+            ]
+        }):
+            response = self._post_apply({"emails": [user.email]})
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        row = body["results"][0]
+        expected = datetime(2027, 5, 18, 9, 50, 17, tzinfo=datetime_timezone.utc)
+        self.assertEqual(row["billing_period_end"], expected.isoformat())
+
+        user.refresh_from_db()
+        self.assertEqual(user.billing_period_end, expected)
 
     def test_apply_response_includes_billing_period_end_per_row(self):
         """Every per-row apply result carries ``billing_period_end``.

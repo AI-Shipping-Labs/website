@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
-from datetime import timezone as datetime_timezone
 
 import stripe
 from django.core.management.base import CommandError
@@ -13,6 +11,7 @@ from accounts.models import IMPORT_SOURCE_STRIPE
 from accounts.services.import_users import ImportRow, register_import_adapter
 from integrations.config import get_config
 from payments.models import Tier
+from payments.services.stripe_client import _subscription_period_end
 
 logger = logging.getLogger(__name__)
 
@@ -157,13 +156,6 @@ def _subscription_price_id(subscription):
     first_item = data[0]
     price = _get(first_item, "price", {}) or {}
     return _get(price, "id", "") or ""
-
-
-def _subscription_period_end(subscription):
-    current_period_end = _get(subscription, "current_period_end")
-    if not current_period_end:
-        return None
-    return datetime.fromtimestamp(current_period_end, tz=datetime_timezone.utc)
 
 
 def _price_to_tier_map():

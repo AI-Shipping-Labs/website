@@ -19,9 +19,9 @@ from payments.services import tier_resolution as _tier_resolution
 from payments.services.import_stripe import (
     CONFIGURATION_ERRORS,
     _price_to_tier_map,
-    _subscription_period_end,
     _subscription_price_id,
 )
+from payments.services.stripe_client import _subscription_period_end
 
 # Backwards-compatible re-exports. Tests historically patched
 # ``payments.services.backfill_tiers._resolve_subscription_tier`` /

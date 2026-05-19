@@ -38,19 +38,40 @@ def customer(customer_id, email="", name="", created=1, livemode=False):
     }
 
 
+_UNSET = object()
+
+
 def subscription(
     subscription_id,
     *,
     status="active",
     price_id="",
     current_period_end=1_800_000_000,
+    item_current_period_end=_UNSET,
 ):
-    return {
+    """Build a fake Stripe subscription payload.
+
+    ``current_period_end`` controls the subscription-level field. Passing
+    ``None`` drops the key from the top-level payload so the period-end
+    helper has to fall back to the item-level field (matching Stripe API
+    versions that moved ``current_period_end`` onto each Subscription
+    Item).
+
+    ``item_current_period_end`` controls the item-level field. When left
+    unset the item has no ``current_period_end`` key at all (today's
+    default fixture shape). Pass an int to attach the field to the
+    Subscription Item.
+    """
+    sub = {
         "id": subscription_id,
         "status": status,
-        "current_period_end": current_period_end,
         "items": {"data": [{"price": {"id": price_id}}]},
     }
+    if current_period_end is not None:
+        sub["current_period_end"] = current_period_end
+    if item_current_period_end is not _UNSET:
+        sub["items"]["data"][0]["current_period_end"] = item_current_period_end
+    return sub
 
 
 @override_settings(STRIPE_SECRET_KEY="sk_test_import")
@@ -407,3 +428,106 @@ class StripeImportAdapterTest(TestCase):
         self.assertEqual(user.tier, self.premium)
         self.assertEqual(user.subscription_id, "sub_new_webhook")
         self.assertEqual(User.objects.filter(stripe_customer_id="cus_webhook").count(), 1)
+
+    # ------------------------------------------------------------------
+    # Period-end resolution across subscription-level / item-level fields
+    # (issue #685). Stripe moved ``current_period_end`` onto each
+    # Subscription Item in recent API versions; the helper must fall back
+    # to the item-level value when the top-level field is absent, while
+    # preserving subscription-level precedence when both are present.
+    # ------------------------------------------------------------------
+
+    def test_item_level_period_end_is_used_when_subscription_level_is_absent(self):
+        item_period = 1_810_633_817  # 2027-05-18 09:50:17 UTC, the casraysa case
+        customers = [customer("cus_item_only", "item-only@example.com")]
+        subscriptions = {
+            "cus_item_only": [
+                subscription(
+                    "sub_item_only",
+                    price_id="price_basic_monthly",
+                    current_period_end=None,
+                    item_current_period_end=item_period,
+                )
+            ]
+        }
+        customer_patch, subscription_patch = self._patch_stripe(customers, subscriptions)
+
+        with customer_patch, subscription_patch:
+            run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
+
+        user = User.objects.get(email="item-only@example.com")
+        self.assertEqual(
+            user.billing_period_end,
+            datetime(2027, 5, 18, 9, 50, 17, tzinfo=datetime_timezone.utc),
+        )
+
+    def test_subscription_level_period_end_wins_when_both_levels_are_present(self):
+        sub_period = 1_800_000_000
+        item_period = 1_810_633_817
+        customers = [customer("cus_both", "both-levels@example.com")]
+        subscriptions = {
+            "cus_both": [
+                subscription(
+                    "sub_both",
+                    price_id="price_basic_monthly",
+                    current_period_end=sub_period,
+                    item_current_period_end=item_period,
+                )
+            ]
+        }
+        customer_patch, subscription_patch = self._patch_stripe(customers, subscriptions)
+
+        with customer_patch, subscription_patch:
+            run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
+
+        user = User.objects.get(email="both-levels@example.com")
+        self.assertEqual(
+            user.billing_period_end,
+            datetime.fromtimestamp(sub_period, tz=datetime_timezone.utc),
+        )
+
+    def test_period_end_is_none_when_both_levels_are_missing(self):
+        customers = [customer("cus_neither", "neither@example.com")]
+        subscriptions = {
+            "cus_neither": [
+                subscription(
+                    "sub_neither",
+                    price_id="price_basic_monthly",
+                    current_period_end=None,
+                )
+            ]
+        }
+        customer_patch, subscription_patch = self._patch_stripe(customers, subscriptions)
+
+        with customer_patch, subscription_patch:
+            run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
+
+        user = User.objects.get(email="neither@example.com")
+        # Missing period end must not abort the write — the tier is still
+        # resolved and saved against the user.
+        self.assertEqual(user.tier, self.basic)
+        self.assertEqual(user.subscription_id, "sub_neither")
+        self.assertIsNone(user.billing_period_end)
+
+    def test_subscription_level_period_end_is_used_when_item_level_is_absent(self):
+        sub_period = 1_800_000_000
+        customers = [customer("cus_sub_only", "sub-only@example.com")]
+        subscriptions = {
+            "cus_sub_only": [
+                subscription(
+                    "sub_sub_only",
+                    price_id="price_basic_monthly",
+                    current_period_end=sub_period,
+                )
+            ]
+        }
+        customer_patch, subscription_patch = self._patch_stripe(customers, subscriptions)
+
+        with customer_patch, subscription_patch:
+            run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
+
+        user = User.objects.get(email="sub-only@example.com")
+        self.assertEqual(
+            user.billing_period_end,
+            datetime.fromtimestamp(sub_period, tz=datetime_timezone.utc),
+        )

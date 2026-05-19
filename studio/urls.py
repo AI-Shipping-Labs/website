@@ -66,7 +66,13 @@ from studio.views.event_series import (
     event_series_detail,
     event_series_list,
 )
-from studio.views.events import event_create, event_create_zoom, event_edit, event_list
+from studio.views.events import (
+    event_create,
+    event_create_zoom,
+    event_edit,
+    event_list,
+    event_registrations_csv,
+)
 from studio.views.impersonate import impersonate_user, stop_impersonation
 from studio.views.member_notes import (
     member_note_create,
@@ -255,6 +261,11 @@ urlpatterns = [
     path('events/new', event_create, name='studio_event_new'),
     path('events/<int:event_id>/edit', event_edit, name='studio_event_edit'),
     path('events/<int:event_id>/create-zoom', event_create_zoom, name='studio_event_create_zoom'),
+    path(
+        'events/<int:event_id>/registrations.csv',
+        event_registrations_csv,
+        name='studio_event_registrations_csv',
+    ),
     path('events/<int:event_id>/notify', event_notify, name='studio_event_notify'),
     path('events/<int:event_id>/announce-slack', event_announce_slack, name='studio_event_announce_slack'),
 

@@ -1,12 +1,14 @@
 """Studio views for event CRUD."""
 
+import csv
+import datetime as _datetime
 import logging
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone as djtimezone
@@ -470,7 +472,68 @@ def event_edit(request, event_id):
     tz_value = context['timezone_value']
     context['timezone_label'] = get_timezone_label(tz_value) or tz_value
     context['timezone_options'] = build_timezone_options()
+    # Issue #701: surface registered attendees on the edit page so
+    # operators can see and export the roster without dropping into
+    # Django admin. ``-registered_at`` matches the model's default
+    # ordering and the spec.
+    registrations = (
+        EventRegistration.objects
+        .filter(event=event)
+        .select_related('user', 'user__tier')
+        .order_by('-registered_at')
+    )
+    context['registrations'] = registrations
+    context['registration_count'] = registrations.count()
+    context['registrations_csv_url'] = reverse(
+        'studio_event_registrations_csv', kwargs={'event_id': event.pk},
+    )
     return render(request, 'studio/events/form.html', context)
+
+
+@staff_required
+def event_registrations_csv(request, event_id):
+    """Export the roster for ``event_id`` as CSV.
+
+    Issue #701. Mirrors the shape of ``studio.views.users.user_export_csv``:
+    ``HttpResponse(content_type='text/csv')`` + ``csv.writer`` + an attachment
+    filename with a UTC timestamp. Session-gated via ``@staff_required``; no
+    token mechanism. Columns are locked at ``email, name, registered_at, tier``
+    (in that order). The ``registered_at`` cell is ISO 8601 UTC. ``tier``
+    defaults to ``Free`` when the user row has no tier FK set.
+    """
+    event = get_object_or_404(Event, pk=event_id)
+
+    registrations = (
+        EventRegistration.objects
+        .filter(event=event)
+        .select_related('user', 'user__tier')
+        .order_by('-registered_at')
+    )
+
+    timestamp = (
+        djtimezone.now()
+        .astimezone(_datetime.timezone.utc)
+        .strftime('%Y%m%d-%H%M%S')
+    )
+    filename = f'event-{event.slug}-registrations-{timestamp}.csv'
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    writer = csv.writer(response)
+    writer.writerow(['email', 'name', 'registered_at', 'tier'])
+    for reg in registrations:
+        user = reg.user
+        name = user.get_full_name() or ''
+        tier_name = user.tier.name if user.tier_id else 'Free'
+        writer.writerow([
+            user.email,
+            name,
+            reg.registered_at.isoformat() if reg.registered_at else '',
+            tier_name,
+        ])
+
+    return response
 
 
 @staff_required

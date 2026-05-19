@@ -16,6 +16,7 @@
     </div>
     <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
       {% if article %}
+      {% include "studio/includes/_admin_link.html" with obj=article %}
       {% if github_edit_url %}
       <a href="{{ github_edit_url }}" target="_blank" rel="noopener noreferrer"
          class="border border-blue-500/40 bg-blue-500/10 px-4 py-2 rounded-lg text-sm font-medium text-blue-200 transition-colors hover:bg-blue-500/20 flex items-center space-x-1"

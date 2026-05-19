@@ -12,11 +12,20 @@
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
     <span class="text-foreground">Edit</span>
   </div>
-  <h1 class="text-2xl font-semibold text-foreground">Edit Workshop</h1>
-  <p class="text-muted-foreground mt-1 text-sm">
-    Most fields are managed in the workshops-content repo and shown here read-only.
-    Only the fields below this banner are editable in Studio.
-  </p>
+  <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold text-foreground">Edit Workshop</h1>
+      <p class="text-muted-foreground mt-1 text-sm">
+        Most fields are managed in the workshops-content repo and shown here read-only.
+        Only the fields below this banner are editable in Studio.
+      </p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
+      {% if workshop %}
+      {% include "studio/includes/_admin_link.html" with obj=workshop %}
+      {% endif %}
+    </div>
+  </header>
 </div>
 
 {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}

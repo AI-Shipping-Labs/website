@@ -39,6 +39,7 @@
   </div>
 
   <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="crm-detail-actions">
+    {% include "studio/includes/_admin_link.html" with obj=record %}
     <form method="post" action="{% url 'studio_impersonate' detail_user.pk %}" class="inline-flex">
       {% csrf_token %}
       <button type="submit"

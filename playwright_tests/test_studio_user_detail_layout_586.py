@@ -171,20 +171,23 @@ class TestUserDetailLayout586:
         assert "layout1@test.com" in h1.inner_text()
 
         # Action row sits below the header and contains exactly two
-        # controls: Login as user (primary), View in Django admin
-        # (secondary). The duplicate "View as user" button is gone.
+        # controls: Login as user (primary), Open in Django admin
+        # (secondary, shared partial since issue #702). The duplicate
+        # "View as user" button is gone.
         actions = page.locator('[data-testid="user-detail-actions"]')
         assert actions.is_visible()
         impersonate = actions.locator(
             '[data-testid="user-detail-impersonate"]'
         )
         admin = actions.locator(
-            '[data-testid="user-detail-django-admin"]'
+            '[data-testid="studio-open-in-admin"]'
         )
         assert impersonate.count() == 1
         assert admin.count() == 1
         assert "Login as user" in impersonate.inner_text()
-        assert "View in Django admin" in admin.inner_text()
+        # Issue #702: chip uses the shared partial; label changed to
+        # "Open in Django admin" for parity across all Studio surfaces.
+        assert "Open in Django admin" in admin.inner_text()
 
         # The previously-rendered duplicate is removed page-wide.
         assert page.locator(
@@ -249,7 +252,7 @@ class TestUserDetailLayout586:
         )
 
         admin_link = page.locator(
-            '[data-testid="user-detail-django-admin"]'
+            '[data-testid="studio-open-in-admin"]'
         )
         assert (
             admin_link.get_attribute("href")

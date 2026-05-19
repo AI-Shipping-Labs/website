@@ -21,6 +21,7 @@
     </div>
     <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
       {% if event %}
+      {% include "studio/includes/_admin_link.html" with obj=event %}
       <a href="{{ event.get_absolute_url }}" target="_blank" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1" data-testid="view-on-site">
         <i data-lucide="external-link" class="w-4 h-4"></i>
         <span>View on site</span>

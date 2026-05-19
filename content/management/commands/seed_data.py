@@ -342,7 +342,12 @@ class Command(BaseCommand):
                 'email': 'premium@test.com',
                 'title': 'LLM Agents Workshop in 24 hours',
                 'body': 'Reminder: the LLM Agents Workshop starts tomorrow.',
-                'url': '/events/llm-agents-workshop-march',
+                # Issue #673: notification URLs in seed fixtures use the
+                # canonical id+slug shape so a manual click from the
+                # seeded notification feed resolves to the new route.
+                # The id ``1`` is just a placeholder; the seeded event
+                # would mint the real value via ``get_absolute_url``.
+                'url': '/events/1/llm-agents-workshop-march',
                 'notification_type': 'event_reminder',
             },
             {
@@ -356,7 +361,9 @@ class Command(BaseCommand):
                 'email': 'alice@test.com',
                 'title': 'Community Demo Day is live!',
                 'body': 'The February Community Demo Day is starting now. Join the Zoom call.',
-                'url': '/events/community-demo-day-feb',
+                # Issue #673: seed fixture mirroring the canonical
+                # ``/events/<id>/<slug>`` URL shape.
+                'url': '/events/2/community-demo-day-feb',
                 'notification_type': 'event_reminder',
             },
             {

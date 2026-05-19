@@ -273,7 +273,8 @@ still in flight.
                   {% elif item.content_type == 'project' %}
                   <a href="/projects/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>
                   {% elif item.content_type == 'event' %}
-                  <a href="/events/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>
+                  {# Issue #673 — event URLs now key on id; older log entries lack item.id and fall back to the slug-only path which 404s via the operator-managed Redirect surface. #}
+                  {% if item.id %}<a href="/events/{{ item.id }}/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>{% else %}<span class="text-foreground">{{ item.title }}</span>{% endif %}
                   {% elif item.content_type == 'interview_question' %}
                   <a href="/interview/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>
                   {% else %}

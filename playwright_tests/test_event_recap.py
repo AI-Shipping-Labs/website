@@ -47,9 +47,13 @@ def _create_event_with_recap(slug='launch', status='completed'):
 class TestRecapPage:
     def test_visitor_finds_rendered_recap_content_inline(self, django_server, page):
         _clear_events()
-        _create_event_with_recap()
+        event = _create_event_with_recap()
 
-        page.goto(f"{django_server}/events/launch", wait_until="domcontentloaded")
+        # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
+        page.goto(
+            f"{django_server}{event.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
         body = page.content()
 
         assert 'AI Shipping Labs Community Launch' in body
@@ -59,15 +63,21 @@ class TestRecapPage:
         assert 'Ship real projects.' in body
         assert '<!-- include:' not in body
 
-        response = page.goto(f"{django_server}/events/launch/recap",
-                             wait_until="domcontentloaded")
+        # The legacy ``/recap`` sub-route was retired.
+        response = page.goto(
+            f"{django_server}/events/launch/recap",
+            wait_until="domcontentloaded",
+        )
         assert response.status == 404
 
     def test_upcoming_event_does_not_render_synced_recap(self, django_server, page):
         _clear_events()
-        _create_event_with_recap(status='upcoming')
+        event = _create_event_with_recap(status='upcoming')
 
-        page.goto(f"{django_server}/events/launch", wait_until="domcontentloaded")
+        page.goto(
+            f"{django_server}{event.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
         body = page.content()
         # Issue #513: anonymous CTA on free events was replaced by the
         # inline email-only registration form.
@@ -84,18 +94,22 @@ class TestEventWithoutRenderedRecap:
         _clear_events()
         from events.models import Event
 
-        Event.objects.create(
+        event = Event.objects.create(
             title='No Recap Event', slug='test-no-recap',
             start_datetime=timezone.now(),
             status='upcoming',
         )
         connection.close()
 
-        page.goto(f"{django_server}/events/test-no-recap",
-                  wait_until="domcontentloaded")
+        page.goto(
+            f"{django_server}{event.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
         body = page.content()
         assert 'View event recap' not in body
 
-        response = page.goto(f"{django_server}/events/test-no-recap/recap",
-                             wait_until="domcontentloaded")
+        response = page.goto(
+            f"{django_server}/events/test-no-recap/recap",
+            wait_until="domcontentloaded",
+        )
         assert response.status == 404

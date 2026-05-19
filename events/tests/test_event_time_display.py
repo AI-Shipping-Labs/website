@@ -63,7 +63,7 @@ class EventDetailTimeDisplayTest(TestCase):
             is_secret=False,
         )
         clear_config_cache()
-        Event.objects.create(
+        event = Event.objects.create(
             title='Local Time Event',
             slug='local-time-event',
             start_datetime=datetime(2026, 4, 13, 16, 30, tzinfo=UTC),
@@ -73,7 +73,7 @@ class EventDetailTimeDisplayTest(TestCase):
             location='Zoom',
         )
 
-        response = self.client.get('/events/local-time-event')
+        response = self.client.get(event.get_absolute_url())
 
         self.assertContains(
             response,
@@ -86,7 +86,7 @@ class EventDetailTimeDisplayTest(TestCase):
         self.assertNotContains(response, 'Until 18:00 UTC')
 
     def test_detail_uses_berlin_fallback_when_setting_unset(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='Berlin Fallback Event',
             slug='berlin-fallback-event',
             start_datetime=datetime(2026, 4, 13, 16, 30, tzinfo=UTC),
@@ -94,7 +94,7 @@ class EventDetailTimeDisplayTest(TestCase):
             status='upcoming',
         )
 
-        response = self.client.get('/events/berlin-fallback-event')
+        response = self.client.get(event.get_absolute_url())
 
         self.assertContains(
             response,
@@ -109,7 +109,7 @@ class EventDetailTimeDisplayTest(TestCase):
             preferred_timezone='America/New_York',
         )
         self.client.force_login(user)
-        Event.objects.create(
+        event = Event.objects.create(
             title='Preferred Timezone Event',
             slug='preferred-timezone-event',
             start_datetime=datetime(2026, 4, 13, 16, 30, tzinfo=UTC),
@@ -118,7 +118,7 @@ class EventDetailTimeDisplayTest(TestCase):
             timezone='Europe/Berlin',
         )
 
-        response = self.client.get('/events/preferred-timezone-event')
+        response = self.client.get(event.get_absolute_url())
 
         self.assertContains(
             response,
@@ -131,7 +131,7 @@ class EventDetailTimeDisplayTest(TestCase):
     def test_logged_in_without_preference_allows_browser_timezone_replacement(self):
         user = User.objects.create_user(email='browser@example.com')
         self.client.force_login(user)
-        Event.objects.create(
+        event = Event.objects.create(
             title='Browser Timezone Event',
             slug='browser-timezone-event',
             start_datetime=datetime(2026, 4, 13, 16, 30, tzinfo=UTC),
@@ -139,7 +139,7 @@ class EventDetailTimeDisplayTest(TestCase):
             status='upcoming',
         )
 
-        response = self.client.get('/events/browser-timezone-event')
+        response = self.client.get(event.get_absolute_url())
 
         self.assertContains(response, 'data-browser-timezone-enabled="true"')
 
@@ -151,20 +151,20 @@ class EventDetailTimeDisplayTest(TestCase):
             is_secret=False,
         )
         clear_config_cache()
-        Event.objects.create(
+        event = Event.objects.create(
             title='Invalid Setting Event',
             slug='invalid-setting-event',
             start_datetime=datetime(2026, 4, 13, 16, 30, tzinfo=UTC),
             status='upcoming',
         )
 
-        response = self.client.get('/events/invalid-setting-event')
+        response = self.client.get(event.get_absolute_url())
 
         self.assertContains(response, 'April 13, 2026, 18:30 Europe/Berlin')
         self.assertContains(response, 'data-default-timezone="Europe/Berlin"')
 
     def test_completed_zoom_location_is_hidden(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='Completed Zoom Event',
             slug='completed-zoom-event',
             start_datetime=timezone.now() - timedelta(days=7),
@@ -172,14 +172,14 @@ class EventDetailTimeDisplayTest(TestCase):
             location='Zoom',
         )
 
-        response = self.client.get('/events/completed-zoom-event')
+        response = self.client.get(event.get_absolute_url())
 
         self.assertContains(response, 'Completed Zoom Event')
         self.assertNotContains(response, '<i data-lucide="map-pin"')
         self.assertNotContains(response, '>Zoom<')
 
     def test_upcoming_zoom_location_is_preserved(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='Upcoming Zoom Event',
             slug='upcoming-zoom-event',
             start_datetime=timezone.now() + timedelta(days=7),
@@ -187,13 +187,13 @@ class EventDetailTimeDisplayTest(TestCase):
             location='Zoom',
         )
 
-        response = self.client.get('/events/upcoming-zoom-event')
+        response = self.client.get(event.get_absolute_url())
 
         self.assertContains(response, '<i data-lucide="map-pin"')
         self.assertContains(response, 'Zoom')
 
     def test_completed_custom_location_is_preserved(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='Completed In Person Event',
             slug='completed-in-person-event',
             start_datetime=timezone.now() - timedelta(days=7),
@@ -201,7 +201,7 @@ class EventDetailTimeDisplayTest(TestCase):
             location='Berlin office',
         )
 
-        response = self.client.get('/events/completed-in-person-event')
+        response = self.client.get(event.get_absolute_url())
 
         self.assertContains(response, '<i data-lucide="map-pin"')
         self.assertContains(response, 'Berlin office')
@@ -219,8 +219,9 @@ class EventListAndCalendarScopeTest(TestCase):
         list_response = self.client.get('/events')
         calendar_response = self.client.get('/events/calendar/2026/4')
 
-        self.assertContains(list_response, '/events/detail-owns-timezone-event')
-        self.assertContains(calendar_response, '/events/detail-owns-timezone-event')
+        # Issue #673: links go to the canonical id+slug URL now.
+        self.assertContains(list_response, event.get_absolute_url())
+        self.assertContains(calendar_response, event.get_absolute_url())
         self.assertContains(list_response, event.formatted_date())
         self.assertNotContains(list_response, event.formatted_start())
         self.assertNotContains(calendar_response, event.formatted_time())

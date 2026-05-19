@@ -154,8 +154,9 @@ class CalendarViewTest(TestCase):
         self.assertIn('data-lucide="lock"', content)
 
     def test_event_links_to_detail_page(self):
+        """Issue #673: links go to canonical ``/events/<id>/<slug>``."""
         response = self.client.get('/events/calendar/2026/3')
-        self.assertContains(response, '/events/ai-workshop')
+        self.assertContains(response, self.event.get_absolute_url())
 
     def test_anonymous_can_view_calendar(self):
         # No login - should still get 200

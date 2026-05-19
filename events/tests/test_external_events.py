@@ -209,7 +209,7 @@ class ExternalEventDetailTest(TierSetupMixin, TestCase):
         )
 
     def test_external_detail_renders_pill_and_join_card(self):
-        response = self.client.get(f'/events/{self.external_event.slug}')
+        response = self.client.get(self.external_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         # Header pill present.
@@ -224,7 +224,7 @@ class ExternalEventDetailTest(TierSetupMixin, TestCase):
         self.assertIn('https://maven.com/aisl/llm-eng', html)
 
     def test_external_detail_join_link_has_blank_target_and_noopener(self):
-        response = self.client.get(f'/events/{self.external_event.slug}')
+        response = self.client.get(self.external_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         # The whole external Join link block is the one we care about.
@@ -242,7 +242,7 @@ class ExternalEventDetailTest(TierSetupMixin, TestCase):
         """The registration card and its three branches must not render
         for an external event.
         """
-        response = self.client.get(f'/events/{self.external_event.slug}')
+        response = self.client.get(self.external_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         self.assertNotIn('data-testid="event-registration-card"', html)
@@ -255,7 +255,7 @@ class ExternalEventDetailTest(TierSetupMixin, TestCase):
         """
         # required_level=0 is the same condition that would normally
         # surface the anonymous email-only form on a community event.
-        response = self.client.get(f'/events/{self.external_event.slug}')
+        response = self.client.get(self.external_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         self.assertNotIn('data-testid="event-anonymous-email-form"', html)
@@ -283,7 +283,7 @@ class ExternalEventDetailTest(TierSetupMixin, TestCase):
         free_user.save()
         self.client.force_login(free_user)
 
-        response = self.client.get(f'/events/{gated_external.slug}')
+        response = self.client.get(gated_external.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         # Upgrade CTA is gone.
@@ -304,7 +304,7 @@ class ExternalEventDetailTest(TierSetupMixin, TestCase):
             external_host='Maven',
             zoom_join_url='',
         )
-        response = self.client.get(f'/events/{no_url.slug}')
+        response = self.client.get(no_url.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         self.assertIn('data-testid="event-external-join-card"', html)
@@ -321,7 +321,7 @@ class ExternalEventDetailTest(TierSetupMixin, TestCase):
         """Regression guard: community events still render the existing
         registration card and do not pick up the external Join card.
         """
-        response = self.client.get(f'/events/{self.community_event.slug}')
+        response = self.client.get(self.community_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         self.assertIn('data-testid="event-registration-card"', html)

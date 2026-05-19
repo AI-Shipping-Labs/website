@@ -380,15 +380,18 @@ class HomepageRecordingsCardTest(TestCase):
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
         scan = _scan_anchors(response.content.decode())
+        # Issue #673: cards link to ``/events/<id>/<slug>`` via
+        # ``Event.get_absolute_url``.
+        expected_href = self.event.get_absolute_url()
         wrapper_links = [
             a for a in scan.anchors
-            if a['href'] == '/events/rag-workshop'
+            if a['href'] == expected_href
             and _focus_classes_present(a['class'])
         ]
         self.assertGreaterEqual(
             len(wrapper_links), 1,
-            'Homepage #resources card should wrap to /events/<slug> with the '
-            'shared focus-visible ring.',
+            'Homepage #resources card should wrap to '
+            f'{expected_href} with the shared focus-visible ring.',
         )
 
     def test_homepage_recording_card_no_nested_anchor(self):

@@ -65,12 +65,12 @@ class EventDetailWorkshopHandoffTest(TestCase):
     # --- Linked Workshop event: workshop CTA surfaces, no inline UI --------
 
     def test_linked_event_omits_recording_block_testid(self):
-        response = self.client.get('/events/linked-workshop-event')
+        response = self.client.get(self.linked_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="event-recording-block"')
 
     def test_linked_event_omits_video_player(self):
-        response = self.client.get('/events/linked-workshop-event')
+        response = self.client.get(self.linked_event.get_absolute_url())
         # The video_player template tag emits a wrapper with this data-source
         # attribute; its absence proves the player did not render. (We do
         # NOT match on "youtube" since the writeup CTA may legitimately
@@ -79,27 +79,27 @@ class EventDetailWorkshopHandoffTest(TestCase):
         self.assertNotContains(response, 'class="video-timestamp')
 
     def test_linked_event_omits_core_tools_section(self):
-        response = self.client.get('/events/linked-workshop-event')
+        response = self.client.get(self.linked_event.get_absolute_url())
         # Suppressing the Core Tools heading and tag chips.
         self.assertNotContains(response, 'Core Tools')
         self.assertNotContains(response, '>Cursor<')
         self.assertNotContains(response, '>Claude Code<')
 
     def test_linked_event_omits_learning_objectives_section(self):
-        response = self.client.get('/events/linked-workshop-event')
+        response = self.client.get(self.linked_event.get_absolute_url())
         self.assertNotContains(response, "What You'll Learn")
         self.assertNotContains(response, 'Build an MVP')
         self.assertNotContains(response, 'Ship to prod')
 
     def test_linked_event_omits_expected_outcome_section(self):
-        response = self.client.get('/events/linked-workshop-event')
+        response = self.client.get(self.linked_event.get_absolute_url())
         self.assertNotContains(response, 'Expected Outcome')
         self.assertNotContains(
             response, 'You will have shipped an MVP.'
         )
 
     def test_linked_event_omits_materials_section(self):
-        response = self.client.get('/events/linked-workshop-event')
+        response = self.client.get(self.linked_event.get_absolute_url())
         # The Materials heading and the slide link must both be absent.
         self.assertNotContains(response, 'Materials</h2>')
         self.assertNotContains(response, 'https://example.com/slides.pdf')
@@ -117,7 +117,7 @@ class EventDetailWorkshopHandoffTest(TestCase):
              'url': 'https://example.com/workshop-only.pdf'},
         ]
         self.workshop.save()
-        response = self.client.get('/events/linked-workshop-event')
+        response = self.client.get(self.linked_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Materials</h2>')
         self.assertNotContains(
@@ -129,7 +129,7 @@ class EventDetailWorkshopHandoffTest(TestCase):
         )
 
     def test_linked_event_shows_workshop_writeup_cta(self):
-        response = self.client.get('/events/linked-workshop-event')
+        response = self.client.get(self.linked_event.get_absolute_url())
         self.assertContains(
             response, 'data-testid="event-workshop-writeup"'
         )
@@ -141,7 +141,7 @@ class EventDetailWorkshopHandoffTest(TestCase):
     def test_linked_event_shows_announcement_description(self):
         # The event's announcement copy still renders independently of the
         # workshop's description.
-        response = self.client.get('/events/linked-workshop-event')
+        response = self.client.get(self.linked_event.get_absolute_url())
         self.assertContains(
             response, 'Announcement copy for the live session.'
         )
@@ -178,44 +178,44 @@ class EventDetailNoWorkshopRecordingRemovedTest(TestCase):
         )
 
     def test_orphan_event_omits_recording_block_testid(self):
-        response = self.client.get('/events/orphan-past-event')
+        response = self.client.get(self.orphan_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="event-recording-block"')
 
     def test_orphan_event_omits_video_player(self):
-        response = self.client.get('/events/orphan-past-event')
+        response = self.client.get(self.orphan_event.get_absolute_url())
         self.assertNotContains(response, 'data-source="youtube"')
         self.assertNotContains(response, 'class="video-timestamp')
 
     def test_orphan_event_omits_core_tools(self):
-        response = self.client.get('/events/orphan-past-event')
+        response = self.client.get(self.orphan_event.get_absolute_url())
         self.assertNotContains(response, 'Core Tools')
         self.assertNotContains(response, 'ChatGPT')
 
     def test_orphan_event_omits_learning_objectives(self):
-        response = self.client.get('/events/orphan-past-event')
+        response = self.client.get(self.orphan_event.get_absolute_url())
         self.assertNotContains(response, "What You'll Learn")
         self.assertNotContains(response, 'Understand RAG')
 
     def test_orphan_event_omits_materials(self):
-        response = self.client.get('/events/orphan-past-event')
+        response = self.client.get(self.orphan_event.get_absolute_url())
         self.assertNotContains(response, 'Materials</h2>')
         self.assertNotContains(response, 'https://example.com/notes.pdf')
 
     def test_orphan_event_omits_transcript(self):
-        response = self.client.get('/events/orphan-past-event')
+        response = self.client.get(self.orphan_event.get_absolute_url())
         self.assertNotContains(response, 'data-testid="recording-transcript"')
         self.assertNotContains(response, 'Some transcript copy.')
 
     def test_orphan_event_has_no_workshop_writeup_cta(self):
         # No linked workshop -> no handoff CTA either.
-        response = self.client.get('/events/orphan-past-event')
+        response = self.client.get(self.orphan_event.get_absolute_url())
         self.assertNotContains(
             response, 'data-testid="event-workshop-writeup"'
         )
 
     def test_orphan_event_still_shows_announcement_description(self):
-        response = self.client.get('/events/orphan-past-event')
+        response = self.client.get(self.orphan_event.get_absolute_url())
         self.assertContains(
             response,
             'An older session that was never promoted to a workshop.',

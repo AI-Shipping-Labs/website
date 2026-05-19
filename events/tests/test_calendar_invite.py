@@ -53,22 +53,23 @@ class GenerateIcsTest(TestCase):
         self.assertEqual(str(vevent.get('summary')), 'AI Agents Workshop')
         # Issue #578: DESCRIPTION now includes a trailing "Join: <url>"
         # line so the join URL survives clients that hide URL/LOCATION.
+        # Issue #673: that URL is the canonical ``/events/<id>/<slug>``.
         description = str(vevent.get('description'))
         self.assertIn('Learn about AI agents.', description)
         self.assertIn(
-            'Join: https://aishippinglabs.com/events/ai-workshop',
+            f'Join: https://aishippinglabs.com{self.event.get_absolute_url()}',
             description,
         )
         # Issue #578: URL/LOCATION now point at the public detail page,
         # not the /join redirect (which requires login and would 302
-        # subscriber clients).
+        # subscriber clients). Issue #673: that URL is id+slug.
         self.assertEqual(
             str(vevent.get('url')),
-            'https://aishippinglabs.com/events/ai-workshop',
+            f'https://aishippinglabs.com{self.event.get_absolute_url()}',
         )
         self.assertEqual(
             str(vevent.get('location')),
-            'https://aishippinglabs.com/events/ai-workshop',
+            f'https://aishippinglabs.com{self.event.get_absolute_url()}',
         )
 
     def test_generate_ics_has_correct_start_end(self):
@@ -162,7 +163,9 @@ class GenerateIcsTest(TestCase):
         ics_bytes = generate_ics(event)
         ics_str = ics_bytes.decode('utf-8')
 
-        self.assertIn('/events/zoom-event', ics_str)
+        # Issue #673: the .ics ``URL`` field follows the canonical
+        # ``/events/<id>/<slug>`` shape via ``get_absolute_url``.
+        self.assertIn(event.get_absolute_url(), ics_str)
         self.assertNotIn('zoom.us', ics_str)
 
 

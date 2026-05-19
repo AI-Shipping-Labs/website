@@ -559,15 +559,16 @@ class RecordingDetailSEOTest(TestCase):
         )
 
     def test_recording_detail_has_canonical_url(self):
-        response = self.client.get('/events/ai-agents-workshop')
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        response = self.client.get(self.recording.get_absolute_url())
         content = response.content.decode()
         self.assertIn(
-            '<link rel="canonical" href="https://aishippinglabs.com/events/ai-agents-workshop">',
+            f'<link rel="canonical" href="https://aishippinglabs.com{self.recording.get_absolute_url()}">',
             content,
         )
 
     def test_recording_detail_emits_event_jsonld_not_video(self):
-        response = self.client.get('/events/ai-agents-workshop')
+        response = self.client.get(self.recording.get_absolute_url())
         content = response.content.decode()
         # The event detail page is announcement-only -> Event schema, not
         # VideoObject. VideoObject lives on the workshop video page.
@@ -575,11 +576,11 @@ class RecordingDetailSEOTest(TestCase):
         self.assertNotIn('"@type": "VideoObject"', content)
 
     def test_recording_detail_event_jsonld_url_points_to_events_path(self):
-        response = self.client.get('/events/ai-agents-workshop')
+        response = self.client.get(self.recording.get_absolute_url())
         content = response.content.decode()
-        # The Event JSON-LD url is the canonical event page URL.
+        # Issue #673: the Event JSON-LD url is the canonical id+slug URL.
         self.assertIn(
-            '"url": "https://aishippinglabs.com/events/ai-agents-workshop"',
+            f'"url": "https://aishippinglabs.com{self.recording.get_absolute_url()}"',
             content,
         )
         self.assertNotIn('/event-recordings/', content)
@@ -599,15 +600,16 @@ class EventDetailSEOTest(TestCase):
         )
 
     def test_event_detail_has_canonical_url(self):
-        response = self.client.get('/events/live-workshop')
+        # Issue #673: canonical URL is ``/events/<id>/<slug>``.
+        response = self.client.get(self.event.get_absolute_url())
         content = response.content.decode()
         self.assertIn(
-            '<link rel="canonical" href="https://aishippinglabs.com/events/live-workshop">',
+            f'<link rel="canonical" href="https://aishippinglabs.com{self.event.get_absolute_url()}">',
             content,
         )
 
     def test_event_detail_has_event_jsonld(self):
-        response = self.client.get('/events/live-workshop')
+        response = self.client.get(self.event.get_absolute_url())
         content = response.content.decode()
         self.assertIn('"@type": "Event"', content)
 
@@ -796,21 +798,22 @@ class SitemapTest(TestCase):
         self.assertNotIn('/courses/draft-course', content)
 
     def test_sitemap_includes_upcoming_event(self):
+        """Issue #673: sitemap URLs use the canonical ``/events/<id>/<slug>``."""
         response = self.client.get('/sitemap.xml')
         content = response.content.decode()
-        self.assertIn('/events/test-event', content)
+        self.assertIn(self.event.get_absolute_url(), content)
 
     def test_sitemap_excludes_draft_event(self):
         response = self.client.get('/sitemap.xml')
         content = response.content.decode()
-        self.assertNotIn('/events/draft-event', content)
+        self.assertNotIn(self.draft_event.get_absolute_url(), content)
 
     def test_sitemap_includes_open_recording(self):
-        # Completed-with-recording events now live on /events/<slug>
+        # Completed-with-recording events now live on /events/<id>/<slug>
         # (EventSitemap covers all non-draft events including recordings).
         response = self.client.get('/sitemap.xml')
         content = response.content.decode()
-        self.assertIn('/events/open-recording', content)
+        self.assertIn(self.recording.get_absolute_url(), content)
 
     def test_sitemap_has_no_event_recordings_urls(self):
         # The legacy /event-recordings/* URLs must no longer appear in the

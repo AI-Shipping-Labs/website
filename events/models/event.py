@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 
 from content.access import VISIBILITY_CHOICES
@@ -33,6 +34,44 @@ EVENT_ORIGIN_CHOICES = [
     ('github', 'GitHub'),
     ('studio', 'Studio'),
 ]
+
+# Issue #673: cap slug length on save so a giant title can't produce a
+# 200+ char URL. Capped at 70 chars (parity with Luma) and rounded back to
+# the last ``-`` separator if 70 lands mid-word, so the truncated tail is
+# whole words rather than a half-clipped one.
+EVENT_SLUG_MAX_LENGTH = 70
+
+
+def _truncate_event_slug(slug):
+    """Return ``slug`` truncated to ``EVENT_SLUG_MAX_LENGTH``.
+
+    The slug is purely cosmetic in the new ``/events/<id>/<slug>`` URL
+    pattern (issue #673), so we cap its length to keep canonical URLs
+    short. The truncation rules:
+
+    1. Short slugs are returned unchanged.
+    2. If the truncation point lands inside a word (the next character
+       would NOT be ``-``), walk back to the previous ``-`` so the
+       truncated tail is a whole word.
+    3. Strip trailing ``-`` so the URL never ends with a stray dash.
+    4. If steps 1-3 produce an empty string (e.g. slug was a single
+       long word with no dashes), fall back to the un-truncated value
+       so we never silently emit a blank slug.
+    """
+    if not slug or len(slug) <= EVENT_SLUG_MAX_LENGTH:
+        return slug
+
+    # If the 70th char is mid-word (next char isn't a boundary), walk
+    # back to the previous ``-`` so we end on a whole word.
+    truncated = slug[:EVENT_SLUG_MAX_LENGTH]
+    next_char = slug[EVENT_SLUG_MAX_LENGTH]
+    if next_char != '-' and '-' in truncated:
+        truncated = truncated.rsplit('-', 1)[0]
+
+    truncated = truncated.rstrip('-')
+    if not truncated:
+        return slug
+    return truncated
 
 # Issue #579: canonical list of supported third-party hosts for the
 # "Hosted on X" pill. Adding a new partner is a one-line code change
@@ -270,14 +309,33 @@ class Event(
         return self.title
 
     def get_absolute_url(self):
-        return f'/events/{self.slug}'
+        """Return the canonical ``/events/<id>/<slug>`` URL.
+
+        Issue #673: URL encodes the integer primary key first, then the
+        slug as a cosmetic segment. ``event_detail`` reads the id only;
+        the slug is verified against the stored value and a mismatch
+        triggers a 301 to the canonical form.
+
+        Returns ``''`` for unsaved rows (``self.id is None``) so admin
+        previews and ``__str__`` don't raise ``NoReverseMatch``.
+        """
+        if self.id is None:
+            return ''
+        return reverse(
+            'event_detail',
+            kwargs={'event_id': self.id, 'slug': self.slug},
+        )
 
     def get_studio_edit_url(self):
         return f'/studio/events/{self.pk}/edit'
 
     def get_recording_url(self):
-        """Returns the canonical URL for viewing the event (and its recording, if present)."""
-        return f'/events/{self.slug}'
+        """Return the canonical URL for viewing the event (and its recording).
+
+        Issue #673: de-duplicated with ``get_absolute_url`` — both
+        surfaces resolve to the same id+slug URL.
+        """
+        return self.get_absolute_url()
 
     def save(self, *args, **kwargs):
         from content.utils.tags import normalize_tags
@@ -285,6 +343,12 @@ class Event(
 
         if self.description:
             self.description_html = render_markdown(self.description)
+
+        # Issue #673: cap slug length so a 200-char title cannot produce
+        # a giant ``/events/<id>/<200-char-slug>`` URL. Truncates on the
+        # last ``-`` boundary so the tail is a whole word.
+        if self.slug:
+            self.slug = _truncate_event_slug(self.slug)
 
         # Sync published_at with published flag
         if self.published and not self.published_at:

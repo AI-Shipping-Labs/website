@@ -79,8 +79,38 @@ class EventModelFieldsTest(TestCase):
         self.assertEqual(event.status, 'upcoming')
 
     def test_get_absolute_url(self):
+        """Issue #673: canonical URL is ``/events/<id>/<slug>``."""
+        event = Event.objects.create(
+            title='My Event',
+            slug='my-event',
+            start_datetime=timezone.now(),
+        )
+        self.assertEqual(
+            event.get_absolute_url(),
+            f'/events/{event.id}/my-event',
+        )
+
+    def test_get_absolute_url_unsaved_returns_empty_string(self):
+        """Issue #673: an unsaved row has no id, so reverse() would
+        raise ``NoReverseMatch``. The helper returns ``''`` instead so
+        admin previews and ``__str__`` don't blow up.
+        """
         event = Event(slug='my-event')
-        self.assertEqual(event.get_absolute_url(), '/events/my-event')
+        self.assertEqual(event.get_absolute_url(), '')
+
+    def test_get_recording_url_matches_get_absolute_url(self):
+        """Issue #673: the two helpers must agree so callers that
+        still go through ``get_recording_url`` end up at the same
+        canonical URL.
+        """
+        event = Event.objects.create(
+            title='Rec', slug='rec',
+            start_datetime=timezone.now(),
+        )
+        self.assertEqual(
+            event.get_recording_url(),
+            event.get_absolute_url(),
+        )
 
     def test_default_timezone(self):
         event = Event.objects.create(
@@ -355,7 +385,7 @@ class EventsListRecordingLinkTest(TestCase):
     """Test past events show the recording indicator on the default /events view."""
 
     def test_completed_event_with_recording_shows_indicator(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='Recorded Event',
             slug='recorded-event',
             start_datetime=timezone.now() - timedelta(days=7),
@@ -363,10 +393,11 @@ class EventsListRecordingLinkTest(TestCase):
             recording_url='https://youtube.com/watch?v=test',
         )
         response = self.client.get('/events')
-        # The card itself already links to /events/<slug>. The past section
-        # shows a small "Recording available" indicator for such events.
+        # The card itself already links to /events/<id>/<slug>. The past
+        # section shows a small "Recording available" indicator for
+        # such events.
         self.assertContains(response, 'Recording available')
-        self.assertContains(response, '/events/recorded-event')
+        self.assertContains(response, event.get_absolute_url())
         # Must not link out to the old standalone recording surface.
         self.assertNotContains(response, '/event-recordings/')
 
@@ -402,7 +433,7 @@ class EventDetailPageTest(TestCase):
         )
 
     def test_detail_template(self):
-        response = self.client.get('/events/detail-event')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertTemplateUsed(response, 'events/event_detail.html')
         self.assertTemplateUsed(response, 'events/_event_hero_media.html')
         self.assertTemplateUsed(response, 'events/_event_header.html')
@@ -410,7 +441,7 @@ class EventDetailPageTest(TestCase):
         self.assertTemplateUsed(response, 'events/_event_description.html')
 
     def test_detail_uses_static_page_script(self):
-        response = self.client.get('/events/detail-event')
+        response = self.client.get(self.event.get_absolute_url())
         html = response.content.decode()
 
         self.assertIn('data-event-detail', html)
@@ -421,51 +452,52 @@ class EventDetailPageTest(TestCase):
         self.assertNotIn('function registerForEvent', html)
 
     def test_shows_title(self):
-        response = self.client.get('/events/detail-event')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertContains(response, 'Detail Event')
 
     def test_shows_description(self):
-        response = self.client.get('/events/detail-event')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertContains(response, 'A detailed description of the event.')
 
     def test_shows_location(self):
-        response = self.client.get('/events/detail-event')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertContains(response, 'Zoom')
 
     def test_shows_timezone(self):
-        response = self.client.get('/events/detail-event')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertContains(response, 'Europe/Berlin')
 
     def test_omits_event_type(self):
-        response = self.client.get('/events/detail-event')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertNotContains(response, 'Live Event')
         self.assertNotContains(response, 'Async Event')
 
     def test_shows_tags(self):
-        response = self.client.get('/events/detail-event')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertContains(response, 'python')
         self.assertContains(response, 'agents')
 
     def test_title_tag_format(self):
-        response = self.client.get('/events/detail-event')
+        response = self.client.get(self.event.get_absolute_url())
         content = response.content.decode()
         self.assertIn('<title>Detail Event | AI Shipping Labs</title>', content)
 
-    def test_404_for_nonexistent_slug(self):
-        response = self.client.get('/events/nonexistent')
+    def test_404_for_nonexistent_id(self):
+        """Issue #673: an unknown id returns 404."""
+        response = self.client.get('/events/99999/nonexistent')
         self.assertEqual(response.status_code, 404)
 
     def test_draft_event_404_for_anonymous(self):
-        Event.objects.create(
+        draft = Event.objects.create(
             title='Draft Event', slug='draft-event',
             start_datetime=timezone.now() + timedelta(days=7),
             status='draft',
         )
-        response = self.client.get('/events/draft-event')
+        response = self.client.get(draft.get_absolute_url())
         self.assertEqual(response.status_code, 404)
 
     def test_draft_event_visible_to_staff(self):
-        Event.objects.create(
+        draft = Event.objects.create(
             title='Draft Event', slug='draft-event-staff',
             start_datetime=timezone.now() + timedelta(days=7),
             status='draft',
@@ -474,13 +506,13 @@ class EventDetailPageTest(TestCase):
             email='admin@test.com', password='pass',
         )
         self.client.login(email='admin@test.com', password='pass')
-        response = self.client.get('/events/draft-event-staff')
+        response = self.client.get(draft.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'events/event_detail.html')
         self.assertContains(response, 'Draft Event')
 
     def test_back_link_to_events(self):
-        response = self.client.get('/events/detail-event')
+        response = self.client.get(self.event.get_absolute_url())
         content = response.content.decode()
         self.assertIn('href="/events"', content)
 
@@ -491,16 +523,18 @@ class EventDetailPageTest(TestCase):
         Sign in" link below the form preserves the sign-in path for
         returning users.
         """
-        response = self.client.get('/events/detail-event')
+        response = self.client.get(self.event.get_absolute_url())
         # The new email-only form replaces the old sign-in CTA on free
         # events (required_level == 0).
         self.assertContains(response, 'event-anonymous-email-form')
         self.assertContains(response, 'id="event-anon-email"')
         self.assertContains(response, 'Register for this event')
         # The "Already have an account?" sign-in link still preserves
-        # the next URL for returning users.
+        # the next URL for returning users. Issue #673: ``next`` carries
+        # the canonical id+slug URL now.
         self.assertContains(
-            response, '/accounts/login/?next=/events/detail-event',
+            response,
+            f'/accounts/login/?next={self.event.get_absolute_url()}',
         )
         # The legacy "Create free account" CTA is gone for free events.
         self.assertNotContains(response, 'Create free account')
@@ -516,7 +550,7 @@ class EventDetailRecordingRemovedTest(TestCase):
     """
 
     def test_completed_with_recording_omits_inline_block(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='Completed Event',
             slug='completed-event',
             start_datetime=timezone.now() - timedelta(days=7),
@@ -528,7 +562,7 @@ class EventDetailRecordingRemovedTest(TestCase):
             ],
             transcript_text='Event transcript text.',
         )
-        response = self.client.get('/events/completed-event')
+        response = self.client.get(event.get_absolute_url())
         # No inline recording block markers anywhere on the page.
         self.assertNotContains(response, 'data-testid="event-recording-block"')
         self.assertNotContains(response, 'data-testid="video-chapters"')
@@ -546,13 +580,13 @@ class EventDetailRecordingRemovedTest(TestCase):
         self.assertNotContains(response, '/event-recordings/')
 
     def test_completed_without_recording_no_block(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='No Rec Event',
             slug='no-rec-event',
             start_datetime=timezone.now() - timedelta(days=7),
             status='completed',
         )
-        response = self.client.get('/events/no-rec-event')
+        response = self.client.get(event.get_absolute_url())
         self.assertNotContains(response, 'data-testid="event-recording-block"')
 
 
@@ -588,13 +622,13 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_sees_open_event(self):
-        response = self.client.get('/events/open-event')
+        response = self.client.get(self.open_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Open Event')
 
     def test_anonymous_sees_gated_event_with_upgrade_cta(self):
         """Detail page is always visible, but registration is gated."""
-        response = self.client.get('/events/gated-event')
+        response = self.client.get(self.gated_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Gated Event')
         self.assertContains(response, 'This event is gated.')
@@ -610,7 +644,7 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         user.tier = self.main_tier
         user.save()
         self.client.login(email='main@test.com', password='pass')
-        response = self.client.get('/events/gated-event')
+        response = self.client.get(self.gated_event.get_absolute_url())
         self.assertTrue(response.context['has_access'])
         self.assertContains(response, 'id="register-btn"')
         self.assertNotContains(response, 'Upgrade to Main')
@@ -624,7 +658,7 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         user.tier = self.basic_tier
         user.save()
         self.client.login(email='basic@test.com', password='pass')
-        response = self.client.get('/events/gated-event')
+        response = self.client.get(self.gated_event.get_absolute_url())
         self.assertContains(response, 'Upgrade to Main to attend')
         # Issue #481: Main event copy still uses "or above" because Main
         # is not the highest tier. Issue #671: copy starts with
@@ -641,7 +675,7 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         Premium is the highest public tier so "Premium membership or
         above" is misleading — there is no higher tier to upgrade to.
         """
-        Event.objects.create(
+        premium_event = Event.objects.create(
             title='Premium Event',
             slug='premium-event',
             description='Premium-only event.',
@@ -657,7 +691,7 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         user.tier = self.basic_tier
         user.save()
         self.client.login(email='basic-premium@test.com', password='pass')
-        response = self.client.get('/events/premium-event')
+        response = self.client.get(premium_event.get_absolute_url())
         self.assertContains(response, 'Upgrade to Premium to attend')
         self.assertContains(
             response,
@@ -684,7 +718,7 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
             email_verified=True,
         )
         self.client.login(email='viewer@test.com', password='pass')
-        response = self.client.get('/events/full-event-detail')
+        response = self.client.get(event.get_absolute_url())
         self.assertContains(response, 'Event is full')
 
 
@@ -706,7 +740,9 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
         )
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='soon@test.com', password='pass')
-        response = self.client.get('/events/soon-event')
+        response = self.client.get(event.get_absolute_url())
+        # Issue #673: the /join route still keys on slug (slug-keyed
+        # sibling routes were intentionally left unchanged).
         self.assertContains(response, '/events/soon-event/join')
 
     def test_zoom_link_not_shown_when_far_from_start(self):
@@ -724,11 +760,11 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
         )
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='far@test.com', password='pass')
-        response = self.client.get('/events/far-event')
+        response = self.client.get(event.get_absolute_url())
         self.assertNotContains(response, '/events/far-event/join')
 
     def test_zoom_link_not_shown_when_not_registered(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='Not Reg Event',
             slug='not-reg-event',
             start_datetime=timezone.now() + timedelta(minutes=10),
@@ -741,7 +777,7 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
             email_verified=True,
         )
         self.client.login(email='notreg@test.com', password='pass')
-        response = self.client.get('/events/not-reg-event')
+        response = self.client.get(event.get_absolute_url())
         self.assertNotContains(response, 'https://zoom.us/j/111111')
 
 
@@ -762,11 +798,11 @@ class EventDetailRegisteredStatusTest(TierSetupMixin, TestCase):
         )
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='regstat@test.com', password='pass')
-        response = self.client.get('/events/reg-status-event')
+        response = self.client.get(event.get_absolute_url())
         self.assertContains(response, "You're registered!")
 
     def test_unregistered_user_sees_register_button(self):
-        Event.objects.create(
+        unreg_event = Event.objects.create(
             title='Unreg Event',
             slug='unreg-event',
             start_datetime=timezone.now() + timedelta(days=7),
@@ -778,7 +814,7 @@ class EventDetailRegisteredStatusTest(TierSetupMixin, TestCase):
             email_verified=True,
         )
         self.client.login(email='unreg@test.com', password='pass')
-        response = self.client.get('/events/unreg-event')
+        response = self.client.get(unreg_event.get_absolute_url())
         self.assertFalse(response.context['is_registered'])
         self.assertContains(response, 'id="register-btn"')
         self.assertNotContains(response, "You're registered!")
@@ -1137,14 +1173,14 @@ class EventDetailCoverImageTest(TestCase):
     empty."""
 
     def test_event_detail_with_cover_renders_image(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='With Cover',
             slug='with-cover',
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
             cover_image_url='https://cdn.example.com/cover.jpg',
         )
-        response = self.client.get('/events/with-cover')
+        response = self.client.get(event.get_absolute_url())
         self.assertContains(response, 'data-testid="event-cover-image"')
         self.assertContains(response, 'https://cdn.example.com/cover.jpg')
         self.assertNotContains(response, 'data-testid="event-cover-fallback"')
@@ -1153,13 +1189,13 @@ class EventDetailCoverImageTest(TestCase):
         """Issue #651: empty cover_image_url renders neither an image
         nor a decorative fallback — the page starts at the back-link
         and title directly."""
-        Event.objects.create(
+        event = Event.objects.create(
             title='No Cover',
             slug='no-cover',
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
         )
-        response = self.client.get('/events/no-cover')
+        response = self.client.get(event.get_absolute_url())
         self.assertNotContains(response, 'data-testid="event-cover-image"')
         self.assertNotContains(response, 'data-testid="event-cover-fallback"')
 
@@ -1182,18 +1218,18 @@ class EventDetailInstructorTest(TestCase):
         EventInstructor.objects.create(
             event=event, instructor=instructor, position=0,
         )
-        response = self.client.get('/events/speaker-event')
+        response = self.client.get(event.get_absolute_url())
         self.assertContains(response, 'data-testid="event-instructors"')
         self.assertContains(response, 'Ada Lovelace')
 
     def test_no_instructor_block_when_unlinked(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='No Speaker',
             slug='no-speaker',
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
         )
-        response = self.client.get('/events/no-speaker')
+        response = self.client.get(event.get_absolute_url())
         self.assertNotContains(response, 'data-testid="event-instructors"')
 
 
@@ -1220,32 +1256,32 @@ class EventDetailRegisteredConfirmationTest(TierSetupMixin, TestCase):
         self.client.login(email='conf@test.com', password='pass')
 
     def test_registered_confirmation_block_rendered(self):
-        response = self.client.get('/events/confirmation-event')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertContains(
             response, 'data-testid="event-registered-confirmation"',
         )
         self.assertContains(response, "You're registered!")
 
     def test_next_steps_mention_email_and_calendar(self):
-        response = self.client.get('/events/confirmation-event')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertContains(response, 'data-testid="event-next-steps"')
         self.assertContains(response, 'confirmation to your email')
         self.assertContains(response, 'spam folder')
         self.assertContains(response, '15 minutes before')
 
     def test_add_to_calendar_button_links_to_ics(self):
-        response = self.client.get('/events/confirmation-event')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertContains(response, 'data-testid="event-add-to-calendar"')
         self.assertContains(response, '/events/confirmation-event/calendar.ics')
         self.assertContains(response, 'Add to calendar')
 
     def test_cancel_registration_still_present(self):
-        response = self.client.get('/events/confirmation-event')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertContains(response, 'id="unregister-btn"')
         self.assertContains(response, 'Cancel registration')
 
     def test_event_ics_url_in_context(self):
-        response = self.client.get('/events/confirmation-event')
+        response = self.client.get(self.event.get_absolute_url())
         self.assertEqual(
             response.context['event_ics_url'],
             '/events/confirmation-event/calendar.ics',
@@ -1294,6 +1330,7 @@ class EventCalendarIcsViewTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_nonexistent_event_returns_404(self):
+        # The .ics download still keys by slug — unknown slug 404s.
         response = self.client.get('/events/no-such-event/calendar.ics')
         self.assertEqual(response.status_code, 404)
 
@@ -1317,7 +1354,7 @@ class EventDetailAnonymousCopyTest(TestCase):
         )
 
     def test_form_copy_discloses_account_creation_and_unsubscribe(self):
-        response = self.client.get('/events/anon-event')
+        response = self.client.get(self.event.get_absolute_url())
         # The form is the new entry point for anonymous registration.
         self.assertContains(response, 'event-anonymous-email-form')
         # Disclose that submitting the form creates an account.
@@ -1326,10 +1363,12 @@ class EventDetailAnonymousCopyTest(TestCase):
         self.assertContains(response, 'unsubscribe')
 
     def test_signin_link_preserves_event_path(self):
-        response = self.client.get('/events/anon-event')
+        response = self.client.get(self.event.get_absolute_url())
         # Returning users keep the sign-in path, with `next` preserved.
+        # Issue #673: the next URL is the canonical id+slug shape.
         self.assertContains(
-            response, '/accounts/login/?next=/events/anon-event',
+            response,
+            f'/accounts/login/?next={self.event.get_absolute_url()}',
         )
 
 
@@ -1802,20 +1841,20 @@ class EventDetailAnonymousFlowTest(TestCase):
         )
 
     def test_form_visible_to_anonymous_on_free_event(self):
-        resp = self.client.get('/events/open-call-detail')
+        resp = self.client.get(self.event.get_absolute_url())
         self.assertContains(resp, 'event-anonymous-email-form')
         self.assertContains(resp, 'id="event-anon-email"')
         self.assertContains(resp, 'Register for this event')
 
     def test_form_hidden_for_gated_event(self):
-        Event.objects.create(
+        gated_event = Event.objects.create(
             title='Gated',
             slug='gated-detail',
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
             required_level=LEVEL_MAIN,
         )
-        resp = self.client.get('/events/gated-detail')
+        resp = self.client.get(gated_event.get_absolute_url())
         self.assertNotContains(resp, 'event-anonymous-email-form')
         # Falls back to the tier-aware anonymous CTA (issue #671).
         self.assertContains(resp, 'event-anonymous-cta')
@@ -1830,7 +1869,8 @@ class EventDetailAnonymousFlowTest(TestCase):
 
     def test_confirmation_block_renders_for_registered_query_param(self):
         resp = self.client.get(
-            '/events/open-call-detail?registered=anon%40test.com&account_created=1',
+            self.event.get_absolute_url()
+            + '?registered=anon%40test.com&account_created=1',
         )
         self.assertContains(resp, 'event-anonymous-registered-confirmation')
         # Email used is surfaced in the confirmation block.
@@ -1845,7 +1885,9 @@ class EventDetailAnonymousFlowTest(TestCase):
         self.assertContains(resp, 'verification link')
 
     def test_confirmation_block_skipped_for_junk_query_param(self):
-        resp = self.client.get('/events/open-call-detail?registered=1')
+        resp = self.client.get(
+            self.event.get_absolute_url() + '?registered=1',
+        )
         # ``?registered=1`` is junk (not an email); template should fall
         # back to the regular form, not the confirmation block.
         self.assertNotContains(
@@ -1885,7 +1927,7 @@ class EventAnonymousPaidCopyTest(TestCase):
         )
 
     def test_basic_event_anonymous_cta_names_tier(self):
-        resp = self.client.get('/events/basic-paid-event')
+        resp = self.client.get(self.basic_event.get_absolute_url())
         self.assertContains(resp, 'data-testid="event-anonymous-cta"')
         self.assertContains(resp, 'This event is for Basic members')
         self.assertContains(
@@ -1897,7 +1939,7 @@ class EventAnonymousPaidCopyTest(TestCase):
         self.assertNotContains(resp, 'A free account is required to register')
 
     def test_main_event_anonymous_cta_names_tier(self):
-        resp = self.client.get('/events/main-paid-event')
+        resp = self.client.get(self.main_event.get_absolute_url())
         self.assertContains(resp, 'This event is for Main members')
         self.assertContains(
             resp,
@@ -1906,7 +1948,7 @@ class EventAnonymousPaidCopyTest(TestCase):
         self.assertNotContains(resp, 'free account is required')
 
     def test_premium_event_anonymous_cta_drops_or_above(self):
-        resp = self.client.get('/events/premium-paid-event')
+        resp = self.client.get(self.premium_event.get_absolute_url())
         self.assertContains(resp, 'This event is for Premium members')
         self.assertContains(
             resp,
@@ -1916,7 +1958,7 @@ class EventAnonymousPaidCopyTest(TestCase):
         self.assertNotContains(resp, 'Premium membership or above')
 
     def test_anonymous_paid_cta_has_pricing_link(self):
-        resp = self.client.get('/events/main-paid-event')
+        resp = self.client.get(self.main_event.get_absolute_url())
         html = resp.content.decode()
         # The primary CTA is "View membership options" linking to /pricing.
         self.assertIn(
@@ -1926,20 +1968,22 @@ class EventAnonymousPaidCopyTest(TestCase):
         self.assertIn('View membership options', html)
 
     def test_anonymous_paid_cta_has_signin_link_preserving_next(self):
-        resp = self.client.get('/events/main-paid-event')
+        resp = self.client.get(self.main_event.get_absolute_url())
         html = resp.content.decode()
         # Secondary CTA: "Sign in" preserving ?next= to the event URL.
+        # Issue #673: ``next`` carries the canonical id+slug URL.
         self.assertIn(
             'data-testid="event-anonymous-signin-cta"', html,
         )
         self.assertIn(
-            '/accounts/login/?next=/events/main-paid-event', html,
+            f'/accounts/login/?next={self.main_event.get_absolute_url()}',
+            html,
         )
 
     def test_anonymous_paid_cta_does_not_offer_signup(self):
         """Issue #671: the new copy does not push anonymous visitors to
         create a free account on a paid event — that was the bug."""
-        resp = self.client.get('/events/main-paid-event')
+        resp = self.client.get(self.main_event.get_absolute_url())
         html = resp.content.decode()
         # The legacy "Create free account" CTA pointing at /accounts/signup
         # must be gone for tier-gated events. (The /accounts/login link
@@ -1963,14 +2007,14 @@ class EventAnonymousPaidCopyTest(TestCase):
         """Regression check: anonymous visitor on a free event must still
         see the inline email-only signup form (unchanged from issue #513).
         """
-        Event.objects.create(
+        free_event = Event.objects.create(
             title='Free event',
             slug='free-event-regression',
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
             required_level=LEVEL_OPEN,
         )
-        resp = self.client.get('/events/free-event-regression')
+        resp = self.client.get(free_event.get_absolute_url())
         self.assertContains(resp, 'event-anonymous-email-form')
         # The new paid-event CTA must not leak into free events.
         self.assertNotContains(resp, 'event-anonymous-cta')
@@ -2014,7 +2058,7 @@ class EventUnderTierCopyConsistencyTest(TierSetupMixin, TestCase):
 
     def test_free_user_on_main_event_sees_registering_copy(self):
         self._login_at(self.free_tier)
-        response = self.client.get('/events/under-tier-main')
+        response = self.client.get(self.main_event.get_absolute_url())
         self.assertContains(response, 'Upgrade to Main to attend')
         self.assertContains(
             response,
@@ -2025,7 +2069,7 @@ class EventUnderTierCopyConsistencyTest(TierSetupMixin, TestCase):
 
     def test_basic_user_on_premium_event_drops_or_above(self):
         self._login_at(self.basic_tier)
-        response = self.client.get('/events/under-tier-premium')
+        response = self.client.get(self.premium_event.get_absolute_url())
         self.assertContains(response, 'Upgrade to Premium to attend')
         self.assertContains(
             response,

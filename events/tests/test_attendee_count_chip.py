@@ -73,7 +73,7 @@ class EventDetailAttendeeChipCopyTest(TestCase):
 
     def test_upcoming_with_zero_shows_be_the_first(self):
         event = self._make_event('upcoming-zero', status='upcoming')
-        response = self.client.get(f'/events/{event.slug}')
+        response = self.client.get(event.get_absolute_url())
         self.assertContains(
             response, 'data-testid="event-attendee-count"',
         )
@@ -83,19 +83,19 @@ class EventDetailAttendeeChipCopyTest(TestCase):
     def test_upcoming_with_one_uses_singular(self):
         event = self._make_event('upcoming-one', status='upcoming')
         _register_users(event, 1)
-        response = self.client.get(f'/events/{event.slug}')
+        response = self.client.get(event.get_absolute_url())
         self.assertContains(response, '1 person is going')
         self.assertNotContains(response, '1 people are going')
 
     def test_upcoming_with_many_uses_plural(self):
         event = self._make_event('upcoming-many', status='upcoming')
         _register_users(event, 5)
-        response = self.client.get(f'/events/{event.slug}')
+        response = self.client.get(event.get_absolute_url())
         self.assertContains(response, '5 people are going')
 
     def test_past_with_zero_hides_chip(self):
         event = self._make_event('past-zero', status='completed')
-        response = self.client.get(f'/events/{event.slug}')
+        response = self.client.get(event.get_absolute_url())
         # The chip element itself must not be in the DOM when a past
         # event has zero attendees — there is no social proof to show.
         self.assertNotContains(
@@ -105,7 +105,7 @@ class EventDetailAttendeeChipCopyTest(TestCase):
     def test_past_with_one_uses_singular_attended(self):
         event = self._make_event('past-one', status='completed')
         _register_users(event, 1)
-        response = self.client.get(f'/events/{event.slug}')
+        response = self.client.get(event.get_absolute_url())
         self.assertContains(response, '1 person attended')
         self.assertNotContains(response, '1 people attended')
         self.assertNotContains(response, '1 person is going')
@@ -113,14 +113,14 @@ class EventDetailAttendeeChipCopyTest(TestCase):
     def test_past_with_many_uses_plural_attended(self):
         event = self._make_event('past-many', status='completed')
         _register_users(event, 12)
-        response = self.client.get(f'/events/{event.slug}')
+        response = self.client.get(event.get_absolute_url())
         self.assertContains(response, '12 people attended')
         self.assertNotContains(response, '12 people are going')
 
     def test_cancelled_with_attendees_uses_attended_copy(self):
         event = self._make_event('cancelled-evt', status='cancelled')
         _register_users(event, 3)
-        response = self.client.get(f'/events/{event.slug}')
+        response = self.client.get(event.get_absolute_url())
         self.assertContains(response, '3 people attended')
 
 

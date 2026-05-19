@@ -597,7 +597,7 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_does_not_see_video(self):
-        response = self.client.get('/events/gated-recording')
+        response = self.client.get(self.gated_recording.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'youtube.com/embed')
         # The recording paywall lives on the workshop video page; the
@@ -753,13 +753,13 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
     # by ``test_event_detail_renders_verify_gate`` below.
 
     def test_event_detail_renders_verify_gate(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='Free Event Gate', slug='free-event-gate',
             description='Event description',
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming', published=True, required_level=LEVEL_OPEN,
         )
-        response = self.client.get('/events/free-event-gate')
+        response = self.client.get(event.get_absolute_url())
         self.assert_verify_gate(response)
 
     def test_course_detail_renders_verify_gate(self):

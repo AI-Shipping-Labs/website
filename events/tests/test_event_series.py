@@ -178,8 +178,13 @@ class PublicEventSeriesViewTest(TestCase):
         self.assertContains(response, 'Series Session 2')
 
     def test_event_detail_url_still_resolves_after_groups_route(self):
-        """The ``/events/groups/<slug>`` route must not swallow event slugs."""
-        response = self.client.get(f'/events/{self.published_event.slug}')
+        """The ``/events/groups/<slug>`` route must not swallow event ids.
+
+        Issue #673: event detail is now keyed on id+slug; the assertion
+        is that ``Event.get_absolute_url`` resolves to a 200 alongside
+        the existing groups route.
+        """
+        response = self.client.get(self.published_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
 
 

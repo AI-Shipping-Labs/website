@@ -88,7 +88,19 @@ def build_vevent(event):
     vevent.add('uid', f'event-{event.slug}@aishippinglabs.com')
 
     site_url = site_base_url()
-    detail_url = f'{site_url}/events/{event.slug}'
+    # Issue #673: route the canonical detail URL through
+    # ``Event.get_absolute_url`` so the .ics ``URL`` field follows the
+    # new ``/events/<id>/<slug>`` shape automatically. The ``UID``
+    # above intentionally keeps the slug-only form — UIDs are stable
+    # globally-unique identifiers and changing them would break
+    # already-issued calendar invites.
+    absolute_url = getattr(event, 'get_absolute_url', lambda: '')()
+    if absolute_url:
+        detail_url = f'{site_url}{absolute_url}'
+    else:
+        # Defensive fallback for stub events (e.g. a SimpleNamespace
+        # without ``id``) used in some integration tests.
+        detail_url = f'{site_url}/events/{event.slug}'
 
     # DESCRIPTION — plain text body plus a final ``Join:`` line so the
     # URL is visible in clients that hide ``URL`` / ``LOCATION``.

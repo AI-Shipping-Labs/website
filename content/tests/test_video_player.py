@@ -590,7 +590,7 @@ class RecordingDetailVideoPlayerTest(TestCase):
         self.client = Client()
 
     def test_event_detail_omits_youtube_player(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='YT Recording',
             slug='yt-recording',
             description='A recording with YouTube',
@@ -602,7 +602,7 @@ class RecordingDetailVideoPlayerTest(TestCase):
             ],
             published=True,
         )
-        response = self.client.get('/events/yt-recording')
+        response = self.client.get(event.get_absolute_url())
         content = response.content.decode()
         self.assertEqual(response.status_code, 200)
         # No inline video player or timestamp UI on event detail.
@@ -614,7 +614,7 @@ class RecordingDetailVideoPlayerTest(TestCase):
         self.assertIn('A recording with YouTube', content)
 
     def test_recording_without_youtube_no_player(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='No Video Recording',
             slug='no-video',
             description='Recording without video',
@@ -622,14 +622,14 @@ class RecordingDetailVideoPlayerTest(TestCase):
             recording_embed_url='https://drive.google.com/file/d/abc/preview',
             published=True,
         )
-        response = self.client.get('/events/no-video')
+        response = self.client.get(event.get_absolute_url())
         content = response.content.decode()
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('data-source=', content)
 
     def test_event_detail_omits_google_embed_iframe(self):
         """The fallback drive.google.com iframe must not render on event detail either."""
-        Event.objects.create(
+        event = Event.objects.create(
             title='Google Recording',
             slug='google-recording',
             description='Recording with google embed',
@@ -637,14 +637,14 @@ class RecordingDetailVideoPlayerTest(TestCase):
             recording_embed_url='https://drive.google.com/file/d/abc/preview',
             published=True,
         )
-        response = self.client.get('/events/google-recording')
+        response = self.client.get(event.get_absolute_url())
         content = response.content.decode()
         self.assertEqual(response.status_code, 200)
         # The fallback iframe URL must not appear on the announcement page.
         self.assertNotIn('drive.google.com/file/d/abc/preview', content)
 
     def test_event_detail_omits_hour_long_timestamps(self):
-        Event.objects.create(
+        event = Event.objects.create(
             title='Long Recording',
             slug='long-recording',
             description='An hour-long recording',
@@ -657,7 +657,7 @@ class RecordingDetailVideoPlayerTest(TestCase):
             ],
             published=True,
         )
-        response = self.client.get('/events/long-recording')
+        response = self.client.get(event.get_absolute_url())
         content = response.content.decode()
         # Timestamp labels must not appear on the announcement page.
         self.assertNotIn('[00:00]', content)

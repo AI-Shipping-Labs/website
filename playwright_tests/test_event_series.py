@@ -494,8 +494,11 @@ class TestScenario8PublicSeriesPage:
         assert rows.count() == 6
 
         # Click the first event — lands on the event detail page.
+        # Issue #673: canonical URL is ``/events/<id>/public-series-session-1``.
         page.locator('[data-testid="series-event-link"]').first.click()
-        page.wait_for_url(re.compile(r".*/events/public-series-session-1$"))
+        page.wait_for_url(
+            re.compile(r".*/events/\d+/public-series-session-1$"),
+        )
         assert page.locator("h1").first.is_visible()
 
         ctx.close()

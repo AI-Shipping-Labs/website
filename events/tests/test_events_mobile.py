@@ -150,7 +150,7 @@ class EventDetailRegisterButtonFullWidthMobileTest(TestCase):
 
     def test_register_button_full_width_on_mobile(self):
         self.client.login(email="btn@test.com", password="testpass")
-        response = self.client.get(f"/events/{self.event.slug}")
+        response = self.client.get(self.event.get_absolute_url())
         content = response.content.decode()
         # The register button should have w-full sm:w-auto
         btn_pos = content.index('id="register-btn"')
@@ -162,7 +162,7 @@ class EventDetailRegisterButtonFullWidthMobileTest(TestCase):
     def test_unregister_button_full_width_on_mobile(self):
         EventRegistration.objects.create(user=self.user, event=self.event)
         self.client.login(email="btn@test.com", password="testpass")
-        response = self.client.get(f"/events/{self.event.slug}")
+        response = self.client.get(self.event.get_absolute_url())
         content = response.content.decode()
         # The unregister button should have w-full sm:w-auto
         btn_pos = content.index('id="unregister-btn"')

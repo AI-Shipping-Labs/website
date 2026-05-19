@@ -265,7 +265,8 @@
         the card itself is the link.
         {% endcomment %}
         <article class="group flex min-w-0 flex-col rounded-xl border border-border bg-card transition-colors hover:border-accent/50 max-md:w-[min(82vw,22rem)] max-md:flex-none max-md:snap-center" data-testid="home-recording-card">
-          <a href="/events/{{ recording.slug }}" class="{% include 'content/_clickable_card_classes.html' %} flex flex-1 flex-col p-6">
+          {# Issue #673 — canonical event URL via get_absolute_url. #}
+          <a href="{{ recording.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %} flex flex-1 flex-col p-6">
             <div class="flex-1">
               <div class="flex min-w-0 items-center gap-2 mb-2">
                 <i data-lucide="video" class="h-5 w-5 shrink-0 text-accent"></i>

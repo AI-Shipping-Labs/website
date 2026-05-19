@@ -251,7 +251,10 @@ def event_join_redirect(request, slug):
         event=event, user=request.user,
     ).exists()
     if not is_registered:
-        return redirect('event_detail', slug=event.slug)
+        # Issue #673: ``event_detail`` is keyed on ``event_id`` + ``slug``
+        # now. ``Event.get_absolute_url`` is the single source of truth
+        # for the canonical URL shape.
+        return redirect(event.get_absolute_url())
 
     # Past events show an unavailable page. The "Back to event" link there
     # already surfaces the inline recording on /events/<slug>.
@@ -274,7 +277,7 @@ def event_join_redirect(request, slug):
 
 
 @ensure_csrf_cookie
-def event_detail(request, slug):
+def event_detail(request, event_id, slug):
     """Event detail page - always visible to everyone.
 
     Issue #513: this view sets the ``csrftoken`` cookie for fresh
@@ -282,8 +285,23 @@ def event_detail(request, slug):
     ``templates/events/event_detail.html`` can read it via
     ``getCookie('csrftoken')`` and POST successfully. Without this
     decorator the first POST from an anonymous session would return 403.
+
+    Issue #673: lookup is by integer ``event_id`` only — the ``slug``
+    segment is cosmetic. When the URL slug does not match the stored
+    slug we 301 to the canonical form so external links survive
+    rename-by-slug. The 301 (not 302) lets search engines collapse the
+    two URLs into one.
     """
-    event = get_object_or_404(Event, slug=slug)
+    event = get_object_or_404(Event, pk=event_id)
+
+    # Issue #673: redirect to canonical when the cosmetic slug doesn't
+    # match the stored slug. The check runs BEFORE the draft gate so a
+    # stale share-on-X link with the old slug still redirects rather
+    # than 404s; the draft visibility check then applies on the
+    # canonical URL.
+    if slug != event.slug:
+        return redirect(event.get_absolute_url(), permanent=True)
+
     # Draft events should not be publicly visible
     if event.status == 'draft' and not request.user.is_staff:
         from django.http import Http404
@@ -363,7 +381,10 @@ def event_detail(request, slug):
         'event_instructors': event.ordered_instructors,
         # Issue #484: surface a download URL for the .ics file so
         # registered users can re-add the event to their calendar
-        # independent of email delivery.
+        # independent of email delivery. Issue #673: the .ics download
+        # route still keys by slug (slug-keyed sibling routes were
+        # intentionally left unchanged), so build the URL from
+        # ``event.slug`` here rather than the new id+slug helper.
         'event_ics_url': f'/events/{event.slug}/calendar.ics',
         # Issue #513: post-registration confirmation copy for the
         # anonymous email-only flow.
@@ -375,6 +396,24 @@ def event_detail(request, slug):
     }
     context.update(gating)
     return render(request, 'events/event_detail.html', context)
+
+
+def event_detail_no_slug_redirect(request, event_id):
+    """Permanent redirect from ``/events/<id>`` to the canonical id+slug URL.
+
+    Issue #673: a share-on-X link without the cosmetic slug segment
+    (``/events/42`` or ``/events/42/``) still resolves to the canonical
+    ``/events/42/<slug>`` form. The redirect is a 301 so search engines
+    collapse the two URLs into one and crawlers don't re-fetch the bare
+    id route.
+
+    A draft event is treated the same as any other event here — the
+    redirect itself does not gate on visibility, the canonical detail
+    view does. This matches the slug-mismatch redirect inside
+    ``event_detail`` so the two id-routes have a consistent shape.
+    """
+    event = get_object_or_404(Event, pk=event_id)
+    return redirect(event.get_absolute_url(), permanent=True)
 
 
 def event_series_public(request, slug):
@@ -418,8 +457,17 @@ def _resolve_cancel_state(slug, token):
     The same logic backs both the GET confirmation page and the POST
     action so the user sees consistent messaging across the two-step
     flow.
+
+    Issue #673: the ``slug`` argument is the URL path segment, which
+    still keys the slug-only cancel-registration sibling route. The
+    cosmetic ``event_url`` we render in error states points to the
+    canonical id+slug URL when we can resolve the event, and falls back
+    to the events list when we can't (no id available).
     """
-    event_url = f'/events/{slug}'
+    # Fallback used by error branches that don't have an Event in
+    # scope. ``/events`` is the public list and is always safe to
+    # offer.
+    event_url = '/events'
 
     if not token:
         return 'invalid', {
@@ -450,6 +498,10 @@ def _resolve_cancel_state(slug, token):
             'message': 'This cancellation link is invalid.',
             'event_url': event_url,
         }
+
+    # Once we have the event, switch to the canonical id+slug URL so
+    # the user lands on the new route if they click through.
+    event_url = event.get_absolute_url()
 
     if payload['event_id'] != event.pk:
         return 'invalid', {

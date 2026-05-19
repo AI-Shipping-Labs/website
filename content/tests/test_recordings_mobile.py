@@ -90,7 +90,7 @@ class RecordingDetailMaterialTapTargetTest(TestCase):
         )
 
     def test_event_detail_omits_materials_list(self):
-        response = self.client.get('/events/material-tap-test')
+        response = self.client.get(self.recording.get_absolute_url())
         content = response.content.decode()
         # No Materials heading or material URLs on the announcement page.
         self.assertNotIn('Materials</h2>', content)

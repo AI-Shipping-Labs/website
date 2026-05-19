@@ -125,8 +125,8 @@
                   <h3 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
                     {{ event.title }}
                   </h3>
-                  {% if event.description %}
-                  <p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description|truncatewords:30 }}</p>
+                  {% if event.description_html %}
+                  <p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description_html|striptags|truncatechars:200 }}</p>
                   {% endif %}
                   <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                     <span class="flex items-center gap-1.5">
@@ -223,7 +223,9 @@
                       {% if event.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ event.title }}
                     </h2>
                   </div>
-                  <p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description }}</p>
+                  {% if event.description_html %}
+                  <p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description_html|striptags|truncatechars:200 }}</p>
+                  {% endif %}
                   <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                     <span class="flex items-center gap-1.5">
                       <i data-lucide="calendar" class="h-4 w-4"></i>

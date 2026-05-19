@@ -4,6 +4,7 @@ from .healthcheck import health_check
 from .helpers import async_task, schedule
 from .names import TASK_NAME_MAX_LENGTH, build_task_name, constrain_task_name, sanitize_task_name_part
 from .recording_upload import upload_recording_to_s3
+from .test_worker_smoke import run as test_worker_smoke
 from .youtube_upload import upload_recording_to_youtube
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     'health_check',
     'sanitize_task_name_part',
     'schedule',
+    'test_worker_smoke',
     'upload_recording_to_s3',
     'upload_recording_to_youtube',
 ]

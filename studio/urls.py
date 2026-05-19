@@ -193,6 +193,7 @@ from studio.views.worker import (
     worker_retry_failed,
     worker_status,
     worker_task_detail,
+    worker_test_smoke,
 )
 from studio.views.workshops import (
     workshop_detail,
@@ -635,6 +636,11 @@ urlpatterns = [
 
     # Worker Status
     path('worker/', worker_status, name='studio_worker'),
+    path(
+        'worker/test/',
+        worker_test_smoke,
+        name='studio_worker_test_smoke',
+    ),
     path(
         'worker/queue/drain/',
         worker_drain_queue,

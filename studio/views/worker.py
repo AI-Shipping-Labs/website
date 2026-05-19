@@ -443,3 +443,21 @@ def worker_bulk_delete_failed(request):
     else:
         messages.info(request, 'No failed tasks to delete.')
     return redirect('studio_worker')
+
+
+@staff_required
+@require_POST
+def worker_test_smoke(request):
+    """Enqueue a tiny smoke-test task to confirm a worker is consuming jobs.
+
+    Issue #697: after a deploy or worker restart, the operator needs a
+    one-click way to confirm the worker is alive end-to-end. We enqueue
+    ``jobs.tasks.test_worker_smoke.run`` and surface the task_id in the
+    flash so the operator can spot it in Recent Tasks.
+    """
+    task_id = async_task('jobs.tasks.test_worker_smoke.run')
+    messages.success(
+        request,
+        f'Test task queued (id={task_id}). Check Recent tasks for the result.',
+    )
+    return redirect('studio_worker')

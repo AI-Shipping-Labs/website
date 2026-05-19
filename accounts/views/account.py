@@ -31,7 +31,6 @@ from accounts.services.timezones import (
     is_valid_timezone,
 )
 from content.access import get_active_override
-from email_app.models import EmailLog
 from integrations.config import get_config
 from payments.models import Tier
 from payments.tier_state import build_tier_state
@@ -128,14 +127,6 @@ def _render_account_page(
     has_stale_subscription = has_subscription and is_free
 
     free_tier = Tier.objects.filter(slug="free").first()
-    latest_verification_email = None
-    if not user.email_verified:
-        latest_verification_email = (
-            EmailLog.objects
-            .filter(user=user, email_type="email_verification")
-            .order_by("-sent_at")
-            .first()
-        )
 
     state_tier = tier or free_tier
     account_plan_state = (
@@ -186,7 +177,6 @@ def _render_account_page(
         "show_manage_subscription": show_manage_subscription,
         "show_upgrade_action": show_upgrade_action,
         "stripe_customer_portal_url": stripe_customer_portal_url,
-        "latest_verification_email": latest_verification_email,
         # Profile name form (consolidated onto /account/, issue #447). The
         # form posts to ``account_profile``; this view renders it inline.
         "profile_error": profile_error,

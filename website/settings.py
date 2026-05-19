@@ -201,6 +201,7 @@ TEMPLATES = [
                 'website.context_processors.impersonation_context',
                 'website.context_processors.announcement_banner_context',
                 'website.context_processors.studio_env_mismatch_context',
+                'accounts.context_processors.unverified_email_banner',
             ],
         },
     },

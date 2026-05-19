@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Starting soon - {{ event.title }} | AI Shipping Labs{% endblock %}
+
+{% block extra_head %}
+<meta http-equiv="refresh" content="30">
+{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <div class="py-8 sm:py-16 lg:py-24">
+    <div data-testid="event-join-countdown" class="mx-auto max-w-2xl px-6 lg:px-8 text-center">
+      <div class="mb-6">
+        <i data-lucide="hourglass" class="mx-auto h-12 w-12 text-muted-foreground"></i>
+      </div>
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{{ event.title }}</h1>
+      <p class="mt-4 text-muted-foreground">
+        This event starts at <span class="text-foreground">{{ event_start_local }}</span>.
+      </p>
+      <p class="mt-6 text-lg text-foreground">
+        Starting in
+        <span data-testid="event-join-countdown-timer"
+              data-seconds-remaining="{{ seconds_until_open }}"
+              class="font-semibold">{{ minutes_until_open }} min {{ remaining_seconds }} sec</span>
+      </p>
+      <p class="mt-4 text-sm text-muted-foreground">
+        This page will refresh automatically. The Join button will open as soon as the meeting is about to start.
+      </p>
+
+      <div class="mt-8">
+        <a href="{{ event.get_absolute_url }}"
+           class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <i data-lucide="arrow-left" class="h-4 w-4"></i>
+          Back to event details
+        </a>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+  (function() {
+    var el = document.querySelector('[data-testid="event-join-countdown-timer"]');
+    if (!el) return;
+    var remaining = parseInt(el.getAttribute('data-seconds-remaining'), 10);
+    if (isNaN(remaining)) return;
+    function render() {
+      if (remaining <= 0) {
+        el.textContent = '0 min 0 sec';
+        return;
+      }
+      var minutes = Math.floor(remaining / 60);
+      var seconds = remaining % 60;
+      el.textContent = minutes + ' min ' + seconds + ' sec';
+    }
+    render();
+    setInterval(function() {
+      remaining -= 1;
+      if (remaining < 0) remaining = 0;
+      render();
+    }, 1000);
+  })();
+</script>
+{% include "includes/footer.html" %}
+{% endblock %}

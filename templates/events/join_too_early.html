@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Too early to join - {{ event.title }} | AI Shipping Labs{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <div class="py-8 sm:py-16 lg:py-24">
+    <div data-testid="event-join-too-early" class="mx-auto max-w-2xl px-6 lg:px-8 text-center">
+      <div class="mb-6">
+        <i data-lucide="clock" class="mx-auto h-12 w-12 text-muted-foreground"></i>
+      </div>
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{{ event.title }}</h1>
+      <p class="mt-4 text-muted-foreground">
+        This event starts at <span class="text-foreground">{{ event_start_local }}</span>.
+      </p>
+      <p class="mt-2 text-muted-foreground">Come back closer to the start time to join.</p>
+
+      <div class="mt-8">
+        <a href="{{ event.get_absolute_url }}"
+           class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <i data-lucide="arrow-left" class="h-4 w-4"></i>
+          Back to event details
+        </a>
+      </div>
+    </div>
+  </div>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

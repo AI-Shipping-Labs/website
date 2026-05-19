@@ -316,22 +316,111 @@
   <h2 class="text-lg font-semibold text-foreground mb-4">Tags</h2>
 
   <div class="mb-4">
-    {% if tags %}
+    {% if tag_chips %}
     <div class="flex flex-wrap items-center gap-2" data-testid="user-tags-chips">
-      {% for tag in tags %}
-      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-accent/10 text-accent border border-accent/30" data-testid="user-tag-chip" data-tag="{{ tag }}">
-        {{ tag }}
+      {% for chip in tag_chips %}
+      {% comment %}
+        Each chip carries three affordances (issue #694):
+        - The pencil opens an inline rename form for that tag.
+        - The trash icon opens a confirm modal that calls
+          ``/studio/tags/<name>/delete`` and removes the tag from every
+          user that carries it.
+        - The existing ``x`` removes the tag from THIS user only.
+        Rename input visibility is controlled by a checkbox hidden input
+        + a CSS sibling selector so the affordance works without JS for
+        the open/close toggle (the actual submit hits the POST endpoint).
+      {% endcomment %}
+      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-accent/10 text-accent border border-accent/30"
+            data-testid="user-tag-chip"
+            data-tag="{{ chip.name }}"
+            data-tag-user-count="{{ chip.user_count }}">
+        <span data-testid="user-tag-chip-name">{{ chip.name }}</span>
+
+        <button type="button"
+                class="text-muted-foreground hover:text-foreground"
+                aria-label="Rename tag {{ chip.name }}"
+                data-testid="user-tag-rename-toggle"
+                data-tag-rename-toggle="{{ chip.name }}"
+                title="Rename tag everywhere">&#9998;</button>
+
+        <button type="button"
+                class="text-muted-foreground hover:text-foreground"
+                aria-label="Delete tag {{ chip.name }} everywhere"
+                data-testid="user-tag-delete-everywhere"
+                data-tag-delete-open="{{ chip.name }}"
+                data-tag-user-count="{{ chip.user_count }}"
+                title="Delete tag everywhere">&#128465;</button>
+
         <form method="post" action="{% url 'studio_user_tag_remove' detail_user.pk %}" class="inline">
           {% csrf_token %}
-          <input type="hidden" name="tag" value="{{ tag }}">
+          <input type="hidden" name="tag" value="{{ chip.name }}">
           <button type="submit"
                   class="text-muted-foreground hover:text-foreground"
-                  aria-label="Remove tag {{ tag }}"
+                  aria-label="Remove tag {{ chip.name }} from this user"
                   data-testid="user-tag-remove">x</button>
         </form>
       </span>
+
+      <form method="post"
+            action="{% url 'studio_tag_rename' chip.name %}"
+            class="hidden flex-wrap items-center gap-1"
+            data-testid="user-tag-rename-form"
+            data-tag-rename-form="{{ chip.name }}">
+        {% csrf_token %}
+        <input type="text"
+               name="new"
+               value="{{ chip.name }}"
+               aria-label="New name for tag {{ chip.name }}"
+               data-testid="user-tag-rename-input"
+               data-tag-rename-input="{{ chip.name }}"
+               class="bg-secondary border border-border rounded-lg px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <button type="submit"
+                data-testid="user-tag-rename-apply"
+                class="bg-accent text-accent-foreground px-2 py-1 rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">
+          Apply
+        </button>
+        <button type="button"
+                data-testid="user-tag-rename-cancel"
+                data-tag-rename-cancel="{{ chip.name }}"
+                class="text-xs text-muted-foreground hover:text-foreground px-2 py-1">
+          Cancel
+        </button>
+      </form>
       {% endfor %}
     </div>
+
+    {% comment %}
+      One confirm dialog per chip, rendered alongside the chip list so
+      the operator never sees a generic "delete tag" prompt. The dialog
+      uses native ``<dialog>`` so we get focus trapping + Esc-to-close
+      for free; the open/close wiring is in the small script at the
+      bottom of this section.
+    {% endcomment %}
+    {% for chip in tag_chips %}
+    <dialog data-testid="user-tag-delete-dialog"
+            data-tag-delete-dialog="{{ chip.name }}"
+            class="bg-card border border-border rounded-lg p-6 text-foreground max-w-md backdrop:bg-black/60">
+      <form method="post" action="{% url 'studio_tag_delete' chip.name %}" class="space-y-4">
+        {% csrf_token %}
+        <p class="text-sm" data-testid="user-tag-delete-copy">
+          Delete tag {{ chip.name }}? This removes it from {{ chip.user_count }} user{{ chip.user_count|pluralize }}. Cannot be undone.
+        </p>
+        <div class="flex justify-end gap-2">
+          <button type="button"
+                  data-testid="user-tag-delete-cancel"
+                  data-tag-delete-cancel="{{ chip.name }}"
+                  class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+            Cancel
+          </button>
+          <button type="submit"
+                  data-testid="user-tag-delete-confirm"
+                  class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">
+            Delete tag
+          </button>
+        </div>
+      </form>
+    </dialog>
+    {% endfor %}
     {% else %}
     <p class="text-sm text-muted-foreground" data-testid="user-tags-empty">No tags yet. Add one below.</p>
     {% endif %}
@@ -360,6 +449,64 @@
   <p class="text-xs text-muted-foreground mt-2">
     Tags are normalized to lowercase and hyphenated. They are visible to staff only and never rendered on public pages.
   </p>
+
+  {% comment %}
+    Lightweight wiring for the rename inline-form toggle and the
+    delete-everywhere confirm dialog (issue #694). The actual mutation
+    happens server-side; this script only flips visibility and opens /
+    closes the native ``<dialog>`` element.
+  {% endcomment %}
+  <script>
+    (function () {
+      document.querySelectorAll('[data-tag-rename-toggle]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var name = btn.getAttribute('data-tag-rename-toggle');
+          var form = document.querySelector('[data-tag-rename-form="' + CSS.escape(name) + '"]');
+          if (!form) return;
+          form.classList.remove('hidden');
+          form.classList.add('flex');
+          var input = form.querySelector('[data-tag-rename-input]');
+          if (input) {
+            input.focus();
+            input.select();
+          }
+        });
+      });
+      document.querySelectorAll('[data-tag-rename-cancel]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var name = btn.getAttribute('data-tag-rename-cancel');
+          var form = document.querySelector('[data-tag-rename-form="' + CSS.escape(name) + '"]');
+          if (!form) return;
+          form.classList.add('hidden');
+          form.classList.remove('flex');
+          var input = form.querySelector('[data-tag-rename-input]');
+          if (input) input.value = name;
+        });
+      });
+      document.querySelectorAll('[data-tag-delete-open]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var name = btn.getAttribute('data-tag-delete-open');
+          var dialog = document.querySelector('[data-tag-delete-dialog="' + CSS.escape(name) + '"]');
+          if (dialog && typeof dialog.showModal === 'function') {
+            dialog.showModal();
+          } else if (dialog) {
+            dialog.setAttribute('open', '');
+          }
+        });
+      });
+      document.querySelectorAll('[data-tag-delete-cancel]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var name = btn.getAttribute('data-tag-delete-cancel');
+          var dialog = document.querySelector('[data-tag-delete-dialog="' + CSS.escape(name) + '"]');
+          if (dialog && typeof dialog.close === 'function') {
+            dialog.close();
+          } else if (dialog) {
+            dialog.removeAttribute('open');
+          }
+        });
+      });
+    })();
+  </script>
 </section>
 
 <!-- Course context -->

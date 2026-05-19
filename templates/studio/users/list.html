@@ -108,6 +108,35 @@
            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
     <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
   </form>
+
+  {% comment %}
+    Standalone tag picker (issue #694). Submits as its own GET form so a
+    change reloads with ``?tag=<name>`` set, preserving the active tier
+    chip, Slack chip, and free-text search via hidden inputs. The first
+    option is "All tags" with an empty value, which clears the filter
+    server-side (matches the normalize_tag empty-string contract). The
+    ``q`` field is intentionally separate from this picker -- substring
+    search vs exact-match tag filtering.
+  {% endcomment %}
+  <form method="get" class="flex flex-wrap items-center gap-2" autocomplete="off" data-testid="user-tag-picker-form">
+    <input type="hidden" name="filter" value="{{ active_filter }}">
+    <input type="hidden" name="slack" value="{{ slack_filter }}">
+    {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
+    <label for="user-tag-picker" class="text-xs text-muted-foreground">Tag:</label>
+    <select id="user-tag-picker"
+            name="tag"
+            onchange="this.form.submit()"
+            data-testid="user-tag-picker"
+            class="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <option value="" {% if not active_tag %}selected{% endif %}>All tags</option>
+      {% for tag in known_tags %}
+      <option value="{{ tag }}" {% if tag == active_tag %}selected{% endif %}>{{ tag }}</option>
+      {% endfor %}
+    </select>
+    <noscript>
+      <button type="submit" class="bg-secondary border border-border px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Apply</button>
+    </noscript>
+  </form>
 </div>
 
 <!-- User list -->

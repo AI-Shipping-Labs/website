@@ -43,6 +43,8 @@ from accounts.utils.tags import (
     add_tag as _add_tag_to_user,
 )
 from accounts.utils.tags import (
+    count_users_with_tag,
+    list_all_tags,
     normalize_tag,
     normalize_tags,
 )
@@ -498,6 +500,9 @@ def user_list(request):
         'slack_filter': slack_filter,
         'search': search,
         'active_tag': active_tag,
+        # Tag picker for the filter row (issue #694). Same sorted source as
+        # the user-detail datalist so the dropdown matches the typeahead.
+        'known_tags': list_all_tags(),
         'total_users': counts['total_users'],
         'paid_count': counts['paid_count'],
         'main_plus_count': counts['main_plus_count'],
@@ -870,6 +875,19 @@ def user_detail(request, user_id):
     # account ID itself — no separate flag is needed.
     stripe_account_id = get_config('STRIPE_DASHBOARD_ACCOUNT_ID', '')
 
+    # Per-tag chip data for the rename / delete-everywhere affordances
+    # (issue #694). Each entry pairs the tag with a live count of users
+    # carrying it so the delete-confirm modal can render
+    # "This removes it from {N} users." without a separate query.
+    user_tags = list(user.tags or [])
+    tag_chips = [
+        {
+            'name': tag,
+            'user_count': count_users_with_tag(tag),
+        }
+        for tag in user_tags
+    ]
+
     context = {
         'detail_user': user,
         'tier_name': _effective_tier_name(user, override),
@@ -877,7 +895,8 @@ def user_detail(request, user_id):
         'has_override': has_override,
         'active_override': override,
         'is_subscribed': not user.unsubscribed,
-        'tags': list(user.tags or []),
+        'tags': user_tags,
+        'tag_chips': tag_chips,
         'known_tags': _all_known_contact_tags(),
         'status': _user_status(user),
         'crm_record': crm_record,

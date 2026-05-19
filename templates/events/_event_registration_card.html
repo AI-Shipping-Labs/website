@@ -109,10 +109,6 @@
           {% else %}
           Registering for this event requires a {{ required_tier_name }} membership or above.
           {% endif %}
-          Already a member?
-          <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}" class="text-accent hover:underline">Sign in</a>
-          to register. New here?
-          <a href="/pricing" class="text-accent hover:underline">View membership options</a>.
         </p>
         <div class="mt-4 flex flex-wrap items-center justify-center gap-3">
           <a href="/pricing"

@@ -112,6 +112,42 @@ class SlackCommunityService(CommunityService):
                 return None
             raise
 
+    def lookup_user_profile_by_email(self, email):
+        """Look up a Slack user's profile (id + name fields) by email.
+
+        Companion to ``lookup_user_by_email`` that surfaces the name
+        fields ``users.lookupByEmail`` already returns. Used by the
+        Slack membership probe (issue #699) to backfill
+        ``first_name`` / ``last_name`` on the local user without
+        adding a second API surface.
+
+        Args:
+            email: Email address to search for.
+
+        Returns:
+            dict or None: ``{"id", "real_name", "first_name",
+            "last_name"}`` when the user is found, ``None`` if the
+            user is not in the workspace. Raises ``SlackAPIError`` for
+            any other failure so callers can decide whether to swallow.
+        """
+        try:
+            data = self._api_call("users.lookupByEmail", email=email)
+        except SlackAPIError as e:
+            if e.error_code == "users_not_found":
+                return None
+            raise
+
+        user = data.get("user", {}) or {}
+        if not user.get("id"):
+            return None
+        profile = user.get("profile", {}) or {}
+        return {
+            "id": user.get("id", ""),
+            "real_name": user.get("real_name", "") or profile.get("real_name", ""),
+            "first_name": profile.get("first_name", "") or "",
+            "last_name": profile.get("last_name", "") or "",
+        }
+
     def check_workspace_membership(self, email):
         """Check whether an email is a member of the Slack workspace.
 

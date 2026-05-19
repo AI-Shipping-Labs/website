@@ -27,6 +27,7 @@ import stripe
 from django.core.mail import BadHeaderError
 
 from accounts.models import User
+from accounts.utils.names import set_name_from_external
 from community.models import CommunityAuditLog
 from payments import services as _services
 from payments.exceptions import WebhookPermanentError
@@ -140,15 +141,22 @@ def handle_checkout_completed(session_data):
         if billing_end:
             user.billing_period_end = billing_end
 
-    user.save(
-        update_fields=[
-            "tier",
-            "stripe_customer_id",
-            "subscription_id",
-            "billing_period_end",
-            "pending_tier",
-        ]
-    )
+    # Capture name from Stripe receipt (issue #699). Stripe sends the
+    # full name as a single string on ``customer_details.name``; the
+    # helper splits on the LAST whitespace and refuses to overwrite a
+    # value the user already has.
+    update_fields = [
+        "tier",
+        "stripe_customer_id",
+        "subscription_id",
+        "billing_period_end",
+        "pending_tier",
+    ]
+    stripe_name = session_data.get("customer_details", {}).get("name", "") or ""
+    if set_name_from_external(user, full_name=stripe_name, source="stripe"):
+        update_fields.extend(["first_name", "last_name"])
+
+    user.save(update_fields=update_fields)
     _services.logger.info(
         "checkout.session.completed: user=%s tier=%s", user.email, tier.slug,
     )
@@ -356,10 +364,20 @@ def _handle_course_purchase(session_data, course_id):
         },
     )
 
+    # Capture name from the Stripe receipt (issue #699). Same split /
+    # only-fill-empty behaviour as the tier-checkout path.
+    stripe_name = session_data.get("customer_details", {}).get("name", "") or ""
+    name_changed = set_name_from_external(user, full_name=stripe_name, source="stripe")
+
     # Update stripe_customer_id if not already set
+    update_fields = []
     if customer_id and not user.stripe_customer_id:
         user.stripe_customer_id = customer_id
-        user.save(update_fields=["stripe_customer_id"])
+        update_fields.append("stripe_customer_id")
+    if name_changed:
+        update_fields.extend(["first_name", "last_name"])
+    if update_fields:
+        user.save(update_fields=update_fields)
 
     _services.logger.info(
         "course purchase: user=%s course=%s (%s)",

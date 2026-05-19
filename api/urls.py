@@ -37,6 +37,12 @@ from api.views.enrollments import (
     sprint_enrollment_detail,
     sprint_enrollments_collection,
 )
+from api.views.event_series import (
+    event_series_collection,
+    event_series_detail,
+    event_series_occurrence_detail,
+    event_series_occurrences_bulk,
+)
 from api.views.events import event_detail, events_collection
 from api.views.integration_settings import integration_settings
 from api.views.interview_notes import (
@@ -78,6 +84,30 @@ urlpatterns = [
         "events/<slug:slug>",
         event_detail,
         name="api_event_detail",
+    ),
+    # ---- Event series + bulk occurrences (issue #678) -----------------
+    # Register the bulk literal BEFORE the per-occurrence id capture so
+    # the ``occurrences/bulk`` literal is not swallowed by ``<int>``.
+    # Matches the ``sprints/<slug>/plans/bulk-import`` precedent.
+    path(
+        "event-series",
+        event_series_collection,
+        name="api_event_series_collection",
+    ),
+    path(
+        "event-series/<int:series_id>",
+        event_series_detail,
+        name="api_event_series_detail",
+    ),
+    path(
+        "event-series/<int:series_id>/occurrences/bulk",
+        event_series_occurrences_bulk,
+        name="api_event_series_occurrences_bulk",
+    ),
+    path(
+        "event-series/<int:series_id>/occurrences/<int:occurrence_id>",
+        event_series_occurrence_detail,
+        name="api_event_series_occurrence_detail",
     ),
     # ---- Integration settings (issues #633, #640) ---------------------
     # GET lists registered keys with metadata + source enum but never the

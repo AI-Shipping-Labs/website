@@ -74,6 +74,13 @@ class EventSeries(TimestampedModelMixin, models.Model):
         max_length=100, default='Europe/Berlin',
         help_text='IANA timezone name, e.g. Europe/Berlin.',
     )
+    is_active = models.BooleanField(
+        default=True,
+        help_text=(
+            'Hide flag. When False the series is hidden from public series '
+            'listings; existing occurrences keep their own per-event status.'
+        ),
+    )
 
     class Meta:
         ordering = ['-created_at']

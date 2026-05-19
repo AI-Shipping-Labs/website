@@ -117,3 +117,48 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
         self.assertEqual(
             env_by_container["ai-shipping-labs-worker"]["RUN_MIGRATIONS"], "false"
         )
+
+    def test_web_role_strips_worker_sidecar(self):
+        with TemporaryDirectory() as tmpdir:
+            input_path = Path(tmpdir) / "input.json"
+            output_path = Path(tmpdir) / "output.json"
+            self._write_task_definition(input_path)
+
+            with redirect_stdout(StringIO()):
+                update_task_def.update_task_definition(
+                    str(input_path),
+                    "20260519-abcd",
+                    str(output_path),
+                    "prod",
+                    "web",
+                )
+
+            task_def = self._read_task_definition(output_path)
+
+        names = [c["name"] for c in task_def["containerDefinitions"]]
+        self.assertEqual(names, ["ai-shipping-labs"])
+
+    def test_worker_role_keeps_only_worker_container(self):
+        with TemporaryDirectory() as tmpdir:
+            input_path = Path(tmpdir) / "input.json"
+            output_path = Path(tmpdir) / "output.json"
+            self._write_task_definition(input_path)
+
+            with redirect_stdout(StringIO()):
+                update_task_def.update_task_definition(
+                    str(input_path),
+                    "20260519-abcd",
+                    str(output_path),
+                    "prod",
+                    "worker",
+                )
+
+            task_def = self._read_task_definition(output_path)
+
+        names = [c["name"] for c in task_def["containerDefinitions"]]
+        self.assertEqual(names, ["ai-shipping-labs-worker"])
+        environment = {
+            item["name"]: item["value"]
+            for item in task_def["containerDefinitions"][0]["environment"]
+        }
+        self.assertEqual(environment["RUN_MIGRATIONS"], "false")

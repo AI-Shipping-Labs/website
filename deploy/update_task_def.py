@@ -32,6 +32,8 @@ SITE_BASE_URL_BY_ENV = {
     "prod": "https://aishippinglabs.com",
 }
 
+VALID_ROLES = {"combined", "web", "worker"}
+
 
 def _set_env_var(environment, name, value):
     for env_var in environment:
@@ -69,18 +71,17 @@ def _site_base_url_for_env(deploy_env):
     return SITE_BASE_URL_BY_ENV.get(deploy_env, SITE_BASE_URL_BY_ENV["dev"])
 
 
-def _ensure_worker_container(containers):
-    # Source-of-truth for the qcluster sidecar. Cloning from the web
-    # container keeps image, secrets, and log config in sync — only the
-    # name, port mappings, and essential flag differ.
+def _ensure_worker_sidecar(containers):
+    # Combined-role task: web + worker share one ECS task. Clone the web
+    # container so image, secrets, and log config stay in sync — only
+    # name, command, port mappings, and essential flag differ.
     #
-    # Note: ``command`` is set here for ECS console readability only.
-    # The Dockerfile sets ENTRYPOINT to ``scripts/entrypoint_init.py``
-    # without consuming ``$@``, so the actual web/worker dispatch is
-    # driven by the ``RUN_MIGRATIONS`` env var (set on the web container
-    # only). If you need to change worker behaviour, edit
-    # ``scripts/entrypoint_init.py`` -- editing this command field has
-    # no runtime effect.
+    # ``command`` is set here for ECS console readability only. The
+    # Dockerfile sets ENTRYPOINT to ``scripts/entrypoint_init.py`` without
+    # consuming ``$@``, so the actual web/worker dispatch is driven by the
+    # ``RUN_MIGRATIONS`` env var (set on the web container only). If you
+    # need to change worker behaviour, edit ``scripts/entrypoint_init.py``
+    # — editing this command field has no runtime effect.
     if any(c["name"].endswith("-worker") for c in containers):
         return
 
@@ -93,14 +94,42 @@ def _ensure_worker_container(containers):
     containers.append(worker)
 
 
-def update_task_definition(input_file, new_tag, output_file, deploy_env="dev"):
-    print(f"Updating task definition from {input_file} with tag {new_tag}")
+def _apply_role(task_def, role):
+    containers = task_def["containerDefinitions"]
+    if role == "web":
+        # Worker runs as its own ECS service (prod). Strip any sidecar
+        # left over from earlier two-container revisions so the new
+        # revision is single-container.
+        task_def["containerDefinitions"] = [
+            c for c in containers if not c["name"].endswith("-worker")
+        ]
+    elif role == "worker":
+        # Worker-only task def. Keep only the worker container in case
+        # the source task def carries an unrelated container.
+        task_def["containerDefinitions"] = [
+            c for c in containers if c["name"].endswith("-worker")
+        ]
+    elif role == "combined":
+        _ensure_worker_sidecar(containers)
+
+
+def update_task_definition(
+    input_file, new_tag, output_file, deploy_env="dev", role="combined"
+):
+    if role not in VALID_ROLES:
+        print(f"Invalid role: {role}. Must be one of {sorted(VALID_ROLES)}.")
+        sys.exit(1)
+
+    print(
+        f"Updating task definition from {input_file} with tag {new_tag} "
+        f"(env={deploy_env}, role={role})"
+    )
 
     try:
         with open(input_file, "r") as f:
             task_def = json.load(f)["taskDefinition"]
 
-        _ensure_worker_container(task_def["containerDefinitions"])
+        _apply_role(task_def, role)
 
         for container_def in task_def["containerDefinitions"]:
             if "image" in container_def:
@@ -161,12 +190,13 @@ def update_task_definition(input_file, new_tag, output_file, deploy_env="dev"):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) not in {4, 5}:
+    if len(sys.argv) not in {4, 5, 6}:
         print(
             "Usage: python update_task_def.py <input_file> <new_tag> "
-            "<output_file> [deploy_env]"
+            "<output_file> [deploy_env] [role]"
         )
         sys.exit(1)
 
-    deploy_env = sys.argv[4] if len(sys.argv) == 5 else "dev"
-    update_task_definition(sys.argv[1], sys.argv[2], sys.argv[3], deploy_env)
+    deploy_env = sys.argv[4] if len(sys.argv) >= 5 else "dev"
+    role = sys.argv[5] if len(sys.argv) == 6 else "combined"
+    update_task_definition(sys.argv[1], sys.argv[2], sys.argv[3], deploy_env, role)

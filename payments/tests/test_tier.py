@@ -1,4 +1,5 @@
-from django.test import TestCase, tag
+from django.contrib.auth import get_user_model
+from django.test import Client, TestCase, tag
 
 from payments.models import Tier
 
@@ -121,3 +122,40 @@ class TierPricingViewAuthenticatedTest(TestCase):
         content = response.content.decode()
         for tier_name in ("Free", "Basic", "Main", "Premium"):
             self.assertIn(tier_name, content)
+
+
+class TierAdminSmokeTest(TestCase):
+    """Regression: TierAdmin change/add pages must render 200, not 500.
+
+    Previously `prepopulated_fields = {"slug": ("name",)}` referenced
+    `name`, which is in `readonly_fields` (yaml-managed). Django's admin
+    raises `KeyError: "Key 'name' not found in 'TierForm'"` when a
+    prepopulated source field is readonly, returning HTTP 500.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        User = get_user_model()
+        cls.superuser = User.objects.create_superuser(
+            email="tieradmin@test.com",
+            password="pw",
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.superuser)
+
+    def test_change_page_returns_200(self):
+        tier = Tier.objects.get(slug="basic")
+        response = self.client.get(
+            f"/admin/payments/tier/{tier.pk}/change/",
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_add_page_returns_200(self):
+        response = self.client.get("/admin/payments/tier/add/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_changelist_returns_200(self):
+        response = self.client.get("/admin/payments/tier/")
+        self.assertEqual(response.status_code, 200)

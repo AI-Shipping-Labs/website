@@ -272,6 +272,20 @@ def _probe_slack_membership_on_signup(user):
         if uid and not user.slack_user_id:
             user.slack_user_id = uid
             update_fields.append("slack_user_id")
+        # Issue #709: backfill first_name/last_name from the Slack profile
+        # in the same DB round-trip. This adds ONE extra Slack API call
+        # (``users.lookupByEmail`` via ``lookup_user_profile_by_email``)
+        # to the signup latency budget — only on the ``member`` branch
+        # (``not_member`` / ``unknown`` skip it, zero extra cost there).
+        # Typical Slack ``users.lookupByEmail`` latency is ~80-300 ms;
+        # the signup path already pays one such call via
+        # ``check_workspace_membership`` above, so this is a 2x of the
+        # existing Slack budget on the ``member`` branch only. Helper
+        # swallows its own exceptions (returns False on lookup failure),
+        # so signup never fails because of the profile call.
+        from community.tasks.slack_membership import _backfill_name_from_slack
+        if _backfill_name_from_slack(service, user):
+            update_fields.extend(["first_name", "last_name"])
     else:
         user.slack_member = False
 

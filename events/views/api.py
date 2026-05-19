@@ -3,12 +3,14 @@ import json
 import logging
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST
 
+from accounts.services.timezones import is_valid_timezone
 from accounts.services.verification import resolve_unverified_ttl_days
 from content.access import LEVEL_OPEN, can_access
 from events.models import Event, EventRegistration
@@ -17,6 +19,63 @@ from events.views.pages import _resolve_cancel_state
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
+
+# Rate-limit knobs for the anonymous email-submit branch (issue #672).
+# Mirrors the cache-add pattern shipped under #448; no new library is
+# introduced. Limits apply only to the anonymous path — authenticated
+# registration is unaffected.
+ANON_REGISTER_IP_LIMIT = 5
+ANON_REGISTER_IP_WINDOW_SECONDS = 60
+ANON_REGISTER_EMAIL_LIMIT = 3
+ANON_REGISTER_EMAIL_WINDOW_SECONDS = 3600
+ANON_REGISTER_IP_CACHE_KEY = "event-anon-register:ip:{addr}"
+ANON_REGISTER_EMAIL_CACHE_KEY = "event-anon-register:email:{email}"
+ANON_REGISTER_RATE_LIMIT_MESSAGE = (
+    "Too many registration attempts. Please try again in a few minutes."
+)
+
+
+def _consume_anon_register_rate_limit(request, email):
+    """Return ``True`` if the request is rate-limited, ``False`` otherwise.
+
+    Atomically increments per-IP and per-email counters in the cache. The
+    first gate to trip wins — both counters are advanced only when both
+    pass so we do not penalise a user whose email gate is fine after
+    their IP gate has already fired.
+
+    The IP comes from ``REMOTE_ADDR`` — the existing nginx / Cloudflare
+    setup rewrites it for us, matching ``_resolve_cancel_state``'s style.
+    """
+    ip = request.META.get("REMOTE_ADDR") or ""
+    ip_key = ANON_REGISTER_IP_CACHE_KEY.format(addr=ip)
+    email_key = ANON_REGISTER_EMAIL_CACHE_KEY.format(email=email.lower())
+
+    # ``cache.add`` only sets when the key is missing; once it exists we
+    # use ``cache.incr`` so concurrent requests increment the same slot.
+    if cache.add(ip_key, 1, ANON_REGISTER_IP_WINDOW_SECONDS):
+        ip_count = 1
+    else:
+        try:
+            ip_count = cache.incr(ip_key)
+        except ValueError:
+            # Key expired between ``add`` and ``incr``; treat as fresh.
+            cache.add(ip_key, 1, ANON_REGISTER_IP_WINDOW_SECONDS)
+            ip_count = 1
+    if ip_count > ANON_REGISTER_IP_LIMIT:
+        return True
+
+    if cache.add(email_key, 1, ANON_REGISTER_EMAIL_WINDOW_SECONDS):
+        email_count = 1
+    else:
+        try:
+            email_count = cache.incr(email_key)
+        except ValueError:
+            cache.add(email_key, 1, ANON_REGISTER_EMAIL_WINDOW_SECONDS)
+            email_count = 1
+    if email_count > ANON_REGISTER_EMAIL_LIMIT:
+        return True
+
+    return False
 
 
 def _is_valid_email(email):
@@ -29,7 +88,7 @@ def _is_valid_email(email):
     return "." in domain
 
 
-def _create_unverified_subscriber(email):
+def _create_unverified_subscriber(email, preferred_timezone=""):
     """Create a free, unverified ``User`` for an anonymous registrant.
 
     Mirrors ``subscribe_api`` so anonymous event registration produces the
@@ -37,6 +96,12 @@ def _create_unverified_subscriber(email):
     ``verification_expires_at`` window so the daily purge job (#452)
     cleans up abandoned accounts. ``import_source`` defaults to
     ``"manual"`` and ``imported_at`` stays ``None``.
+
+    ``preferred_timezone`` (issue #672) is the browser-detected IANA
+    timezone forwarded by the email-only registration form. Callers are
+    expected to validate the string before passing it in — invalid /
+    missing values become ``""`` (UTC fallback in
+    ``format_user_datetime``).
     """
     ttl_days = resolve_unverified_ttl_days()
     verification_expires_at = (
@@ -45,6 +110,7 @@ def _create_unverified_subscriber(email):
     return User.objects.create_user(
         email=email,
         verification_expires_at=verification_expires_at,
+        preferred_timezone=preferred_timezone,
     )
 
 
@@ -93,36 +159,75 @@ def _register_anonymous(request, event):
 
     # Gate anonymous registration to free events only. Gated events keep
     # the existing tier-check CTA on the detail page; we must not let an
-    # unauthenticated email submit bypass it.
+    # unauthenticated email submit bypass it. Bail BEFORE consuming a
+    # rate-limit slot — the gate decision is deterministic per slug and
+    # bots probing gated events should not exhaust a legitimate user's
+    # quota on the same IP.
     if event.required_level > LEVEL_OPEN:
         return JsonResponse(
             {'error': 'Insufficient access level'},
             status=403,
         )
 
+    # Rate-limit only the anonymous email-submit branch (issue #672).
+    # Authenticated registration is unaffected — it takes a different
+    # code path.
+    if _consume_anon_register_rate_limit(request, email):
+        return JsonResponse(
+            {'error': ANON_REGISTER_RATE_LIMIT_MESSAGE},
+            status=429,
+        )
+
+    # Browser-detected IANA timezone (issue #672). Optional; invalid /
+    # missing values fall back to ``""`` so the email rendering helper
+    # uses UTC. Never reject the request on a bad TZ alone.
+    raw_timezone = data.get('timezone') or ''
+    submitted_timezone = (
+        raw_timezone if is_valid_timezone(raw_timezone) else ""
+    )
+
     # If the email already maps to a User, register that user. Do NOT
     # touch their tier, password, ``email_verified`` flag, or
     # ``verification_expires_at`` — the existing account is canonical.
     existing_user = User.objects.filter(email__iexact=email).first()
     if existing_user is not None:
-        # Defensive: if the existing user somehow can't access the event
-        # (e.g. they were downgraded), behave the same as the gated
-        # response above. ``required_level == 0`` should always pass
-        # this check today, but check explicitly so the contract is
-        # consistent with the authenticated path.
-        if not can_access(existing_user, event):
-            return JsonResponse(
-                {'error': 'Insufficient access level'},
-                status=403,
-            )
+        # Issue #672: the event-level gate above (``required_level >
+        # LEVEL_OPEN``) is the authoritative tier check for the
+        # anonymous email-submit branch. ``can_access`` additionally
+        # enforces ``email_verified`` even on LEVEL_OPEN content, which
+        # would 403 an existing-unverified user — but the whole point
+        # of this branch is to register them AND send a fresh claim
+        # link (gap 1). So we skip ``can_access`` here. The new-user
+        # path below registers unverified users by construction, so
+        # this keeps both paths consistent.
 
-        if EventRegistration.objects.filter(
+        # Backfill ``preferred_timezone`` only when the user has none.
+        # A non-empty existing value reflects either an account-setting
+        # choice or a previous anonymous submit — both are canonical.
+        if (
+            submitted_timezone
+            and not existing_user.preferred_timezone
+        ):
+            existing_user.preferred_timezone = submitted_timezone
+            existing_user.save(update_fields=["preferred_timezone"])
+
+        existing_registration = EventRegistration.objects.filter(
             event=event, user=existing_user,
-        ).exists():
-            return JsonResponse(
-                {'error': 'Already registered'},
-                status=409,
-            )
+        ).first()
+        if existing_registration is not None:
+            # Idempotent resubmit (issue #672, gap 4): return 201 with
+            # ``already_registered: true`` so the frontend lands on the
+            # same confirmation block instead of surfacing a 409. Do
+            # NOT re-send any emails, do NOT create a duplicate row.
+            return JsonResponse({
+                'status': 'registered',
+                'event_slug': event.slug,
+                'registered_at': (
+                    existing_registration.registered_at.isoformat()
+                ),
+                'account_created': False,
+                'already_registered': True,
+            }, status=201)
 
         if event.is_full:
             return JsonResponse({'error': 'Event is full'}, status=410)
@@ -140,6 +245,15 @@ def _register_anonymous(request, event):
                 'Failed to send registration email for event "%s" to user %s',
                 event.slug, existing_user.email,
             )
+
+        # Issue #672, gap 1: an existing unverified user also needs the
+        # claim-account magic link in their inbox. Verified accounts
+        # are skipped — re-sending the verify email there would be
+        # noise, and ``test_anonymous_with_existing_user_registers_without_resetting``
+        # asserts the no-spam contract.
+        if not existing_user.email_verified:
+            _send_event_verification_email(existing_user)
+
         return JsonResponse({
             'status': 'registered',
             'event_slug': event.slug,
@@ -153,7 +267,9 @@ def _register_anonymous(request, event):
         # going to fail anyway.
         return JsonResponse({'error': 'Event is full'}, status=410)
 
-    user = _create_unverified_subscriber(email)
+    user = _create_unverified_subscriber(
+        email, preferred_timezone=submitted_timezone,
+    )
     registration = EventRegistration.objects.create(event=event, user=user)
 
     # Send registration confirmation (with .ics) AND the verification

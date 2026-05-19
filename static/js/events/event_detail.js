@@ -87,6 +87,16 @@
     const btn = document.getElementById('event-anon-submit-btn');
     const errEl = document.getElementById('event-anon-error');
     const emailInput = document.getElementById('event-anon-email');
+    const tzInput = document.getElementById('event-anon-timezone');
+
+    // Issue #672: populate the hidden timezone input from the browser's
+    // resolved IANA zone so the registration email renders times in the
+    // visitor's local zone. Invalid / unavailable zones fall back to ""
+    // and the backend treats that as UTC.
+    if (tzInput) {
+      const detected = getBrowserTimeZone();
+      tzInput.value = isValidTimeZone(detected) ? detected : '';
+    }
 
     function showError(message) {
       if (!errEl) {
@@ -114,13 +124,15 @@
 
       setButtonBusy(btn, 'Registering...');
 
+      const timezone = tzInput ? (tzInput.value || '') : '';
+
       fetch(`/api/events/${slug}/register`, {
         method: 'POST',
         headers: {
           'X-CSRFToken': getCookie('csrftoken'),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, timezone }),
       })
         .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
         .then((result) => {

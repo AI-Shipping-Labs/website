@@ -80,6 +80,13 @@
                  autocomplete="email"
                  placeholder="you@example.com"
                  class="flex-1 rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          {% comment %}
+            Issue #672: the JS in event_detail.js populates this hidden
+            field with Intl.DateTimeFormat().resolvedOptions().timeZone
+            on bind so the registration email renders times in the
+            visitor's local zone instead of falling back to UTC.
+          {% endcomment %}
+          <input type="hidden" name="timezone" id="event-anon-timezone" value="">
           <button type="submit"
                   id="event-anon-submit-btn"
                   class="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">

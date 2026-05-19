@@ -1362,11 +1362,20 @@ class AnonymousEventRegistrationAPITest(TierSetupMixin, TestCase):
             required_level=LEVEL_MAIN,
         )
 
-    def _post(self, slug, body):
+    def setUp(self):
+        # Issue #672: the anon-register view now uses the cache for
+        # per-IP / per-email rate limiting. Tests share an in-memory
+        # cache backend, so a counter left behind by an earlier case
+        # can trip rate limits in this one. Clear once per test.
+        from django.core.cache import cache
+        cache.clear()
+
+    def _post(self, slug, body, **extra):
         return self.client.post(
             f'/api/events/{slug}/register',
             data=json.dumps(body),
             content_type='application/json',
+            **extra,
         )
 
     @patch('events.views.api._send_event_verification_email')
@@ -1499,6 +1508,280 @@ class AnonymousEventRegistrationAPITest(TierSetupMixin, TestCase):
         self.assertFalse(
             User.objects.filter(email__iexact='late@test.com').exists()
         )
+        mock_verify.assert_not_called()
+
+    # --- Issue #672: gap 1 (claim link for existing unverified user) ---
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_existing_unverified_user_receives_claim_link(
+        self, mock_reg_email, mock_verify,
+    ):
+        """Existing-unverified user must ALSO get the claim-account
+        magic link, not just the calendar invite. Without this they
+        have an account they cannot sign into.
+        """
+        existing = User.objects.create_user(
+            email='unverified@test.com',
+            email_verified=False,
+        )
+
+        resp = self._post('open-call', {'email': 'unverified@test.com'})
+        self.assertEqual(resp.status_code, 201)
+
+        body = resp.json()
+        self.assertFalse(body['account_created'])
+
+        mock_reg_email.assert_called_once()
+        # The claim link goes out alongside the calendar invite.
+        mock_verify.assert_called_once()
+        self.assertEqual(mock_verify.call_args[0][0].pk, existing.pk)
+
+    # --- Issue #672: gap 2 (preferred_timezone capture) ---
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_anonymous_register_stores_browser_timezone(
+        self, mock_reg_email, mock_verify,
+    ):
+        resp = self._post(
+            'open-call',
+            {'email': 'tz1@test.com', 'timezone': 'Europe/Berlin'},
+        )
+        self.assertEqual(resp.status_code, 201)
+        user = User.objects.get(email='tz1@test.com')
+        self.assertEqual(user.preferred_timezone, 'Europe/Berlin')
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_anonymous_register_invalid_timezone_falls_back_to_empty(
+        self, mock_reg_email, mock_verify,
+    ):
+        """Invalid TZ must NOT reject the request — fall back to '' so
+        the email helper uses UTC. The user still gets registered.
+        """
+        resp = self._post(
+            'open-call',
+            {'email': 'tz2@test.com', 'timezone': 'Not/A/Zone'},
+        )
+        self.assertEqual(resp.status_code, 201)
+        user = User.objects.get(email='tz2@test.com')
+        self.assertEqual(user.preferred_timezone, '')
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_anonymous_register_missing_timezone_key_succeeds(
+        self, mock_reg_email, mock_verify,
+    ):
+        """Legacy clients that don't send the ``timezone`` key still
+        register cleanly. ``preferred_timezone`` defaults to ''.
+        """
+        resp = self._post('open-call', {'email': 'tz3@test.com'})
+        self.assertEqual(resp.status_code, 201)
+        user = User.objects.get(email='tz3@test.com')
+        self.assertEqual(user.preferred_timezone, '')
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_existing_user_with_empty_timezone_gets_backfilled(
+        self, mock_reg_email, mock_verify,
+    ):
+        existing = User.objects.create_user(
+            email='tz4@test.com', email_verified=True,
+        )
+        self.assertEqual(existing.preferred_timezone, '')
+
+        resp = self._post(
+            'open-call',
+            {'email': 'tz4@test.com', 'timezone': 'America/New_York'},
+        )
+        self.assertEqual(resp.status_code, 201)
+        existing.refresh_from_db()
+        self.assertEqual(existing.preferred_timezone, 'America/New_York')
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_existing_user_with_timezone_is_preserved(
+        self, mock_reg_email, mock_verify,
+    ):
+        """A non-empty existing ``preferred_timezone`` must NOT be
+        overwritten by a new anonymous submit — the existing setting
+        is canonical (it likely came from the account settings page).
+        """
+        existing = User.objects.create_user(
+            email='tz5@test.com',
+            email_verified=True,
+            preferred_timezone='Asia/Tokyo',
+        )
+
+        resp = self._post(
+            'open-call',
+            {'email': 'tz5@test.com', 'timezone': 'America/New_York'},
+        )
+        self.assertEqual(resp.status_code, 201)
+        existing.refresh_from_db()
+        self.assertEqual(existing.preferred_timezone, 'Asia/Tokyo')
+
+    # --- Issue #672: gap 3 (rate limiting) ---
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_anonymous_ip_rate_limit_blocks_sixth_request(
+        self, mock_reg_email, mock_verify,
+    ):
+        ip = '203.0.113.7'
+        # Five distinct emails from the same IP must succeed.
+        for i in range(5):
+            resp = self._post(
+                'open-call',
+                {'email': f'ratelimit{i}@test.com'},
+                REMOTE_ADDR=ip,
+            )
+            self.assertEqual(resp.status_code, 201, msg=f'request {i}')
+
+        # The sixth request from the same IP is rate-limited regardless
+        # of the email used.
+        resp = self._post(
+            'open-call',
+            {'email': 'ratelimit-extra@test.com'},
+            REMOTE_ADDR=ip,
+        )
+        self.assertEqual(resp.status_code, 429)
+        self.assertEqual(
+            resp.json()['error'],
+            'Too many registration attempts. Please try again in a few '
+            'minutes.',
+        )
+        # No user created for the blocked submission.
+        self.assertFalse(
+            User.objects.filter(
+                email__iexact='ratelimit-extra@test.com',
+            ).exists()
+        )
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_anonymous_email_rate_limit_blocks_fourth_request(
+        self, mock_reg_email, mock_verify,
+    ):
+        # Use a unique IP per attempt so the IP gate doesn't fire.
+        for i in range(3):
+            resp = self._post(
+                'open-call',
+                {'email': 'repeat@test.com'},
+                REMOTE_ADDR=f'198.51.100.{i + 10}',
+            )
+            # First request creates the user + registration; subsequent
+            # ones return 201 with already_registered=True.
+            self.assertEqual(resp.status_code, 201, msg=f'request {i}')
+
+        resp = self._post(
+            'open-call',
+            {'email': 'repeat@test.com'},
+            REMOTE_ADDR='198.51.100.99',
+        )
+        self.assertEqual(resp.status_code, 429)
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_authenticated_register_is_not_rate_limited(
+        self, mock_reg_email, mock_verify,
+    ):
+        """Rate limit is only applied on the anonymous email-submit
+        branch. Authenticated POSTs hit a different code path and must
+        be unaffected.
+        """
+        user = User.objects.create_user(
+            email='auth-rl@test.com',
+            password='realpassword12',
+            email_verified=True,
+        )
+        self.client.force_login(user)
+
+        # First authenticated POST registers the user.
+        resp = self.client.post('/api/events/open-call/register')
+        self.assertEqual(resp.status_code, 201)
+
+        # Spam another five POSTs from the same IP. They keep hitting
+        # the auth-side 409 (already registered), NOT the 429.
+        for _ in range(5):
+            resp = self.client.post('/api/events/open-call/register')
+            self.assertEqual(resp.status_code, 409)
+            self.assertEqual(resp.json()['error'], 'Already registered')
+
+    def test_anonymous_gated_event_does_not_consume_rate_limit_slot(self):
+        """Gated-event 403 must short-circuit BEFORE the rate-limit
+        check so bots probing gated events cannot exhaust a legitimate
+        visitor's quota on the same IP.
+        """
+        ip = '192.0.2.55'
+        # Hit the gated endpoint six times — all should 403, NONE
+        # should consume an IP-bucket slot.
+        for _ in range(6):
+            resp = self._post(
+                'main-workshop',
+                {'email': 'probe@test.com'},
+                REMOTE_ADDR=ip,
+            )
+            self.assertEqual(resp.status_code, 403)
+
+        # A free-event submit from the same IP still succeeds — the
+        # IP gate has not been touched by the probes above.
+        resp = self._post(
+            'open-call',
+            {'email': 'real-visitor@test.com'},
+            REMOTE_ADDR=ip,
+        )
+        self.assertEqual(resp.status_code, 201)
+
+    # --- Issue #672: gap 4 (idempotent duplicate submit) ---
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_duplicate_anonymous_submit_returns_201_already_registered(
+        self, mock_reg_email, mock_verify,
+    ):
+        """Duplicate anonymous submit by the same email returns 201
+        with ``already_registered: true`` — not 409. No second
+        registration row is created and no second email is sent.
+        """
+        # First submit creates the user + registration.
+        resp = self._post(
+            'open-call',
+            {'email': 'dup@test.com'},
+            REMOTE_ADDR='198.51.100.1',
+        )
+        self.assertEqual(resp.status_code, 201)
+        user = User.objects.get(email='dup@test.com')
+
+        # Reset mocks so we can assert the duplicate path sends nothing.
+        mock_reg_email.reset_mock()
+        mock_verify.reset_mock()
+
+        # Second submit — same email, different IP so the IP gate is
+        # not the thing tripping us.
+        resp = self._post(
+            'open-call',
+            {'email': 'dup@test.com'},
+            REMOTE_ADDR='198.51.100.2',
+        )
+        self.assertEqual(resp.status_code, 201)
+        body = resp.json()
+        self.assertEqual(body['status'], 'registered')
+        self.assertFalse(body['account_created'])
+        self.assertTrue(body['already_registered'])
+        self.assertEqual(body['event_slug'], 'open-call')
+
+        # Exactly one registration row.
+        self.assertEqual(
+            EventRegistration.objects.filter(
+                event=self.event, user=user,
+            ).count(),
+            1,
+        )
+
+        # No second registration email and no second verification email.
+        mock_reg_email.assert_not_called()
         mock_verify.assert_not_called()
 
 

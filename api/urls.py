@@ -15,6 +15,7 @@ call.
 
 from django.urls import path
 
+from api.views.campaigns import campaign_detail, campaigns_collection
 from api.views.checkpoints import (
     checkpoint_detail,
     checkpoint_move,
@@ -79,6 +80,20 @@ from api.views.tier_reconcile import (
 from api.views.weeks import plan_weeks_collection, week_detail
 
 urlpatterns = [
+    # ---- Email campaigns (issue #676) ---------------------------------
+    # Draft authoring only: GET/POST collection, GET/PATCH detail. No
+    # DELETE route is registered (archive via PATCH is_archived=true).
+    # No POST /send, /test-send, or /duplicate — sending stays in Studio.
+    path(
+        "campaigns",
+        campaigns_collection,
+        name="api_campaigns_collection",
+    ),
+    path(
+        "campaigns/<int:campaign_id>",
+        campaign_detail,
+        name="api_campaign_detail",
+    ),
     # ---- Events (issue #627) ------------------------------------------
     path(
         "events",

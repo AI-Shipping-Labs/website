@@ -204,6 +204,40 @@ def handle_checkout_completed(session_data):
         stripe_customer_id=customer_id,
     )
 
+    # Issue #703: paid-signup automation. Gated on Basic+ (level 10).
+    # Course purchases are explicitly out of scope — they take the
+    # ``_send_payment_notification_email(course=...)`` path above and
+    # never reach here. Failures inside the helper are swallowed and
+    # logged; they MUST NOT propagate out and trigger a Stripe retry.
+    from content.access import LEVEL_BASIC
+
+    if tier is not None and tier.level >= LEVEL_BASIC:
+        try:
+            from community.services.staff_notifications import (
+                notify_paid_signup,
+            )
+
+            notify_paid_signup(
+                user=user,
+                tier=tier,
+                previous_tier=previous_tier,
+                was_new_user=was_new_user,
+                stripe_customer_id=customer_id,
+                session_id=session_id,
+                billing_period=billing_period,
+            )
+        except Exception:
+            # Defensive: notify_paid_signup wraps each send internally,
+            # but a setup-time error (import failure, get_config dying)
+            # could still throw. The user has paid — we must not let
+            # Stripe retry the webhook.
+            _services.logger.exception(
+                "notify_paid_signup raised unexpectedly for user=%s "
+                "session=%s",
+                user.email,
+                session_id,
+            )
+
 
 def _send_payment_notification_email(
     event_id,

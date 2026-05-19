@@ -177,3 +177,31 @@ event uses the new value.
 
 Test vs live: n/a. Use a per-environment value if you want
 non-production checkout test events routed to a different inbox.
+
+## STAFF_SIGNUP_NOTIFY_EMAIL
+
+Purpose: Single staff mailbox that receives the structured internal
+heads-up email on every paid signup (Basic and above) AND is put on
+CC of the personalised co-founder welcome that goes to the new user.
+Read by `community/services/staff_notifications.py::notify_paid_signup`.
+Distinct from `PAYMENT_NOTIFICATION_EMAIL` — the latter is the
+short operator audit ping; this one drives the founder-led
+high-touch onboarding loop.
+
+Without it (blank): The co-founder welcome still goes to the new
+user without a visible CC, and the structured staff heads-up email
+is skipped. The Slack post still fires if `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`
+is set.
+
+Where to find it: This is operator intent — pick the mailbox the
+founders read. A shared list address (`founders@<your-domain>`) so
+the alert is not tied to one human.
+
+Prereqs: Same as `PAYMENT_NOTIFICATION_EMAIL` — SES configured per
+`ses.md`; recipient need not be SES-verified.
+
+Rotation: Safe to change at any time. The next paid checkout uses
+the new value.
+
+Test vs live: n/a. Use per-environment values if non-production
+test checkouts should route somewhere else.

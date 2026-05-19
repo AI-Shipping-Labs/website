@@ -542,8 +542,18 @@ class CheckoutCompletedResolverFallbackTest(TestCase):
     def setUpTestData(cls):
         cls.main = Tier.objects.get(slug="main")
         cls.basic = Tier.objects.get(slug="basic")
+        # Since #684, the bootstrap migration only seeds slug/level/name;
+        # yaml content sync writes Stripe IDs and EUR prices. The
+        # amount-based resolver fallback in step 3 of these tests needs
+        # main's EUR price columns, so configure them inline.
         cls.main.stripe_price_id_yearly = "price_main_yearly"
-        cls.main.save(update_fields=["stripe_price_id_yearly"])
+        cls.main.price_eur_month = 50
+        cls.main.price_eur_year = 500
+        cls.main.save(update_fields=[
+            "stripe_price_id_yearly",
+            "price_eur_month",
+            "price_eur_year",
+        ])
 
     def setUp(self):
         super().setUp()

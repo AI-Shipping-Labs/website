@@ -64,8 +64,18 @@ class BackfillStripeTiersCommandTest(TestCase):
     def setUpTestData(cls):
         cls.free = Tier.objects.get(slug="free")
         cls.main = Tier.objects.get(slug="main")
+        # Since #684, the bootstrap migration only seeds slug/level/name;
+        # yaml content sync writes Stripe IDs and EUR prices. The
+        # amount-based resolver fallback below needs main's monthly /
+        # yearly prices, so configure them inline.
         cls.main.stripe_price_id_monthly = "price_main_monthly"
-        cls.main.save(update_fields=["stripe_price_id_monthly"])
+        cls.main.price_eur_month = 50
+        cls.main.price_eur_year = 500
+        cls.main.save(update_fields=[
+            "stripe_price_id_monthly",
+            "price_eur_month",
+            "price_eur_year",
+        ])
 
     def _user(self, email, **kwargs):
         kwargs.setdefault("stripe_customer_id", f"cus_{email.split('@')[0]}")

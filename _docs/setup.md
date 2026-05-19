@@ -310,6 +310,15 @@ uvx pgcli -h localhost -p 5434 -U aisl_admin -d aisl_dev
 
 ### One-time data seeding
 
+The bootstrap order on a fresh database is:
+
+```
+manage.py migrate                       # creates the slug+level skeleton tier rows
+manage.py sync_content [--from-disk ...] # fills in name / prices / Stripe IDs / description / features
+```
+
+`migrate` seeds the four `payments.Tier` rows with only `slug`, `level`, and a placeholder `name` (the slug, title-cased). Every other editable tier field (`price_eur_month`, `price_eur_year`, `stripe_price_id_monthly`, `stripe_price_id_yearly`, `description`, `features`) is populated by the `tiers.yaml` content sync, which is the source of truth. Until `sync_content` runs against a yaml that carries those fields, the `/pricing` page renders empty prices and empty feature lists; tier names still work via the placeholder, but the page is not customer-ready.
+
 After creating a new database, run migrations first (if the container hasn't done it yet):
 
 ```bash
@@ -334,7 +343,7 @@ DATABASE_URL="postgresql://aisl_admin:${DB_PASSWORD}@localhost:5434/aisl_dev" \
   uv run python manage.py seed_content_sources
 ```
 
-This registers the GitHub content sources so the sync page (`/studio/sync/`) can pull content. Replace `aisl_dev` with `aisl_prod` for production.
+This registers the GitHub content sources so the sync page (`/studio/sync/`) can pull content. Replace `aisl_dev` with `aisl_prod` for production. The first `sync_content` run after that populates the tier fields above from `tiers.yaml`.
 
 ### Creating admin users
 

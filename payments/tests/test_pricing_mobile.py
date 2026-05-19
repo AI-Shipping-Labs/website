@@ -87,7 +87,16 @@ class PricingMobileResponsiveTest(TestCase):
         self.assertIn("gap-8 sm:gap-6", content)
 
     def test_feature_list_items_have_shrink_zero_icon(self):
-        """Feature list check icons should have shrink-0 to prevent text wrapping into them."""
+        """Feature list check icons should have shrink-0 to prevent text wrapping into them.
+
+        Since #684, the bootstrap migration no longer seeds tier features;
+        the yaml content sync populates them. Seed at least one feature
+        so the template renders the icon span this test asserts on.
+        """
+        from payments.models import Tier
+        Tier.objects.filter(slug="basic").update(
+            features=["Feature with check icon"],
+        )
         content = self._get_pricing_content()
         self.assertIn("shrink-0 text-accent", content)
 

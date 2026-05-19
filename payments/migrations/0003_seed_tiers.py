@@ -2,86 +2,26 @@
 
 from django.db import migrations
 
+# Bootstrap-only seed: the four tier rows must exist on a fresh DB so that
+# foreign-key references from other tables hold and `user.tier.level >= X`
+# access checks resolve. Beyond ``slug`` and ``level``, the migration only
+# writes a placeholder ``name`` (the slug, title-cased). Every other
+# editable field (``price_eur_*``, ``stripe_price_id_*``, ``description``,
+# ``features``) is populated by the tiers.yaml content sync, which is now
+# the single source of truth.
+#
+# The placeholder ``name`` is required because the ``Tier.name`` column is
+# a non-nullable ``CharField`` without ``blank=True`` and without a DB
+# default; without it, ``get_or_create`` would insert an empty string and
+# break the pricing page, account page, and email interpolations that
+# reference ``tier.name`` before the first content sync runs. The
+# placeholder values happen to match the canonical yaml names, so the
+# yaml sync is a no-op on a freshly-migrated DB.
 TIERS = [
-    {
-        "slug": "free",
-        "name": "Free",
-        "level": 0,
-        "price_eur_month": None,
-        "price_eur_year": None,
-        "stripe_price_id_monthly": "",
-        "stripe_price_id_yearly": "",
-        "description": (
-            "Subscribe to the newsletter and access open content. "
-            "No payment required."
-        ),
-        "features": [
-            "Newsletter emails",
-            "Access to open content",
-        ],
-    },
-    {
-        "slug": "basic",
-        "name": "Basic",
-        "level": 10,
-        "price_eur_month": 20,
-        "price_eur_year": 200,
-        "stripe_price_id_monthly": "",
-        "stripe_price_id_yearly": "",
-        "description": (
-            "Access curated educational content, tutorials, and research. "
-            "Perfect for self-directed builders who learn at their own pace."
-        ),
-        "features": [
-            "Exclusive articles",
-            "Tutorials with code examples",
-            "AI tool breakdowns",
-            "Research notes",
-            "Curated social posts",
-        ],
-    },
-    {
-        "slug": "main",
-        "name": "Main",
-        "level": 20,
-        "price_eur_month": 50,
-        "price_eur_year": 500,
-        "stripe_price_id_monthly": "",
-        "stripe_price_id_yearly": "",
-        "description": (
-            "Everything in Basic, plus the structure, accountability, "
-            "and peer support to ship your AI projects consistently."
-        ),
-        "features": [
-            "Everything in Basic",
-            "Slack community access",
-            "Group coding sessions",
-            "Project-based learning",
-            "Community hackathons",
-            "Career discussions",
-            "Personal brand guidance",
-            "Topic voting",
-        ],
-    },
-    {
-        "slug": "premium",
-        "name": "Premium",
-        "level": 30,
-        "price_eur_month": 100,
-        "price_eur_year": 1000,
-        "stripe_price_id_monthly": "",
-        "stripe_price_id_yearly": "",
-        "description": (
-            "Everything in Main, plus structured learning paths through "
-            "mini-courses and personalized career guidance."
-        ),
-        "features": [
-            "Everything in Main",
-            "All mini-courses",
-            "Mini-course topic voting",
-            "Resume/LinkedIn/GitHub teardowns",
-        ],
-    },
+    {"slug": "free", "level": 0, "name": "Free"},
+    {"slug": "basic", "level": 10, "name": "Basic"},
+    {"slug": "main", "level": 20, "name": "Main"},
+    {"slug": "premium", "level": 30, "name": "Premium"},
 ]
 
 

@@ -81,11 +81,21 @@ class SubscriptionExtractionTest(TestCase):
     """Tests for resilient Stripe subscription shape parsing."""
 
     def setUp(self):
+        # Since #684, the bootstrap migration only seeds slug/level/name;
+        # the yaml content sync writes Stripe IDs and EUR prices. The
+        # attribution snapshot in test_checkout_resolves_tier_and_yearly_*
+        # reads ``basic.price_eur_year`` for ``amount_eur`` / ``mrr_eur``,
+        # so configure the post-sync state explicitly.
         self.basic = Tier.objects.get(slug="basic")
         self.basic.stripe_price_id_monthly = "price_basic_monthly"
         self.basic.stripe_price_id_yearly = "price_basic_yearly"
+        self.basic.price_eur_month = 20
+        self.basic.price_eur_year = 200
         self.basic.save(update_fields=[
-            "stripe_price_id_monthly", "stripe_price_id_yearly",
+            "stripe_price_id_monthly",
+            "stripe_price_id_yearly",
+            "price_eur_month",
+            "price_eur_year",
         ])
 
     @patch("payments.services._get_stripe_client")

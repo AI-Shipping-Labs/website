@@ -634,7 +634,8 @@ class VerifyEmailFooterTest(TestCase):
         html = mock_ses.call_args[0][2]
 
         self.assertIn('<p class="verify-email-cta">', html)
-        self.assertIn('Verify your email', html)
+        self.assertIn('Your email is not verified on our platform.', html)
+        self.assertIn('click here', html)
         verify_url = _extract_verify_url_from_footer(html)
         self.assertIsNotNone(verify_url)
         self.assertIn('/api/verify-email?token=', verify_url)

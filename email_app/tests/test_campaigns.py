@@ -1260,7 +1260,8 @@ class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
         # Captured HTML is the third positional arg to _send_ses.
         html = mock_ses.call_args[0][2]
         self.assertIn('<p class="verify-email-cta">', html)
-        self.assertIn('Verify your email', html)
+        self.assertIn('Your email is not verified on our platform.', html)
+        self.assertIn('click here', html)
         self.assertIn('/api/verify-email?token=', html)
         self.assertIn('/api/unsubscribe?token=', html)
         assert_no_internal_footer_text(self, html)

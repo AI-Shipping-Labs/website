@@ -71,7 +71,9 @@ class TestScenario1CreateSeries:
         page.fill('input[name="start_time"]', "18:00")
         page.fill('input[name="duration_hours"]', "1.5")
         page.fill('input[name="occurrences"]', "6")
-        page.fill('input[name="timezone"]', "Europe/Berlin")
+        # Issue #665: timezone is now a <select> rendered by the shared
+        # studio/_partials/datetime_picker.html, not a free-text input.
+        page.select_option('select[name="timezone"]', "Europe/Berlin")
 
         page.locator('[data-testid="event-series-submit"]').click()
         page.wait_for_url(re.compile(r".*/studio/event-series/\d+/$"))
@@ -116,6 +118,12 @@ class TestScenario2StudioEditable:
                 end_datetime=base_dt + timedelta(days=7 * (i - 1), hours=1, minutes=30),
                 status="draft",
                 origin="studio",
+                # Issue #665: pin timezone='UTC' so the stored UTC instant
+                # round-trips through the picker unchanged. Without this
+                # the Event model default ('Europe/Berlin') would re-
+                # interpret 18:00 wall-clock as Berlin, and submitting
+                # 19:00 would store 17:00 UTC (CEST −2h).
+                timezone="UTC",
                 event_series=series,
                 series_position=i,
             )

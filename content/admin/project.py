@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils import timezone
 
 from content.models import Project
+from studio.admin_links import studio_link
 
 
 def approve_projects(modeladmin, request, queryset):
@@ -32,12 +33,13 @@ class ProjectAdmin(admin.ModelAdmin):
     list_display = [
         'title', 'slug', 'status', 'author', 'difficulty',
         'date', 'required_level', 'published', 'published_at',
+        'studio_link',
     ]
     list_filter = ['status', 'published', 'required_level', 'difficulty', 'date']
     search_fields = ['title', 'description']
     prepopulated_fields = {'slug': ('title',)}
     actions = [approve_projects, reject_projects]
-    readonly_fields = ['published_at']
+    readonly_fields = ['published_at', 'studio_link']
 
     fieldsets = (
         (None, {
@@ -57,4 +59,15 @@ class ProjectAdmin(admin.ModelAdmin):
         ('Publishing', {
             'fields': ('published', 'status', 'date', 'published_at', 'submitter'),
         }),
+        ('Studio', {
+            'fields': ('studio_link',),
+        }),
     )
+
+    @admin.display(description='Studio')
+    def studio_link(self, obj):
+        return studio_link(
+            obj,
+            'studio_project_review',
+            lambda o: {'project_id': o.pk},
+        )

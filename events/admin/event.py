@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from content.admin.widgets import TimestampEditorWidget
 from events.models import Event, EventFeedback, EventInstructor, EventRegistration
+from studio.admin_links import studio_link
 
 
 def make_upcoming(modeladmin, request, queryset):
@@ -117,7 +118,7 @@ class EventAdmin(admin.ModelAdmin):
     list_display = [
         'title', 'slug', 'platform', 'external_host', 'status',
         'start_datetime', 'required_level', 'has_recording_display',
-        'registration_count_display',
+        'registration_count_display', 'studio_link',
     ]
     list_filter = ['status', 'platform', 'external_host', 'required_level', 'published']
     search_fields = ['title', 'description']
@@ -167,9 +168,20 @@ class EventAdmin(admin.ModelAdmin):
             ),
             'classes': ('collapse',),
         }),
+        ('Studio', {
+            'fields': ('studio_link',),
+        }),
     )
 
-    readonly_fields = ['published_at']
+    readonly_fields = ['published_at', 'studio_link']
+
+    @admin.display(description='Studio')
+    def studio_link(self, obj):
+        return studio_link(
+            obj,
+            'studio_event_edit',
+            lambda o: {'event_id': o.pk},
+        )
 
     def has_recording_display(self, obj):
         return bool(obj.recording_url)

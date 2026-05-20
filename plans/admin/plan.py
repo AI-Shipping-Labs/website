@@ -8,14 +8,27 @@ primary surface for editing plans; this admin is a low-fi inspector.
 from django.contrib import admin
 
 from plans.models import Plan, PlanRequest, Sprint, SprintEnrollment
+from studio.admin_links import studio_link
 
 
 @admin.register(Sprint)
 class SprintAdmin(admin.ModelAdmin):
-    list_display = ['name', 'slug', 'status', 'start_date', 'duration_weeks']
+    list_display = [
+        'name', 'slug', 'status', 'start_date', 'duration_weeks',
+        'studio_link',
+    ]
     list_filter = ['status']
     search_fields = ['name', 'slug']
     prepopulated_fields = {'slug': ('name',)}
+    readonly_fields = ['studio_link']
+
+    @admin.display(description='Studio')
+    def studio_link(self, obj):
+        return studio_link(
+            obj,
+            'studio_sprint_detail',
+            lambda o: {'sprint_id': o.pk},
+        )
 
 
 @admin.register(SprintEnrollment)
@@ -30,12 +43,22 @@ class SprintEnrollmentAdmin(admin.ModelAdmin):
 class PlanAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'member', 'sprint', 'status', 'visibility',
-        'created_at', 'updated_at',
+        'created_at', 'updated_at', 'studio_link',
     ]
     list_filter = ['status', 'visibility', 'sprint']
     search_fields = ['member__email', 'sprint__name', 'sprint__slug']
     raw_id_fields = ['member']
-    readonly_fields = ['comment_content_id', 'created_at', 'updated_at']
+    readonly_fields = [
+        'comment_content_id', 'created_at', 'updated_at', 'studio_link',
+    ]
+
+    @admin.display(description='Studio')
+    def studio_link(self, obj):
+        return studio_link(
+            obj,
+            'studio_plan_detail',
+            lambda o: {'plan_id': o.pk},
+        )
 
 
 @admin.register(PlanRequest)

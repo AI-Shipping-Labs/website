@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils import timezone
 
 from content.models import Article
+from studio.admin_links import studio_link
 
 
 def publish_articles(modeladmin, request, queryset):
@@ -37,7 +38,7 @@ unpublish_articles.short_description = 'Unpublish selected articles'
 class ArticleAdmin(admin.ModelAdmin):
     list_display = [
         'title', 'slug', 'status', 'author', 'date',
-        'required_level', 'published_at',
+        'required_level', 'published_at', 'studio_link',
     ]
     list_filter = ['status', 'published', 'required_level', 'date']
     search_fields = ['title', 'description', 'content_markdown']
@@ -57,6 +58,17 @@ class ArticleAdmin(admin.ModelAdmin):
         ('Publishing', {
             'fields': ('published', 'date', 'published_at'),
         }),
+        ('Studio', {
+            'fields': ('studio_link',),
+        }),
     )
 
-    readonly_fields = ['published_at']
+    readonly_fields = ['published_at', 'studio_link']
+
+    @admin.display(description='Studio')
+    def studio_link(self, obj):
+        return studio_link(
+            obj,
+            'studio_article_edit',
+            lambda o: {'article_id': o.pk},
+        )

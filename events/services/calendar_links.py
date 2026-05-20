@@ -83,7 +83,16 @@ def build_calendar_links(event):
     site_url = site_base_url()
     join_url = f'{site_url}/events/{event.slug}/join'
 
-    end_dt = event.end_datetime or (event.start_datetime + timedelta(hours=1))
+    # Issue #712: ``Event.effective_end_datetime`` is the single source
+    # of truth for "when did this event end?" — ``end_datetime`` when
+    # set, otherwise ``start + 1h``. Falls back to an inline expression
+    # for stub events (e.g. SimpleNamespace) that don't expose the
+    # property.
+    end_dt = getattr(event, 'effective_end_datetime', None)
+    if end_dt is None:
+        end_dt = event.end_datetime or (
+            event.start_datetime + timedelta(hours=1)
+        )
 
     title = event.title
     details = _build_details(event, join_url)

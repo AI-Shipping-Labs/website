@@ -48,6 +48,13 @@ def complete_finished_events():
 
     now = timezone.now()
 
+    # Issue #712: DB-side mirror of ``Event.effective_end_datetime`` —
+    # ``end_datetime`` when set, otherwise ``start_datetime + 1h``. Both
+    # branches together encode the same "this event is over" contract
+    # that the join-redirect view, the .ics export, and the calendar
+    # deep-link builders consume via the Python property. Keep these in
+    # sync; a divergence here means cron and join-gate disagree on when
+    # an event ends.
     explicit_end_filter = Q(
         status='upcoming',
         end_datetime__lte=now,

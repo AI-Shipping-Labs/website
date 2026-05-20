@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
@@ -435,6 +437,23 @@ class Event(
     @property
     def is_past(self):
         return self.status in ('completed', 'cancelled')
+
+    @property
+    def effective_end_datetime(self):
+        """Return ``end_datetime`` when set, else ``start_datetime + 1h``.
+
+        Issue #712: single source of truth for "when did this event end?"
+        consumed by the join-redirect view, the
+        ``complete_finished_events`` cron, the ``.ics`` export, and the
+        Google/Apple calendar deep-link builders. Keep these surfaces
+        consistent — if one of them diverges, a join past end is
+        reachable. The 1h fallback matches Studio's default duration; a
+        host who wants a longer window MUST set ``end_datetime``
+        explicitly in the source repo yaml or Studio form.
+        """
+        if self.end_datetime:
+            return self.end_datetime
+        return self.start_datetime + timedelta(hours=1)
 
     @property
     def registration_count(self):

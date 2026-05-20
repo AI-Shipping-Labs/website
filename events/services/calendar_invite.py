@@ -72,10 +72,18 @@ def build_vevent(event):
 
     vevent.add('dtstart', event.start_datetime)
 
-    # Use end_datetime if set, otherwise default to start + 1 hour
-    # (parity with the single-event generator's pre-refactor behavior).
-    end_dt = event.end_datetime or (event.start_datetime + timedelta(hours=1))
-    vevent.add('dtend', end_dt)
+    # Issue #712: ``Event.effective_end_datetime`` is the single source
+    # of truth for "when did this event end?" — ``end_datetime`` when
+    # set, otherwise ``start + 1h``. Falls back to an inline expression
+    # for stub events (e.g. SimpleNamespace) that don't expose the
+    # property; integration tests under ``integrations.tests`` rely on
+    # this.
+    effective_end = getattr(event, 'effective_end_datetime', None)
+    if effective_end is None:
+        effective_end = event.end_datetime or (
+            event.start_datetime + timedelta(hours=1)
+        )
+    vevent.add('dtend', effective_end)
 
     vevent.add('dtstamp', timezone.now())
     vevent.add('sequence', event.ics_sequence)

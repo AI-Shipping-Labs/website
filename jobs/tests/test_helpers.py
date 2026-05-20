@@ -173,7 +173,41 @@ class ScheduleTest(TestCase):
             name='cleanup-test',
             days=60,
         )
-        self.assertEqual(obj.kwargs, {'days': 60})
+        # Issue #717: the helper also writes q_options.task_name so each
+        # fire produces a descriptive Task.name. The scheduled function's
+        # own kwargs (here ``days``) still ride alongside it.
+        self.assertEqual(obj.kwargs['days'], 60)
+        self.assertEqual(
+            obj.kwargs['q_options'],
+            {'task_name': 'cleanup-test'},
+        )
+
+    def test_schedule_writes_q_options_task_name(self):
+        """schedule() injects q_options.task_name = schedule name.
+
+        Issue #717: django-q 1.x's scheduler reads q_options from the
+        Schedule's kwargs at fire time and forwards task_name into the
+        resulting Task.name. Without this, every scheduled fire lands a
+        random Django-Q codename like ``texas-texas-oscar-earth``.
+        """
+        obj = schedule(
+            'jobs.tasks.healthcheck.health_check',
+            cron='*/15 * * * *',
+            name='health-check',
+        )
+        self.assertIn('q_options', obj.kwargs)
+        self.assertEqual(obj.kwargs['q_options']['task_name'], 'health-check')
+
+    def test_schedule_preserves_caller_q_options(self):
+        """Caller-supplied q_options entries survive the task_name injection."""
+        obj = schedule(
+            'jobs.tasks.healthcheck.health_check',
+            cron='*/15 * * * *',
+            name='health-check',
+            q_options={'hook': 'myapp.hooks.on_done'},
+        )
+        self.assertEqual(obj.kwargs['q_options']['hook'], 'myapp.hooks.on_done')
+        self.assertEqual(obj.kwargs['q_options']['task_name'], 'health-check')
 
     def test_schedule_with_repeats(self):
         """schedule() accepts a custom repeats value."""

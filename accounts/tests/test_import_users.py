@@ -463,6 +463,47 @@ class ImportUsersServiceTest(TestCase):
         self.assertGreaterEqual((fiftieth.next_run - first.next_run).total_seconds(), 3600)
 
 
+class QueueImportedWelcomeEmailsTest(TestCase):
+    """``queue_imported_welcome_emails`` writes ``q_options.task_name``.
+
+    Issue #717: the raw ``Schedule.objects.create`` site must also pump
+    the descriptive name into ``q_options`` so each scheduled fire lands a
+    readable ``Task.name`` instead of a Django-Q random codename.
+    """
+
+    def _decode(self, raw):
+        import ast
+        if raw in (None, ''):
+            return {}
+        if isinstance(raw, dict):
+            return raw
+        return ast.literal_eval(raw)
+
+    def test_each_schedule_row_carries_q_options_task_name(self):
+        from accounts.services.import_users import queue_imported_welcome_emails
+
+        users = [
+            User.objects.create_user(email=f"welcome{i}@example.com")
+            for i in range(3)
+        ]
+        batch = ImportBatch.objects.create(source="slack")
+        queued = queue_imported_welcome_emails(
+            batch, [u.pk for u in users],
+        )
+
+        self.assertEqual(queued, 3)
+        rows = list(Schedule.objects.order_by("next_run"))
+        self.assertEqual(len(rows), 3)
+        for row, user in zip(rows, users):
+            expected_name = f"welcome_email_send:{batch.pk}:{user.pk}"
+            self.assertEqual(row.name, expected_name)
+            decoded = self._decode(row.kwargs)
+            self.assertEqual(decoded["user_id"], user.pk)
+            self.assertEqual(
+                decoded["q_options"]["task_name"], expected_name,
+            )
+
+
 class WelcomeImportedEmailTaskTest(TestCase):
     @patch("email_app.services.email_service.EmailService._send_ses", return_value="ses-1")
     def test_welcome_email_renders_and_is_idempotent(self, _mock_send):

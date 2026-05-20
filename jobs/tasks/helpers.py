@@ -12,6 +12,31 @@ Usage:
 
     # Schedule a recurring job
     schedule('myapp.tasks.cleanup', cron='0 * * * *')  # every hour
+
+Task naming for scheduled fires
+-------------------------------
+
+Django-Q 1.x's scheduler (``django_q.scheduler.scheduler``) reads
+``kwargs.get('q_options', {})`` from the Schedule row at fire time and
+forwards it to ``async_task``. ``async_task`` in turn reads
+``q_options['task_name']`` and writes it onto the resulting ``Task.name``
+(see ``django_q/tasks.py:async_task`` ``keywords.pop("task_name", None) or
+q_options.pop("task_name", None) or tag[0]``). When no ``task_name`` is
+provided, Django-Q falls back to a random codename like
+``texas-texas-oscar-earth`` derived from the task UUID.
+
+To give every scheduled fire a descriptive ``Task.name``, the ``schedule``
+helper writes ``q_options['task_name'] = <schedule-name>`` into the
+Schedule's stored ``kwargs``. Every fire of the schedule then carries the
+schedule's name through to the worker history.
+
+Naming convention is a STATIC schedule name (e.g.
+``slack-membership-refresh``). Django-Q 1.x's scheduler does not perform
+template expansion of ``{ts}`` or any other placeholder in
+``q_options['task_name']`` (verified by reading
+``django_q/scheduler.py``), so any ``{ts}`` placeholder would land
+verbatim in ``Task.name``. The fire timestamp is already visible on
+``Task.started``, so duplicating it inside the name buys nothing.
 """
 
 import logging
@@ -67,6 +92,11 @@ def schedule(func, cron=None, name=None, repeats=-1, preserve_disabled=False, **
     """
     Register a recurring job schedule.
 
+    The schedule's ``kwargs`` carry ``q_options['task_name'] = <name>`` so
+    every fire of the schedule lands a descriptive ``Task.name`` in the
+    worker history instead of a Django-Q random codename. See module
+    docstring for the rationale and limits of the static-name convention.
+
     Args:
         func: Dotted path to the function (e.g. 'jobs.tasks.cleanup.cleanup_old_webhook_logs').
         cron: Cron expression (e.g. '0 * * * *' for every hour).
@@ -88,6 +118,14 @@ def schedule(func, cron=None, name=None, repeats=-1, preserve_disabled=False, **
 
     effective_repeats = 0 if preserve_disabled and existing_repeats == 0 else repeats
 
+    # Inject the schedule's name into q_options.task_name so each fire
+    # carries it through to Task.name. See module docstring for details.
+    stored_kwargs = dict(kwargs) if kwargs else {}
+    existing_q_options = stored_kwargs.get('q_options') or {}
+    q_options = dict(existing_q_options)
+    q_options['task_name'] = schedule_name
+    stored_kwargs['q_options'] = q_options
+
     # Update or create the schedule to avoid duplicates
     obj, created = Schedule.objects.update_or_create(
         name=schedule_name,
@@ -96,7 +134,7 @@ def schedule(func, cron=None, name=None, repeats=-1, preserve_disabled=False, **
             'schedule_type': Schedule.CRON,
             'cron': cron,
             'repeats': effective_repeats,
-            'kwargs': kwargs if kwargs else None,
+            'kwargs': stored_kwargs,
         },
     )
 

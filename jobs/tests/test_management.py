@@ -2,11 +2,27 @@
 Tests for the setup_schedules management command.
 """
 
+import ast
 from io import StringIO
 
 from django.core.management import call_command
 from django.test import TestCase
 from django_q.models import Schedule
+
+
+def _decode_schedule_kwargs(raw):
+    """Decode a Schedule.kwargs value the same way django-q does at fire time.
+
+    Schedule.kwargs is a TextField; Django stores ``str(dict)`` when the
+    helper hands a dict to ``update_or_create``. The scheduler reads it
+    back with ``ast.literal_eval``. We mirror that round-trip so the test
+    assertions reflect the value seen by ``django_q.scheduler.scheduler``.
+    """
+    if raw in (None, ''):
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    return ast.literal_eval(raw)
 
 
 class SetupSchedulesCommandTest(TestCase):
@@ -131,20 +147,54 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(names, expected)
 
     def test_creates_daily_import_schedules(self):
-        """Command creates daily Slack and Stripe import schedules."""
+        """Command creates daily Slack and Stripe import schedules.
+
+        Issue #717: the schedule helper writes q_options.task_name into
+        kwargs so each fire lands a descriptive Task.name. The function
+        kwarg ``source`` rides alongside it.
+        """
         call_command('setup_schedules', stdout=StringIO())
 
         slack = Schedule.objects.get(name='import-slack-daily')
         self.assertEqual(slack.func, 'accounts.tasks.run_scheduled_import')
         self.assertEqual(slack.cron, '0 3 * * *')
         self.assertEqual(slack.schedule_type, Schedule.CRON)
-        self.assertEqual(slack.kwargs, "{'source': 'slack'}")
+        slack_kwargs = _decode_schedule_kwargs(slack.kwargs)
+        self.assertEqual(slack_kwargs['source'], 'slack')
+        self.assertEqual(
+            slack_kwargs['q_options']['task_name'], 'import-slack-daily',
+        )
 
         stripe = Schedule.objects.get(name='import-stripe-daily')
         self.assertEqual(stripe.func, 'accounts.tasks.run_scheduled_import')
         self.assertEqual(stripe.cron, '30 3 * * *')
         self.assertEqual(stripe.schedule_type, Schedule.CRON)
-        self.assertEqual(stripe.kwargs, "{'source': 'stripe'}")
+        stripe_kwargs = _decode_schedule_kwargs(stripe.kwargs)
+        self.assertEqual(stripe_kwargs['source'], 'stripe')
+        self.assertEqual(
+            stripe_kwargs['q_options']['task_name'], 'import-stripe-daily',
+        )
+
+    def test_every_schedule_carries_q_options_task_name(self):
+        """Issue #717: every setup_schedules row carries q_options.task_name.
+
+        Django-Q 1.x's scheduler reads q_options from the Schedule's
+        stored kwargs at fire time and forwards ``task_name`` into the
+        resulting ``Task.name``. Without this, every scheduled fire
+        lands a random Django-Q codename in the worker history.
+        """
+        call_command('setup_schedules', stdout=StringIO())
+
+        for row in Schedule.objects.all():
+            decoded = _decode_schedule_kwargs(row.kwargs)
+            self.assertIn(
+                'q_options', decoded,
+                f"Schedule {row.name!r} missing q_options in kwargs={row.kwargs!r}",
+            )
+            self.assertEqual(
+                decoded['q_options'].get('task_name'), row.name,
+                f"Schedule {row.name!r} q_options.task_name mismatch: {decoded!r}",
+            )
 
     def test_setup_preserves_disabled_import_schedule(self):
         """Refreshing schedules keeps disabled import schedules disabled."""

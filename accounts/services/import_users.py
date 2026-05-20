@@ -281,13 +281,22 @@ def queue_imported_welcome_emails(batch, user_ids):
     queued = 0
 
     for index, user_id in enumerate(user_ids):
+        schedule_name = f"welcome_email_send:{batch.pk}:{user_id}"
+        # Mirror jobs.tasks.helpers.schedule(): inject q_options.task_name so
+        # the fired Task lands a descriptive name (e.g.
+        # ``welcome_email_send:42:7``) in the worker history instead of a
+        # Django-Q random codename. See jobs/tasks/helpers.py module
+        # docstring for the underlying scheduler contract.
         Schedule.objects.create(
-            name=f"welcome_email_send:{batch.pk}:{user_id}",
+            name=schedule_name,
             func=WELCOME_TASK_PATH,
             schedule_type=Schedule.ONCE,
             repeats=1,
             next_run=now + timedelta(seconds=index * spacing_seconds),
-            kwargs={"user_id": user_id},
+            kwargs={
+                "user_id": user_id,
+                "q_options": {"task_name": schedule_name},
+            },
         )
         queued += 1
 

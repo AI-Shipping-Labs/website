@@ -137,6 +137,15 @@ PREVIEW_CONTEXTS = {
             'cancel-registration?token=preview-token'
         ),
     },
+    'plan_shared': {
+        # Issue #732: in-product share notification for sprint plans.
+        # ``plan_url`` deep-links to the member-owned workspace
+        # (``my_plan_detail`` at ``/sprints/<slug>/plan/<id>``), not
+        # the cohort-board sibling.
+        'user_name': 'Ada',
+        'sprint_name': 'May 2026',
+        'plan_url': 'https://aishippinglabs.com/sprints/may-2026/plan/42',
+    },
     'lead_magnet_delivery': {
         'user_name': 'Ada',
         'resource_title': 'AI Cheat Sheet',

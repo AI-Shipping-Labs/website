@@ -37,13 +37,41 @@
             class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-secondary text-foreground border border-border">
         {{ plan.get_status_display }}
       </span>
-      <p class="text-xs text-muted-foreground">
+      <p class="text-xs text-muted-foreground" data-testid="plan-share-indicator">
         {% if plan.shared_at %}
           Shared <time datetime="{{ plan.shared_at.isoformat }}">{{ plan.shared_at|date:"Y-m-d H:i" }}</time>
         {% else %}
           Not yet shared
         {% endif %}
       </p>
+      {# Issue #732: explicit Share / Re-share button. Staff-only — the #}
+      {# template only renders inside Studio routes where the request #}
+      {# is already gated to staff, but we keep the explicit check so #}
+      {# the markup is safe if the partial is ever reused. The re-share #}
+      {# variant wraps a JS confirm() prompt so a stray click does not #}
+      {# surprise-notify the member. #}
+      {% if request.user.is_staff %}
+      <form method="post"
+            action="{% url 'studio_plan_share' plan_id=plan.pk %}"
+            data-testid="plan-share-form"
+            {% if plan.shared_at %}onsubmit="return confirm('Send another notification?');"{% endif %}
+            class="mt-1">
+        {% csrf_token %}
+        {% if plan.shared_at %}
+        <button type="submit"
+                data-testid="plan-reshare-button"
+                class="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-secondary text-foreground border border-border hover:bg-secondary/80">
+          Re-share with member
+        </button>
+        {% else %}
+        <button type="submit"
+                data-testid="plan-share-button"
+                class="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/90">
+          Share with member
+        </button>
+        {% endif %}
+      </form>
+      {% endif %}
 
       {# Saved/Saving indicator. JS toggles the data-state attribute. #}
       <div data-testid="save-indicator"

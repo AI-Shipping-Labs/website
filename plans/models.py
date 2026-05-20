@@ -18,6 +18,7 @@ import uuid
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from content.access import LEVEL_MAIN
 from content.access import (
@@ -390,6 +391,25 @@ class Plan(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return f'{self.member} — {self.sprint}'
+
+    def mark_shared(self):
+        """Stamp ``shared_at = timezone.now()`` and persist.
+
+        Issue #732: callers (Studio share button + API PATCH share path)
+        capture ``was_already_shared = self.shared_at is not None`` BEFORE
+        calling this method, then decide whether the operator's intent is
+        a first-time share or an explicit re-share. The model is
+        deliberately neutral on that distinction — both flows just want
+        the timestamp moved to ``now()``.
+
+        Returns the (saved) plan instance for chaining.
+        """
+        self.shared_at = timezone.now()
+        # ``updated_at`` is ``auto_now=True`` but ``save(update_fields=...)``
+        # only refreshes columns named in the list; include it explicitly
+        # so the API contract stays consistent with the full-save path.
+        self.save(update_fields=['shared_at', 'updated_at'])
+        return self
 
 
 class Week(TimestampedModelMixin, models.Model):

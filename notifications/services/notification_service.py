@@ -368,3 +368,81 @@ class NotificationService:
             )
 
         return notification
+
+    @staticmethod
+    def create_plan_shared(plan):
+        """Fire the bell + transactional email when staff shares a plan.
+
+        Issue #732. Modelled on :meth:`create_event_reminder` but with
+        two deliberate differences:
+
+        1. No dedup row. Re-share is allowed — every call creates a
+           fresh ``Notification`` row and emits a fresh email log. The
+           operator pressed the button knowing they were re-firing
+           (the Studio button wraps a JS ``confirm()`` on re-share).
+        2. The deep link targets the member-owned workspace
+           (``my_plan_detail`` at ``/sprints/<slug>/plan/<id>``), NOT
+           the cohort-board sibling (``member_plan_detail`` at
+           ``/sprints/<slug>/plans/<id>``).
+
+        Best-effort failure contract: persist the ``Notification`` row
+        BEFORE calling ``EmailService.send``. SES exceptions are
+        swallowed and logged via ``logger.exception`` so a 5xx from
+        SES does not unwind the bell row and does not propagate to the
+        caller (who has already saved ``Plan.shared_at``).
+
+        Args:
+            plan: Plan model instance. Must have ``.member`` (the
+                recipient), ``.sprint`` (for the title + URL), and
+                ``.pk`` (for the URL).
+
+        Returns:
+            The created ``Notification`` instance.
+        """
+        from django.urls import reverse
+
+        from email_app.services.email_service import EmailService
+        from integrations.config import site_base_url
+
+        sprint_name = plan.sprint.name
+        plan_path = reverse(
+            'my_plan_detail',
+            kwargs={'sprint_slug': plan.sprint.slug, 'plan_id': plan.pk},
+        )
+        base_url = site_base_url()
+        plan_url = f"{base_url}{plan_path}"
+
+        title = f'Your plan for {sprint_name} is ready'
+        body = (
+            f'Your sprint plan for {sprint_name} is ready for you to '
+            f'review.'
+        )
+
+        notification = Notification.objects.create(
+            user=plan.member,
+            title=title,
+            body=body,
+            url=plan_path,
+            notification_type='plan_shared',
+        )
+
+        # Best-effort email send. Failures must NOT raise — the bell
+        # row is already persisted so the operator's intent is captured
+        # on both surfaces (in-app + the ``shared_at`` timestamp). Log
+        # loudly so ops can chase the SES failure.
+        try:
+            EmailService().send(
+                plan.member,
+                'plan_shared',
+                {
+                    'sprint_name': sprint_name,
+                    'plan_url': plan_url,
+                },
+            )
+        except Exception:
+            logger.exception(
+                'Failed to send plan_shared email to %s for plan %s',
+                plan.member.email, plan.pk,
+            )
+
+        return notification

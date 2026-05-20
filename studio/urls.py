@@ -109,6 +109,7 @@ from studio.views.plans import (
     plan_detail,
     plan_edit,
     plan_list,
+    plan_share,
 )
 from studio.views.projects import project_list, project_review
 from studio.views.recordings import recording_edit, recording_list, recording_publish_youtube
@@ -589,6 +590,14 @@ urlpatterns = [
     path('plans/new', plan_create, name='studio_plan_create'),
     path('plans/<int:plan_id>/', plan_detail, name='studio_plan_detail'),
     path('plans/<int:plan_id>/edit/', plan_edit, name='studio_plan_edit'),
+    # Issue #732: explicit share / re-share trigger from the plan
+    # editor header. POST-only; staff-only. Fires bell + transactional
+    # email and stamps ``Plan.shared_at = now()``.
+    path(
+        'plans/<int:plan_id>/share/',
+        plan_share,
+        name='studio_plan_share',
+    ),
     path(
         'plans/<int:plan_id>/notes/new',
         interview_note_create,

@@ -126,6 +126,7 @@ def _render_form(request, *, sprint, form_action, form_data, error='', status=20
         'tier_level_choices': TIER_LEVEL_CHOICES,
         'event_series_list': EventSeries.objects.all().order_by('name'),
         'error': error,
+        'primary_label': 'Save changes' if form_action == 'edit' else 'Create sprint',
     }
     return render(request, 'studio/sprints/form.html', context, status=status)
 
@@ -508,6 +509,7 @@ def sprint_add_member(request, sprint_id):
             'picker_extra_query': picker_extra_query,
             'prefill_member_display': '',
             'error': '',
+            'primary_label': 'Add member',
         })
 
     raw_member = (request.POST.get('member') or '').strip()
@@ -529,6 +531,7 @@ def sprint_add_member(request, sprint_id):
             'picker_extra_query': picker_extra_query,
             'prefill_member_display': _prefill_display(raw_member),
             'error': error,
+            'primary_label': 'Add member',
         }, status=status)
 
     if not raw_member.isdigit():

@@ -38,6 +38,7 @@ def redirect_create(request):
             return render(request, 'studio/redirects/form.html', {
                 'redirect_obj': None,
                 'form_action': 'create',
+                'primary_label': 'Create Redirect',
             })
 
         if Redirect.objects.filter(source_path=source_path).exists():
@@ -45,6 +46,7 @@ def redirect_create(request):
             return render(request, 'studio/redirects/form.html', {
                 'redirect_obj': None,
                 'form_action': 'create',
+                'primary_label': 'Create Redirect',
             })
 
         obj = Redirect.objects.create(
@@ -60,6 +62,7 @@ def redirect_create(request):
     return render(request, 'studio/redirects/form.html', {
         'redirect_obj': None,
         'form_action': 'create',
+        'primary_label': 'Create Redirect',
     })
 
 
@@ -85,6 +88,7 @@ def redirect_edit(request, redirect_id):
             return render(request, 'studio/redirects/form.html', {
                 'redirect_obj': obj,
                 'form_action': 'edit',
+                'primary_label': 'Save Changes',
             })
 
         obj.source_path = source_path
@@ -99,6 +103,7 @@ def redirect_edit(request, redirect_id):
     return render(request, 'studio/redirects/form.html', {
         'redirect_obj': obj,
         'form_action': 'edit',
+        'primary_label': 'Save Changes',
     })
 
 

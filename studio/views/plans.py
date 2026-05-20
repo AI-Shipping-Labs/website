@@ -196,6 +196,7 @@ def plan_create(request):
             'picker_extra_query': _picker_extra_query_for(prefill_sprint),
             'prefill_member_display': _picker_prefill_display(prefill_member),
             'error': '',
+            'primary_label': 'Create plan',
         })
 
     form_data = {
@@ -215,6 +216,7 @@ def plan_create(request):
             'picker_extra_query': _picker_extra_query_for(form_data['sprint']),
             'prefill_member_display': _picker_prefill_display(form_data['member']),
             'error': error,
+            'primary_label': 'Create plan',
         }, status=status)
 
     if not form_data['member'].isdigit():

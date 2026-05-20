@@ -28,7 +28,7 @@
 {% endif %}
 
 <div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
-  <form method="post" action="{% if form_action == 'edit' %}{% url 'studio_sprint_edit' sprint_id=sprint.pk %}{% else %}{% url 'studio_sprint_create' %}{% endif %}">
+  <form id="sprint-edit-form" method="post" action="{% if form_action == 'edit' %}{% url 'studio_sprint_edit' sprint_id=sprint.pk %}{% else %}{% url 'studio_sprint_create' %}{% endif %}">
     {% csrf_token %}
 
     <div class="mb-6">
@@ -104,15 +104,9 @@
       <p class="text-xs text-muted-foreground mt-1">Default Main. Lower per-sprint for free pilots; raise to Premium for high-touch sprints.</p>
     </div>
 
-    <div class="flex items-center space-x-4">
-      <button type="submit"
-              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-        {% if form_action == 'edit' %}Save changes{% else %}Create sprint{% endif %}
-      </button>
-      <a href="{% url 'studio_sprint_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-        Cancel
-      </a>
-    </div>
   </form>
 </div>
+
+{% url 'studio_sprint_list' as sprint_cancel_url %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="sprint-edit-form" title="Sprint changes" subtitle="Save remains available while you review the form." can_save=True primary_label=primary_label cancel_url=sprint_cancel_url %}
 {% endblock %}

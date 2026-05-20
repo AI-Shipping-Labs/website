@@ -79,6 +79,11 @@ from api.views.tier_reconcile import (
     tier_reconcile_diagnostics,
 )
 from api.views.weeks import plan_weeks_collection, week_detail
+from api.views.worker import (
+    worker_task_detail,
+    worker_tasks_collection,
+    worker_tasks_failed,
+)
 
 urlpatterns = [
     # ---- API documentation (issue #722) -------------------------------
@@ -98,6 +103,26 @@ urlpatterns = [
         "docs",
         docs_page,
         name="api_docs",
+    ),
+    # ---- Worker (issue #714) ------------------------------------------
+    # Read-only worker task observability. Register the ``failed`` literal
+    # and the bare collection BEFORE the ``<task_id>`` capture so neither
+    # is swallowed by the 32-char hex id matcher. No write endpoints --
+    # retry/delete/drain stay on Studio HTML (``/studio/worker/``).
+    path(
+        "worker/tasks/failed",
+        worker_tasks_failed,
+        name="api_worker_tasks_failed",
+    ),
+    path(
+        "worker/tasks",
+        worker_tasks_collection,
+        name="api_worker_tasks_collection",
+    ),
+    path(
+        "worker/tasks/<str:task_id>",
+        worker_task_detail,
+        name="api_worker_task_detail",
     ),
     # ---- Email campaigns (issue #676) ---------------------------------
     # Draft authoring only: GET/POST collection, GET/PATCH detail. No

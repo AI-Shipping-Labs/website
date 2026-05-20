@@ -44,6 +44,7 @@ from django.views.decorators.http import require_POST
 from django_q.models import OrmQ, Task
 from django_q.tasks import async_task
 
+from api.serializers.worker import extract_error_summary
 from jobs.tasks.names import build_task_name, constrain_task_name
 from studio.decorators import staff_required
 from studio.worker_health import get_worker_status
@@ -170,25 +171,10 @@ def worker_status(request):
     failed_with_details = []
     for task in failed_tasks:
         error_message = str(task.result) if task.result is not None else 'No error details'
-        # Pick the most informative one-line summary for the collapsed row.
-        # For traceback-shaped results (``traceback.format_exc()`` output) the
-        # first line is the literal ``Traceback (most recent call last):``
-        # banner, which is identical for every failure and tells operators
-        # nothing — the exception class + message lives on the LAST non-blank
-        # line. For other result strings (custom error wrappers, plain
-        # messages) the first non-blank line is still the most useful summary.
-        nonblank_lines = [line.strip() for line in error_message.splitlines() if line.strip()]
-        if not nonblank_lines:
-            summary_line = 'No error details'
-        elif (
-            error_message.startswith('Traceback')
-            or '\nTraceback (most recent call last):' in error_message
-        ):
-            summary_line = nonblank_lines[-1]
-        else:
-            summary_line = nonblank_lines[0]
-        if len(summary_line) > 160:
-            summary_line = summary_line[:157] + '...'
+        # ``extract_error_summary`` lives in ``api/serializers/worker.py`` so the
+        # JSON API (issue #714) and this HTML view share one definition of the
+        # collapsed-row heuristic. See that module for the full rationale.
+        summary_line = extract_error_summary(error_message)
         failed_with_details.append({
             'task': task,
             'error_message': error_message,

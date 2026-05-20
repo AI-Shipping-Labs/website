@@ -74,7 +74,12 @@ def _create_recording(
     if tags is None:
         tags = []
     if date is None:
-        date = datetime.date.today()
+        # Issue #713 made event-state time-derived: an event is only
+        # "past" once its effective end (start + 1h when end is unset)
+        # is in the past. Default to 30 days ago so recordings created
+        # without an explicit ``date`` always land in the past bucket
+        # regardless of the local wall clock at test time.
+        date = datetime.date.today() - datetime.timedelta(days=30)
 
     start_dt = timezone.make_aware(
         datetime.datetime.combine(date, datetime.time(12, 0))

@@ -108,13 +108,32 @@ class SprintAddMemberFormRenderTest(TestCase):
         # No sprint <select>.
         self.assertNotContains(response, '<select name="sprint"')
 
-    def test_get_renders_member_picker_with_all_users(self):
+    def test_get_renders_people_picker_with_sprint_extra_query(self):
+        """Issue #735: the inline ``<select>`` was swapped for the picker.
+
+        The picker's ``data-extra-query`` carries the sprint slug so
+        every search request fans out the sprint-context badges
+        (``In this sprint`` / ``Has plan in sprint``). The legacy
+        ``<select name="member">`` is gone -- the picker's hidden
+        ``<input name="member">`` carries the form field on submit.
+        """
         response = self.client.get(
             f'/studio/sprints/{self.sprint.pk}/add-member',
         )
-        self.assertContains(response, 'data-testid="add-member-select"')
-        self.assertContains(response, 'alice@test.com')
-        self.assertContains(response, 'bob@test.com')
+        # Picker is rendered, legacy <select> is gone.
+        self.assertContains(response, 'data-testid="plan-member-search"')
+        self.assertContains(
+            response,
+            '<input type="hidden" name="member" id="plan-member-id">',
+            html=False,
+        )
+        self.assertNotContains(response, '<select name="member"')
+        # The sprint slug rides on ``data-extra-query`` so the picker
+        # JS appends it to every search request.
+        self.assertContains(
+            response,
+            f'data-extra-query="sprint={self.sprint.slug}"',
+        )
 
     def test_get_uses_existing_plan_form_template(self):
         """Reuse rule: NEVER fork the template (issue #444)."""

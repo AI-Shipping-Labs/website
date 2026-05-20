@@ -92,21 +92,36 @@ class StudioUserAutocompleteSuppressionTest(TestCase):
             )
         )
 
-    def test_add_member_select_suppresses_credential_autocomplete(self):
+    def test_add_member_picker_suppresses_credential_autocomplete(self):
+        """Picker visible input must opt out of password-manager autofill.
+
+        Issue #735 swapped the ``<select name="member">`` for the
+        people picker; the input the operator actually types into is
+        the picker's visible search input, identified by
+        ``id="plan-member-search"``. Autofill suppression moves with
+        the input.
+        """
         response = self.client.get(
             f'/studio/sprints/{self.sprint.pk}/add-member',
         )
 
-        member = _find_control(response, 'select', name='member')
-        self.assertEqual(member.get('autocomplete'), 'off')
-        self.assertEqual(member.get('data-testid'), 'add-member-select')
+        search = _find_control(response, 'input', id='plan-member-search')
+        self.assertEqual(search.get('autocomplete'), 'off')
         self.assertEqual(_find_control(response, 'form').get('autocomplete'), 'off')
 
     def test_new_plan_selectors_suppress_credential_autocomplete(self):
+        """Issue #735: the member field is now the people picker input.
+
+        The sprint + status selects still exist and must keep
+        ``autocomplete="off"``; the member field is now the picker's
+        visible search input.
+        """
         response = self.client.get('/studio/plans/new')
 
         self.assertEqual(
-            _find_control(response, 'select', name='member').get('autocomplete'),
+            _find_control(response, 'input', id='plan-member-search').get(
+                'autocomplete',
+            ),
             'off',
         )
         self.assertEqual(

@@ -195,31 +195,54 @@ class PlanCreateTest(TestCase):
         )
 
     def test_plan_create_get_prefills_from_query_params(self):
-        """GET ?user=<pk>&sprint=<pk> pre-selects both options (issue #719).
+        """GET ?user=<pk>&sprint=<pk> pre-selects both fields (issues #719 + #735).
 
-        The plan_request bell notification lands here; both selects
-        must already be chosen so the operator one-clicks Create plan.
-        Assert on the rendered ``selected`` attribute -- the template
-        only adds it when the form_data value matches the row's pk.
+        The plan_request bell notification lands here; the member must
+        be pre-populated in the picker AND the sprint must be selected
+        in the sprint ``<select>`` so the operator one-clicks Create
+        plan. After #735, the member field is a people-picker (not a
+        ``<select>``): the visible search input must show the user's
+        display name (or email) and the hidden ``name="member"`` input
+        must hold the pk.
         """
         response = self.client.get(
             f'/studio/plans/new?user={self.member.pk}&sprint={self.sprint.pk}',
         )
         self.assertEqual(response.status_code, 200)
-        # form_data carries the string-form ids so the template's
-        # `{% if form_data.member == m.pk|stringformat:"s" %}` matches.
+        # form_data carries the string-form ids so the inline prefill
+        # script in form.html seeds the visible + hidden inputs.
         self.assertEqual(
             response.context['form_data']['member'], str(self.member.pk),
         )
         self.assertEqual(
             response.context['form_data']['sprint'], str(self.sprint.pk),
         )
-        # And the rendered <option> for that row carries `selected`.
+        # The picker context: display name resolves to the email (no
+        # first/last name set on the test user). The seed-script branch
+        # only renders when prefill_member_display is non-empty.
+        self.assertEqual(
+            response.context['prefill_member_display'], self.member.email,
+        )
+        # The picker include renders its search input + hidden input
+        # with the ``plan-member`` id_prefix.
+        self.assertContains(response, 'id="plan-member-search"')
         self.assertContains(
             response,
-            f'<option value="{self.member.pk}" selected>{self.member.email}</option>',
+            '<input type="hidden" name="member" id="plan-member-id">',
             html=False,
         )
+        # The seed script assigns the display name into the visible
+        # input and the pk into the hidden input.
+        body = response.content.decode()
+        self.assertIn(
+            f"visible.value = '{self.member.email}'",
+            body,
+        )
+        self.assertIn(
+            f"hidden.value = '{self.member.pk}'",
+            body,
+        )
+        # The sprint <select> still uses the legacy ``selected`` attr.
         self.assertContains(
             response,
             f'<option value="{self.sprint.pk}" selected>{self.sprint.name}</option>',
@@ -250,7 +273,7 @@ class PlanCreateTest(TestCase):
         self.assertEqual(response.context['form_data']['sprint'], '')
 
     def test_plan_create_get_with_only_user_prefills_member_only(self):
-        """Partial pre-fill works: only ``?user`` fills the member select."""
+        """Partial pre-fill works: only ``?user`` fills the member picker."""
         response = self.client.get(
             f'/studio/plans/new?user={self.member.pk}',
         )
@@ -259,6 +282,79 @@ class PlanCreateTest(TestCase):
             response.context['form_data']['member'], str(self.member.pk),
         )
         self.assertEqual(response.context['form_data']['sprint'], '')
+        # No sprint => picker_extra_query is empty (no sprint-context
+        # badges to compute).
+        self.assertEqual(response.context['picker_extra_query'], '')
+
+    def test_plan_create_get_renders_picker_not_select(self):
+        """GET /studio/plans/new renders the picker (issue #735).
+
+        The legacy ``<select name="member">`` is gone; the member field
+        is now the include from ``_people_picker.html`` whose hidden
+        ``<input name="member">`` is the actual form field.
+        """
+        response = self.client.get('/studio/plans/new')
+        self.assertEqual(response.status_code, 200)
+        # Picker hidden id input carries the form field name.
+        self.assertContains(
+            response,
+            '<input type="hidden" name="member" id="plan-member-id">',
+            html=False,
+        )
+        # Picker visible search input is present with the expected testid.
+        self.assertContains(response, 'data-testid="plan-member-search"')
+        # Legacy <select name="member"> is gone.
+        self.assertNotContains(response, '<select name="member"')
+
+    def test_plan_create_get_picker_extra_query_with_sprint(self):
+        """``?sprint=<pk>`` plumbs into the picker's data-extra-query.
+
+        The picker include reads ``data-extra-query`` and appends it
+        to every search request, which is what lights up the sprint-
+        context badges (``In this sprint``, ``Has plan in sprint``).
+        """
+        response = self.client.get(
+            f'/studio/plans/new?sprint={self.sprint.pk}',
+        )
+        self.assertEqual(response.status_code, 200)
+        # The sprint's slug is ``s`` in this test class; assert on the
+        # exact URL-encoded value the view computes.
+        self.assertEqual(
+            response.context['picker_extra_query'], f'sprint={self.sprint.slug}',
+        )
+        self.assertContains(
+            response,
+            f'data-extra-query="sprint={self.sprint.slug}"',
+        )
+
+    def test_plan_create_get_stale_user_pk_does_not_seed_picker(self):
+        """Stale ?user falls through silently to an empty picker (#719/#735).
+
+        No traceback, no error banner, no leaked display name.
+        """
+        response = self.client.get('/studio/plans/new?user=999999')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['form_data']['member'], '')
+        self.assertEqual(response.context['prefill_member_display'], '')
+        # No seed script branch -> no ``visible.value`` assignment.
+        self.assertNotContains(response, 'visible.value =')
+
+    def test_plan_create_post_still_works_with_picker(self):
+        """POST flow is unchanged by the picker swap (issue #735).
+
+        The picker include's hidden ``<input name="member">`` carries
+        the pk under the same key the legacy ``<select>`` did, so the
+        existing validation in ``plan_create`` does not need any change.
+        """
+        before = Plan.objects.count()
+        response = self.client.post('/studio/plans/new', {
+            'member': str(self.member.pk),
+            'sprint': str(self.sprint.pk),
+            'status': 'draft',
+        })
+        self.assertEqual(Plan.objects.count(), before + 1)
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        self.assertRedirects(response, f'/studio/plans/{plan.pk}/')
 
 
 class PlanDetailRenderTest(TestCase):

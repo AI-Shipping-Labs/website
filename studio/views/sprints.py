@@ -15,6 +15,7 @@ with the sprint locked from the URL.
 """
 
 from datetime import datetime
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -23,6 +24,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import Count, Max
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils.text import slugify
 
 from content.access import LEVEL_MAIN
@@ -455,7 +457,7 @@ def sprint_add_member(request, sprint_id):
     """Form: pick a member and one-click enroll + create their plan.
 
     Issue #444. The sprint is locked from the URL; the member picker
-    is the same single-select widget the standalone create-plan form
+    is the same reusable people picker the standalone create-plan form
     uses (``templates/studio/plans/form.html``). On a valid POST we
     delegate to :func:`plans.services.create_plan_for_enrollment`,
     which is shared with ``studio_plan_create`` so the empty-plan
@@ -465,9 +467,30 @@ def sprint_add_member(request, sprint_id):
     Idempotent. Re-submitting the same ``(sprint, user)`` pair never
     duplicates rows: we redirect back to the existing plan editor with
     a ``messages.info`` flash containing ``Already enrolled``.
+
+    Issue #735 swapped the inline member ``<select>`` for the people
+    picker include. The sprint is always known here, so the picker's
+    ``extra_query`` is always set to ``sprint=<slug>`` -- suggestion
+    rows always carry the sprint-context badges (``In this sprint`` /
+    ``Has plan in sprint``). On a POST validation error, the picker's
+    visible input is re-seeded from the submitted ``member`` pk so the
+    operator doesn't have to retype.
     """
     sprint = get_object_or_404(Sprint, pk=sprint_id)
-    members = User.objects.order_by('email')
+    user_search_url = reverse('studio_user_search')
+    # The sprint is locked from the URL; the picker passes ``sprint=<slug>``
+    # so suggestion rows show the sprint-context badges (issue #735).
+    picker_extra_query = urlencode({'sprint': sprint.slug})
+
+    def _prefill_display(member_id_str):
+        """Resolve the picker's visible-input prefill on POST re-render."""
+        if not member_id_str or not member_id_str.isdigit():
+            return ''
+        user = User.objects.filter(pk=int(member_id_str)).first()
+        if user is None:
+            return ''
+        full = (user.get_full_name() or '').strip()
+        return full or user.email
 
     if request.method != 'POST':
         return render(request, 'studio/plans/form.html', {
@@ -480,8 +503,10 @@ def sprint_add_member(request, sprint_id):
                 'status': 'draft',
             },
             'sprint': sprint,
-            'members': members,
             'plan_status_choices': PLAN_STATUS_CHOICES,
+            'user_search_url': user_search_url,
+            'picker_extra_query': picker_extra_query,
+            'prefill_member_display': '',
             'error': '',
         })
 
@@ -499,8 +524,10 @@ def sprint_add_member(request, sprint_id):
             'form_action_url': request.path,
             'form_data': form_data,
             'sprint': sprint,
-            'members': members,
             'plan_status_choices': PLAN_STATUS_CHOICES,
+            'user_search_url': user_search_url,
+            'picker_extra_query': picker_extra_query,
+            'prefill_member_display': _prefill_display(raw_member),
             'error': error,
         }, status=status)
 

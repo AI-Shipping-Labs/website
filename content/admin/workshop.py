@@ -2,6 +2,7 @@
 from django.contrib import admin
 
 from content.models import Workshop, WorkshopInstructor, WorkshopPage
+from studio.admin_links import studio_link
 
 
 class WorkshopPageInline(admin.StackedInline):
@@ -30,7 +31,7 @@ class WorkshopAdmin(admin.ModelAdmin):
         'title', 'slug', 'date', 'status',
         'landing_required_level',
         'pages_required_level', 'recording_required_level',
-        'event', 'updated_at',
+        'event', 'updated_at', 'studio_link',
     ]
     list_display_links = ['title']
     list_filter = [
@@ -42,7 +43,7 @@ class WorkshopAdmin(admin.ModelAdmin):
     raw_id_fields = ['event']
     inlines = [WorkshopInstructorInline, WorkshopPageInline]
     ordering = ['-date']
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = ['created_at', 'updated_at', 'studio_link']
 
     fieldsets = (
         (None, {
@@ -67,7 +68,18 @@ class WorkshopAdmin(admin.ModelAdmin):
             ),
             'classes': ('collapse',),
         }),
+        ('Studio', {
+            'fields': ('studio_link',),
+        }),
     )
+
+    @admin.display(description='Studio')
+    def studio_link(self, obj):
+        return studio_link(
+            obj,
+            'studio_workshop_detail',
+            lambda o: {'workshop_id': o.pk},
+        )
 
 
 @admin.register(WorkshopPage)

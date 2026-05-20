@@ -8,6 +8,7 @@ from django.urls import path, reverse
 
 from email_app.models import EmailCampaign
 from email_app.services.email_classification import EMAIL_KIND_PROMOTIONAL
+from studio.admin_links import studio_link
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +22,15 @@ class EmailCampaignAdmin(admin.ModelAdmin):
         'sent_count',
         'sent_at',
         'created_at',
+        'studio_link',
     ]
     list_filter = ['status', 'target_min_level']
     search_fields = ['subject']
     ordering = ['-created_at']
-    readonly_fields = ['status', 'sent_at', 'sent_count', 'created_at', 'recipient_count_display']
+    readonly_fields = [
+        'status', 'sent_at', 'sent_count', 'created_at',
+        'recipient_count_display', 'studio_link',
+    ]
     fields = [
         'subject',
         'body',
@@ -35,7 +40,16 @@ class EmailCampaignAdmin(admin.ModelAdmin):
         'sent_count',
         'sent_at',
         'created_at',
+        'studio_link',
     ]
+
+    @admin.display(description='Studio')
+    def studio_link(self, obj):
+        return studio_link(
+            obj,
+            'studio_campaign_detail',
+            lambda o: {'campaign_id': o.pk},
+        )
 
     def get_readonly_fields(self, request, obj=None):
         """Make all fields readonly for sent/sending campaigns."""
@@ -43,7 +57,7 @@ class EmailCampaignAdmin(admin.ModelAdmin):
             return [
                 'subject', 'body', 'target_min_level',
                 'status', 'sent_at', 'sent_count', 'created_at',
-                'recipient_count_display',
+                'recipient_count_display', 'studio_link',
             ]
         return self.readonly_fields
 

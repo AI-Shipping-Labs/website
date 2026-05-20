@@ -11,6 +11,7 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
+from studio.admin_links import studio_link
 
 # ---------------------------------------------------------------------------
 # Unit form with all fields including timestamps widget
@@ -115,7 +116,7 @@ class CourseAdmin(admin.ModelAdmin):
 
     list_display = [
         'title', 'slug', 'status', 'primary_instructor_name',
-        'required_level', 'created_at', 'updated_at',
+        'required_level', 'created_at', 'updated_at', 'studio_link',
     ]
     list_display_links = ['title']
     list_filter = ['status', 'required_level']
@@ -125,7 +126,7 @@ class CourseAdmin(admin.ModelAdmin):
     inlines = [CourseInstructorInline, ModuleInline, CohortInline]
     ordering = ['-created_at']
     date_hierarchy = 'created_at'
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = ['created_at', 'updated_at', 'studio_link']
 
     fieldsets = (
         (None, {
@@ -154,7 +155,18 @@ class CourseAdmin(admin.ModelAdmin):
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',),
         }),
+        ('Studio', {
+            'fields': ('studio_link',),
+        }),
     )
+
+    @admin.display(description='Studio')
+    def studio_link(self, obj):
+        return studio_link(
+            obj,
+            'studio_course_edit',
+            lambda o: {'course_id': o.pk},
+        )
 
     def primary_instructor_name(self, obj):
         """Display the first instructor's name on the changelist.
@@ -188,11 +200,15 @@ class UnitAdmin(admin.ModelAdmin):
     """Admin for Unit with all fields including timestamps widget."""
 
     form = UnitAdminForm
-    list_display = ['title', 'module', 'sort_order', 'is_preview', 'video_url']
+    list_display = [
+        'title', 'module', 'sort_order', 'is_preview', 'video_url',
+        'studio_link',
+    ]
     list_display_links = ['title']
     list_filter = ['is_preview', 'module__course']
     search_fields = ['title', 'module__title', 'module__course__title']
     ordering = ['module__course', 'module__sort_order', 'sort_order']
+    readonly_fields = ['studio_link']
 
     fieldsets = (
         (None, {
@@ -204,7 +220,18 @@ class UnitAdmin(admin.ModelAdmin):
         ('Content', {
             'fields': ('body', 'homework'),
         }),
+        ('Studio', {
+            'fields': ('studio_link',),
+        }),
     )
+
+    @admin.display(description='Studio')
+    def studio_link(self, obj):
+        return studio_link(
+            obj,
+            'studio_unit_edit',
+            lambda o: {'unit_id': o.pk},
+        )
 
 
 @admin.register(UserCourseProgress)

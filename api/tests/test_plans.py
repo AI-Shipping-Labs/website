@@ -287,3 +287,230 @@ class PlansAuthTest(PlansApiTestBase):
         )
         self.assertEqual(response.status_code, 401)
         self.assertEqual(Plan.objects.count(), before)
+
+
+class PlanCreateMaxLengthValidationTest(PlansApiTestBase):
+    """Issue #725: every ``max_length``-constrained string field on the
+    plans-API write surface must reject overflow with 422, not 500.
+
+    The previous code only validated ``Plan.goal``; the other four caps
+    (``summary_weekly_hours``, ``Week.theme``, ``Resource.title``,
+    ``Resource.url``) blew up at the DB layer. Each scenario asserts both
+    the structured error shape and that no row was persisted.
+    """
+
+    def _post(self, payload, *, token=None):
+        return self.client.post(
+            "/api/sprints/may-2026/plans",
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self._auth(token),
+        )
+
+    def test_rejects_overlong_summary_weekly_hours_nested(self):
+        max_len = Plan._meta.get_field("summary_weekly_hours").max_length
+        before = Plan.objects.count()
+        response = self._post({
+            "user_email": "member@test.com",
+            "summary": {"weekly_hours": "x" * (max_len + 1)},
+        })
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("summary.weekly_hours", body["details"])
+        self.assertEqual(body["details"]["max_length"], max_len)
+        # No row persisted.
+        self.assertEqual(Plan.objects.count(), before)
+
+    def test_rejects_overlong_summary_weekly_hours_flat(self):
+        # When the client sent the flat shape, the error path key
+        # mirrors that shape ("summary_weekly_hours") so they can find
+        # the offending field in their original payload.
+        max_len = Plan._meta.get_field("summary_weekly_hours").max_length
+        response = self._post({
+            "user_email": "member@test.com",
+            "summary_weekly_hours": "x" * (max_len + 1),
+        })
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("summary_weekly_hours", body["details"])
+        self.assertEqual(body["details"]["max_length"], max_len)
+
+    def test_accepts_boundary_summary_weekly_hours(self):
+        # Exactly at the cap is valid (one char over is the rejection).
+        max_len = Plan._meta.get_field("summary_weekly_hours").max_length
+        value = "x" * max_len
+        response = self._post({
+            "user_email": "member@test.com",
+            "summary": {"weekly_hours": value},
+        })
+        self.assertEqual(response.status_code, 201)
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        self.assertEqual(plan.summary_weekly_hours, value)
+
+    def test_rejects_overlong_week_theme(self):
+        max_len = Week._meta.get_field("theme").max_length
+        before = Plan.objects.count()
+        response = self._post({
+            "user_email": "member@test.com",
+            "weeks": [
+                {"week_number": 1, "theme": "x" * (max_len + 1)},
+            ],
+        })
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("weeks[0].theme", body["details"])
+        self.assertEqual(body["details"]["max_length"], max_len)
+        # Plan itself rolled back via outer atomic block.
+        self.assertEqual(Plan.objects.count(), before)
+
+    def test_accepts_boundary_week_theme(self):
+        max_len = Week._meta.get_field("theme").max_length
+        value = "x" * max_len
+        response = self._post({
+            "user_email": "member@test.com",
+            "weeks": [{"week_number": 1, "theme": value}],
+        })
+        self.assertEqual(response.status_code, 201)
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        self.assertEqual(plan.weeks.get(week_number=1).theme, value)
+
+    def test_rejects_overlong_resource_title(self):
+        max_len = Resource._meta.get_field("title").max_length
+        before = Plan.objects.count()
+        response = self._post({
+            "user_email": "member@test.com",
+            "resources": [
+                {"title": "x" * (max_len + 1), "url": "https://example.com"},
+            ],
+        })
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("resources[0].title", body["details"])
+        self.assertEqual(body["details"]["max_length"], max_len)
+        self.assertEqual(Plan.objects.count(), before)
+
+    def test_rejects_overlong_resource_url(self):
+        max_len = Resource._meta.get_field("url").max_length
+        before = Plan.objects.count()
+        response = self._post({
+            "user_email": "member@test.com",
+            "resources": [
+                {"title": "ok", "url": "https://x.example.com/"
+                 + "y" * (max_len + 1)},
+            ],
+        })
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("resources[0].url", body["details"])
+        self.assertEqual(body["details"]["max_length"], max_len)
+        self.assertEqual(Plan.objects.count(), before)
+
+    def test_accepts_boundary_resource_fields(self):
+        title_max = Resource._meta.get_field("title").max_length
+        url_max = Resource._meta.get_field("url").max_length
+        # Build URL of exactly url_max length so we exercise the
+        # accept-side of the boundary on both fields at once.
+        url_prefix = "https://x.example.com/"
+        url_value = url_prefix + "y" * (url_max - len(url_prefix))
+        self.assertEqual(len(url_value), url_max)
+        response = self._post({
+            "user_email": "member@test.com",
+            "resources": [
+                {"title": "t" * title_max, "url": url_value},
+            ],
+        })
+        self.assertEqual(response.status_code, 201)
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        resource = plan.resources.get()
+        self.assertEqual(len(resource.title), title_max)
+        self.assertEqual(len(resource.url), url_max)
+
+    def test_regression_payload_under_caps_succeeds(self):
+        # Sanity: a payload that touches every newly-validated field, all
+        # under the caps, still results in 201 and persists the data.
+        response = self._post({
+            "user_email": "member@test.com",
+            "summary": {"weekly_hours": "5h/week"},
+            "weeks": [
+                {"week_number": 1, "theme": "warm-up"},
+                {"week_number": 2, "theme": "build"},
+            ],
+            "resources": [
+                {"title": "Blog post", "url": "https://example.com/p"},
+            ],
+        })
+        self.assertEqual(response.status_code, 201)
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        self.assertEqual(plan.summary_weekly_hours, "5h/week")
+        self.assertEqual(plan.weeks.count(), 2)
+        self.assertEqual(plan.resources.count(), 1)
+
+
+class PlanPatchMaxLengthValidationTest(PlansApiTestBase):
+    """Issue #725: PATCH must enforce the same caps as create."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.plan = Plan.objects.create(
+            member=cls.member, sprint=cls.sprint,
+        )
+
+    def _patch(self, payload, *, token=None):
+        return self.client.patch(
+            f"/api/plans/{self.plan.id}",
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self._auth(token),
+        )
+
+    def test_patch_rejects_overlong_summary_weekly_hours_nested(self):
+        max_len = Plan._meta.get_field("summary_weekly_hours").max_length
+        response = self._patch({
+            "summary": {"weekly_hours": "x" * (max_len + 1)},
+        })
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("summary.weekly_hours", body["details"])
+        self.assertEqual(body["details"]["max_length"], max_len)
+        # No partial mutation: row still has the original empty value.
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.summary_weekly_hours, "")
+
+    def test_patch_rejects_overlong_summary_weekly_hours_flat(self):
+        max_len = Plan._meta.get_field("summary_weekly_hours").max_length
+        response = self._patch({
+            "summary_weekly_hours": "x" * (max_len + 1),
+        })
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("summary_weekly_hours", body["details"])
+        self.assertEqual(body["details"]["max_length"], max_len)
+
+    def test_patch_accepts_boundary_summary_weekly_hours(self):
+        max_len = Plan._meta.get_field("summary_weekly_hours").max_length
+        value = "x" * max_len
+        response = self._patch({"summary": {"weekly_hours": value}})
+        self.assertEqual(response.status_code, 200)
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.summary_weekly_hours, value)
+
+    def test_patch_goal_uses_model_meta_max_length(self):
+        # Regression: the existing 280-char check on goal still rejects
+        # over-length values AND now also surfaces ``max_length`` in
+        # ``details`` for client introspection.
+        goal_max = Plan._meta.get_field("goal").max_length
+        response = self._patch({"goal": "x" * (goal_max + 1)})
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertEqual(body["details"]["max_length"], goal_max)
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.goal, "")

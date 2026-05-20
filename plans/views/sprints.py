@@ -16,6 +16,7 @@ the JSON API mirror lives in ``api/views/enrollments.py``.
 
 import datetime
 import logging
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -302,17 +303,39 @@ def _email_staff_about_plan_request(*, member, sprint, board_url, admin_url):
     return len(recipients)
 
 
-def _create_staff_plan_request_notifications(*, member, sprint, admin_url):
-    """Create one ``plan_request`` Notification per active staff user."""
+def _studio_plan_create_url(*, member, sprint):
+    """Build the Studio plan-create URL pre-filled for this (member, sprint).
+
+    Stop-gap destination for the ``plan_request`` in-app notification
+    (issue #719). The operator clicks the bell, lands on the Studio
+    create-plan form with both selects pre-selected, and one-clicks
+    "Create plan". When the sprint-first plan-creation flow ships
+    (issue #718), swap the reverse target and query-param shape here.
+    """
+    base = reverse('studio_plan_create')
+    query = urlencode({'user': member.pk, 'sprint': sprint.pk})
+    return f'{base}?{query}'
+
+
+def _create_staff_plan_request_notifications(*, member, sprint):
+    """Create one ``plan_request`` Notification per active staff user.
+
+    The notification's ``url`` points at the Studio create-plan form
+    pre-filled with ``?user=<pk>&sprint=<pk>`` so the operator lands
+    one click away from creating the plan (issue #719). Slack and the
+    staff email keep linking to the Django admin user-change page --
+    that's a deliberate secondary affordance and out of scope here.
+    """
     member_name = _member_display_name(member)
     title = f'Plan request from {member_name}'
     body = f'In sprint {sprint.name}'
+    studio_url = _studio_plan_create_url(member=member, sprint=sprint)
     notifications = [
         Notification(
             user=staff,
             title=title,
             body=body,
-            url=admin_url,
+            url=studio_url,
             notification_type='plan_request',
         )
         for staff in _staff_users()
@@ -378,7 +401,7 @@ def sprint_ask_team(request, sprint_slug):
         )
 
     _create_staff_plan_request_notifications(
-        member=request.user, sprint=sprint, admin_url=admin_url,
+        member=request.user, sprint=sprint,
     )
 
     messages.success(

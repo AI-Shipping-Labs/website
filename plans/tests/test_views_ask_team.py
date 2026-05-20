@@ -157,20 +157,97 @@ class AskTeamHappyPathTest(TestCase):
             {'staff1@test.com', 'staff2@test.com'},
         )
 
-    def test_first_ping_notification_links_to_admin(self):
+    def test_first_ping_notification_links_to_studio_plan_create(self):
+        """Notification URL points at Studio plan-create with pre-fill.
+
+        Rewritten for issue #719: the in-app bell notification's ``url``
+        now lands the operator on the Studio create-plan form with the
+        requesting member and sprint pre-filled via query params --
+        NOT the Django admin user-change page. Slack and the staff
+        email keep linking to admin (separate regression tests below).
+        """
         self.client.post(self.url)
         notif = Notification.objects.filter(
             notification_type='plan_request',
         ).first()
         self.assertIsNotNone(notif)
-        # Admin URL points to the requesting member's accounts/user
-        # change page (NOT the plan, which doesn't exist yet).
-        self.assertIn(
-            f'/admin/accounts/user/{self.member.pk}/change/',
-            notif.url,
+        # Studio destination -- NOT /admin/.
+        self.assertTrue(
+            notif.url.startswith('/studio/plans/new'),
+            f'Expected Studio URL, got {notif.url!r}',
         )
+        self.assertNotIn('/admin/', notif.url)
+        # Both pre-fill query params present with the right pks.
+        self.assertIn(f'user={self.member.pk}', notif.url)
+        self.assertIn(f'sprint={self.sprint.pk}', notif.url)
         # Title carries the member's display name.
         self.assertIn('Alex Member', notif.title)
+
+    def test_other_notification_types_url_unchanged_regression(self):
+        """The new URL builder only applies to plan_request rows.
+
+        Regression guard for #719: a non-plan_request notification
+        created the normal way still carries whatever url the caller
+        chose; the plan-request URL builder must not leak into other
+        notification creation paths.
+        """
+        staff = User.objects.filter(is_staff=True, is_active=True).first()
+        Notification.objects.create(
+            user=staff,
+            title='New article published',
+            url='/blog/some-article/',
+            notification_type='new_content',
+        )
+        other = Notification.objects.get(notification_type='new_content')
+        self.assertEqual(other.url, '/blog/some-article/')
+        self.assertNotIn('/studio/plans/new', other.url)
+
+    def test_staff_email_still_links_to_admin(self):
+        """Regression for #719: staff email body keeps the admin URL.
+
+        Only the in-app Notification was retargeted to Studio. The
+        Slack "Open user in admin" button and the staff email's
+        "Open user in admin" line are deliberate secondary affordances
+        and must keep linking to the Django admin user-change page.
+        """
+        self.client.post(self.url)
+        self.assertEqual(len(mail.outbox), 1)
+        sent = mail.outbox[0]
+        self.assertIn(
+            f'/admin/accounts/user/{self.member.pk}/change/',
+            sent.body,
+        )
+
+    @override_settings(SLACK_ENABLED=True, SLACK_BOT_TOKEN='xoxb-fake')
+    def test_slack_post_still_links_to_admin(self):
+        """Regression for #719: Slack post body keeps the admin URL.
+
+        The Slack message text and the "Open user in admin" button
+        URL must still be the Django admin user-change page.
+        """
+        with patch(
+            'community.slack_config.get_slack_team_requests_channel_id',
+            return_value='C123',
+        ):
+            with patch('requests.post') as mock_post:
+                mock_post.return_value.json.return_value = {'ok': True}
+                self.client.post(self.url)
+        self.assertEqual(mock_post.call_count, 1)
+        payload = mock_post.call_args.kwargs['json']
+        # The blocks payload contains the admin URL both in the
+        # mrkdwn link and the action-button url.
+        import json as _json
+        serialized = _json.dumps(payload)
+        self.assertIn(
+            f'/admin/accounts/user/{self.member.pk}/change/',
+            serialized,
+        )
+        # And the in-app Notification still points at Studio.
+        notif = Notification.objects.filter(
+            notification_type='plan_request',
+        ).first()
+        self.assertIsNotNone(notif)
+        self.assertTrue(notif.url.startswith('/studio/plans/new'))
 
     def test_first_ping_emails_staff_when_slack_disabled(self):
         # By default in tests SLACK_ENABLED is false, so the email

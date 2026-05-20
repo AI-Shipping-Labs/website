@@ -194,6 +194,72 @@ class PlanCreateTest(TestCase):
             before,
         )
 
+    def test_plan_create_get_prefills_from_query_params(self):
+        """GET ?user=<pk>&sprint=<pk> pre-selects both options (issue #719).
+
+        The plan_request bell notification lands here; both selects
+        must already be chosen so the operator one-clicks Create plan.
+        Assert on the rendered ``selected`` attribute -- the template
+        only adds it when the form_data value matches the row's pk.
+        """
+        response = self.client.get(
+            f'/studio/plans/new?user={self.member.pk}&sprint={self.sprint.pk}',
+        )
+        self.assertEqual(response.status_code, 200)
+        # form_data carries the string-form ids so the template's
+        # `{% if form_data.member == m.pk|stringformat:"s" %}` matches.
+        self.assertEqual(
+            response.context['form_data']['member'], str(self.member.pk),
+        )
+        self.assertEqual(
+            response.context['form_data']['sprint'], str(self.sprint.pk),
+        )
+        # And the rendered <option> for that row carries `selected`.
+        self.assertContains(
+            response,
+            f'<option value="{self.member.pk}" selected>{self.member.email}</option>',
+            html=False,
+        )
+        self.assertContains(
+            response,
+            f'<option value="{self.sprint.pk}" selected>{self.sprint.name}</option>',
+            html=False,
+        )
+
+    def test_plan_create_get_with_stale_ids_renders_empty_form(self):
+        """Stale ?user / ?sprint silently fall through to empty form (#719).
+
+        Operators may follow a bell notification long after the
+        member or sprint has been deleted. No 400, no 404, no
+        traceback -- just an empty form they can fill in by hand.
+        """
+        response = self.client.get(
+            '/studio/plans/new?user=999999&sprint=888888',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['form_data']['member'], '')
+        self.assertEqual(response.context['form_data']['sprint'], '')
+
+    def test_plan_create_get_with_non_digit_query_params_renders_empty_form(self):
+        """Non-digit ?user / ?sprint fall through to empty form (#719)."""
+        response = self.client.get(
+            '/studio/plans/new?user=abc&sprint=xyz',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['form_data']['member'], '')
+        self.assertEqual(response.context['form_data']['sprint'], '')
+
+    def test_plan_create_get_with_only_user_prefills_member_only(self):
+        """Partial pre-fill works: only ``?user`` fills the member select."""
+        response = self.client.get(
+            f'/studio/plans/new?user={self.member.pk}',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context['form_data']['member'], str(self.member.pk),
+        )
+        self.assertEqual(response.context['form_data']['sprint'], '')
+
 
 class PlanDetailRenderTest(TestCase):
     @classmethod

@@ -12,13 +12,14 @@ can tell at a glance which is which.
 - One-off analyses (e.g. perf, accessibility, lint, dependency review)
 - Dated status reports
 
-Examples of filenames that belong here:
+Examples of filenames that belong here (taken from the files already in this folder, all in the canonical `YYYY-MM-DD-<topic>.md` form):
 
+- `2026-03-21-test-remediation-plan.md`
+- `2026-03-27-content-images-s3.md`
 - `2026-04-20-audit.md`
-- `2026-05-code-smell-audit.md`
-- `2026-05-test-suite-audit.md`
-- `test-remediation-plan.md`
-- `lint-advisory.md`
+- `2026-05-12-code-smell-audit.md`
+- `2026-05-12-test-suite-audit.md`
+- `2026-05-13-lint-advisory.md`
 
 ## What does NOT go here
 

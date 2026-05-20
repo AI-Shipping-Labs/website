@@ -386,115 +386,32 @@ print('Created', user.email)
 
 ## OAuth (Google, GitHub, Slack)
 
-OAuth credentials are managed via the database (Django admin > Social applications), not environment variables.
+OAuth credentials for Google, GitHub, and Slack login are configured in Studio > Settings > Auth & Login. The full operator setup — including the provider-console steps, callback URLs, scopes, and per-provider foot-guns — is documented in [`_docs/configuration.md`](configuration.md) section 3.
 
-### Getting Google OAuth credentials
+Use this section only when you need a local-development shortcut that bypasses Studio. For any non-local environment (dev, prod, staging), use the Studio path documented in `configuration.md`.
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-2. Create a project (or select an existing one)
-3. Go to APIs & Services > OAuth consent screen, configure it (External, add app name and email)
-4. Go to APIs & Services > Credentials > Create Credentials > OAuth client ID
-5. Application type: Web application
-6. Name: e.g. `AI Shipping Labs`
-7. Authorized JavaScript origins: add all domains you want to support
-8. Authorized redirect URIs: add a callback URL for each environment you want to support:
-   - `http://localhost:8000/accounts/google/login/callback/`
-   - `https://dev.aishippinglabs.com/accounts/google/login/callback/`
-   - `https://prod.aishippinglabs.com/accounts/google/login/callback/`
-   - `https://aishippinglabs.com/accounts/google/login/callback/`
-9. Save and copy the Client ID and Client secret
+### Local-development shortcut (`seed_data` + `.env`)
 
-You can use a single OAuth client for all environments (local, dev, prod) by adding all redirect URIs to the same client. Or create separate clients per environment if you prefer isolation.
+For local development you can pre-populate `socialaccount.SocialApp` entries from environment variables:
 
-### Getting GitHub OAuth credentials
+1. Register OAuth apps with each provider, using `http://localhost:8000/accounts/<provider>/login/callback/` as the callback URL. The full provider-console instructions live in [`configuration.md`](configuration.md) section 3.
+2. Add the client ID and secret pairs to your local `.env`:
+   ```
+   GOOGLE_OAUTH_CLIENT_ID=your-client-id
+   GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
+   GITHUB_OAUTH_CLIENT_ID=your-client-id
+   GITHUB_OAUTH_CLIENT_SECRET=your-client-secret
+   ```
+3. Run `uv run python manage.py seed_data` — it picks up any `*_OAUTH_CLIENT_ID` / `*_OAUTH_CLIENT_SECRET` pairs from the environment and creates the corresponding Social Application entries in the database.
 
-1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
-2. Click New OAuth App
-3. Application name: e.g. `AI Shipping Labs`
-4. Homepage URL: `https://aishippinglabs.com`
-5. Authorization callback URL: `http://localhost:8000/accounts/github/login/callback/`
-6. Click Register application
-7. Copy the Client ID, then click Generate a new client secret and copy it
-
-GitHub only allows one callback URL per OAuth app, so create a separate app for each environment:
-
-| Environment | Callback URL |
-|-------------|-------------|
-| Local | `http://localhost:8000/accounts/github/login/callback/` |
-| Dev | `https://dev.aishippinglabs.com/accounts/github/login/callback/` |
-| Prod | `https://aishippinglabs.com/accounts/github/login/callback/` |
-
-`prod.aishippinglabs.com` is a legacy alias of the same ECS service. If you want logins to keep working from that hostname, also register a callback for it; otherwise users are expected to land on the canonical `aishippinglabs.com`.
-
-### Getting Slack OAuth credentials
-
-1. Go to [Slack API Apps](https://api.slack.com/apps)
-2. Click Create New App > From scratch
-3. App Name: e.g. `AI Shipping Labs`
-4. Pick the workspace you want to develop in
-5. Go to OAuth & Permissions
-6. Under Redirect URLs, add the callback URLs for each environment:
-   - `http://localhost:8000/accounts/slack/login/callback/`
-   - `https://dev.aishippinglabs.com/accounts/slack/login/callback/`
-   - `https://prod.aishippinglabs.com/accounts/slack/login/callback/`
-   - `https://aishippinglabs.com/accounts/slack/login/callback/`
-7. Under Scopes > User Token Scopes, add: `openid`, `profile`, `email`
-8. Go to Basic Information and copy the Client ID and Client Secret
-
-### Option A: via `.env` + seed script (local development)
-
-Add the credentials to your `.env` file:
-
-```
-GOOGLE_OAUTH_CLIENT_ID=your-client-id
-GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
-GITHUB_OAUTH_CLIENT_ID=your-client-id
-GITHUB_OAUTH_CLIENT_SECRET=your-client-secret
-```
-
-Then run `uv run python manage.py seed_data` — it picks up any `*_OAUTH_CLIENT_ID` / `*_OAUTH_CLIENT_SECRET` pairs from the environment and creates the corresponding Social Application entries in the database.
-
-### Option B: via Django admin (any environment)
-
-1. Log in to the admin panel:
-   - Local: http://localhost:8000/admin/socialaccount/socialapp/add/
-   - Dev: https://dev.aishippinglabs.com/admin/socialaccount/socialapp/add/
-2. Fill in:
-   - Provider: `Google` (or `GitHub`, `Slack`)
-   - Name: `Google`
-   - Client id: your OAuth client ID
-   - Secret key: your OAuth client secret
-   - Sites: move `aishippinglabs.com` to the "Chosen sites" box
-3. Save
-
-### Setup per environment
-
-Each environment has its own database, so the Social Application must be added to each one separately.
-
-For `https://dev.aishippinglabs.com/`:
-
-1. Log in at https://dev.aishippinglabs.com/admin/
-2. Go to https://dev.aishippinglabs.com/admin/socialaccount/socialapp/add/
-3. Add Google with your client ID and secret, assign to the site, save
-4. Repeat for GitHub (use the dev-specific GitHub OAuth app) and Slack
-
-For `https://aishippinglabs.com/` (production):
-
-1. Log in at https://aishippinglabs.com/admin/
-2. Go to https://aishippinglabs.com/admin/socialaccount/socialapp/add/
-3. Add Google with your client ID and secret, assign to the site, save
-4. Repeat for GitHub (use the prod GitHub OAuth app) and Slack
-
-`prod.aishippinglabs.com` is a legacy alias that points to the same ECS service and database, so the social apps configured for `aishippinglabs.com` already cover it — no separate setup needed.
-
-The same Google/Slack OAuth client can be reused across environments as long as all redirect URIs are registered. GitHub requires a separate OAuth app per environment since it only allows one callback URL per app.
+This is a one-shot convenience for local dev; the canonical path on any deployed environment is Studio > Settings > Auth & Login.
 
 ### OAuth troubleshooting
 
 - `redirect_uri_mismatch` (Google) — Add both `localhost` and `127.0.0.1` callback URIs in Google Console. allauth uses the host from the browser request.
 - `The redirect_uri MUST match the registered callback URL` (GitHub) — GitHub only allows one callback URL per app. Create separate apps for each environment.
 - `User has no field named 'username'` — Ensure `ACCOUNT_USER_MODEL_USERNAME_FIELD = None` is in `settings.py`.
-- `SocialApp matching query does not exist` — No Social Application has been added for this provider. Add one via Django admin or `seed_data`.
+- `SocialApp matching query does not exist` — No Social Application has been added for this provider. Add one via Studio > Settings > Auth & Login (any environment) or via `seed_data` (local dev shortcut).
 - `Site matching query does not exist` — Run: `uv run python manage.py shell -c "from django.contrib.sites.models import Site; Site.objects.update_or_create(id=1, defaults={'domain': 'localhost:8000', 'name': 'AI Shipping Labs'})"`
 - Google shows "App not verified" warning — Expected during development. Click Continue. For production, submit for Google verification.
 - Login works but accounts not consolidated — Ensure `SOCIALACCOUNT_EMAIL_AUTHENTICATION = True` and `SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True` in settings.

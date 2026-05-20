@@ -2,8 +2,8 @@
 
 This report investigates where CI wall-clock time goes today, identifies tests that overlap or
 provide low signal, and proposes a small number of concrete optimizations. It does not delete or
-modify tests. Issue: #466. Companion priors: `_docs/test-remediation-plan.md` (2026-03-21),
-`_docs/audit-2026-04-20.md`.
+modify tests. Issue: #466. Companion priors: `_docs/audits/2026-03-21-test-remediation-plan.md` (2026-03-21),
+`_docs/audits/2026-04-20-audit.md`.
 
 ## 1. Methodology
 
@@ -295,7 +295,7 @@ not for raw seconds.
 
 ## 6. Low-value test candidates
 
-Cross-referenced against `_docs/test-remediation-plan.md` (2026-03-21). For each category from
+Cross-referenced against `_docs/audits/2026-03-21-test-remediation-plan.md` (2026-03-21). For each category from
 that plan, this audit checked whether the listed items are still in the tree.
 
 | Test | File:line | Category | Already in remediation plan? | Recommendation |

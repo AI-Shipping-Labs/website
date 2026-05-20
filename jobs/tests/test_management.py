@@ -92,23 +92,36 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(schedule.cron, '*/30 * * * *')
 
     def test_creates_remind_unverified_users_schedule(self):
-        """Command creates remind-unverified-users schedule (issue #452)."""
+        """Command creates remind-unverified-users schedule (issue #452).
+
+        Issue #716: ``func`` must be the fully-qualified dotted path to the
+        function, not the parent package. The submodule name matches the
+        re-exported function name, and ``pydoc.locate`` resolves the
+        ambiguous shorter form to the module — which django-q then tries
+        to call, raising ``TypeError: 'module' object is not callable``.
+        """
         call_command('setup_schedules', stdout=StringIO())
         schedule = Schedule.objects.get(name='remind-unverified-users')
         self.assertEqual(
             schedule.func,
-            'accounts.tasks.remind_unverified_users',
+            'accounts.tasks.remind_unverified_users.remind_unverified_users',
         )
         self.assertEqual(schedule.cron, '0 7 * * *')
         self.assertEqual(schedule.schedule_type, Schedule.CRON)
 
     def test_creates_purge_unverified_users_schedule(self):
-        """Command creates purge-unverified-users schedule (issue #452)."""
+        """Command creates purge-unverified-users schedule (issue #452).
+
+        Issue #716: see ``test_creates_remind_unverified_users_schedule``
+        — the registered ``func`` must point at the function, not the
+        submodule of the same name, otherwise django-q raises a
+        ``TypeError`` at fire time.
+        """
         call_command('setup_schedules', stdout=StringIO())
         schedule = Schedule.objects.get(name='purge-unverified-users')
         self.assertEqual(
             schedule.func,
-            'accounts.tasks.purge_unverified_users',
+            'accounts.tasks.purge_unverified_users.purge_unverified_users',
         )
         self.assertEqual(schedule.cron, '0 8 * * *')
         self.assertEqual(schedule.schedule_type, Schedule.CRON)

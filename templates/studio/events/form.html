@@ -160,6 +160,25 @@
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
     </div>
     {% endif %}
+
+    {% comment %}
+      Issue #680: post-event recap body for the follow-up email. Markdown
+      input; blank is permitted (the task substitutes a generic fallback
+      string). Only renders on the edit form (no event = no recap yet).
+    {% endcomment %}
+    {% if event %}
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="post-event-summary">Post-event summary (Markdown)</label>
+      <textarea name="post_event_summary"
+                id="post-event-summary"
+                rows="5"
+                data-testid="post-event-summary"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ event.post_event_summary|default:'' }}</textarea>
+      <p class="text-xs text-muted-foreground mt-1">
+        Used as the body of the post-event follow-up email. Leave blank for a short generic recap.
+      </p>
+    </div>
+    {% endif %}
   </div>
 
   {% if not event %}
@@ -328,6 +347,53 @@
   {% if event.status != 'draft' %}
   {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True %}
   {% endif %}
+
+  {% comment %}
+    Issue #680: manual "Send follow-up now" trigger. The button is the
+    documented escape hatch when the cron skipped the follow-up
+    because the recording URL was empty at the moment the event flipped
+    to ``completed``. The button is disabled (and the panel surfaces a
+    short reason) when the gate is unmet so staff are not left guessing.
+
+    Enable conditions (must hold):
+
+    - event.status == 'completed'
+    - event has recording_url OR recording_s3_url set
+
+    The actual no-double-send protection lives in the per-user task
+    (EventReminderLog dedup) and the view (already-sent flash) — the
+    button itself is a one-click POST without a confirmation dialog
+    because the dedup row makes accidental re-presses safe.
+  {% endcomment %}
+  <div class="bg-card border border-border rounded-lg p-4" data-testid="event-followup-panel">
+    <h2 class="text-sm font-medium text-foreground mb-3">Post-event follow-up</h2>
+    {% if event.status == 'completed' and event.video_url %}
+      <form method="post" action="{{ send_followup_url }}">
+        {% csrf_token %}
+        <button type="submit"
+                data-testid="send-followup-button"
+                class="w-full bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-colors">
+          Send follow-up now
+        </button>
+      </form>
+      <p class="text-xs text-muted-foreground mt-2">
+        Emails every registered attendee with the recap, recording link, and a notes-coming-soon placeholder. Safe to press more than once — already-sent recipients are skipped automatically.
+      </p>
+    {% else %}
+      <button type="button" disabled
+              data-testid="send-followup-button-disabled"
+              class="w-full bg-secondary border border-border text-muted-foreground px-4 py-2 rounded-lg text-sm font-medium cursor-not-allowed opacity-60">
+        Send follow-up now
+      </button>
+      <p class="text-xs text-muted-foreground mt-2">
+        {% if event.status != 'completed' %}
+          Available once the event status is Completed.
+        {% else %}
+          Set a recording URL to enable.
+        {% endif %}
+      </p>
+    {% endif %}
+  </div>
 </aside>
 {% endif %}
 </div>

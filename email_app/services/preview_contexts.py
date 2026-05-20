@@ -105,6 +105,23 @@ PREVIEW_CONTEXTS = {
         # {site}/events/{slug}/join.
         'event_url': 'https://aishippinglabs.com/events/ai-shipping-workshop/join',
     },
+    'post_event_followup': {
+        'user_name': 'Ada',
+        'event_title': 'AI Shipping Workshop',
+        'event_summary': (
+            'Thanks for joining the AI Shipping Workshop. We covered '
+            'three deployment patterns and ended with live Q&A.'
+        ),
+        'recording_url': (
+            'https://cdn.aishippinglabs.com/recordings/'
+            'ai-shipping-workshop.mp4'
+        ),
+        'event_url': 'https://aishippinglabs.com/events/42/ai-shipping-workshop',
+        'notes_placeholder': True,
+        'feedback_url': (
+            'https://aishippinglabs.com/events/ai-shipping-workshop/feedback'
+        ),
+    },
     'event_rescheduled': {
         'user_name': 'Ada',
         'event_title': 'AI Shipping Workshop',

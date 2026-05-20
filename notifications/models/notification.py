@@ -55,9 +55,17 @@ class Notification(models.Model):
 
 
 class EventReminderLog(models.Model):
-    """Tracks which event reminders have been sent to avoid duplicates.
+    """Tracks which event reminders / follow-ups have been sent to avoid duplicates.
 
     Each (event, user, interval) triple should only generate one notification.
+
+    Known interval values:
+
+    - ``24h`` and ``20m``: pre-event reminder bells/emails (issue #706).
+    - ``followup``: post-event recap email (issue #680). One row per
+      (event, user) — the per-user task uses ``get_or_create`` so a
+      re-fired cron or a manual "Send follow-up now" press never
+      double-sends.
     """
 
     event = models.ForeignKey(
@@ -72,7 +80,10 @@ class EventReminderLog(models.Model):
     )
     interval = models.CharField(
         max_length=10,
-        help_text='Reminder interval: "24h" or "20m".',
+        help_text=(
+            'Reminder interval: "24h" or "20m" for pre-event reminders, '
+            '"followup" for the post-event recap email (issue #680).'
+        ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

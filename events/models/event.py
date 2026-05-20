@@ -255,6 +255,18 @@ class Event(
         help_text='Data from recap frontmatter / event recap_data for include rendering.',
     )
 
+    # Issue #680: host-authored recap body for the post-event follow-up
+    # email. Markdown. Optional — when blank the follow-up template uses a
+    # generic fallback string so a host who forgets to fill this in still
+    # gets a usable email.
+    post_event_summary = models.TextField(
+        blank=True, default='',
+        help_text=(
+            'Markdown summary used as the body of the post-event follow-up '
+            'email. Leave blank for the generic fallback copy.'
+        ),
+    )
+
     # Issue #564: explicit origin gate. ``github`` means the row is synced
     # from a content repo and ``source_repo`` must be non-empty; ``studio``
     # means the row was authored in Studio (e.g. via the event-series flow)

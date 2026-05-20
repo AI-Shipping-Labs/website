@@ -195,12 +195,13 @@ class TestScenario1VisitorBrowsesAndWatchesOpen:
             'a[data-testid="past-card-workshop-link"]:has-text("Building AI Agents")'
         ).first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/workshops/building-ai-agents" in page.url
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
+        assert "/workshops/2026-02-15-building-ai-agents" in page.url
 
         # Step 3: Follow "Watch the recording" to the canonical video page.
         page.locator('a:has-text("Watch the recording")').first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/workshops/building-ai-agents/video" in page.url
+        assert "/workshops/2026-02-15-building-ai-agents/video" in page.url
 
         body = page.content()
 
@@ -380,7 +381,10 @@ class TestScenario3FreeUserSeesUpgradePath:
         # Workshop landing -> follow to video page, which is gated.
         page.locator('a:has-text("Watch the recording")').first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/workshops/premium-workshop-fine-tuning/video" in page.url
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
+        # _create_recording defaults date to today-30; compute the same.
+        expected_date = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+        assert f"/workshops/{expected_date}-premium-workshop-fine-tuning/video" in page.url
 
         body = page.content()
 
@@ -559,7 +563,8 @@ class TestScenario5NavigateFromDetailToFilteredListing:
             'a[data-testid="past-card-workshop-link"]:has-text("Building Chatbots")'
         ).first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/workshops/building-chatbots" in page.url
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
+        assert "/workshops/2026-02-15-building-chatbots" in page.url
 
         # Step 4: Navigate back to /events — both recordings are still
         # discoverable under the past-events section.

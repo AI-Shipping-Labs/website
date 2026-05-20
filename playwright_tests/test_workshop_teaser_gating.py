@@ -162,8 +162,10 @@ class TestAnonRegisteredTutorial:
         _clear_workshops()
         _create_workshop(slug='reg-tut', pages=5, recording=10)
 
+        # Issue #750: workshops live at /workshops/<YYYY-MM-DD>-<slug>;
+        # the workshop factory pins the date to 2026-04-21.
         page.goto(
-            f'{django_server}/workshops/reg-tut/tutorial/intro',
+            f'{django_server}/workshops/2026-04-21-reg-tut/tutorial/intro',
             wait_until='domcontentloaded',
         )
 
@@ -186,13 +188,13 @@ class TestAnonRegisteredTutorial:
         href = login.get_attribute('href')
         assert href is not None
         assert href.startswith('/accounts/login/')
-        assert 'next=%2Fworkshops%2Freg-tut%2Ftutorial%2Fintro' in href
+        assert 'next=%2Fworkshops%2F2026-04-21-reg-tut%2Ftutorial%2Fintro' in href
 
         # Click the secondary signup button.
         signup = page.locator('[data-testid="teaser-signup-cta"]')
         signup_href = signup.get_attribute('href')
         assert signup_href.startswith('/accounts/signup/')
-        assert 'next=%2Fworkshops%2Freg-tut%2Ftutorial%2Fintro' in signup_href
+        assert 'next=%2Fworkshops%2F2026-04-21-reg-tut%2Ftutorial%2Fintro' in signup_href
 
         signup.click()
         page.wait_for_load_state('domcontentloaded')
@@ -302,8 +304,10 @@ class TestAnonOnPaidRecording:
             pages=10, recording=10,  # Basic-gated recording
         )
 
+        # Issue #750: workshops live at /workshops/<YYYY-MM-DD>-<slug>;
+        # the workshop factory pins the date to 2026-04-21.
         page.goto(
-            f'{django_server}/workshops/reg-vid/video',
+            f'{django_server}/workshops/2026-04-21-reg-vid/video',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -317,7 +321,7 @@ class TestAnonOnPaidRecording:
         signup = page.locator('[data-testid="teaser-signup-cta"]')
         assert signup.count() == 1
         signup_href = signup.get_attribute('href')
-        assert 'next=%2Fworkshops%2Freg-vid%2Fvideo' in signup_href
+        assert 'next=%2Fworkshops%2F2026-04-21-reg-vid%2Fvideo' in signup_href
 
 
 # ---------------------------------------------------------------------
@@ -457,8 +461,10 @@ class TestSignInReturnsToTutorial:
         )
 
         # Visit the gated tutorial as anonymous and click Sign In.
+        # Issue #750: workshops live at /workshops/<YYYY-MM-DD>-<slug>;
+        # the workshop factory pins the date to 2026-04-21.
         page.goto(
-            f'{django_server}/workshops/return-tut/tutorial/intro',
+            f'{django_server}/workshops/2026-04-21-return-tut/tutorial/intro',
             wait_until='domcontentloaded',
         )
         page.locator('[data-testid="page-upgrade-cta"]').click()
@@ -473,10 +479,10 @@ class TestSignInReturnsToTutorial:
         page.fill('#login-password', DEFAULT_PASSWORD)
         page.click('#login-submit')
         # Wait for the JS redirect to complete.
-        page.wait_for_url('**/workshops/return-tut/tutorial/intro')
+        page.wait_for_url('**/workshops/2026-04-21-return-tut/tutorial/intro')
 
         # Lands back on the tutorial page; full body renders.
-        assert '/workshops/return-tut/tutorial/intro' in page.url
+        assert '/workshops/2026-04-21-return-tut/tutorial/intro' in page.url
         body = page.content()
         assert 'data-testid="page-body"' in body
         assert 'TUTORIALHIDDENMARKER' in body

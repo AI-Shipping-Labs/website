@@ -199,8 +199,9 @@ class TestWorkshopShowsInContinueLearning:
         cta = page.locator(
             '[data-testid="continue-learning-workshop-cta"]',
         ).first
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
         assert cta.get_attribute('href') == (
-            f'/workshops/{workshop.slug}/tutorial/setup'
+            f'/workshops/{workshop.url_key}/tutorial/setup'
         )
 
         ctx.close()

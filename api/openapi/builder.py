@@ -237,7 +237,16 @@ def build_spec(urlpatterns, *, title="AI Shipping Labs Operator API", version="1
                 "Operator API for AI Shipping Labs. All endpoints accept "
                 "JSON in and return JSON out. Authentication is via the "
                 "``Authorization: Token <key>`` header where ``<key>`` is "
-                "a token owned by a staff user."
+                "a token owned by a staff user.\n\n"
+                "The spec endpoint ``/api/openapi.json`` itself accepts "
+                "the same ``Authorization: Token <key>`` header, so "
+                "OpenAPI tooling (Postman ``Import -> Link``, "
+                "``openapi-generator``, Swagger UI) can pull the spec "
+                "from the same base URL it then calls. Example:\n\n"
+                "```\n"
+                "curl -H \"Authorization: Token $API_TOKEN\" "
+                "https://aishippinglabs.com/api/openapi.json > spec.json\n"
+                "```"
             ),
         },
     )

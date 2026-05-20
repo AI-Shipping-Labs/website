@@ -21,6 +21,16 @@ The API uses `Authorization: Token <key>` headers (not Bearer). The token must b
 export API_TOKEN="<production-api-token>"
 ```
 
+### Pulling the OpenAPI spec with a token
+
+The spec endpoint `/api/openapi.json` accepts the same token header, so you can fetch the machine-readable catalogue without repo access:
+
+```bash
+curl -H "Authorization: Token $API_TOKEN" https://aishippinglabs.com/api/openapi.json > spec.json
+```
+
+Postman users: paste the same URL into `Import -> Link` and add `Authorization: Token $API_TOKEN` as a request header in the generated collection. The same token works against every endpoint listed below.
+
 ## Step 1: Find the sprint
 
 List all sprints and identify the one you need by `start_date`:

@@ -80,7 +80,11 @@ class PlanGoalRenderTest(TestCase):
         )
         self.assertContains(response, 'data-testid="plan-summary"')
         self.assertContains(response, 'data-testid="plan-details"')
-        self.assertContains(response, '<h2 class="text-lg font-semibold text-foreground">Details</h2>', html=True)
+        self.assertContains(
+            response,
+            '<h2 class="text-2xl font-semibold tracking-tight text-foreground">Details</h2>',
+            html=True,
+        )
         self.assertContains(
             response,
             "Only you can see this section. Use it for personal context that doesn't need to be shared.",

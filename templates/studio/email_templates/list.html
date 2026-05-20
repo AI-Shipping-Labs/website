@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Email templates{% endblock %}
 
@@ -47,21 +48,21 @@
         <td class="px-4 py-3 text-muted-foreground" data-label="Last edited">
           {% if row.updated_at %}{{ row.updated_at|date:"Y-m-d H:i" }}{% else %}&mdash;{% endif %}
         </td>
-        <td class="px-4 py-3 studio-actions-cell" data-label="Actions">
-          <div class="flex flex-wrap gap-2 justify-end">
-            <a href="{% url 'studio_email_template_edit' row.template_name %}"
-               class="text-accent hover:underline text-xs font-medium">Edit</a>
-            <form method="post" action="{% url 'studio_email_template_send_test' row.template_name %}" class="inline">
+        <td class="px-4 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            {% url 'studio_email_template_edit' row.template_name as edit_url %}
+            {% studio_list_action edit_url 'Edit' 'primary' %}
+            <form method="post" action="{% url 'studio_email_template_send_test' row.template_name %}" class="{% studio_list_class 'action_form' %}">
               {% csrf_token %}
-              <button type="submit" class="text-xs text-muted-foreground hover:text-foreground">Send test to me</button>
+              <button type="submit" class="{% studio_action_class 'secondary' %}">Send test to me</button>
             </form>
             {% if row.edited %}
             <form method="post"
                   action="{% url 'studio_email_template_reset' row.template_name %}"
-                  class="inline"
+                  class="{% studio_list_class 'action_form' %}"
                   onsubmit="return confirm('Reset {{ row.template_name }} to the filesystem default? This deletes the override.');">
               {% csrf_token %}
-              <button type="submit" class="text-xs text-destructive hover:underline">Reset to default</button>
+              <button type="submit" class="{% studio_action_class 'destructive' %}">Reset to default</button>
             </form>
             {% endif %}
           </div>

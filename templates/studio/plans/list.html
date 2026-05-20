@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Plans{% endblock %}
 
@@ -76,10 +77,13 @@
         <td class="px-6 py-4 text-sm text-muted-foreground">
           {% if plan.shared_at %}{{ plan.shared_at|date:"Y-m-d" }}{% else %}-{% endif %}
         </td>
-        <td class="px-6 py-4 text-right">
-          <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="text-sm text-accent hover:underline">View plan</a>
-          <span class="mx-2 text-muted-foreground">/</span>
-          <a href="{% url 'studio_plan_edit' plan_id=plan.pk %}" class="text-sm text-accent hover:underline">Edit</a>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            {% url 'studio_plan_detail' plan_id=plan.pk as plan_detail_url %}
+            {% url 'studio_plan_edit' plan_id=plan.pk as plan_edit_url %}
+            {% studio_list_action plan_detail_url 'View plan' 'primary' %}
+            {% studio_list_action plan_edit_url 'Edit' 'secondary' %}
+          </div>
         </td>
       </tr>
       {% endfor %}

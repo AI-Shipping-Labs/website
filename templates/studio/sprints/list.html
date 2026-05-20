@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Sprints{% endblock %}
 
@@ -50,8 +51,13 @@
           <span class="text-muted-foreground">—</span>
           {% endif %}
         </td>
-        <td class="px-6 py-4 text-right">
-          <a href="{% url 'studio_sprint_edit' sprint_id=sprint.pk %}" class="text-sm text-accent hover:underline">Edit</a>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            {% url 'studio_sprint_detail' sprint_id=sprint.pk as sprint_detail_url %}
+            {% url 'studio_sprint_edit' sprint_id=sprint.pk as sprint_edit_url %}
+            {% studio_list_action sprint_detail_url 'View' 'primary' %}
+            {% studio_list_action sprint_edit_url 'Edit' 'secondary' %}
+          </div>
         </td>
       </tr>
       {% endfor %}

@@ -26,6 +26,7 @@ from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from api.views.events import (
@@ -50,6 +51,25 @@ OCCURRENCE_DELETE_NOT_AVAILABLE_MESSAGE = (
 )
 
 VALID_CADENCES = {value for value, _label in EVENT_SERIES_CADENCE_CHOICES}
+
+_VALID_CADENCES_ENUM = sorted(VALID_CADENCES)
+
+_EVENT_SERIES_EXAMPLE = {
+    "id": 1,
+    "name": "Weekly Office Hours",
+    "slug": "weekly-office-hours",
+    "description": "Open Q&A every Tuesday.",
+    "cadence": "weekly",
+    "cadence_weeks": 1,
+    "day_of_week": 1,
+    "start_time": "17:00:00",
+    "timezone": "Europe/Berlin",
+    "is_active": True,
+    "event_count": 12,
+    "published_event_count": 10,
+    "created_at": "2026-04-15T12:00:00+00:00",
+    "updated_at": "2026-04-15T12:00:00+00:00",
+}
 
 SERIES_WRITABLE_FIELDS = {
     "name",
@@ -276,6 +296,93 @@ def _save_series_or_error(series):
 @token_required
 @csrf_exempt
 @require_methods("GET", "POST", "DELETE")
+@openapi_spec(
+    tag="Event Series",
+    summary="List, create, or attempt to delete event series",
+    methods={
+        "GET": {
+            "summary": "List event series",
+            "query": {
+                "is_active": {
+                    "type": "string",
+                    "enum": ["true", "false"],
+                    "required": False,
+                    "description": "Filter on the hide flag.",
+                },
+                "q": {
+                    "type": "string",
+                    "required": False,
+                    "description": "icontains match on name.",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "List of event series.",
+                    "example": {
+                        "event_series": [_EVENT_SERIES_EXAMPLE],
+                    },
+                },
+            },
+        },
+        "POST": {
+            "summary": "Create an event series",
+            "request_body": {
+                "required": ["name", "day_of_week", "start_time"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "slug": {"type": "string"},
+                    "description": {"type": "string"},
+                    "cadence": {
+                        "type": "string",
+                        "enum": _VALID_CADENCES_ENUM,
+                    },
+                    "cadence_weeks": {"type": "integer", "minimum": 1},
+                    "day_of_week": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 6,
+                    },
+                    "start_time": {
+                        "type": "string",
+                        "description": "HH:MM or HH:MM:SS.",
+                    },
+                    "timezone": {"type": "string"},
+                    "is_active": {"type": "boolean"},
+                },
+                "example": {
+                    "name": "Weekly Office Hours",
+                    "day_of_week": 1,
+                    "start_time": "17:00",
+                },
+            },
+            "responses": {
+                201: {
+                    "description": "Event series created.",
+                    "example": _EVENT_SERIES_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                422: {"description": "Validation error (missing name, bad cadence, slug collision, etc.)."},
+            },
+        },
+        "DELETE": {
+            "summary": "DELETE is not available on this route",
+            "description": (
+                "DELETE returns 405 with a structured error -- "
+                "deletion is not exposed through the API. Hide the "
+                "series with ``PATCH is_active=false``."
+            ),
+            "responses": {
+                405: {
+                    "description": "Series deletion is not available.",
+                    "example": {
+                        "error": SERIES_DELETE_NOT_AVAILABLE_MESSAGE,
+                        "code": "series_delete_not_available",
+                    },
+                },
+            },
+        },
+    },
+)
 def event_series_collection(request):
     """GET/POST ``/api/event-series``.
 
@@ -325,6 +432,84 @@ def event_series_collection(request):
 @token_required
 @csrf_exempt
 @require_methods("GET", "PATCH", "DELETE")
+@openapi_spec(
+    tag="Event Series",
+    summary="Retrieve, update, or attempt to delete an event series",
+    methods={
+        "GET": {
+            "summary": "Retrieve an event series",
+            "description": (
+                "Returns the series plus an inlined ``occurrences`` "
+                "array using the same shape as the events API."
+            ),
+            "responses": {
+                200: {
+                    "description": "Event series with occurrences.",
+                    "example": {
+                        **_EVENT_SERIES_EXAMPLE,
+                        "occurrences": [],
+                    },
+                },
+                404: {
+                    "description": "Event series not found.",
+                    "example": {
+                        "error": "Event series not found",
+                        "code": "unknown_series",
+                    },
+                },
+            },
+        },
+        "PATCH": {
+            "summary": "Update an event series",
+            "description": (
+                "Partial update. Setting ``is_active=false`` hides the "
+                "series without touching its occurrences."
+            ),
+            "request_body": {
+                "properties": {
+                    "name": {"type": "string"},
+                    "slug": {"type": "string"},
+                    "description": {"type": "string"},
+                    "cadence": {
+                        "type": "string",
+                        "enum": _VALID_CADENCES_ENUM,
+                    },
+                    "cadence_weeks": {"type": "integer", "minimum": 1},
+                    "day_of_week": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 6,
+                    },
+                    "start_time": {"type": "string"},
+                    "timezone": {"type": "string"},
+                    "is_active": {"type": "boolean"},
+                },
+                "example": {"is_active": False},
+            },
+            "responses": {
+                200: {
+                    "description": "Event series updated.",
+                    "example": _EVENT_SERIES_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                404: {"description": "Event series not found."},
+                422: {"description": "Validation error."},
+            },
+        },
+        "DELETE": {
+            "summary": "DELETE is not available on this route",
+            "responses": {
+                405: {
+                    "description": "Series deletion is not available.",
+                    "example": {
+                        "error": SERIES_DELETE_NOT_AVAILABLE_MESSAGE,
+                        "code": "series_delete_not_available",
+                    },
+                },
+            },
+        },
+    },
+)
 def event_series_detail(request, series_id):
     """GET/PATCH ``/api/event-series/<series_id>``.
 
@@ -379,6 +564,84 @@ def _dedup_key(start_datetime):
 @token_required
 @csrf_exempt
 @require_methods("POST")
+@openapi_spec(
+    tag="Event Series",
+    summary="Bulk-create occurrences for an event series",
+    methods={
+        "POST": {
+            "summary": "Bulk create occurrences",
+            "description": (
+                "Atomic create of N events linked to ``series_id``. "
+                "Any per-row validation failure rolls the whole batch "
+                "back; the response includes the failing index. "
+                "Dedup key is ``(event_series_id, start_datetime)`` "
+                "rounded to the minute -- in-batch duplicates return "
+                "422 ``duplicate_in_batch``, and rows matching existing "
+                "series events are silently counted as "
+                "``skipped_existing`` for idempotent retries."
+            ),
+            "request_body": {
+                "required": ["occurrences"],
+                "properties": {
+                    "occurrences": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "start_datetime": {
+                                    "type": "string",
+                                    "format": "date-time",
+                                },
+                                "title": {"type": "string"},
+                                "slug": {"type": "string"},
+                            },
+                            "required": ["start_datetime"],
+                        },
+                    },
+                },
+                "example": {
+                    "occurrences": [
+                        {"start_datetime": "2026-05-05T17:00:00+02:00"},
+                        {"start_datetime": "2026-05-12T17:00:00+02:00"},
+                    ],
+                },
+            },
+            "responses": {
+                201: {
+                    "description": "Bulk create summary.",
+                    "example": {
+                        "created": 2,
+                        "skipped_existing": 0,
+                        "occurrence_ids": [42, 43],
+                    },
+                },
+                400: {
+                    "description": "Invalid JSON or missing field.",
+                    "example": {
+                        "error": "Missing required field: start_datetime",
+                        "code": "missing_field",
+                        "details": {"index": 0, "field": "start_datetime"},
+                    },
+                },
+                404: {"description": "Event series not found."},
+                422: {
+                    "description": (
+                        "Validation error or in-batch duplicate "
+                        "start_datetime."
+                    ),
+                    "example": {
+                        "error": "Duplicate start_datetime within the batch",
+                        "code": "duplicate_in_batch",
+                        "details": {
+                            "indexes": [0, 1],
+                            "start_datetime": "2026-05-05T17:00:00",
+                        },
+                    },
+                },
+            },
+        },
+    },
+)
 def event_series_occurrences_bulk(request, series_id):
     """``POST /api/event-series/<series_id>/occurrences/bulk``.
 
@@ -592,6 +855,76 @@ def event_series_occurrences_bulk(request, series_id):
 @token_required
 @csrf_exempt
 @require_methods("GET", "PATCH", "DELETE")
+@openapi_spec(
+    tag="Event Series",
+    summary="Retrieve, update, or attempt to delete a series occurrence",
+    methods={
+        "GET": {
+            "summary": "Retrieve an occurrence",
+            "responses": {
+                200: {"description": "Occurrence detail."},
+                404: {
+                    "description": (
+                        "Event series or occurrence not found."
+                    ),
+                    "example": {
+                        "error": "Event not found",
+                        "code": "unknown_event",
+                    },
+                },
+            },
+        },
+        "PATCH": {
+            "summary": "Update an occurrence",
+            "description": (
+                "Cancel with ``{\"status\": \"cancelled\"}``. The API "
+                "does NOT auto-send attendee notifications in v1."
+            ),
+            "request_body": {
+                "properties": {
+                    "title": {"type": "string"},
+                    "status": {"type": "string"},
+                    "start_datetime": {
+                        "type": "string",
+                        "format": "date-time",
+                    },
+                    "end_datetime": {
+                        "type": "string",
+                        "format": "date-time",
+                    },
+                },
+                "example": {"status": "cancelled"},
+            },
+            "responses": {
+                200: {"description": "Occurrence updated."},
+                400: {"description": "Invalid JSON body."},
+                404: {"description": "Series or occurrence not found."},
+                422: {
+                    "description": (
+                        "Validation error or attempt to write a "
+                        "read-only field."
+                    ),
+                },
+            },
+        },
+        "DELETE": {
+            "summary": "DELETE is not available on this route",
+            "description": (
+                "Cancel an occurrence with ``PATCH status=cancelled`` "
+                "instead. DELETE returns a structured 405."
+            ),
+            "responses": {
+                405: {
+                    "description": "Occurrence deletion is not available.",
+                    "example": {
+                        "error": OCCURRENCE_DELETE_NOT_AVAILABLE_MESSAGE,
+                        "code": "occurrence_delete_not_available",
+                    },
+                },
+            },
+        },
+    },
+)
 def event_series_occurrence_detail(request, series_id, occurrence_id):
     """GET/PATCH ``/api/event-series/<series_id>/occurrences/<occurrence_id>``.
 

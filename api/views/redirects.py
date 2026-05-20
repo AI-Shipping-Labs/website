@@ -21,10 +21,21 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from integrations.middleware import clear_redirect_cache
 from integrations.models import Redirect
+
+_REDIRECT_EXAMPLE = {
+    "id": 7,
+    "source_path": "/old-page",
+    "target_path": "/new-page",
+    "redirect_type": 301,
+    "is_active": True,
+    "created_at": "2026-04-15T12:00:00+00:00",
+    "updated_at": "2026-04-15T12:00:00+00:00",
+}
 
 VALID_REDIRECT_TYPES = {301, 302}
 
@@ -204,6 +215,72 @@ def _conflict_response(source_path, *, index=None):
 @token_required
 @csrf_exempt
 @require_methods("GET", "POST")
+@openapi_spec(
+    tag="Redirects",
+    summary="List or create URL redirects",
+    methods={
+        "GET": {
+            "summary": "List redirects",
+            "query": {
+                "is_active": {
+                    "type": "string",
+                    "enum": ["true", "false"],
+                    "required": False,
+                    "description": "Filter on the activation flag.",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "List of redirects.",
+                    "example": {"redirects": [_REDIRECT_EXAMPLE]},
+                },
+            },
+        },
+        "POST": {
+            "summary": "Create a redirect",
+            "request_body": {
+                "required": ["source_path", "target_path"],
+                "properties": {
+                    "source_path": {"type": "string"},
+                    "target_path": {"type": "string"},
+                    "redirect_type": {
+                        "type": "integer",
+                        "enum": [301, 302],
+                    },
+                    "is_active": {"type": "boolean"},
+                },
+                "example": {
+                    "source_path": "/old-page",
+                    "target_path": "/new-page",
+                    "redirect_type": 301,
+                },
+            },
+            "responses": {
+                201: {
+                    "description": "Redirect created.",
+                    "example": _REDIRECT_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                409: {
+                    "description": (
+                        "A redirect with the same source_path already "
+                        "exists."
+                    ),
+                    "example": {
+                        "error": "A redirect for '/old-page' already exists",
+                        "code": "source_path_conflict",
+                    },
+                },
+                422: {
+                    "description": (
+                        "Validation error: source_path == target_path "
+                        "(loop), unknown redirect_type, missing field."
+                    ),
+                },
+            },
+        },
+    },
+)
 def redirects_collection(request):
     """``GET / POST /api/redirects``.
 
@@ -252,6 +329,64 @@ def redirects_collection(request):
 @token_required
 @csrf_exempt
 @require_methods("GET", "PATCH", "DELETE")
+@openapi_spec(
+    tag="Redirects",
+    summary="Retrieve, update, or delete a redirect",
+    methods={
+        "GET": {
+            "summary": "Retrieve a redirect",
+            "responses": {
+                200: {
+                    "description": "Redirect detail.",
+                    "example": _REDIRECT_EXAMPLE,
+                },
+                404: {
+                    "description": "Redirect not found.",
+                    "example": {
+                        "error": "Redirect not found",
+                        "code": "redirect_not_found",
+                    },
+                },
+            },
+        },
+        "PATCH": {
+            "summary": "Update a redirect",
+            "request_body": {
+                "properties": {
+                    "source_path": {"type": "string"},
+                    "target_path": {"type": "string"},
+                    "redirect_type": {
+                        "type": "integer",
+                        "enum": [301, 302],
+                    },
+                    "is_active": {"type": "boolean"},
+                },
+                "example": {"is_active": False},
+            },
+            "responses": {
+                200: {
+                    "description": "Redirect updated.",
+                    "example": _REDIRECT_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                404: {"description": "Redirect not found."},
+                409: {
+                    "description": (
+                        "Source path conflict with another redirect."
+                    ),
+                },
+                422: {"description": "Validation error or loop check failed."},
+            },
+        },
+        "DELETE": {
+            "summary": "Delete a redirect",
+            "responses": {
+                204: {"description": "Redirect deleted (empty body)."},
+                404: {"description": "Redirect not found."},
+            },
+        },
+    },
+)
 def redirect_detail(request, redirect_id):
     """``GET / PATCH / DELETE /api/redirects/<id>``."""
     redirect_obj = Redirect.objects.filter(pk=redirect_id).first()
@@ -312,6 +447,73 @@ def redirect_detail(request, redirect_id):
 @token_required
 @csrf_exempt
 @require_methods("POST")
+@openapi_spec(
+    tag="Redirects",
+    summary="Bulk upsert redirects",
+    methods={
+        "POST": {
+            "summary": "Bulk upsert redirects",
+            "description": (
+                "Atomic upsert by ``source_path``. Any row failure "
+                "rolls every row back. ``action`` is "
+                "``created`` / ``updated`` / ``skipped`` (where "
+                "``skipped`` means the row was identical to the "
+                "existing record)."
+            ),
+            "request_body": {
+                "required": ["redirects"],
+                "properties": {
+                    "redirects": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["source_path", "target_path"],
+                            "properties": {
+                                "source_path": {"type": "string"},
+                                "target_path": {"type": "string"},
+                                "redirect_type": {
+                                    "type": "integer",
+                                    "enum": [301, 302],
+                                },
+                                "is_active": {"type": "boolean"},
+                            },
+                        },
+                    },
+                },
+                "example": {
+                    "redirects": [
+                        {
+                            "source_path": "/old-page",
+                            "target_path": "/new-page",
+                            "redirect_type": 301,
+                        },
+                    ],
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Bulk upsert summary.",
+                    "example": {
+                        "created": 1,
+                        "updated": 0,
+                        "skipped": 0,
+                        "results": [
+                            {
+                                "index": 0,
+                                "source_path": "/old-page",
+                                "action": "created",
+                                "id": 7,
+                            },
+                        ],
+                        "warnings": [],
+                    },
+                },
+                400: {"description": "Invalid JSON or missing field."},
+                422: {"description": "Per-row validation error."},
+            },
+        },
+    },
+)
 def redirects_bulk_upsert(request):
     """``POST /api/redirects/bulk``.
 

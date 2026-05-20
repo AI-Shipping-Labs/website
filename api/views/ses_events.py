@@ -72,6 +72,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from accounts.utils.tags import add_tag
+from api.openapi import openapi_spec
 from email_app.models import EmailLog, SesEvent
 from integrations.services.ses import validate_sns_notification
 
@@ -91,6 +92,83 @@ TAG_COMPLAINED = "complained"
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@openapi_spec(
+    tag="SES Webhook",
+    summary="SNS-delivered SES event webhook",
+    description=(
+        "Receives SNS notifications for SES bounce / complaint / "
+        "delivery / open / click events. The SNS message signature is "
+        "the authentication layer here -- there is no bearer token. "
+        "Signatures are validated via "
+        "``integrations.services.ses.validate_sns_notification`` "
+        "before any DB work runs. Idempotency is enforced via the "
+        "unique ``SesEvent.message_id`` index so retried deliveries "
+        "are a no-op."
+    ),
+    security=[],
+    methods={
+        "POST": {
+            "summary": "Receive an SNS-delivered SES event",
+            "description": (
+                "Accepts ``SubscriptionConfirmation``, "
+                "``UnsubscribeConfirmation``, and ``Notification`` SNS "
+                "types. The inner SES payload uses either "
+                "``notificationType`` (identity notifications) or "
+                "``eventType`` (configuration-set destinations); both "
+                "shapes are handled."
+            ),
+            "request_body": {
+                "properties": {
+                    "Type": {
+                        "type": "string",
+                        "enum": [
+                            "Notification",
+                            "SubscriptionConfirmation",
+                            "UnsubscribeConfirmation",
+                        ],
+                    },
+                    "MessageId": {"type": "string"},
+                    "Message": {
+                        "type": "string",
+                        "description": (
+                            "Inner SES JSON payload as a string."
+                        ),
+                    },
+                    "SubscribeURL": {
+                        "type": "string",
+                        "format": "uri",
+                    },
+                    "Signature": {"type": "string"},
+                    "SigningCertURL": {"type": "string"},
+                },
+                "example": {
+                    "Type": "Notification",
+                    "MessageId": "11111111-2222-3333-4444-555555555555",
+                    "Message": "{\"notificationType\": \"Bounce\", ...}",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": (
+                        "Event accepted, ignored, or duplicate."
+                    ),
+                    "example": {"status": "ok"},
+                },
+                400: {
+                    "description": (
+                        "Malformed body or missing MessageId."
+                    ),
+                    "example": {"error": "Missing MessageId"},
+                },
+                403: {
+                    "description": (
+                        "SNS signature failed validation."
+                    ),
+                },
+            },
+        },
+    },
+)
 def ses_events(request):
     """Webhook entry point for SNS-delivered SES events."""
     raw_body = request.body

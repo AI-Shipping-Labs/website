@@ -34,9 +34,21 @@ from django.views.decorators.csrf import csrf_exempt
 from django_q.models import Task
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.worker import serialize_task_detail, serialize_task_row
 from api.utils import require_methods
+
+_WORKER_TASK_EXAMPLE = {
+    "id": "ab12cd34ef56",
+    "name": "complete-finished-events",
+    "group": "scheduled",
+    "func": "events.tasks.complete_finished_events.complete_finished_events",
+    "started": "2026-05-20T04:00:00+00:00",
+    "stopped": "2026-05-20T04:00:02+00:00",
+    "success": True,
+    "result": None,
+}
 
 # Caps. ``LIMIT_MAX`` is the absolute ceiling on rows the API will
 # return in one response; clients asking for more are clamped down.
@@ -106,6 +118,30 @@ def _parse_limit(raw, default):
 @token_required
 @csrf_exempt
 @require_methods("GET")
+@openapi_spec(
+    tag="Worker Tasks",
+    summary="Get a single django-q task by id",
+    methods={
+        "GET": {
+            "summary": "Get worker task detail",
+            "description": (
+                "Returns the full payload, timing, and result for one "
+                "django-q ``Task`` row. Read-only — there is no "
+                "retry/delete surface in the API."
+            ),
+            "responses": {
+                200: {
+                    "description": "Task detail.",
+                    "example": _WORKER_TASK_EXAMPLE,
+                },
+                404: {
+                    "description": "No task with this id.",
+                    "example": {"error": "Task not found"},
+                },
+            },
+        },
+    },
+)
 def worker_task_detail(request, task_id):
     """``GET /api/worker/tasks/<task_id>`` -- single task detail.
 
@@ -123,6 +159,56 @@ def worker_task_detail(request, task_id):
 @token_required
 @csrf_exempt
 @require_methods("GET")
+@openapi_spec(
+    tag="Worker Tasks",
+    summary="List failed worker tasks (newest first)",
+    methods={
+        "GET": {
+            "summary": "List failed worker tasks",
+            "description": (
+                "Newest-first list of django-q tasks with "
+                "``success=False``. Use ``since`` to scope to a deploy."
+            ),
+            "query": {
+                "limit": {
+                    "type": "integer",
+                    "required": False,
+                    "description": (
+                        "Page size. Default 20; clamped to 200."
+                    ),
+                },
+                "since": {
+                    "type": "string",
+                    "required": False,
+                    "description": (
+                        "ISO-8601 datetime; only tasks started at or "
+                        "after this are returned."
+                    ),
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Failed-task page.",
+                    "example": {
+                        "tasks": [
+                            dict(_WORKER_TASK_EXAMPLE, success=False),
+                        ],
+                        "count": 1,
+                        "limit": 20,
+                    },
+                },
+                422: {
+                    "description": "Invalid ``limit`` or ``since``.",
+                    "example": {
+                        "error": "Invalid integer: 'abc'",
+                        "code": "validation_error",
+                        "details": {"field": "limit", "value": "abc"},
+                    },
+                },
+            },
+        },
+    },
+)
 def worker_tasks_failed(request):
     """``GET /api/worker/tasks/failed`` -- newest-first failed-task list.
 
@@ -153,6 +239,75 @@ def worker_tasks_failed(request):
 @token_required
 @csrf_exempt
 @require_methods("GET")
+@openapi_spec(
+    tag="Worker Tasks",
+    summary="List worker tasks across statuses",
+    methods={
+        "GET": {
+            "summary": "List worker tasks",
+            "description": (
+                "Newest-first list of django-q tasks. Default returns "
+                "the most recent 50 across success and failed. "
+                "``status``, ``group``, ``since``, and ``limit`` narrow "
+                "the result."
+            ),
+            "query": {
+                "status": {
+                    "type": "string",
+                    "enum": ["success", "failed", "all"],
+                    "required": False,
+                    "description": (
+                        "Bucket filter. Default ``all``."
+                    ),
+                },
+                "group": {
+                    "type": "string",
+                    "required": False,
+                    "description": "Exact ``Task.group`` match.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "required": False,
+                    "description": (
+                        "Page size. Default 50; clamped to 200."
+                    ),
+                },
+                "since": {
+                    "type": "string",
+                    "required": False,
+                    "description": (
+                        "ISO-8601 datetime; only tasks started at or "
+                        "after this are returned."
+                    ),
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Task page.",
+                    "example": {
+                        "tasks": [_WORKER_TASK_EXAMPLE],
+                        "count": 1,
+                        "limit": 50,
+                    },
+                },
+                422: {
+                    "description": (
+                        "Invalid ``status``, ``limit``, or ``since``."
+                    ),
+                    "example": {
+                        "error": "Invalid status value: 'queued'",
+                        "code": "validation_error",
+                        "details": {
+                            "field": "status",
+                            "value": "queued",
+                            "allowed": ["success", "failed", "all"],
+                        },
+                    },
+                },
+            },
+        },
+    },
+)
 def worker_tasks_collection(request):
     """``GET /api/worker/tasks`` -- generic list across statuses.
 

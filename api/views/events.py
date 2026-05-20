@@ -18,6 +18,7 @@ from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from content.access import VISIBILITY_CHOICES
@@ -69,6 +70,35 @@ VALID_STATUSES = {value for value, _label in EVENT_STATUS_CHOICES}
 VALID_ORIGINS = {value for value, _label in EVENT_ORIGIN_CHOICES}
 VALID_EXTERNAL_HOSTS = {value for value, _label in EXTERNAL_HOST_CHOICES}
 VALID_REQUIRED_LEVELS = {value for value, _label in VISIBILITY_CHOICES}
+
+_VALID_STATUSES_ENUM = sorted(VALID_STATUSES)
+_VALID_ORIGINS_ENUM = sorted(VALID_ORIGINS)
+
+_EVENT_EXAMPLE = {
+    "id": 42,
+    "slug": "office-hours-2026-05-05",
+    "title": "Office Hours: May 5",
+    "description": "Open Q&A.",
+    "kind": "standard",
+    "platform": "zoom",
+    "start_datetime": "2026-05-05T17:00:00+02:00",
+    "end_datetime": "2026-05-05T18:00:00+02:00",
+    "timezone": "Europe/Berlin",
+    "zoom_join_url": "https://zoom.us/j/123",
+    "location": "",
+    "tags": ["sprint:may-2026"],
+    "required_level": 0,
+    "max_participants": None,
+    "status": "scheduled",
+    "external_host": "",
+    "published": True,
+    "origin": "studio",
+    "source_repo": "",
+    "source_path": "",
+    "editable": True,
+    "created_at": "2026-04-15T12:00:00+00:00",
+    "updated_at": "2026-04-15T12:00:00+00:00",
+}
 
 
 def _iso(value):
@@ -300,6 +330,112 @@ def _save_event_or_error(event):
 @token_required
 @csrf_exempt
 @require_methods("GET", "POST", "DELETE")
+@openapi_spec(
+    tag="Events",
+    summary="List, create, or attempt to delete events",
+    methods={
+        "GET": {
+            "summary": "List events",
+            "query": {
+                "status": {
+                    "type": "string",
+                    "enum": _VALID_STATUSES_ENUM,
+                    "required": False,
+                },
+                "origin": {
+                    "type": "string",
+                    "enum": _VALID_ORIGINS_ENUM,
+                    "required": False,
+                },
+                "q": {
+                    "type": "string",
+                    "required": False,
+                    "description": "icontains match on title.",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "List of events.",
+                    "example": {"events": [_EVENT_EXAMPLE]},
+                },
+                422: {"description": "Unknown filter value."},
+            },
+        },
+        "POST": {
+            "summary": "Create a Studio-origin event",
+            "description": (
+                "Studio/API-origin events can be created through this "
+                "endpoint. GitHub-origin events are read-only here."
+            ),
+            "request_body": {
+                "required": ["title", "start_datetime"],
+                "properties": {
+                    "title": {"type": "string"},
+                    "slug": {"type": "string"},
+                    "description": {"type": "string"},
+                    "kind": {"type": "string"},
+                    "platform": {"type": "string"},
+                    "start_datetime": {
+                        "type": "string",
+                        "format": "date-time",
+                    },
+                    "end_datetime": {
+                        "type": "string",
+                        "format": "date-time",
+                    },
+                    "timezone": {"type": "string"},
+                    "zoom_join_url": {"type": "string"},
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "required_level": {"type": "integer"},
+                    "max_participants": {
+                        "type": "integer",
+                        "nullable": True,
+                    },
+                    "status": {"type": "string"},
+                    "external_host": {"type": "string"},
+                    "published": {"type": "boolean"},
+                },
+                "example": {
+                    "title": "Office Hours: May 5",
+                    "start_datetime": "2026-05-05T17:00:00+02:00",
+                },
+            },
+            "responses": {
+                201: {
+                    "description": "Event created.",
+                    "example": _EVENT_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                422: {
+                    "description": (
+                        "Validation error or attempt to write a "
+                        "read-only origin field."
+                    ),
+                },
+            },
+        },
+        "DELETE": {
+            "summary": "DELETE is not available on this route",
+            "description": (
+                "Event deletion is intentionally unavailable through "
+                "the API; operators must use Studio so ownership and "
+                "sync rules stay explicit."
+            ),
+            "responses": {
+                405: {
+                    "description": "Event deletion is not available.",
+                    "example": {
+                        "error": DELETE_NOT_AVAILABLE_MESSAGE,
+                        "code": "event_delete_not_available",
+                    },
+                },
+            },
+        },
+    },
+)
 def events_collection(request):
     """GET/POST/DELETE ``/api/events``."""
     if request.method == "DELETE":
@@ -366,6 +502,77 @@ def events_collection(request):
 @token_required
 @csrf_exempt
 @require_methods("GET", "PATCH", "DELETE")
+@openapi_spec(
+    tag="Events",
+    summary="Retrieve, update, or attempt to delete an event",
+    methods={
+        "GET": {
+            "summary": "Retrieve an event",
+            "responses": {
+                200: {
+                    "description": "Event detail.",
+                    "example": _EVENT_EXAMPLE,
+                },
+                404: {
+                    "description": "Event not found.",
+                    "example": {
+                        "error": "Event not found",
+                        "code": "unknown_event",
+                    },
+                },
+            },
+        },
+        "PATCH": {
+            "summary": "Update an event",
+            "description": (
+                "Synced GitHub events are read-only through this API "
+                "and return 409 ``synced_event_read_only``."
+            ),
+            "request_body": {
+                "properties": {
+                    "title": {"type": "string"},
+                    "description": {"type": "string"},
+                    "status": {"type": "string"},
+                    "published": {"type": "boolean"},
+                },
+                "example": {"status": "scheduled", "published": True},
+            },
+            "responses": {
+                200: {
+                    "description": "Event updated.",
+                    "example": _EVENT_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                404: {"description": "Event not found."},
+                409: {
+                    "description": "Synced GitHub event cannot be edited.",
+                    "example": {
+                        "error": "Synced GitHub events are read-only through this API",
+                        "code": "synced_event_read_only",
+                    },
+                },
+                422: {
+                    "description": (
+                        "Validation error or attempt to write a "
+                        "read-only origin field."
+                    ),
+                },
+            },
+        },
+        "DELETE": {
+            "summary": "DELETE is not available on this route",
+            "responses": {
+                405: {
+                    "description": "Event deletion is not available.",
+                    "example": {
+                        "error": DELETE_NOT_AVAILABLE_MESSAGE,
+                        "code": "event_delete_not_available",
+                    },
+                },
+            },
+        },
+    },
+)
 def event_detail(request, slug):
     """GET/PATCH/DELETE ``/api/events/<slug>``."""
     if request.method == "DELETE":

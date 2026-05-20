@@ -26,6 +26,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.plans import serialize_interview_note
 from api.utils import parse_json_body, require_methods
@@ -45,6 +46,21 @@ User = get_user_model()
 VALID_VISIBILITIES = {choice for choice, _label in VISIBILITY_CHOICES}
 VALID_KINDS = {choice for choice, _label in KIND_CHOICES}
 
+_VISIBILITIES_ENUM = sorted(VALID_VISIBILITIES)
+_KINDS_ENUM = sorted(VALID_KINDS)
+
+_INTERVIEW_NOTE_EXAMPLE = {
+    "id": 12,
+    "plan_id": 5,
+    "member_email": "alice@example.com",
+    "created_by_email": "staff@example.com",
+    "visibility": "external",
+    "kind": "general",
+    "body": "Great onboarding chat.",
+    "created_at": "2026-04-15T12:00:00+00:00",
+    "updated_at": "2026-04-15T12:00:00+00:00",
+}
+
 
 # All staff-or-not branches in this module go through
 # ``bearer_sees_internal_notes`` from ``_permissions.py``. There is no
@@ -56,6 +72,53 @@ VALID_KINDS = {choice for choice, _label in KIND_CHOICES}
 @token_required
 @csrf_exempt
 @require_methods("GET")
+@openapi_spec(
+    tag="Interview Notes",
+    summary="List interview notes attached to a plan",
+    methods={
+        "GET": {
+            "summary": "List interview notes for a plan",
+            "description": (
+                "Visibility goes through "
+                "``visible_interview_notes_for``: a non-staff bearer "
+                "asking with ``?visibility=internal`` gets 403 "
+                "``forbidden_internal_note``."
+            ),
+            "query": {
+                "visibility": {
+                    "type": "string",
+                    "enum": _VISIBILITIES_ENUM,
+                    "required": False,
+                    "description": "Filter on note visibility.",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "List of interview notes.",
+                    "example": {
+                        "interview_notes": [_INTERVIEW_NOTE_EXAMPLE],
+                    },
+                },
+                403: {
+                    "description": (
+                        "Non-staff bearer asked for internal notes."
+                    ),
+                    "example": {
+                        "error": "Internal notes are not visible to this token",
+                        "code": "forbidden_internal_note",
+                    },
+                },
+                404: {
+                    "description": "Plan not found or not visible.",
+                    "example": {
+                        "error": "Plan not found",
+                        "code": "unknown_plan",
+                    },
+                },
+            },
+        },
+    },
+)
 def plan_interview_notes(request, plan_id):
     """``GET /api/plans/<plan_id>/interview-notes/``."""
     plan = visible_plans_for(request.user).filter(pk=plan_id).first()
@@ -90,6 +153,48 @@ def plan_interview_notes(request, plan_id):
 @token_required
 @csrf_exempt
 @require_methods("GET")
+@openapi_spec(
+    tag="Interview Notes",
+    summary="List interview notes for a specific user",
+    methods={
+        "GET": {
+            "summary": "List a user's interview notes",
+            "description": (
+                "Staff-only. Routed by three URL aliases under "
+                "``/api/users/<email>/`` -- the OpenAPI spec emits one "
+                "operation per alias. ``?plan=null`` preserves the "
+                "inbox-only behaviour; ``?plan=<id>`` narrows to one "
+                "plan."
+            ),
+            "query": {
+                "plan": {
+                    "type": "string",
+                    "required": False,
+                    "description": (
+                        "Plan id, or the literal string ``null`` to "
+                        "narrow to notes with no plan attached."
+                    ),
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "List of interview notes.",
+                    "example": {
+                        "interview_notes": [_INTERVIEW_NOTE_EXAMPLE],
+                    },
+                },
+                422: {
+                    "description": "Unknown user or bad plan filter.",
+                    "example": {
+                        "error": "User not found",
+                        "code": "unknown_user",
+                        "details": {"email": "Unknown user"},
+                    },
+                },
+            },
+        },
+    },
+)
 def user_interview_notes(request, email):
     """``GET /api/users/<email>/interview-notes/``.
 
@@ -132,6 +237,82 @@ def user_interview_notes(request, email):
 @token_required
 @csrf_exempt
 @require_methods("GET", "PATCH", "DELETE")
+@openapi_spec(
+    tag="Interview Notes",
+    summary="Retrieve, update, or delete an interview note",
+    description=(
+        "Routed by three URL aliases: ``/api/interview-notes/<id>``, "
+        "``/api/member-notes/<id>``, ``/api/member-notes/<id>/``. The "
+        "OpenAPI spec emits one operation per alias automatically. A "
+        "non-staff bearer asking for an internal note id gets 404 "
+        "``unknown_note`` (the bearer cannot tell whether the row "
+        "exists)."
+    ),
+    methods={
+        "GET": {
+            "summary": "Retrieve an interview note",
+            "responses": {
+                200: {
+                    "description": "Interview note detail.",
+                    "example": _INTERVIEW_NOTE_EXAMPLE,
+                },
+                404: {
+                    "description": "Note not found or not visible.",
+                    "example": {
+                        "error": "Interview note not found",
+                        "code": "unknown_note",
+                    },
+                },
+            },
+        },
+        "PATCH": {
+            "summary": "Update an interview note",
+            "description": (
+                "Non-staff bearers cannot promote a note to "
+                "``internal`` visibility."
+            ),
+            "request_body": {
+                "properties": {
+                    "body": {"type": "string"},
+                    "kind": {
+                        "type": "string",
+                        "enum": _KINDS_ENUM,
+                    },
+                    "visibility": {
+                        "type": "string",
+                        "enum": _VISIBILITIES_ENUM,
+                    },
+                },
+                "example": {"body": "Updated body"},
+            },
+            "responses": {
+                200: {
+                    "description": "Note updated.",
+                    "example": _INTERVIEW_NOTE_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                403: {
+                    "description": (
+                        "Non-staff bearer tried to promote to internal."
+                    ),
+                    "example": {
+                        "error": "Cannot create or promote an internal note",
+                        "code": "forbidden_internal_note",
+                    },
+                },
+                404: {"description": "Note not found."},
+                422: {"description": "Unknown kind or visibility."},
+            },
+        },
+        "DELETE": {
+            "summary": "Delete an interview note",
+            "responses": {
+                204: {"description": "Note deleted (empty body)."},
+                404: {"description": "Note not found."},
+            },
+        },
+    },
+)
 def interview_note_detail(request, note_id):
     """``GET / PATCH / DELETE /api/interview-notes/<note_id>/``.
 
@@ -213,6 +394,67 @@ def interview_note_detail(request, note_id):
 @token_required
 @csrf_exempt
 @require_methods("POST")
+@openapi_spec(
+    tag="Interview Notes",
+    summary="Create an interview note",
+    description=(
+        "Routed by three URL aliases: ``/api/interview-notes``, "
+        "``/api/member-notes``, ``/api/member-notes/``. The OpenAPI "
+        "spec emits one operation per alias automatically."
+    ),
+    methods={
+        "POST": {
+            "summary": "Create an interview note",
+            "description": (
+                "Non-staff bearers cannot create a note with "
+                "``visibility=internal``. The plan_id is optional; "
+                "when supplied it must reference a plan the bearer can "
+                "see."
+            ),
+            "request_body": {
+                "required": ["user_email", "body"],
+                "properties": {
+                    "user_email": {"type": "string", "format": "email"},
+                    "body": {"type": "string"},
+                    "plan_id": {"type": "integer", "nullable": True},
+                    "visibility": {
+                        "type": "string",
+                        "enum": _VISIBILITIES_ENUM,
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": _KINDS_ENUM,
+                    },
+                },
+                "example": {
+                    "user_email": "alice@example.com",
+                    "body": "Onboarding notes...",
+                    "visibility": "external",
+                    "kind": "general",
+                },
+            },
+            "responses": {
+                201: {
+                    "description": "Note created.",
+                    "example": _INTERVIEW_NOTE_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON or missing fields."},
+                403: {
+                    "description": (
+                        "Non-staff bearer tried to create an internal "
+                        "note."
+                    ),
+                    "example": {
+                        "error": "Cannot create an internal note",
+                        "code": "forbidden_internal_note",
+                    },
+                },
+                404: {"description": "Plan not found or not visible."},
+                422: {"description": "Unknown user, kind, or visibility."},
+            },
+        },
+    },
+)
 def interview_notes_create(request):
     """``POST /api/interview-notes/``."""
     data, parse_error = parse_json_body(request)

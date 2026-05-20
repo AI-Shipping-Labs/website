@@ -20,11 +20,18 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from api.views._permissions import bearer_is_admin
 from content.access import get_user_level
 from plans.models import Plan, Sprint, SprintEnrollment
+
+_SPRINT_ENROLLMENT_EXAMPLE = {
+    "user_email": "alice@example.com",
+    "enrolled_at": "2026-04-15T12:00:00+00:00",
+    "enrolled_by": "staff@example.com",
+}
 
 User = get_user_model()
 
@@ -66,6 +73,77 @@ def _normalize_emails(raw):
 @token_required
 @csrf_exempt
 @require_methods('GET', 'POST')
+@openapi_spec(
+    tag="Sprint Enrollments",
+    summary="List or bulk-enroll sprint participants",
+    methods={
+        "GET": {
+            "summary": "List sprint enrollments",
+            "description": (
+                "Staff sees every enrollment in the sprint; non-staff "
+                "sees only their own row."
+            ),
+            "responses": {
+                200: {
+                    "description": "List of enrollments.",
+                    "example": {
+                        "enrollments": [_SPRINT_ENROLLMENT_EXAMPLE],
+                    },
+                },
+                404: {
+                    "description": "Sprint not found.",
+                    "example": {
+                        "error": "Sprint not found",
+                        "code": "unknown_sprint",
+                    },
+                },
+            },
+        },
+        "POST": {
+            "summary": "Bulk enroll users (staff-only)",
+            "description": (
+                "Tier mismatches are flagged as ``under_tier`` "
+                "(warning) but the enrollment is still created -- "
+                "staff are explicitly choosing to enroll the user."
+            ),
+            "request_body": {
+                "required": ["user_emails"],
+                "properties": {
+                    "user_emails": {
+                        "type": "array",
+                        "items": {"type": "string", "format": "email"},
+                    },
+                },
+                "example": {
+                    "user_emails": [
+                        "alice@example.com",
+                        "bob@example.com",
+                    ],
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Bulk enroll summary.",
+                    "example": {
+                        "enrolled": 1,
+                        "already_enrolled": 1,
+                        "under_tier": [],
+                        "unknown_emails": [],
+                    },
+                },
+                403: {
+                    "description": "Non-staff bearer.",
+                    "example": {
+                        "error": "Bulk enrollment is staff-only",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                404: {"description": "Sprint not found."},
+                422: {"description": "Missing or invalid user_emails."},
+            },
+        },
+    },
+)
 def sprint_enrollments_collection(request, slug):
     """``GET / POST /api/sprints/<slug>/enrollments``."""
     sprint = Sprint.objects.filter(slug=slug).first()
@@ -158,6 +236,32 @@ def sprint_enrollments_collection(request, slug):
 @token_required
 @csrf_exempt
 @require_methods('DELETE')
+@openapi_spec(
+    tag="Sprint Enrollments",
+    summary="Unenroll a user from a sprint (staff-only)",
+    methods={
+        "DELETE": {
+            "summary": "Unenroll a user from a sprint",
+            "description": (
+                "Staff-only. Idempotent: returns 204 whether or not a "
+                "row was deleted. Auto-privates the user's plan if one "
+                "exists, mirroring the member-leave flow. There is no "
+                "GET / PATCH on this URL."
+            ),
+            "responses": {
+                204: {"description": "Enrollment removed (empty body)."},
+                403: {
+                    "description": "Non-staff bearer.",
+                    "example": {
+                        "error": "Enrollment delete is staff-only",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                404: {"description": "Sprint not found."},
+            },
+        },
+    },
+)
 def sprint_enrollment_detail(request, slug, email):
     """``DELETE /api/sprints/<slug>/enrollments/<email>`` -- staff only.
 

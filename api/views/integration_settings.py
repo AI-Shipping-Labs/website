@@ -40,6 +40,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import require_methods
 from integrations.config import clear_config_cache, resolve_source
@@ -90,6 +91,105 @@ def _coerce_boolean_value(raw_value):
 @token_required
 @csrf_exempt
 @require_methods("GET", "POST")
+@openapi_spec(
+    tag="Integration Settings",
+    summary="List or update integration settings",
+    description=(
+        "GET lists registered keys plus metadata + a ``source`` enum "
+        "indicating WHERE the value resolves from; the value itself is "
+        "NEVER returned. POST writes ``IntegrationSetting`` rows for "
+        "keys in the registry. Both responses are scrubbed of any "
+        "stored or submitted secret value."
+    ),
+    methods={
+        "GET": {
+            "summary": "List integration settings (no values)",
+            "description": (
+                "Returns one entry per registered key with its "
+                "``group``, ``label``, ``description``, "
+                "``is_secret``, ``is_boolean``, ``configured`` flag, "
+                "``source`` (``db`` / ``env`` / ``django_settings`` / "
+                "``default`` / ``null``), and a ``docs_url`` path. "
+                "The actual stored or env value is NEVER included."
+            ),
+            "responses": {
+                200: {
+                    "description": "Registered settings metadata.",
+                    "example": {
+                        "settings": [
+                            {
+                                "key": "STRIPE_SECRET_KEY",
+                                "group": "stripe",
+                                "label": "Stripe",
+                                "description": "Stripe API secret key.",
+                                "is_secret": True,
+                                "is_boolean": False,
+                                "configured": True,
+                                "source": "db",
+                                "docs_url": "_docs/integrations/stripe.md#stripe_secret_key",
+                            },
+                        ],
+                    },
+                },
+            },
+        },
+        "POST": {
+            "summary": "Batch update integration settings",
+            "description": (
+                "All-or-nothing batch: any unknown key fails the "
+                "entire batch with 400 ``invalid_key``. Empty-string "
+                "on a non-boolean key clears the DB override. "
+                "Response never echoes key names or values."
+            ),
+            "request_body": {
+                "required": ["updates"],
+                "properties": {
+                    "updates": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["key", "value"],
+                            "properties": {
+                                "key": {"type": "string"},
+                                "value": {
+                                    "oneOf": [
+                                        {"type": "string"},
+                                        {"type": "boolean"},
+                                        {"type": "null"},
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                },
+                "example": {
+                    "updates": [
+                        {
+                            "key": "CONTENT_CDN_BASE",
+                            "value": "https://cdn.example.com",
+                        },
+                    ],
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Batch applied.",
+                    "example": {"status": "ok", "updated": 1},
+                },
+                400: {
+                    "description": (
+                        "Malformed body, invalid key, or invalid value."
+                    ),
+                    "example": {
+                        "error": "One or more keys are not in the integration registry",
+                        "code": "invalid_key",
+                        "details": {"invalid_keys": ["BAD_KEY"]},
+                    },
+                },
+            },
+        },
+    },
+)
 def integration_settings(request):
     """Dispatch GET (list, no values — issue #640) and POST (write — #633).
 

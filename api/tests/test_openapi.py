@@ -13,8 +13,11 @@ Covers:
   committed file has drifted.
 """
 
+import importlib
+import inspect
 import io
 import json
+import pkgutil
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -24,6 +27,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
+import api.views as api_views_package
 from accounts.models import Token
 from api.openapi import OPENAPI_SPEC_ATTR, build_spec
 from api.urls import urlpatterns
@@ -128,6 +132,130 @@ class SprintsModuleHasOpenApiSpecTest(TestCase):
         self.assertEqual(
             set(spec["methods"].keys()),
             {"GET", "PATCH", "DELETE"},
+        )
+
+
+class AllApiViewsHaveOpenApiSpecTest(TestCase):
+    """Every public view function across every module under ``api.views``
+    must carry the ``@openapi_spec`` decorator.
+
+    The list of modules is discovered at runtime so that adding a new
+    ``api/views/<thing>.py`` automatically extends coverage -- the test
+    suite is the source of truth for "every view is decorated", not the
+    builder (the builder silently skips undecorated routes by design).
+    """
+
+    # Modules under ``api.views`` that intentionally do NOT carry the
+    # decorator. ``_permissions`` is a pure helper module (no views);
+    # ``docs`` hosts the staff-only Swagger UI page and the openapi.json
+    # endpoint, both of which the builder explicitly excludes from the
+    # generated spec.
+    SKIP_MODULES = {"_permissions", "docs"}
+
+    def _iter_view_modules(self):
+        # Discovered fresh per test so the parallel-test pickling layer
+        # never has to round-trip ``module`` objects via ``setUpTestData``.
+        for module_info in pkgutil.iter_modules(api_views_package.__path__):
+            if module_info.ispkg:
+                continue
+            name = module_info.name
+            if name in self.SKIP_MODULES:
+                continue
+            yield importlib.import_module(f"api.views.{name}")
+
+    def _iter_public_view_functions(self, module):
+        """Yield ``(name, function)`` pairs for public Django view callables.
+
+        A Django view is identified by signature: the first positional
+        parameter is named ``request``. This filter intentionally excludes
+        public serializer helpers (``serialize_event``, ``serialize_*``)
+        which live in the same module but are not URL-routed callables.
+        """
+        for name, value in vars(module).items():
+            if name.startswith("_"):
+                continue
+            if not callable(value):
+                continue
+            # Skip imports (re-exports). Their decorator already lives
+            # on the original module's definition; checking it twice is
+            # noise.
+            origin = getattr(value, "__module__", None)
+            if origin != module.__name__:
+                continue
+            if inspect.isclass(value):
+                continue
+            # The view-vs-helper signal: view functions in this codebase
+            # always take ``request`` as their first positional argument
+            # (see api/views/sprints.py as the canonical pattern).
+            try:
+                signature = inspect.signature(value)
+            except (TypeError, ValueError):
+                continue
+            params = list(signature.parameters.values())
+            if not params:
+                continue
+            first = params[0]
+            if first.name != "request":
+                continue
+            yield name, value
+
+    def test_every_public_view_has_openapi_spec_attribute(self):
+        missing = []
+        for module in self._iter_view_modules():
+            for name, view in self._iter_public_view_functions(module):
+                spec = getattr(view, OPENAPI_SPEC_ATTR, None)
+                if spec is None:
+                    missing.append(f"{module.__name__}.{name}")
+                    continue
+                # Decorator contract: tag + methods are mandatory.
+                if "tag" not in spec or "methods" not in spec:
+                    missing.append(
+                        f"{module.__name__}.{name} (spec missing tag/methods)",
+                    )
+        self.assertFalse(
+            missing,
+            msg=(
+                "These public api.views functions are missing the "
+                "@openapi_spec(...) decorator:\n  " + "\n  ".join(missing)
+            ),
+        )
+
+    def test_openapi_spec_methods_keys_are_uppercase_http_verbs(self):
+        """Every method key in ``methods`` must be one of the canonical
+        uppercase HTTP verbs the builder knows how to lower-case for the
+        OpenAPI operations dict.
+        """
+        valid_verbs = {"GET", "POST", "PATCH", "PUT", "DELETE", "HEAD", "OPTIONS"}
+        bad = []
+        for module in self._iter_view_modules():
+            for name, view in self._iter_public_view_functions(module):
+                spec = getattr(view, OPENAPI_SPEC_ATTR, None)
+                if spec is None:
+                    continue
+                for key in spec["methods"]:
+                    if key not in valid_verbs:
+                        bad.append(
+                            f"{module.__name__}.{name}: method key "
+                            f"{key!r} is not a canonical HTTP verb",
+                        )
+        self.assertFalse(bad, msg="\n".join(bad))
+
+    def test_ses_webhook_explicitly_opts_out_of_security(self):
+        """The SES webhook receives SNS-signed payloads; bearer tokens
+        do not apply. The decorator contract is ``security=[]`` (NOT
+        ``security=None``) so the operation renders as unauthenticated
+        in Swagger UI rather than inheriting the document default.
+        """
+        from api.views.ses_events import ses_events
+
+        spec = getattr(ses_events, OPENAPI_SPEC_ATTR)
+        self.assertEqual(
+            spec["security"], [],
+            msg=(
+                "api.views.ses_events.ses_events must declare "
+                "``security=[]`` so the SES webhook does not "
+                "inherit the document-level tokenAuth requirement"
+            ),
         )
 
 

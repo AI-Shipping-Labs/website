@@ -6,7 +6,8 @@ Endpoints:
 - ``POST /api/sprints/<slug>/plans/`` -- create a plan (staff only)
 - ``POST /api/sprints/<slug>/plans/bulk-import`` -- atomic bulk create (staff)
 - ``GET /api/plans/<id>/`` -- nested detail
-- ``PATCH /api/plans/<id>/`` -- update plan-level fields
+- ``PATCH /api/plans/<id>/`` -- update plan-level fields and/or reconcile
+  nested children (issue #734)
 - ``DELETE /api/plans/<id>/`` -- delete (staff)
 """
 
@@ -73,6 +74,17 @@ SUMMARY_FIELDS = (
     "why_this_plan",
 )
 
+# Collection keys that PATCH may reconcile (issue #734). Order matters
+# only for deterministic error reporting: weeks first, then the flat
+# collections, then interview_notes.
+RECONCILABLE_COLLECTIONS = (
+    "weeks",
+    "resources",
+    "deliverables",
+    "next_steps",
+    "interview_notes",
+)
+
 
 def _apply_summary(plan, summary_dict):
     """Copy a ``{key: value}`` summary dict onto the plan instance.
@@ -124,6 +136,118 @@ def _build_summary_from_payload(data):
     return summary
 
 
+# ---------------------------------------------------------------------------
+# Shared validators (extracted so POST and PATCH cannot drift; issue #734).
+# Each helper returns ``None`` on success or an ``error_response`` tuple.
+# ---------------------------------------------------------------------------
+
+
+def _with_index(details, index):
+    """Attach a bulk-import row index to validation details if present."""
+    if index is not None:
+        details["index"] = index
+    return details
+
+
+def _validate_status(value, *, index=None):
+    if value not in VALID_PLAN_STATUSES:
+        return error_response(
+            "Invalid status",
+            "validation_error",
+            status=422,
+            details=_with_index({"status": "Unknown status"}, index),
+        )
+    return None
+
+
+def _validate_goal(value, *, index=None):
+    if value is None:
+        return None
+    if not isinstance(value, str) or len(value) > 280:
+        return error_response(
+            "Invalid goal",
+            "validation_error",
+            status=422,
+            details=_with_index(
+                {"goal": "must be a string of 280 characters or fewer"},
+                index,
+            ),
+        )
+    return None
+
+
+def _validate_list(value, field_name, *, index=None):
+    """``value`` must be a list."""
+    if not isinstance(value, list):
+        return error_response(
+            f"{field_name} must be a list",
+            "invalid_type",
+            details=_with_index(
+                {"field": field_name, "expected": "list"}, index,
+            ),
+        )
+    return None
+
+
+def _validate_dict_row(row, field_name, *, index=None):
+    """Single row inside a collection must be an object."""
+    if not isinstance(row, dict):
+        return error_response(
+            f"{field_name} entries must be objects",
+            "validation_error",
+            status=422,
+            details=_with_index(
+                {field_name: "each entry must be an object"}, index,
+            ),
+        )
+    return None
+
+
+def _validate_visibility(value, *, index=None):
+    if value not in VALID_VISIBILITIES:
+        return error_response(
+            "Invalid visibility",
+            "validation_error",
+            status=422,
+            details=_with_index({"visibility": "Unknown visibility"}, index),
+        )
+    return None
+
+
+def _validate_kind(value, *, index=None):
+    if value not in VALID_KINDS:
+        return error_response(
+            "Invalid kind",
+            "validation_error",
+            status=422,
+            details=_with_index({"kind": "Unknown kind"}, index),
+        )
+    return None
+
+
+def _validate_focus(focus_dict, *, index=None):
+    """``focus`` must be a dict and ``supporting`` must be a list."""
+    if not isinstance(focus_dict, dict):
+        return None
+    if "supporting" in focus_dict and not isinstance(
+        focus_dict["supporting"], list,
+    ):
+        return error_response(
+            "Invalid focus.supporting",
+            "validation_error",
+            status=422,
+            details=_with_index(
+                {"focus.supporting": "must be a list"}, index,
+            ),
+        )
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Plan-create payload helper (used by POST + bulk-import)
+# ---------------------------------------------------------------------------
+
+
 def _create_plan_from_payload(plan_data, sprint, *, index=None):
     """Create a Plan + nested children from a single payload dict.
 
@@ -136,62 +260,39 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
     """
     user_email = plan_data.get("user_email")
     if not user_email:
-        details = {"field": "user_email"}
-        if index is not None:
-            details["index"] = index
         return None, error_response(
             "Missing required field: user_email",
             "missing_field",
-            details=details,
+            details=_with_index({"field": "user_email"}, index),
         )
     member = User.objects.filter(email__iexact=user_email).first()
     if member is None:
-        details = {"user_email": "Unknown user"}
-        if index is not None:
-            details["index"] = index
         return None, error_response(
             "Unknown user",
             "unknown_user",
             status=422,
-            details=details,
+            details=_with_index({"user_email": "Unknown user"}, index),
         )
 
     if Plan.objects.filter(member=member, sprint=sprint).exists():
-        details = {"user_email": user_email}
-        if index is not None:
-            details["index"] = index
         return None, error_response(
             "Plan already exists for this user in this sprint",
             "duplicate_plan",
             status=409,
-            details=details,
+            details=_with_index({"user_email": user_email}, index),
         )
 
     status_value = plan_data.get("status", "draft")
-    if status_value not in VALID_PLAN_STATUSES:
-        details = {"status": "Unknown status"}
-        if index is not None:
-            details["index"] = index
-        return None, error_response(
-            "Invalid status",
-            "validation_error",
-            status=422,
-            details=details,
-        )
+    err = _validate_status(status_value, index=index)
+    if err is not None:
+        return None, err
 
     goal_value = plan_data.get("goal", "")
     if goal_value is None:
         goal_value = ""
-    if not isinstance(goal_value, str) or len(goal_value) > 280:
-        details = {"goal": "must be a string of 280 characters or fewer"}
-        if index is not None:
-            details["index"] = index
-        return None, error_response(
-            "Invalid goal",
-            "validation_error",
-            status=422,
-            details=details,
-        )
+    err = _validate_goal(goal_value, index=index)
+    if err is not None:
+        return None, err
 
     plan = Plan(
         member=member,
@@ -206,17 +307,10 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
 
     focus = plan_data.get("focus")
     if isinstance(focus, dict):
-        focus_result = _apply_focus(plan, focus)
-        if focus_result is None:
-            details = {"focus.supporting": "must be a list"}
-            if index is not None:
-                details["index"] = index
-            return None, error_response(
-                "Invalid focus.supporting",
-                "validation_error",
-                status=422,
-                details=details,
-            )
+        err = _validate_focus(focus, index=index)
+        if err is not None:
+            return None, err
+        _apply_focus(plan, focus)
 
     plan.save()
 
@@ -224,26 +318,13 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
     # roll back the outer ``transaction.atomic`` the caller should be
     # holding.
     weeks_payload = plan_data.get("weeks") or []
-    if not isinstance(weeks_payload, list):
-        details = {"field": "weeks", "expected": "list"}
-        if index is not None:
-            details["index"] = index
-        return None, error_response(
-            "weeks must be a list",
-            "invalid_type",
-            details=details,
-        )
+    err = _validate_list(weeks_payload, "weeks", index=index)
+    if err is not None:
+        return None, err
     for week_index, week_data in enumerate(weeks_payload):
-        if not isinstance(week_data, dict):
-            details = {"weeks": "each entry must be an object"}
-            if index is not None:
-                details["index"] = index
-            return None, error_response(
-                "weeks entries must be objects",
-                "validation_error",
-                status=422,
-                details=details,
-            )
+        err = _validate_dict_row(week_data, "weeks", index=index)
+        if err is not None:
+            return None, err
         week_number = week_data.get("week_number", week_index + 1)
         week = Week.objects.create(
             plan=plan,
@@ -252,15 +333,9 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
             position=week_data.get("position", week_index),
         )
         cps = week_data.get("checkpoints") or []
-        if not isinstance(cps, list):
-            details = {"weeks.checkpoints": "must be a list"}
-            if index is not None:
-                details["index"] = index
-            return None, error_response(
-                "checkpoints must be a list",
-                "invalid_type",
-                details=details,
-            )
+        err = _validate_list(cps, "weeks.checkpoints", index=index)
+        if err is not None:
+            return None, err
         for cp_index, cp_data in enumerate(cps):
             if not isinstance(cp_data, dict):
                 continue
@@ -277,15 +352,9 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
         ("next_steps", NextStep, ("description",)),
     ):
         rows = plan_data.get(collection_name) or []
-        if not isinstance(rows, list):
-            details = {"field": collection_name, "expected": "list"}
-            if index is not None:
-                details["index"] = index
-            return None, error_response(
-                f"{collection_name} must be a list",
-                "invalid_type",
-                details=details,
-            )
+        err = _validate_list(rows, collection_name, index=index)
+        if err is not None:
+            return None, err
         for row_index, row in enumerate(rows):
             if not isinstance(row, dict):
                 continue
@@ -297,40 +366,20 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
             model.objects.create(**kwargs)
 
     notes = plan_data.get("interview_notes") or []
-    if not isinstance(notes, list):
-        details = {"field": "interview_notes", "expected": "list"}
-        if index is not None:
-            details["index"] = index
-        return None, error_response(
-            "interview_notes must be a list",
-            "invalid_type",
-            details=details,
-        )
+    err = _validate_list(notes, "interview_notes", index=index)
+    if err is not None:
+        return None, err
     for note_data in notes:
         if not isinstance(note_data, dict):
             continue
         visibility = note_data.get("visibility", "external")
-        if visibility not in VALID_VISIBILITIES:
-            details = {"visibility": "Unknown visibility"}
-            if index is not None:
-                details["index"] = index
-            return None, error_response(
-                "Invalid visibility",
-                "validation_error",
-                status=422,
-                details=details,
-            )
+        err = _validate_visibility(visibility, index=index)
+        if err is not None:
+            return None, err
         kind = note_data.get("kind", "general")
-        if kind not in VALID_KINDS:
-            details = {"kind": "Unknown kind"}
-            if index is not None:
-                details["index"] = index
-            return None, error_response(
-                "Invalid kind",
-                "validation_error",
-                status=422,
-                details=details,
-            )
+        err = _validate_kind(kind, index=index)
+        if err is not None:
+            return None, err
         InterviewNote.objects.create(
             plan=plan,
             member=member,
@@ -340,6 +389,425 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
         )
 
     return plan, None
+
+
+# ---------------------------------------------------------------------------
+# PATCH reconciliation helpers (issue #734)
+# ---------------------------------------------------------------------------
+
+
+def _reconcile_flat_collection(
+    plan, payload_rows, manager, model, scalar_fields, *,
+    collection_name, has_done_at=False,
+):
+    """Reconcile a flat plan-level collection (resources / deliverables /
+    next_steps) against ``payload_rows``.
+
+    Algorithm (id-presence based):
+
+    - Row in payload with ``id`` matching an existing row -> UPDATE.
+    - Row in payload with no ``id`` (or ``id`` is ``None``) -> CREATE.
+    - Row in payload with an ``id`` that does NOT belong to this plan
+      -> 422 ``validation_error``.
+    - Existing row whose ``id`` is absent from the payload -> DELETE.
+
+    ``payload_rows`` must already have been validated to be a list of
+    dicts by the caller. Returns ``None`` on success or an
+    ``error_response`` on validation failure (the caller is responsible
+    for rolling back the surrounding transaction).
+    """
+    existing_by_id = {row.id: row for row in manager.all()}
+    seen_ids = set()
+
+    for row_index, row in enumerate(payload_rows):
+        row_id = row.get("id")
+        if row_id is not None:
+            existing = existing_by_id.get(row_id)
+            if existing is None:
+                return error_response(
+                    f"{collection_name}[{row_index}].id does not belong "
+                    f"to this plan",
+                    "validation_error",
+                    status=422,
+                    details={
+                        "field": f"{collection_name}.id",
+                        "value": row_id,
+                    },
+                )
+            # UPDATE
+            update_fields = []
+            for field_name in scalar_fields:
+                if field_name in row:
+                    setattr(existing, field_name, row[field_name] or "")
+                    update_fields.append(field_name)
+            if "position" in row:
+                existing.position = row["position"]
+                update_fields.append("position")
+            if has_done_at and "done_at" in row:
+                existing.done_at = _coerce_datetime(row["done_at"])
+                update_fields.append("done_at")
+            if update_fields:
+                existing.save(
+                    update_fields=list(set(update_fields)) + ["updated_at"],
+                )
+            seen_ids.add(row_id)
+        else:
+            # CREATE
+            kwargs = {
+                f: (row.get(f) or "") for f in scalar_fields
+            }
+            kwargs["plan"] = plan
+            kwargs["position"] = row.get("position", row_index)
+            if has_done_at and "done_at" in row:
+                kwargs["done_at"] = _coerce_datetime(row["done_at"])
+            model.objects.create(**kwargs)
+
+    # DELETE rows whose ids were not in the payload.
+    for existing_id, existing_row in existing_by_id.items():
+        if existing_id not in seen_ids:
+            existing_row.delete()
+
+    return None
+
+
+def _reconcile_checkpoints(week, payload_rows, allowed_ids_per_week):
+    """Reconcile checkpoints for a single ``week``.
+
+    ``allowed_ids_per_week`` maps ``week_id`` -> ``set(checkpoint_id)``.
+    A checkpoint id that belongs to a DIFFERENT week of this plan is
+    rejected with 422 ``validation_error`` (cross-week move is OUT OF
+    SCOPE per issue #734).
+    """
+    existing_by_id = {cp.id: cp for cp in week.checkpoints.all()}
+    seen_ids = set()
+    allowed_for_this_week = allowed_ids_per_week.get(week.id, set())
+    # All checkpoint ids reachable on this plan (any week).
+    all_plan_cp_ids = set()
+    for ids in allowed_ids_per_week.values():
+        all_plan_cp_ids |= ids
+
+    for cp_index, cp in enumerate(payload_rows):
+        cp_id = cp.get("id")
+        if cp_id is not None:
+            if cp_id not in all_plan_cp_ids:
+                return error_response(
+                    f"checkpoints[{cp_index}].id does not belong "
+                    f"to this plan",
+                    "validation_error",
+                    status=422,
+                    details={
+                        "field": "checkpoints.id",
+                        "value": cp_id,
+                    },
+                )
+            if cp_id not in allowed_for_this_week:
+                # The id is on this plan but under a different week.
+                # Cross-week moves are explicitly out of scope (issue #734);
+                # implementing them would require parent-tracking across
+                # the reconcile pass.
+                return error_response(
+                    f"checkpoints[{cp_index}].id belongs to a different "
+                    f"week (cross-week moves are not supported)",
+                    "validation_error",
+                    status=422,
+                    details={
+                        "field": "checkpoints.id",
+                        "value": cp_id,
+                        "current_week_id": _find_owning_week_id(
+                            cp_id, allowed_ids_per_week,
+                        ),
+                        "requested_week_id": week.id,
+                    },
+                )
+            existing = existing_by_id[cp_id]
+            update_fields = []
+            if "description" in cp:
+                existing.description = cp["description"] or ""
+                update_fields.append("description")
+            if "position" in cp:
+                existing.position = cp["position"]
+                update_fields.append("position")
+            if "done_at" in cp:
+                existing.done_at = _coerce_datetime(cp["done_at"])
+                update_fields.append("done_at")
+            if update_fields:
+                existing.save(
+                    update_fields=list(set(update_fields)) + ["updated_at"],
+                )
+            seen_ids.add(cp_id)
+        else:
+            Checkpoint.objects.create(
+                week=week,
+                description=cp.get("description", "") or "",
+                position=cp.get("position", cp_index),
+                done_at=_coerce_datetime(cp.get("done_at")),
+            )
+
+    for existing_id, existing_row in existing_by_id.items():
+        if existing_id not in seen_ids:
+            existing_row.delete()
+
+    return None
+
+
+def _find_owning_week_id(cp_id, allowed_ids_per_week):
+    """Helper: locate which week id currently owns ``cp_id``."""
+    for week_id, ids in allowed_ids_per_week.items():
+        if cp_id in ids:
+            return week_id
+    return None
+
+
+def _reconcile_weeks(plan, weeks_payload):
+    """Reconcile ``plan.weeks`` and each surviving week's checkpoints.
+
+    Returns ``None`` on success or an ``error_response`` on validation
+    failure. The caller is responsible for the surrounding
+    ``transaction.atomic`` and rollback.
+    """
+    # Snapshot pre-existing week + checkpoint ids so we can validate
+    # cross-week checkpoint moves.
+    pre_existing_weeks = list(plan.weeks.all().prefetch_related("checkpoints"))
+    allowed_ids_per_week = {
+        w.id: {cp.id for cp in w.checkpoints.all()}
+        for w in pre_existing_weeks
+    }
+    existing_weeks_by_id = {w.id: w for w in pre_existing_weeks}
+    seen_week_ids = set()
+
+    # First pass: validate every row's shape so we fail fast before any
+    # writes. ``_validate_list`` was already invoked by the caller for
+    # the outer list.
+    for week_index, week_data in enumerate(weeks_payload):
+        err = _validate_dict_row(week_data, "weeks")
+        if err is not None:
+            return err
+        checkpoints = week_data.get("checkpoints")
+        if checkpoints is not None:
+            err = _validate_list(checkpoints, "weeks.checkpoints")
+            if err is not None:
+                return err
+            for cp_index, cp in enumerate(checkpoints):
+                err = _validate_dict_row(cp, "weeks.checkpoints")
+                if err is not None:
+                    return err
+                description = cp.get("description")
+                if description is not None and not isinstance(
+                    description, str,
+                ):
+                    return error_response(
+                        f"weeks[{week_index}].checkpoints[{cp_index}]"
+                        f".description must be a string",
+                        "validation_error",
+                        status=422,
+                        details={
+                            "field": "checkpoints.description",
+                        },
+                    )
+
+    # Second pass: apply CREATE / UPDATE per week, deferring checkpoint
+    # reconciliation until the week row exists in the DB.
+    week_to_checkpoints_payload = []  # list of (week_instance, cps_payload)
+    for week_index, week_data in enumerate(weeks_payload):
+        week_id = week_data.get("id")
+        if week_id is not None:
+            existing = existing_weeks_by_id.get(week_id)
+            if existing is None:
+                return error_response(
+                    f"weeks[{week_index}].id does not belong to this plan",
+                    "validation_error",
+                    status=422,
+                    details={"field": "weeks.id", "value": week_id},
+                )
+            update_fields = []
+            if "week_number" in week_data:
+                existing.week_number = week_data["week_number"]
+                update_fields.append("week_number")
+            if "theme" in week_data:
+                existing.theme = week_data["theme"] or ""
+                update_fields.append("theme")
+            if "position" in week_data:
+                existing.position = week_data["position"]
+                update_fields.append("position")
+            if update_fields:
+                existing.save(
+                    update_fields=list(set(update_fields)) + ["updated_at"],
+                )
+            seen_week_ids.add(week_id)
+            week_obj = existing
+        else:
+            week_number = week_data.get("week_number", week_index + 1)
+            week_obj = Week.objects.create(
+                plan=plan,
+                week_number=week_number,
+                theme=week_data.get("theme", "") or "",
+                position=week_data.get("position", week_index),
+            )
+        if "checkpoints" in week_data:
+            week_to_checkpoints_payload.append(
+                (week_obj, week_data.get("checkpoints") or []),
+            )
+
+    # DELETE weeks whose ids were not in the payload (checkpoints cascade
+    # via the FK ``on_delete=CASCADE``).
+    for existing_id, existing_week in existing_weeks_by_id.items():
+        if existing_id not in seen_week_ids:
+            existing_week.delete()
+            # Remove from the cross-week map so a checkpoint that lived
+            # under a deleted week cannot be referenced.
+            allowed_ids_per_week.pop(existing_id, None)
+
+    # Third pass: reconcile checkpoints under each surviving week.
+    # We do this after the DELETE so cross-week move attempts that point
+    # at a now-deleted week's checkpoints fail validation cleanly.
+    for week_obj, cps_payload in week_to_checkpoints_payload:
+        err = _reconcile_checkpoints(
+            week_obj, cps_payload, allowed_ids_per_week,
+        )
+        if err is not None:
+            return err
+
+    return None
+
+
+def _reconcile_children(plan, payload):
+    """Top-level entry point: reconcile every collection key PRESENT in
+    ``payload``. Keys not present are left untouched.
+
+    Returns ``None`` on success or an ``error_response`` on validation
+    failure. Caller MUST hold a ``transaction.atomic`` so a failure
+    rolls back every write made by this function.
+    """
+    # Step 1: validate every collection's outer shape up front so we
+    # never start mutating the DB before we know the request is coherent.
+    for key in RECONCILABLE_COLLECTIONS:
+        if key not in payload:
+            continue
+        value = payload[key]
+        err = _validate_list(value, key)
+        if err is not None:
+            return err
+        # Per-row shape check (interview_notes / weeks have additional
+        # per-row validation handled by their reconcilers).
+        for row in value:
+            err = _validate_dict_row(row, key)
+            if err is not None:
+                return err
+
+    # Step 2: weeks first (because deleting a week removes its
+    # checkpoints; we want a deterministic order if a later collection
+    # also fails).
+    if "weeks" in payload:
+        err = _reconcile_weeks(plan, payload["weeks"])
+        if err is not None:
+            return err
+
+    flat_collections = (
+        (
+            "resources", plan.resources, Resource,
+            ("title", "url", "note"), False,
+        ),
+        (
+            "deliverables", plan.deliverables, Deliverable,
+            ("description",), True,
+        ),
+        (
+            "next_steps", plan.next_steps, NextStep,
+            ("description",), True,
+        ),
+    )
+    for collection_name, manager, model, fields, has_done_at in (
+        flat_collections
+    ):
+        if collection_name not in payload:
+            continue
+        err = _reconcile_flat_collection(
+            plan,
+            payload[collection_name],
+            manager,
+            model,
+            fields,
+            collection_name=collection_name,
+            has_done_at=has_done_at,
+        )
+        if err is not None:
+            return err
+
+    if "interview_notes" in payload:
+        err = _reconcile_interview_notes(plan, payload["interview_notes"])
+        if err is not None:
+            return err
+
+    return None
+
+
+def _reconcile_interview_notes(plan, payload_rows):
+    """Reconcile ``plan.interview_notes`` against ``payload_rows``.
+
+    Validates ``visibility`` and ``kind`` enums on every row. CREATE
+    uses the plan's member as the note's ``member`` (matches POST
+    semantics).
+    """
+    existing_by_id = {n.id: n for n in plan.interview_notes.all()}
+    seen_ids = set()
+
+    for row_index, row in enumerate(payload_rows):
+        # ``visibility`` / ``kind`` validated on every present-key path:
+        # UPDATE with the key set, or CREATE with the default.
+        if "visibility" in row:
+            visibility = row.get("visibility")
+            err = _validate_visibility(visibility)
+            if err is not None:
+                return err
+        if "kind" in row:
+            kind = row.get("kind")
+            err = _validate_kind(kind)
+            if err is not None:
+                return err
+
+        row_id = row.get("id")
+        if row_id is not None:
+            existing = existing_by_id.get(row_id)
+            if existing is None:
+                return error_response(
+                    f"interview_notes[{row_index}].id does not belong "
+                    f"to this plan",
+                    "validation_error",
+                    status=422,
+                    details={
+                        "field": "interview_notes.id",
+                        "value": row_id,
+                    },
+                )
+            update_fields = []
+            if "visibility" in row:
+                existing.visibility = row["visibility"]
+                update_fields.append("visibility")
+            if "kind" in row:
+                existing.kind = row["kind"]
+                update_fields.append("kind")
+            if "body" in row:
+                existing.body = row["body"] or ""
+                update_fields.append("body")
+            if update_fields:
+                existing.save(
+                    update_fields=list(set(update_fields)) + ["updated_at"],
+                )
+            seen_ids.add(row_id)
+        else:
+            InterviewNote.objects.create(
+                plan=plan,
+                member=plan.member,
+                visibility=row.get("visibility", "external"),
+                kind=row.get("kind", "general"),
+                body=row.get("body", "") or "",
+            )
+
+    for existing_id, existing_row in existing_by_id.items():
+        if existing_id not in seen_ids:
+            existing_row.delete()
+
+    return None
 
 
 @token_required
@@ -396,10 +864,14 @@ def sprint_plans_collection(request, slug):
             "resources",
             "deliverables",
             "next_steps",
+            "interview_notes",
         )
         .get(pk=plan.pk)
     )
-    return JsonResponse(serialize_plan_detail(plan), status=201)
+    return JsonResponse(
+        serialize_plan_detail(plan, viewer=request.user),
+        status=201,
+    )
 
 
 @token_required
@@ -475,6 +947,23 @@ def sprint_plans_bulk_import(request, slug):
     )
 
 
+def _refetch_plan_detail(plan_id):
+    """Refetch a plan with the full prefetch chain so the serializer
+    avoids N+1 reads on the nested children."""
+    return (
+        Plan.objects
+        .select_related("member", "sprint")
+        .prefetch_related(
+            "weeks__checkpoints",
+            "resources",
+            "deliverables",
+            "next_steps",
+            "interview_notes",
+        )
+        .get(pk=plan_id)
+    )
+
+
 @token_required
 @csrf_exempt
 @require_methods("GET", "PATCH", "DELETE")
@@ -488,6 +977,7 @@ def plan_detail(request, plan_id):
             "resources",
             "deliverables",
             "next_steps",
+            "interview_notes",
         )
         .filter(pk=plan_id)
         .first()
@@ -500,7 +990,10 @@ def plan_detail(request, plan_id):
         )
 
     if request.method == "GET":
-        return JsonResponse(serialize_plan_detail(plan), status=200)
+        return JsonResponse(
+            serialize_plan_detail(plan, viewer=request.user),
+            status=200,
+        )
 
     if request.method == "DELETE":
         if not bearer_is_admin(request.user):
@@ -523,15 +1016,85 @@ def plan_detail(request, plan_id):
             details={"field": "body", "expected": "object"},
         )
 
-    update_fields = []
-    if "status" in data:
-        if data["status"] not in VALID_PLAN_STATUSES:
-            return error_response(
-                "Invalid status",
-                "validation_error",
-                status=422,
-                details={"status": "Unknown status"},
+    # Issue #732: ``shared_at`` is the explicit share trigger. Non-null
+    # values are server-clamped to ``timezone.now()`` (we don't trust
+    # client clocks for the share moment). ``null`` clears the
+    # timestamp WITHOUT firing notifications — operator un-share is
+    # silent by design. Staff-only, same gate as DELETE.
+    if "shared_at" in data and not bearer_is_admin(request.user):
+        return error_response(
+            "Plan share is staff-only",
+            "forbidden_other_user_plan",
+            status=403,
+        )
+
+    # Detect whether the request is asking us to reconcile any nested
+    # collection. If yes, we wrap everything in an atomic block; if no,
+    # we take the legacy top-level-only path so simple PATCH callers
+    # see the same behaviour they did before issue #734.
+    reconciles_children = any(
+        key in data for key in RECONCILABLE_COLLECTIONS
+    )
+
+    fire_plan_shared = False
+
+    if reconciles_children:
+        # Atomic path: any validation failure rolls back ALL writes
+        # (top-level field updates AND nested child mutations). The
+        # share-notification fire is deferred until after this block
+        # commits — that path is unchanged by issue #734 and is the
+        # contract from #732.
+        with transaction.atomic():
+            err, fire_plan_shared = _apply_top_level_fields(plan, data)
+            if err is not None:
+                transaction.set_rollback(True)
+                return err
+            err = _reconcile_children(plan, data)
+            if err is not None:
+                transaction.set_rollback(True)
+                return err
+    else:
+        # Legacy path: no atomic block needed (top-level fields are a
+        # single ``save`` call). This preserves the pre-#734 behaviour
+        # for callers that only PATCH ``status`` / ``goal`` /
+        # ``accountability`` / ``summary`` / ``focus`` / ``shared_at``.
+        err, fire_plan_shared = _apply_top_level_fields(plan, data)
+        if err is not None:
+            return err
+
+    # Issue #732: fire bell + email AFTER the save so the timestamp is
+    # already committed. A failure in the notification helper must not
+    # roll back the PATCH; the helper itself logs SES exceptions. This
+    # is OUTSIDE the atomic block on purpose.
+    if fire_plan_shared:
+        try:
+            NotificationService.create_plan_shared(plan)
+        except Exception:
+            logger.exception(
+                'Failed to fire plan_shared notification for plan %s',
+                plan.pk,
             )
+
+    plan = _refetch_plan_detail(plan.pk)
+    return JsonResponse(
+        serialize_plan_detail(plan, viewer=request.user),
+        status=200,
+    )
+
+
+def _apply_top_level_fields(plan, data):
+    """Apply every top-level PATCH field on ``plan`` and persist.
+
+    Returns ``(error_response_or_None, fire_plan_shared_bool)``. The
+    boolean signals whether the caller should fire the share
+    notification AFTER the surrounding transaction commits.
+    """
+    update_fields = []
+
+    if "status" in data:
+        err = _validate_status(data["status"])
+        if err is not None:
+            return err, False
         plan.status = data["status"]
         update_fields.append("status")
 
@@ -549,14 +1112,14 @@ def plan_detail(request, plan_id):
                 "validation_error",
                 status=422,
                 details={"goal": "must be a string"},
-            )
+            ), False
         if len(goal) > 280:
             return error_response(
                 "Invalid goal",
                 "validation_error",
                 status=422,
                 details={"goal": "must be 280 characters or fewer"},
-            )
+            ), False
         plan.goal = goal
         update_fields.append("goal")
 
@@ -565,29 +1128,14 @@ def plan_detail(request, plan_id):
         update_fields.extend(_apply_summary(plan, summary))
 
     if "focus" in data and isinstance(data["focus"], dict):
+        err = _validate_focus(data["focus"])
+        if err is not None:
+            return err, False
         focus_fields = _apply_focus(plan, data["focus"])
-        if focus_fields is None:
-            return error_response(
-                "Invalid focus.supporting",
-                "validation_error",
-                status=422,
-                details={"focus.supporting": "must be a list"},
-            )
         update_fields.extend(focus_fields)
 
-    # Issue #732: ``shared_at`` is the explicit share trigger. Non-null
-    # values are server-clamped to ``timezone.now()`` (we don't trust
-    # client clocks for the share moment). ``null`` clears the
-    # timestamp WITHOUT firing notifications — operator un-share is
-    # silent by design. Staff-only, same gate as DELETE.
     fire_plan_shared = False
     if "shared_at" in data:
-        if not bearer_is_admin(request.user):
-            return error_response(
-                "Plan share is staff-only",
-                "forbidden_other_user_plan",
-                status=403,
-            )
         if data["shared_at"] is None:
             plan.shared_at = None
         else:
@@ -600,28 +1148,4 @@ def plan_detail(request, plan_id):
         # with `auto_now=True` semantics on direct model save.
         plan.save(update_fields=list(set(update_fields)) + ["updated_at"])
 
-    # Issue #732: fire bell + email AFTER the save so the timestamp is
-    # already committed. A failure in the notification helper must not
-    # roll back the PATCH; the helper itself logs SES exceptions.
-    if fire_plan_shared:
-        try:
-            NotificationService.create_plan_shared(plan)
-        except Exception:
-            logger.exception(
-                'Failed to fire plan_shared notification for plan %s',
-                plan.pk,
-            )
-
-    plan.refresh_from_db()
-    plan = (
-        Plan.objects
-        .select_related("member", "sprint")
-        .prefetch_related(
-            "weeks__checkpoints",
-            "resources",
-            "deliverables",
-            "next_steps",
-        )
-        .get(pk=plan.pk)
-    )
-    return JsonResponse(serialize_plan_detail(plan), status=200)
+    return None, fire_plan_shared

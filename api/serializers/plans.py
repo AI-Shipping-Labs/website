@@ -12,6 +12,7 @@ endpoint does not N+1.
 
 from __future__ import annotations
 
+from plans.models import InterviewNote
 from plans.templatetags.plan_markdown import render_plan_markdown
 
 
@@ -113,16 +114,25 @@ def serialize_next_step(next_step):
     }
 
 
-def serialize_plan_detail(plan):
+def serialize_plan_detail(plan, *, viewer=None):
     """Full nested plan dict (weeks -> checkpoints, plus all child rows).
 
     Reads each child collection from ``.all()`` so callers that want a
     single-roundtrip read should ``prefetch_related`` weeks,
     weeks__checkpoints, resources, deliverables, and next_steps before
     calling this.
+
+    ``viewer`` is required to filter ``interview_notes``: staff see all
+    notes, the plan's member sees only their own ``external`` notes,
+    everyone else (anonymous / ``None``) sees an empty list. The key
+    is always present so the GET / PATCH response shape is stable.
     """
     weeks = list(
         plan.weeks.all().order_by("position", "week_number")
+    )
+    visible_notes = (
+        InterviewNote.objects.visible_to(viewer).filter(plan=plan)
+        .order_by("-created_at")
     )
     return {
         "id": plan.id,
@@ -154,6 +164,9 @@ def serialize_plan_detail(plan):
         "next_steps": [
             serialize_next_step(n)
             for n in plan.next_steps.all().order_by("position", "id")
+        ],
+        "interview_notes": [
+            serialize_interview_note(n) for n in visible_notes
         ],
         "shared_at": _isoformat_or_none(plan.shared_at),
         "created_at": _isoformat_or_none(plan.created_at),

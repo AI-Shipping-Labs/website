@@ -34,6 +34,7 @@ from api.views.course_enrollments import (
     course_enrollment_detail,
     course_enrollments_collection,
 )
+from api.views.docs import docs_page, openapi_json
 from api.views.enrollments import (
     sprint_enrollment_detail,
     sprint_enrollments_collection,
@@ -80,6 +81,24 @@ from api.views.tier_reconcile import (
 from api.views.weeks import plan_weeks_collection, week_detail
 
 urlpatterns = [
+    # ---- API documentation (issue #722) -------------------------------
+    # Staff-only Swagger UI page + raw OpenAPI JSON. These two routes
+    # are deliberately EXCLUDED from the generated spec itself (see
+    # ``api.openapi.builder._DOCS_ROUTE_NAMES``) -- the docs do not
+    # document themselves. They also sit outside the ``token_required``
+    # surface that the rest of the API uses, because an operator
+    # pulling up ``/api/docs`` in a browser doesn't yet have a token
+    # to authorize with; the Swagger UI page prompts for one.
+    path(
+        "openapi.json",
+        openapi_json,
+        name="api_openapi_json",
+    ),
+    path(
+        "docs",
+        docs_page,
+        name="api_docs",
+    ),
     # ---- Email campaigns (issue #676) ---------------------------------
     # Draft authoring only: GET/POST collection, GET/PATCH detail. No
     # DELETE route is registered (archive via PATCH is_archived=true).

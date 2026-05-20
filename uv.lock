@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.13"
 
 [options]
-exclude-newer = "2026-05-01T02:50:01.352527106Z"
+exclude-newer = "2026-05-13T09:07:14.262883447Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -11,6 +11,7 @@ name = "ai-shipping-labs"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "apispec" },
     { name = "boto3" },
     { name = "coverage" },
     { name = "croniter" },
@@ -44,6 +45,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "apispec", specifier = ">=6.6.0" },
     { name = "boto3", specifier = ">=1.42.52" },
     { name = "coverage", specifier = ">=7.13.4" },
     { name = "croniter", specifier = ">=6.0.0" },
@@ -73,6 +75,18 @@ requires-dist = [
 dev = [
     { name = "honcho", specifier = ">=2.0.0" },
     { name = "ruff", specifier = ">=0.11.0" },
+]
+
+[[package]]
+name = "apispec"
+version = "6.10.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4a/f1/1f5a9332df3ecd90cc5ab69bc58a4174b8ba2ac1720c4c26b01d20751bf5/apispec-6.10.0.tar.gz", hash = "sha256:0a888555cd4aa5fb7176041be15684154fd8961055e1672e703abf737e8761bf", size = 80631, upload-time = "2026-03-06T21:48:40.916Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/20/88/e149b20246c4689e7d27163e4e3bb8946ef31617cfb3b9c427813483fe5b/apispec-6.10.0-py3-none-any.whl", hash = "sha256:8ff23e0de9a0ceb62ff70047241126315bd17b8d0565a567934c0156f4ddbb43", size = 31313, upload-time = "2026-03-06T21:48:39.404Z" },
 ]
 
 [[package]]

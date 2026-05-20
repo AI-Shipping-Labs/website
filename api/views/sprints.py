@@ -15,6 +15,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.plans import serialize_sprint
 from api.utils import parse_json_body, require_methods
@@ -22,6 +23,19 @@ from api.views._permissions import bearer_is_admin, visible_plans_for
 from plans.models import SPRINT_STATUS_CHOICES, Sprint
 
 VALID_SPRINT_STATUSES = {choice for choice, _label in SPRINT_STATUS_CHOICES}
+
+# Sorted list for OpenAPI ``enum`` entries (deterministic output).
+_SPRINT_STATUS_ENUM = sorted(VALID_SPRINT_STATUSES)
+
+_SPRINT_EXAMPLE = {
+    "slug": "may-2026",
+    "name": "May 2026",
+    "start_date": "2026-05-01",
+    "duration_weeks": 6,
+    "status": "active",
+    "created_at": "2026-04-15T12:00:00+00:00",
+    "updated_at": "2026-04-15T12:00:00+00:00",
+}
 
 
 def _parse_iso_date(value):
@@ -50,6 +64,84 @@ def _sprint_visible_to(user, sprint):
 @token_required
 @csrf_exempt
 @require_methods("GET", "POST")
+@openapi_spec(
+    tag="Sprints",
+    summary="List or create sprints",
+    methods={
+        "GET": {
+            "summary": "List sprints",
+            "description": (
+                "Returns every sprint visible to the bearer token. "
+                "Non-staff tokens see every sprint row -- visibility "
+                "narrowing happens on the per-sprint detail endpoint, "
+                "not on the collection."
+            ),
+            "query": {
+                "status": {
+                    "type": "string",
+                    "enum": _SPRINT_STATUS_ENUM,
+                    "required": False,
+                    "description": "Filter to sprints with the given status.",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "List of sprints.",
+                    "example": {"sprints": [_SPRINT_EXAMPLE]},
+                },
+                401: {"description": "Missing or invalid token."},
+                422: {"description": "Unknown ``status`` filter value."},
+            },
+        },
+        "POST": {
+            "summary": "Create a sprint (staff-only)",
+            "description": (
+                "Staff-only. Non-staff tokens get 403 with code "
+                "``forbidden_other_user_plan``. Slug uniqueness is "
+                "enforced at the API layer (422) before hitting the DB."
+            ),
+            "request_body": {
+                "required": ["name", "slug", "start_date", "duration_weeks"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "slug": {"type": "string"},
+                    "start_date": {"type": "string", "format": "date"},
+                    "duration_weeks": {"type": "integer"},
+                    "status": {
+                        "type": "string",
+                        "enum": _SPRINT_STATUS_ENUM,
+                        "default": "draft",
+                    },
+                },
+                "example": {
+                    "name": "May 2026",
+                    "slug": "may-2026",
+                    "start_date": "2026-05-01",
+                    "duration_weeks": 6,
+                    "status": "draft",
+                },
+            },
+            "responses": {
+                201: {
+                    "description": "Sprint created.",
+                    "example": _SPRINT_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                403: {
+                    "description": "Non-staff token attempted to create.",
+                    "example": {
+                        "error": "Sprint creation is staff-only",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                422: {
+                    "description": "Validation error (missing field, "
+                                   "bad date, duplicate slug).",
+                },
+            },
+        },
+    },
+)
 def sprints_collection(request):
     """``GET /api/sprints/`` and ``POST /api/sprints/``."""
     if request.method == "GET":
@@ -141,6 +233,79 @@ def sprints_collection(request):
 @token_required
 @csrf_exempt
 @require_methods("GET", "PATCH", "DELETE")
+@openapi_spec(
+    tag="Sprints",
+    summary="Retrieve, update, or delete a sprint",
+    methods={
+        "GET": {
+            "summary": "Retrieve a sprint",
+            "description": (
+                "Non-staff tokens see a sprint only if they have at "
+                "least one plan in it; otherwise the endpoint returns "
+                "404 ``unknown_sprint`` (deliberately, to avoid leaking "
+                "existence information)."
+            ),
+            "responses": {
+                200: {
+                    "description": "Sprint detail.",
+                    "example": _SPRINT_EXAMPLE,
+                },
+                401: {"description": "Missing or invalid token."},
+                404: {
+                    "description": "Sprint not found or not visible.",
+                    "example": {
+                        "error": "Sprint not found",
+                        "code": "unknown_sprint",
+                    },
+                },
+            },
+        },
+        "PATCH": {
+            "summary": "Update a sprint (staff-only)",
+            "request_body": {
+                "properties": {
+                    "name": {"type": "string"},
+                    "start_date": {"type": "string", "format": "date"},
+                    "duration_weeks": {"type": "integer"},
+                    "status": {
+                        "type": "string",
+                        "enum": _SPRINT_STATUS_ENUM,
+                    },
+                },
+                "example": {"status": "active"},
+            },
+            "responses": {
+                200: {
+                    "description": "Sprint updated.",
+                    "example": _SPRINT_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                403: {"description": "Non-staff token."},
+                404: {"description": "Sprint not found."},
+                422: {"description": "Validation error."},
+            },
+        },
+        "DELETE": {
+            "summary": "Delete a sprint (staff-only)",
+            "description": (
+                "409 with code ``sprint_has_plans`` if any plans are "
+                "still attached -- the API does not cascade-delete."
+            ),
+            "responses": {
+                204: {"description": "Sprint deleted (empty body)."},
+                403: {"description": "Non-staff token."},
+                404: {"description": "Sprint not found."},
+                409: {
+                    "description": "Sprint has attached plans.",
+                    "example": {
+                        "error": "Sprint has attached plans",
+                        "code": "sprint_has_plans",
+                    },
+                },
+            },
+        },
+    },
+)
 def sprint_detail(request, slug):
     """``GET / PATCH / DELETE /api/sprints/<slug>/``."""
     sprint = Sprint.objects.filter(slug=slug).first()

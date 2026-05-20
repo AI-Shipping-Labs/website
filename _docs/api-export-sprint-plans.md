@@ -1,5 +1,8 @@
 # Exporting Sprint Plans via the Production API
 
+For the full machine-readable endpoint catalogue, see `/api/docs` (staff only) or
+[`_docs/openapi.json`](openapi.json). This guide walks the sprint-plan export specifically.
+
 ## Overview
 
 The plans API lets you pull all member plans from any sprint using token authentication. This doc covers the end-to-end process for exporting, grouping, and saving sprint plan data to a private Gist.

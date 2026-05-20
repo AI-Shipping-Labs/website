@@ -313,9 +313,16 @@ class TestMemberWithPlanSeesNoAskButton:
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffSeesPlanRequestNotification:
-    """Staff sees the in-app notification and clicks through to admin."""
+    """Staff sees the in-app notification and clicks through to Studio.
 
-    def test_staff_notification_links_to_admin_user_page(
+    Per issue #719, the in-app ``plan_request`` notification CTA points
+    at the Studio create-plan form pre-filled with the (member, sprint)
+    pair -- NOT the Django admin user-change page. The admin URL is
+    still used in the Slack post + staff email fanout as a secondary
+    affordance, but the bell link lands on Studio.
+    """
+
+    def test_staff_notification_links_to_studio_plan_create(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -369,10 +376,13 @@ class TestStaffSeesPlanRequestNotification:
             assert 'Plan request from' in body_text
             assert 'Alex Member' in body_text
 
-            # Look for the link with the admin user URL pointing at the
-            # requesting member's user pk.
+            # Per #719: the bell CTA points at the Studio create-plan
+            # form pre-filled with this (member, sprint). Verify URL
+            # path and both query params.
             link = page.locator(
-                f'a[href*="/admin/accounts/user/{alex_user.pk}/change/"]',
+                'a[href*="/studio/plans/new"]'
+                f'[href*="user={alex_user.pk}"]'
+                f'[href*="sprint={sprint.pk}"]',
             ).first
             link.wait_for(state='visible')
         finally:

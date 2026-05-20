@@ -12,6 +12,11 @@ import pytest
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
+# Issue #656: this module seeds Articles / Courses / Workshops / Downloads
+# / CuratedLinks / Events via *.objects.create and cannot run against the
+# deployed dev environment.
+pytestmark = pytest.mark.local_only
+
 SCREENSHOT_DIR = Path("/tmp/aisl-issue-544-screenshots")
 DESKTOP = {"width": 1280, "height": 900}
 MOBILE = {"width": 393, "height": 851}

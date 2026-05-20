@@ -22,15 +22,20 @@ from notifications.services.slack_announcements import post_slack_announcement
 
 DEFAULT_SLACK_TEST_CHANNEL = "C0AHN84QNP3"
 
-# Skip the entire module if SLACK_BOT_TOKEN is not available in env
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("SLACK_BOT_TOKEN")
-    or not os.environ.get("SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID"),
-    reason=(
-        "SLACK_BOT_TOKEN and SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID must be set; "
-        "skipping real Slack integration test"
+# Skip the entire module if SLACK_BOT_TOKEN is not available in env.
+# Issue #656: this module also posts to real Slack and must not run
+# against the deployed dev environment (tagged ``local_only``).
+pytestmark = [
+    pytest.mark.skipif(
+        not os.environ.get("SLACK_BOT_TOKEN")
+        or not os.environ.get("SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID"),
+        reason=(
+            "SLACK_BOT_TOKEN and SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID must be "
+            "set; skipping real Slack integration test"
+        ),
     ),
-)
+    pytest.mark.local_only,
+]
 
 
 class _FakeContent:

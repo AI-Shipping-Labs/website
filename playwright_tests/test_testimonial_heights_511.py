@@ -300,6 +300,9 @@ def test_homepage_mobile_carousel_no_truncation_for_current_corpus(
 # ---------------------------------------------------------------------------
 
 
+# Issue #656: this test seeds a course via Course.objects.update_or_create
+# and cannot run against the deployed dev environment.
+@pytest.mark.local_only
 @pytest.mark.django_db(transaction=True)
 def test_course_detail_uses_shared_partial_with_clamp(django_server, page):
     """Course detail renders the same partial and inherits the clamp."""
@@ -328,6 +331,9 @@ def test_course_detail_uses_shared_partial_with_clamp(django_server, page):
     _screenshot_section(page, "course-detail-desktop-1280x900")
 
 
+# Issue #656: this test seeds a course via Course.objects.update_or_create
+# and cannot run against the deployed dev environment.
+@pytest.mark.local_only
 @pytest.mark.django_db(transaction=True)
 def test_long_quote_clamps_at_ten_lines_on_course_detail(django_server, page):
     """A 1500-char quote is clipped at 10 lines, author block still renders."""

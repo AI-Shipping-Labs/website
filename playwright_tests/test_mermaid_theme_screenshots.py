@@ -11,6 +11,11 @@ import pytest
 
 os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')
 
+# Issue #656: this module seeds Workshops via _create_workshop and cannot
+# run against the deployed dev environment. (Already excluded via the
+# ``manual_visual`` marker, but tag explicitly for clarity.)
+pytestmark = pytest.mark.local_only
+
 from playwright_tests.conftest import VIEWPORT  # noqa: E402
 from playwright_tests.test_mermaid import (  # noqa: E402
     WORKSHOP_MERMAID_BODY,

@@ -36,6 +36,11 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
+# Issue #656: this module uses local-only fixtures (DB seeding,
+# session-cookie injection, etc.) and cannot run against the
+# deployed dev environment. See _docs/testing-guidelines.md.
+pytestmark = pytest.mark.local_only
+
 
 PIXEL_7 = {"width": 412, "height": 915}
 DESKTOP = {"width": 1280, "height": 900}

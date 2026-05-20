@@ -22,6 +22,11 @@ from django.db import connection  # noqa: E402
 
 from integrations.config import clear_config_cache  # noqa: E402
 
+# Issue #656: this module uses local-only fixtures (DB seeding,
+# session-cookie injection, etc.) and cannot run against the
+# deployed dev environment. See _docs/testing-guidelines.md.
+pytestmark = pytest.mark.local_only
+
 
 def _reset_site_settings():
     """Delete SITE_BASE_URL* rows so each test starts clean."""

@@ -34,6 +34,11 @@ from playwright_tests.conftest import (
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
 
+# Issue #656: this module uses local-only fixtures (DB seeding,
+# session-cookie injection, etc.) and cannot run against the
+# deployed dev environment. See _docs/testing-guidelines.md.
+pytestmark = pytest.mark.local_only
+
 
 def _clear_users_except_staff(staff_email):
     """Drop every user except the named staff account so the listing is

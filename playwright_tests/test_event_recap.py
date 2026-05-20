@@ -12,7 +12,12 @@ import pytest
 from django.utils import timezone
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
-from django.db import connection
+
+# Issue #656: this module seeds Events via Event.objects.create and
+# cannot run against the deployed dev environment.
+pytestmark = pytest.mark.local_only
+
+from django.db import connection  # noqa: E402
 
 
 def _clear_events():

@@ -43,6 +43,11 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
+# Issue #656: this module uses local-only fixtures (DB seeding,
+# session-cookie injection, etc.) and cannot run against the
+# deployed dev environment. See _docs/testing-guidelines.md.
+pytestmark = pytest.mark.local_only
+
 
 # Default SITE_BASE_URL in settings is ``https://aishippinglabs.com`` — when
 # the dev server runs on 127.0.0.1 the env-mismatch banner reliably renders.

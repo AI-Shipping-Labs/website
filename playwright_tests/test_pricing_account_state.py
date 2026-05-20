@@ -6,6 +6,11 @@ import pytest
 from django.conf import settings
 
 from playwright_tests.conftest import DEFAULT_PASSWORD, VIEWPORT
+
+# Issue #656: this module uses local-only fixtures (DB seeding,
+# session-cookie injection, etc.) and cannot run against the
+# deployed dev environment. See _docs/testing-guidelines.md.
+pytestmark = pytest.mark.local_only
 from playwright_tests.conftest import (
     create_session_for_user as _create_session_for_user,
 )

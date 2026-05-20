@@ -1,0 +1,170 @@
+name: Scheduled Playwright (dev environment)
+
+on:
+  schedule:
+    # Every 3 hours, offset 30 minutes from scheduled-playwright.yml's
+    # cron (`0 */3 * * *`) so the two scheduled suites do not collide on
+    # the same runner pool. Dev is targeted directly via HTTP so there is
+    # no local-port contention to worry about, but the SHA-based change
+    # gate is intentionally omitted: dev can drift via content sync even
+    # with no new commits, so the suite must run on cadence.
+    - cron: '30 1-23/3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: scheduled-playwright-dev
+  cancel-in-progress: true
+
+env:
+  PLAYWRIGHT_BASE_URL: https://dev.aishippinglabs.com
+  PLAYWRIGHT_DEFAULT_MARKERS: >-
+    not manual_visual and not legacy_checkout and not slow_platform
+    and not visual_regression and not local_only and not creates_data
+
+jobs:
+  playwright-dev:
+    name: Playwright Dev Suite (${{ matrix.shard_name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard_name: shard 1/4
+            shard_index: 0
+            shard_total: 4
+          - shard_name: shard 2/4
+            shard_index: 1
+            shard_total: 4
+          - shard_name: shard 3/4
+            shard_index: 2
+            shard_total: 4
+          - shard_name: shard 4/4
+            shard_index: 3
+            shard_total: 4
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Install Playwright browsers
+        run: uv run playwright install --with-deps chromium
+
+      - name: Select Playwright shard files
+        id: shard
+        shell: bash
+        run: |
+          mapfile -t files < <(
+            find playwright_tests -maxdepth 1 -type f -name 'test_*.py' | sort |
+              awk -v shard="${{ matrix.shard_index }}" -v total="${{ matrix.shard_total }}" \
+                '((NR - 1) % total) == shard'
+          )
+
+          printf '%s\n' "${files[@]}" > .playwright-shard-files
+          echo "count=${#files[@]}" >> "$GITHUB_OUTPUT"
+          printf 'Selected %s files for %s:\n' "${#files[@]}" "${{ matrix.shard_name }}"
+          printf '  %s\n' "${files[@]}"
+
+      - name: Run Playwright dev shard
+        shell: bash
+        run: |
+          mapfile -t files < .playwright-shard-files
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No Playwright files selected for ${{ matrix.shard_name }}."
+            exit 0
+          fi
+
+          # PLAYWRIGHT_BASE_URL=https://dev.aishippinglabs.com is set at
+          # workflow scope. playwright_tests/conftest.py reads it, skips
+          # tests marked `local_only` / `creates_data`, and does NOT start
+          # a local runserver thread or migrate any database. The
+          # `django_db` marker is intentionally NOT auto-skipped — see
+          # _docs/testing-guidelines.md "Dev-environment scheduled suite
+          # policy".
+          uv run pytest -m "${PLAYWRIGHT_DEFAULT_MARKERS}" "${files[@]}" -v
+
+  notify:
+    name: Scheduled Playwright (dev) Failure Issue
+    needs: [playwright-dev]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      issues: write
+
+    steps:
+      - name: Open or update failure issue
+        if: contains(toJSON(needs.*.result), 'failure')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_TITLE: "[CI] Scheduled Playwright (dev) full suite failing"
+        shell: bash
+        run: |
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          failed_jobs=$(gh run view "${GITHUB_RUN_ID}" \
+            --json jobs \
+            --jq '.jobs[] | select(.conclusion == "failure") | "- " + .name' || true)
+          if [ -z "${failed_jobs}" ]; then
+            failed_jobs="- Failure details were not available when this notification ran."
+          fi
+
+          body_file="$(mktemp)"
+          cat > "${body_file}" <<EOF
+          Scheduled Playwright (dev environment) failed on \`${GITHUB_REF_NAME}\`.
+
+          Target: ${PLAYWRIGHT_BASE_URL:-https://dev.aishippinglabs.com}
+          Run: ${run_url}
+          Commit: ${GITHUB_SHA}
+          Event: ${GITHUB_EVENT_NAME}
+
+          Failed jobs:
+          ${failed_jobs}
+          EOF
+
+          issue_number=$(gh issue list \
+            --state open \
+            --search "${ISSUE_TITLE} in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${ISSUE_TITLE}\") | .number" \
+            | head -n 1)
+
+          if [ -n "${issue_number}" ]; then
+            gh issue comment "${issue_number}" --body-file "${body_file}"
+          else
+            gh issue create --title "${ISSUE_TITLE}" --body-file "${body_file}"
+          fi
+
+      - name: Close recovered failure issue
+        if: ${{ !contains(toJSON(needs.*.result), 'failure') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_TITLE: "[CI] Scheduled Playwright (dev) full suite failing"
+        shell: bash
+        run: |
+          issue_number=$(gh issue list \
+            --state open \
+            --search "${ISSUE_TITLE} in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${ISSUE_TITLE}\") | .number" \
+            | head -n 1)
+
+          if [ -z "${issue_number}" ]; then
+            exit 0
+          fi
+
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          gh issue close "${issue_number}" \
+            --comment "Scheduled Playwright (dev) recovered on \`${GITHUB_REF_NAME}\`: ${run_url}"

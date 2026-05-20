@@ -7,6 +7,11 @@ from playwright.sync_api import expect
 
 from playwright_tests.conftest import ensure_site_config_tiers, ensure_tiers
 
+# Issue #656: this module uses local-only fixtures (DB seeding,
+# session-cookie injection, etc.) and cannot run against the
+# deployed dev environment. See _docs/testing-guidelines.md.
+pytestmark = pytest.mark.local_only
+
 
 def _goto(page, django_server, path):
     page.goto(f"{django_server}{path}", wait_until="domcontentloaded")

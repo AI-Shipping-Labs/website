@@ -24,6 +24,7 @@
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Start date</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Duration</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Plans</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Pending requests</th>
         <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
       </tr>
     </thead>
@@ -40,6 +41,15 @@
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.start_date|date:"Y-m-d" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.duration_weeks }} weeks</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.plan_count }}</td>
+        <td class="px-6 py-4 text-sm" data-testid="sprint-list-pending-count">
+          {% if sprint.pending_request_count %}
+          <a href="{% url 'studio_sprint_detail' sprint_id=sprint.pk %}#pending-requests"
+             class="text-accent hover:underline"
+             data-testid="sprint-list-pending-link">{{ sprint.pending_request_count }}</a>
+          {% else %}
+          <span class="text-muted-foreground">—</span>
+          {% endif %}
+        </td>
         <td class="px-6 py-4 text-right">
           <a href="{% url 'studio_sprint_edit' sprint_id=sprint.pk %}" class="text-sm text-accent hover:underline">Edit</a>
         </td>

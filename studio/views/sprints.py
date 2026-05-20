@@ -20,14 +20,21 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db.models import Count
+from django.db.models import Count, Max
+from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 
 from content.access import LEVEL_MAIN
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from events.models import EventSeries
-from plans.models import PLAN_STATUS_CHOICES, SPRINT_STATUS_CHOICES, Plan, Sprint
+from plans.models import (
+    PLAN_STATUS_CHOICES,
+    SPRINT_STATUS_CHOICES,
+    Plan,
+    PlanRequest,
+    Sprint,
+)
 from plans.services import create_plan_for_enrollment
 from studio.decorators import staff_required
 
@@ -147,14 +154,57 @@ def _form_data_from_sprint(sprint):
     }
 
 
+def _pending_request_member_ids(sprint):
+    """Return distinct member ids with outstanding plan requests in ``sprint``.
+
+    A request is "outstanding" iff the member has at least one
+    :class:`PlanRequest` row for the sprint AND no :class:`Plan` row
+    yet. The set is computed as a SQL left-anti-join in two steps:
+
+    1. distinct member ids that requested in this sprint, then
+    2. exclude any whose pk has a Plan row in the sprint.
+    """
+    # ``order_by()`` with no args clears the model's default ordering
+    # by ``-created_at`` so ``DISTINCT`` operates on ``member_id``
+    # alone -- otherwise PostgreSQL would distinct on the (member_id,
+    # created_at) tuple and return one row per ping rather than one
+    # row per pinger. See Django docs: "Note that ordering fields are
+    # part of the SQL query, and can therefore affect the results."
+    requested_member_ids = set(
+        PlanRequest.objects
+        .filter(sprint=sprint)
+        .order_by()
+        .values_list('member_id', flat=True)
+        .distinct()
+    )
+    members_with_plans = set(
+        Plan.objects
+        .filter(sprint=sprint, member_id__in=requested_member_ids)
+        .values_list('member_id', flat=True)
+    )
+    return sorted(requested_member_ids - members_with_plans)
+
+
 @staff_required
 def sprint_list(request):
-    """Table of sprints with status badge, start date, duration, plan count."""
-    sprints = (
+    """Table of sprints with status badge, start date, duration, plan count.
+
+    Also surfaces a "Pending requests" column per sprint -- the count
+    of distinct members with at least one outstanding ``PlanRequest``
+    and no ``Plan`` in the sprint. Clicking the count deep-links to
+    the sprint detail page's ``#pending-requests`` anchor (issue #718).
+    """
+    sprints = list(
         Sprint.objects
         .annotate(plan_count=Count('plans'))
         .order_by('-start_date')
     )
+    # Compute pending counts in Python because the left-anti-join is
+    # awkward to express as a single annotation across both PlanRequest
+    # and Plan with distinct counts. N is bounded by the number of
+    # sprints (small) so the extra round trips are cheap.
+    for sprint in sprints:
+        sprint.pending_request_count = len(_pending_request_member_ids(sprint))
     return render(request, 'studio/sprints/list.html', {
         'sprints': sprints,
     })
@@ -244,9 +294,59 @@ def sprint_create(request):
     return redirect('studio_sprint_detail', sprint_id=sprint.pk)
 
 
+def _build_pending_plan_requests(sprint):
+    """Return one row per member with outstanding plan requests.
+
+    Each row dict is shaped for the template: ``{member, request_count,
+    last_requested_at}``. Members who already have a :class:`Plan` in
+    the sprint are excluded (a left-anti-join against ``Plan``).
+
+    Ordering: most-recent-request-first. The PM did not specify but the
+    operator dictation framed this as a working inbox, so newest-on-top
+    is the conventional choice — it surfaces the freshest pings first
+    and keeps the panel useful when an operator is processing a queue.
+    """
+    pending_member_ids = _pending_request_member_ids(sprint)
+    if not pending_member_ids:
+        return []
+
+    # Aggregate request count and latest timestamp per member.
+    aggregates = (
+        PlanRequest.objects
+        .filter(sprint=sprint, member_id__in=pending_member_ids)
+        .values('member_id')
+        .annotate(
+            request_count=Count('id'),
+            last_requested_at=Max('created_at'),
+        )
+    )
+    members = {
+        u.pk: u for u in User.objects.filter(pk__in=pending_member_ids)
+    }
+    rows = []
+    for agg in aggregates:
+        member = members.get(agg['member_id'])
+        if member is None:
+            continue
+        rows.append({
+            'member': member,
+            'request_count': agg['request_count'],
+            'last_requested_at': agg['last_requested_at'],
+        })
+    # Most-recent-request-first.
+    rows.sort(key=lambda r: r['last_requested_at'], reverse=True)
+    return rows
+
+
 @staff_required
 def sprint_detail(request, sprint_id):
-    """Sprint metadata + list of plans in that sprint."""
+    """Sprint metadata + pending plan requests inbox + list of plans.
+
+    The "Pending plan requests" inbox (issue #718) is the primary CTA
+    for plan creation: it lists distinct members who pinged the team
+    for a plan in this sprint and don't yet have one. The "Add member"
+    button is demoted to a secondary, less-common path.
+    """
     sprint = get_object_or_404(
         Sprint.objects.select_related('event_series'),
         pk=sprint_id,
@@ -262,12 +362,14 @@ def sprint_detail(request, sprint_id):
         list(event_series.events.all().order_by('start_datetime'))
         if event_series else []
     )
+    pending_plan_requests = _build_pending_plan_requests(sprint)
     return render(request, 'studio/sprints/detail.html', {
         'sprint': sprint,
         'plans': plans,
         'enrollment_count': enrollment_count,
         'event_series': event_series,
         'event_series_events': event_series_events,
+        'pending_plan_requests': pending_plan_requests,
     })
 
 
@@ -424,6 +526,50 @@ def sprint_add_member(request, sprint_id):
         messages.info(
             request,
             f'Already enrolled — opening existing plan for {member.email}.',
+        )
+
+    return redirect('studio_plan_edit', plan_id=plan.pk)
+
+
+@staff_required
+def sprint_plan_request_create_plan(request, sprint_id, member_id):
+    """Inbox button: create a plan for a member who pinged for one.
+
+    Issue #718. POST-only, staff-only, idempotent. Delegates to
+    :func:`plans.services.create_plan_for_enrollment` so the artefact
+    shape stays consistent with the other plan-creation surfaces.
+
+    The :class:`PlanRequest` rows are NOT deleted on success -- they
+    remain as audit history. The member just disappears from the
+    inbox on the next page load because the left-anti-join now matches
+    the new ``Plan`` row.
+
+    Race / double-click safe: ``create_plan_for_enrollment`` already
+    catches ``IntegrityError`` on its inner ``Plan.objects.create``
+    and re-fetches the existing row, so two concurrent POSTs cannot
+    create two plans for the same ``(sprint, member)`` pair.
+    """
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    member = get_object_or_404(User, pk=member_id)
+
+    plan, _enrollment, created_now = create_plan_for_enrollment(
+        sprint=sprint,
+        user=member,
+        enrolled_by=request.user,
+    )
+
+    if created_now:
+        messages.success(
+            request,
+            f'Plan created for {member.email} in "{sprint.name}".',
+        )
+    else:
+        messages.info(
+            request,
+            f'{member.email} already has a plan in "{sprint.name}".',
         )
 
     return redirect('studio_plan_edit', plan_id=plan.pk)

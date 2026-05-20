@@ -275,6 +275,16 @@ class SprintAddMemberSubmitTest(TestCase):
 
 
 class SprintDetailAddMemberButtonTest(TestCase):
+    """Add-member button is the secondary path after the inbox redesign.
+
+    Issue #718 moved the primary CTA from this button to the
+    "Pending plan requests" inbox panel. The button still works and
+    still links to the same URL, but it now lives inside a
+    ``<details>`` block labelled "Add a member who didn't request a
+    plan" and the button text is "Add member without a request" so
+    operators understand it is the secondary path.
+    """
+
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
@@ -295,16 +305,30 @@ class SprintDetailAddMemberButtonTest(TestCase):
             response,
             f'href="/studio/sprints/{self.sprint.pk}/add-member"',
         )
-        # Label is "Add member".
-        self.assertContains(response, '>\n        Add member\n      </a>')
+        # New secondary-path label (issue #718).
+        self.assertContains(response, 'Add member without a request')
 
-    def test_add_member_button_appears_before_edit_sprint(self):
-        """Add member must be LEFT of Edit sprint per the spec."""
+    def test_add_member_button_lives_inside_details_block(self):
+        """The button is the SECONDARY path; the inbox is primary."""
         response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
         body = response.content.decode()
-        add_idx = body.index('data-testid="sprint-add-member-link"')
-        edit_idx = body.index('Edit sprint')
+        # The <details> block opens before the button so the button
+        # collapses by default. The summary copy guides operators to
+        # the right call (inbox first, this only for "no request").
+        details_idx = body.index('data-testid="sprint-add-member-details"')
+        summary_idx = body.index("Add a member who didn't request a plan")
+        button_idx = body.index('data-testid="sprint-add-member-link"')
+        self.assertLess(details_idx, button_idx)
+        self.assertLess(summary_idx, button_idx)
+
+    def test_pending_requests_section_appears_before_add_member(self):
+        """The inbox is the primary CTA; add-member is below it."""
+        response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
+        body = response.content.decode()
+        inbox_idx = body.index('data-testid="sprint-pending-requests-section"')
+        button_idx = body.index('data-testid="sprint-add-member-link"')
         self.assertLess(
-            add_idx, edit_idx,
-            msg='Add member button must appear before Edit sprint',
+            inbox_idx, button_idx,
+            msg='Pending requests inbox must appear before the '
+                'Add member secondary path.',
         )

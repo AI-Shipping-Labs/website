@@ -255,8 +255,12 @@ def refresh_slack_membership(
             models_q_null_or_old(cutoff)
         ).exists()
         if more_remaining:
+            # Issue #717: every async_task() call must carry a descriptive
+            # task_name= so the worker history shows the chained refresh
+            # under a stable label instead of django-q's random codename.
             async_task(
                 'community.tasks.slack_membership.refresh_slack_membership',
+                task_name='Refresh: slack membership chunk from scheduled refresh',
             )
             enqueued_followup = True
 

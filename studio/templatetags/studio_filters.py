@@ -46,6 +46,10 @@ STATUS_BADGE_CLASSES = {
     'published': 'bg-green-500/20 text-green-400',
     'draft': 'bg-yellow-500/20 text-yellow-400',
     'upcoming': 'bg-blue-500/20 text-blue-400',
+    # ``active`` (sprints, etc.) reads as a live/in-progress state — same
+    # green as ``published`` so the two read consistently. ``completed``
+    # is the archived/done state and stays grey-muted.
+    'active': 'bg-green-500/20 text-green-400',
     'completed': 'bg-secondary text-muted-foreground',
     'cancelled': 'bg-red-500/20 text-red-400',
     # Sprint statuses (#753): ``active`` reads as the "currently happening"

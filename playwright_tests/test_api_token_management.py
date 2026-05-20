@@ -91,7 +91,7 @@ class TestSuperuserIssuesToken:
             page.locator('[data-testid="api-tokens-empty"]')
         ).to_be_visible()
 
-        # 2. Click "Create token" button.
+        # 2. Click the New token button (issue #752 renamed from "Create token").
         page.locator('[data-testid="api-token-create-link"]').click()
         page.wait_for_load_state("domcontentloaded")
         assert "/studio/api-tokens/new/" in page.url

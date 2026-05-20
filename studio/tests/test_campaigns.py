@@ -73,10 +73,13 @@ class StudioCampaignListTest(TestCase):
         self.assertNotContains(response, "Update Email")
 
     def test_empty_state_message_and_create_link(self):
-        """When no campaigns exist, show empty-state message and 'New Campaign' link.
+        """When no campaigns exist, show empty-state message and 'New campaign' link.
 
         Covers Playwright Scenario 11 (test_empty_campaign_list_shows_message_and_create_link)
         from the deleted playwright_tests/test_email_campaigns.py.
+
+        Issue #752 renamed the header CTA from TitleCase ``New Campaign``
+        to sentence-case ``New campaign`` per the new design-system rule.
         """
         # No campaigns exist for this test.
         self.assertEqual(EmailCampaign.objects.count(), 0)
@@ -84,9 +87,9 @@ class StudioCampaignListTest(TestCase):
         response = self.client.get("/studio/campaigns/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No campaigns found")
-        # 'New Campaign' link is still available even with no campaigns.
+        # 'New campaign' link is still available even with no campaigns.
         self.assertContains(response, 'href="/studio/campaigns/new"')
-        self.assertContains(response, "New Campaign")
+        self.assertContains(response, "New campaign")
 
 
 class StudioCampaignCreateTest(TestCase):
@@ -452,14 +455,18 @@ class StudioCampaignListActionsTest(TestCase):
 
     def test_list_empty_state_shows_create_cta(self):
         """With zero campaigns the page renders the empty-state block
-        with a visible 'Create your first campaign' CTA link."""
+        with a visible 'Create your first campaign' CTA link.
+
+        Issue #752 renamed the header CTA from TitleCase ``New Campaign``
+        to sentence-case ``New campaign`` per the new design-system rule.
+        """
         self.assertEqual(EmailCampaign.objects.count(), 0)
 
         response = self.client.get("/studio/campaigns/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="campaigns-empty-state"')
         self.assertContains(response, "Create your first campaign")
-        self.assertContains(response, "New Campaign")
+        self.assertContains(response, "New campaign")
         self.assertContains(response, 'href="/studio/campaigns/new"')
 
     def test_list_draft_rows_show_edit_link(self):

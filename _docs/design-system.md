@@ -192,6 +192,29 @@ Canonical Studio header button classes:
 
 Current Studio detail surfaces using the pattern include users, CRM, sprints, plans, workshops, project review, recordings, articles, courses, events, downloads, event series, campaigns, UTM campaigns, and import batches.
 
+#### Studio list-page header row
+
+Studio list pages (`templates/studio/*/list.html`) follow one canonical header pattern so every list surface reads the same way on desktop and mobile (issue #752):
+
+- Outer container: `flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8`. On mobile the title stacks above the action row; on `sm+` the row aligns horizontally with the actions pinned right.
+- Inner action container (when the header has more than one button): `flex items-center gap-2`. Add `shrink-0` when the header subtitle is long enough to need wrapping room. Do not use `space-x-*` or `gap-3` — list-page header rows use `gap-2` uniformly.
+- Header bottom margin is `mb-8` everywhere. Do not introduce `mb-4 md:mb-8` or `mb-6` on list pages.
+- Every primary or secondary CTA in the header carries a Lucide `h-4 w-4` leading icon. Use `inline-flex items-center gap-2` on the button itself and a bare `<i data-lucide="..." class="h-4 w-4"></i>` icon (no `mr-2` — the button-level `gap-2` already separates the icon from the label).
+- Icon vocabulary: `plus` for create, `upload` for import, `download` for export, `refresh-cw` for re-sync.
+- Primary CTA label convention: `New <noun>` in sentence case for creation actions (`New event`, `New campaign`, `New token`). Singular noun. Do not use `Add` or `Create` verbs and do not TitleCase the noun.
+- Transformation CTA label convention: `Import <noun>` / `Export <noun>` / `Re-sync <noun>` in sentence case. Domain initialisms such as `CSV` keep their casing (`Export CSV`).
+- Exception for sync-managed entities (workshops, content_sources): the `New <noun>` CTA is omitted because the entities are populated by GitHub sync. The header primary may instead be `Re-sync <noun>` (workshops use this pattern).
+- The `/studio/users/` header has no `New user` CTA because users join via signup. Both `Import contacts` and `Export CSV` stay as bordered-secondary buttons; they get matching `upload` / `download` lead icons.
+- The `/studio/crm/` and `/studio/email-templates/` list pages do not match this pattern: CRM uses a wider filter bar and email templates has no header CTA. Both are documented exceptions.
+
+Status badge palette (`STATUS_BADGE_CLASSES` in `studio/templatetags/studio_filters.py`):
+
+- `published`, `active`: `bg-green-500/20 text-green-400` — live/in-progress states.
+- `draft`: `bg-yellow-500/20 text-yellow-400`.
+- `upcoming`: `bg-blue-500/20 text-blue-400`.
+- `completed` (archived): `bg-secondary text-muted-foreground`.
+- `cancelled`: `bg-red-500/20 text-red-400`.
+
 ## Pills, Badges, and Chips
 
 Canonical shape: `inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium`.

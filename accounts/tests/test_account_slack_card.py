@@ -150,6 +150,11 @@ class AccountSlackJoinCtaTest(
         # Mirrors the Playwright scenario "Member who joins Slack sees
         # the state update on /account/ next page load". Simulates the
         # 30-minute probe by toggling ``slack_member`` directly.
+        #
+        # Issue #730 dropped the connected-state card on /account/, so
+        # once the probe flips the user to ``slack_member=True`` the
+        # Slack slot must render nothing at all (no join CTA AND no
+        # connected confirmation panel).
         user = self._login_main("flip@test.com")
         with self.settings(SLACK_INVITE_URL=TEST_INVITE_URL):
             join_response = self.client.get("/account/")
@@ -166,14 +171,55 @@ class AccountSlackJoinCtaTest(
         self.assertNotContains(
             connected_response, 'data-testid="slack-account-card-join"',
         )
-        self.assertContains(connected_response, "Connected to Slack")
-        self.assertContains(connected_response, "U0FLIP123")
+        # After #730 the connected-state panel is gated out on /account/.
+        self.assertNotContains(
+            connected_response, 'data-testid="slack-account-card"',
+        )
+        self.assertNotContains(connected_response, "Connected to Slack")
+        self.assertNotContains(connected_response, "U0FLIP123")
+
+    def test_join_cta_renders_above_membership_and_email_preferences(self):
+        # Issue #730: when the user has not yet joined Slack, the Join
+        # CTA must sit immediately under Profile -- above Membership
+        # and above Email Preferences. Anchor on markers that only
+        # appear once inside the main /account/ card stack (Membership
+        # also appears in the global nav and the mobile menu, so we
+        # cannot rely on the literal word alone).
+        self._login_main("position@test.com")
+        with self.settings(SLACK_INVITE_URL=TEST_INVITE_URL):
+            response = self.client.get("/account/")
+        self.assertEqual(response.status_code, 200)
+
+        content = response.content.decode()
+        join_idx = content.index('data-testid="slack-account-card-join"')
+        # The Membership card heading: lucide "crown" icon + "Membership"
+        # heading text appears in the card stack only.
+        membership_idx = content.index('data-lucide="crown"')
+        email_prefs_idx = content.index('id="email-preferences-section"')
+
+        self.assertLess(
+            join_idx, membership_idx,
+            "Join Slack CTA must render above the Membership card",
+        )
+        self.assertLess(
+            membership_idx, email_prefs_idx,
+            "Membership card must render above Email Preferences",
+        )
 
 
 class AccountSlackConnectedStateTest(
     _SlackTeamIdSettingMixin, TierSetupMixin, TestCase,
 ):
-    """Main+ users with ``slack_member=True`` see the Connected state."""
+    """Issue #730: connected Main+ users see NO Slack card on /account/.
+
+    The connected-state panel ("Connected to Slack" + Slack ID) duplicates
+    information the user already has inside Slack itself. After #730 the
+    /account/ template gates the partial behind ``{% if not
+    slack_connected %}``, so a Main+ user with ``slack_member=True`` must
+    see no Slack-card markup at all. The view context (``slack_user_id``,
+    ``slack_profile_url``) is still populated so Studio and other
+    surfaces keep working — only the /account/ render is suppressed.
+    """
 
     def setUp(self):
         self._reset_team_id()
@@ -189,70 +235,51 @@ class AccountSlackConnectedStateTest(
         self.client.login(email=email, password="pw")
         return user
 
-    def test_connected_state_shows_slack_id_as_plain_text_without_team_id(self):
+    def test_connected_user_sees_no_slack_card_without_team_id(self):
         self._login_connected()
         # SLACK_TEAM_ID is unset (see _reset_team_id in setUp).
         response = self.client.get("/account/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="slack-account-card"')
-        self.assertContains(response, "Connected to Slack")
-        self.assertContains(response, 'data-testid="slack-account-card-id-row"')
-        # Plain monospace span — no profile link anchor.
-        self.assertContains(
+        # The entire Slack card section is gated out on /account/ for
+        # connected users — none of the partial's markup should leak.
+        self.assertNotContains(response, 'data-testid="slack-account-card"')
+        self.assertNotContains(response, "Connected to Slack")
+        self.assertNotContains(
+            response,
+            "You are a member of the AI Shipping Labs community workspace.",
+        )
+        self.assertNotContains(
+            response, 'data-testid="slack-account-card-id-row"',
+        )
+        self.assertNotContains(
             response, 'data-testid="slack-account-card-id-value"',
         )
-        self.assertContains(response, "U07AB12CDEF")
-        self.assertNotContains(
-            response, 'data-testid="slack-account-card-profile-link"',
-        )
-        self.assertNotContains(response, "app.slack.com/client/")
-        # The join CTA must NOT render alongside the connected card.
         self.assertNotContains(
             response, 'data-testid="slack-account-card-join"',
         )
+        # And the bare Slack ID must not leak as plain text on /account/.
+        self.assertNotContains(response, "U07AB12CDEF")
 
-    def test_connected_state_shows_profile_link_when_team_id_set(self):
+    def test_connected_user_sees_no_slack_card_with_team_id_set(self):
+        # Even when SLACK_TEAM_ID is set (which would normally render an
+        # "Open in Slack" anchor inside the connected-state panel), the
+        # whole card is still suppressed on /account/ after #730.
         self._set_team_id("T01TEAM123")
         self._login_connected(slack_user_id="U07AB12CDEF")
 
         response = self.client.get("/account/")
-        self.assertContains(
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-testid="slack-account-card"')
+        self.assertNotContains(
             response, 'data-testid="slack-account-card-profile-link"',
         )
-        anchor_match = re.search(
-            r'<a[^>]*data-testid="slack-account-card-profile-link"[^>]*>'
-            r'([^<]*)</a>',
-            response.content.decode(),
-            re.DOTALL,
+        # The deep-link URL the partial would have rendered must not be
+        # on the page at all.
+        self.assertNotContains(
+            response, "app.slack.com/client/T01TEAM123/U07AB12CDEF",
         )
-        self.assertIsNotNone(
-            anchor_match, "Slack profile-link anchor must render",
-        )
-        attrs = anchor_match.group(0)
-        self.assertIn(
-            'href="https://app.slack.com/client/T01TEAM123/U07AB12CDEF"',
-            attrs,
-        )
-        self.assertIn('target="_blank"', attrs)
-        self.assertIn('rel="noopener"', attrs)
-        # The visible link text is the Slack ID itself.
-        self.assertEqual(anchor_match.group(1).strip(), "U07AB12CDEF")
-
-    def test_connected_card_appears_after_membership_card(self):
-        # Pin the ordering so a future refactor of the card stack cannot
-        # silently drop the partial above the Email Preferences block.
-        self._login_connected()
-        response = self.client.get("/account/")
-        content = response.content.decode()
-        membership_idx = content.find("Membership")
-        slack_idx = content.find('data-testid="slack-account-card"')
-        email_prefs_idx = content.find('id="email-preferences-section"')
-        self.assertNotEqual(membership_idx, -1)
-        self.assertNotEqual(slack_idx, -1)
-        self.assertNotEqual(email_prefs_idx, -1)
-        self.assertLess(membership_idx, slack_idx)
-        self.assertLess(slack_idx, email_prefs_idx)
+        self.assertNotContains(response, "Connected to Slack")
 
 
 class AccountSlackCardAnonymousTest(TestCase):

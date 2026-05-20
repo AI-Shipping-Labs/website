@@ -1,0 +1,235 @@
+{% comment %}
+Reusable Studio people picker (issue #720).
+
+Renders a search input backed by the staff JSON endpoint
+``studio_user_search`` (``/studio/api/users/search/``). Suggestion rows show
+the user's display name (bold), email (muted), and contextual badges:
+``In this sprint`` and ``Has plan in sprint`` when a sprint is in context,
+``No community access`` when the user is below LEVEL_MAIN, and ``Tier:
+{level_name}`` for the current tier.
+
+Block parameters (pass via ``{% include ... with key=value %}``):
+- ``name`` (required): form field name for the selected user id (hidden input).
+- ``id_prefix`` (required): DOM id prefix to avoid collisions when several
+  pickers appear on one page (e.g. ``tier-override-user``).
+- ``search_url`` (required): URL that returns the JSON ``{results: [...]}``
+  payload. Usually ``{% url 'studio_user_search' %}``.
+- ``placeholder`` (optional, default ``Search by name or email...``).
+- ``label`` (optional, default ``User``): visible label above the input.
+- ``extra_query`` (optional): URL-encoded extra query string appended to
+  every search request (e.g. ``sprint=may-2026``).
+- ``on_select_action`` (optional, default ``set_value``): one of
+  ``navigate`` (jump to ``navigate_url_template`` with ``{id}`` replaced),
+  ``submit_form`` (set the hidden id then submit the enclosing form), or
+  ``set_value`` (set the hidden id and dispatch a ``picker:select`` event).
+- ``navigate_url_template`` (required when ``on_select_action='navigate'``):
+  url with a ``{id}`` placeholder.
+- ``testid_prefix`` (optional, default = ``id_prefix``): override the
+  ``data-testid`` prefix used for input, suggestion list, and rows.
+
+Keyboard support: ArrowDown / ArrowUp moves the highlighted suggestion,
+Enter activates the highlighted row, Esc closes the suggestion list.
+{% endcomment %}
+{% with effective_testid_prefix=testid_prefix|default:id_prefix effective_placeholder=placeholder|default:"Search by name or email..." effective_label=label|default:"User" effective_on_select=on_select_action|default:"set_value" %}
+<div class="relative" data-component="studio-people-picker">
+  <label for="{{ id_prefix }}-search" class="block text-sm font-medium text-foreground mb-1">{{ effective_label }}</label>
+  <input type="text"
+         id="{{ id_prefix }}-search"
+         placeholder="{{ effective_placeholder }}"
+         autocomplete="off"
+         data-search-url="{{ search_url }}"
+         data-extra-query="{{ extra_query|default:'' }}"
+         data-on-select="{{ effective_on_select }}"
+         data-navigate-template="{{ navigate_url_template|default:'' }}"
+         data-result-list="{{ id_prefix }}-suggestions"
+         data-hidden-id="{{ id_prefix }}-id"
+         class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+         data-testid="{{ effective_testid_prefix }}-search">
+  <input type="hidden" name="{{ name }}" id="{{ id_prefix }}-id">
+  <ul id="{{ id_prefix }}-suggestions"
+      class="hidden absolute z-20 mt-1 w-full bg-card border border-border rounded-lg shadow-lg overflow-hidden"
+      role="listbox"
+      data-testid="{{ effective_testid_prefix }}-suggestions"></ul>
+</div>
+<script>
+(function() {
+  var input = document.getElementById('{{ id_prefix }}-search');
+  var hidden = document.getElementById('{{ id_prefix }}-id');
+  var list = document.getElementById('{{ id_prefix }}-suggestions');
+  if (!input || !hidden || !list) { return; }
+
+  var url = input.dataset.searchUrl;
+  var extraQuery = input.dataset.extraQuery || '';
+  var onSelect = input.dataset.onSelect || 'set_value';
+  var navigateTemplate = input.dataset.navigateTemplate || '';
+  var testidPrefix = '{{ effective_testid_prefix|escapejs }}';
+  var debounce;
+  var activeIndex = -1;
+
+  var TIER_NAMES = {0: 'Free', 5: 'Free', 10: 'Basic', 20: 'Main', 30: 'Premium'};
+  var BADGE_BASE = 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ';
+  var BADGE_NEUTRAL = BADGE_BASE + 'bg-secondary text-muted-foreground';
+  var BADGE_WARN = BADGE_BASE + 'bg-destructive/10 text-destructive';
+
+  function clearSelection() { hidden.value = ''; }
+  function items() { return list.querySelectorAll('li[data-user-id]'); }
+
+  function hideList() {
+    list.classList.add('hidden');
+    list.innerHTML = '';
+    activeIndex = -1;
+  }
+
+  function setActive(index) {
+    var rows = items();
+    if (!rows.length) { activeIndex = -1; return; }
+    if (index < 0) { index = rows.length - 1; }
+    if (index >= rows.length) { index = 0; }
+    rows.forEach(function(row, i) {
+      if (i === index) {
+        row.classList.add('bg-secondary', 'ring-1', 'ring-accent');
+        row.setAttribute('aria-selected', 'true');
+      } else {
+        row.classList.remove('bg-secondary', 'ring-1', 'ring-accent');
+        row.setAttribute('aria-selected', 'false');
+      }
+    });
+    activeIndex = index;
+  }
+
+  function badge(label, klass, testid) {
+    var span = document.createElement('span');
+    span.className = klass;
+    span.textContent = label;
+    if (testid) { span.setAttribute('data-testid', testid); }
+    return span;
+  }
+
+  function buildRow(u) {
+    var li = document.createElement('li');
+    li.className = 'cursor-pointer px-4 py-3 hover:bg-secondary text-sm text-foreground';
+    li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', 'false');
+    li.setAttribute('data-testid', testidPrefix + '-suggestion');
+    li.setAttribute('data-user-id', u.id);
+    li.setAttribute('data-email', u.email);
+
+    var nameRow = document.createElement('div');
+    nameRow.className = 'font-semibold break-all';
+    nameRow.setAttribute('data-testid', testidPrefix + '-suggestion-name');
+    var hasName = (u.first_name && u.first_name.length) || (u.last_name && u.last_name.length);
+    nameRow.textContent = hasName ? (u.display_name || u.email) : '(no name)';
+    li.appendChild(nameRow);
+
+    var emailRow = document.createElement('div');
+    emailRow.className = 'text-xs text-muted-foreground font-mono break-all mt-0.5';
+    emailRow.setAttribute('data-testid', testidPrefix + '-suggestion-email');
+    emailRow.textContent = u.email;
+    li.appendChild(emailRow);
+
+    var badges = document.createElement('div');
+    badges.className = 'mt-2 flex flex-wrap gap-1.5';
+    badges.setAttribute('data-testid', testidPrefix + '-suggestion-badges');
+    if (u.in_sprint) {
+      badges.appendChild(badge('In this sprint', BADGE_NEUTRAL, testidPrefix + '-badge-in-sprint'));
+    }
+    if (u.has_plan_in_sprint) {
+      badges.appendChild(badge('Has plan in sprint', BADGE_NEUTRAL, testidPrefix + '-badge-has-plan'));
+    }
+    if (u.has_community_access === false) {
+      badges.appendChild(badge('No community access', BADGE_WARN, testidPrefix + '-badge-no-community'));
+    }
+    if (typeof u.tier_level === 'number') {
+      var tierName = TIER_NAMES[u.tier_level] || ('Level ' + u.tier_level);
+      badges.appendChild(badge('Tier: ' + tierName, BADGE_NEUTRAL, testidPrefix + '-badge-tier'));
+    }
+    if (badges.childNodes.length) { li.appendChild(badges); }
+
+    li.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      activate(u);
+    });
+    return li;
+  }
+
+  function render(results) {
+    list.innerHTML = '';
+    activeIndex = -1;
+    if (!results || !results.length) { hideList(); return; }
+    results.forEach(function(u) { list.appendChild(buildRow(u)); });
+    list.classList.remove('hidden');
+  }
+
+  function activate(u) {
+    hidden.value = u.id;
+    if (onSelect === 'navigate' && navigateTemplate) {
+      window.location.href = navigateTemplate.replace('{id}', u.id);
+      return;
+    }
+    if (onSelect === 'submit_form') {
+      hideList();
+      var form = hidden.closest('form');
+      if (form) { form.submit(); }
+      return;
+    }
+    // set_value: write to the hidden field and notify listeners.
+    input.value = u.display_name || u.email;
+    hideList();
+    var event;
+    try {
+      event = new CustomEvent('picker:select', {detail: u, bubbles: true});
+    } catch (err) {
+      event = document.createEvent('CustomEvent');
+      event.initCustomEvent('picker:select', true, false, u);
+    }
+    input.dispatchEvent(event);
+  }
+
+  function search(q) {
+    var qs = 'q=' + encodeURIComponent(q);
+    if (extraQuery) { qs = qs + '&' + extraQuery; }
+    fetch(url + '?' + qs, {credentials: 'same-origin'})
+      .then(function(r) { return r.ok ? r.json() : {results: []}; })
+      .then(function(d) { render(d.results || []); })
+      .catch(function() { hideList(); });
+  }
+
+  input.addEventListener('input', function() {
+    clearSelection();
+    var q = input.value.trim();
+    if (debounce) { clearTimeout(debounce); }
+    if (q.length < 2) { hideList(); return; }
+    debounce = setTimeout(function() { search(q); }, 200);
+  });
+
+  input.addEventListener('keydown', function(e) {
+    var rows = items();
+    if (e.key === 'ArrowDown') {
+      if (!rows.length) { return; }
+      e.preventDefault();
+      setActive(activeIndex + 1);
+    } else if (e.key === 'ArrowUp') {
+      if (!rows.length) { return; }
+      e.preventDefault();
+      setActive(activeIndex - 1);
+    } else if (e.key === 'Enter') {
+      if (activeIndex >= 0 && rows[activeIndex]) {
+        e.preventDefault();
+        var row = rows[activeIndex];
+        activate({
+          id: row.getAttribute('data-user-id'),
+          email: row.getAttribute('data-email'),
+          display_name: row.querySelector('[data-testid="' + testidPrefix + '-suggestion-name"]').textContent,
+        });
+      }
+    } else if (e.key === 'Escape') {
+      hideList();
+    }
+  });
+
+  input.addEventListener('blur', function() {
+    setTimeout(hideList, 150);
+  });
+})();
+</script>
+{% endwith %}

@@ -6,6 +6,7 @@ from dateutil.relativedelta import relativedelta
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.http import (
+    Http404,
     HttpResponsePermanentRedirect,
     HttpResponseRedirect,
     JsonResponse,
@@ -15,7 +16,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import TierOverride
+from content.access import LEVEL_MAIN
 from payments.models import Tier
+from plans.models import Plan, Sprint, SprintEnrollment
 from studio.decorators import staff_required
 
 User = get_user_model()
@@ -103,25 +106,139 @@ def user_tier_override_page(request, user_id):
     )
 
 
+def _display_name_for(user):
+    """Return the picker display name for a user.
+
+    Prefers ``"First Last"`` (trimmed) when at least one of ``first_name`` or
+    ``last_name`` is non-empty; otherwise falls back to the email so every
+    suggestion row still has something to render.
+    """
+    full = (user.get_full_name() or '').strip()
+    return full or user.email
+
+
+def _relevance_rank(user, query_lower):
+    """Sort key: lower is better.
+
+    Band 0: exact match on email or full name (case-insensitive).
+    Band 1: startswith match on email, first_name, last_name, or full name.
+    Band 2: substring match (any other case-insensitive containment).
+    """
+    email_l = user.email.lower()
+    first_l = (user.first_name or '').lower()
+    last_l = (user.last_name or '').lower()
+    full_l = f'{first_l} {last_l}'.strip()
+    if email_l == query_lower or full_l == query_lower:
+        return 0
+    if (
+        email_l.startswith(query_lower)
+        or first_l.startswith(query_lower)
+        or last_l.startswith(query_lower)
+        or full_l.startswith(query_lower)
+    ):
+        return 1
+    return 2
+
+
 @staff_required
 def studio_user_search(request):
-    """Staff-only JSON user search endpoint for Studio autocomplete fields."""
+    """Staff-only JSON user search for Studio autocomplete fields.
+
+    Searches across ``first_name``, ``last_name``, and ``email``
+    (case-insensitive substring). Returns up to 10 results ordered by
+    relevance (exact > startswith > substring) and then alphabetically by
+    display name within each band.
+
+    Each result includes ``id``, ``email``, ``first_name``, ``last_name``,
+    ``display_name``, ``tier_level``, and ``has_community_access``. When the
+    optional ``?sprint=<slug>`` query param is set, each result additionally
+    reports ``in_sprint`` and ``has_plan_in_sprint`` flags for that sprint.
+    An unknown sprint slug returns 404.
+    """
     query = request.GET.get('q', '').strip()
     if len(query) < 2:
         return JsonResponse({'results': []})
 
-    qs = User.objects.filter(email__icontains=query)
-    if query.isdigit():
-        qs = User.objects.filter(Q(email__icontains=query) | Q(pk=int(query)))
+    sprint_slug = request.GET.get('sprint', '').strip()
+    sprint = None
+    if sprint_slug:
+        try:
+            sprint = Sprint.objects.get(slug=sprint_slug)
+        except Sprint.DoesNotExist as exc:
+            raise Http404(f'Sprint {sprint_slug!r} not found') from exc
 
-    results = [
-        {
+    # The full query string is the primary substring match (so "alice" still
+    # works the same way the old endpoint did). When the operator pastes a
+    # full name like "Sam One", whitespace-separated tokens are also matched
+    # against any field so the AND of tokens-must-each-appear-somewhere
+    # still surfaces the right person -- the relevance ranker promotes the
+    # exact full-name match to the top.
+    tokens = [t for t in query.split() if t]
+    name_or_email = (
+        Q(email__icontains=query)
+        | Q(first_name__icontains=query)
+        | Q(last_name__icontains=query)
+    )
+    for token in tokens:
+        if token == query:
+            continue
+        name_or_email = name_or_email | (
+            Q(email__icontains=token)
+            | Q(first_name__icontains=token)
+            | Q(last_name__icontains=token)
+        )
+    if query.isdigit():
+        name_or_email = name_or_email | Q(pk=int(query))
+
+    # Fetch a wider window than the cap so we can sort by relevance in Python
+    # without paying for a second query. 50 is plenty given the cap of 10.
+    candidates = list(
+        User.objects
+        .filter(name_or_email)
+        .select_related('tier')
+        [:50]
+    )
+
+    query_lower = query.lower()
+    candidates.sort(
+        key=lambda u: (
+            _relevance_rank(u, query_lower),
+            _display_name_for(u).lower(),
+        )
+    )
+    candidates = candidates[:10]
+
+    sprint_user_ids = set()
+    plan_user_ids = set()
+    if sprint is not None and candidates:
+        candidate_ids = [u.pk for u in candidates]
+        sprint_user_ids = set(
+            SprintEnrollment.objects
+            .filter(sprint=sprint, user_id__in=candidate_ids)
+            .values_list('user_id', flat=True)
+        )
+        plan_user_ids = set(
+            Plan.objects
+            .filter(sprint=sprint, member_id__in=candidate_ids)
+            .values_list('member_id', flat=True)
+        )
+
+    results = []
+    for user in candidates:
+        tier_level = user.tier.level if user.tier_id else 0
+        row = {
             'id': user.pk,
             'email': user.email,
-            'name': (user.get_full_name() or '').strip(),
+            'first_name': user.first_name or '',
+            'last_name': user.last_name or '',
+            'display_name': _display_name_for(user),
+            'tier_level': tier_level,
+            'has_community_access': tier_level >= LEVEL_MAIN,
         }
-        for user in qs.order_by('email')[:10]
-    ]
+        if sprint is not None:
+            row['in_sprint'] = user.pk in sprint_user_ids
+            row['has_plan_in_sprint'] = user.pk in plan_user_ids
+        results.append(row)
     return JsonResponse({'results': results})
 
 

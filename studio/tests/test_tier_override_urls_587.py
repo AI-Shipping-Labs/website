@@ -60,19 +60,22 @@ class TierOverrideIssue587Test(TestCase):
         response = self.client.get(reverse('studio_user_search'), {'q': 'learn'})
 
         self.assertEqual(response.status_code, 200)
+        results = response.json()['results']
+        emails = [row['email'] for row in results]
+        self.assertEqual(emails, ['learner1@test.com', 'learner2@test.com'])
+        # Issue #720 superset: identity + tier metadata. ``sprint`` query
+        # param adds two more keys; without it those keys are absent.
         self.assertEqual(
-            response.json(),
+            set(results[0].keys()),
             {
-                'results': [
-                    {'id': User.objects.get(email='learner1@test.com').pk, 'email': 'learner1@test.com', 'name': 'Learner One'},
-                    {'id': User.objects.get(email='learner2@test.com').pk, 'email': 'learner2@test.com', 'name': ''},
-                ],
+                'id', 'email', 'first_name', 'last_name', 'display_name',
+                'tier_level', 'has_community_access',
             },
         )
-        self.assertEqual(
-            set(response.json()['results'][0].keys()),
-            {'id', 'email', 'name'},
-        )
+        self.assertEqual(results[0]['first_name'], 'Learner')
+        self.assertEqual(results[0]['last_name'], 'One')
+        self.assertEqual(results[0]['display_name'], 'Learner One')
+        self.assertEqual(results[1]['display_name'], 'learner2@test.com')
 
     def test_user_search_returns_empty_for_short_empty_and_no_match(self):
         self._user('alpha@test.com')

@@ -11,20 +11,7 @@
 
 <div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-xl">
   <h2 class="text-lg font-semibold text-foreground mb-4">Search User</h2>
-  <div class="relative">
-    <label for="tier-override-user-search" class="block text-sm font-medium text-foreground mb-1">User</label>
-    <input type="text"
-           id="tier-override-user-search"
-           placeholder="Search by email..."
-           autocomplete="off"
-           data-search-url="{% url 'studio_user_search' %}"
-           class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-           data-testid="tier-override-user-search">
-    <input type="hidden" name="user_id" id="tier-override-user-id">
-    <ul id="tier-override-user-suggestions"
-        class="hidden absolute z-20 mt-1 w-full bg-card border border-border rounded-lg shadow-lg overflow-hidden"
-        data-testid="tier-override-user-suggestions"></ul>
-  </div>
+  {% include "studio/includes/_people_picker.html" with name="user_id" id_prefix="tier-override-user" search_url="/studio/api/users/search/" placeholder="Search by name or email..." on_select_action="navigate" navigate_url_template="/studio/users/{id}/tier_override/" %}
 </div>
 
 <div class="bg-card border border-border rounded-lg overflow-hidden mb-8"
@@ -120,60 +107,4 @@
   {% endif %}
 </div>
 
-<script>
-(function() {
-  var input = document.getElementById('tier-override-user-search');
-  var hidden = document.getElementById('tier-override-user-id');
-  var list = document.getElementById('tier-override-user-suggestions');
-  if (!input || !hidden || !list) { return; }
-  var url = input.dataset.searchUrl;
-  var debounce;
-
-  function clearSelection() { hidden.value = ''; }
-  function hideList() { list.classList.add('hidden'); list.innerHTML = ''; }
-
-  function render(items) {
-    list.innerHTML = '';
-    if (!items.length) { hideList(); return; }
-    items.forEach(function(u) {
-      var li = document.createElement('li');
-      li.className = 'cursor-pointer px-4 py-3 hover:bg-secondary text-sm text-foreground';
-      li.setAttribute('data-testid', 'tier-override-user-suggestion');
-      li.setAttribute('data-user-id', u.id);
-      li.setAttribute('data-email', u.email);
-      var emailSpan = document.createElement('div');
-      emailSpan.className = 'font-medium break-all';
-      emailSpan.textContent = u.email;
-      var meta = document.createElement('div');
-      meta.className = 'text-xs text-muted-foreground';
-      meta.textContent = 'ID ' + u.id + (u.name ? ' - ' + u.name : '');
-      li.appendChild(emailSpan);
-      li.appendChild(meta);
-      li.addEventListener('mousedown', function(e) {
-        e.preventDefault();
-        window.location.href = '/studio/users/' + u.id + '/tier_override/';
-      });
-      list.appendChild(li);
-    });
-    list.classList.remove('hidden');
-  }
-
-  input.addEventListener('input', function() {
-    clearSelection();
-    var q = input.value.trim();
-    if (debounce) { clearTimeout(debounce); }
-    if (q.length < 2) { hideList(); return; }
-    debounce = setTimeout(function() {
-      fetch(url + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
-        .then(function(r) { return r.ok ? r.json() : { results: [] }; })
-        .then(function(d) { render(d.results || []); })
-        .catch(function() { hideList(); });
-    }, 200);
-  });
-
-  input.addEventListener('blur', function() {
-    setTimeout(hideList, 150);
-  });
-})();
-</script>
 {% endblock %}

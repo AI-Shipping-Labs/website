@@ -839,16 +839,19 @@ def _build_feed_etag(last_modified, count):
 def events_calendar_feed(request):
     """Return the subscribable platform-wide events feed.
 
-    Issue #578. Includes published, non-cancelled, non-gated events
-    from the last 30 days through all future. Subscribers (Apple
-    Calendar, Google Calendar, Outlook) refresh on their own polling
-    cycle; we set short cache headers and honor ``If-None-Match`` /
-    ``If-Modified-Since`` so a CDN in front can serve 304s when
-    nothing has changed.
+    Issues #578 / #726. Includes published, non-draft, non-cancelled
+    events from the last 30 days through all future, at every tier
+    level. Subscribers (Apple Calendar, Google Calendar, Outlook)
+    refresh on their own polling cycle; we set short cache headers
+    and honor ``If-None-Match`` / ``If-Modified-Since`` so a CDN in
+    front can serve 304s when nothing has changed.
 
-    No login required — the feed contains only ``required_level=0``
-    events. A signed-token per-user feed for gated events is a
-    deferred follow-up (see issue body).
+    No login required. Tier-gated events (``required_level > 0``)
+    appear in the feed with a ``[Members only]`` ``SUMMARY`` prefix
+    and a stub ``DESCRIPTION`` (title + members-only sentence +
+    detail URL) so visibility is preserved without leaking gated
+    bodies into the anonymous feed. A signed-token per-user feed
+    for full gated descriptions is a deferred follow-up.
     """
     events_qs = feed_events_queryset()
     events = list(events_qs)

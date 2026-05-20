@@ -183,6 +183,79 @@ class BuildVeventTest(TestCase):
             description,
         )
 
+    def test_summary_prefix_for_gated_events(self):
+        """Issue #726: gated events get a ``[Members only]`` prefix."""
+        gated = Event.objects.create(
+            slug='gated-summary-evt',
+            title='Members Workshop',
+            description='Gated body text.',
+            start_datetime=self.start,
+            status='upcoming',
+            required_level=20,
+        )
+        self.assertEqual(
+            str(build_vevent(gated).get('summary')),
+            '[Members only] Members Workshop',
+        )
+
+    def test_summary_prefix_combines_members_only_and_hosted_on(self):
+        """Issue #726: external gated event combines both prefixes."""
+        gated_external = Event.objects.create(
+            slug='gated-external-evt',
+            title='LLM Cohort',
+            description='Gated external body.',
+            start_datetime=self.start,
+            status='upcoming',
+            required_level=20,
+            external_host='Maven',
+            zoom_join_url='https://maven.com/aisl/llm',
+        )
+        self.assertEqual(
+            str(build_vevent(gated_external).get('summary')),
+            '[Members only] [Hosted on Maven] LLM Cohort',
+        )
+
+    def test_summary_unchanged_for_open_events(self):
+        """Issue #726: open (level 0) events get no ``[Members only]`` prefix."""
+        self.assertEqual(
+            str(build_vevent(self.community).get('summary')),
+            'Community Workshop',
+        )
+
+    def test_description_stubbed_for_gated_events(self):
+        """Issue #726: gated event description does NOT leak the body."""
+        gated = Event.objects.create(
+            slug='gated-desc-evt',
+            title='Members Workshop',
+            description='SECRET-MEMBERS-ONLY-BODY-DETAILS',
+            start_datetime=self.start,
+            status='upcoming',
+            required_level=20,
+        )
+        vevent = build_vevent(gated)
+        description = str(vevent.get('description'))
+        # The original gated body MUST NOT appear in the public feed.
+        self.assertNotIn('SECRET-MEMBERS-ONLY-BODY-DETAILS', description)
+        # The stub MUST mention members-only and include the detail URL.
+        self.assertIn('members-only', description)
+        self.assertIn(
+            f'https://aishippinglabs.com{gated.get_absolute_url()}',
+            description,
+        )
+        # The title still appears in the stub so subscribers know what
+        # the entry is even if their client hides the SUMMARY.
+        self.assertIn('Members Workshop', description)
+
+    def test_description_full_body_for_open_events(self):
+        """Issue #726: open (level 0) events keep the full body + Join line."""
+        vevent = build_vevent(self.community)
+        description = str(vevent.get('description'))
+        self.assertIn('A normal community session.', description)
+        self.assertIn(
+            f'Join: https://aishippinglabs.com{self.community.get_absolute_url()}',
+            description,
+        )
+
 
 @override_settings(SITE_BASE_URL='https://aishippinglabs.com')
 class FeedEventsQuerysetTest(TestCase):
@@ -249,13 +322,23 @@ class FeedEventsQuerysetTest(TestCase):
         self.assertIn('recent-done', slugs)
         self.assertIn('future-upcoming', slugs)
 
-    def test_excludes_old_drafts_cancelled_gated_unpublished(self):
+    def test_includes_gated_events(self):
+        """Issue #726: gated events appear in the public feed.
+
+        The body is stubbed and the SUMMARY is prefixed with
+        ``[Members only]`` in ``build_vevent``; the inclusion query
+        no longer filters on ``required_level``.
+        """
+        qs = feed_events_queryset(now=self.now)
+        slugs = set(qs.values_list('slug', flat=True))
+        self.assertIn('gated-evt', slugs)
+
+    def test_excludes_old_drafts_cancelled_unpublished(self):
         qs = feed_events_queryset(now=self.now)
         slugs = set(qs.values_list('slug', flat=True))
         self.assertNotIn('old-done', slugs)
         self.assertNotIn('draft-evt', slugs)
         self.assertNotIn('cancelled-evt', slugs)
-        self.assertNotIn('gated-evt', slugs)
         self.assertNotIn('unpublished-evt', slugs)
 
     def test_ordered_by_start_datetime_ascending(self):
@@ -444,15 +527,43 @@ class EventsCalendarFeedViewTest(TestCase):
         self.assertIn('Upcoming Feed Event', summaries)
         self.assertIn('Completed Feed Event', summaries)
 
-    def test_excludes_draft_cancelled_and_gated(self):
+    def test_excludes_draft_and_cancelled(self):
         response = self.client.get('/events/calendar.ics')
         text = response.content.decode('utf-8')
         self.assertNotIn('Draft Feed Event', text)
         self.assertNotIn('draft-feed', text)
         self.assertNotIn('Cancelled Feed Event', text)
         self.assertNotIn('cancelled-feed', text)
-        self.assertNotIn('Gated Feed Event', text)
-        self.assertNotIn('gated-feed', text)
+
+    def test_includes_gated_event_with_members_only_prefix(self):
+        """Issue #726: gated event appears with ``[Members only]`` SUMMARY."""
+        response = self.client.get('/events/calendar.ics')
+        cal = _parse(response.content)
+        gated = _vevent_by_uid(
+            cal, 'event-gated-feed@aishippinglabs.com',
+        )
+        self.assertIsNotNone(gated)
+        self.assertEqual(
+            str(gated.get('summary')),
+            '[Members only] Gated Feed Event',
+        )
+
+    def test_gated_event_description_is_stubbed(self):
+        """Issue #726: gated event DESCRIPTION does not leak the body."""
+        response = self.client.get('/events/calendar.ics')
+        cal = _parse(response.content)
+        gated = _vevent_by_uid(
+            cal, 'event-gated-feed@aishippinglabs.com',
+        )
+        self.assertIsNotNone(gated)
+        description = str(gated.get('description'))
+        self.assertIn('members-only', description)
+        # The detail URL must be present so the subscriber can land
+        # on the upgrade CTA.
+        self.assertIn(
+            f'https://aishippinglabs.com{self.gated.get_absolute_url()}',
+            description,
+        )
 
     def test_external_event_has_hosted_on_prefix(self):
         response = self.client.get('/events/calendar.ics')

@@ -64,10 +64,18 @@ def build_vevent(event):
     if is_external is None:
         is_external = bool(getattr(event, 'external_host', '') or '')
     external_host = getattr(event, 'external_host', '') or ''
+    # Issue #726: tier-gated events appear in the public feed with a
+    # ``[Members only]`` SUMMARY prefix so a subscriber can tell at a
+    # glance which sessions need a paid tier to attend. Both the
+    # ``[Members only]`` and ``[Hosted on X]`` prefixes may apply; the
+    # documented order is ``[Members only] [Hosted on X] <title>``.
+    required_level = getattr(event, 'required_level', 0) or 0
+    is_gated = required_level > 0
+    summary = event.title
     if is_external:
-        summary = f'[Hosted on {external_host}] {event.title}'
-    else:
-        summary = event.title
+        summary = f'[Hosted on {external_host}] {summary}'
+    if is_gated:
+        summary = f'[Members only] {summary}'
     vevent.add('summary', summary)
 
     vevent.add('dtstart', event.start_datetime)
@@ -112,13 +120,27 @@ def build_vevent(event):
 
     # DESCRIPTION — plain text body plus a final ``Join:`` line so the
     # URL is visible in clients that hide ``URL`` / ``LOCATION``.
-    description = (event.description or '').strip()
-    if len(description) > MAX_DESCRIPTION_CHARS:
-        description = description[:MAX_DESCRIPTION_CHARS]
-    if description:
-        body = f'{description}\n\nJoin: {detail_url}'
+    #
+    # Issue #726: for tier-gated events we REPLACE the body with a
+    # short stub (title + "members-only" sentence + detail URL). The
+    # anonymous feed is cacheable by third-party services and we
+    # treat its contents as public; gated event bodies stay behind
+    # the auth gate on the detail page.
+    if is_gated:
+        body = (
+            f'{event.title}\n\n'
+            'This is a members-only event. Membership required to '
+            'register and attend.\n'
+            f'Details: {detail_url}'
+        )
     else:
-        body = f'Join: {detail_url}'
+        description = (event.description or '').strip()
+        if len(description) > MAX_DESCRIPTION_CHARS:
+            description = description[:MAX_DESCRIPTION_CHARS]
+        if description:
+            body = f'{description}\n\nJoin: {detail_url}'
+        else:
+            body = f'Join: {detail_url}'
     vevent.add('description', body)
 
     # URL points to the public detail page (announcement landing). The

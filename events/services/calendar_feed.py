@@ -25,15 +25,21 @@ FEED_BACKFILL_DAYS = 30
 def feed_events_queryset(now=None):
     """Return the queryset of events that belong in the public feed.
 
-    Inclusion rules (issue #578):
+    Inclusion rules (issue #726, broadens issue #578):
 
     - ``published = True``
-    - ``status in ('upcoming', 'completed')`` — never ``draft``,
-      never ``cancelled``
-    - ``start_datetime >= now - 30 days``
-    - ``required_level == 0`` — gated events stay invisible in the
-      public feed; member-aware feeds with signed tokens are a
-      deliberate follow-up
+    - ``status NOT IN ('draft', 'cancelled')`` — status exclusion,
+      not inclusion, so a freshly-synced event whose stored status
+      happens to be ``completed`` (the default in the GitHub sync
+      dispatcher) or any other non-draft, non-cancelled value is
+      included on equal footing. This matches the time-derived
+      ``is_upcoming`` / ``is_past`` rules used elsewhere post-#713.
+    - ``start_datetime >= now - 30 days`` — 30-day backfill window.
+    - All tier levels are included. Gated events
+      (``required_level > 0``) are rendered with a ``[Members only]``
+      ``SUMMARY`` prefix and a stub ``DESCRIPTION`` (see
+      ``build_vevent``) so visibility is preserved without leaking
+      gated content into the anonymous feed.
 
     Ordering is ``start_datetime`` ascending so the file reads
     chronologically when opened by a human.
@@ -49,9 +55,9 @@ def feed_events_queryset(now=None):
 
     return Event.objects.filter(
         published=True,
-        status__in=('upcoming', 'completed'),
         start_datetime__gte=window_start,
-        required_level=0,
+    ).exclude(
+        status__in=('draft', 'cancelled'),
     ).order_by('start_datetime')
 
 

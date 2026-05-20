@@ -91,11 +91,14 @@ class TestScenario1CreateCampaignAndLink:
         # Empty state visible
         body = page.content()
         assert "No UTM campaigns yet" in body
-        assert "Add Campaign" in body
-        assert "Import" in body
+        # Issue #752 renamed the header CTAs from ``Add Campaign`` /
+        # ``Import`` to sentence-case ``New UTM campaign`` /
+        # ``Import UTM campaigns`` per the new design-system rule.
+        assert "New UTM campaign" in body
+        assert "Import UTM campaigns" in body
 
-        # Click Add Campaign
-        page.click('a:has-text("Add Campaign")')
+        # Click the New UTM campaign CTA.
+        page.click('a:has-text("New UTM campaign")')
         page.wait_for_load_state("domcontentloaded")
         assert "/studio/utm-campaigns/new" in page.url
 

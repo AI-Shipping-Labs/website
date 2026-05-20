@@ -4,14 +4,15 @@
 {% block studio_title %}Sprints{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8 flex items-center justify-between">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
   <div>
     <h1 class="text-2xl font-semibold text-foreground">Sprints</h1>
     <p class="text-muted-foreground mt-1">Rolling cohort windows. Plans hang off a sprint.</p>
   </div>
   <a href="{% url 'studio_sprint_create' %}"
-     class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-    New sprint
+     class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2">
+    <i data-lucide="plus" class="h-4 w-4"></i>
+    <span>New sprint</span>
   </a>
 </div>
 
@@ -37,7 +38,7 @@
           <div class="text-xs text-muted-foreground font-mono">{{ sprint.slug }}</div>
         </td>
         <td class="px-6 py-4">
-          <span class="text-xs px-2 py-1 rounded-full bg-secondary text-foreground">{{ sprint.get_status_display }}</span>
+          {% studio_status_badge sprint.status sprint.get_status_display %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.start_date|date:"Y-m-d" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.duration_weeks }} weeks</td>

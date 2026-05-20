@@ -4,20 +4,22 @@
 {% block studio_title %}UTM Campaigns{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8 flex items-center justify-between">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
   <div>
     <h1 class="text-2xl font-semibold text-foreground">UTM Campaigns</h1>
     <p class="text-muted-foreground mt-1">Mint, store, and share canonical tracking URLs for outbound campaigns.</p>
   </div>
-  <div class="flex items-center space-x-2">
+  <div class="flex items-center gap-2">
     <a href="{% url 'studio_utm_campaign_import' %}"
        data-testid="utm-campaign-import-link"
-       class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
-      Import
+       class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2">
+      <i data-lucide="upload" class="h-4 w-4"></i>
+      <span>Import UTM campaigns</span>
     </a>
     <a href="{% url 'studio_utm_campaign_create' %}"
-       class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-      Add Campaign
+       class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2">
+      <i data-lucide="plus" class="h-4 w-4"></i>
+      <span>New UTM campaign</span>
     </a>
   </div>
 </div>

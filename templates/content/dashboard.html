@@ -75,7 +75,11 @@
     {% endif %}
 
     <!-- Slack Community Section (shared partial — issue #700) -->
+    {# Issue #729: hide the "Connected to Slack" card on the dashboard. The #}
+    {# partial still renders on /account/ for the connected state. #}
+    {% if not slack_connected %}
     {% include "includes/_slack_account_card.html" %}
+    {% endif %}
 
     <div class="grid gap-10 lg:gap-8 lg:grid-cols-3 overflow-hidden">
       <!-- Main content: 2 columns wide -->

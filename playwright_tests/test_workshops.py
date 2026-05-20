@@ -79,10 +79,16 @@ def _create_workshop(
 
     event = None
     if with_event:
+        # Backdate start_datetime so the events page's time-derived
+        # past_filter (issue #713) classifies the event as past. The
+        # filter requires either end_datetime <= now OR
+        # (end_datetime is null AND start_datetime <= now - 1h).
+        # No end_datetime is set here, so subtract 2 hours from now
+        # to clear the 1h buffer.
         event = Event.objects.create(
             slug=f'{slug}-event',
             title=title,
-            start_datetime=timezone.now(),
+            start_datetime=timezone.now() - datetime.timedelta(hours=2),
             status='completed',
             kind='workshop',
             recording_url=recording_url,

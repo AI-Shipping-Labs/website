@@ -120,10 +120,11 @@ lint-advisory:
 	uv run python scripts/lint_advisory_metrics.py
 
 # Drift check for the committed OpenAPI spec (_docs/openapi.json).
-# Wired into CI in .github/workflows/ci.yml so a forgotten regenerate
-# fails the build instead of shipping a stale spec. Run locally with
-# ``make check-openapi-drift`` after changing any @openapi_spec
-# decorator; regenerate with ``uv run python manage.py generate_openapi``.
+# Wired into CI in .github/workflows/deploy-dev.yml so a forgotten
+# regenerate fails the build instead of shipping a stale spec. Run
+# locally with ``make check-openapi-drift`` after changing any
+# @openapi_spec decorator; regenerate with
+# ``uv run python manage.py generate_openapi``.
 check-openapi-drift:
 	uv run python manage.py generate_openapi --check
 

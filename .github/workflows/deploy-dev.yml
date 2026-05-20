@@ -66,6 +66,18 @@ jobs:
           end=$(date +%s)
           echo "CI_TIMING phase=uv_sync seconds=$((end - start))"
 
+      # Issue #722: the committed _docs/openapi.json must match what the
+      # @openapi_spec decorators currently describe. CI fails the build
+      # if a developer edits a decorator without regenerating the spec.
+      # Re-homed from ci.yml in #739 — ci.yml is pull_request-only and
+      # this project uses local merges, so the gate never fired there.
+      - name: Check OpenAPI spec drift
+        run: |
+          start=$(date +%s)
+          make check-openapi-drift
+          end=$(date +%s)
+          echo "CI_TIMING phase=check_openapi_drift seconds=$((end - start))"
+
       - name: Collect static files
         run: |
           start=$(date +%s)

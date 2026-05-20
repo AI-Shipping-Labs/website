@@ -28,7 +28,7 @@ LIST_TABLE_HEAD_CELL_RIGHT_CLASS = (
 LIST_TABLE_BODY_CLASS = 'divide-y divide-border'
 LIST_TABLE_ROW_CLASS = 'hover:bg-secondary/50 transition-colors'
 ACTION_CELL_CLASS = 'studio-actions-cell text-right'
-ACTION_GROUP_CLASS = 'studio-action-group inline-flex flex-wrap items-center justify-end gap-2'
+ACTION_GROUP_CLASS = 'studio-action-group inline-flex flex-nowrap items-center justify-end gap-2'
 ACTION_FORM_CLASS = 'inline-flex'
 ACTION_BASE_CLASS = (
     'studio-action inline-flex items-center justify-center whitespace-nowrap rounded-md '
@@ -48,6 +48,15 @@ STATUS_BADGE_CLASSES = {
     'upcoming': 'bg-blue-500/20 text-blue-400',
     'completed': 'bg-secondary text-muted-foreground',
     'cancelled': 'bg-red-500/20 text-red-400',
+    # Sprint statuses (#753): ``active`` reads as the "currently happening"
+    # equivalent of ``published`` for content. ``archived`` aliases the
+    # muted-grey ``completed`` treatment.
+    'active': 'bg-green-500/20 text-green-400',
+    'archived': 'bg-secondary text-muted-foreground',
+    # User-import batch statuses (#753): align the imports list pill colors
+    # with the canonical palette instead of inline ``{% if %}`` blocks.
+    'failed': 'bg-red-500/20 text-red-400',
+    'running': 'bg-blue-500/20 text-blue-400',
 }
 
 TIER_PILL_CLASSES = {

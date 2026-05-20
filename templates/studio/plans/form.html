@@ -34,15 +34,30 @@
     {% csrf_token %}
 
     <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-1">Member</label>
-      <select name="member" required data-testid="add-member-select" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-              autocomplete="off"
-              >
-        <option value="">-- pick a member --</option>
-        {% for m in members %}
-        <option value="{{ m.pk }}" {% if form_data.member == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.email }}</option>
-        {% endfor %}
-      </select>
+      {# Issue #735: swap the inline `<select>` for the reusable people #}
+      {# picker (#720). The picker renders a search input backed by the #}
+      {# `studio_user_search` JSON endpoint, with sprint-context badges #}
+      {# when `picker_extra_query` carries `sprint=<slug>`. The picker's #}
+      {# own hidden `<input name="member">` is the form field; the #}
+      {# operator still clicks Create plan / Add member to submit -- we #}
+      {# use `on_select_action="set_value"` (not `submit_form`). #}
+      {% include "studio/includes/_people_picker.html" with name="member" id_prefix="plan-member" label="Member" search_url=user_search_url extra_query=picker_extra_query on_select_action="set_value" testid_prefix="plan-member" %}
+      {% if prefill_member_display %}
+      {# Seed the picker on first render for the `?user=<pk>` entry path #}
+      {# (issue #719). The picker include's own JS only writes to these #}
+      {# fields on a fresh search, so we seed them here before that JS #}
+      {# attaches its `input` listener. ``escapejs`` makes both values #}
+      {# safe to inline inside the single-quoted JS string literals. #}
+      <script>
+      (function() {
+        var visible = document.getElementById('plan-member-search');
+        var hidden = document.getElementById('plan-member-id');
+        if (!visible || !hidden) { return; }
+        visible.value = '{{ prefill_member_display|escapejs }}';
+        hidden.value = '{{ form_data.member|escapejs }}';
+      })();
+      </script>
+      {% endif %}
     </div>
 
     {% if sprint %}

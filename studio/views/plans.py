@@ -21,6 +21,7 @@ reading.
 """
 
 import logging
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -106,6 +107,44 @@ def plan_list(request):
     })
 
 
+def _picker_prefill_display(member_id_str):
+    """Return the picker's visible-input prefill text for a user pk.
+
+    The picker include's hidden ``<input name="member">`` is seeded
+    by the inline script in ``form.html`` from ``form_data.member``
+    (the user's pk as a string). The visible search ``<input>`` also
+    needs something to render; the autocomplete endpoint never runs on
+    first paint, so the view resolves the display name once
+    server-side. Falls back to the email when first/last name are blank.
+
+    Returns ``''`` for an unset / invalid / stale id so the template
+    skips the seed-script branch entirely.
+    """
+    if not member_id_str or not member_id_str.isdigit():
+        return ''
+    user = User.objects.filter(pk=int(member_id_str)).first()
+    if user is None:
+        return ''
+    full = (user.get_full_name() or '').strip()
+    return full or user.email
+
+
+def _picker_extra_query_for(sprint_id_str):
+    """Build the picker ``extra_query`` string for a sprint pk.
+
+    Returns ``'sprint=<slug>'`` when the id resolves to a real sprint,
+    empty string otherwise. The picker include passes this string
+    through to every search request, which lights up the sprint-context
+    badges (``In this sprint``, ``Has plan in sprint``).
+    """
+    if not sprint_id_str or not sprint_id_str.isdigit():
+        return ''
+    sprint = Sprint.objects.filter(pk=int(sprint_id_str)).only('slug').first()
+    if sprint is None:
+        return ''
+    return urlencode({'sprint': sprint.slug})
+
+
 @staff_required
 def plan_create(request):
     """Form: pick member, pick sprint. ``status`` defaults to draft.
@@ -117,9 +156,18 @@ def plan_create(request):
     view kept its own duplicate-detection branch so the dedicated
     ``A plan already exists`` error message still fires (the sprint-
     detail flow surfaces idempotency as a flash message instead).
+
+    Issue #735 swapped the inline member ``<select>`` for the reusable
+    people picker include from #720. Three extra context keys are
+    passed to the template: ``user_search_url`` (the JSON endpoint the
+    picker queries), ``picker_extra_query`` (a URL-encoded
+    ``sprint=<slug>`` when a sprint is in scope, so the suggestion rows
+    show the sprint-context badges), and ``prefill_member_display`` (the
+    display name to seed the picker's visible input with on the #719
+    bell-notification entry path).
     """
     sprints = Sprint.objects.order_by('-start_date')
-    members = User.objects.order_by('email')
+    user_search_url = reverse('studio_user_search')
 
     if request.method != 'POST':
         # Optional pre-fill via ``?user=<pk>&sprint=<pk>`` so the
@@ -143,8 +191,10 @@ def plan_create(request):
                 'status': 'draft',
             },
             'sprints': sprints,
-            'members': members,
             'plan_status_choices': PLAN_STATUS_CHOICES,
+            'user_search_url': user_search_url,
+            'picker_extra_query': _picker_extra_query_for(prefill_sprint),
+            'prefill_member_display': _picker_prefill_display(prefill_member),
             'error': '',
         })
 
@@ -160,8 +210,10 @@ def plan_create(request):
             'form_action': 'create',
             'form_data': form_data,
             'sprints': sprints,
-            'members': members,
             'plan_status_choices': PLAN_STATUS_CHOICES,
+            'user_search_url': user_search_url,
+            'picker_extra_query': _picker_extra_query_for(form_data['sprint']),
+            'prefill_member_display': _picker_prefill_display(form_data['member']),
             'error': error,
         }, status=status)
 

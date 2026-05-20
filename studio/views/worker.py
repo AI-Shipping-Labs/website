@@ -455,7 +455,14 @@ def worker_test_smoke(request):
     ``jobs.tasks.test_worker_smoke.run`` and surface the task_id in the
     flash so the operator can spot it in Recent Tasks.
     """
-    task_id = async_task('jobs.tasks.test_worker_smoke.run')
+    task_id = async_task(
+        'jobs.tasks.test_worker_smoke.run',
+        task_name=build_task_name(
+            'Test worker smoke',
+            'queue dispatch',
+            'Studio worker page',
+        ),
+    )
     messages.success(
         request,
         f'Test task queued (id={task_id}). Check Recent tasks for the result.',

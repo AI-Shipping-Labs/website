@@ -86,7 +86,15 @@ class WorkerTestSmokePostTest(TestCase):
         response = self.client.post('/studio/worker/test/')
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, '/studio/worker/')
-        mock_async.assert_called_once_with('jobs.tasks.test_worker_smoke.run')
+        mock_async.assert_called_once()
+        args, kwargs = mock_async.call_args
+        self.assertEqual(args, ('jobs.tasks.test_worker_smoke.run',))
+        # Issue #717: every async_task() must pass a descriptive task_name so
+        # the resulting worker-history row isn't a random Django-Q codename.
+        self.assertEqual(
+            kwargs['task_name'],
+            'Test worker smoke: queue dispatch from Studio worker page',
+        )
 
     @patch('studio.views.worker.async_task')
     def test_flash_contains_task_id(self, mock_async):

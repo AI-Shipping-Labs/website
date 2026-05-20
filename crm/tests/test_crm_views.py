@@ -45,13 +45,16 @@ class CRMViewsBase(TestCase):
 
 class CRMListViewTest(CRMViewsBase):
     def test_empty_state(self):
+        """CRM list renders the canonical fresh-zero empty state when no
+        records exist (#756 — ``studio_empty_state`` partial). The
+        explanatory copy about ``Track in CRM`` is no longer in the
+        partial; the operator instead lands on the user-list page to
+        opt-in via that flow."""
         response = self.client.get('/studio/crm/')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="crm-empty-state"')
-        self.assertContains(
-            response,
-            'No CRM records yet. Open a user profile and click',
-        )
+        self.assertContains(response, 'data-testid="studio-empty-state-fresh"')
+        self.assertContains(response, 'data-empty-state="crm-empty-state"')
+        self.assertContains(response, 'No CRM records yet')
 
     def test_list_shows_record_with_counts_and_links(self):
         record = CRMRecord.objects.create(

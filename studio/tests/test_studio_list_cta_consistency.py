@@ -161,47 +161,31 @@ class StudioListCtaConsistencyTest(SimpleTestCase):
         # Must NOT be primary.
         self.assertNotIn('bg-accent', class_value)
 
-    def test_campaigns_empty_state_cta_uses_inline_flex(self):
-        """``campaigns/list.html`` empty-state CTA — upgraded from
-        ``inline-block`` so it matches the canonical CTA flex shape.
+    def test_canonical_empty_state_cta_uses_inline_flex(self):
+        """``templates/studio/includes/empty_state.html`` (the canonical
+        Studio empty-state partial introduced in #756) renders the
+        fresh-zero CTA with the same inline-flex shape every list page
+        now inherits. Campaigns, plans, sprints, redirects, events, etc.
+        all share that partial.
         """
-        source = (REPO_ROOT / 'templates' / 'studio' / 'campaigns' / 'list.html').read_text()
-        # The empty-state CTA sits inside the ``campaigns-empty-state``
-        # wrapper; extract that block and assert on the anchor inside it.
-        block_match = re.search(
-            r'data-testid="campaigns-empty-state".*?</div>',
-            source,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(block_match)
-        block = block_match.group(0)
-        anchor_match = re.search(r'<a\b[^>]*>', block)
-        self.assertIsNotNone(anchor_match)
-        class_value = re.search(r'class="([^"]+)"', anchor_match.group(0)).group(1)
-        self.assertIn('inline-flex', class_value)
-        self.assertIn('items-center', class_value)
-        self.assertIn('justify-center', class_value)
-        self.assertNotIn('inline-block', class_value)
-        self.assertIn('transition-opacity', class_value)
-
-    def test_workshops_empty_state_cta_uses_inline_flex(self):
-        """``workshops/list.html`` empty-state CTA — same as campaigns."""
-        source = (REPO_ROOT / 'templates' / 'studio' / 'workshops' / 'list.html').read_text()
-        block_match = re.search(
-            r'data-testid="workshops-empty-state".*?{% endif %}',
-            source,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(block_match)
-        block = block_match.group(0)
-        # The accent CTA (not the "Clear filters" link which is text-only).
+        source = (
+            REPO_ROOT
+            / 'templates' / 'studio' / 'includes' / 'empty_state.html'
+        ).read_text()
+        # Find the fresh-zero CTA anchor inside the partial.
         anchor_match = re.search(
-            r'<a\b[^>]*class="[^"]*bg-accent[^"]*"[^>]*>', block, re.DOTALL,
+            r'<a\b[^>]*class="[^"]*bg-accent[^"]*"[^>]*>',
+            source,
+            re.DOTALL,
         )
         self.assertIsNotNone(anchor_match)
-        class_value = re.search(r'class="([^"]+)"', anchor_match.group(0)).group(1)
+        class_value = re.search(
+            r'class="([^"]+)"', anchor_match.group(0),
+        ).group(1)
         self.assertIn('inline-flex', class_value)
         self.assertIn('items-center', class_value)
         self.assertIn('justify-center', class_value)
         self.assertNotIn('inline-block', class_value)
+        self.assertIn('rounded-lg', class_value)
+        self.assertNotIn('rounded-md', class_value)
         self.assertIn('transition-opacity', class_value)

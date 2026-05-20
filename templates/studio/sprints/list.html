@@ -65,9 +65,7 @@
   </table>
 </div>
 {% else %}
-<div class="bg-card border border-border rounded-lg p-12 text-center">
-  <p class="text-muted-foreground">No sprints yet.</p>
-  <a href="{% url 'studio_sprint_create' %}" class="text-accent hover:underline text-sm mt-2 inline-block">Create your first sprint</a>
-</div>
+  {% url 'studio_sprint_create' as sprints_create_url %}
+  {% studio_empty_state 'fresh' entity_label='sprint' entity_label_plural='sprints' create_url=sprints_create_url %}
 {% endif %}
 {% endblock %}

@@ -12,6 +12,7 @@
   </div>
 </div>
 
+{% if page_obj.paginator.count %}
 <!-- Notification Log -->
 <div class="bg-card border border-border rounded-lg overflow-hidden">
   <table class="w-full">
@@ -37,14 +38,13 @@
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ batch.created_date|date:"M d, Y H:i" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ batch.user_count }}</td>
       </tr>
-      {% empty %}
-      <tr>
-        <td colspan="4" class="px-6 py-8 text-center text-sm text-muted-foreground">No notifications found.</td>
-      </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% else %}
+  {% studio_empty_state 'fresh' entity_label='notification' entity_label_plural='notifications' %}
+{% endif %}
 
 <!-- Pagination -->
 {% if page_obj.has_other_pages %}

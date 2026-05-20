@@ -80,6 +80,7 @@
   </div>
 </div>
 
+{% if page_obj.paginator.count or source_filter or dry_run_filter %}
 <div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto">
   <table class="w-full min-w-[980px]">
     <thead class="bg-secondary">
@@ -128,13 +129,16 @@
         </td>
       </tr>
       {% empty %}
-      <tr>
-        <td class="px-4 py-8 text-center text-muted-foreground" colspan="12">No import batches found.</td>
-      </tr>
+        {% url 'studio_import_batch_list' as imports_clear_url %}
+        {% studio_empty_state 'filter' entity_label='import batch' entity_label_plural='import batches' clear_url=imports_clear_url colspan=12 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% else %}
+  {% url 'studio_import_batch_new' as imports_create_url %}
+  {% studio_empty_state 'fresh' entity_label='import' entity_label_plural='import batches' create_url=imports_create_url cta_label='New import' %}
+{% endif %}
 
 {% if page_obj.paginator.num_pages > 1 %}
 <div class="flex items-center justify-between mt-6 text-sm">

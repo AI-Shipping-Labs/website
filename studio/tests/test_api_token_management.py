@@ -124,6 +124,9 @@ class ApiTokenListViewTest(TestCase):
         response = self.client.get("/studio/api-tokens/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No API tokens yet")
+        # Canonical fresh-zero card from #756 partial.
+        self.assertContains(response, 'data-testid="studio-empty-state-fresh"')
+        self.assertContains(response, 'data-empty-state="api-tokens-empty"')
 
     def test_reserved_system_tokens_are_not_listed_as_operator_tokens(self):
         for name in RESERVED_SYSTEM_TOKEN_NAMES:

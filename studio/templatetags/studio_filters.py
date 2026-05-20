@@ -132,6 +132,41 @@ def studio_action_class(kind='secondary'):
     return f"{ACTION_BASE_CLASS} {ACTION_KIND_CLASSES.get(kind, ACTION_KIND_CLASSES['secondary'])}"
 
 
+@register.inclusion_tag('studio/includes/empty_state.html')
+def studio_empty_state(
+    kind,
+    entity_label='',
+    entity_label_plural='',
+    create_url=None,
+    clear_url=None,
+    colspan=8,
+    cta_label=None,
+    testid_suffix='',
+):
+    """Render the canonical Studio list-page empty state.
+
+    ``kind`` is ``"filter"`` for an inline ``<tr>`` empty cell that keeps
+    the table chrome visible (a search/status filter is active and
+    produced zero rows), or ``"fresh"`` for a separate ``bg-card`` empty
+    card with a ``New <entity>`` CTA (no rows exist at all).
+
+    Sub-issue C of #747 codifies the two-flavour convention. See
+    ``_docs/design-system.md`` "Studio list pages".
+    """
+    return {
+        'kind': kind,
+        'entity_label': entity_label,
+        'entity_label_plural': entity_label_plural or (
+            f'{entity_label}s' if entity_label else ''
+        ),
+        'create_url': create_url,
+        'clear_url': clear_url,
+        'colspan': colspan,
+        'cta_label': cta_label,
+        'testid_suffix': testid_suffix,
+    }
+
+
 @register.inclusion_tag('studio/includes/list_filter_form.html')
 def studio_list_filter(
     search='',

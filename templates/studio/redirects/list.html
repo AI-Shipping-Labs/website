@@ -65,9 +65,7 @@
   </table>
 </div>
 {% else %}
-<div class="bg-card border border-border rounded-lg p-12 text-center">
-  <p class="text-muted-foreground">No redirects configured yet.</p>
-  <a href="{% url 'studio_redirect_create' %}" class="text-accent hover:underline text-sm mt-2 inline-block">Add your first redirect</a>
-</div>
+  {% url 'studio_redirect_create' as redirects_create_url %}
+  {% studio_empty_state 'fresh' entity_label='redirect' entity_label_plural='redirects' create_url=redirects_create_url %}
 {% endif %}
 {% endblock %}

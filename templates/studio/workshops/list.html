@@ -25,7 +25,7 @@
 
 {% studio_list_filter search status_filter "Search workshops..." "publication" False %}
 
-{% if workshops %}
+{% if workshops or search or status_filter %}
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="{% studio_list_class 'table' %}">
     <thead class="{% studio_list_class 'thead' %}">
@@ -75,22 +75,15 @@
           </div>
         </td>
       </tr>
+      {% empty %}
+        {% url 'studio_workshop_list' as workshops_clear_url %}
+        {% studio_empty_state 'filter' entity_label='workshop' entity_label_plural='workshops' clear_url=workshops_clear_url colspan=10 testid_suffix='workshops-empty-state' %}
       {% endfor %}
     </tbody>
   </table>
 </div>
 {% else %}
-<div class="bg-card border border-border rounded-lg p-12 text-center" data-testid="workshops-empty-state">
-  {% if search or status_filter %}
-  <p class="text-muted-foreground mb-4">No workshops match your filters.</p>
-  <a href="{% url 'studio_workshop_list' %}" class="text-sm text-accent hover:underline">Clear filters</a>
-  {% else %}
-  <p class="text-muted-foreground mb-4">No workshops yet. Sync your workshops repo to populate this list.</p>
-  <a href="{% url 'studio_sync_dashboard' %}"
-     class="inline-flex items-center justify-center bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-    Open sync dashboard
-  </a>
-  {% endif %}
-</div>
+  {# Workshops are sync-managed (PM ruling on #756): no "New workshop" CTA on fresh-zero. #}
+  {% studio_empty_state 'fresh' entity_label='workshop' entity_label_plural='workshops' testid_suffix='workshops-empty-state' %}
 {% endif %}
 {% endblock %}

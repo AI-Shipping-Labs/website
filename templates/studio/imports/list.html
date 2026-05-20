@@ -103,13 +103,7 @@
       <tr class="hover:bg-secondary/50">
         <td class="px-4 py-3 text-sm"><a class="text-accent hover:underline" href="{% url 'studio_import_batch_detail' batch_id=batch.pk %}">{{ batch.get_source_display }}</a></td>
         <td class="px-4 py-3 text-sm" data-label="Status">
-          {% if batch.status == 'failed' %}
-          <span class="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-400">Failed</span>
-          {% elif batch.status == 'completed' %}
-          <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Completed</span>
-          {% else %}
-          <span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">Running</span>
-          {% endif %}
+          {% studio_status_badge batch.status batch.get_status_display %}
         </td>
         <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Started">{{ batch.started_at|date:"Y-m-d H:i" }}</td>
         <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Finished">{% if batch.finished_at %}{{ batch.finished_at|date:"Y-m-d H:i" }}{% else %}running{% endif %}</td>

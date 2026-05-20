@@ -20,7 +20,10 @@ from accounts.models import User
 from community.models import CommunityAuditLog
 from community.services.slack import SlackAPIError, SlackCommunityService
 from community.tasks import slack_membership as task_module
-from community.tasks.slack_membership import refresh_slack_membership
+from community.tasks.slack_membership import (
+    SLACK_MEMBERSHIP_CHUNK_SIZE,
+    refresh_slack_membership,
+)
 
 
 @override_settings(SLACK_ENABLED=True, SLACK_BOT_TOKEN='xoxb-test')
@@ -363,3 +366,126 @@ class TagMirrorTest(TestCase):
         # #354 added User.tags; the detector must report True so the
         # slack-membership task actually mirrors to the tag list.
         self.assertTrue(task_module._has_tags_field())
+
+
+class RefreshSlackMembershipChunkChainTest(TestCase):
+    """Chunked-chain pattern for refresh_slack_membership (issue #715).
+
+    When a chunk completes and more users still match the predicate,
+    the task enqueues a follow-up ``async_task`` so the backlog drains
+    without blowing past ``Q_CLUSTER['timeout']``. The all-unknown
+    guard prevents an infinite chain on a misconfigured environment.
+    """
+
+    FOLLOWUP_PATH = 'community.tasks.slack_membership.refresh_slack_membership'
+
+    def _make_user(self, email):
+        return User.objects.create_user(email=email)
+
+    def test_default_chunk_size_is_120(self):
+        # Lock the design decision (issue #715) into the test suite so
+        # future changes are deliberate. The constant is sized against
+        # the 300s Q_CLUSTER timeout and 1.5s per-call pacing.
+        self.assertEqual(SLACK_MEMBERSHIP_CHUNK_SIZE, 120)
+
+    @patch('community.tasks.slack_membership.async_task')
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_followup_enqueued_when_backlog_remains(
+        self, mock_get_service, mock_async_task,
+    ):
+        # Create more users than the chunk we'll process so a backlog
+        # remains after the run.
+        for i in range(3):
+            self._make_user(f'u{i}@test.com')
+
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('not_member', None)
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(batch_size=2, sleep_seconds=0)
+
+        # Exactly one follow-up enqueued, pointed at this same task.
+        self.assertEqual(mock_async_task.call_count, 1)
+        (called_path, *rest) = mock_async_task.call_args.args
+        self.assertEqual(called_path, self.FOLLOWUP_PATH)
+        self.assertTrue(result['enqueued_followup'])
+
+    @patch('community.tasks.slack_membership.async_task')
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_followup_not_enqueued_when_queue_drains(
+        self, mock_get_service, mock_async_task,
+    ):
+        # Fewer users than the chunk size => queue drains in one run.
+        for i in range(2):
+            self._make_user(f'u{i}@test.com')
+
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('not_member', None)
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(batch_size=5, sleep_seconds=0)
+
+        mock_async_task.assert_not_called()
+        self.assertFalse(result['enqueued_followup'])
+
+    @patch('community.tasks.slack_membership.async_task')
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_followup_not_enqueued_when_all_unknown(
+        self, mock_get_service, mock_async_task,
+    ):
+        # Three users, chunk of 2; even though a user still matches
+        # the predicate after the run, the chunk was 100% unknown so
+        # we must NOT enqueue a follow-up (infinite-chain guard).
+        for i in range(3):
+            self._make_user(f'u{i}@test.com')
+
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('unknown', None)
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(batch_size=2, sleep_seconds=0)
+
+        mock_async_task.assert_not_called()
+        self.assertEqual(result['unknown'], 2)
+        self.assertEqual(result['total_checked'], 2)
+        self.assertFalse(result['enqueued_followup'])
+
+    @patch('community.tasks.slack_membership.async_task')
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_followup_enqueued_when_some_unknown_but_backlog_remains(
+        self, mock_get_service, mock_async_task,
+    ):
+        # Three users, chunk of 2. First call returns unknown, second
+        # returns not_member. The guard is ALL-unknown (not ANY-unknown),
+        # so the partial outage still leaves us free to chain because
+        # one user advanced and the third still matches the predicate.
+        for i in range(3):
+            self._make_user(f'u{i}@test.com')
+
+        svc = MagicMock()
+        svc.check_workspace_membership.side_effect = [
+            ('unknown', None),
+            ('not_member', None),
+        ]
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(batch_size=2, sleep_seconds=0)
+
+        self.assertEqual(mock_async_task.call_count, 1)
+        self.assertTrue(result['enqueued_followup'])
+
+    @patch('community.tasks.slack_membership.async_task')
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_followup_not_enqueued_on_empty_queryset(
+        self, mock_get_service, mock_async_task,
+    ):
+        # No users at all => nothing to do, nothing to enqueue.
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('not_member', None)
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(sleep_seconds=0)
+
+        mock_async_task.assert_not_called()
+        self.assertEqual(result['total_checked'], 0)
+        self.assertFalse(result['enqueued_followup'])

@@ -53,6 +53,8 @@ from playwright_tests.conftest import (
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
 
+pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.local_only]
+
 
 def _clear_state():
     """Reset workshops, notifications, AND workshop-announcement EmailLog
@@ -136,7 +138,6 @@ def _direct_notify_post(context, django_server, workshop_id):
 # Scenario 1: Operator sees both counts in the Studio banner
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db(transaction=True)
 class TestStudioNotifyBanner:
     @pytest.mark.core
     def test_staff_sees_notified_and_emailed_in_studio_banner(
@@ -221,7 +222,6 @@ class TestStudioNotifyBanner:
 # Scenario 2: Member toggles workshop emails off; off state persists
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db(transaction=True)
 class TestAccountWorkshopEmailToggle:
     @pytest.mark.core
     def test_member_toggles_workshop_emails_on_account(
@@ -286,7 +286,6 @@ class TestAccountWorkshopEmailToggle:
 # Scenario 3: Opted-out member gets bell but no email
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db(transaction=True)
 class TestWorkshopOptOut:
     @pytest.mark.core
     def test_opted_out_member_gets_bell_but_not_email(
@@ -372,7 +371,6 @@ class TestWorkshopOptOut:
 # noop SES message id
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db(transaction=True)
 class TestWorkshopSubscribedEmail:
     @pytest.mark.core
     def test_subscribed_member_sees_email_arrive(
@@ -423,7 +421,6 @@ class TestWorkshopSubscribedEmail:
 # Scenario 5: Globally unsubscribed user gets zero EmailLog rows
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db(transaction=True)
 class TestWorkshopGloballyUnsubscribed:
     @pytest.mark.core
     def test_globally_unsubscribed_user_receives_no_workshop_email(

@@ -8,12 +8,12 @@ existing tests.
 {% load accounts_extras plan_markdown %}
 
 {% if plan.goal or plan_can_edit %}
-<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6"
+<section class="mt-10"
          data-testid="plan-goal"
          {% if plan_can_edit %}data-plan-goal-editor data-update-url="{% url 'update_plan_goal' sprint_slug=plan.sprint.slug plan_id=plan.pk %}"{% endif %}>
   <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
     <div class="min-w-0 flex-1">
-      <h2 class="text-lg font-semibold text-foreground">Goal</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-foreground">Goal</h2>
       <div class="plan-markdown mt-3 text-foreground {% if not plan.goal %}text-muted-foreground italic{% endif %}"
            data-testid="plan-goal-text"
            data-plan-goal-text>
@@ -42,7 +42,7 @@ existing tests.
 </section>
 {% endif %}
 
-<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-weeks">
+<section class="mt-10" data-testid="plan-weeks">
   <div class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
     <div>
       <p class="text-xs font-medium uppercase tracking-widest text-accent">Timeline</p>
@@ -104,12 +104,12 @@ existing tests.
         {% endfor %}
       </ul>
 
-      <div class="mt-4 rounded-lg border border-border/70 bg-secondary/40 p-3" data-testid="plan-week-notes" data-week-id="{{ week.pk }}">
-        <h4 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Week notes</h4>
+      <div class="mt-4 border-t border-border/70 pt-3" data-testid="plan-week-notes" data-week-id="{{ week.pk }}">
+        <h4 class="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-2">Week notes</h4>
         {% if week.notes.all %}
-        <ul class="space-y-3" data-testid="plan-week-notes-list">
+        <ul class="divide-y divide-border" data-testid="plan-week-notes-list">
           {% for note in week.notes.all %}
-          <li class="rounded-md border border-border bg-card p-3" data-testid="plan-week-note" data-note-id="{{ note.pk }}">
+          <li class="py-3 first:pt-0" data-testid="plan-week-note" data-note-id="{{ note.pk }}">
             <div class="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
               <span>
                 {% if note.author %}{{ note.author|display_name }}{% else %}Member{% endif %}
@@ -193,11 +193,11 @@ existing tests.
 
 {# Issue #583: section order is weeks -> resources -> deliverables -> next steps -> plan context -> focus -> accountability. Resources moved up here so it sits between weeks and the action items. #}
 {% if plan.resources.all %}
-<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-resources">
-  <h2 class="text-lg font-semibold text-foreground">Resources</h2>
-  <ul class="mt-3 space-y-3 text-sm">
+<section class="mt-10" data-testid="plan-resources">
+  <h2 class="text-2xl font-semibold tracking-tight text-foreground">Resources</h2>
+  <ul class="mt-3 divide-y divide-border text-sm">
     {% for resource in plan.resources.all %}
-    <li class="rounded-lg border border-border bg-background p-4" data-testid="plan-resource">
+    <li class="py-3 first:pt-0" data-testid="plan-resource">
       {% if resource.url %}
       <a href="{{ resource.url }}" class="inline-flex min-h-[44px] items-center gap-2 font-medium text-accent hover:underline" rel="noopener noreferrer" target="_blank">
         {{ resource.title }}
@@ -217,12 +217,12 @@ existing tests.
 {% endif %}
 
 {% if plan.deliverables.all or plan.next_steps.all %}
-<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-action-items">
+<section class="mt-10" data-testid="plan-action-items">
   {# Issue #583: single-column stack at every viewport width (was lg:grid-cols-2). #}
-  <div class="flex flex-col gap-6">
+  <div class="flex flex-col gap-8">
     {% if plan.deliverables.all %}
     <div data-testid="plan-deliverables">
-      <h2 class="text-lg font-semibold text-foreground">Deliverables</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-foreground">Deliverables</h2>
       <ul class="mt-3 divide-y divide-border text-sm">
         {% for deliverable in plan.deliverables.all %}
         <li class="flex min-h-[44px] items-start gap-3 py-3 {% if deliverable.done_at %}is-complete{% endif %}"
@@ -268,7 +268,7 @@ existing tests.
 
     {% if plan.next_steps.all %}
     <div data-testid="plan-next-steps">
-      <h2 class="text-lg font-semibold text-foreground">Next steps</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-foreground">Next steps</h2>
       <ul class="mt-3 divide-y divide-border text-sm">
         {% for step in plan.next_steps.all %}
         <li class="flex min-h-[44px] items-start gap-3 py-3 {% if step.done_at %}is-complete{% endif %}"
@@ -316,9 +316,9 @@ existing tests.
 {% endif %}
 
 {% if plan_can_edit %}
-<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-summary">
+<section class="mt-10" data-testid="plan-summary">
   <div data-testid="plan-details">
-  <h2 class="text-lg font-semibold text-foreground">Details</h2>
+  <h2 class="text-2xl font-semibold tracking-tight text-foreground">Details</h2>
   <p class="mt-1 text-sm text-muted-foreground">Only you can see this section. Use it for personal context that doesn't need to be shared.</p>
   <dl class="mt-4 grid grid-cols-1 gap-4 text-sm lg:grid-cols-2">
     {% if plan.summary_current_situation %}
@@ -357,8 +357,8 @@ existing tests.
 {% endif %}
 
 {% if plan.focus_main or plan.focus_supporting %}
-<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-focus">
-  <h2 class="text-lg font-semibold text-foreground">Focus</h2>
+<section class="mt-10" data-testid="plan-focus">
+  <h2 class="text-2xl font-semibold tracking-tight text-foreground">Focus</h2>
   {% if plan.focus_main %}
   <div class="plan-markdown mt-3 text-foreground" data-testid="plan-focus-main">{{ plan.focus_main|plan_markdown }}</div>
   {% endif %}
@@ -373,8 +373,8 @@ existing tests.
 {% endif %}
 
 {% if plan.accountability %}
-<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-accountability">
-  <h2 class="text-lg font-semibold text-foreground">Accountability</h2>
+<section class="mt-10" data-testid="plan-accountability">
+  <h2 class="text-2xl font-semibold tracking-tight text-foreground">Accountability</h2>
   <div class="plan-markdown mt-3 text-foreground">{{ plan.accountability|plan_markdown }}</div>
 </section>
 {% endif %}

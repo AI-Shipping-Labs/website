@@ -95,6 +95,30 @@ class ApiTokenListViewTest(TestCase):
             "Full plaintext key must only appear in the revoke form action URL.",
         )
 
+    def test_revoke_button_uses_destructive_palette(self):
+        """Regression for #743: the kind passed to ``studio_action_class``
+        must resolve to the destructive variant, not silently fall through
+        to the neutral secondary grey. ``text-red-400`` is the
+        distinguishing class of the destructive variant — see
+        ``ACTION_KIND_CLASSES`` in ``studio/templatetags/studio_filters.py``.
+        """
+        response = self.client.get("/studio/api-tokens/")
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        # Locate the Revoke button by its data-testid and slice its
+        # opening tag so the assertion can't match red classes from
+        # other parts of the page.
+        marker = 'data-testid="api-token-revoke"'
+        self.assertIn(marker, body)
+        idx = body.index(marker)
+        tag_end = body.index(">", idx)
+        button_open_tag = body[idx:tag_end]
+        self.assertIn(
+            "text-red-400", button_open_tag,
+            "Revoke button must render with the destructive-red palette "
+            "(see issue #743).",
+        )
+
     def test_empty_state_when_no_tokens_exist(self):
         Token.objects.all().delete()
         response = self.client.get("/studio/api-tokens/")

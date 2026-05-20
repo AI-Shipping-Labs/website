@@ -39,6 +39,4748 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/campaigns": {
+      "get": {
+        "description": "Returns every ``EmailCampaign`` row ordered by ``-created_at``. Optional filters narrow the result.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "description": "Filter to campaigns with the given status.",
+              "enum": [
+                "draft",
+                "sending",
+                "sent"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "archived",
+            "required": false,
+            "schema": {
+              "description": "Filter on is_archived (boolean string).",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaigns": [
+                    {
+                      "audience_verification": "verified_only",
+                      "body": "Hello {{ first_name }} \u2014 here's what's up this week...",
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "id": 1,
+                      "is_archived": false,
+                      "sent_at": null,
+                      "sent_count": 0,
+                      "slack_filter": "any",
+                      "status": "draft",
+                      "subject": "Week 3 of May 2026 sprint",
+                      "target_min_level": 0,
+                      "target_tags_any": [
+                        "sprint:may-2026"
+                      ],
+                      "target_tags_none": [
+                        "unsubscribed"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of campaigns."
+          },
+          "401": {
+            "description": "Missing or invalid token."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "status": "Unknown status."
+                  },
+                  "error": "Validation error"
+                }
+              }
+            },
+            "description": "Unknown filter value."
+          }
+        },
+        "summary": "List campaigns",
+        "tags": [
+          "Campaigns"
+        ]
+      },
+      "post": {
+        "description": "Creates an ``EmailCampaign`` row in ``draft`` status. Sending stays a deliberate Studio action -- this API intentionally has no ``/send`` route. Read-only fields (``id``, ``status``, ``sent_at``, ``sent_count``, ``created_at``) in the body are rejected with 422 ``read_only_field``; ``status`` in the body is silently overwritten to ``draft`` so detail round-trips keep working.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "Here's what's up...",
+                "subject": "Hello sprinters",
+                "target_min_level": 0,
+                "target_tags_any": [
+                  "sprint:may-2026"
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "audience_verification": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "is_archived": {
+                    "type": "boolean"
+                  },
+                  "slack_filter": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "maxLength": 255,
+                    "type": "string"
+                  },
+                  "target_min_level": {
+                    "type": "integer"
+                  },
+                  "target_tags_any": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "target_tags_none": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "subject",
+                  "body"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "audience_verification": "verified_only",
+                  "body": "Hello {{ first_name }} \u2014 here's what's up this week...",
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "id": 1,
+                  "is_archived": false,
+                  "sent_at": null,
+                  "sent_count": 0,
+                  "slack_filter": "any",
+                  "status": "draft",
+                  "subject": "Week 3 of May 2026 sprint",
+                  "target_min_level": 0,
+                  "target_tags_any": [
+                    "sprint:may-2026"
+                  ],
+                  "target_tags_none": [
+                    "unsubscribed"
+                  ]
+                }
+              }
+            },
+            "description": "Campaign created."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "422": {
+            "description": "Validation error (missing subject/body, read-only field present, bad enum)."
+          }
+        },
+        "summary": "Create a campaign draft",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "audience_verification": "verified_only",
+                  "body": "Hello {{ first_name }} \u2014 here's what's up this week...",
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "id": 1,
+                  "is_archived": false,
+                  "sent_at": null,
+                  "sent_count": 0,
+                  "slack_filter": "any",
+                  "status": "draft",
+                  "subject": "Week 3 of May 2026 sprint",
+                  "target_min_level": 0,
+                  "target_tags_any": [
+                    "sprint:may-2026"
+                  ],
+                  "target_tags_none": [
+                    "unsubscribed"
+                  ]
+                }
+              }
+            },
+            "description": "Campaign detail."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_campaign",
+                  "error": "Campaign not found"
+                }
+              }
+            },
+            "description": "Campaign not found."
+          }
+        },
+        "summary": "Retrieve a campaign",
+        "tags": [
+          "Campaigns"
+        ]
+      },
+      "patch": {
+        "description": "Partial update. ``status`` in the body is rejected (immutable through the API) unless it equals the row's current status (silent no-op). Use ``is_archived=true`` to hide a campaign; there is no DELETE route.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "is_archived": true
+              },
+              "schema": {
+                "properties": {
+                  "audience_verification": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "is_archived": {
+                    "type": "boolean"
+                  },
+                  "slack_filter": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "maxLength": 255,
+                    "type": "string"
+                  },
+                  "target_min_level": {
+                    "type": "integer"
+                  },
+                  "target_tags_any": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "target_tags_none": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "audience_verification": "verified_only",
+                  "body": "Hello {{ first_name }} \u2014 here's what's up this week...",
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "id": 1,
+                  "is_archived": false,
+                  "sent_at": null,
+                  "sent_count": 0,
+                  "slack_filter": "any",
+                  "status": "draft",
+                  "subject": "Week 3 of May 2026 sprint",
+                  "target_min_level": 0,
+                  "target_tags_any": [
+                    "sprint:may-2026"
+                  ],
+                  "target_tags_none": [
+                    "unsubscribed"
+                  ]
+                }
+              }
+            },
+            "description": "Campaign updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "description": "Campaign not found."
+          },
+          "422": {
+            "description": "Validation error or attempt to mutate a read-only field."
+          }
+        },
+        "summary": "Update a campaign draft",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/checkpoints/{checkpoint_id}": {
+      "delete": {
+        "description": "Deletes the checkpoint and re-packs the sibling positions inside the same week so there are no gaps.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "checkpoint_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Checkpoint deleted (empty body)."
+          },
+          "404": {
+            "description": "Checkpoint not found."
+          }
+        },
+        "summary": "Delete a checkpoint",
+        "tags": [
+          "Checkpoints"
+        ]
+      },
+      "patch": {
+        "description": "Partial update. Changing ``position`` re-packs sibling positions inside the same week (atomically).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "checkpoint_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "done_at": "2026-04-15T12:00:00+00:00"
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "done_at": {
+                    "format": "date-time",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "description": "Watch the intro video",
+                  "done_at": null,
+                  "id": 17,
+                  "position": 0,
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "week_id": 5
+                }
+              }
+            },
+            "description": "Checkpoint updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "description": "Checkpoint not found."
+          },
+          "422": {
+            "description": "Invalid position value."
+          }
+        },
+        "summary": "Update a checkpoint",
+        "tags": [
+          "Checkpoints"
+        ]
+      }
+    },
+    "/api/checkpoints/{checkpoint_id}/move": {
+      "post": {
+        "description": "Atomic cross-week move + reorder. Locks both affected weeks in id order (deadlock-safe) inside one ``transaction.atomic``. Returns a reconciliation envelope so an optimistic client does not need a follow-up GET. Idempotent when source week and position are unchanged.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "checkpoint_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "position": 2,
+                "week_id": 6
+              },
+              "schema": {
+                "properties": {
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "week_id": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "week_id"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "checkpoint": {
+                    "created_at": "2026-04-15T12:00:00+00:00",
+                    "description": "Watch the intro video",
+                    "done_at": null,
+                    "id": 17,
+                    "position": 0,
+                    "updated_at": "2026-04-15T12:00:00+00:00",
+                    "week_id": 5
+                  },
+                  "destination_week": {
+                    "checkpoint_ids": [
+                      20,
+                      21,
+                      17
+                    ],
+                    "id": 6
+                  },
+                  "source_week": {
+                    "checkpoint_ids": [
+                      18,
+                      19
+                    ],
+                    "id": 5
+                  }
+                }
+              }
+            },
+            "description": "Move applied (or no-op)."
+          },
+          "400": {
+            "description": "Invalid JSON or missing week_id."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Cannot move a checkpoint in another user's plan"
+                }
+              }
+            },
+            "description": "Non-staff bearer attempted to move a checkpoint in another user's plan."
+          },
+          "404": {
+            "description": "Checkpoint or target week not found."
+          },
+          "422": {
+            "description": "Invalid position, target week in a different plan, or bad type."
+          }
+        },
+        "summary": "Move a checkpoint",
+        "tags": [
+          "Checkpoints"
+        ]
+      }
+    },
+    "/api/contacts/export": {
+      "get": {
+        "description": "Default response is JSON. ``?format=csv`` switches to ``text/csv`` with an ``aishippinglabs-contacts-<utc-timestamp>.csv`` attachment header. Output is ordered by ``id`` so repeat calls are deterministic.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "description": "Output format. Defaults to JSON.",
+              "enum": [
+                "csv",
+                "json"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "contacts": [
+                    {
+                      "date_joined": "2026-04-15T12:00:00+00:00",
+                      "email": "alice@example.com",
+                      "email_verified": true,
+                      "first_name": "Alice",
+                      "last_login": null,
+                      "last_name": "Doe",
+                      "slack_checked_at": null,
+                      "slack_member": true,
+                      "stripe_customer_id": "cus_xyz",
+                      "subscription_id": "sub_xyz",
+                      "tags": [
+                        "sprint:may-2026"
+                      ],
+                      "tier": "main",
+                      "unsubscribed": false
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Contact list (JSON) or CSV download."
+          }
+        },
+        "summary": "Export contacts (JSON or CSV)",
+        "tags": [
+          "Contacts"
+        ]
+      }
+    },
+    "/api/contacts/import": {
+      "post": {
+        "description": "Per-row tags are MERGED into the user's existing tags (idempotent append, not replace). Per-row ``tier`` is accepted only when live Stripe confirms the active subscription maps to the same tier; otherwise the row is warned. Tier overrides are intentionally not available through this endpoint.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "contacts": [
+                  {
+                    "email": "alice@example.com",
+                    "tags": [
+                      "sprint:may-2026"
+                    ]
+                  }
+                ],
+                "default_tag": "imported-2026-05"
+              },
+              "schema": {
+                "properties": {
+                  "contacts": {
+                    "items": {
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "default_tag": {
+                    "type": "string"
+                  },
+                  "default_tier": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "contacts"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": 1,
+                  "malformed": 0,
+                  "skipped": 0,
+                  "updated": 0,
+                  "warnings": []
+                }
+              }
+            },
+            "description": "Import summary."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "missing_contacts",
+                  "error": "contacts must be a list"
+                }
+              }
+            },
+            "description": "Malformed body or unknown default tier."
+          }
+        },
+        "summary": "Bulk upsert contacts",
+        "tags": [
+          "Contacts"
+        ]
+      }
+    },
+    "/api/contacts/{email}/tags": {
+      "post": {
+        "description": "Replaces (NOT merges) the user's tags with the supplied normalized list. An empty list clears tags.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "tags": [
+                  "sprint:may-2026",
+                  "interviewed"
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "tags"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "email": "alice@example.com",
+                  "tags": [
+                    "interviewed",
+                    "sprint:may-2026"
+                  ]
+                }
+              }
+            },
+            "description": "Tags replaced."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "missing_tags",
+                  "error": "tags must be a list"
+                }
+              }
+            },
+            "description": "Malformed body or missing tags list."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "contact_not_found",
+                  "error": "Contact not found"
+                }
+              }
+            },
+            "description": "Contact not found."
+          }
+        },
+        "summary": "Replace a contact's tags",
+        "tags": [
+          "Contacts"
+        ]
+      }
+    },
+    "/api/courses/{slug}/certificates": {
+      "get": {
+        "description": "Staff-only. Lists certificates for a published course, ordered by ``-issued_at``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "certificates": [
+                    {
+                      "id": "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51",
+                      "issued_at": "2026-04-15T12:00:00+00:00",
+                      "pdf_url": "https://certs.example.com/alice.pdf",
+                      "submission_id": 42,
+                      "user_email": "alice@example.com"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of certificates."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Certificate API is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_course",
+                  "error": "Course not found"
+                }
+              }
+            },
+            "description": "Course not found or unpublished."
+          }
+        },
+        "summary": "List course certificates",
+        "tags": [
+          "Course Certificates"
+        ]
+      },
+      "post": {
+        "description": "Upsert on ``(user, course)``. Existing rows update only ``pdf_url`` and ``submission_id``; ``issued_at`` is immutable (it's the historical issue date and ``auto_now_add``).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "pdf_url": "https://certs.example.com/alice.pdf",
+                "user_email": "alice@example.com"
+              },
+              "schema": {
+                "properties": {
+                  "pdf_url": {
+                    "format": "uri",
+                    "type": "string"
+                  },
+                  "submission_id": {
+                    "nullable": true,
+                    "type": "integer"
+                  },
+                  "user_email": {
+                    "format": "email",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "user_email"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": true,
+                  "id": "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51",
+                  "issued_at": "2026-04-15T12:00:00+00:00",
+                  "pdf_url": "https://certs.example.com/alice.pdf",
+                  "submission_id": 42,
+                  "user_email": "alice@example.com"
+                }
+              }
+            },
+            "description": "Certificate created or updated."
+          },
+          "403": {
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "description": "Course not found or unpublished."
+          },
+          "422": {
+            "description": "Validation error: bad URL scheme, submission belongs to a different course, missing user, etc."
+          }
+        },
+        "summary": "Create or update a course certificate (staff-only)",
+        "tags": [
+          "Course Certificates"
+        ]
+      }
+    },
+    "/api/courses/{slug}/certificates/{email}": {
+      "delete": {
+        "description": "Staff-only. Idempotent -- returns 204 whether or not a row was deleted. There is no GET / PATCH on this URL; use the collection endpoint for those.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Certificate deleted (empty body)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Certificate delete is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "description": "Course not found or unpublished."
+          }
+        },
+        "summary": "Delete a course certificate",
+        "tags": [
+          "Course Certificates"
+        ]
+      }
+    },
+    "/api/courses/{slug}/enrollments": {
+      "get": {
+        "description": "Active enrollments by default; ``?include_unenrolled=1`` includes soft-deleted rows. Staff sees all rows; non-staff sees only their own.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_unenrolled",
+            "required": false,
+            "schema": {
+              "description": "When ``1``, include soft-deleted (unenrolled) rows.",
+              "enum": [
+                "1"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "enrollments": [
+                    {
+                      "enrolled_at": "2026-04-15T12:00:00+00:00",
+                      "source": "admin",
+                      "unenrolled_at": null,
+                      "user_email": "alice@example.com"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of enrollments."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_course",
+                  "error": "Course not found"
+                }
+              }
+            },
+            "description": "Course not found or unpublished."
+          }
+        },
+        "summary": "List course enrollments",
+        "tags": [
+          "Course Enrollments"
+        ]
+      },
+      "post": {
+        "description": "Accepts either ``{\"user_email\": \"...\"}`` (single) or ``{\"user_emails\": [...]}`` (bulk). Tier mismatches are flagged as ``under_tier`` (warning) but the enrollment is still created -- staff are explicitly choosing to enroll the user.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "user_emails": [
+                  "alice@example.com",
+                  "bob@example.com"
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "user_email": {
+                    "format": "email",
+                    "type": "string"
+                  },
+                  "user_emails": {
+                    "items": {
+                      "format": "email",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "already_enrolled": 1,
+                  "enrolled": 1,
+                  "under_tier": [],
+                  "unknown_emails": []
+                }
+              }
+            },
+            "description": "Bulk enroll summary."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Bulk enrollment is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "description": "Course not found."
+          },
+          "422": {
+            "description": "Missing user_email / user_emails or bad type."
+          }
+        },
+        "summary": "Bulk enroll users (staff-only)",
+        "tags": [
+          "Course Enrollments"
+        ]
+      }
+    },
+    "/api/courses/{slug}/enrollments/{email}": {
+      "delete": {
+        "description": "Staff-only. Idempotent: returns 204 whether or not a row was changed. Soft-deletes the active enrollment by setting ``unenrolled_at``; the historical row is preserved so a follow-up POST can create a new active row. There is no GET / PATCH on this URL.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Enrollment unenrolled (empty body)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Enrollment delete is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "description": "Course not found or unpublished."
+          }
+        },
+        "summary": "Unenroll a user (soft-delete)",
+        "tags": [
+          "Course Enrollments"
+        ]
+      }
+    },
+    "/api/deliverables/{item_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deliverable deleted (empty body)."
+          },
+          "404": {
+            "description": "Deliverable not found."
+          }
+        },
+        "summary": "Delete a deliverable",
+        "tags": [
+          "Plan Items"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "done_at": "2026-04-15T12:00:00+00:00"
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "done_at": {
+                    "format": "date-time",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "description": "Submit week-1 demo",
+                  "done_at": null,
+                  "id": 2,
+                  "plan_id": 5,
+                  "position": 0,
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Deliverable updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_deliverable",
+                  "error": "Deliverable not found"
+                }
+              }
+            },
+            "description": "Deliverable not found."
+          },
+          "422": {
+            "description": "Invalid position."
+          }
+        },
+        "summary": "Update a deliverable",
+        "tags": [
+          "Plan Items"
+        ]
+      }
+    },
+    "/api/event-series": {
+      "delete": {
+        "description": "DELETE returns 405 with a structured error -- deletion is not exposed through the API. Hide the series with ``PATCH is_active=false``.",
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "series_delete_not_available",
+                  "error": "Event series deletion is not available through the API. Hide the series with PATCH is_active=false, or use Studio to delete it."
+                }
+              }
+            },
+            "description": "Series deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Event Series"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "is_active",
+            "required": false,
+            "schema": {
+              "description": "Filter on the hide flag.",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "description": "icontains match on name.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "event_series": [
+                    {
+                      "cadence": "weekly",
+                      "cadence_weeks": 1,
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "day_of_week": 1,
+                      "description": "Open Q&A every Tuesday.",
+                      "event_count": 12,
+                      "id": 1,
+                      "is_active": true,
+                      "name": "Weekly Office Hours",
+                      "published_event_count": 10,
+                      "slug": "weekly-office-hours",
+                      "start_time": "17:00:00",
+                      "timezone": "Europe/Berlin",
+                      "updated_at": "2026-04-15T12:00:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of event series."
+          }
+        },
+        "summary": "List event series",
+        "tags": [
+          "Event Series"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "day_of_week": 1,
+                "name": "Weekly Office Hours",
+                "start_time": "17:00"
+              },
+              "schema": {
+                "properties": {
+                  "cadence": {
+                    "enum": [
+                      "weekly"
+                    ],
+                    "type": "string"
+                  },
+                  "cadence_weeks": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "day_of_week": {
+                    "maximum": 6,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string"
+                  },
+                  "start_time": {
+                    "description": "HH:MM or HH:MM:SS.",
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "day_of_week",
+                  "start_time"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cadence": "weekly",
+                  "cadence_weeks": 1,
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "day_of_week": 1,
+                  "description": "Open Q&A every Tuesday.",
+                  "event_count": 12,
+                  "id": 1,
+                  "is_active": true,
+                  "name": "Weekly Office Hours",
+                  "published_event_count": 10,
+                  "slug": "weekly-office-hours",
+                  "start_time": "17:00:00",
+                  "timezone": "Europe/Berlin",
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Event series created."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "422": {
+            "description": "Validation error (missing name, bad cadence, slug collision, etc.)."
+          }
+        },
+        "summary": "Create an event series",
+        "tags": [
+          "Event Series"
+        ]
+      }
+    },
+    "/api/event-series/{series_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "series_delete_not_available",
+                  "error": "Event series deletion is not available through the API. Hide the series with PATCH is_active=false, or use Studio to delete it."
+                }
+              }
+            },
+            "description": "Series deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Event Series"
+        ]
+      },
+      "get": {
+        "description": "Returns the series plus an inlined ``occurrences`` array using the same shape as the events API.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cadence": "weekly",
+                  "cadence_weeks": 1,
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "day_of_week": 1,
+                  "description": "Open Q&A every Tuesday.",
+                  "event_count": 12,
+                  "id": 1,
+                  "is_active": true,
+                  "name": "Weekly Office Hours",
+                  "occurrences": [],
+                  "published_event_count": 10,
+                  "slug": "weekly-office-hours",
+                  "start_time": "17:00:00",
+                  "timezone": "Europe/Berlin",
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Event series with occurrences."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_series",
+                  "error": "Event series not found"
+                }
+              }
+            },
+            "description": "Event series not found."
+          }
+        },
+        "summary": "Retrieve an event series",
+        "tags": [
+          "Event Series"
+        ]
+      },
+      "patch": {
+        "description": "Partial update. Setting ``is_active=false`` hides the series without touching its occurrences.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "is_active": false
+              },
+              "schema": {
+                "properties": {
+                  "cadence": {
+                    "enum": [
+                      "weekly"
+                    ],
+                    "type": "string"
+                  },
+                  "cadence_weeks": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "day_of_week": {
+                    "maximum": 6,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string"
+                  },
+                  "start_time": {
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cadence": "weekly",
+                  "cadence_weeks": 1,
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "day_of_week": 1,
+                  "description": "Open Q&A every Tuesday.",
+                  "event_count": 12,
+                  "id": 1,
+                  "is_active": true,
+                  "name": "Weekly Office Hours",
+                  "published_event_count": 10,
+                  "slug": "weekly-office-hours",
+                  "start_time": "17:00:00",
+                  "timezone": "Europe/Berlin",
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Event series updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "description": "Event series not found."
+          },
+          "422": {
+            "description": "Validation error."
+          }
+        },
+        "summary": "Update an event series",
+        "tags": [
+          "Event Series"
+        ]
+      }
+    },
+    "/api/event-series/{series_id}/occurrences/bulk": {
+      "post": {
+        "description": "Atomic create of N events linked to ``series_id``. Any per-row validation failure rolls the whole batch back; the response includes the failing index. Dedup key is ``(event_series_id, start_datetime)`` rounded to the minute -- in-batch duplicates return 422 ``duplicate_in_batch``, and rows matching existing series events are silently counted as ``skipped_existing`` for idempotent retries.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "occurrences": [
+                  {
+                    "start_datetime": "2026-05-05T17:00:00+02:00"
+                  },
+                  {
+                    "start_datetime": "2026-05-12T17:00:00+02:00"
+                  }
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "occurrences": {
+                    "items": {
+                      "properties": {
+                        "slug": {
+                          "type": "string"
+                        },
+                        "start_datetime": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "start_datetime"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "occurrences"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": 2,
+                  "occurrence_ids": [
+                    42,
+                    43
+                  ],
+                  "skipped_existing": 0
+                }
+              }
+            },
+            "description": "Bulk create summary."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "missing_field",
+                  "details": {
+                    "field": "start_datetime",
+                    "index": 0
+                  },
+                  "error": "Missing required field: start_datetime"
+                }
+              }
+            },
+            "description": "Invalid JSON or missing field."
+          },
+          "404": {
+            "description": "Event series not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "duplicate_in_batch",
+                  "details": {
+                    "indexes": [
+                      0,
+                      1
+                    ],
+                    "start_datetime": "2026-05-05T17:00:00"
+                  },
+                  "error": "Duplicate start_datetime within the batch"
+                }
+              }
+            },
+            "description": "Validation error or in-batch duplicate start_datetime."
+          }
+        },
+        "summary": "Bulk create occurrences",
+        "tags": [
+          "Event Series"
+        ]
+      }
+    },
+    "/api/event-series/{series_id}/occurrences/{occurrence_id}": {
+      "delete": {
+        "description": "Cancel an occurrence with ``PATCH status=cancelled`` instead. DELETE returns a structured 405.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "occurrence_delete_not_available",
+                  "error": "Occurrence deletion is not available through the API. Cancel with PATCH status=\"cancelled\", or use Studio to delete it."
+                }
+              }
+            },
+            "description": "Occurrence deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Event Series"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Occurrence detail."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_event",
+                  "error": "Event not found"
+                }
+              }
+            },
+            "description": "Event series or occurrence not found."
+          }
+        },
+        "summary": "Retrieve an occurrence",
+        "tags": [
+          "Event Series"
+        ]
+      },
+      "patch": {
+        "description": "Cancel with ``{\"status\": \"cancelled\"}``. The API does NOT auto-send attendee notifications in v1.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "status": "cancelled"
+              },
+              "schema": {
+                "properties": {
+                  "end_datetime": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "start_datetime": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Occurrence updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "description": "Series or occurrence not found."
+          },
+          "422": {
+            "description": "Validation error or attempt to write a read-only field."
+          }
+        },
+        "summary": "Update an occurrence",
+        "tags": [
+          "Event Series"
+        ]
+      }
+    },
+    "/api/events": {
+      "delete": {
+        "description": "Event deletion is intentionally unavailable through the API; operators must use Studio so ownership and sync rules stay explicit.",
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "event_delete_not_available",
+                  "error": "Event deletion is not available through the API. Go to Studio to delete this event manually."
+                }
+              }
+            },
+            "description": "Event deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Events"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "cancelled",
+                "completed",
+                "draft",
+                "upcoming"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "enum": [
+                "github",
+                "studio"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "description": "icontains match on title.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "events": [
+                    {
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "description": "Open Q&A.",
+                      "editable": true,
+                      "end_datetime": "2026-05-05T18:00:00+02:00",
+                      "external_host": "",
+                      "id": 42,
+                      "kind": "standard",
+                      "location": "",
+                      "max_participants": null,
+                      "origin": "studio",
+                      "platform": "zoom",
+                      "published": true,
+                      "required_level": 0,
+                      "slug": "office-hours-2026-05-05",
+                      "source_path": "",
+                      "source_repo": "",
+                      "start_datetime": "2026-05-05T17:00:00+02:00",
+                      "status": "scheduled",
+                      "tags": [
+                        "sprint:may-2026"
+                      ],
+                      "timezone": "Europe/Berlin",
+                      "title": "Office Hours: May 5",
+                      "updated_at": "2026-04-15T12:00:00+00:00",
+                      "zoom_join_url": "https://zoom.us/j/123"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of events."
+          },
+          "422": {
+            "description": "Unknown filter value."
+          }
+        },
+        "summary": "List events",
+        "tags": [
+          "Events"
+        ]
+      },
+      "post": {
+        "description": "Studio/API-origin events can be created through this endpoint. GitHub-origin events are read-only here.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "start_datetime": "2026-05-05T17:00:00+02:00",
+                "title": "Office Hours: May 5"
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "end_datetime": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "external_host": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "max_participants": {
+                    "nullable": true,
+                    "type": "integer"
+                  },
+                  "platform": {
+                    "type": "string"
+                  },
+                  "published": {
+                    "type": "boolean"
+                  },
+                  "required_level": {
+                    "type": "integer"
+                  },
+                  "slug": {
+                    "type": "string"
+                  },
+                  "start_datetime": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "timezone": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "zoom_join_url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "start_datetime"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "description": "Open Q&A.",
+                  "editable": true,
+                  "end_datetime": "2026-05-05T18:00:00+02:00",
+                  "external_host": "",
+                  "id": 42,
+                  "kind": "standard",
+                  "location": "",
+                  "max_participants": null,
+                  "origin": "studio",
+                  "platform": "zoom",
+                  "published": true,
+                  "required_level": 0,
+                  "slug": "office-hours-2026-05-05",
+                  "source_path": "",
+                  "source_repo": "",
+                  "start_datetime": "2026-05-05T17:00:00+02:00",
+                  "status": "scheduled",
+                  "tags": [
+                    "sprint:may-2026"
+                  ],
+                  "timezone": "Europe/Berlin",
+                  "title": "Office Hours: May 5",
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "zoom_join_url": "https://zoom.us/j/123"
+                }
+              }
+            },
+            "description": "Event created."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "422": {
+            "description": "Validation error or attempt to write a read-only origin field."
+          }
+        },
+        "summary": "Create a Studio-origin event",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/api/events/{slug}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "event_delete_not_available",
+                  "error": "Event deletion is not available through the API. Go to Studio to delete this event manually."
+                }
+              }
+            },
+            "description": "Event deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Events"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "description": "Open Q&A.",
+                  "editable": true,
+                  "end_datetime": "2026-05-05T18:00:00+02:00",
+                  "external_host": "",
+                  "id": 42,
+                  "kind": "standard",
+                  "location": "",
+                  "max_participants": null,
+                  "origin": "studio",
+                  "platform": "zoom",
+                  "published": true,
+                  "required_level": 0,
+                  "slug": "office-hours-2026-05-05",
+                  "source_path": "",
+                  "source_repo": "",
+                  "start_datetime": "2026-05-05T17:00:00+02:00",
+                  "status": "scheduled",
+                  "tags": [
+                    "sprint:may-2026"
+                  ],
+                  "timezone": "Europe/Berlin",
+                  "title": "Office Hours: May 5",
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "zoom_join_url": "https://zoom.us/j/123"
+                }
+              }
+            },
+            "description": "Event detail."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_event",
+                  "error": "Event not found"
+                }
+              }
+            },
+            "description": "Event not found."
+          }
+        },
+        "summary": "Retrieve an event",
+        "tags": [
+          "Events"
+        ]
+      },
+      "patch": {
+        "description": "Synced GitHub events are read-only through this API and return 409 ``synced_event_read_only``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "published": true,
+                "status": "scheduled"
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "published": {
+                    "type": "boolean"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "description": "Open Q&A.",
+                  "editable": true,
+                  "end_datetime": "2026-05-05T18:00:00+02:00",
+                  "external_host": "",
+                  "id": 42,
+                  "kind": "standard",
+                  "location": "",
+                  "max_participants": null,
+                  "origin": "studio",
+                  "platform": "zoom",
+                  "published": true,
+                  "required_level": 0,
+                  "slug": "office-hours-2026-05-05",
+                  "source_path": "",
+                  "source_repo": "",
+                  "start_datetime": "2026-05-05T17:00:00+02:00",
+                  "status": "scheduled",
+                  "tags": [
+                    "sprint:may-2026"
+                  ],
+                  "timezone": "Europe/Berlin",
+                  "title": "Office Hours: May 5",
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "zoom_join_url": "https://zoom.us/j/123"
+                }
+              }
+            },
+            "description": "Event updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "description": "Event not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "synced_event_read_only",
+                  "error": "Synced GitHub events are read-only through this API"
+                }
+              }
+            },
+            "description": "Synced GitHub event cannot be edited."
+          },
+          "422": {
+            "description": "Validation error or attempt to write a read-only origin field."
+          }
+        },
+        "summary": "Update an event",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/api/integrations/settings": {
+      "get": {
+        "description": "Returns one entry per registered key with its ``group``, ``label``, ``description``, ``is_secret``, ``is_boolean``, ``configured`` flag, ``source`` (``db`` / ``env`` / ``django_settings`` / ``default`` / ``null``), and a ``docs_url`` path. The actual stored or env value is NEVER included.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "settings": [
+                    {
+                      "configured": true,
+                      "description": "Stripe API secret key.",
+                      "docs_url": "_docs/integrations/stripe.md#stripe_secret_key",
+                      "group": "stripe",
+                      "is_boolean": false,
+                      "is_secret": true,
+                      "key": "STRIPE_SECRET_KEY",
+                      "label": "Stripe",
+                      "source": "db"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Registered settings metadata."
+          }
+        },
+        "summary": "List integration settings (no values)",
+        "tags": [
+          "Integration Settings"
+        ]
+      },
+      "post": {
+        "description": "All-or-nothing batch: any unknown key fails the entire batch with 400 ``invalid_key``. Empty-string on a non-boolean key clears the DB override. Response never echoes key names or values.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "updates": [
+                  {
+                    "key": "CONTENT_CDN_BASE",
+                    "value": "https://cdn.example.com"
+                  }
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "updates": {
+                    "items": {
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "oneOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "updates"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "ok",
+                  "updated": 1
+                }
+              }
+            },
+            "description": "Batch applied."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_key",
+                  "details": {
+                    "invalid_keys": [
+                      "BAD_KEY"
+                    ]
+                  },
+                  "error": "One or more keys are not in the integration registry"
+                }
+              }
+            },
+            "description": "Malformed body, invalid key, or invalid value."
+          }
+        },
+        "summary": "Batch update integration settings",
+        "tags": [
+          "Integration Settings"
+        ]
+      }
+    },
+    "/api/interview-notes": {
+      "post": {
+        "description": "Non-staff bearers cannot create a note with ``visibility=internal``. The plan_id is optional; when supplied it must reference a plan the bearer can see.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "Onboarding notes...",
+                "kind": "general",
+                "user_email": "alice@example.com",
+                "visibility": "external"
+              },
+              "schema": {
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "action_item",
+                      "background",
+                      "general",
+                      "intake",
+                      "meeting",
+                      "persona",
+                      "recommendation",
+                      "source"
+                    ],
+                    "type": "string"
+                  },
+                  "plan_id": {
+                    "nullable": true,
+                    "type": "integer"
+                  },
+                  "user_email": {
+                    "format": "email",
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "external",
+                      "internal"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "user_email",
+                  "body"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "body": "Great onboarding chat.",
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "created_by_email": "staff@example.com",
+                  "id": 12,
+                  "kind": "general",
+                  "member_email": "alice@example.com",
+                  "plan_id": 5,
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "visibility": "external"
+                }
+              }
+            },
+            "description": "Note created."
+          },
+          "400": {
+            "description": "Invalid JSON or missing fields."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_internal_note",
+                  "error": "Cannot create an internal note"
+                }
+              }
+            },
+            "description": "Non-staff bearer tried to create an internal note."
+          },
+          "404": {
+            "description": "Plan not found or not visible."
+          },
+          "422": {
+            "description": "Unknown user, kind, or visibility."
+          }
+        },
+        "summary": "Create an interview note",
+        "tags": [
+          "Interview Notes"
+        ]
+      }
+    },
+    "/api/interview-notes/{note_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Note deleted (empty body)."
+          },
+          "404": {
+            "description": "Note not found."
+          }
+        },
+        "summary": "Delete an interview note",
+        "tags": [
+          "Interview Notes"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "body": "Great onboarding chat.",
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "created_by_email": "staff@example.com",
+                  "id": 12,
+                  "kind": "general",
+                  "member_email": "alice@example.com",
+                  "plan_id": 5,
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "visibility": "external"
+                }
+              }
+            },
+            "description": "Interview note detail."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_note",
+                  "error": "Interview note not found"
+                }
+              }
+            },
+            "description": "Note not found or not visible."
+          }
+        },
+        "summary": "Retrieve an interview note",
+        "tags": [
+          "Interview Notes"
+        ]
+      },
+      "patch": {
+        "description": "Non-staff bearers cannot promote a note to ``internal`` visibility.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "Updated body"
+              },
+              "schema": {
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "action_item",
+                      "background",
+                      "general",
+                      "intake",
+                      "meeting",
+                      "persona",
+                      "recommendation",
+                      "source"
+                    ],
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "external",
+                      "internal"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "body": "Great onboarding chat.",
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "created_by_email": "staff@example.com",
+                  "id": 12,
+                  "kind": "general",
+                  "member_email": "alice@example.com",
+                  "plan_id": 5,
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "visibility": "external"
+                }
+              }
+            },
+            "description": "Note updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_internal_note",
+                  "error": "Cannot create or promote an internal note"
+                }
+              }
+            },
+            "description": "Non-staff bearer tried to promote to internal."
+          },
+          "404": {
+            "description": "Note not found."
+          },
+          "422": {
+            "description": "Unknown kind or visibility."
+          }
+        },
+        "summary": "Update an interview note",
+        "tags": [
+          "Interview Notes"
+        ]
+      }
+    },
+    "/api/member-notes": {
+      "post": {
+        "description": "Non-staff bearers cannot create a note with ``visibility=internal``. The plan_id is optional; when supplied it must reference a plan the bearer can see.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "Onboarding notes...",
+                "kind": "general",
+                "user_email": "alice@example.com",
+                "visibility": "external"
+              },
+              "schema": {
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "action_item",
+                      "background",
+                      "general",
+                      "intake",
+                      "meeting",
+                      "persona",
+                      "recommendation",
+                      "source"
+                    ],
+                    "type": "string"
+                  },
+                  "plan_id": {
+                    "nullable": true,
+                    "type": "integer"
+                  },
+                  "user_email": {
+                    "format": "email",
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "external",
+                      "internal"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "user_email",
+                  "body"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "body": "Great onboarding chat.",
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "created_by_email": "staff@example.com",
+                  "id": 12,
+                  "kind": "general",
+                  "member_email": "alice@example.com",
+                  "plan_id": 5,
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "visibility": "external"
+                }
+              }
+            },
+            "description": "Note created."
+          },
+          "400": {
+            "description": "Invalid JSON or missing fields."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_internal_note",
+                  "error": "Cannot create an internal note"
+                }
+              }
+            },
+            "description": "Non-staff bearer tried to create an internal note."
+          },
+          "404": {
+            "description": "Plan not found or not visible."
+          },
+          "422": {
+            "description": "Unknown user, kind, or visibility."
+          }
+        },
+        "summary": "Create an interview note",
+        "tags": [
+          "Interview Notes"
+        ]
+      }
+    },
+    "/api/member-notes/": {
+      "post": {
+        "description": "Non-staff bearers cannot create a note with ``visibility=internal``. The plan_id is optional; when supplied it must reference a plan the bearer can see.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "Onboarding notes...",
+                "kind": "general",
+                "user_email": "alice@example.com",
+                "visibility": "external"
+              },
+              "schema": {
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "action_item",
+                      "background",
+                      "general",
+                      "intake",
+                      "meeting",
+                      "persona",
+                      "recommendation",
+                      "source"
+                    ],
+                    "type": "string"
+                  },
+                  "plan_id": {
+                    "nullable": true,
+                    "type": "integer"
+                  },
+                  "user_email": {
+                    "format": "email",
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "external",
+                      "internal"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "user_email",
+                  "body"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "body": "Great onboarding chat.",
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "created_by_email": "staff@example.com",
+                  "id": 12,
+                  "kind": "general",
+                  "member_email": "alice@example.com",
+                  "plan_id": 5,
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "visibility": "external"
+                }
+              }
+            },
+            "description": "Note created."
+          },
+          "400": {
+            "description": "Invalid JSON or missing fields."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_internal_note",
+                  "error": "Cannot create an internal note"
+                }
+              }
+            },
+            "description": "Non-staff bearer tried to create an internal note."
+          },
+          "404": {
+            "description": "Plan not found or not visible."
+          },
+          "422": {
+            "description": "Unknown user, kind, or visibility."
+          }
+        },
+        "summary": "Create an interview note",
+        "tags": [
+          "Interview Notes"
+        ]
+      }
+    },
+    "/api/member-notes/{note_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Note deleted (empty body)."
+          },
+          "404": {
+            "description": "Note not found."
+          }
+        },
+        "summary": "Delete an interview note",
+        "tags": [
+          "Interview Notes"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "body": "Great onboarding chat.",
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "created_by_email": "staff@example.com",
+                  "id": 12,
+                  "kind": "general",
+                  "member_email": "alice@example.com",
+                  "plan_id": 5,
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "visibility": "external"
+                }
+              }
+            },
+            "description": "Interview note detail."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_note",
+                  "error": "Interview note not found"
+                }
+              }
+            },
+            "description": "Note not found or not visible."
+          }
+        },
+        "summary": "Retrieve an interview note",
+        "tags": [
+          "Interview Notes"
+        ]
+      },
+      "patch": {
+        "description": "Non-staff bearers cannot promote a note to ``internal`` visibility.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "Updated body"
+              },
+              "schema": {
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "action_item",
+                      "background",
+                      "general",
+                      "intake",
+                      "meeting",
+                      "persona",
+                      "recommendation",
+                      "source"
+                    ],
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "external",
+                      "internal"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "body": "Great onboarding chat.",
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "created_by_email": "staff@example.com",
+                  "id": 12,
+                  "kind": "general",
+                  "member_email": "alice@example.com",
+                  "plan_id": 5,
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "visibility": "external"
+                }
+              }
+            },
+            "description": "Note updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_internal_note",
+                  "error": "Cannot create or promote an internal note"
+                }
+              }
+            },
+            "description": "Non-staff bearer tried to promote to internal."
+          },
+          "404": {
+            "description": "Note not found."
+          },
+          "422": {
+            "description": "Unknown kind or visibility."
+          }
+        },
+        "summary": "Update an interview note",
+        "tags": [
+          "Interview Notes"
+        ]
+      }
+    },
+    "/api/member-notes/{note_id}/": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Note deleted (empty body)."
+          },
+          "404": {
+            "description": "Note not found."
+          }
+        },
+        "summary": "Delete an interview note",
+        "tags": [
+          "Interview Notes"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "body": "Great onboarding chat.",
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "created_by_email": "staff@example.com",
+                  "id": 12,
+                  "kind": "general",
+                  "member_email": "alice@example.com",
+                  "plan_id": 5,
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "visibility": "external"
+                }
+              }
+            },
+            "description": "Interview note detail."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_note",
+                  "error": "Interview note not found"
+                }
+              }
+            },
+            "description": "Note not found or not visible."
+          }
+        },
+        "summary": "Retrieve an interview note",
+        "tags": [
+          "Interview Notes"
+        ]
+      },
+      "patch": {
+        "description": "Non-staff bearers cannot promote a note to ``internal`` visibility.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "Updated body"
+              },
+              "schema": {
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "action_item",
+                      "background",
+                      "general",
+                      "intake",
+                      "meeting",
+                      "persona",
+                      "recommendation",
+                      "source"
+                    ],
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "external",
+                      "internal"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "body": "Great onboarding chat.",
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "created_by_email": "staff@example.com",
+                  "id": 12,
+                  "kind": "general",
+                  "member_email": "alice@example.com",
+                  "plan_id": 5,
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "visibility": "external"
+                }
+              }
+            },
+            "description": "Note updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_internal_note",
+                  "error": "Cannot create or promote an internal note"
+                }
+              }
+            },
+            "description": "Non-staff bearer tried to promote to internal."
+          },
+          "404": {
+            "description": "Note not found."
+          },
+          "422": {
+            "description": "Unknown kind or visibility."
+          }
+        },
+        "summary": "Update an interview note",
+        "tags": [
+          "Interview Notes"
+        ]
+      }
+    },
+    "/api/next-steps/{item_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Next step deleted (empty body)."
+          },
+          "404": {
+            "description": "Next step not found."
+          }
+        },
+        "summary": "Delete a next step",
+        "tags": [
+          "Plan Items"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "done_at": "2026-04-15T12:00:00+00:00"
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "done_at": {
+                    "format": "date-time",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "description": "Email reviewer",
+                  "done_at": null,
+                  "id": 3,
+                  "plan_id": 5,
+                  "position": 0,
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Next step updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_next_step",
+                  "error": "Next_step not found"
+                }
+              }
+            },
+            "description": "Next step not found."
+          },
+          "422": {
+            "description": "Invalid position."
+          }
+        },
+        "summary": "Update a next step",
+        "tags": [
+          "Plan Items"
+        ]
+      }
+    },
+    "/api/payments/tier-reconcile": {
+      "post": {
+        "description": "All body fields are optional. When ``emails`` is omitted the endpoint processes every user with a non-empty ``stripe_customer_id`` (capped at ``MAX_USERS_PER_REQUEST``).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "dry_run": true,
+                "emails": [
+                  "alice@example.com"
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "customer_ids": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "dry_run": {
+                    "type": "boolean"
+                  },
+                  "emails": {
+                    "items": {
+                      "format": "email",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "force": {
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "changed": 1,
+                  "dry_run": false,
+                  "processed": 1,
+                  "results": [
+                    {
+                      "audit_event_id": "evt_xyz",
+                      "billing_period_end": "2026-06-15T12:00:00+00:00",
+                      "deactivated_override": false,
+                      "email": "alice@example.com",
+                      "from": "free",
+                      "message": "Tier set to main",
+                      "saved_metadata": false,
+                      "status": "changed",
+                      "stripe_customer_id": "cus_xyz",
+                      "subscription_id": "sub_xyz",
+                      "to": "main"
+                    }
+                  ],
+                  "skipped": 0,
+                  "warnings": 0
+                }
+              }
+            },
+            "description": "Apply results."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_type",
+                  "error": "emails must be a list of strings"
+                }
+              }
+            },
+            "description": "Invalid JSON or bad type for a field."
+          },
+          "422": {
+            "description": "Per-entry validation error (bad email, bad customer_id value)."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "too_many_users",
+                  "error": "Too many users to process in one request (max 500). Pass an explicit emails list to batch."
+                }
+              }
+            },
+            "description": "Eligible user count exceeded the cap."
+          }
+        },
+        "summary": "Apply (or dry-run) tier reconciliation",
+        "tags": [
+          "Tier Reconciliation"
+        ]
+      }
+    },
+    "/api/payments/tier-reconcile/diagnostics": {
+      "get": {
+        "description": "Capped at ``MAX_USERS_PER_REQUEST`` (default 500). Above the cap returns 429 ``too_many_users``.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "email",
+            "required": false,
+            "schema": {
+              "description": "Filter to a single user (case-insensitive).",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include",
+            "required": false,
+            "schema": {
+              "description": "When ``ok``, include users whose tier already matches Stripe (action_needed=``noop``).",
+              "enum": [
+                "ok"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "users": [
+                    {
+                      "action_needed": "noop",
+                      "billing_period_end": "2026-06-15T12:00:00+00:00",
+                      "current_tier": "main",
+                      "current_tier_source": "direct",
+                      "email": "alice@example.com",
+                      "stripe_active_tier": "main",
+                      "stripe_customer_id": "cus_xyz",
+                      "subscription_id": "sub_xyz"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Diagnostic results."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "too_many_users",
+                  "error": "Too many users to process in one request (max 500). Pass an explicit ?email= filter or batch via the apply endpoint."
+                }
+              }
+            },
+            "description": "Eligible user count exceeded the per-request cap."
+          }
+        },
+        "summary": "List users whose tier needs reconciling",
+        "tags": [
+          "Tier Reconciliation"
+        ]
+      }
+    },
+    "/api/plans/{plan_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Plan deleted (empty body)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Plan delete is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "description": "Plan not found."
+          }
+        },
+        "summary": "Delete a plan (staff-only)",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plan with nested weeks, checkpoints, resources, deliverables, and next steps."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_plan",
+                  "error": "Plan not found"
+                }
+              }
+            },
+            "description": "Plan not found or not visible."
+          }
+        },
+        "summary": "Retrieve a plan (nested detail)",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "patch": {
+        "description": "Supports partial updates including ``summary`` and ``focus`` nested dicts plus ``summary_*`` flat fields. Setting ``shared_at`` to a non-null value is staff-only and fires a ``plan_shared`` notification; setting it to ``null`` clears the timestamp silently.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "status": "active"
+              },
+              "schema": {
+                "properties": {
+                  "accountability": {
+                    "type": "string"
+                  },
+                  "focus": {
+                    "type": "object"
+                  },
+                  "goal": {
+                    "maxLength": 280,
+                    "type": "string"
+                  },
+                  "shared_at": {
+                    "format": "date-time",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "active",
+                      "archived",
+                      "completed",
+                      "draft",
+                      "shared"
+                    ],
+                    "type": "string"
+                  },
+                  "summary": {
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Plan updated (nested detail shape)."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Plan share is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer touched a staff-only field (``shared_at`` to non-null)."
+          },
+          "404": {
+            "description": "Plan not found."
+          },
+          "422": {
+            "description": "Bad goal length, unknown status, or invalid focus.supporting type."
+          }
+        },
+        "summary": "Update plan-level fields",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/api/plans/{plan_id}/deliverables": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "deliverables": [
+                    {
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "description": "Submit week-1 demo",
+                      "done_at": null,
+                      "id": 2,
+                      "plan_id": 5,
+                      "position": 0,
+                      "updated_at": "2026-04-15T12:00:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of deliverables."
+          },
+          "404": {
+            "description": "Plan not found."
+          }
+        },
+        "summary": "List plan deliverables",
+        "tags": [
+          "Plan Items"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "Submit week-1 demo"
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "done_at": {
+                    "format": "date-time",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "description"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "description": "Submit week-1 demo",
+                  "done_at": null,
+                  "id": 2,
+                  "plan_id": 5,
+                  "position": 0,
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Deliverable created."
+          },
+          "400": {
+            "description": "Invalid JSON or missing field."
+          },
+          "404": {
+            "description": "Plan not found."
+          },
+          "422": {
+            "description": "Invalid position."
+          }
+        },
+        "summary": "Create a deliverable",
+        "tags": [
+          "Plan Items"
+        ]
+      }
+    },
+    "/api/plans/{plan_id}/interview-notes": {
+      "get": {
+        "description": "Visibility goes through ``visible_interview_notes_for``: a non-staff bearer asking with ``?visibility=internal`` gets 403 ``forbidden_internal_note``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "visibility",
+            "required": false,
+            "schema": {
+              "description": "Filter on note visibility.",
+              "enum": [
+                "external",
+                "internal"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "interview_notes": [
+                    {
+                      "body": "Great onboarding chat.",
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "created_by_email": "staff@example.com",
+                      "id": 12,
+                      "kind": "general",
+                      "member_email": "alice@example.com",
+                      "plan_id": 5,
+                      "updated_at": "2026-04-15T12:00:00+00:00",
+                      "visibility": "external"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of interview notes."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_internal_note",
+                  "error": "Internal notes are not visible to this token"
+                }
+              }
+            },
+            "description": "Non-staff bearer asked for internal notes."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_plan",
+                  "error": "Plan not found"
+                }
+              }
+            },
+            "description": "Plan not found or not visible."
+          }
+        },
+        "summary": "List interview notes for a plan",
+        "tags": [
+          "Interview Notes"
+        ]
+      }
+    },
+    "/api/plans/{plan_id}/next-steps": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "next_steps": [
+                    {
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "description": "Email reviewer",
+                      "done_at": null,
+                      "id": 3,
+                      "plan_id": 5,
+                      "position": 0,
+                      "updated_at": "2026-04-15T12:00:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of next steps."
+          },
+          "404": {
+            "description": "Plan not found."
+          }
+        },
+        "summary": "List plan next steps",
+        "tags": [
+          "Plan Items"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "Email reviewer"
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "done_at": {
+                    "format": "date-time",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "description"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "description": "Email reviewer",
+                  "done_at": null,
+                  "id": 3,
+                  "plan_id": 5,
+                  "position": 0,
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Next step created."
+          },
+          "400": {
+            "description": "Invalid JSON or missing field."
+          },
+          "404": {
+            "description": "Plan not found."
+          },
+          "422": {
+            "description": "Invalid position."
+          }
+        },
+        "summary": "Create a next step",
+        "tags": [
+          "Plan Items"
+        ]
+      }
+    },
+    "/api/plans/{plan_id}/resources": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "resources": [
+                    {
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "id": 1,
+                      "note": "",
+                      "plan_id": 5,
+                      "position": 0,
+                      "title": "Tier list spreadsheet",
+                      "updated_at": "2026-04-15T12:00:00+00:00",
+                      "url": "https://example.com/sheet"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of resources."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_plan",
+                  "error": "Plan not found"
+                }
+              }
+            },
+            "description": "Plan not found or not visible."
+          }
+        },
+        "summary": "List plan resources",
+        "tags": [
+          "Plan Items"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "title": "Tier list spreadsheet",
+                "url": "https://example.com/sheet"
+              },
+              "schema": {
+                "properties": {
+                  "note": {
+                    "type": "string"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "id": 1,
+                  "note": "",
+                  "plan_id": 5,
+                  "position": 0,
+                  "title": "Tier list spreadsheet",
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "url": "https://example.com/sheet"
+                }
+              }
+            },
+            "description": "Resource created."
+          },
+          "400": {
+            "description": "Invalid JSON or missing field."
+          },
+          "404": {
+            "description": "Plan not found."
+          },
+          "422": {
+            "description": "Invalid position."
+          }
+        },
+        "summary": "Create a resource",
+        "tags": [
+          "Plan Items"
+        ]
+      }
+    },
+    "/api/plans/{plan_id}/weeks": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "weeks": [
+                    {
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "id": 11,
+                      "plan_id": 5,
+                      "position": 0,
+                      "theme": "Discovery",
+                      "updated_at": "2026-04-15T12:00:00+00:00",
+                      "week_number": 1
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of weeks."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_plan",
+                  "error": "Plan not found"
+                }
+              }
+            },
+            "description": "Plan not found or not visible."
+          }
+        },
+        "summary": "List weeks in a plan",
+        "tags": [
+          "Weeks"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "theme": "Discovery",
+                "week_number": 1
+              },
+              "schema": {
+                "properties": {
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "theme": {
+                    "type": "string"
+                  },
+                  "week_number": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "week_number"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "id": 11,
+                  "plan_id": 5,
+                  "position": 0,
+                  "theme": "Discovery",
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "week_number": 1
+                }
+              }
+            },
+            "description": "Week created."
+          },
+          "400": {
+            "description": "Invalid JSON or missing field."
+          },
+          "404": {
+            "description": "Plan not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "duplicate_week_number",
+                  "error": "Week number already exists for this plan"
+                }
+              }
+            },
+            "description": "A week with the same week_number already exists for this plan."
+          },
+          "422": {
+            "description": "Invalid position or type."
+          }
+        },
+        "summary": "Create a week",
+        "tags": [
+          "Weeks"
+        ]
+      }
+    },
+    "/api/redirects": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "is_active",
+            "required": false,
+            "schema": {
+              "description": "Filter on the activation flag.",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "redirects": [
+                    {
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "id": 7,
+                      "is_active": true,
+                      "redirect_type": 301,
+                      "source_path": "/old-page",
+                      "target_path": "/new-page",
+                      "updated_at": "2026-04-15T12:00:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of redirects."
+          }
+        },
+        "summary": "List redirects",
+        "tags": [
+          "Redirects"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "redirect_type": 301,
+                "source_path": "/old-page",
+                "target_path": "/new-page"
+              },
+              "schema": {
+                "properties": {
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "redirect_type": {
+                    "enum": [
+                      301,
+                      302
+                    ],
+                    "type": "integer"
+                  },
+                  "source_path": {
+                    "type": "string"
+                  },
+                  "target_path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source_path",
+                  "target_path"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "id": 7,
+                  "is_active": true,
+                  "redirect_type": 301,
+                  "source_path": "/old-page",
+                  "target_path": "/new-page",
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Redirect created."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "source_path_conflict",
+                  "error": "A redirect for '/old-page' already exists"
+                }
+              }
+            },
+            "description": "A redirect with the same source_path already exists."
+          },
+          "422": {
+            "description": "Validation error: source_path == target_path (loop), unknown redirect_type, missing field."
+          }
+        },
+        "summary": "Create a redirect",
+        "tags": [
+          "Redirects"
+        ]
+      }
+    },
+    "/api/redirects/bulk": {
+      "post": {
+        "description": "Atomic upsert by ``source_path``. Any row failure rolls every row back. ``action`` is ``created`` / ``updated`` / ``skipped`` (where ``skipped`` means the row was identical to the existing record).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "redirects": [
+                  {
+                    "redirect_type": 301,
+                    "source_path": "/old-page",
+                    "target_path": "/new-page"
+                  }
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "redirects": {
+                    "items": {
+                      "properties": {
+                        "is_active": {
+                          "type": "boolean"
+                        },
+                        "redirect_type": {
+                          "enum": [
+                            301,
+                            302
+                          ],
+                          "type": "integer"
+                        },
+                        "source_path": {
+                          "type": "string"
+                        },
+                        "target_path": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "source_path",
+                        "target_path"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "redirects"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": 1,
+                  "results": [
+                    {
+                      "action": "created",
+                      "id": 7,
+                      "index": 0,
+                      "source_path": "/old-page"
+                    }
+                  ],
+                  "skipped": 0,
+                  "updated": 0,
+                  "warnings": []
+                }
+              }
+            },
+            "description": "Bulk upsert summary."
+          },
+          "400": {
+            "description": "Invalid JSON or missing field."
+          },
+          "422": {
+            "description": "Per-row validation error."
+          }
+        },
+        "summary": "Bulk upsert redirects",
+        "tags": [
+          "Redirects"
+        ]
+      }
+    },
+    "/api/redirects/{redirect_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "redirect_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Redirect deleted (empty body)."
+          },
+          "404": {
+            "description": "Redirect not found."
+          }
+        },
+        "summary": "Delete a redirect",
+        "tags": [
+          "Redirects"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "redirect_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "id": 7,
+                  "is_active": true,
+                  "redirect_type": 301,
+                  "source_path": "/old-page",
+                  "target_path": "/new-page",
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Redirect detail."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "redirect_not_found",
+                  "error": "Redirect not found"
+                }
+              }
+            },
+            "description": "Redirect not found."
+          }
+        },
+        "summary": "Retrieve a redirect",
+        "tags": [
+          "Redirects"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "redirect_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "is_active": false
+              },
+              "schema": {
+                "properties": {
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "redirect_type": {
+                    "enum": [
+                      301,
+                      302
+                    ],
+                    "type": "integer"
+                  },
+                  "source_path": {
+                    "type": "string"
+                  },
+                  "target_path": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "id": 7,
+                  "is_active": true,
+                  "redirect_type": 301,
+                  "source_path": "/old-page",
+                  "target_path": "/new-page",
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Redirect updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "description": "Redirect not found."
+          },
+          "409": {
+            "description": "Source path conflict with another redirect."
+          },
+          "422": {
+            "description": "Validation error or loop check failed."
+          }
+        },
+        "summary": "Update a redirect",
+        "tags": [
+          "Redirects"
+        ]
+      }
+    },
+    "/api/resources/{item_id}": {
+      "delete": {
+        "description": "Re-packs sibling positions inside the same plan.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Resource deleted (empty body)."
+          },
+          "404": {
+            "description": "Resource not found."
+          }
+        },
+        "summary": "Delete a resource",
+        "tags": [
+          "Plan Items"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "note": "Latest version"
+              },
+              "schema": {
+                "properties": {
+                  "note": {
+                    "type": "string"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "id": 1,
+                  "note": "",
+                  "plan_id": 5,
+                  "position": 0,
+                  "title": "Tier list spreadsheet",
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "url": "https://example.com/sheet"
+                }
+              }
+            },
+            "description": "Resource updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_resource",
+                  "error": "Resource not found"
+                }
+              }
+            },
+            "description": "Resource not found."
+          },
+          "422": {
+            "description": "Invalid position."
+          }
+        },
+        "summary": "Update a resource",
+        "tags": [
+          "Plan Items"
+        ]
+      }
+    },
+    "/api/ses-events": {
+      "post": {
+        "description": "Accepts ``SubscriptionConfirmation``, ``UnsubscribeConfirmation``, and ``Notification`` SNS types. The inner SES payload uses either ``notificationType`` (identity notifications) or ``eventType`` (configuration-set destinations); both shapes are handled.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "Message": "{\"notificationType\": \"Bounce\", ...}",
+                "MessageId": "11111111-2222-3333-4444-555555555555",
+                "Type": "Notification"
+              },
+              "schema": {
+                "properties": {
+                  "Message": {
+                    "description": "Inner SES JSON payload as a string.",
+                    "type": "string"
+                  },
+                  "MessageId": {
+                    "type": "string"
+                  },
+                  "Signature": {
+                    "type": "string"
+                  },
+                  "SigningCertURL": {
+                    "type": "string"
+                  },
+                  "SubscribeURL": {
+                    "format": "uri",
+                    "type": "string"
+                  },
+                  "Type": {
+                    "enum": [
+                      "Notification",
+                      "SubscriptionConfirmation",
+                      "UnsubscribeConfirmation"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "ok"
+                }
+              }
+            },
+            "description": "Event accepted, ignored, or duplicate."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Missing MessageId"
+                }
+              }
+            },
+            "description": "Malformed body or missing MessageId."
+          },
+          "403": {
+            "description": "SNS signature failed validation."
+          }
+        },
+        "security": [],
+        "summary": "Receive an SNS-delivered SES event",
+        "tags": [
+          "SES Webhook"
+        ]
+      }
+    },
     "/api/sprints": {
       "get": {
         "description": "Returns every sprint visible to the bearer token. Non-staff tokens see every sprint row -- visibility narrowing happens on the per-sprint detail endpoint, not on the collection.",
@@ -347,6 +5089,1018 @@
         "summary": "Update a sprint (staff-only)",
         "tags": [
           "Sprints"
+        ]
+      }
+    },
+    "/api/sprints/{slug}/enrollments": {
+      "get": {
+        "description": "Staff sees every enrollment in the sprint; non-staff sees only their own row.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "enrollments": [
+                    {
+                      "enrolled_at": "2026-04-15T12:00:00+00:00",
+                      "enrolled_by": "staff@example.com",
+                      "user_email": "alice@example.com"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of enrollments."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_sprint",
+                  "error": "Sprint not found"
+                }
+              }
+            },
+            "description": "Sprint not found."
+          }
+        },
+        "summary": "List sprint enrollments",
+        "tags": [
+          "Sprint Enrollments"
+        ]
+      },
+      "post": {
+        "description": "Tier mismatches are flagged as ``under_tier`` (warning) but the enrollment is still created -- staff are explicitly choosing to enroll the user.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "user_emails": [
+                  "alice@example.com",
+                  "bob@example.com"
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "user_emails": {
+                    "items": {
+                      "format": "email",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "user_emails"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "already_enrolled": 1,
+                  "enrolled": 1,
+                  "under_tier": [],
+                  "unknown_emails": []
+                }
+              }
+            },
+            "description": "Bulk enroll summary."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Bulk enrollment is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "description": "Sprint not found."
+          },
+          "422": {
+            "description": "Missing or invalid user_emails."
+          }
+        },
+        "summary": "Bulk enroll users (staff-only)",
+        "tags": [
+          "Sprint Enrollments"
+        ]
+      }
+    },
+    "/api/sprints/{slug}/enrollments/{email}": {
+      "delete": {
+        "description": "Staff-only. Idempotent: returns 204 whether or not a row was deleted. Auto-privates the user's plan if one exists, mirroring the member-leave flow. There is no GET / PATCH on this URL.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Enrollment removed (empty body)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Enrollment delete is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "description": "Sprint not found."
+          }
+        },
+        "summary": "Unenroll a user from a sprint",
+        "tags": [
+          "Sprint Enrollments"
+        ]
+      }
+    },
+    "/api/sprints/{slug}/plans": {
+      "get": {
+        "description": "Returns plans visible to the bearer (via ``visible_plans_for``), ordered by ``-created_at``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "plans": [
+                    {
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "goal": "Ship the LLM evaluation toolkit",
+                      "id": 5,
+                      "member_email": "alice@example.com",
+                      "sprint_slug": "may-2026",
+                      "status": "active",
+                      "updated_at": "2026-04-15T12:00:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of plans."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_sprint",
+                  "error": "Sprint not found"
+                }
+              }
+            },
+            "description": "Sprint not found."
+          }
+        },
+        "summary": "List plans in a sprint",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "post": {
+        "description": "Staff-only. Returns the nested plan detail shape.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "goal": "Ship the LLM evaluation toolkit",
+                "status": "draft",
+                "user_email": "alice@example.com"
+              },
+              "schema": {
+                "properties": {
+                  "accountability": {
+                    "type": "string"
+                  },
+                  "goal": {
+                    "maxLength": 280,
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "active",
+                      "archived",
+                      "completed",
+                      "draft",
+                      "shared"
+                    ],
+                    "type": "string"
+                  },
+                  "user_email": {
+                    "format": "email",
+                    "type": "string"
+                  },
+                  "weeks": {
+                    "items": {
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "user_email"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Plan created (nested detail shape)."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Plan creation is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "description": "Sprint not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "duplicate_plan",
+                  "error": "Plan already exists for this user in this sprint"
+                }
+              }
+            },
+            "description": "User already has a plan in this sprint."
+          },
+          "422": {
+            "description": "Missing user_email, unknown user, bad goal length, or unknown enum value."
+          }
+        },
+        "summary": "Create a plan (staff-only)",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/api/sprints/{slug}/plans/bulk-import": {
+      "post": {
+        "description": "Atomic: any single plan validation failure rolls every row back so the caller never has to clean up partial state. Returns the list of created plan ids.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "plans": [
+                  {
+                    "goal": "Ship the toolkit",
+                    "status": "draft",
+                    "user_email": "alice@example.com"
+                  }
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "plans": {
+                    "items": {
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "plans"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": 1,
+                  "plan_ids": [
+                    5
+                  ]
+                }
+              }
+            },
+            "description": "Plans created."
+          },
+          "400": {
+            "description": "Invalid JSON or missing field."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Bulk import is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "description": "Sprint not found."
+          },
+          "409": {
+            "description": "One of the rows would create a duplicate plan."
+          },
+          "422": {
+            "description": "Per-row validation error."
+          }
+        },
+        "summary": "Bulk-import plans",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/api/sync/sources": {
+      "delete": {
+        "description": "Source deletion is intentionally unavailable through the API; use Studio.",
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "sync_source_delete_not_available",
+                  "error": "Content sync source deletion is not available through the API. Go to Studio to delete this source manually."
+                }
+              }
+            },
+            "description": "Source deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Sync Sources"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "sources": [
+                    {
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "id": "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51",
+                      "is_private": true,
+                      "last_sync_status": "ok",
+                      "last_synced_at": "2026-04-15T12:00:00+00:00",
+                      "last_synced_commit": "a1b2c3d4e5f6",
+                      "max_files": 5000,
+                      "repo_name": "AI-Shipping-Labs/content",
+                      "short_name": "content",
+                      "short_synced_commit": "a1b2c3d",
+                      "sync_locked_at": null,
+                      "sync_requested": false,
+                      "synced_commit_url": "https://github.com/AI-Shipping-Labs/content/commit/a1b2c3d4e5f6",
+                      "updated_at": "2026-04-15T12:00:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of content sync sources."
+          }
+        },
+        "summary": "List content sync sources",
+        "tags": [
+          "Sync Sources"
+        ]
+      }
+    },
+    "/api/sync/sources/{source_id}/trigger": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "sync_source_delete_not_available",
+                  "error": "Content sync source deletion is not available through the API. Go to Studio to delete this source manually."
+                }
+              }
+            },
+            "description": "Source deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Sync Sources"
+        ]
+      },
+      "post": {
+        "description": "Enqueues a sync job for the given source. Pass ``force=true`` as a query param or in the JSON body to bypass the per-source idempotency lock.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "force",
+            "required": false,
+            "schema": {
+              "description": "Truthy values bypass the idempotency lock.",
+              "enum": [
+                "1",
+                "true",
+                "True",
+                "yes",
+                "on"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "force": true
+              },
+              "schema": {
+                "properties": {
+                  "force": {
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "batch_id": null,
+                  "message": "Sync completed inline",
+                  "ran_inline": true,
+                  "source": {
+                    "created_at": "2026-04-15T12:00:00+00:00",
+                    "id": "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51",
+                    "is_private": true,
+                    "last_sync_status": "ok",
+                    "last_synced_at": "2026-04-15T12:00:00+00:00",
+                    "last_synced_commit": "a1b2c3d4e5f6",
+                    "max_files": 5000,
+                    "repo_name": "AI-Shipping-Labs/content",
+                    "short_name": "content",
+                    "short_synced_commit": "a1b2c3d",
+                    "sync_locked_at": null,
+                    "sync_requested": false,
+                    "synced_commit_url": "https://github.com/AI-Shipping-Labs/content/commit/a1b2c3d4e5f6",
+                    "updated_at": "2026-04-15T12:00:00+00:00"
+                  },
+                  "status": "completed",
+                  "task_id": null
+                }
+              }
+            },
+            "description": "Sync ran inline (e.g. in tests)."
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "batch_id": "batch_xyz",
+                  "message": "Sync queued",
+                  "ran_inline": false,
+                  "source": {
+                    "created_at": "2026-04-15T12:00:00+00:00",
+                    "id": "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51",
+                    "is_private": true,
+                    "last_sync_status": "ok",
+                    "last_synced_at": "2026-04-15T12:00:00+00:00",
+                    "last_synced_commit": "a1b2c3d4e5f6",
+                    "max_files": 5000,
+                    "repo_name": "AI-Shipping-Labs/content",
+                    "short_name": "content",
+                    "short_synced_commit": "a1b2c3d",
+                    "sync_locked_at": null,
+                    "sync_requested": false,
+                    "synced_commit_url": "https://github.com/AI-Shipping-Labs/content/commit/a1b2c3d4e5f6",
+                    "updated_at": "2026-04-15T12:00:00+00:00"
+                  },
+                  "status": "queued",
+                  "task_id": "task_xyz"
+                }
+              }
+            },
+            "description": "Sync job queued."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "description": "Sync source not found."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "sync_enqueue_failed",
+                  "error": "Failed to enqueue sync"
+                }
+              }
+            },
+            "description": "Sync enqueue failed."
+          }
+        },
+        "summary": "Trigger a content sync run",
+        "tags": [
+          "Sync Sources"
+        ]
+      }
+    },
+    "/api/users/{email}/interview-notes": {
+      "get": {
+        "description": "Staff-only. Routed by three URL aliases under ``/api/users/<email>/`` -- the OpenAPI spec emits one operation per alias. ``?plan=null`` preserves the inbox-only behaviour; ``?plan=<id>`` narrows to one plan.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plan",
+            "required": false,
+            "schema": {
+              "description": "Plan id, or the literal string ``null`` to narrow to notes with no plan attached.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "interview_notes": [
+                    {
+                      "body": "Great onboarding chat.",
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "created_by_email": "staff@example.com",
+                      "id": 12,
+                      "kind": "general",
+                      "member_email": "alice@example.com",
+                      "plan_id": 5,
+                      "updated_at": "2026-04-15T12:00:00+00:00",
+                      "visibility": "external"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of interview notes."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_user",
+                  "details": {
+                    "email": "Unknown user"
+                  },
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown user or bad plan filter."
+          }
+        },
+        "summary": "List a user's interview notes",
+        "tags": [
+          "Interview Notes"
+        ]
+      }
+    },
+    "/api/users/{email}/notes": {
+      "get": {
+        "description": "Staff-only. Routed by three URL aliases under ``/api/users/<email>/`` -- the OpenAPI spec emits one operation per alias. ``?plan=null`` preserves the inbox-only behaviour; ``?plan=<id>`` narrows to one plan.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plan",
+            "required": false,
+            "schema": {
+              "description": "Plan id, or the literal string ``null`` to narrow to notes with no plan attached.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "interview_notes": [
+                    {
+                      "body": "Great onboarding chat.",
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "created_by_email": "staff@example.com",
+                      "id": 12,
+                      "kind": "general",
+                      "member_email": "alice@example.com",
+                      "plan_id": 5,
+                      "updated_at": "2026-04-15T12:00:00+00:00",
+                      "visibility": "external"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of interview notes."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_user",
+                  "details": {
+                    "email": "Unknown user"
+                  },
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown user or bad plan filter."
+          }
+        },
+        "summary": "List a user's interview notes",
+        "tags": [
+          "Interview Notes"
+        ]
+      }
+    },
+    "/api/users/{email}/notes/": {
+      "get": {
+        "description": "Staff-only. Routed by three URL aliases under ``/api/users/<email>/`` -- the OpenAPI spec emits one operation per alias. ``?plan=null`` preserves the inbox-only behaviour; ``?plan=<id>`` narrows to one plan.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plan",
+            "required": false,
+            "schema": {
+              "description": "Plan id, or the literal string ``null`` to narrow to notes with no plan attached.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "interview_notes": [
+                    {
+                      "body": "Great onboarding chat.",
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "created_by_email": "staff@example.com",
+                      "id": 12,
+                      "kind": "general",
+                      "member_email": "alice@example.com",
+                      "plan_id": 5,
+                      "updated_at": "2026-04-15T12:00:00+00:00",
+                      "visibility": "external"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of interview notes."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_user",
+                  "details": {
+                    "email": "Unknown user"
+                  },
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown user or bad plan filter."
+          }
+        },
+        "summary": "List a user's interview notes",
+        "tags": [
+          "Interview Notes"
+        ]
+      }
+    },
+    "/api/weeks/{week_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "week_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Week deleted (empty body)."
+          },
+          "404": {
+            "description": "Week not found."
+          }
+        },
+        "summary": "Delete a week",
+        "tags": [
+          "Weeks"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "week_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "theme": "Discovery"
+              },
+              "schema": {
+                "properties": {
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "theme": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "id": 11,
+                  "plan_id": 5,
+                  "position": 0,
+                  "theme": "Discovery",
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "week_number": 1
+                }
+              }
+            },
+            "description": "Week updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_week",
+                  "error": "Week not found"
+                }
+              }
+            },
+            "description": "Week not found."
+          },
+          "422": {
+            "description": "Invalid position."
+          }
+        },
+        "summary": "Update a week",
+        "tags": [
+          "Weeks"
+        ]
+      }
+    },
+    "/api/weeks/{week_id}/checkpoints": {
+      "post": {
+        "description": "Creates a checkpoint at the optional ``position`` index inside the given week. Without ``position`` we append; with a ``position`` at a non-end value, existing siblings shift down by 1 inside a single ``transaction.atomic`` so concurrent inserts cannot leave a partial reorder.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "week_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "Read the brief",
+                "position": 0
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "done_at": {
+                    "format": "date-time",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "description"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "description": "Watch the intro video",
+                  "done_at": null,
+                  "id": 17,
+                  "position": 0,
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "week_id": 5
+                }
+              }
+            },
+            "description": "Checkpoint created."
+          },
+          "400": {
+            "description": "Invalid JSON or missing description."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_week",
+                  "error": "Week not found"
+                }
+              }
+            },
+            "description": "Week not found or not visible."
+          },
+          "422": {
+            "description": "Invalid position value."
+          }
+        },
+        "summary": "Create a checkpoint",
+        "tags": [
+          "Checkpoints"
         ]
       }
     }

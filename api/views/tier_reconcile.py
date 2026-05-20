@@ -21,10 +21,36 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from accounts.models import TierOverride
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from payments.services.import_stripe import _price_to_tier_map
+
+_DIAGNOSTIC_EXAMPLE = {
+    "email": "alice@example.com",
+    "stripe_customer_id": "cus_xyz",
+    "current_tier": "main",
+    "current_tier_source": "direct",
+    "stripe_active_tier": "main",
+    "subscription_id": "sub_xyz",
+    "billing_period_end": "2026-06-15T12:00:00+00:00",
+    "action_needed": "noop",
+}
+
+_APPLY_RESULT_EXAMPLE = {
+    "email": "alice@example.com",
+    "status": "changed",
+    "from": "free",
+    "to": "main",
+    "subscription_id": "sub_xyz",
+    "deactivated_override": False,
+    "saved_metadata": False,
+    "audit_event_id": "evt_xyz",
+    "message": "Tier set to main",
+    "billing_period_end": "2026-06-15T12:00:00+00:00",
+    "stripe_customer_id": "cus_xyz",
+}
 
 User = get_user_model()
 
@@ -117,6 +143,57 @@ def _serialize_diagnostic(user, record):
 
 @token_required
 @require_methods("GET")
+@openapi_spec(
+    tag="Tier Reconciliation",
+    summary="Diagnose tier vs Stripe mismatches",
+    methods={
+        "GET": {
+            "summary": "List users whose tier needs reconciling",
+            "description": (
+                "Capped at ``MAX_USERS_PER_REQUEST`` (default 500). "
+                "Above the cap returns 429 ``too_many_users``."
+            ),
+            "query": {
+                "email": {
+                    "type": "string",
+                    "required": False,
+                    "description": (
+                        "Filter to a single user "
+                        "(case-insensitive)."
+                    ),
+                },
+                "include": {
+                    "type": "string",
+                    "enum": ["ok"],
+                    "required": False,
+                    "description": (
+                        "When ``ok``, include users whose tier already "
+                        "matches Stripe (action_needed=``noop``)."
+                    ),
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Diagnostic results.",
+                    "example": {
+                        "count": 1,
+                        "users": [_DIAGNOSTIC_EXAMPLE],
+                    },
+                },
+                429: {
+                    "description": (
+                        "Eligible user count exceeded the per-request "
+                        "cap."
+                    ),
+                    "example": {
+                        "error": "Too many users to process in one request (max 500). Pass an explicit ?email= filter or batch via the apply endpoint.",
+                        "code": "too_many_users",
+                    },
+                },
+            },
+        },
+    },
+)
 def tier_reconcile_diagnostics(request):
     """``GET /api/payments/tier-reconcile/diagnostics``.
 
@@ -210,6 +287,72 @@ def _billing_period_end_iso(user):
 @token_required
 @csrf_exempt
 @require_methods("POST")
+@openapi_spec(
+    tag="Tier Reconciliation",
+    summary="Apply tier reconciliation against Stripe",
+    methods={
+        "POST": {
+            "summary": "Apply (or dry-run) tier reconciliation",
+            "description": (
+                "All body fields are optional. When ``emails`` is "
+                "omitted the endpoint processes every user with a "
+                "non-empty ``stripe_customer_id`` (capped at "
+                "``MAX_USERS_PER_REQUEST``)."
+            ),
+            "request_body": {
+                "properties": {
+                    "emails": {
+                        "type": "array",
+                        "items": {"type": "string", "format": "email"},
+                    },
+                    "customer_ids": {
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                    },
+                    "dry_run": {"type": "boolean"},
+                    "force": {"type": "boolean"},
+                },
+                "example": {
+                    "emails": ["alice@example.com"],
+                    "dry_run": True,
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Apply results.",
+                    "example": {
+                        "processed": 1,
+                        "changed": 1,
+                        "skipped": 0,
+                        "warnings": 0,
+                        "dry_run": False,
+                        "results": [_APPLY_RESULT_EXAMPLE],
+                    },
+                },
+                400: {
+                    "description": "Invalid JSON or bad type for a field.",
+                    "example": {
+                        "error": "emails must be a list of strings",
+                        "code": "invalid_type",
+                    },
+                },
+                422: {
+                    "description": (
+                        "Per-entry validation error (bad email, bad "
+                        "customer_id value)."
+                    ),
+                },
+                429: {
+                    "description": "Eligible user count exceeded the cap.",
+                    "example": {
+                        "error": "Too many users to process in one request (max 500). Pass an explicit emails list to batch.",
+                        "code": "too_many_users",
+                    },
+                },
+            },
+        },
+    },
+)
 def tier_reconcile_apply(request):
     """``POST /api/payments/tier-reconcile``.
 

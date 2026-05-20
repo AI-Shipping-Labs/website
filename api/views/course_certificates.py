@@ -28,11 +28,20 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from api.views._permissions import bearer_is_admin
 from content.models import Course
 from content.models.peer_review import CourseCertificate, ProjectSubmission
+
+_CERTIFICATE_EXAMPLE = {
+    "id": "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51",
+    "user_email": "alice@example.com",
+    "pdf_url": "https://certs.example.com/alice.pdf",
+    "submission_id": 42,
+    "issued_at": "2026-04-15T12:00:00+00:00",
+}
 
 User = get_user_model()
 
@@ -72,6 +81,78 @@ def _validate_pdf_url(pdf_url):
 @token_required
 @csrf_exempt
 @require_methods('GET', 'POST')
+@openapi_spec(
+    tag="Course Certificates",
+    summary="List or upsert course certificates",
+    methods={
+        "GET": {
+            "summary": "List course certificates",
+            "description": (
+                "Staff-only. Lists certificates for a published course, "
+                "ordered by ``-issued_at``."
+            ),
+            "responses": {
+                200: {
+                    "description": "List of certificates.",
+                    "example": {"certificates": [_CERTIFICATE_EXAMPLE]},
+                },
+                403: {
+                    "description": "Non-staff bearer.",
+                    "example": {
+                        "error": "Certificate API is staff-only",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                404: {
+                    "description": "Course not found or unpublished.",
+                    "example": {
+                        "error": "Course not found",
+                        "code": "unknown_course",
+                    },
+                },
+            },
+        },
+        "POST": {
+            "summary": "Create or update a course certificate (staff-only)",
+            "description": (
+                "Upsert on ``(user, course)``. Existing rows update only "
+                "``pdf_url`` and ``submission_id``; ``issued_at`` is "
+                "immutable (it's the historical issue date and "
+                "``auto_now_add``)."
+            ),
+            "request_body": {
+                "required": ["user_email"],
+                "properties": {
+                    "user_email": {"type": "string", "format": "email"},
+                    "pdf_url": {"type": "string", "format": "uri"},
+                    "submission_id": {
+                        "type": "integer",
+                        "nullable": True,
+                    },
+                },
+                "example": {
+                    "user_email": "alice@example.com",
+                    "pdf_url": "https://certs.example.com/alice.pdf",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Certificate created or updated.",
+                    "example": {**_CERTIFICATE_EXAMPLE, "created": True},
+                },
+                403: {"description": "Non-staff bearer."},
+                404: {"description": "Course not found or unpublished."},
+                422: {
+                    "description": (
+                        "Validation error: bad URL scheme, "
+                        "submission belongs to a different course, "
+                        "missing user, etc."
+                    ),
+                },
+            },
+        },
+    },
+)
 def course_certificates_collection(request, slug):
     """``GET / POST /api/courses/<slug>/certificates`` -- staff only."""
     if not bearer_is_admin(request.user):
@@ -198,6 +279,31 @@ def course_certificates_collection(request, slug):
 @token_required
 @csrf_exempt
 @require_methods('DELETE')
+@openapi_spec(
+    tag="Course Certificates",
+    summary="Delete a course certificate (staff-only)",
+    methods={
+        "DELETE": {
+            "summary": "Delete a course certificate",
+            "description": (
+                "Staff-only. Idempotent -- returns 204 whether or not "
+                "a row was deleted. There is no GET / PATCH on this "
+                "URL; use the collection endpoint for those."
+            ),
+            "responses": {
+                204: {"description": "Certificate deleted (empty body)."},
+                403: {
+                    "description": "Non-staff bearer.",
+                    "example": {
+                        "error": "Certificate delete is staff-only",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                404: {"description": "Course not found or unpublished."},
+            },
+        },
+    },
+)
 def course_certificate_detail(request, slug, email):
     """``DELETE /api/courses/<slug>/certificates/<email>`` -- staff only.
 

@@ -26,6 +26,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from api.views._permissions import bearer_is_admin
@@ -33,6 +34,13 @@ from content.access import can_access
 from content.models import Course
 from content.models.enrollment import SOURCE_ADMIN, Enrollment
 from content.services.enrollment import ensure_enrollment, unenroll
+
+_ENROLLMENT_EXAMPLE = {
+    "user_email": "alice@example.com",
+    "enrolled_at": "2026-04-15T12:00:00+00:00",
+    "unenrolled_at": None,
+    "source": "admin",
+}
 
 User = get_user_model()
 
@@ -76,6 +84,93 @@ def _get_published_course(slug):
 @token_required
 @csrf_exempt
 @require_methods('GET', 'POST')
+@openapi_spec(
+    tag="Course Enrollments",
+    summary="List or bulk-enroll course members",
+    methods={
+        "GET": {
+            "summary": "List course enrollments",
+            "description": (
+                "Active enrollments by default; "
+                "``?include_unenrolled=1`` includes soft-deleted rows. "
+                "Staff sees all rows; non-staff sees only their own."
+            ),
+            "query": {
+                "include_unenrolled": {
+                    "type": "string",
+                    "enum": ["1"],
+                    "required": False,
+                    "description": (
+                        "When ``1``, include soft-deleted (unenrolled) "
+                        "rows."
+                    ),
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "List of enrollments.",
+                    "example": {"enrollments": [_ENROLLMENT_EXAMPLE]},
+                },
+                404: {
+                    "description": "Course not found or unpublished.",
+                    "example": {
+                        "error": "Course not found",
+                        "code": "unknown_course",
+                    },
+                },
+            },
+        },
+        "POST": {
+            "summary": "Bulk enroll users (staff-only)",
+            "description": (
+                "Accepts either ``{\"user_email\": \"...\"}`` (single) "
+                "or ``{\"user_emails\": [...]}`` (bulk). Tier mismatches "
+                "are flagged as ``under_tier`` (warning) but the "
+                "enrollment is still created -- staff are explicitly "
+                "choosing to enroll the user."
+            ),
+            "request_body": {
+                "properties": {
+                    "user_email": {"type": "string", "format": "email"},
+                    "user_emails": {
+                        "type": "array",
+                        "items": {"type": "string", "format": "email"},
+                    },
+                },
+                "example": {
+                    "user_emails": [
+                        "alice@example.com",
+                        "bob@example.com",
+                    ],
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Bulk enroll summary.",
+                    "example": {
+                        "enrolled": 1,
+                        "already_enrolled": 1,
+                        "under_tier": [],
+                        "unknown_emails": [],
+                    },
+                },
+                403: {
+                    "description": "Non-staff bearer.",
+                    "example": {
+                        "error": "Bulk enrollment is staff-only",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                404: {"description": "Course not found."},
+                422: {
+                    "description": (
+                        "Missing user_email / user_emails or bad type."
+                    ),
+                },
+            },
+        },
+    },
+)
 def course_enrollments_collection(request, slug):
     """``GET / POST /api/courses/<slug>/enrollments``."""
     course = _get_published_course(slug)
@@ -169,6 +264,33 @@ def course_enrollments_collection(request, slug):
 @token_required
 @csrf_exempt
 @require_methods('DELETE')
+@openapi_spec(
+    tag="Course Enrollments",
+    summary="Unenroll a user from a course (staff-only)",
+    methods={
+        "DELETE": {
+            "summary": "Unenroll a user (soft-delete)",
+            "description": (
+                "Staff-only. Idempotent: returns 204 whether or not a "
+                "row was changed. Soft-deletes the active enrollment by "
+                "setting ``unenrolled_at``; the historical row is "
+                "preserved so a follow-up POST can create a new active "
+                "row. There is no GET / PATCH on this URL."
+            ),
+            "responses": {
+                204: {"description": "Enrollment unenrolled (empty body)."},
+                403: {
+                    "description": "Non-staff bearer.",
+                    "example": {
+                        "error": "Enrollment delete is staff-only",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                404: {"description": "Course not found or unpublished."},
+            },
+        },
+    },
+)
 def course_enrollment_detail(request, slug, email):
     """``DELETE /api/courses/<slug>/enrollments/<email>`` -- staff only.
 

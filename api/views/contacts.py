@@ -26,6 +26,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from accounts.utils.tags import normalize_tags
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from payments.models import Tier
@@ -92,6 +93,62 @@ def _serialize_user(user):
 @token_required
 @csrf_exempt
 @require_methods("POST")
+@openapi_spec(
+    tag="Contacts",
+    summary="Bulk upsert contacts",
+    methods={
+        "POST": {
+            "summary": "Bulk upsert contacts",
+            "description": (
+                "Per-row tags are MERGED into the user's existing tags "
+                "(idempotent append, not replace). Per-row ``tier`` is "
+                "accepted only when live Stripe confirms the active "
+                "subscription maps to the same tier; otherwise the row "
+                "is warned. Tier overrides are intentionally not "
+                "available through this endpoint."
+            ),
+            "request_body": {
+                "required": ["contacts"],
+                "properties": {
+                    "contacts": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
+                    "default_tag": {"type": "string"},
+                    "default_tier": {"type": "string"},
+                },
+                "example": {
+                    "contacts": [
+                        {
+                            "email": "alice@example.com",
+                            "tags": ["sprint:may-2026"],
+                        },
+                    ],
+                    "default_tag": "imported-2026-05",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Import summary.",
+                    "example": {
+                        "created": 1,
+                        "updated": 0,
+                        "skipped": 0,
+                        "malformed": 0,
+                        "warnings": [],
+                    },
+                },
+                400: {
+                    "description": "Malformed body or unknown default tier.",
+                    "example": {
+                        "error": "contacts must be a list",
+                        "code": "missing_contacts",
+                    },
+                },
+            },
+        },
+    },
+)
 def contacts_import(request):
     """Bulk upsert contacts.
 
@@ -161,6 +218,54 @@ def contacts_import(request):
 
 @token_required
 @require_methods("GET")
+@openapi_spec(
+    tag="Contacts",
+    summary="Export every contact",
+    methods={
+        "GET": {
+            "summary": "Export contacts (JSON or CSV)",
+            "description": (
+                "Default response is JSON. ``?format=csv`` switches to "
+                "``text/csv`` with an "
+                "``aishippinglabs-contacts-<utc-timestamp>.csv`` "
+                "attachment header. Output is ordered by ``id`` so "
+                "repeat calls are deterministic."
+            ),
+            "query": {
+                "format": {
+                    "type": "string",
+                    "enum": ["csv", "json"],
+                    "required": False,
+                    "description": "Output format. Defaults to JSON.",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Contact list (JSON) or CSV download.",
+                    "example": {
+                        "contacts": [
+                            {
+                                "email": "alice@example.com",
+                                "first_name": "Alice",
+                                "last_name": "Doe",
+                                "tags": ["sprint:may-2026"],
+                                "tier": "main",
+                                "email_verified": True,
+                                "unsubscribed": False,
+                                "date_joined": "2026-04-15T12:00:00+00:00",
+                                "last_login": None,
+                                "stripe_customer_id": "cus_xyz",
+                                "subscription_id": "sub_xyz",
+                                "slack_member": True,
+                                "slack_checked_at": None,
+                            },
+                        ],
+                    },
+                },
+            },
+        },
+    },
+)
 def contacts_export(request):
     """Dump every ``User`` row in the system.
 
@@ -213,6 +318,52 @@ def contacts_export(request):
 @token_required
 @csrf_exempt
 @require_methods("POST")
+@openapi_spec(
+    tag="Contacts",
+    summary="Replace a contact's tags",
+    methods={
+        "POST": {
+            "summary": "Replace a contact's tags",
+            "description": (
+                "Replaces (NOT merges) the user's tags with the "
+                "supplied normalized list. An empty list clears tags."
+            ),
+            "request_body": {
+                "required": ["tags"],
+                "properties": {
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "example": {"tags": ["sprint:may-2026", "interviewed"]},
+            },
+            "responses": {
+                200: {
+                    "description": "Tags replaced.",
+                    "example": {
+                        "email": "alice@example.com",
+                        "tags": ["interviewed", "sprint:may-2026"],
+                    },
+                },
+                400: {
+                    "description": "Malformed body or missing tags list.",
+                    "example": {
+                        "error": "tags must be a list",
+                        "code": "missing_tags",
+                    },
+                },
+                404: {
+                    "description": "Contact not found.",
+                    "example": {
+                        "error": "Contact not found",
+                        "code": "contact_not_found",
+                    },
+                },
+            },
+        },
+    },
+)
 def contacts_set_tags(request, email):
     """Replace a contact's tags with the given normalized list.
 

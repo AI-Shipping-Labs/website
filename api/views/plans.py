@@ -20,6 +20,7 @@ from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.plans import (
     serialize_plan_detail,
@@ -62,6 +63,18 @@ User = get_user_model()
 VALID_PLAN_STATUSES = {choice for choice, _label in PLAN_STATUS_CHOICES}
 VALID_VISIBILITIES = {choice for choice, _label in VISIBILITY_CHOICES}
 VALID_KINDS = {choice for choice, _label in KIND_CHOICES}
+
+_PLAN_STATUS_ENUM = sorted(VALID_PLAN_STATUSES)
+
+_PLAN_FLAT_EXAMPLE = {
+    "id": 5,
+    "member_email": "alice@example.com",
+    "sprint_slug": "may-2026",
+    "status": "active",
+    "goal": "Ship the LLM evaluation toolkit",
+    "created_at": "2026-04-15T12:00:00+00:00",
+    "updated_at": "2026-04-15T12:00:00+00:00",
+}
 
 # Top-level plan fields the spec lets clients write directly. Used by both
 # the create endpoint and PATCH so the contract is centralized.
@@ -345,6 +358,88 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
 @token_required
 @csrf_exempt
 @require_methods("GET", "POST")
+@openapi_spec(
+    tag="Plans",
+    summary="List sprint plans or create one",
+    methods={
+        "GET": {
+            "summary": "List plans in a sprint",
+            "description": (
+                "Returns plans visible to the bearer (via "
+                "``visible_plans_for``), ordered by ``-created_at``."
+            ),
+            "responses": {
+                200: {
+                    "description": "List of plans.",
+                    "example": {"plans": [_PLAN_FLAT_EXAMPLE]},
+                },
+                404: {
+                    "description": "Sprint not found.",
+                    "example": {
+                        "error": "Sprint not found",
+                        "code": "unknown_sprint",
+                    },
+                },
+            },
+        },
+        "POST": {
+            "summary": "Create a plan (staff-only)",
+            "description": (
+                "Staff-only. Returns the nested plan detail shape."
+            ),
+            "request_body": {
+                "required": ["user_email"],
+                "properties": {
+                    "user_email": {"type": "string", "format": "email"},
+                    "status": {
+                        "type": "string",
+                        "enum": _PLAN_STATUS_ENUM,
+                    },
+                    "goal": {"type": "string", "maxLength": 280},
+                    "accountability": {"type": "string"},
+                    "weeks": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
+                },
+                "example": {
+                    "user_email": "alice@example.com",
+                    "status": "draft",
+                    "goal": "Ship the LLM evaluation toolkit",
+                },
+            },
+            "responses": {
+                201: {
+                    "description": "Plan created (nested detail shape).",
+                },
+                400: {"description": "Invalid JSON body."},
+                403: {
+                    "description": "Non-staff bearer.",
+                    "example": {
+                        "error": "Plan creation is staff-only",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                404: {"description": "Sprint not found."},
+                409: {
+                    "description": (
+                        "User already has a plan in this sprint."
+                    ),
+                    "example": {
+                        "error": "Plan already exists for this user in this sprint",
+                        "code": "duplicate_plan",
+                    },
+                },
+                422: {
+                    "description": (
+                        "Missing user_email, unknown user, bad goal "
+                        "length, or unknown enum value."
+                    ),
+                },
+            },
+        },
+    },
+)
 def sprint_plans_collection(request, slug):
     """``GET / POST /api/sprints/<slug>/plans/``."""
     sprint = Sprint.objects.filter(slug=slug).first()
@@ -405,6 +500,59 @@ def sprint_plans_collection(request, slug):
 @token_required
 @csrf_exempt
 @require_methods("POST")
+@openapi_spec(
+    tag="Plans",
+    summary="Bulk-import plans into a sprint (staff-only)",
+    methods={
+        "POST": {
+            "summary": "Bulk-import plans",
+            "description": (
+                "Atomic: any single plan validation failure rolls every "
+                "row back so the caller never has to clean up partial "
+                "state. Returns the list of created plan ids."
+            ),
+            "request_body": {
+                "required": ["plans"],
+                "properties": {
+                    "plans": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
+                },
+                "example": {
+                    "plans": [
+                        {
+                            "user_email": "alice@example.com",
+                            "status": "draft",
+                            "goal": "Ship the toolkit",
+                        },
+                    ],
+                },
+            },
+            "responses": {
+                201: {
+                    "description": "Plans created.",
+                    "example": {"created": 1, "plan_ids": [5]},
+                },
+                400: {"description": "Invalid JSON or missing field."},
+                403: {
+                    "description": "Non-staff bearer.",
+                    "example": {
+                        "error": "Bulk import is staff-only",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                404: {"description": "Sprint not found."},
+                409: {
+                    "description": (
+                        "One of the rows would create a duplicate plan."
+                    ),
+                },
+                422: {"description": "Per-row validation error."},
+            },
+        },
+    },
+)
 def sprint_plans_bulk_import(request, slug):
     """``POST /api/sprints/<slug>/plans/bulk-import``.
 
@@ -478,6 +626,93 @@ def sprint_plans_bulk_import(request, slug):
 @token_required
 @csrf_exempt
 @require_methods("GET", "PATCH", "DELETE")
+@openapi_spec(
+    tag="Plans",
+    summary="Retrieve, update, or delete a plan",
+    methods={
+        "GET": {
+            "summary": "Retrieve a plan (nested detail)",
+            "responses": {
+                200: {
+                    "description": (
+                        "Plan with nested weeks, checkpoints, "
+                        "resources, deliverables, and next steps."
+                    ),
+                },
+                404: {
+                    "description": "Plan not found or not visible.",
+                    "example": {
+                        "error": "Plan not found",
+                        "code": "unknown_plan",
+                    },
+                },
+            },
+        },
+        "PATCH": {
+            "summary": "Update plan-level fields",
+            "description": (
+                "Supports partial updates including ``summary`` and "
+                "``focus`` nested dicts plus ``summary_*`` flat fields. "
+                "Setting ``shared_at`` to a non-null value is "
+                "staff-only and fires a ``plan_shared`` notification; "
+                "setting it to ``null`` clears the timestamp silently."
+            ),
+            "request_body": {
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": _PLAN_STATUS_ENUM,
+                    },
+                    "goal": {"type": "string", "maxLength": 280},
+                    "accountability": {"type": "string"},
+                    "summary": {"type": "object"},
+                    "focus": {"type": "object"},
+                    "shared_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": True,
+                    },
+                },
+                "example": {"status": "active"},
+            },
+            "responses": {
+                200: {"description": "Plan updated (nested detail shape)."},
+                400: {"description": "Invalid JSON body."},
+                403: {
+                    "description": (
+                        "Non-staff bearer touched a staff-only field "
+                        "(``shared_at`` to non-null)."
+                    ),
+                    "example": {
+                        "error": "Plan share is staff-only",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                404: {"description": "Plan not found."},
+                422: {
+                    "description": (
+                        "Bad goal length, unknown status, or invalid "
+                        "focus.supporting type."
+                    ),
+                },
+            },
+        },
+        "DELETE": {
+            "summary": "Delete a plan (staff-only)",
+            "responses": {
+                204: {"description": "Plan deleted (empty body)."},
+                403: {
+                    "description": "Non-staff bearer.",
+                    "example": {
+                        "error": "Plan delete is staff-only",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                404: {"description": "Plan not found."},
+            },
+        },
+    },
+)
 def plan_detail(request, plan_id):
     """``GET / PATCH / DELETE /api/plans/<id>/``."""
     plan = (

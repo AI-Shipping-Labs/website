@@ -16,6 +16,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from accounts.utils.tags import normalize_tags
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from email_app.models import EmailCampaign
@@ -44,6 +45,24 @@ VALID_TARGET_LEVELS = {value for value, _label in EmailCampaign.TARGET_LEVEL_CHO
 VALID_SLACK_FILTERS = {value for value, _label in EmailCampaign.SLACK_FILTER_CHOICES}
 VALID_AUDIENCE_VERIFICATIONS = {
     value for value, _label in EmailCampaign.AUDIENCE_VERIFICATION_CHOICES
+}
+
+_STATUS_ENUM = sorted(VALID_STATUSES)
+
+_CAMPAIGN_EXAMPLE = {
+    "id": 1,
+    "subject": "Week 3 of May 2026 sprint",
+    "body": "Hello {{ first_name }} — here's what's up this week...",
+    "target_min_level": 0,
+    "target_tags_any": ["sprint:may-2026"],
+    "target_tags_none": ["unsubscribed"],
+    "slack_filter": "any",
+    "audience_verification": "verified_only",
+    "status": "draft",
+    "is_archived": False,
+    "sent_at": None,
+    "sent_count": 0,
+    "created_at": "2026-04-15T12:00:00+00:00",
 }
 
 
@@ -192,6 +211,99 @@ def _parse_bool_query(value):
 @token_required
 @csrf_exempt
 @require_methods("GET", "POST")
+@openapi_spec(
+    tag="Campaigns",
+    summary="List or create email campaign drafts",
+    methods={
+        "GET": {
+            "summary": "List campaigns",
+            "description": (
+                "Returns every ``EmailCampaign`` row ordered by "
+                "``-created_at``. Optional filters narrow the result."
+            ),
+            "query": {
+                "status": {
+                    "type": "string",
+                    "enum": _STATUS_ENUM,
+                    "required": False,
+                    "description": "Filter to campaigns with the given status.",
+                },
+                "archived": {
+                    "type": "string",
+                    "enum": ["true", "false"],
+                    "required": False,
+                    "description": "Filter on is_archived (boolean string).",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "List of campaigns.",
+                    "example": {"campaigns": [_CAMPAIGN_EXAMPLE]},
+                },
+                401: {"description": "Missing or invalid token."},
+                422: {
+                    "description": "Unknown filter value.",
+                    "example": {
+                        "error": "Validation error",
+                        "code": "validation_error",
+                        "details": {"status": "Unknown status."},
+                    },
+                },
+            },
+        },
+        "POST": {
+            "summary": "Create a campaign draft",
+            "description": (
+                "Creates an ``EmailCampaign`` row in ``draft`` status. "
+                "Sending stays a deliberate Studio action -- this API "
+                "intentionally has no ``/send`` route. Read-only fields "
+                "(``id``, ``status``, ``sent_at``, ``sent_count``, "
+                "``created_at``) in the body are rejected with 422 "
+                "``read_only_field``; ``status`` in the body is silently "
+                "overwritten to ``draft`` so detail round-trips keep "
+                "working."
+            ),
+            "request_body": {
+                "required": ["subject", "body"],
+                "properties": {
+                    "subject": {"type": "string", "maxLength": 255},
+                    "body": {"type": "string"},
+                    "target_min_level": {"type": "integer"},
+                    "target_tags_any": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "target_tags_none": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "slack_filter": {"type": "string"},
+                    "audience_verification": {"type": "string"},
+                    "is_archived": {"type": "boolean"},
+                },
+                "example": {
+                    "subject": "Hello sprinters",
+                    "body": "Here's what's up...",
+                    "target_min_level": 0,
+                    "target_tags_any": ["sprint:may-2026"],
+                },
+            },
+            "responses": {
+                201: {
+                    "description": "Campaign created.",
+                    "example": _CAMPAIGN_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                422: {
+                    "description": (
+                        "Validation error (missing subject/body, "
+                        "read-only field present, bad enum)."
+                    ),
+                },
+            },
+        },
+    },
+)
 def campaigns_collection(request):
     """GET/POST ``/api/campaigns``.
 
@@ -249,6 +361,70 @@ def campaigns_collection(request):
 @token_required
 @csrf_exempt
 @require_methods("GET", "PATCH")
+@openapi_spec(
+    tag="Campaigns",
+    summary="Retrieve or update a campaign draft",
+    methods={
+        "GET": {
+            "summary": "Retrieve a campaign",
+            "responses": {
+                200: {
+                    "description": "Campaign detail.",
+                    "example": _CAMPAIGN_EXAMPLE,
+                },
+                404: {
+                    "description": "Campaign not found.",
+                    "example": {
+                        "error": "Campaign not found",
+                        "code": "unknown_campaign",
+                    },
+                },
+            },
+        },
+        "PATCH": {
+            "summary": "Update a campaign draft",
+            "description": (
+                "Partial update. ``status`` in the body is rejected "
+                "(immutable through the API) unless it equals the row's "
+                "current status (silent no-op). Use ``is_archived=true`` "
+                "to hide a campaign; there is no DELETE route."
+            ),
+            "request_body": {
+                "properties": {
+                    "subject": {"type": "string", "maxLength": 255},
+                    "body": {"type": "string"},
+                    "target_min_level": {"type": "integer"},
+                    "target_tags_any": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "target_tags_none": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "slack_filter": {"type": "string"},
+                    "audience_verification": {"type": "string"},
+                    "is_archived": {"type": "boolean"},
+                },
+                "example": {"is_archived": True},
+            },
+            "responses": {
+                200: {
+                    "description": "Campaign updated.",
+                    "example": _CAMPAIGN_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                404: {"description": "Campaign not found."},
+                422: {
+                    "description": (
+                        "Validation error or attempt to mutate a "
+                        "read-only field."
+                    ),
+                },
+            },
+        },
+    },
+)
 def campaign_detail(request, campaign_id):
     """GET/PATCH ``/api/campaigns/<id>``.
 

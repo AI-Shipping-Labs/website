@@ -14,11 +14,22 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.plans import serialize_week
 from api.utils import parse_json_body, require_methods
 from api.views._permissions import visible_plans_for
 from plans.models import Week
+
+_WEEK_EXAMPLE = {
+    "id": 11,
+    "plan_id": 5,
+    "week_number": 1,
+    "theme": "Discovery",
+    "position": 0,
+    "created_at": "2026-04-15T12:00:00+00:00",
+    "updated_at": "2026-04-15T12:00:00+00:00",
+}
 
 
 def _load_plan_for_write(user, plan_id):
@@ -58,6 +69,59 @@ def _load_week_for_write(user, week_id):
 @token_required
 @csrf_exempt
 @require_methods("GET", "POST")
+@openapi_spec(
+    tag="Weeks",
+    summary="List or create weeks in a plan",
+    methods={
+        "GET": {
+            "summary": "List weeks in a plan",
+            "responses": {
+                200: {
+                    "description": "List of weeks.",
+                    "example": {"weeks": [_WEEK_EXAMPLE]},
+                },
+                404: {
+                    "description": "Plan not found or not visible.",
+                    "example": {
+                        "error": "Plan not found",
+                        "code": "unknown_plan",
+                    },
+                },
+            },
+        },
+        "POST": {
+            "summary": "Create a week",
+            "request_body": {
+                "required": ["week_number"],
+                "properties": {
+                    "week_number": {"type": "integer", "minimum": 1},
+                    "theme": {"type": "string"},
+                    "position": {"type": "integer", "minimum": 0},
+                },
+                "example": {"week_number": 1, "theme": "Discovery"},
+            },
+            "responses": {
+                201: {
+                    "description": "Week created.",
+                    "example": _WEEK_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON or missing field."},
+                404: {"description": "Plan not found."},
+                409: {
+                    "description": (
+                        "A week with the same week_number already "
+                        "exists for this plan."
+                    ),
+                    "example": {
+                        "error": "Week number already exists for this plan",
+                        "code": "duplicate_week_number",
+                    },
+                },
+                422: {"description": "Invalid position or type."},
+            },
+        },
+    },
+)
 def plan_weeks_collection(request, plan_id):
     """``GET / POST /api/plans/<plan_id>/weeks/``."""
     plan, err = _load_plan_for_write(request.user, plan_id)
@@ -137,6 +201,44 @@ def plan_weeks_collection(request, plan_id):
 @token_required
 @csrf_exempt
 @require_methods("PATCH", "DELETE")
+@openapi_spec(
+    tag="Weeks",
+    summary="Update or delete a week",
+    methods={
+        "PATCH": {
+            "summary": "Update a week",
+            "request_body": {
+                "properties": {
+                    "theme": {"type": "string"},
+                    "position": {"type": "integer", "minimum": 0},
+                },
+                "example": {"theme": "Discovery"},
+            },
+            "responses": {
+                200: {
+                    "description": "Week updated.",
+                    "example": _WEEK_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                404: {
+                    "description": "Week not found.",
+                    "example": {
+                        "error": "Week not found",
+                        "code": "unknown_week",
+                    },
+                },
+                422: {"description": "Invalid position."},
+            },
+        },
+        "DELETE": {
+            "summary": "Delete a week",
+            "responses": {
+                204: {"description": "Week deleted (empty body)."},
+                404: {"description": "Week not found."},
+            },
+        },
+    },
+)
 def week_detail(request, week_id):
     """``PATCH / DELETE /api/weeks/<week_id>/``."""
     week, err = _load_week_for_write(request.user, week_id)

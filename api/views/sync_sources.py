@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from integrations.models import ContentSource
@@ -19,6 +20,23 @@ DELETE_NOT_AVAILABLE_MESSAGE = (
     "Content sync source deletion is not available through the API. "
     "Go to Studio to delete this source manually."
 )
+
+_SYNC_SOURCE_EXAMPLE = {
+    "id": "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51",
+    "repo_name": "AI-Shipping-Labs/content",
+    "short_name": "content",
+    "is_private": True,
+    "last_sync_status": "ok",
+    "last_synced_at": "2026-04-15T12:00:00+00:00",
+    "sync_locked_at": None,
+    "sync_requested": False,
+    "last_synced_commit": "a1b2c3d4e5f6",
+    "short_synced_commit": "a1b2c3d",
+    "synced_commit_url": "https://github.com/AI-Shipping-Labs/content/commit/a1b2c3d4e5f6",
+    "max_files": 5000,
+    "created_at": "2026-04-15T12:00:00+00:00",
+    "updated_at": "2026-04-15T12:00:00+00:00",
+}
 
 
 def _iso(value):
@@ -61,6 +79,37 @@ def _force_requested(request, data):
 @token_required
 @csrf_exempt
 @require_methods("GET", "DELETE")
+@openapi_spec(
+    tag="Sync Sources",
+    summary="List sync sources or attempt to delete (not available)",
+    methods={
+        "GET": {
+            "summary": "List content sync sources",
+            "responses": {
+                200: {
+                    "description": "List of content sync sources.",
+                    "example": {"sources": [_SYNC_SOURCE_EXAMPLE]},
+                },
+            },
+        },
+        "DELETE": {
+            "summary": "DELETE is not available on this route",
+            "description": (
+                "Source deletion is intentionally unavailable through "
+                "the API; use Studio."
+            ),
+            "responses": {
+                405: {
+                    "description": "Source deletion is not available.",
+                    "example": {
+                        "error": DELETE_NOT_AVAILABLE_MESSAGE,
+                        "code": "sync_source_delete_not_available",
+                    },
+                },
+            },
+        },
+    },
+)
 def sync_sources_collection(request):
     """GET/DELETE ``/api/sync/sources``."""
     if request.method == "DELETE":
@@ -75,6 +124,83 @@ def sync_sources_collection(request):
 @token_required
 @csrf_exempt
 @require_methods("POST", "DELETE")
+@openapi_spec(
+    tag="Sync Sources",
+    summary="Trigger a sync run (POST); DELETE is not available",
+    methods={
+        "POST": {
+            "summary": "Trigger a content sync run",
+            "description": (
+                "Enqueues a sync job for the given source. Pass "
+                "``force=true`` as a query param or in the JSON body to "
+                "bypass the per-source idempotency lock."
+            ),
+            "query": {
+                "force": {
+                    "type": "string",
+                    "enum": ["1", "true", "True", "yes", "on"],
+                    "required": False,
+                    "description": (
+                        "Truthy values bypass the idempotency lock."
+                    ),
+                },
+            },
+            "request_body": {
+                "properties": {
+                    "force": {"type": "boolean"},
+                },
+                "example": {"force": True},
+            },
+            "responses": {
+                200: {
+                    "description": (
+                        "Sync ran inline (e.g. in tests)."
+                    ),
+                    "example": {
+                        "status": "completed",
+                        "source": _SYNC_SOURCE_EXAMPLE,
+                        "batch_id": None,
+                        "task_id": None,
+                        "ran_inline": True,
+                        "message": "Sync completed inline",
+                    },
+                },
+                202: {
+                    "description": "Sync job queued.",
+                    "example": {
+                        "status": "queued",
+                        "source": _SYNC_SOURCE_EXAMPLE,
+                        "batch_id": "batch_xyz",
+                        "task_id": "task_xyz",
+                        "ran_inline": False,
+                        "message": "Sync queued",
+                    },
+                },
+                400: {"description": "Invalid JSON body."},
+                404: {"description": "Sync source not found."},
+                500: {
+                    "description": "Sync enqueue failed.",
+                    "example": {
+                        "error": "Failed to enqueue sync",
+                        "code": "sync_enqueue_failed",
+                    },
+                },
+            },
+        },
+        "DELETE": {
+            "summary": "DELETE is not available on this route",
+            "responses": {
+                405: {
+                    "description": "Source deletion is not available.",
+                    "example": {
+                        "error": DELETE_NOT_AVAILABLE_MESSAGE,
+                        "code": "sync_source_delete_not_available",
+                    },
+                },
+            },
+        },
+    },
+)
 def sync_source_trigger(request, source_id):
     """POST/DELETE ``/api/sync/sources/<uuid>/trigger``."""
     if request.method == "DELETE":

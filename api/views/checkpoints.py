@@ -28,11 +28,22 @@ from django.http import JsonResponse
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 
+from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.plans import serialize_checkpoint
 from api.utils import parse_json_body, require_methods, token_or_session_required
 from api.views._permissions import visible_plans_for
 from plans.models import Checkpoint, Week
+
+_CHECKPOINT_EXAMPLE = {
+    "id": 17,
+    "week_id": 5,
+    "description": "Watch the intro video",
+    "position": 0,
+    "done_at": None,
+    "created_at": "2026-04-15T12:00:00+00:00",
+    "updated_at": "2026-04-15T12:00:00+00:00",
+}
 
 
 def _coerce_datetime(value):
@@ -103,6 +114,54 @@ def _load_checkpoint_for_write(user, checkpoint_id):
 @token_or_session_required
 @csrf_exempt
 @require_methods("POST")
+@openapi_spec(
+    tag="Checkpoints",
+    summary="Create a checkpoint inside a week",
+    methods={
+        "POST": {
+            "summary": "Create a checkpoint",
+            "description": (
+                "Creates a checkpoint at the optional ``position`` index "
+                "inside the given week. Without ``position`` we append; "
+                "with a ``position`` at a non-end value, existing "
+                "siblings shift down by 1 inside a single "
+                "``transaction.atomic`` so concurrent inserts cannot "
+                "leave a partial reorder."
+            ),
+            "request_body": {
+                "required": ["description"],
+                "properties": {
+                    "description": {"type": "string"},
+                    "position": {"type": "integer", "minimum": 0},
+                    "done_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": True,
+                    },
+                },
+                "example": {
+                    "description": "Read the brief",
+                    "position": 0,
+                },
+            },
+            "responses": {
+                201: {
+                    "description": "Checkpoint created.",
+                    "example": _CHECKPOINT_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON or missing description."},
+                404: {
+                    "description": "Week not found or not visible.",
+                    "example": {
+                        "error": "Week not found",
+                        "code": "unknown_week",
+                    },
+                },
+                422: {"description": "Invalid position value."},
+            },
+        },
+    },
+)
 def week_checkpoints_create(request, week_id):
     """``POST /api/weeks/<week_id>/checkpoints/``.
 
@@ -166,6 +225,51 @@ def week_checkpoints_create(request, week_id):
 @token_or_session_required
 @csrf_exempt
 @require_methods("PATCH", "DELETE")
+@openapi_spec(
+    tag="Checkpoints",
+    summary="Update or delete a checkpoint",
+    methods={
+        "PATCH": {
+            "summary": "Update a checkpoint",
+            "description": (
+                "Partial update. Changing ``position`` re-packs sibling "
+                "positions inside the same week (atomically)."
+            ),
+            "request_body": {
+                "properties": {
+                    "description": {"type": "string"},
+                    "position": {"type": "integer", "minimum": 0},
+                    "done_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": True,
+                    },
+                },
+                "example": {"done_at": "2026-04-15T12:00:00+00:00"},
+            },
+            "responses": {
+                200: {
+                    "description": "Checkpoint updated.",
+                    "example": _CHECKPOINT_EXAMPLE,
+                },
+                400: {"description": "Invalid JSON body."},
+                404: {"description": "Checkpoint not found."},
+                422: {"description": "Invalid position value."},
+            },
+        },
+        "DELETE": {
+            "summary": "Delete a checkpoint",
+            "description": (
+                "Deletes the checkpoint and re-packs the sibling "
+                "positions inside the same week so there are no gaps."
+            ),
+            "responses": {
+                204: {"description": "Checkpoint deleted (empty body)."},
+                404: {"description": "Checkpoint not found."},
+            },
+        },
+    },
+)
 def checkpoint_detail(request, checkpoint_id):
     """``PATCH / DELETE /api/checkpoints/<checkpoint_id>/``."""
     cp, err = _load_checkpoint_for_write(request.user, checkpoint_id)
@@ -240,6 +344,65 @@ def checkpoint_detail(request, checkpoint_id):
 @token_or_session_required
 @csrf_exempt
 @require_methods("POST")
+@openapi_spec(
+    tag="Checkpoints",
+    summary="Move a checkpoint across or within weeks",
+    methods={
+        "POST": {
+            "summary": "Move a checkpoint",
+            "description": (
+                "Atomic cross-week move + reorder. Locks both affected "
+                "weeks in id order (deadlock-safe) inside one "
+                "``transaction.atomic``. Returns a reconciliation "
+                "envelope so an optimistic client does not need a "
+                "follow-up GET. Idempotent when source week and "
+                "position are unchanged."
+            ),
+            "request_body": {
+                "required": ["week_id"],
+                "properties": {
+                    "week_id": {"type": "integer"},
+                    "position": {"type": "integer", "minimum": 0},
+                },
+                "example": {"week_id": 6, "position": 2},
+            },
+            "responses": {
+                200: {
+                    "description": "Move applied (or no-op).",
+                    "example": {
+                        "checkpoint": _CHECKPOINT_EXAMPLE,
+                        "source_week": {
+                            "id": 5,
+                            "checkpoint_ids": [18, 19],
+                        },
+                        "destination_week": {
+                            "id": 6,
+                            "checkpoint_ids": [20, 21, 17],
+                        },
+                    },
+                },
+                400: {"description": "Invalid JSON or missing week_id."},
+                403: {
+                    "description": (
+                        "Non-staff bearer attempted to move a "
+                        "checkpoint in another user's plan."
+                    ),
+                    "example": {
+                        "error": "Cannot move a checkpoint in another user's plan",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                404: {"description": "Checkpoint or target week not found."},
+                422: {
+                    "description": (
+                        "Invalid position, target week in a different "
+                        "plan, or bad type."
+                    ),
+                },
+            },
+        },
+    },
+)
 def checkpoint_move(request, checkpoint_id):
     """``POST /api/checkpoints/<checkpoint_id>/move``.
 

@@ -44,12 +44,14 @@ def check_event_reminders():
     window_20m_start = now + timedelta(minutes=15)
     window_20m_end = now + timedelta(minutes=25)
 
-    # Events in 24h window
+    # Events in 24h window.
+    # Issue #713: drop the stored ``status='upcoming'`` clause so a
+    # legacy ``status='completed'`` row scheduled in the window still
+    # generates reminders. Drafts + cancelled are excluded.
     events_24h = Event.objects.filter(
-        status='upcoming',
         start_datetime__gte=window_24h_start,
         start_datetime__lte=window_24h_end,
-    )
+    ).exclude(status__in=['draft', 'cancelled'])
 
     for event in events_24h:
         registrations = EventRegistration.objects.filter(
@@ -82,12 +84,13 @@ def check_event_reminders():
                 'Failed to post Slack reminder for event %s', event.slug,
             )
 
-    # Events in 20-minute window
+    # Events in 20-minute window.
+    # Issue #713: drop the stored ``status='upcoming'`` clause; exclude
+    # draft + cancelled.
     events_20m = Event.objects.filter(
-        status='upcoming',
         start_datetime__gte=window_20m_start,
         start_datetime__lte=window_20m_end,
-    )
+    ).exclude(status__in=['draft', 'cancelled'])
 
     for event in events_20m:
         registrations = EventRegistration.objects.filter(

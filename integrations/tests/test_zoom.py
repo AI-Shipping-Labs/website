@@ -515,7 +515,12 @@ class ZoomRecordingCompletedTest(TestCase):
         )
 
     def test_sets_recording_fields_on_event(self):
-        """recording.completed webhook sets recording fields on the matched Event."""
+        """recording.completed webhook sets recording fields on the matched Event.
+
+        Issue #713: the webhook no longer writes ``status='completed'``;
+        ``Event.is_past`` is time-derived. Stored status stays
+        ``upcoming`` until the daily cron refreshes it.
+        """
         payload = make_recording_completed_payload('12345678901')
         response = self._post_webhook(payload)
         self.assertEqual(response.status_code, 200)
@@ -524,7 +529,6 @@ class ZoomRecordingCompletedTest(TestCase):
         self.event.refresh_from_db()
         self.assertTrue(self.event.has_recording)
         self.assertEqual(self.event.recording_url, 'https://zoom.us/rec/play/abc123')
-        self.assertEqual(self.event.status, 'completed')
         self.assertFalse(self.event.published)  # Needs admin review
 
     def test_recording_fields_set_on_event(self):
@@ -535,14 +539,19 @@ class ZoomRecordingCompletedTest(TestCase):
         self.event.refresh_from_db()
         self.assertTrue(self.event.has_recording)
         self.assertEqual(self.event.recording_url, 'https://zoom.us/rec/play/abc123')
-        self.assertEqual(self.event.status, 'completed')
 
-    def test_event_status_set_to_completed(self):
+    def test_event_status_not_written_by_webhook(self):
+        """Issue #713: the webhook MUST NOT flip ``status`` to ``completed``.
+
+        Status flipping is now the responsibility of the daily
+        ``complete_finished_events`` cron; the user-facing UI no longer
+        depends on the stored field.
+        """
         payload = make_recording_completed_payload('12345678901')
         self._post_webhook(payload)
 
         self.event.refresh_from_db()
-        self.assertEqual(self.event.status, 'completed')
+        self.assertEqual(self.event.status, 'upcoming')
 
     def test_recording_uses_play_url(self):
         """Preferred recording type (shared_screen_with_speaker_view) play_url used."""
@@ -649,9 +658,6 @@ class ZoomRecordingCompletedTest(TestCase):
         self.assertEqual(recording.title, 'Workshop: Building AI Agents')
         self.assertEqual(recording.transcript_url, '')
         self.assertEqual(recording.transcript_text, '')
-
-        self.event.refresh_from_db()
-        self.assertEqual(self.event.status, 'completed')
 
 
 # --- Event Admin Zoom Meeting Tests ---

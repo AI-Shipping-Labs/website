@@ -2,13 +2,29 @@
 
 <header class="mb-12">
   <div class="mb-4 flex flex-wrap items-center gap-2">
-    <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium
-      {% if event.status == 'upcoming' %}bg-blue-500/20 text-blue-400
-      {% elif event.status == 'completed' %}bg-green-500/20 text-green-400
-      {% elif event.status == 'cancelled' %}bg-secondary text-muted-foreground
-      {% else %}bg-secondary text-muted-foreground{% endif %}">
+    {% comment %}
+      Issue #713: status pill is time-derived. Cancelled wins over
+      time. Otherwise: ``is_upcoming`` -> blue Upcoming pill;
+      ``is_past`` -> green Past pill. Drafts fall through to the
+      muted style (staff-only view).
+    {% endcomment %}
+    {% if event.status == 'cancelled' %}
+    <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground" data-testid="event-status-pill">
+      Cancelled
+    </span>
+    {% elif event.is_upcoming %}
+    <span class="inline-flex items-center gap-1.5 rounded-full bg-blue-500/20 px-3 py-1 text-xs font-medium text-blue-400" data-testid="event-status-pill">
+      Upcoming
+    </span>
+    {% elif event.is_past %}
+    <span class="inline-flex items-center gap-1.5 rounded-full bg-green-500/20 px-3 py-1 text-xs font-medium text-green-400" data-testid="event-status-pill">
+      Past
+    </span>
+    {% else %}
+    <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground" data-testid="event-status-pill">
       {{ event.get_status_display }}
     </span>
+    {% endif %}
     {% if event.required_level > 0 %}
     <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">
       <i data-lucide="lock" class="h-3 w-3"></i>
@@ -70,8 +86,13 @@
 
   {% if event.tags %}
   <div class="mt-4 flex flex-wrap gap-2">
+    {% comment %}
+      Issue #713: tag chips link to the past-recordings tag filter for
+      any past (non-cancelled) event, not just legacy
+      ``status='completed'`` rows.
+    {% endcomment %}
     {% for tag in event.tags %}
-    {% if event.status == 'completed' %}
+    {% if event.is_past and event.status != 'cancelled' %}
     <a href="/events?filter=past&amp;tag={{ tag }}" class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors">{{ tag }}</a>
     {% else %}
     <span class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>

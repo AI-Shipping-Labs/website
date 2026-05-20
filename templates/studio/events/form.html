@@ -82,6 +82,13 @@
           <option value="completed" {% if event.status == 'completed' or form_values.status == 'completed' %}selected{% endif %}>Completed</option>
           <option value="cancelled" {% if event.status == 'cancelled' or form_values.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
         </select>
+        {% comment %}
+          Issue #713: clarify that ``completed`` is a legacy value —
+          past detection now runs off ``end_datetime``.
+        {% endcomment %}
+        <p class="text-xs text-muted-foreground mt-1" data-testid="event-status-legacy-note">
+          <code>completed</code> is a legacy status. Past events are detected automatically from the end time.
+        </p>
       </div>
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Platform</label>
@@ -443,15 +450,15 @@
   {% endif %}
 
   {% comment %}
-    Issue #680: manual "Send follow-up now" trigger. The button is the
-    documented escape hatch when the cron skipped the follow-up
-    because the recording URL was empty at the moment the event flipped
-    to ``completed``. The button is disabled (and the panel surfaces a
+    Issue #680 / #713: manual "Send follow-up now" trigger. The button
+    is the documented escape hatch when the daily cron skipped the
+    follow-up because the recording URL was empty at the moment the
+    event ended. The button is disabled (and the panel surfaces a
     short reason) when the gate is unmet so staff are not left guessing.
 
     Enable conditions (must hold):
 
-    - event.status == 'completed'
+    - event.is_past (time-derived; #713)
     - event has recording_url OR recording_s3_url set
 
     The actual no-double-send protection lives in the per-user task
@@ -461,7 +468,7 @@
   {% endcomment %}
   <div class="bg-card border border-border rounded-lg p-4" data-testid="event-followup-panel">
     <h2 class="text-sm font-medium text-foreground mb-3">Post-event follow-up</h2>
-    {% if event.status == 'completed' and event.video_url %}
+    {% if event.is_past and event.video_url %}
       <form method="post" action="{{ send_followup_url }}">
         {% csrf_token %}
         <button type="submit"
@@ -480,8 +487,8 @@
         Send follow-up now
       </button>
       <p class="text-xs text-muted-foreground mt-2">
-        {% if event.status != 'completed' %}
-          Available once the event status is Completed.
+        {% if not event.is_past %}
+          Available once the event has ended.
         {% else %}
           Set a recording URL to enable.
         {% endif %}

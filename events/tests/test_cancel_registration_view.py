@@ -235,7 +235,14 @@ class CancelRegistrationAlreadyCancelledTest(TestCase):
 
 
 class CancelRegistrationCompletedEventTest(TestCase):
-    """Cancelling a completed event preserves the row."""
+    """Cancelling a finished event preserves the row.
+
+    Issue #713: ``is_upcoming`` is time-derived, so flipping
+    ``status='completed'`` alone is no longer enough to drive the
+    "already started or finished" branch — the event's
+    ``end_datetime`` also has to be in the past. We move the event
+    into the past via timestamps rather than the stored status.
+    """
 
     def setUp(self):
         self.event = _make_event(slug='last-weeks-talk', status='upcoming')
@@ -247,9 +254,14 @@ class CancelRegistrationCompletedEventTest(TestCase):
         )
         self.token = generate_cancel_token(self.registration)
 
-    def test_completed_event_post_preserves_row(self):
-        self.event.status = 'completed'
+    def _move_event_to_past(self):
+        now = timezone.now()
+        self.event.start_datetime = now - timedelta(hours=3)
+        self.event.end_datetime = now - timedelta(hours=1)
         self.event.save()
+
+    def test_completed_event_post_preserves_row(self):
+        self._move_event_to_past()
 
         client = Client()
         response = client.post(
@@ -263,8 +275,7 @@ class CancelRegistrationCompletedEventTest(TestCase):
         )
 
     def test_completed_event_get_renders_finished_state(self):
-        self.event.status = 'completed'
-        self.event.save()
+        self._move_event_to_past()
 
         client = Client()
         response = client.get(

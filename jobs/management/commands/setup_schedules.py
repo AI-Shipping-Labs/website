@@ -39,13 +39,15 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: event-reminders (every 15 min)'))
 
-        # Flip finished events from upcoming to completed every 5 minutes (issue #573)
+        # Flip finished events from upcoming to completed daily at 04:00 UTC
+        # (issue #573; cadence reduced from every 5 min to daily in #713 now
+        # that user-facing surfaces derive past/upcoming from timestamps).
         schedule(
             'events.tasks.complete_finished_events.complete_finished_events',
-            cron='*/5 * * * *',
+            cron='0 4 * * *',
             name='complete-finished-events',
         )
-        self.stdout.write(self.style.SUCCESS('Registered: complete-finished-events (every 5 min)'))
+        self.stdout.write(self.style.SUCCESS('Registered: complete-finished-events (daily at 04:00 UTC)'))
 
         # Expire tier overrides every 15 minutes
         schedule(

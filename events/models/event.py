@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
@@ -429,12 +431,49 @@ class Event(
         return bool((self.external_host or '').strip())
 
     @property
+    def effective_end_datetime(self):
+        """Return the effective end of the event.
+
+        Issue #712 / #713: when ``end_datetime`` is explicitly set we
+        use it; otherwise an event is assumed to last 1 hour from its
+        ``start_datetime`` (mirrors the ``.ics`` fallback in
+        ``events/services/calendar_invite.py`` and the cron logic in
+        ``events/tasks/complete_finished_events.py``).
+        """
+        if self.end_datetime is not None:
+            return self.end_datetime
+        return self.start_datetime + timedelta(hours=1)
+
+    @property
     def is_upcoming(self):
-        return self.status == 'upcoming'
+        """Return True when the event is still scheduled in the future.
+
+        Issue #713: time-derived. An event is "upcoming" only when it
+        is neither draft nor cancelled AND ``now`` is before
+        ``effective_end_datetime``. The legacy ``status='completed'``
+        flag is intentionally ignored — once an end time has passed an
+        event is past regardless of the stored status, and a legacy
+        ``completed`` row with a future end time renders upcoming.
+        """
+        if self.status in ('draft', 'cancelled'):
+            return False
+        return timezone.now() < self.effective_end_datetime
 
     @property
     def is_past(self):
-        return self.status in ('completed', 'cancelled')
+        """Return True when the event has finished or been cancelled.
+
+        Issue #713: time-derived. Cancelled events are always treated
+        as past so they never offer registration or join links.
+        Drafts return ``False`` (drafts are not in any state for
+        visitors — they 404 anyway). Otherwise an event is past once
+        ``now >= effective_end_datetime``.
+        """
+        if self.status == 'cancelled':
+            return True
+        if self.status == 'draft':
+            return False
+        return timezone.now() >= self.effective_end_datetime
 
     @property
     def registration_count(self):

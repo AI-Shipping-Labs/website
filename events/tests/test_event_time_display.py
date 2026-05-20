@@ -209,15 +209,23 @@ class EventDetailTimeDisplayTest(TestCase):
 
 class EventListAndCalendarScopeTest(TestCase):
     def test_list_and_calendar_are_date_only_and_link_to_detail(self):
+        # Issue #713: use a future start so the event lands in the
+        # Upcoming section (which shows ``formatted_date`` per the
+        # template). Otherwise the row falls into the compact past
+        # list that renders ``short_date``.
+        future = timezone.now() + timedelta(days=30)
+        future = future.replace(hour=16, minute=30, second=0, microsecond=0)
         event = Event.objects.create(
             title='Detail Owns Timezone Event',
             slug='detail-owns-timezone-event',
-            start_datetime=datetime(2026, 4, 13, 16, 30, tzinfo=UTC),
+            start_datetime=future,
             status='upcoming',
         )
 
         list_response = self.client.get('/events')
-        calendar_response = self.client.get('/events/calendar/2026/4')
+        calendar_response = self.client.get(
+            f'/events/calendar/{future.year}/{future.month}',
+        )
 
         # Issue #673: links go to the canonical id+slug URL now.
         self.assertContains(list_response, event.get_absolute_url())

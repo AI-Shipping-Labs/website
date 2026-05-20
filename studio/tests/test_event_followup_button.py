@@ -2,28 +2,38 @@
 
 Coverage:
 
-- The button is present and enabled when the event is completed AND
+- The button is present and enabled when the event has ended AND
   has a recording URL.
 - The button is disabled when the gate is unmet (no recording URL, or
-  status != completed).
+  the event is still upcoming).
 - POSTing to the send-followup endpoint enqueues the fan-out and
   flashes a success message.
 - A second press flashes "already sent" without re-enqueuing.
-- Gate failures (no recording / not completed) flash an error and do
+- Gate failures (no recording / not past) flash an error and do
   NOT enqueue.
 - The ``post_event_summary`` field is persisted via the edit POST.
+
+Issue #713: gates are now time-derived. Fixtures use past timestamps
+to mark an event as finished rather than (only) ``status='completed'``.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta  # noqa: F401  (UTC, datetime used in summary fixtures)
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
+from django.utils import timezone as djtimezone
 
 from events.models import Event, EventRegistration
 from notifications.models import EventReminderLog
 
 User = get_user_model()
+
+
+def _past_start_end():
+    """Return ``(start, end)`` with the event already finished."""
+    now = djtimezone.now()
+    return now - timedelta(hours=3), now - timedelta(hours=1)
 
 
 class StaffMixin:
@@ -42,11 +52,13 @@ class StaffMixin:
 class StudioEventFormButtonStateTest(StaffMixin, TestCase):
     """The form template renders the right button state based on the gate."""
 
-    def test_button_enabled_when_completed_with_recording(self):
+    def test_button_enabled_when_past_with_recording(self):
+        start, end = _past_start_end()
         event = Event.objects.create(
             title='Recap Enabled',
             slug='recap-enabled',
-            start_datetime=datetime(2026, 6, 8, 16, 0, tzinfo=UTC),
+            start_datetime=start,
+            end_datetime=end,
             status='completed',
             recording_url='https://youtube.com/watch?v=enabled',
         )
@@ -55,27 +67,31 @@ class StudioEventFormButtonStateTest(StaffMixin, TestCase):
         self.assertNotContains(response, 'data-testid="send-followup-button-disabled"')
 
     def test_button_disabled_when_no_recording(self):
+        start, end = _past_start_end()
         event = Event.objects.create(
             title='Recap No Recording',
             slug='recap-no-rec',
-            start_datetime=datetime(2026, 6, 8, 16, 0, tzinfo=UTC),
+            start_datetime=start,
+            end_datetime=end,
             status='completed',
         )
         response = self.client.get(f'/studio/events/{event.pk}/edit')
         self.assertContains(response, 'data-testid="send-followup-button-disabled"')
         self.assertContains(response, 'Set a recording URL to enable.')
 
-    def test_button_disabled_when_not_completed(self):
+    def test_button_disabled_when_future(self):
+        # Issue #713: gate is ``is_past``; a future event disables.
         event = Event.objects.create(
-            title='Recap Upcoming',
-            slug='recap-upcoming',
-            start_datetime=datetime(2026, 6, 8, 16, 0, tzinfo=UTC),
+            title='Recap Future',
+            slug='recap-future',
+            start_datetime=djtimezone.now() + timedelta(hours=2),
+            end_datetime=djtimezone.now() + timedelta(hours=3),
             status='upcoming',
-            recording_url='https://youtube.com/watch?v=upcoming',
+            recording_url='https://youtube.com/watch?v=future',
         )
         response = self.client.get(f'/studio/events/{event.pk}/edit')
         self.assertContains(response, 'data-testid="send-followup-button-disabled"')
-        self.assertContains(response, 'Available once the event status is Completed.')
+        self.assertContains(response, 'Available once the event has ended')
 
     def test_post_event_summary_field_rendered(self):
         event = Event.objects.create(
@@ -97,10 +113,12 @@ class StudioSendFollowupEndpointTest(StaffMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
+        start, end = _past_start_end()
         cls.event = Event.objects.create(
             title='Send Followup',
             slug='send-followup',
-            start_datetime=datetime(2026, 6, 8, 16, 0, tzinfo=UTC),
+            start_datetime=start,
+            end_datetime=end,
             status='completed',
             recording_url='https://youtube.com/watch?v=send',
         )
@@ -147,10 +165,12 @@ class StudioSendFollowupEndpointTest(StaffMixin, TestCase):
         'studio.views.events.enqueue_post_event_followup',
     )
     def test_no_recording_returns_error(self, mock_enq):
+        start, end = _past_start_end()
         bad_event = Event.objects.create(
             title='No Recording',
             slug='no-rec-event',
-            start_datetime=datetime(2026, 6, 8, 16, 0, tzinfo=UTC),
+            start_datetime=start,
+            end_datetime=end,
             status='completed',
         )
         response = self.client.post(
@@ -163,11 +183,12 @@ class StudioSendFollowupEndpointTest(StaffMixin, TestCase):
     @patch(
         'studio.views.events.enqueue_post_event_followup',
     )
-    def test_not_completed_returns_error(self, mock_enq):
+    def test_not_past_returns_error(self, mock_enq):
         upcoming_event = Event.objects.create(
             title='Still Upcoming',
             slug='still-upcoming',
-            start_datetime=datetime(2026, 6, 8, 16, 0, tzinfo=UTC),
+            start_datetime=djtimezone.now() + timedelta(hours=2),
+            end_datetime=djtimezone.now() + timedelta(hours=3),
             status='upcoming',
             recording_url='https://youtube.com/watch?v=upcoming-evt',
         )
@@ -178,7 +199,7 @@ class StudioSendFollowupEndpointTest(StaffMixin, TestCase):
         mock_enq.assert_not_called()
         self.assertContains(
             response,
-            'Follow-up emails can only be sent for completed events.',
+            'Follow-up emails can only be sent after the event has ended.',
         )
 
     def test_get_method_not_allowed(self):

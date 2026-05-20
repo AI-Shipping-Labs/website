@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Q
 from django.http import Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -168,22 +168,42 @@ def events_list(request):
 
     selected_tags = _get_selected_tags(request)
 
-    upcoming_events = events.filter(status='upcoming').order_by('start_datetime')
+    # Issue #713: derive upcoming / past from timestamps so a stale
+    # ``status='upcoming'`` row whose effective end has passed lands
+    # in the past bucket immediately. ``effective end`` is
+    # ``end_datetime`` when set, else ``start_datetime + 1h``.
+    now = timezone.now()
+    one_hour = timedelta(hours=1)
+    upcoming_filter = (
+        Q(end_datetime__gt=now)
+        | Q(end_datetime__isnull=True, start_datetime__gt=now - one_hour)
+    )
+    past_filter = (
+        Q(end_datetime__lte=now)
+        | Q(end_datetime__isnull=True, start_datetime__lte=now - one_hour)
+    )
 
-    # For the "past" surface we only show completed events with a recording
+    upcoming_events = events.filter(upcoming_filter).exclude(
+        status='cancelled',
+    ).order_by('start_datetime')
+
+    # For the "past" surface we show finished events with a recording
     # (and honor the ``published`` flag). The default "all" view also
     # includes cancelled events and does not require a recording.
-    past_with_recording_qs = events.filter(
-        status='completed',
+    past_with_recording_qs = events.filter(past_filter).filter(
         published=True,
+    ).exclude(
+        status='cancelled',
     ).exclude(
         recording_url='',
     ).exclude(
         recording_url__isnull=True,
     ).order_by('-start_datetime')
 
+    # ``past_all_qs`` = any event past its effective end, OR any
+    # cancelled event (which is treated as past regardless of time).
     past_all_qs = events.filter(
-        status__in=['completed', 'cancelled'],
+        past_filter | Q(status='cancelled'),
     ).order_by('-start_datetime')
 
     # Collect all tags from past-with-recording events for the tag filter UI
@@ -266,7 +286,10 @@ def event_join_redirect(request, slug):
 
     # Past events show an unavailable page. The "Back to event" link there
     # already surfaces the inline recording on /events/<slug>.
-    if event.status in ('completed', 'cancelled'):
+    # Issue #713: gate on the time-derived ``is_past`` so a legacy
+    # ``status='upcoming'`` row whose ``end_datetime`` has passed is also
+    # treated as past without waiting for the daily cron.
+    if event.is_past:
         return render(request, 'events/join_unavailable.html', {
             'event': event,
             'reason': 'past',
@@ -395,10 +418,13 @@ def event_detail(request, event_id, slug):
     gating = build_gating_context(user, event, 'event')
 
     # Determine if we should show the join link.
+    # Issue #713: gate on time-derived ``is_upcoming`` so a stale
+    # ``status='upcoming'`` row whose end has passed no longer offers
+    # the join link.
     show_join_link = (
         is_registered
         and event.can_show_zoom_link()
-        and event.status == 'upcoming'
+        and event.is_upcoming
     )
 
     # Determine required tier name for CTA
@@ -418,7 +444,7 @@ def event_detail(request, event_id, slug):
     anon_registered_account_created = False
     if (
         not user.is_authenticated
-        and event.status == 'upcoming'
+        and event.is_upcoming
         and not is_external
     ):
         raw_email = (request.GET.get('registered') or '').strip()
@@ -433,10 +459,10 @@ def event_detail(request, event_id, slug):
     # Issue #679: feedback surface — only meaningful once the event has
     # ended. The public aggregate counts only rated entries (rating IS
     # NOT NULL); comment-only rows don't move the rating average.
-    event_is_past = (
-        event.end_datetime is not None
-        and event.end_datetime <= timezone.now()
-    )
+    # Issue #713: gate on the model's time-derived ``is_past`` so the
+    # feedback form opens automatically once the effective end passes,
+    # without a cron run.
+    event_is_past = event.is_past
     feedback_qs = event.feedback.all()
     feedback_aggregate = feedback_qs.aggregate(avg=Avg('rating'))
     feedback_avg = feedback_aggregate['avg']
@@ -693,7 +719,10 @@ def _resolve_cancel_state(slug, token):
             'message': "You're not registered for this event. No action needed.",
         }
 
-    if event.status != 'upcoming':
+    # Issue #713: gate on the time-derived ``is_upcoming`` so a stale
+    # ``status='upcoming'`` row whose end has passed lands on the
+    # "already started or finished" branch even before the daily cron.
+    if not event.is_upcoming:
         return 'event_finished', {
             'event': event,
             'event_url': event_url,

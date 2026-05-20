@@ -26,7 +26,11 @@ class EntrypointRegistersSchedulesTest(TestCase):
     """``_register_schedules`` populates the django-q ``Schedule`` table."""
 
     def test_registers_complete_finished_events_schedule(self):
-        """The cron behind issue #708 is created with the correct func and cron."""
+        """The cron behind issue #708 is created with the correct func and cron.
+
+        Issue #713: cadence reduced from ``*/5 * * * *`` to
+        ``0 4 * * *`` (daily at 04:00 UTC).
+        """
         _register_schedules()
 
         schedule = Schedule.objects.get(name='complete-finished-events')
@@ -34,7 +38,7 @@ class EntrypointRegistersSchedulesTest(TestCase):
             schedule.func,
             'events.tasks.complete_finished_events.complete_finished_events',
         )
-        self.assertEqual(schedule.cron, '*/5 * * * *')
+        self.assertEqual(schedule.cron, '0 4 * * *')
         self.assertEqual(schedule.schedule_type, Schedule.CRON)
 
     def test_registers_all_default_schedules(self):

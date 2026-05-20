@@ -354,6 +354,17 @@ class StudioMobileDensityRegressionTest(TestCase):
         # the fix, the wrapper class string comes from
         # ``studio_list_class 'wrapper'`` so it ends up identical to
         # /studio/articles/.
+        # Issue #756: the table only renders when rows or filters are
+        # active (otherwise the fresh-zero empty card replaces the
+        # table chrome) — seed one row so we exercise the table chrome.
+        Event.objects.create(
+            title="Density recording",
+            slug="density-recording",
+            start_datetime=timezone.now(),
+            status="completed",
+            recording_url="https://youtube.com/watch?v=density",
+            published=True,
+        )
         response = self.client.get("/studio/recordings/")
         self.assertContains(
             response,
@@ -364,6 +375,15 @@ class StudioMobileDensityRegressionTest(TestCase):
         )
 
     def test_no_legacy_per_row_rounded_card_chrome_in_projects(self):
+        # Issue #756: seed a project so the table chrome renders
+        # (zero-row + no-filter renders the fresh-zero empty card).
+        Project.objects.create(
+            title="Density project",
+            slug="density-project",
+            date=timezone.now().date(),
+            status="published",
+            published=True,
+        )
         response = self.client.get("/studio/projects/")
         self.assertContains(
             response,

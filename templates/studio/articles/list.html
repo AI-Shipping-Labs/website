@@ -13,6 +13,7 @@
 
 {% studio_list_filter search status_filter "Search articles..." %}
 
+{% if articles or search or status_filter %}
 <!-- Article List -->
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="{% studio_list_class 'table' %}">
@@ -54,11 +55,13 @@
         </td>
       </tr>
       {% empty %}
-      <tr>
-        <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">No articles found.</td>
-      </tr>
+        {% url 'studio_article_list' as articles_clear_url %}
+        {% studio_empty_state 'filter' entity_label='article' entity_label_plural='articles' clear_url=articles_clear_url colspan=5 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% else %}
+  {% studio_empty_state 'fresh' entity_label='article' entity_label_plural='articles' %}
+{% endif %}
 {% endblock %}

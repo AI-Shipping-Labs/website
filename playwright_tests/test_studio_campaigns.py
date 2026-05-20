@@ -221,8 +221,10 @@ class TestStaffConfirmsDelete:
         assert "Deleted draft campaign" in body
         assert "Distinctive Delete Target" in body
 
-        # The empty-state block shows up because the list is now empty.
-        assert "Create your first campaign" in body
+        # The canonical fresh-zero empty-state block shows up because the
+        # list is now empty (#756 — studio_empty_state partial).
+        assert "No campaigns yet" in body
+        assert "New campaign" in body
 
         # And the record is really gone.
         from email_app.models import EmailCampaign

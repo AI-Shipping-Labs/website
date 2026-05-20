@@ -130,6 +130,7 @@ Reach for these before writing a new inline component.
 - `templates/includes/testimonial_cards.html`: testimonial grid/mobile carousel with quote icon, `line-clamp-10`, author block, and responsive card width.
 - `templates/content/_content_preview.html`: reusable course/workshop preview media with cover image or fallback, label pill, access label, title, and meta row.
 - `templates/includes/_icon_github.html`: inline GitHub SVG replacement for missing Lucide brand icons; inherits color through `currentColor`.
+- `templates/studio/includes/empty_state.html`: standardized Studio list-page empty state. Use `kind="filter"` (inline `<tr>` with `Clear filters` link) when a filter is active and produced zero rows. Use `kind="fresh"` (separate `bg-card` empty card with a `New <noun>` CTA) when no rows exist at all. Render through the `{% studio_empty_state %}` inclusion tag — never hand-roll either branch.
 
 ## Buttons
 
@@ -214,6 +215,17 @@ Status badge palette (`STATUS_BADGE_CLASSES` in `studio/templatetags/studio_filt
 - `upcoming`: `bg-blue-500/20 text-blue-400`.
 - `completed` (archived): `bg-secondary text-muted-foreground`.
 - `cancelled`: `bg-red-500/20 text-red-400`.
+
+#### Studio list-page empty states
+
+List-page empty states have two flavours, and both ship from the shared `templates/studio/includes/empty_state.html` partial via the `{% studio_empty_state %}` inclusion tag (issue #756):
+
+- Filter-zero — a search or status filter is active and produced zero rows. Use `{% studio_empty_state 'filter' entity_label='sprint' entity_label_plural='sprints' clear_url=... colspan=N %}` inside the table's `<tbody>`. The partial renders an inline `<tr><td colspan>` row with the message `No <plural> match your filters.` and a `Clear filters` link, keeping the table header visible so the operator can adjust filters in place.
+- Fresh-install zero — the entity has no rows at all (no filter active). Wrap the table in `{% if rows or <filter_vars> %}...{% else %} {% studio_empty_state 'fresh' entity_label='sprint' entity_label_plural='sprints' create_url=... %} {% endif %}`. The partial renders a separate `bg-card border border-border rounded-lg p-12 text-center` empty card with an inbox icon, the message `No <plural> yet.`, and a primary `New <noun>` CTA (use `cta_label=...` to override when the page's header CTA uses non-sentence-case copy such as `Add Campaign` or `Create token`).
+
+Distinguish the two cases in the view by exposing the search / status / tag filter variables to the template (most list views already do) or by adding a `filters_active` boolean to the context. The pattern is: when the queryset is empty AND filters are active, the table chrome stays visible with the filter-row; when the queryset is empty AND no filter is active, the table is omitted entirely in favour of the fresh card.
+
+Sync-managed entities (workshops, courses, articles, projects, downloads, recordings) call the partial with `create_url` omitted so the fresh-zero card renders without a CTA — content for those tables comes from the GitHub content sync, not from a Studio create form.
 
 ## Pills, Badges, and Chips
 

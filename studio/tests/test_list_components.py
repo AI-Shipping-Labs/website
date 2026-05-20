@@ -252,7 +252,10 @@ class StudioListComponentRenderTest(TestCase):
         self.assertContains(response, 'rel="noopener noreferrer"')
 
         empty_response = self.client.get('/studio/workshops/?q=no-such-workshop')
-        self.assertContains(empty_response, 'data-testid="workshops-empty-state"')
+        # Canonical filter-zero empty state (#756): inline <tr> testid plus
+        # the page-specific data attribute that legacy selectors still use.
+        self.assertContains(empty_response, 'data-testid="studio-empty-state-filter"')
+        self.assertContains(empty_response, 'data-empty-state="workshops-empty-state"')
         self.assertContains(empty_response, 'No workshops match your filters.')
         self.assertContains(empty_response, 'Clear filters')
 

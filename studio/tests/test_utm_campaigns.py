@@ -76,10 +76,13 @@ class UtmCampaignListViewTest(TestCase):
         _staff_login(self.client)
 
     def test_empty_state(self):
+        """UTM campaigns list renders the canonical fresh-zero empty state
+        (#756) plus the supplemental Import action below the partial card."""
         response = self.client.get('/studio/utm-campaigns/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'No UTM campaigns yet')
-        # Both CTAs visible
+        self.assertContains(response, 'data-testid="studio-empty-state-fresh"')
+        # Both CTAs visible: header import link + below-card empty import.
         self.assertContains(response, 'Add Campaign')
         self.assertContains(response, 'Import')
         self.assertContains(

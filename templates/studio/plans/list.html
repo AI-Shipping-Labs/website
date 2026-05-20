@@ -46,7 +46,7 @@
   </div>
 </form>
 
-{% if plans %}
+{% if plans or search or sprint_filter_id or member_filter_id %}
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="w-full">
     <thead class="bg-secondary">
@@ -76,14 +76,15 @@
           </div>
         </td>
       </tr>
+      {% empty %}
+        {% url 'studio_plan_list' as plans_clear_url %}
+        {% studio_empty_state 'filter' entity_label='plan' entity_label_plural='plans' clear_url=plans_clear_url colspan=4 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
 {% else %}
-<div class="bg-card border border-border rounded-lg p-12 text-center">
-  <p class="text-muted-foreground">No plans match these filters.</p>
-  <a href="{% url 'studio_plan_create' %}" class="text-accent hover:underline text-sm mt-2 inline-block">Create a new plan</a>
-</div>
+  {% url 'studio_plan_create' as plans_create_url %}
+  {% studio_empty_state 'fresh' entity_label='plan' entity_label_plural='plans' create_url=plans_create_url %}
 {% endif %}
 {% endblock %}

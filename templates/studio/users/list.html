@@ -303,9 +303,8 @@
         </td>
       </tr>
       {% empty %}
-      <tr>
-        <td colspan="4" class="px-6 py-8 text-center text-sm text-muted-foreground">No users found.</td>
-      </tr>
+        {% url 'studio_user_list' as users_clear_url %}
+        {% studio_empty_state 'filter' entity_label='user' entity_label_plural='users' clear_url=users_clear_url colspan=4 %}
       {% endfor %}
     </tbody>
   </table>

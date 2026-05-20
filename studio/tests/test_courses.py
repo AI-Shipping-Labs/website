@@ -65,8 +65,14 @@ class StudioCourseListTest(StaffUserMixin, TestCase):
         self.assertNotContains(response, 'Java Course')
 
     def test_list_empty_state(self):
+        """Courses list renders the canonical fresh-zero empty state (#756).
+
+        Courses are sync-managed so the partial is rendered without a
+        ``New course`` CTA — content creation happens via the GitHub sync.
+        """
         response = self.client.get('/studio/courses/')
-        self.assertContains(response, 'No courses found')
+        self.assertContains(response, 'No courses yet')
+        self.assertContains(response, 'data-testid="studio-empty-state-fresh"')
 
     def test_list_shows_synced_and_local_origins(self):
         Course.objects.create(

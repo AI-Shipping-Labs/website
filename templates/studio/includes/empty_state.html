@@ -1,0 +1,52 @@
+{% comment %}
+  Canonical Studio list-page empty state. Two flavours:
+
+  - ``kind="filter"`` — a search or status filter is active and produced
+    zero rows. Renders an inline ``<tr><td colspan>`` row so the table
+    header stays visible while the operator adjusts the filter.
+  - ``kind="fresh"`` — the entity has no rows at all. Renders a separate
+    ``bg-card`` empty card (no table chrome) with a primary CTA so the
+    page looks inviting on a fresh install.
+
+  Context:
+    kind                 -- "filter" | "fresh"
+    entity_label         -- singular, lowercase ("sprint", "campaign")
+    entity_label_plural  -- plural, lowercase ("sprints", "campaigns")
+    create_url           -- target for the "New <entity>" CTA (fresh only).
+                            Pass ``None`` to skip the CTA entirely (e.g.
+                            workshops, which are sync-managed).
+    clear_url            -- target for the "Clear filters" link (filter only).
+    colspan              -- number of table columns for the filter row. Default 8.
+    cta_label            -- optional override for the CTA label. Defaults to
+                            "New <entity_label>".
+    testid_suffix        -- optional extra ``data-testid`` to keep page-specific
+                            selectors working alongside the canonical testid.
+
+  Sub-issue C of #747 (the design-system audit) codifies the two-flavour
+  convention. See _docs/design-system.md "Studio list pages".
+{% endcomment %}
+{% if kind == 'fresh' %}
+<div class="bg-card border border-border rounded-lg p-12 text-center"
+     data-testid="studio-empty-state-fresh"
+     {% if testid_suffix %}data-empty-state="{{ testid_suffix }}"{% endif %}>
+  <i data-lucide="inbox" class="mx-auto h-10 w-10 text-muted-foreground/60"></i>
+  <p class="mt-4 text-sm text-muted-foreground">No {{ entity_label_plural }} yet.</p>
+  {% if create_url %}
+  <a href="{{ create_url }}"
+     class="mt-4 inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    <i data-lucide="plus" class="h-4 w-4"></i>
+    <span>{{ cta_label|default_if_none:"" }}{% if not cta_label %}New {{ entity_label }}{% endif %}</span>
+  </a>
+  {% endif %}
+</div>
+{% elif kind == 'filter' %}
+<tr data-testid="studio-empty-state-filter"
+    {% if testid_suffix %}data-empty-state="{{ testid_suffix }}"{% endif %}>
+  <td colspan="{{ colspan|default:8 }}" class="px-6 py-12 text-center text-sm text-muted-foreground">
+    No {{ entity_label_plural }} match your filters.
+    {% if clear_url %}
+    <a href="{{ clear_url }}" class="ml-2 text-accent hover:underline">Clear filters</a>
+    {% endif %}
+  </td>
+</tr>
+{% endif %}

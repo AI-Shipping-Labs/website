@@ -14,6 +14,7 @@
 <!-- Search -->
 {% studio_list_filter search "" "Search downloads..." None False %}
 
+{% if downloads or search %}
 <!-- Download List -->
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="w-full">
@@ -57,11 +58,13 @@
         </td>
       </tr>
       {% empty %}
-      <tr>
-        <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">No downloads found.</td>
-      </tr>
+        {% url 'studio_download_list' as downloads_clear_url %}
+        {% studio_empty_state 'filter' entity_label='download' entity_label_plural='downloads' clear_url=downloads_clear_url colspan=5 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% else %}
+  {% studio_empty_state 'fresh' entity_label='download' entity_label_plural='downloads' %}
+{% endif %}
 {% endblock %}

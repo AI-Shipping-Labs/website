@@ -35,7 +35,7 @@
   {% endif %}
 </div>
 
-{% if campaigns %}
+{% if campaigns or show_archived %}
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="w-full">
     <thead class="bg-secondary">
@@ -67,25 +67,18 @@
           </div>
         </td>
       </tr>
+      {% empty %}
+        {% url 'studio_utm_campaign_list' as utm_campaigns_clear_url %}
+        {% studio_empty_state 'filter' entity_label='UTM campaign' entity_label_plural='UTM campaigns' clear_url=utm_campaigns_clear_url colspan=6 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
 {% else %}
-<div class="bg-card border border-border rounded-lg p-12 text-center">
-  <p class="text-muted-foreground mb-4">
-    {% if show_archived %}
-      No archived UTM campaigns.
-    {% else %}
-      No UTM campaigns yet. Create one or import existing tracking links to get started.
-    {% endif %}
-  </p>
-  {% if not show_archived %}
-  <div class="flex items-center justify-center space-x-3">
-    <a href="{% url 'studio_utm_campaign_create' %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">Add Campaign</a>
+  {% url 'studio_utm_campaign_create' as utm_campaigns_create_url %}
+  {% studio_empty_state 'fresh' entity_label='UTM campaign' entity_label_plural='UTM campaigns' create_url=utm_campaigns_create_url cta_label='Add Campaign' %}
+  <div class="mt-3 flex items-center justify-center">
     <a href="{% url 'studio_utm_campaign_import' %}" data-testid="utm-campaign-empty-import-link" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">Import</a>
   </div>
-  {% endif %}
-</div>
 {% endif %}
 {% endblock %}

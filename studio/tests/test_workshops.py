@@ -149,9 +149,15 @@ class StudioWorkshopListTest(TestCase):
         self.assertContains(response, '/workshops/rag-basics')
 
     def test_empty_state_shown_when_no_workshops(self):
+        """Workshops list renders the canonical fresh-zero empty state when
+        no workshops exist. Workshops are sync-managed, so the partial is
+        intentionally rendered without a ``New workshop`` CTA (#756)."""
         Workshop.objects.all().delete()
         response = self.client.get('/studio/workshops/')
         self.assertContains(response, 'No workshops yet')
+        self.assertContains(response, 'data-testid="studio-empty-state-fresh"')
+        # No "New workshop" CTA — workshops only come from sync.
+        self.assertNotContains(response, '>New workshop<')
 
     def test_sidebar_entry_present(self):
         # A list page is rendered through studio/base.html, so the sidebar

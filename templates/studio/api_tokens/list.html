@@ -22,6 +22,7 @@
   </div>
 </div>
 
+{% if tokens %}
 <div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="api-tokens-list">
   <table class="w-full">
     <thead class="bg-secondary">
@@ -66,16 +67,12 @@
           </form>
         </td>
       </tr>
-      {% empty %}
-      <tr>
-        <td colspan="6" class="px-6 py-8 text-center text-sm text-muted-foreground" data-testid="api-tokens-empty">
-          No API tokens yet
-          <a href="{% url 'studio_api_token_create' %}"
-             class="text-accent hover:underline ml-1">Create one</a>.
-        </td>
-      </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% else %}
+  {% url 'studio_api_token_create' as api_tokens_create_url %}
+  {% studio_empty_state 'fresh' entity_label='token' entity_label_plural='API tokens' create_url=api_tokens_create_url cta_label='Create token' testid_suffix='api-tokens-empty' %}
+{% endif %}
 {% endblock %}

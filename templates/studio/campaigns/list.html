@@ -21,7 +21,7 @@
 <!-- Filters -->
 {% studio_list_filter search status_filter "Search campaigns..." "campaign" False %}
 
-{% if campaigns %}
+{% if campaigns or search or status_filter %}
 <!-- Campaign List -->
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="w-full">
@@ -63,18 +63,15 @@
           </div>
         </td>
       </tr>
+      {% empty %}
+        {% url 'studio_campaign_list' as campaigns_clear_url %}
+        {% studio_empty_state 'filter' entity_label='campaign' entity_label_plural='campaigns' clear_url=campaigns_clear_url colspan=6 testid_suffix='campaigns-empty-state' %}
       {% endfor %}
     </tbody>
   </table>
 </div>
 {% else %}
-<!-- Empty state -->
-<div class="bg-card border border-border rounded-lg p-12 text-center" data-testid="campaigns-empty-state">
-  <p class="text-muted-foreground mb-4">No campaigns found.</p>
-  <a href="{% url 'studio_campaign_create' %}"
-     class="inline-flex items-center justify-center bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-    Create your first campaign
-  </a>
-</div>
+  {% url 'studio_campaign_create' as campaigns_create_url %}
+  {% studio_empty_state 'fresh' entity_label='campaign' entity_label_plural='campaigns' create_url=campaigns_create_url testid_suffix='campaigns-empty-state' %}
 {% endif %}
 {% endblock %}

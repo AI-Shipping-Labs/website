@@ -810,8 +810,10 @@ class TestScenario10EmptyStateCourseList:
         self, django_server
     , browser):
         """With no courses in the system, a staff user sees the
-        'No courses found' message. The 'New Course' button has been
-        removed since content creation now happens via GitHub sync (#152)."""
+        canonical fresh-zero empty-state card. The 'New Course' button
+        has been removed since content creation now happens via GitHub
+        sync (#152), and the empty-state copy follows the
+        ``studio_empty_state`` partial introduced in #756."""
         _clear_courses()
         _ensure_tiers()
         _create_staff_user("staff@test.com")
@@ -825,8 +827,8 @@ class TestScenario10EmptyStateCourseList:
         )
         body = page.content()
 
-        # Then: "No courses found" message is shown
-        assert "No courses found" in body
+        # Then: canonical "No courses yet" copy is shown
+        assert "No courses yet" in body
 
         # Then: "New Course" button is no longer present (#152)
         new_course_btn = page.locator(

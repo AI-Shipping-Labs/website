@@ -30,6 +30,7 @@
   </form>
 </div>
 
+{% if projects or search or status_filter %}
 <!-- Project List -->
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="{% studio_list_class 'table' %}">
@@ -67,11 +68,13 @@
         </td>
       </tr>
       {% empty %}
-      <tr>
-        <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">No projects found.</td>
-      </tr>
+        {% url 'studio_project_list' as projects_clear_url %}
+        {% studio_empty_state 'filter' entity_label='project' entity_label_plural='projects' clear_url=projects_clear_url colspan=5 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% else %}
+  {% studio_empty_state 'fresh' entity_label='project' entity_label_plural='projects' %}
+{% endif %}
 {% endblock %}

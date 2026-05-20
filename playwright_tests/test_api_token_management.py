@@ -82,13 +82,16 @@ class TestSuperuserIssuesToken:
         context = _auth_context(browser, admin_email)
         page = context.new_page()
 
-        # 1. Empty state on the list page.
+        # 1. Empty state on the list page (canonical empty-state partial
+        # introduced in #756 — data-testid is now the canonical token,
+        # and the legacy "api-tokens-empty" string is exposed as a
+        # data-empty-state attribute for selector continuity).
         page.goto(
             f"{django_server}/studio/api-tokens/",
             wait_until="domcontentloaded",
         )
         expect(
-            page.locator('[data-testid="api-tokens-empty"]')
+            page.locator('[data-testid="studio-empty-state-fresh"]')
         ).to_be_visible()
 
         # 2. Click the New token button (issue #752 renamed from "Create token").

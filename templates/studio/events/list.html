@@ -46,6 +46,7 @@
      class="rounded-md px-3 py-1 {% if time_filter == 'past' %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-muted{% endif %}">Past</a>
 </div>
 
+{% if events or search or status_filter or time_filter %}
 <!-- Event List -->
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="{% studio_list_class 'table' %}">
@@ -117,11 +118,14 @@
         </td>
       </tr>
       {% empty %}
-      <tr>
-        <td colspan="8" class="px-6 py-8 text-center text-sm text-muted-foreground">No events found.</td>
-      </tr>
+        {% url 'studio_event_list' as events_clear_url %}
+        {% studio_empty_state 'filter' entity_label='event' entity_label_plural='events' clear_url=events_clear_url colspan=8 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% else %}
+  {% url 'studio_event_new' as events_create_url %}
+  {% studio_empty_state 'fresh' entity_label='event' entity_label_plural='events' create_url=events_create_url %}
+{% endif %}
 {% endblock %}

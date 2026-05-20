@@ -139,7 +139,10 @@ class TestJustEndedEventMovesToPast:
         assert upcoming_section.count() == 1
         assert "Today Just Ended" not in upcoming_section.inner_text()
 
-        # Detail page shows the Completed badge.
+        # Detail page shows the Past badge. Issue #713 made the status
+        # pill time-derived: any event with ``is_past`` true renders
+        # "Past", regardless of whether the cron has flipped the DB
+        # status to ``completed``.
         # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
             f"{django_server}{event.get_absolute_url()}",
@@ -148,7 +151,7 @@ class TestJustEndedEventMovesToPast:
         badges_row = page.locator("h1").first.locator(
             "xpath=preceding-sibling::div[1]"
         )
-        assert "Completed" in badges_row.inner_text()
+        assert "Past" in badges_row.inner_text()
         assert "Upcoming" not in badges_row.inner_text()
 
 
@@ -393,16 +396,21 @@ class TestCancelledEventNotFlipped:
 
 @pytest.mark.django_db(transaction=True)
 class TestPublicEventsUpcomingCountDrops:
-    """Scenario 8: the public /events upcoming list drops the ended event after the cron.
+    """Scenario 8: cron flips DB status of an ended event to completed.
 
-    The studio dashboard already double-filters on
-    ``status='upcoming' AND start_datetime__gte=now`` (studio/views/dashboard.py:52,89),
-    so it visually hides ended events even before the cron flips them.
+    Issue #713 made the public ``/events`` list time-derived: the
+    upcoming filter is now ``end_datetime__gt=now`` (or
+    ``end_datetime__isnull=True AND start_datetime__gt=now-1h``), so
+    a past-end event is filtered OUT of the Upcoming section even
+    BEFORE the cron runs. The cron is therefore a no-op for the public
+    list's section counts.
 
-    The visible regression caused by missing the cron lives on the public
-    events list at ``events/views/pages.py:151``, which filters ONLY on
-    ``status='upcoming'``. Until the cron runs, the past-start event shows
-    up in the Upcoming section. That is what this scenario verifies.
+    The cron's DB-side ``status='completed'`` flip still matters for
+    non-presentation surfaces (Zoom cancellation, archiving, calendar
+    feed history). This scenario preserves the regression guard on
+    that side-effect while asserting the new time-derived contract on
+    the public list: the ended event renders in Past, the future ones
+    render in Upcoming, before AND after the cron runs.
     """
 
     def test_public_upcoming_count_drops_after_cron(
@@ -430,26 +438,37 @@ class TestPublicEventsUpcomingCountDrops:
             end_offset=None,
         )
 
-        # Before the cron runs: all three events have status='upcoming',
-        # so the public Upcoming section lists 3.
+        # Before the cron runs: the public list is time-derived
+        # (issue #713), so the ended event is already in Past and the
+        # two future events are in Upcoming.
         page.goto(f"{django_server}/events", wait_until="domcontentloaded")
         upcoming_section = page.locator(
             '[data-testid="events-upcoming-section"]'
         )
         assert upcoming_section.count() == 1
         before_cards = upcoming_section.locator("article")
-        assert before_cards.count() == 3
+        assert before_cards.count() == 2
         before_text = upcoming_section.inner_text()
-        assert "Public Ended" in before_text
         assert "Public Soon" in before_text
         assert "Public Later" in before_text
+        assert "Public Ended" not in before_text
 
-        # Run the cron task — flips status of the ended event to completed.
+        past_section = page.locator('[data-testid="events-past-section"]')
+        assert past_section.count() == 1
+        assert "Public Ended" in past_section.inner_text()
+
+        # Run the cron task — the DB-side side-effect: it flips the
+        # ended event from ``status='upcoming'`` to ``status='completed'``.
+        # The cron is still wired up for Zoom cancellation/archival
+        # consumers even though the public list does not need it.
         flipped = _run_cron()
         assert flipped == 1
+        assert _refresh_status("public-ended") == "completed"
 
-        # After the cron: the ended event has status='completed' and is no
-        # longer in the Upcoming section. Two upcoming cards remain.
+        # After the cron: the public list looks the same — two upcoming
+        # cards, one past card. The cron is a no-op for the section
+        # split because the section split is time-derived, not
+        # status-derived.
         page.goto(f"{django_server}/events", wait_until="domcontentloaded")
         upcoming_section = page.locator(
             '[data-testid="events-upcoming-section"]'
@@ -461,6 +480,10 @@ class TestPublicEventsUpcomingCountDrops:
         assert "Public Soon" in after_text
         assert "Public Later" in after_text
         assert "Public Ended" not in after_text
+
+        past_section = page.locator('[data-testid="events-past-section"]')
+        assert past_section.count() == 1
+        assert "Public Ended" in past_section.inner_text()
 
 
 # Suppress unused-import warnings for import-only modules above.

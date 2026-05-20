@@ -1,12 +1,14 @@
 """Documentation views: serve the OpenAPI JSON and the Swagger UI page.
 
-Both views are staff-only via session auth (``user_passes_test`` redirects
-anonymous users to ``/accounts/login/``; authenticated non-staff get a flat
-403 from the same wrapper). The routes deliberately live outside the
-``token_required`` surface that the rest of ``api/views/*`` uses, because a
-fresh operator pulling up ``/api/docs`` in a browser does not yet have a
-token to authorize the page with. The Swagger UI page then prompts the
-operator for a token and uses it to call the documented endpoints.
+``docs_page`` (Swagger UI) is staff-session only: a fresh operator
+opening ``/api/docs`` in a browser does not yet have a token in hand;
+the page prompts for one via the Authorize button afterwards.
+
+``openapi_json`` accepts EITHER a staff session OR a staff-owned
+``Authorization: Token <key>`` header. The dual-auth path lets external
+tooling (Postman "Import from URL", ``openapi-generator``, ``curl``
+SDK scripts) pull the spec without a browser session, while keeping
+the in-browser Swagger UI fetch -- which has no token to send -- working.
 
 These two routes are excluded from the generated spec itself (see
 ``api.openapi.builder._DOCS_ROUTE_NAMES``) -- the documentation does not
@@ -20,6 +22,8 @@ from django.contrib.auth.decorators import user_passes_test
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
+
+from accounts.auth import staff_session_or_token_required
 
 
 def _staff_required(view_func):
@@ -42,7 +46,7 @@ def _staff_required(view_func):
 
 
 @require_GET
-@_staff_required
+@staff_session_or_token_required
 def openapi_json(request):
     """Serve ``_docs/openapi.json`` as ``application/json``.
 
@@ -50,6 +54,10 @@ def openapi_json(request):
     in-process -- the committed file IS the canonical artefact, and
     serving it directly guarantees Swagger UI sees the same bytes that
     drift-checks are run against.
+
+    Auth: ``staff_session_or_token_required`` -- a staff session OR a
+    valid staff-owned ``Authorization: Token <key>`` header both
+    succeed. See the helper's docstring for the full matrix.
     """
     path = Path(settings.BASE_DIR) / "_docs" / "openapi.json"
     if not path.exists():

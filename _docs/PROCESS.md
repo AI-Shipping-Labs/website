@@ -201,6 +201,10 @@ All agents must use the project-local `.tmp/` directory for temporary files (scr
 - Agents should create subdirectories inside `.tmp/` as needed (e.g. `.tmp/screenshots/`, `.tmp/previews/`)
 - The `.tmp/` directory is excluded from git via `.gitignore`
 
+## Short-lived docs (audits, plans, analyses)
+
+Point-in-time documents — audits, remediation plans, one-off analyses, dated status reports — live in `_docs/audits/`, not at the `_docs/` root. The root is reserved for evergreen references that stay current (`PROCESS.md`, `product.md`, `configuration.md`, `testing-guidelines.md`, `design-system.md`, `integrations/`). When you produce a new audit or plan, put it in `_docs/audits/` using the `YYYY-MM-DD-<topic>.md` filename convention; see [`_docs/audits/README.md`](audits/README.md) for the full lifecycle policy (expected ~6 month expiry, then delete or promote to a permanent doc).
+
 ## Technology Stack
 
 - Backend: Django (Python), managed with uv

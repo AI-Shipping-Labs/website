@@ -10,6 +10,7 @@ from events.views.pages import (
     event_calendar_ics,
     event_detail,
     event_detail_no_slug_redirect,
+    event_feedback_submit,
     event_join_redirect,
     event_series_public,
     events_calendar,
@@ -72,6 +73,15 @@ urlpatterns = [
         'events/<slug:slug>/cancel-registration',
         cancel_registration_page,
         name='event_cancel_registration',
+    ),
+    # Issue #679: post-event feedback submission. Registered BEFORE the
+    # canonical ``events/<int:event_id>/<slug:slug>`` route below so the
+    # literal ``feedback`` segment is not swallowed by the slug
+    # converter. Same pattern as ``events/<slug>/join``.
+    path(
+        'events/<int:event_id>/<slug:slug>/feedback',
+        event_feedback_submit,
+        name='event_feedback_submit',
     ),
     # Issue #673: canonical event detail. ``event_id`` is the lookup key;
     # ``slug`` is purely cosmetic. The view verifies the slug matches the

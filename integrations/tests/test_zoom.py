@@ -703,6 +703,11 @@ class EventAdminZoomCreationTest(TestCase):
             'eventinstructor_set-INITIAL_FORMS': '0',
             'eventinstructor_set-MIN_NUM_FORMS': '0',
             'eventinstructor_set-MAX_NUM_FORMS': '1000',
+            # EventFeedback inline (issue #679)
+            'feedback-TOTAL_FORMS': '0',
+            'feedback-INITIAL_FORMS': '0',
+            'feedback-MIN_NUM_FORMS': '0',
+            'feedback-MAX_NUM_FORMS': '1000',
         })
 
         # Event should be saved but Zoom fields remain empty
@@ -744,6 +749,11 @@ class EventAdminZoomCreationTest(TestCase):
             'eventinstructor_set-INITIAL_FORMS': '0',
             'eventinstructor_set-MIN_NUM_FORMS': '0',
             'eventinstructor_set-MAX_NUM_FORMS': '1000',
+            # EventFeedback inline (issue #679)
+            'feedback-TOTAL_FORMS': '0',
+            'feedback-INITIAL_FORMS': '0',
+            'feedback-MIN_NUM_FORMS': '0',
+            'feedback-MAX_NUM_FORMS': '1000',
         })
 
         event = Event.objects.get(slug='admin-async-event')
@@ -784,6 +794,11 @@ class EventAdminZoomCreationTest(TestCase):
             'eventinstructor_set-INITIAL_FORMS': '0',
             'eventinstructor_set-MIN_NUM_FORMS': '0',
             'eventinstructor_set-MAX_NUM_FORMS': '1000',
+            # EventFeedback inline (issue #679)
+            'feedback-TOTAL_FORMS': '0',
+            'feedback-INITIAL_FORMS': '0',
+            'feedback-MIN_NUM_FORMS': '0',
+            'feedback-MAX_NUM_FORMS': '1000',
         })
 
         event = Event.objects.get(slug='pre-zoomed-event')
@@ -820,6 +835,11 @@ class EventAdminZoomCreationTest(TestCase):
             'eventinstructor_set-INITIAL_FORMS': '0',
             'eventinstructor_set-MIN_NUM_FORMS': '0',
             'eventinstructor_set-MAX_NUM_FORMS': '1000',
+            # EventFeedback inline (issue #679)
+            'feedback-TOTAL_FORMS': '0',
+            'feedback-INITIAL_FORMS': '0',
+            'feedback-MIN_NUM_FORMS': '0',
+            'feedback-MAX_NUM_FORMS': '1000',
         })
 
         # Event should still be created even though Zoom failed
@@ -876,6 +896,11 @@ class EventAdminZoomCreationTest(TestCase):
                 'eventinstructor_set-INITIAL_FORMS': '0',
                 'eventinstructor_set-MIN_NUM_FORMS': '0',
                 'eventinstructor_set-MAX_NUM_FORMS': '1000',
+                # EventFeedback inline (issue #679)
+                'feedback-TOTAL_FORMS': '0',
+                'feedback-INITIAL_FORMS': '0',
+                'feedback-MIN_NUM_FORMS': '0',
+                'feedback-MAX_NUM_FORMS': '1000',
             },
         )
 

@@ -3,11 +3,12 @@ from datetime import date, timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count
-from django.http import Http404, HttpResponse
+from django.db.models import Avg, Count
+from django.http import Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_POST
 
 from accounts.services.timezones import format_user_datetime
 from content.access import (
@@ -15,7 +16,13 @@ from content.access import (
     can_access,
     get_required_tier_name,
 )
-from events.models import Event, EventJoinClick, EventRegistration, EventSeries
+from events.models import (
+    Event,
+    EventFeedback,
+    EventJoinClick,
+    EventRegistration,
+    EventSeries,
+)
 from events.services.calendar_feed import (
     build_subscribe_urls,
     feed_events_queryset,
@@ -423,6 +430,25 @@ def event_detail(request, event_id, slug):
                 request.GET.get('account_created') == '1'
             )
 
+    # Issue #679: feedback surface — only meaningful once the event has
+    # ended. The public aggregate counts only rated entries (rating IS
+    # NOT NULL); comment-only rows don't move the rating average.
+    event_is_past = (
+        event.end_datetime is not None
+        and event.end_datetime <= timezone.now()
+    )
+    feedback_qs = event.feedback.all()
+    feedback_aggregate = feedback_qs.aggregate(avg=Avg('rating'))
+    feedback_avg = feedback_aggregate['avg']
+    if feedback_avg is not None:
+        feedback_avg = round(feedback_avg, 1)
+    feedback_count = feedback_qs.filter(rating__isnull=False).count()
+    user_feedback = None
+    if user.is_authenticated:
+        user_feedback = feedback_qs.filter(user=user).first()
+    can_submit_feedback = is_registered and event_is_past
+    feedback_thanks = request.GET.get('feedback') == 'thanks'
+
     context = {
         'event': event,
         'event_time_display': build_event_time_display(event, user),
@@ -449,9 +475,98 @@ def event_detail(request, event_id, slug):
         # Issue #572: pre-computed branch flag the template uses to swap
         # the registration card for the external Join card.
         'is_external_event': is_external,
+        # Issue #679: post-event feedback surface. ``event_is_past`` is
+        # the template-side gate for both the aggregate badge and the
+        # form. ``user_feedback`` pre-populates the form on subsequent
+        # visits; the submit-button label flips to "Update feedback"
+        # when this is non-null.
+        'event_is_past': event_is_past,
+        'feedback_avg': feedback_avg,
+        'feedback_count': feedback_count,
+        'user_feedback': user_feedback,
+        'can_submit_feedback': can_submit_feedback,
+        'feedback_thanks': feedback_thanks,
     }
     context.update(gating)
     return render(request, 'events/event_detail.html', context)
+
+
+@login_required
+@require_POST
+def event_feedback_submit(request, event_id, slug):
+    """Accept a post-event feedback submission from a registered attendee.
+
+    Issue #679. Gating (all rejections return ``HttpResponseForbidden``
+    with a clear message; no row is created):
+
+    - ``@login_required``: anonymous → redirect to login.
+    - Registered for the event: a non-attendee gets 403.
+    - ``event.end_datetime <= now``: submitting before the event ends
+      gets 403 ("Feedback opens after the event ends").
+
+    On valid POST, ``update_or_create`` overwrites any existing row for
+    this (event, user) pair and redirects back to
+    ``event.get_absolute_url() + '?feedback=thanks'`` so the detail
+    template can render the confirmation block.
+
+    The URL is registered BEFORE the canonical
+    ``events/<int:event_id>/<slug:slug>`` route so the literal
+    ``feedback`` segment is not swallowed (same pattern as
+    ``events/<slug>/join``).
+    """
+    event = get_object_or_404(Event, pk=event_id)
+
+    # Slug mismatch redirects to the canonical URL — same pattern as
+    # event_detail. We redirect to the canonical feedback URL so the
+    # subsequent POST goes through cleanly; in practice templates and
+    # external callers should always mint the canonical form.
+    if slug != event.slug:
+        return redirect(
+            f'/events/{event.pk}/{event.slug}/feedback',
+            permanent=True,
+        )
+
+    is_registered = EventRegistration.objects.filter(
+        event=event, user=request.user,
+    ).exists()
+    if not is_registered:
+        return HttpResponseForbidden(
+            'Only registered attendees can leave feedback.'
+        )
+
+    if event.end_datetime is None or event.end_datetime > timezone.now():
+        return HttpResponseForbidden(
+            'Feedback opens after the event ends.'
+        )
+
+    rating_raw = (request.POST.get('rating') or '').strip()
+    comment = (request.POST.get('comment') or '').strip()
+    would_change = (request.POST.get('would_change') or '').strip()
+
+    rating = None
+    if rating_raw:
+        try:
+            rating = int(rating_raw)
+        except (TypeError, ValueError):
+            return HttpResponseForbidden('Rating must be a number 1-5.')
+        if rating < 1 or rating > 5:
+            return HttpResponseForbidden('Rating must be between 1 and 5.')
+
+    if rating is None and not comment and not would_change:
+        return HttpResponseForbidden(
+            'Please leave a rating or a comment.'
+        )
+
+    EventFeedback.objects.update_or_create(
+        event=event,
+        user=request.user,
+        defaults={
+            'rating': rating,
+            'comment': comment,
+            'would_change': would_change,
+        },
+    )
+    return redirect(f'{event.get_absolute_url()}?feedback=thanks')
 
 
 def event_detail_no_slug_redirect(request, event_id):

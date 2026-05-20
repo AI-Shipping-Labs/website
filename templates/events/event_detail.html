@@ -38,6 +38,14 @@
         announcement / description pages only.
       {% endcomment %}
       {% include "events/_event_description.html" %}
+
+      {% comment %}
+        Issue #679: post-event feedback surface (aggregate badge + form).
+        Renders only when ``event.end_datetime <= now``; everything inside
+        is template-side gated on ``can_submit_feedback`` and
+        ``feedback_count``.
+      {% endcomment %}
+      {% include "events/_event_feedback.html" %}
     </div>
   </article>
 </main>

@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib import messages
+from django.db.models import Avg
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -20,7 +21,7 @@ from accounts.services.timezones import (
     get_timezone_label,
     is_valid_timezone,
 )
-from events.models import Event, EventRegistration
+from events.models import Event, EventFeedback, EventRegistration
 from events.models.event import EXTERNAL_HOST_CHOICES
 from events.tasks.notify_reschedule import enqueue_reschedule_notice
 from events.tasks.send_post_event_followup import enqueue_post_event_followup
@@ -509,6 +510,27 @@ def event_edit(request, event_id):
     context['registration_count'] = registrations.count()
     context['registrations_csv_url'] = reverse(
         'studio_event_registrations_csv', kwargs={'event_id': event.pk},
+    )
+    # Issue #679: per-event Feedback panel on the Studio edit page.
+    # Mirrors the shape of the Registered attendees panel. The aggregate
+    # excludes rating-null rows; the comment count counts non-empty
+    # comments only.
+    feedback_entries = (
+        EventFeedback.objects
+        .filter(event=event)
+        .select_related('user')
+        .order_by('-created_at')
+    )
+    feedback_avg = feedback_entries.aggregate(avg=Avg('rating'))['avg']
+    if feedback_avg is not None:
+        feedback_avg = round(feedback_avg, 1)
+    context['feedback_entries'] = feedback_entries
+    context['feedback_count'] = (
+        feedback_entries.filter(rating__isnull=False).count()
+    )
+    context['feedback_avg'] = feedback_avg
+    context['feedback_comment_count'] = (
+        feedback_entries.exclude(comment='').count()
     )
     return render(request, 'studio/events/form.html', context)
 

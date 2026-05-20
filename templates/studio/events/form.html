@@ -291,6 +291,100 @@
     </script>
   {% endif %}
 </section>
+
+{% comment %}
+  Issue #679: per-event Feedback panel. Mirrors the shape of the
+  Registered attendees panel above. ``feedback_count`` only counts
+  rated entries (rating IS NOT NULL); ``feedback_comment_count``
+  counts non-empty comments. The empty state replaces the whole table
+  when no rows exist.
+{% endcomment %}
+<section class="mt-6 bg-card border border-border rounded-lg p-6"
+         data-testid="event-feedback-panel">
+  <header class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div class="flex items-center gap-3">
+      <h2 class="text-lg font-semibold text-foreground">Feedback</h2>
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-secondary border border-border text-xs font-medium text-muted-foreground"
+            data-testid="feedback-count-chip">
+        {{ feedback_count }} rating{{ feedback_count|pluralize }}
+      </span>
+    </div>
+  </header>
+
+  {% if feedback_entries|length == 0 %}
+    <p class="text-sm text-muted-foreground" data-testid="feedback-empty">
+      No feedback submitted yet.
+    </p>
+  {% else %}
+    <div class="mb-3 text-sm text-muted-foreground"
+         data-testid="feedback-summary">
+      <span data-testid="feedback-avg">
+        Average rating:
+        {% if feedback_avg is not None %}
+          <span aria-hidden="true">&#9733;</span> {{ feedback_avg }}/5
+        {% else %}
+          N/A
+        {% endif %}
+      </span>
+      <span class="mx-2">&middot;</span>
+      <span data-testid="feedback-counts">
+        {{ feedback_count }} rating{{ feedback_count|pluralize }},
+        {{ feedback_comment_count }} comment{{ feedback_comment_count|pluralize }}
+      </span>
+    </div>
+    <div class="border border-border rounded-lg overflow-x-auto max-h-96 overflow-y-auto"
+         data-testid="feedback-table-wrapper">
+      <table class="w-full table-fixed text-sm" data-testid="feedback-table">
+        <thead class="bg-secondary/50 sticky top-0">
+          <tr>
+            <th class="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider w-1/5">Attendee</th>
+            <th class="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider w-16">Rating</th>
+            <th class="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Comment</th>
+            <th class="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Would change</th>
+            <th class="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider w-40">Submitted</th>
+          </tr>
+        </thead>
+        <tbody data-testid="feedback-tbody">
+          {% for entry in feedback_entries %}
+          <tr class="border-t border-border hover:bg-secondary/30"
+              data-testid="feedback-row"
+              data-rating="{{ entry.rating|default_if_none:'' }}">
+            <td class="px-3 py-2 align-top">
+              <div class="truncate text-foreground" title="{{ entry.user.get_full_name|default:entry.user.email }}">
+                {{ entry.user.get_full_name|default:entry.user.email }}
+              </div>
+            </td>
+            <td class="px-3 py-2 align-top text-foreground">
+              {% if entry.rating %}
+                <span aria-hidden="true">&#9733;</span> {{ entry.rating }}
+              {% else %}
+                <span class="text-muted-foreground">N/A</span>
+              {% endif %}
+            </td>
+            <td class="px-3 py-2 align-top text-muted-foreground">
+              {% if entry.comment %}
+                <div class="line-clamp-3" title="{{ entry.comment }}">{{ entry.comment }}</div>
+              {% else %}
+                <span class="text-muted-foreground/60">&mdash;</span>
+              {% endif %}
+            </td>
+            <td class="px-3 py-2 align-top text-muted-foreground">
+              {% if entry.would_change %}
+                <div class="line-clamp-3" title="{{ entry.would_change }}">{{ entry.would_change }}</div>
+              {% else %}
+                <span class="text-muted-foreground/60">&mdash;</span>
+              {% endif %}
+            </td>
+            <td class="px-3 py-2 align-top text-muted-foreground whitespace-nowrap">
+              {{ entry.created_at|date:"d M Y, H:i" }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</section>
 {% endif %}
 </div>
 

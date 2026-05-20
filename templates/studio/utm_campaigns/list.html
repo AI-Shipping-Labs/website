@@ -24,7 +24,7 @@
 
 {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 
-<div class="mb-4 flex items-center space-x-2">
+<div class="mb-6 flex flex-wrap items-center gap-2">
   {% if show_archived %}
     <a href="{% url 'studio_utm_campaign_list' %}" class="text-sm text-accent hover:underline">Show active</a>
     <span class="text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground">Showing archived</span>

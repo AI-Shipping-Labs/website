@@ -1,4 +1,4 @@
-.PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory clean
+.PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift clean
 
 # Default SITE_BASE_URL for local dev so generated links (unsubscribe,
 # calendar invites, password resets, share URLs) point at the running
@@ -118,6 +118,14 @@ lint-fix:
 lint-advisory:
 	uv run ruff check --config ruff-advisory.toml --statistics --exit-zero .
 	uv run python scripts/lint_advisory_metrics.py
+
+# Drift check for the committed OpenAPI spec (_docs/openapi.json).
+# Wired into CI in .github/workflows/ci.yml so a forgotten regenerate
+# fails the build instead of shipping a stale spec. Run locally with
+# ``make check-openapi-drift`` after changing any @openapi_spec
+# decorator; regenerate with ``uv run python manage.py generate_openapi``.
+check-openapi-drift:
+	uv run python manage.py generate_openapi --check
 
 # Clean generated files
 clean:

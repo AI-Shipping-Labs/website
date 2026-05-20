@@ -271,8 +271,14 @@ class VisibilityGateInQuerysetTest(TestCase):
             pathlib.Path(__file__).resolve().parent.parent / "views"
         )
         offending = []
+        # ``docs.py`` (issue #722) is exempt: it is the staff-only
+        # Swagger UI / OpenAPI JSON wrapper, NOT part of the
+        # ``token_required`` operator-API surface. Its access check
+        # gates documentation access by session role and has no plan /
+        # course / queryset narrowing to delegate to ``_permissions.py``.
+        exempt = {"_permissions.py", "__init__.py", "docs.py"}
         for path in sorted(views_dir.glob("*.py")):
-            if path.name in ("_permissions.py", "__init__.py"):
+            if path.name in exempt:
                 continue
             source = path.read_text(encoding="utf-8")
             if "is_staff" in source:

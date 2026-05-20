@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Shipping Labs Operator API</title>
+  {# Pin the swagger-ui-dist version explicitly so the page is reproducible. #}
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css"
+  >
+  <style>
+    body { margin: 0; }
+    #swagger-ui { box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script
+    src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"
+    crossorigin
+  ></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js"
+    crossorigin
+  ></script>
+  <script>
+    window.addEventListener('load', function() {
+      // SwaggerUIBundle is provided by the CDN scripts above.
+      window.ui = SwaggerUIBundle({
+        url: '/api/openapi.json',
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset,
+        ],
+        plugins: [SwaggerUIBundle.plugins.DownloadUrl],
+        layout: 'StandaloneLayout',
+      });
+    });
+  </script>
+</body>
+</html>

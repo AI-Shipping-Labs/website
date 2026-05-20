@@ -1,0 +1,359 @@
+{
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "properties": {
+          "code": {
+            "description": "Machine-readable error code",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "description": "Optional per-field error details",
+            "type": "object"
+          },
+          "error": {
+            "description": "Human-readable message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "code"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "tokenAuth": {
+        "description": "Send the header ``Authorization: Token <key>`` where ``<key>`` is a staff-owned token from the Studio tokens page. The literal scheme name is ``Token``, not ``Bearer`` (Swagger UI's authorize dialog renders this as ``bearer`` but the wire format we accept is ``Token``).",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Operator API for AI Shipping Labs. All endpoints accept JSON in and return JSON out. Authentication is via the ``Authorization: Token <key>`` header where ``<key>`` is a token owned by a staff user.",
+    "title": "AI Shipping Labs Operator API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/sprints": {
+      "get": {
+        "description": "Returns every sprint visible to the bearer token. Non-staff tokens see every sprint row -- visibility narrowing happens on the per-sprint detail endpoint, not on the collection.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "description": "Filter to sprints with the given status.",
+              "enum": [
+                "active",
+                "completed",
+                "draft"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "sprints": [
+                    {
+                      "created_at": "2026-04-15T12:00:00+00:00",
+                      "duration_weeks": 6,
+                      "name": "May 2026",
+                      "slug": "may-2026",
+                      "start_date": "2026-05-01",
+                      "status": "active",
+                      "updated_at": "2026-04-15T12:00:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of sprints."
+          },
+          "401": {
+            "description": "Missing or invalid token."
+          },
+          "422": {
+            "description": "Unknown ``status`` filter value."
+          }
+        },
+        "summary": "List sprints",
+        "tags": [
+          "Sprints"
+        ]
+      },
+      "post": {
+        "description": "Staff-only. Non-staff tokens get 403 with code ``forbidden_other_user_plan``. Slug uniqueness is enforced at the API layer (422) before hitting the DB.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "duration_weeks": 6,
+                "name": "May 2026",
+                "slug": "may-2026",
+                "start_date": "2026-05-01",
+                "status": "draft"
+              },
+              "schema": {
+                "properties": {
+                  "duration_weeks": {
+                    "type": "integer"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string"
+                  },
+                  "start_date": {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  "status": {
+                    "default": "draft",
+                    "enum": [
+                      "active",
+                      "completed",
+                      "draft"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "slug",
+                  "start_date",
+                  "duration_weeks"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "duration_weeks": 6,
+                  "name": "May 2026",
+                  "slug": "may-2026",
+                  "start_date": "2026-05-01",
+                  "status": "active",
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Sprint created."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Sprint creation is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff token attempted to create."
+          },
+          "422": {
+            "description": "Validation error (missing field, bad date, duplicate slug)."
+          }
+        },
+        "summary": "Create a sprint (staff-only)",
+        "tags": [
+          "Sprints"
+        ]
+      }
+    },
+    "/api/sprints/{slug}": {
+      "delete": {
+        "description": "409 with code ``sprint_has_plans`` if any plans are still attached -- the API does not cascade-delete.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Sprint deleted (empty body)."
+          },
+          "403": {
+            "description": "Non-staff token."
+          },
+          "404": {
+            "description": "Sprint not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "sprint_has_plans",
+                  "error": "Sprint has attached plans"
+                }
+              }
+            },
+            "description": "Sprint has attached plans."
+          }
+        },
+        "summary": "Delete a sprint (staff-only)",
+        "tags": [
+          "Sprints"
+        ]
+      },
+      "get": {
+        "description": "Non-staff tokens see a sprint only if they have at least one plan in it; otherwise the endpoint returns 404 ``unknown_sprint`` (deliberately, to avoid leaking existence information).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "duration_weeks": 6,
+                  "name": "May 2026",
+                  "slug": "may-2026",
+                  "start_date": "2026-05-01",
+                  "status": "active",
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Sprint detail."
+          },
+          "401": {
+            "description": "Missing or invalid token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_sprint",
+                  "error": "Sprint not found"
+                }
+              }
+            },
+            "description": "Sprint not found or not visible."
+          }
+        },
+        "summary": "Retrieve a sprint",
+        "tags": [
+          "Sprints"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "status": "active"
+              },
+              "schema": {
+                "properties": {
+                  "duration_weeks": {
+                    "type": "integer"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "start_date": {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "active",
+                      "completed",
+                      "draft"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "duration_weeks": 6,
+                  "name": "May 2026",
+                  "slug": "may-2026",
+                  "start_date": "2026-05-01",
+                  "status": "active",
+                  "updated_at": "2026-04-15T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Sprint updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "403": {
+            "description": "Non-staff token."
+          },
+          "404": {
+            "description": "Sprint not found."
+          },
+          "422": {
+            "description": "Validation error."
+          }
+        },
+        "summary": "Update a sprint (staff-only)",
+        "tags": [
+          "Sprints"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "tokenAuth": []
+    }
+  ]
+}

@@ -27,6 +27,25 @@
 
 {% studio_list_filter search status_filter "Search events..." "event" %}
 
+{% comment %}
+  Issue #713: synthetic Upcoming / Past filter that runs a timestamp
+  query independent of the stored ``status`` field. Combined with the
+  existing stored-status dropdown above. Hidden inputs preserve the
+  status filter and search when the time filter changes.
+{% endcomment %}
+<div class="mb-6 flex flex-wrap items-center gap-2 text-sm" data-testid="event-time-filter">
+  <span class="text-muted-foreground">Time:</span>
+  <a href="?{% if status_filter %}status={{ status_filter }}&amp;{% endif %}{% if search %}q={{ search }}&amp;{% endif %}time="
+     data-testid="event-time-filter-all"
+     class="rounded-md px-3 py-1 {% if not time_filter %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-muted{% endif %}">All</a>
+  <a href="?{% if status_filter %}status={{ status_filter }}&amp;{% endif %}{% if search %}q={{ search }}&amp;{% endif %}time=upcoming"
+     data-testid="event-time-filter-upcoming"
+     class="rounded-md px-3 py-1 {% if time_filter == 'upcoming' %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-muted{% endif %}">Upcoming</a>
+  <a href="?{% if status_filter %}status={{ status_filter }}&amp;{% endif %}{% if search %}q={{ search }}&amp;{% endif %}time=past"
+     data-testid="event-time-filter-past"
+     class="rounded-md px-3 py-1 {% if time_filter == 'past' %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-muted{% endif %}">Past</a>
+</div>
+
 <!-- Event List -->
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="{% studio_list_class 'table' %}">
@@ -70,6 +89,18 @@
         </td>
         <td class="px-6 py-4" data-label="Status">
           {% studio_status_badge event.status event.get_status_display %}
+          {% comment %}
+            Issue #713: derived Upcoming / Past chip so staff can see
+            at a glance whether the event is past, independent of the
+            legacy stored value. Hidden for drafts (no public state).
+          {% endcomment %}
+          {% if event.status != 'draft' %}
+            {% if event.is_past_now %}
+            <span class="ml-1.5 inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid="event-time-chip" data-time-state="past">Past</span>
+            {% else %}
+            <span class="ml-1.5 inline-flex items-center rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400" data-testid="event-time-chip" data-time-state="upcoming">Upcoming</span>
+            {% endif %}
+          {% endif %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Kind / Platform">
           <span class="text-foreground">{{ event.get_kind_display }}</span>

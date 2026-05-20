@@ -1,4 +1,5 @@
-{% if event.has_recap and event.status == 'completed' %}
+{# Issue #713: time-derived gate; render recap as soon as effective end passes. #}
+{% if event.has_recap and event.is_past %}
 <div class="event-recap space-y-12">
   {{ event.recap_html|safe }}
 </div>

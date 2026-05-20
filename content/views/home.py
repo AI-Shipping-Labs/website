@@ -612,13 +612,20 @@ def _get_in_progress_learning(user, user_level):
 
 
 def _get_upcoming_events(user):
-    """Return the next 3 events the user is registered for."""
+    """Return the next 3 events the user is registered for.
+
+    Issue #713: drop the stored ``status='upcoming'`` clause so a
+    legacy ``status='completed'`` row scheduled in the future still
+    appears. Cancelled and draft events are excluded regardless of
+    timestamps.
+    """
     from events.models import EventRegistration
     now = timezone.now()
     registrations = EventRegistration.objects.filter(
         user=user,
         event__start_datetime__gt=now,
-        event__status='upcoming',
+    ).exclude(
+        event__status__in=['draft', 'cancelled'],
     ).select_related('event').order_by('event__start_datetime')[:3]
     return [reg.event for reg in registrations]
 
@@ -648,14 +655,17 @@ def _get_starting_soon_event(user):
     from events.models import EventRegistration
     now = timezone.now()
     window_end = now + timedelta(minutes=10)
+    # Issue #713: drop the stored ``status='upcoming'`` clause; exclude
+    # draft + cancelled instead. A legacy ``status='completed'`` row
+    # scheduled inside the window still surfaces the card.
     registration = (
         EventRegistration.objects
         .filter(
             user=user,
             event__start_datetime__gt=now,
             event__start_datetime__lte=window_end,
-            event__status='upcoming',
         )
+        .exclude(event__status__in=['draft', 'cancelled'])
         .select_related('event')
         .order_by('event__start_datetime')
         .first()

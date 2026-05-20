@@ -49,10 +49,13 @@ def dashboard(request):
         'published_articles': Article.objects.filter(published=True).count(),
         'active_subscribers': User.objects.filter(unsubscribed=False).count(),
         'total_subscribers': User.objects.count(),
+        # Issue #713: drop the stored ``status='upcoming'`` clause so a
+        # legacy ``status='completed'`` row scheduled in the future
+        # still counts. Exclude draft + cancelled — those should never
+        # appear in the upcoming bucket regardless of timestamps.
         'upcoming_events': Event.objects.filter(
-            status='upcoming',
             start_datetime__gte=timezone.now(),
-        ).count(),
+        ).exclude(status__in=['draft', 'cancelled']).count(),
         'total_events': Event.objects.count(),
         'total_recordings': Event.objects.filter(
             recording_url__isnull=False,
@@ -86,10 +89,11 @@ def dashboard(request):
     pending_projects = Project.objects.filter(
         status='pending_review',
     ).order_by('-created_at')[:5]
+    # Issue #713: same translation as the ``stats['upcoming_events']``
+    # count above — time-driven, exclude draft + cancelled.
     upcoming_events = Event.objects.filter(
-        status='upcoming',
         start_datetime__gte=now,
-    ).order_by('start_datetime')[:5]
+    ).exclude(status__in=['draft', 'cancelled']).order_by('start_datetime')[:5]
     recent_users = User.objects.filter(is_staff=False).order_by('-date_joined')[:5]
     recent_articles = Article.objects.order_by('-updated_at')[:5]
     recent_content = [

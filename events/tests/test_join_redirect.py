@@ -470,10 +470,20 @@ class EventJoinTimeWindowTest(TierSetupMixin, TestCase):
         )
         self.assertEqual(EventJoinClick.objects.count(), 0)
 
-    @freeze_time('2026-03-01T14:56:00Z')
-    def test_completed_event_still_unavailable_inside_window(self):
-        """``status='completed'`` overrides the time-window logic."""
-        self.event.status = 'completed'
+    def test_cancelled_event_still_unavailable_inside_window(self):
+        """``status='cancelled'`` overrides the time-window logic.
+
+        Issue #713: legacy ``status='completed'`` alone is no longer
+        enough — past detection is time-driven. Cancellation still
+        wins over time so the join redirect still bails on a cancelled
+        event whose start window is open.
+        """
+        _move_event_to(
+            self.event,
+            start_offset=timedelta(minutes=-4),
+            end_offset=timedelta(minutes=56),
+        )
+        self.event.status = 'cancelled'
         self.event.save(update_fields=['status'])
         self._login()
         response = self.client.get('/events/window-event/join')

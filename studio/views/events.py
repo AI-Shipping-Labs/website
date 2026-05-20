@@ -206,8 +206,18 @@ def _maybe_notify_reschedule(request, event, old_start):
 
 @staff_required
 def event_list(request):
-    """List all events with status filter."""
+    """List all events with stored-status and time-based filters.
+
+    Issue #713: in addition to the stored-status dropdown (``draft`` /
+    ``upcoming`` / ``completed`` / ``cancelled``), a synthetic
+    ``time_filter`` is offered (``upcoming`` / ``past``) that runs a
+    timestamp-only query and ignores the stored ``status`` field. The
+    two filters can be combined.
+    """
+    from django.db.models import Q
+
     status_filter = request.GET.get('status', '')
+    time_filter = request.GET.get('time', '')
     search = request.GET.get('q', '')
 
     events = Event.objects.all()
@@ -216,9 +226,48 @@ def event_list(request):
     if search:
         events = events.filter(title__icontains=search)
 
+    if time_filter in ('upcoming', 'past'):
+        now = djtimezone.now()
+        one_hour = timedelta(hours=1)
+        if time_filter == 'upcoming':
+            events = events.filter(
+                Q(end_datetime__gt=now)
+                | Q(
+                    end_datetime__isnull=True,
+                    start_datetime__gt=now - one_hour,
+                )
+            )
+        else:
+            events = events.filter(
+                Q(end_datetime__lte=now)
+                | Q(
+                    end_datetime__isnull=True,
+                    start_datetime__lte=now - one_hour,
+                )
+            )
+
+    # Issue #713: annotate each event with a derived ``is_past_now``
+    # flag so the template can render the "Past" / "Upcoming" chip
+    # without N+1 calls into the property.
+    now = djtimezone.now()
+    one_hour = timedelta(hours=1)
+    events_list_data = []
+    for event in events:
+        if event.status == 'cancelled':
+            event.is_past_now = True
+        elif event.status == 'draft':
+            event.is_past_now = False
+        else:
+            effective_end = event.end_datetime or (
+                event.start_datetime + one_hour
+            )
+            event.is_past_now = now >= effective_end
+        events_list_data.append(event)
+
     return render(request, 'studio/events/list.html', {
-        'events': events,
+        'events': events_list_data,
         'status_filter': status_filter,
+        'time_filter': time_filter,
         'search': search,
     })
 
@@ -595,7 +644,7 @@ def event_send_followup(request, event_id):
     Gates (must hold; otherwise the request flashes an error and
     redirects back to the edit page without enqueuing):
 
-    - ``event.status == 'completed'``.
+    - ``event.is_past`` (time-derived; issue #713).
     - ``event.recording_s3_url`` or ``event.recording_url`` is set.
 
     Idempotency:
@@ -611,10 +660,14 @@ def event_send_followup(request, event_id):
     """
     event = get_object_or_404(Event, pk=event_id)
 
-    if event.status != 'completed':
+    # Issue #713: gate on the time-derived ``is_past`` so a stale
+    # ``status='upcoming'`` row whose end has passed can still trigger
+    # the follow-up via the Studio escape hatch without waiting for the
+    # daily cron.
+    if not event.is_past:
         messages.error(
             request,
-            'Follow-up emails can only be sent for completed events.',
+            'Follow-up emails can only be sent after the event has ended.',
         )
         return redirect('studio_event_edit', event_id=event.pk)
 

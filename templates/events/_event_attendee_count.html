@@ -1,6 +1,9 @@
 {% comment %}
-Issue #668: social-proof chip showing how many people are going
-(or attended, for past events).
+Issue #668 + #713: social-proof chip showing how many people are
+going (or attended, for past events). Time-derived from
+``event.is_upcoming`` / ``event.is_past`` so a stale
+``status='upcoming'`` row whose end has passed shows past-tense copy
+immediately.
 
 Required context:
   event - Event instance. Uses ``event.attendee_count`` (prefers the
@@ -8,11 +11,11 @@ Required context:
           ``registration_count`` property).
 
 Copy rules:
-  Upcoming (status == 'upcoming'):
+  Upcoming (event.is_upcoming):
     0           -> "Be the first to sign up"
     1           -> "1 person is going"
     n (n >= 2)  -> "{n} people are going"
-  Past (status in {'completed', 'cancelled'}):
+  Past (event.is_past):
     0           -> chip hidden (no social proof to show)
     1           -> "1 person attended"
     n (n >= 2)  -> "{n} people attended"
@@ -21,9 +24,9 @@ Copy rules:
 The wrapping {% if %} keeps the surrounding flex/gap container clean
 when no chip is rendered (past+0, draft).
 {% endcomment %}
-{% if event.status == 'upcoming' or event.status == 'completed' or event.status == 'cancelled' %}
+{% if event.is_upcoming or event.is_past %}
 {% with count=event.attendee_count %}
-{% if event.status == 'upcoming' or count > 0 %}
+{% if event.is_upcoming or count > 0 %}
 <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground"
       data-testid="event-attendee-count">
   <i data-lucide="users" class="h-3 w-3"></i>

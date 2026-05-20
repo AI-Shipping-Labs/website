@@ -35,15 +35,28 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(schedule.cron, '*/15 * * * *')
 
     def test_creates_complete_finished_events_schedule(self):
-        """Command creates complete-finished-events schedule (issue #573)."""
-        call_command('setup_schedules', stdout=StringIO())
+        """Command registers complete-finished-events at daily cadence.
+
+        Issue #573 introduced the schedule; issue #713 reduced its
+        cadence from ``*/5 * * * *`` to ``0 4 * * *`` because every
+        user-facing surface is now time-derived and the cron only
+        powers the post-event follow-up fan-out + stored-field
+        bookkeeping.
+        """
+        out = StringIO()
+        call_command('setup_schedules', stdout=out)
         schedule = Schedule.objects.get(name='complete-finished-events')
         self.assertEqual(
             schedule.func,
             'events.tasks.complete_finished_events.complete_finished_events',
         )
-        self.assertEqual(schedule.cron, '*/5 * * * *')
+        self.assertEqual(schedule.cron, '0 4 * * *')
         self.assertEqual(schedule.schedule_type, Schedule.CRON)
+        self.assertIn(
+            'complete-finished-events (daily at 04:00 UTC)',
+            out.getvalue(),
+        )
+        self.assertNotIn('every 5 min', out.getvalue())
 
     def test_creates_expire_tier_overrides_schedule(self):
         """Command creates expire-tier-overrides schedule."""

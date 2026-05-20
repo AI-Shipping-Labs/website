@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from datetime import timedelta
 
 from django.test import TestCase
 from django.utils import timezone
@@ -29,11 +30,14 @@ class EventRecapViewTest(TestCase):
         # supplied via content sync replaces the description on completed
         # events, so the recording embed (when present) is now part of the
         # recap markup itself rather than a templated inline block.
+        # Issue #713: the recap gate is time-derived (``is_past``) so the
+        # fixture needs a past start to render the recap.
         event = Event.objects.create(
             title='Launch',
             slug='launch',
             description='Original launch description',
-            start_datetime=timezone.now(),
+            start_datetime=timezone.now() - timedelta(hours=3),
+            end_datetime=timezone.now() - timedelta(hours=1),
             status='completed',
             recording_url='https://www.youtube.com/watch?v=test',
             timestamps=[{'time_seconds': 0, 'label': 'Intro'}],

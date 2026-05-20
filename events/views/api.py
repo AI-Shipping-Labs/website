@@ -318,7 +318,10 @@ def register_for_event(request, slug):
     event = get_object_or_404(Event, slug=slug)
     if event.status == 'draft':
         return JsonResponse({'error': 'Event not found'}, status=404)
-    if event.status != 'upcoming':
+    # Issue #713: gate on the time-derived ``is_upcoming`` so a stale
+    # ``status='upcoming'`` row whose end has passed already returns
+    # 409 (rather than waiting for the daily cron to flip the field).
+    if not event.is_upcoming:
         return JsonResponse(
             {'error': 'Event is not open for registration'},
             status=409,
@@ -403,7 +406,8 @@ def unregister_from_event(request, slug):
     event = get_object_or_404(Event, slug=slug)
     if event.status == 'draft':
         return JsonResponse({'error': 'Event not found'}, status=404)
-    if event.status != 'upcoming':
+    # Issue #713: gate on the time-derived ``is_upcoming``.
+    if not event.is_upcoming:
         return JsonResponse(
             {'error': 'Event is not open for registration'},
             status=409,

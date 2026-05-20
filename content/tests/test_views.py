@@ -178,12 +178,19 @@ class BlogDetailViewTest(TestCase):
 
 class RecordingsListViewTest(TestCase):
     def setUp(self):
+        # Issue #713: past detection is time-derived. Set an
+        # ``end_datetime`` in the past so the event appears under the
+        # ``?filter=past`` view.
+        from datetime import timedelta
+
         from django.utils import timezone
+        now = timezone.now()
         self.recording = Event.objects.create(
             title='Workshop 1',
             slug='workshop-1',
             description='First workshop',
-            start_datetime=timezone.now(),
+            start_datetime=now - timedelta(hours=3),
+            end_datetime=now - timedelta(hours=1),
             status='completed',
             recording_url='https://youtube.com/watch?v=test',
             tags=['agents'],

@@ -6,7 +6,12 @@ When Zoom sends a recording.completed webhook:
 1. Validates the webhook signature
 2. Matches the meeting_id to an Event record
 3. Sets recording fields directly on the Event
-4. Marks the Event status to 'completed'
+
+Issue #713: the webhook no longer writes ``event.status='completed'``.
+The event becomes "past" automatically once ``end_datetime`` passes
+via the time-derived ``Event.is_past`` property; the daily
+``complete_finished_events`` cron refreshes the stored status for
+staff bookkeeping.
 """
 
 import json
@@ -98,9 +103,10 @@ def zoom_webhook(request):
 def _handle_recording_completed(payload, webhook_log):
     """Process a recording.completed webhook payload.
 
-    Sets recording fields directly on the matched Event,
-    marks the event as completed, and enqueues a background job to download
-    the recording from Zoom and upload it to S3.
+    Sets recording fields directly on the matched Event and enqueues a
+    background job to download the recording from Zoom and upload it
+    to S3. Issue #713: the ``status='completed'`` write was dropped
+    here; ``Event.is_past`` is now time-derived.
 
     Args:
         payload: The parsed JSON payload from Zoom.
@@ -149,11 +155,16 @@ def _handle_recording_completed(payload, webhook_log):
     if not video_url:
         video_url = object_data.get('share_url', '')
 
-    # Set recording fields directly on the Event
+    # Set recording fields directly on the Event.
+    # Issue #713: do NOT flip ``status`` to ``completed`` here — the
+    # event becomes "past" automatically via the time-derived
+    # ``Event.is_past`` property once ``end_datetime`` passes, and the
+    # daily ``complete_finished_events`` cron later refreshes the
+    # stored field for staff bookkeeping. Writing the field on every
+    # webhook hit was redundant.
     event.recording_url = video_url
     event.transcript_url = transcript_url
     event.recording_s3_url = ''  # Populated later by S3 upload job
-    event.status = 'completed'
     event.published = False  # Admin reviews before publishing
     event.save()
 

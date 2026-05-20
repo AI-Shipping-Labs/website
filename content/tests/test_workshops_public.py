@@ -49,11 +49,20 @@ def _attach_workshop_instructor(workshop, name, position=0):
 
 
 def _make_event(**kwargs):
-    """Create a published past Event, optionally configured as a workshop."""
+    """Create a published past Event, optionally configured as a workshop.
+
+    Issue #713: "past" is now time-derived, so the default fixture sets
+    ``start_datetime`` / ``end_datetime`` in the past (rather than
+    relying on ``status='completed'`` alone).
+    """
+    from datetime import timedelta
+
+    now = timezone.now()
     defaults = {
         'slug': 'default-event',
         'title': 'Event',
-        'start_datetime': timezone.now(),
+        'start_datetime': now - timedelta(hours=3),
+        'end_datetime': now - timedelta(hours=1),
         'status': 'completed',
         'kind': 'standard',
         'recording_url': '',
@@ -916,10 +925,13 @@ class EventWorkshopCrossLinksTest(TierSetupMixin, TestCase):
         ``Event.get_absolute_url`` is the single source of truth for
         that URL shape.
         """
+        from datetime import timedelta
+        now = timezone.now()
         orphan = Event.objects.create(
             slug='orphan-ws',
             title='Orphan',
-            start_datetime=timezone.now(),
+            start_datetime=now - timedelta(hours=3),
+            end_datetime=now - timedelta(hours=1),
             status='completed',
             kind='workshop',
             recording_url='https://x/y',

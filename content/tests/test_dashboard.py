@@ -978,7 +978,9 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
     def test_slack_connected_hides_card_on_dashboard(self):
         """Issue #729: when slack_member is True, the dashboard does NOT
         render the partial at all — neither the connected panel nor the
-        join CTA. /account/ continues to render the connected panel."""
+        join CTA. Issue #730 extended the same drop-when-connected
+        treatment to /account/: connected members no longer see the
+        redundant "Connected to Slack" panel there either."""
         # Issue #358: gate changed from slack_user_id to slack_member.
         self._create_user(
             'main-connected@test.com', tier=self.main_tier,
@@ -992,14 +994,14 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Join our Slack community')
         self.assertNotContains(response, 'data-testid="slack-account-card"')
 
-        # Regression pin: /account/ still renders the connected panel for
-        # the same user. Removing the connected card from /account/ is the
-        # scope of issue #730, not this one.
+        # Issue #730: /account/ also drops the slack card for connected
+        # members — neither the connected panel nor the join CTA renders.
         with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
             account_response = self.client.get('/account/')
         self.assertEqual(account_response.status_code, 200)
-        self.assertContains(account_response, 'Connected to Slack')
-        self.assertContains(account_response, 'AI Shipping Labs community workspace')
+        self.assertNotContains(account_response, 'Connected to Slack')
+        self.assertNotContains(account_response, 'Join our Slack community')
+        self.assertNotContains(account_response, 'data-testid="slack-account-card"')
 
     def test_free_user_sees_no_slack_section(self):
         """Free tier users do not see any Slack-related content."""

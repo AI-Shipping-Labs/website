@@ -111,9 +111,20 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
         # "New plan" from "Create a new plan".
         page.get_by_role("link", name="New plan", exact=True).click()
         page.wait_for_url(f"{django_server}/studio/plans/new")
-        page.locator('select[name="member"]').select_option(
-            label="member@test.com",
+        # Issue #735 swapped the inline ``<select name="member">`` for the
+        # reusable people picker (testid prefix ``plan-member``). Drive
+        # the picker via its real surface: type into the search input,
+        # wait for the suggestion list to render, then click the row.
+        page.locator('[data-testid="plan-member-search"]').fill(
+            "member@test.com",
         )
+        page.locator(
+            '[data-testid="plan-member-suggestions"]'
+        ).wait_for(state="visible")
+        page.locator(
+            '[data-testid="plan-member-suggestion"]'
+            '[data-email="member@test.com"]'
+        ).first.click()
         page.locator('select[name="sprint"]').select_option(
             label="May 2026 sprint",
         )

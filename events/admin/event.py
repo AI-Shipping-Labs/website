@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.utils import timezone
 
 from content.admin.widgets import TimestampEditorWidget
-from events.models import Event, EventInstructor, EventRegistration
+from events.models import Event, EventFeedback, EventInstructor, EventRegistration
 
 
 def make_upcoming(modeladmin, request, queryset):
@@ -93,6 +93,15 @@ class EventRegistrationInline(admin.TabularInline):
     can_delete = True
 
 
+class EventFeedbackInline(admin.TabularInline):
+    """Issue #679: inline EventFeedback on the Event change form."""
+    model = EventFeedback
+    extra = 0
+    readonly_fields = ['user', 'created_at', 'updated_at']
+    fields = ['user', 'rating', 'comment', 'would_change', 'created_at']
+    can_delete = True
+
+
 class EventInstructorInline(admin.TabularInline):
     """Inline editor for Event-Instructor through rows with ordering."""
     model = EventInstructor
@@ -117,7 +126,7 @@ class EventAdmin(admin.ModelAdmin):
         make_upcoming, make_completed, make_cancelled,
         publish_recordings, unpublish_recordings,
     ]
-    inlines = [EventInstructorInline, EventRegistrationInline]
+    inlines = [EventInstructorInline, EventRegistrationInline, EventFeedbackInline]
 
     fieldsets = (
         (None, {
@@ -187,3 +196,12 @@ class EventRegistrationAdmin(admin.ModelAdmin):
     list_filter = ['event']
     search_fields = ['user__email', 'event__title']
     readonly_fields = ['registered_at']
+
+
+@admin.register(EventFeedback)
+class EventFeedbackAdmin(admin.ModelAdmin):
+    """Issue #679: cross-event feedback browser."""
+    list_display = ['event', 'user', 'rating', 'created_at']
+    list_filter = ['event', 'rating']
+    search_fields = ['user__email', 'event__title', 'comment', 'would_change']
+    readonly_fields = ['created_at', 'updated_at']

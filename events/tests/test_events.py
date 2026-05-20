@@ -1110,6 +1110,11 @@ class EventAdminTest(TestCase):
             'eventinstructor_set-INITIAL_FORMS': '0',
             'eventinstructor_set-MIN_NUM_FORMS': '0',
             'eventinstructor_set-MAX_NUM_FORMS': '1000',
+            # EventFeedback inline (issue #679)
+            'feedback-TOTAL_FORMS': '0',
+            'feedback-INITIAL_FORMS': '0',
+            'feedback-MIN_NUM_FORMS': '0',
+            'feedback-MAX_NUM_FORMS': '1000',
         })
         self.assertEqual(Event.objects.filter(slug='new-event').count(), 1)
 

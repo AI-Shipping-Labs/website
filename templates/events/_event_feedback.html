@@ -1,0 +1,97 @@
+{% comment %}
+  Issue #679: post-event feedback surface.
+
+  Gated entirely on ``event_is_past``. Within that branch:
+
+  - The public aggregate badge ``★ {avg} — {N} ratings`` renders only
+    when ``feedback_count >= 1`` (comment-only entries don't move the
+    count or the average).
+  - The form renders only for registered attendees
+    (``can_submit_feedback``). Pre-populates from ``user_feedback`` and
+    flips the submit button label to ``Update feedback`` when the
+    attendee has already submitted.
+  - A green confirmation block renders when ``feedback_thanks`` is set
+    (the submit view appends ``?feedback=thanks`` on redirect).
+{% endcomment %}
+{% if event_is_past %}
+<section class="mb-12 rounded-lg border border-border bg-card p-6"
+         data-testid="event-feedback-section">
+  <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h2 class="text-lg font-semibold text-foreground">Feedback</h2>
+    {% if feedback_count >= 1 and feedback_avg is not None %}
+    <span class="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 text-sm text-foreground"
+          data-testid="event-feedback-aggregate">
+      <span aria-hidden="true">&#9733;</span>
+      <span data-testid="event-feedback-avg">{{ feedback_avg }}</span>
+      <span class="text-muted-foreground">&mdash;</span>
+      <span data-testid="event-feedback-count">{{ feedback_count }} rating{{ feedback_count|pluralize }}</span>
+    </span>
+    {% endif %}
+  </header>
+
+  {% if feedback_thanks and can_submit_feedback %}
+  <div class="mb-4 rounded-lg border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-300"
+       data-testid="event-feedback-thanks">
+    Thanks for your feedback.
+  </div>
+  {% endif %}
+
+  {% if can_submit_feedback %}
+  <form method="post"
+        action="/events/{{ event.id }}/{{ event.slug }}/feedback"
+        class="space-y-4"
+        data-testid="event-feedback-form">
+    {% csrf_token %}
+    <div>
+      <span class="mb-2 block text-sm font-medium text-foreground">Rating</span>
+      <div class="flex items-center gap-3" data-testid="event-feedback-rating-group">
+        {% for value in "12345" %}
+        <label class="inline-flex items-center gap-1 text-sm text-foreground">
+          <input type="radio"
+                 name="rating"
+                 value="{{ value }}"
+                 class="h-4 w-4"
+                 {% if user_feedback and user_feedback.rating|stringformat:"s" == value %}checked{% endif %}
+                 data-testid="event-feedback-rating-{{ value }}">
+          <span>{{ value }}<span aria-hidden="true">&#9733;</span></span>
+        </label>
+        {% endfor %}
+      </div>
+      <p class="mt-1 text-xs text-muted-foreground">Leave empty to submit a comment without a rating.</p>
+    </div>
+
+    <div>
+      <label for="event-feedback-comment"
+             class="mb-2 block text-sm font-medium text-foreground">
+        Comment
+      </label>
+      <textarea id="event-feedback-comment"
+                name="comment"
+                rows="3"
+                class="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                data-testid="event-feedback-comment"
+                placeholder="What did you think?">{% if user_feedback %}{{ user_feedback.comment }}{% endif %}</textarea>
+    </div>
+
+    <div>
+      <label for="event-feedback-would-change"
+             class="mb-2 block text-sm font-medium text-foreground">
+        What would you change next time?
+      </label>
+      <textarea id="event-feedback-would-change"
+                name="would_change"
+                rows="2"
+                class="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                data-testid="event-feedback-would-change"
+                placeholder="Optional">{% if user_feedback %}{{ user_feedback.would_change }}{% endif %}</textarea>
+    </div>
+
+    <button type="submit"
+            class="inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
+            data-testid="event-feedback-submit">
+      {% if user_feedback %}Update feedback{% else %}Submit feedback{% endif %}
+    </button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}

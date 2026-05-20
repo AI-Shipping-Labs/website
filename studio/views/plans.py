@@ -116,12 +116,24 @@ def plan_create(request):
     members = User.objects.order_by('email')
 
     if request.method != 'POST':
+        # Optional pre-fill via ``?user=<pk>&sprint=<pk>`` so the
+        # plan_request bell-notification (issue #719) lands the operator
+        # on a form with both selects already chosen. Invalid or missing
+        # ids silently fall through to an empty form -- never raise.
+        prefill_member = ''
+        prefill_sprint = ''
+        raw_user = (request.GET.get('user') or '').strip()
+        raw_sprint = (request.GET.get('sprint') or '').strip()
+        if raw_user.isdigit() and User.objects.filter(pk=int(raw_user)).exists():
+            prefill_member = raw_user
+        if raw_sprint.isdigit() and Sprint.objects.filter(pk=int(raw_sprint)).exists():
+            prefill_sprint = raw_sprint
         return render(request, 'studio/plans/form.html', {
             'plan': None,
             'form_action': 'create',
             'form_data': {
-                'member': '',
-                'sprint': '',
+                'member': prefill_member,
+                'sprint': prefill_sprint,
                 'status': 'draft',
             },
             'sprints': sprints,

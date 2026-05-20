@@ -106,6 +106,54 @@ gh gist create --desc "Private: <Sprint Name> plans grouped by profile" grouped_
 
 Gists are secret by default (not public). Do not use `-p` (that makes them public).
 
+## Editing a plan in place (PATCH)
+
+Issue #734 extends `PATCH /api/plans/<id>` so the same full nested payload the export returns can be sent straight back to update the plan in place. The plan id (and `comment_content_id`, which links comments and notifications) is preserved across the call, so existing references keep resolving.
+
+### Reconciliation semantics
+
+For every nested-collection key present in the body, the server reconciles in place:
+
+| Collection key | Action |
+|----------------|--------|
+| Key absent | Untouched. |
+| Key set to `[]` | DELETE every row in the collection. |
+| Key set to a list of rows | Per row: row has matching `id` -> UPDATE; row has no `id` -> CREATE; existing rows whose `id` is not in the list -> DELETE. |
+
+Six collection keys participate: `weeks`, `weeks[].checkpoints`, `resources`, `deliverables`, `next_steps`, `interview_notes`. Top-level fields (`status`, `goal`, `accountability`, `summary`, `focus`, `shared_at`) keep the old partial-update behaviour — a PATCH that sends only those keys does NOT touch any child collection.
+
+The whole PATCH is wrapped in `transaction.atomic()`. If any validation fails partway through, every change rolls back; the database state matches the pre-call snapshot.
+
+### Constraints
+
+- The `position` field is written from the payload — the reconciler never auto-renumbers.
+- A checkpoint id appearing under a different week than it currently belongs to is rejected with 422 `validation_error` (cross-week moves are out of scope for #734).
+- A row id that does not belong to the plan being PATCHed is rejected with 422 `validation_error`.
+- `interview_notes` is filtered through `InterviewNote.objects.visible_to(viewer)` on the response, so non-staff readers never see internal notes.
+
+### Worked example
+
+```bash
+# 1) Pull the current plan as JSON.
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  https://aishippinglabs.com/api/plans/81 > plan81.json
+
+# 2) Edit plan81.json locally — say, rename weeks[0].theme and drop the
+#    last resource.
+
+# 3) PATCH the whole thing back. The plan id is unchanged.
+curl -sL -X PATCH \
+  -H "Authorization: Token $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data @plan81.json \
+  https://aishippinglabs.com/api/plans/81 > plan81-updated.json
+
+# 4) Verify the diff with a fresh GET.
+diff <(jq . plan81.json) <(curl -sL \
+  -H "Authorization: Token $API_TOKEN" \
+  https://aishippinglabs.com/api/plans/81 | jq .)
+```
+
 ## API Reference
 
 | Endpoint | Method | Description |
@@ -114,6 +162,7 @@ Gists are secret by default (not public). Do not use `-p` (that makes them publi
 | `/api/sprints/<slug>` | GET | Sprint detail |
 | `/api/sprints/<slug>/plans` | GET | List plans in a sprint (flat) |
 | `/api/plans/<id>` | GET | Full nested plan detail |
+| `/api/plans/<id>` | PATCH | Update top-level fields and/or reconcile nested children (issue #734) |
 
 All endpoints require `Authorization: Token <key>` header.
 

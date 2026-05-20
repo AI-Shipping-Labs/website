@@ -72,10 +72,16 @@ SKIP_DIR_NAMES = frozenset({
 
 def _iter_python_files(root: pathlib.Path) -> Iterable[pathlib.Path]:
     for path in root.rglob('*.py'):
-        if any(part in SKIP_DIR_NAMES for part in path.parts):
+        # Filter against repo-relative parts. Filtering ``path.parts``
+        # (absolute) would silently exclude the whole tree when the repo
+        # lives under a directory whose name is in SKIP_DIR_NAMES — e.g.
+        # an orchestrator worktree at ``.../.claude/worktrees/<id>/`` —
+        # making the test pass vacuously. See issue #745.
+        rel_parts = path.relative_to(root).parts
+        if any(part in SKIP_DIR_NAMES for part in rel_parts):
             continue
         # Skip test scaffolding.
-        if 'tests' in path.parts:
+        if 'tests' in rel_parts:
             continue
         if path.name.startswith('test_'):
             continue
@@ -143,6 +149,29 @@ class AsyncTaskTaskNameStaticAnalysisTest(SimpleTestCase):
                 "and pass it as task_name=. If your call site is an internal "
                 "wrapper that forwards **kwargs (and therefore task_name) "
                 "from its caller, add it to EXEMPT_FILES with a justification."
+            ),
+        )
+
+    def test_iterator_yields_production_files(self):
+        """Guard against zero-yield regressions in ``_iter_python_files``.
+
+        Issue #745: a previous version filtered ``SKIP_DIR_NAMES`` against
+        ``path.parts`` of the absolute path, so when the repo lived under
+        a worktree directory whose name (``.claude``) was in the skip
+        list, the iterator yielded nothing and the suite passed
+        vacuously. This test pins a concrete lower bound on the number
+        of yielded production files so any future regression that
+        collapses the walk to zero (or near-zero) is caught.
+        """
+        files = list(_iter_python_files(PROJECT_ROOT))
+        self.assertGreater(
+            len(files),
+            10,
+            msg=(
+                f"_iter_python_files yielded only {len(files)} file(s) under "
+                f"{PROJECT_ROOT}. Expected the production tree to contain at "
+                "least a dozen Python modules; a near-zero count means the "
+                "walk filter is excluding everything. See issue #745."
             ),
         )
 

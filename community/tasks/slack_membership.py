@@ -40,7 +40,7 @@ from accounts.models import User
 from accounts.utils.names import set_name_from_external
 from community.models import CommunityAuditLog
 from community.services import get_community_service
-from jobs.tasks import async_task
+from jobs.tasks import async_task, build_task_name
 
 logger = logging.getLogger(__name__)
 
@@ -255,12 +255,13 @@ def refresh_slack_membership(
             models_q_null_or_old(cutoff)
         ).exists()
         if more_remaining:
-            # Issue #717: every async_task() call must carry a descriptive
-            # task_name= so the worker history shows the chained refresh
-            # under a stable label instead of django-q's random codename.
             async_task(
                 'community.tasks.slack_membership.refresh_slack_membership',
-                task_name='Refresh: slack membership chunk from scheduled refresh',
+                task_name=build_task_name(
+                    'Refresh Slack membership',
+                    f'chunk follow-up ({total_checked} checked)',
+                    'Slack membership chain',
+                ),
             )
             enqueued_followup = True
 

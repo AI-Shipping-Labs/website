@@ -105,7 +105,13 @@ class TestOperatorEnrollsNewMember:
             f"{django_server}/studio/sprints/{sprint.pk}/",
             wait_until="domcontentloaded",
         )
-        # Step 2: the Add member button is visible to the LEFT of Edit sprint.
+        # Step 2: open the collapsed "Add a member without a request"
+        # disclosure (issue #718 demoted this surface from a primary
+        # button to a <details> block beneath the pending-requests
+        # inbox), then click the Add-member link.
+        page.locator(
+            '[data-testid="sprint-add-member-details"] > summary'
+        ).click()
         add_btn = page.locator('[data-testid="sprint-add-member-link"]')
         add_btn.wait_for(state="visible")
         # Step 3: click Add member.
@@ -119,22 +125,20 @@ class TestOperatorEnrollsNewMember:
             '[data-testid="add-member-sprint-locked"]'
         ).wait_for(state="visible")
 
-        # Step 4: pick the member and submit.
-        new_member_id = page.evaluate(
-            """() => {
-                const sel = document.querySelector('[data-testid="add-member-select"]');
-                for (const o of sel.options) {
-                    if (o.textContent.includes('new@test.com')) {
-                        return o.value;
-                    }
-                }
-                return null;
-            }"""
-        )
-        assert new_member_id is not None
+        # Step 4: pick the member via the people picker and submit.
+        # Issue #735 swapped the inline <select> for the reusable picker
+        # (testid prefix ``plan-member``). We type into the search input,
+        # wait for the suggestions list to render, and click the row that
+        # carries the target email so the hidden ``<input name="member">``
+        # is populated before the form submission.
+        search = page.locator('[data-testid="plan-member-search"]')
+        search.fill("new@test.com")
+        suggestions = page.locator('[data-testid="plan-member-suggestions"]')
+        suggestions.wait_for(state="visible")
         page.locator(
-            '[data-testid="add-member-select"]'
-        ).select_option(new_member_id)
+            '[data-testid="plan-member-suggestion"]'
+            '[data-email="new@test.com"]'
+        ).first.click()
         page.locator('button[type="submit"]').click()
 
         # Step 5: lands on the editor URL (contains /edit/).
@@ -199,26 +203,28 @@ class TestReAddSameMemberIsSilentNoOp:
             f"{django_server}/studio/sprints/{sprint.pk}/",
             wait_until="domcontentloaded",
         )
+        # The Add-member surface lives inside a collapsed <details>
+        # disclosure (#718). Open it before clicking the link.
+        page.locator(
+            '[data-testid="sprint-add-member-details"] > summary'
+        ).click()
         page.locator('[data-testid="sprint-add-member-link"]').click()
         page.wait_for_url(
             f"{django_server}/studio/sprints/{sprint.pk}/add-member",
         )
 
-        member_id_value = page.evaluate(
-            """() => {
-                const sel = document.querySelector('[data-testid="add-member-select"]');
-                for (const o of sel.options) {
-                    if (o.textContent.includes('member@test.com')) {
-                        return o.value;
-                    }
-                }
-                return null;
-            }"""
-        )
-        assert member_id_value is not None
+        # Pick the already-enrolled member via the people picker. The
+        # backend treats a second submission as idempotent, so we just
+        # need to drive the picker to the same hidden ``member`` value
+        # that the legacy <select> used to carry.
+        search = page.locator('[data-testid="plan-member-search"]')
+        search.fill("member@test.com")
+        suggestions = page.locator('[data-testid="plan-member-suggestions"]')
+        suggestions.wait_for(state="visible")
         page.locator(
-            '[data-testid="add-member-select"]'
-        ).select_option(member_id_value)
+            '[data-testid="plan-member-suggestion"]'
+            '[data-email="member@test.com"]'
+        ).first.click()
         page.locator('button[type="submit"]').click()
 
         # Lands on the SAME existing plan editor URL.
@@ -264,16 +270,10 @@ class TestOperatorMissingMemberError:
             wait_until="domcontentloaded",
         )
 
-        # Submit without picking a member. The browser would normally
-        # block this via ``required``; remove the attribute so the
-        # POST reaches the server and we exercise the server-side
-        # error branch.
-        page.evaluate(
-            """() => {
-                const sel = document.querySelector('[data-testid="add-member-select"]');
-                if (sel) sel.removeAttribute('required');
-            }"""
-        )
+        # Submit without picking a member. The people picker (issue #735)
+        # uses a hidden ``<input name="member">`` with no ``required``
+        # attribute, so the POST reaches the server unimpeded and we
+        # exercise the server-side error branch directly.
         page.locator('button[type="submit"]').click()
 
         # The error banner renders with the documented copy.

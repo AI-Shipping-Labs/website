@@ -70,8 +70,7 @@ def _seed_plan(
     *,
     owner_email="owner-499@test.com",
     teammate_email="teammate-499@test.com",
-    visibility="cohort",
-):
+    visibility="cohort"):
     from accounts.models import User
     from plans.models import Plan, Sprint, SprintEnrollment, Week
 
@@ -79,8 +78,7 @@ def _seed_plan(
         name="Issue 499 Sprint",
         slug="i499-sprint",
         start_date=datetime.date(2026, 5, 1),
-        duration_weeks=4,
-    )
+        duration_weeks=4)
     owner = User.objects.get(email=owner_email)
     teammate = User.objects.get(email=teammate_email)
     SprintEnrollment.objects.get_or_create(sprint=sprint, user=owner)
@@ -88,10 +86,8 @@ def _seed_plan(
     plan = Plan.objects.create(
         member=owner,
         sprint=sprint,
-        status="shared",
         visibility=visibility,
-        focus_main="Ship the demo",
-    )
+        focus_main="Ship the demo")
     week = Week.objects.create(plan=plan, week_number=1, position=0)
     connection.close()
     return {
@@ -112,21 +108,18 @@ class TestParticipantNotes:
             "owner-499@test.com",
             tier_slug="free",
             email_verified=True,
-            first_name="Olivia",
-        )
+            first_name="Olivia")
         _create_user(
             "teammate-499@test.com",
             tier_slug="free",
-            email_verified=True,
-        )
+            email_verified=True)
         data = _seed_plan()
 
         context = _auth_context(browser, "owner-499@test.com")
         page = context.new_page()
         page.goto(
             f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
 
         # Empty state on first load
         empty = page.locator(
@@ -203,19 +196,16 @@ class TestPlanCommentsThread:
         _clear_plan_data()
         _create_user(
             "owner-499@test.com", tier_slug="free", email_verified=True,
-            first_name="Olivia",
-        )
+            first_name="Olivia")
         _create_user(
-            "teammate-499@test.com", tier_slug="free", email_verified=True,
-        )
+            "teammate-499@test.com", tier_slug="free", email_verified=True)
         data = _seed_plan(visibility="cohort")
 
         context = _auth_context(browser, "owner-499@test.com")
         page = context.new_page()
         page.goto(
             f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
 
         # Comments section is visible with the textarea (cohort plan).
         section = page.locator('[data-testid="plan-comments-section"]')
@@ -242,25 +232,21 @@ class TestPlanCommentsThread:
         context.close()
 
     def test_private_plan_owner_sees_disabled_composer(
-        self, django_server, browser,
-    ):
+        self, django_server, browser):
         _ensure_tiers()
         _clear_plan_data()
         _create_user(
             "owner-499@test.com", tier_slug="free", email_verified=True,
-            first_name="Olivia",
-        )
+            first_name="Olivia")
         _create_user(
-            "teammate-499@test.com", tier_slug="free", email_verified=True,
-        )
+            "teammate-499@test.com", tier_slug="free", email_verified=True)
         data = _seed_plan(visibility="private")
 
         context = _auth_context(browser, "owner-499@test.com")
         page = context.new_page()
         page.goto(
             f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
 
         section = page.locator('[data-testid="plan-comments-section"]')
         assert section.is_visible()
@@ -275,19 +261,16 @@ class TestPlanCommentsThread:
 @pytest.mark.django_db(transaction=True)
 class TestStudioPlanRendersNotesAndComments:
     def test_studio_plan_detail_shows_notes_read_only_and_comments_section(
-        self, django_server, browser,
-    ):
+        self, django_server, browser):
         from plans.models import WeekNote
 
         _ensure_tiers()
         _clear_plan_data()
         _create_user(
             "owner-499@test.com", tier_slug="free", email_verified=True,
-            first_name="Olivia",
-        )
+            first_name="Olivia")
         _create_user(
-            "teammate-499@test.com", tier_slug="free", email_verified=True,
-        )
+            "teammate-499@test.com", tier_slug="free", email_verified=True)
         _create_staff_user("staff-499@test.com")
         data = _seed_plan(visibility="cohort")
         from accounts.models import User
@@ -297,16 +280,14 @@ class TestStudioPlanRendersNotesAndComments:
         WeekNote.objects.create(
             week=Week.objects.get(pk=data["week_id"]),
             body="STUDIO_VIEW_NOTE",
-            author=owner,
-        )
+            author=owner)
         connection.close()
 
         context = _auth_context(browser, "staff-499@test.com")
         page = context.new_page()
         page.goto(
             f"{django_server}/studio/plans/{data['plan_id']}",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
 
         notes = page.locator('[data-testid="studio-plan-week-note"]')
         assert notes.count() == 1

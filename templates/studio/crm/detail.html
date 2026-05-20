@@ -132,8 +132,7 @@
            data-testid="crm-plan-sprint-link"
            class="text-sm font-medium text-accent hover:underline">{{ member_plan.sprint.name }}</a>
         <p class="text-xs text-muted-foreground">
-          Status: {{ member_plan.get_status_display }}
-          {% if member_plan.shared_at %}&middot; Shared {{ member_plan.shared_at|date:"Y-m-d" }}{% endif %}
+          {% if member_plan.shared_at %}Shared {{ member_plan.shared_at|date:"Y-m-d" }}{% else %}Not yet shared{% endif %}
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2 sm:justify-end">

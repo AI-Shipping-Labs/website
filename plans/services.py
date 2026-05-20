@@ -27,8 +27,8 @@ def create_plan_for_enrollment(*, sprint, user, enrolled_by):
     enrollment may already exist from a prior bulk import). Atomic:
     either both rows exist after return or neither was created.
 
-    The Plan is created with ``status='draft'``,
-    ``visibility='private'``, and N empty ``Week`` rows where
+    The Plan is created with ``visibility='private'`` and N empty
+    ``Week`` rows where
     N == ``sprint.duration_weeks``. Each Week has
     ``week_number=N``, ``position=N-1``, ``theme=''``, zero
     checkpoints. No resources/deliverables/next-steps/notes are
@@ -74,7 +74,6 @@ def create_plan_for_enrollment(*, sprint, user, enrolled_by):
             plan = Plan.objects.create(
                 member=user,
                 sprint=sprint,
-                status='draft',
                 visibility='private',
             )
             for week_index in range(sprint.duration_weeks):

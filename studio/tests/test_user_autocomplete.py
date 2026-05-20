@@ -112,9 +112,9 @@ class StudioUserAutocompleteSuppressionTest(TestCase):
     def test_new_plan_selectors_suppress_credential_autocomplete(self):
         """Issue #735: the member field is now the people picker input.
 
-        The sprint + status selects still exist and must keep
-        ``autocomplete="off"``; the member field is now the picker's
-        visible search input.
+        Issue #728 dropped the status select entirely. The sprint select
+        still exists and must keep ``autocomplete="off"``; the member
+        field is now the picker's visible search input.
         """
         response = self.client.get('/studio/plans/new')
 
@@ -126,10 +126,6 @@ class StudioUserAutocompleteSuppressionTest(TestCase):
         )
         self.assertEqual(
             _find_control(response, 'select', name='sprint').get('autocomplete'),
-            'off',
-        )
-        self.assertEqual(
-            _find_control(response, 'select', name='status').get('autocomplete'),
             'off',
         )
         self.assertEqual(_find_control(response, 'form').get('autocomplete'), 'off')
@@ -150,6 +146,9 @@ class StudioUserAutocompleteSuppressionTest(TestCase):
         self.assertEqual(tag.get('data-testid'), 'user-tag-input')
 
     def test_plan_list_user_filters_suppress_credential_autocomplete(self):
+        """Issue #728 dropped the status filter; the remaining controls
+        keep ``autocomplete='off'``.
+        """
         response = self.client.get('/studio/plans/')
 
         self.assertEqual(
@@ -162,10 +161,6 @@ class StudioUserAutocompleteSuppressionTest(TestCase):
         )
         self.assertEqual(
             _find_control(response, 'select', name='sprint').get('autocomplete'),
-            'off',
-        )
-        self.assertEqual(
-            _find_control(response, 'select', name='status').get('autocomplete'),
             'off',
         )
 

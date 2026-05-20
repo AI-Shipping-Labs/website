@@ -31,10 +31,10 @@ class MemberPlanEditAccessControlTest(TestCase):
             start_date=datetime.date(2026, 6, 1),
         )
         cls.alice_plan = Plan.objects.create(
-            member=cls.alice, sprint=cls.sprint, status='draft',
+            member=cls.alice, sprint=cls.sprint,
         )
         Plan.objects.create(
-            member=cls.bob, sprint=cls.sprint, status='draft',
+            member=cls.bob, sprint=cls.sprint,
         )
 
     def _edit_url(self, sprint=None):

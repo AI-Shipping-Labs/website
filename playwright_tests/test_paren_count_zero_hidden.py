@@ -29,15 +29,9 @@ import uuid
 
 import pytest
 
-from playwright_tests.conftest import (
-    auth_context as _auth_context,
-)
-from playwright_tests.conftest import (
-    create_staff_user as _create_staff_user,
-)
-from playwright_tests.conftest import (
-    create_user as _create_user,
-)
+from playwright_tests.conftest import auth_context as _auth_context
+from playwright_tests.conftest import create_staff_user as _create_staff_user
+from playwright_tests.conftest import create_user as _create_user
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -107,16 +101,13 @@ def _wipe_crm():
 def _create_open_course_unit(
     course_slug="paren-course",
     module_slug="m1",
-    unit_slug="u1",
-):
+    unit_slug="u1"):
     from content.models import Course, Module, Unit
 
     course = Course.objects.create(
-        title="Paren Course", slug=course_slug, status="published",
-    )
+        title="Paren Course", slug=course_slug, status="published")
     module = Module.objects.create(
-        course=course, title="Module 1", slug=module_slug, sort_order=1,
-    )
+        course=course, title="Module 1", slug=module_slug, sort_order=1)
     unit = Unit.objects.create(
         module=module,
         title="Unit One",
@@ -124,8 +115,7 @@ def _create_open_course_unit(
         sort_order=1,
         is_preview=True,
         content_id=uuid.uuid4(),
-        body="Unit body",
-    )
+        body="Unit body")
     connection.close()
     return course, module, unit
 
@@ -133,12 +123,7 @@ def _create_open_course_unit(
 def _create_open_workshop_page(slug="paren-ws"):
     from django.utils.text import slugify
 
-    from content.models import (
-        Instructor,
-        Workshop,
-        WorkshopInstructor,
-        WorkshopPage,
-    )
+    from content.models import Instructor, Workshop, WorkshopInstructor, WorkshopPage
     workshop = Workshop.objects.create(
         slug=slug,
         title="Paren Workshop",
@@ -147,20 +132,16 @@ def _create_open_workshop_page(slug="paren-ws"):
         landing_required_level=0,
         pages_required_level=0,  # open to anonymous visitors
         recording_required_level=20,
-        description="Workshop description.",
-    )
+        description="Workshop description.")
     instructor, _ = Instructor.objects.get_or_create(
         instructor_id=slugify("Alexey")[:200] or "ix",
-        defaults={"name": "Alexey", "status": "published"},
-    )
+        defaults={"name": "Alexey", "status": "published"})
     WorkshopInstructor.objects.get_or_create(
-        workshop=workshop, instructor=instructor, defaults={"position": 0},
-    )
+        workshop=workshop, instructor=instructor, defaults={"position": 0})
     page = WorkshopPage.objects.create(
         workshop=workshop, slug="welcome", title="Welcome",
         sort_order=1, body="# Welcome",
-        content_id=uuid.uuid4(),
-    )
+        content_id=uuid.uuid4())
     connection.close()
     return workshop, page
 
@@ -169,8 +150,7 @@ def _seed_plan(
     *,
     owner_email="owner-597@test.com",
     teammate_email="teammate-597@test.com",
-    visibility="cohort",
-):
+    visibility="cohort"):
     from accounts.models import User
     from plans.models import Plan, Sprint, SprintEnrollment, Week
 
@@ -178,8 +158,7 @@ def _seed_plan(
         name="Issue 597 Sprint",
         slug="i597-sprint",
         start_date=datetime.date(2026, 5, 1),
-        duration_weeks=4,
-    )
+        duration_weeks=4)
     owner = User.objects.get(email=owner_email)
     teammate = User.objects.get(email=teammate_email)
     SprintEnrollment.objects.get_or_create(sprint=sprint, user=owner)
@@ -187,10 +166,8 @@ def _seed_plan(
     plan = Plan.objects.create(
         member=owner,
         sprint=sprint,
-        status="shared",
         visibility=visibility,
-        focus_main="Ship the demo",
-    )
+        focus_main="Ship the demo")
     Week.objects.create(plan=plan, week_number=1, position=0)
     connection.close()
     return {
@@ -210,20 +187,17 @@ def _seed_plan(
 @pytest.mark.django_db(transaction=True)
 class TestCourseUnitZeroAndOneCount:
     def test_zero_questions_hides_paren_then_first_question_shows_one(
-        self, browser, django_server,
-    ):
+        self, browser, django_server):
         _wipe_comments_courses_workshops()
         _create_open_course_unit()
         _create_user(
-            "reader-597@test.com", tier_slug="basic", first_name="Rea",
-        )
+            "reader-597@test.com", tier_slug="basic", first_name="Rea")
 
         ctx = _auth_context(browser, "reader-597@test.com")
         page = ctx.new_page()
         page.goto(
             f"{django_server}/courses/paren-course/m1/u1",
-            wait_until="networkidle",
-        )
+            wait_until="networkidle")
 
         # The Q&A section is visible.
         assert page.locator("#qa-section").is_visible()
@@ -242,8 +216,7 @@ class TestCourseUnitZeroAndOneCount:
 
         # The composer is visible — user can post.
         page.locator("#qa-new-question").fill(
-            "How do I install the deps?",
-        )
+            "How do I install the deps?")
         page.locator("#qa-post-btn").click()
 
         # After posting, the wrapper unhides and shows " (1)".
@@ -251,8 +224,7 @@ class TestCourseUnitZeroAndOneCount:
             "document.getElementById('qa-count-wrapper') && "
             "!document.getElementById('qa-count-wrapper').hasAttribute('hidden') && "
             "document.getElementById('qa-count').textContent === '1'",
-            timeout=5000,
-        )
+            timeout=5000)
         # The H2 is a flex container with gap-2; inner_text() inserts a
         # newline between flex children. Assert on the count wrapper +
         # count element directly so the test is robust to layout tweaks.
@@ -273,25 +245,21 @@ class TestCourseUnitZeroAndOneCount:
 @pytest.mark.django_db(transaction=True)
 class TestPlanWithZeroComments:
     def test_plan_owner_sees_comments_label_without_paren_zero(
-        self, browser, django_server,
-    ):
+        self, browser, django_server):
         _wipe_plans()
         _create_user(
             "owner-597@test.com", tier_slug="free",
-            email_verified=True, first_name="Olivia",
-        )
+            email_verified=True, first_name="Olivia")
         _create_user(
             "teammate-597@test.com", tier_slug="free",
-            email_verified=True,
-        )
+            email_verified=True)
         data = _seed_plan(visibility="cohort")
 
         ctx = _auth_context(browser, "owner-597@test.com")
         page = ctx.new_page()
         page.goto(
             f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
 
         section = page.locator("#qa-section")
         assert section.is_visible()
@@ -313,17 +281,14 @@ class TestPlanWithZeroComments:
 @pytest.mark.django_db(transaction=True)
 class TestPlanWithExistingCommentsShowsCount:
     def test_three_comments_show_paren_three_then_post_makes_four(
-        self, browser, django_server,
-    ):
+        self, browser, django_server):
         _wipe_plans()
         _create_user(
             "owner-597@test.com", tier_slug="free",
-            email_verified=True, first_name="Olivia",
-        )
+            email_verified=True, first_name="Olivia")
         _create_user(
             "teammate-597@test.com", tier_slug="free",
-            email_verified=True, first_name="Tia",
-        )
+            email_verified=True, first_name="Tia")
         data = _seed_plan(visibility="cohort")
 
         from comments.models import Comment
@@ -331,24 +296,21 @@ class TestPlanWithExistingCommentsShowsCount:
             Comment.objects.create(
                 content_id=data["comment_content_id"],
                 user=data["teammate"],
-                body=f"Existing comment {i}",
-            )
+                body=f"Existing comment {i}")
         connection.close()
 
         ctx = _auth_context(browser, "owner-597@test.com")
         page = ctx.new_page()
         page.goto(
             f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
-            wait_until="networkidle",
-        )
+            wait_until="networkidle")
 
         # Wait for JS to load comments and update count to 3.
         page.wait_for_function(
             "document.getElementById('qa-count') && "
             "document.getElementById('qa-count').textContent === '3' && "
             "!document.getElementById('qa-count-wrapper').hasAttribute('hidden')",
-            timeout=5000,
-        )
+            timeout=5000)
         # The H2 is a flex container with gap-2; inner_text() inserts a
         # newline between flex children. Assert on the count wrapper +
         # count element directly so the test is robust to layout tweaks.
@@ -363,8 +325,7 @@ class TestPlanWithExistingCommentsShowsCount:
 
         page.wait_for_function(
             "document.getElementById('qa-count').textContent === '4'",
-            timeout=5000,
-        )
+            timeout=5000)
         heading_text = page.locator("#qa-section h2").inner_text()
         assert "Comments" in heading_text
         assert page.locator("#qa-count-wrapper").is_visible()
@@ -381,15 +342,13 @@ class TestPlanWithExistingCommentsShowsCount:
 @pytest.mark.django_db(transaction=True)
 class TestWorkshopPageAnonymousNoQA:
     def test_anonymous_workshop_page_no_paren_zero(
-        self, page, django_server,
-    ):
+        self, page, django_server):
         _wipe_comments_courses_workshops()
         _create_open_workshop_page(slug="paren-ws")
 
         page.goto(
             f"{django_server}/workshops/paren-ws/tutorial/welcome",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
 
         assert page.locator("#qa-section").is_visible()
         heading_text = page.locator("#qa-section h2").inner_text()
@@ -412,8 +371,7 @@ class TestWorkshopPageAnonymousNoQA:
 @pytest.mark.django_db(transaction=True)
 class TestStaffUserImportResult:
     def test_zero_warnings_hides_paren_zero_then_two_warnings_show_paren_two(
-        self, browser, django_server, tmp_path,
-    ):
+        self, browser, django_server, tmp_path):
         _create_staff_user("paren-staff-597@test.com")
 
         ctx = _auth_context(browser, "paren-staff-597@test.com")
@@ -423,13 +381,11 @@ class TestStaffUserImportResult:
         # Drive the import wizard end to end.
         page.goto(
             f"{django_server}/studio/users/import/",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
 
         clean_csv = tmp_path / "clean.csv"
         clean_csv.write_text(
-            "email\nclean-user-597@test.com\n", encoding="utf-8",
-        )
+            "email\nclean-user-597@test.com\n", encoding="utf-8")
         page.locator('input[type="file"]').set_input_files(str(clean_csv))
         # Submit the upload form (first submit on page).
         page.locator('button[type="submit"]').first.click()
@@ -447,13 +403,11 @@ class TestStaffUserImportResult:
         # Run 2: a CSV with two malformed rows that produce warnings.
         page.goto(
             f"{django_server}/studio/users/import/",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
         bad_csv = tmp_path / "warn.csv"
         # Two rows missing the @, which the importer treats as malformed.
         bad_csv.write_text(
-            "email\nnotanemail\nstillbad\n", encoding="utf-8",
-        )
+            "email\nnotanemail\nstillbad\n", encoding="utf-8")
         page.locator('input[type="file"]').set_input_files(str(bad_csv))
         page.locator('button[type="submit"]').first.click()
         page.wait_for_load_state("networkidle")
@@ -479,16 +433,14 @@ class TestStaffUserImportResult:
 @pytest.mark.django_db(transaction=True)
 class TestStaffSprintBulkEnrollResults:
     def test_only_enrolled_bucket_shows_paren_count(
-        self, browser, django_server,
-    ):
+        self, browser, django_server):
         from accounts.models import User
         from plans.models import Sprint
         # Reset.
         Sprint.objects.filter(slug="paren-sprint-597").delete()
         User.objects.filter(
             email__in=["m1-597@test.com", "m2-597@test.com",
-                       "m3-597@test.com"],
-        ).delete()
+                       "m3-597@test.com"]).delete()
         connection.close()
 
         _create_staff_user("paren-sprint-staff@test.com")
@@ -499,8 +451,7 @@ class TestStaffSprintBulkEnrollResults:
         sprint = Sprint.objects.create(
             name="Paren Sprint 597",
             slug="paren-sprint-597",
-            start_date=datetime.date(2026, 6, 1),
-        )
+            start_date=datetime.date(2026, 6, 1))
         sprint_pk = sprint.pk
         connection.close()
 
@@ -508,18 +459,15 @@ class TestStaffSprintBulkEnrollResults:
         page = ctx.new_page()
         page.goto(
             f"{django_server}/studio/sprints/{sprint_pk}/enroll",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
 
         page.locator('[data-testid="bulk-enroll-emails"]').fill(
-            "m1-597@test.com\nm2-597@test.com\nm3-597@test.com",
-        )
+            "m1-597@test.com\nm2-597@test.com\nm3-597@test.com")
         page.locator('[data-testid="bulk-enroll-submit"]').click()
         page.wait_for_load_state("networkidle")
 
         enrolled = page.locator(
-            '[data-testid="bulk-enroll-result-enrolled"] h3',
-        )
+            '[data-testid="bulk-enroll-result-enrolled"] h3')
         assert enrolled.count() == 1
         # "Enrolled (3)" — paren count present because count > 0.
         enrolled_text = enrolled.inner_text()
@@ -530,8 +478,7 @@ class TestStaffSprintBulkEnrollResults:
         for testid, label in (
             ("bulk-enroll-result-already", "Already enrolled"),
             ("bulk-enroll-result-under-tier", "Under-tier warning"),
-            ("bulk-enroll-result-unknown", "Unknown emails"),
-        ):
+            ("bulk-enroll-result-unknown", "Unknown emails")):
             heading = page.locator(f'[data-testid="{testid}"] h3')
             assert heading.count() == 1
             text = heading.inner_text()
@@ -554,8 +501,7 @@ class TestStaffSprintBulkEnrollResults:
 @pytest.mark.django_db(transaction=True)
 class TestStaffCrmListChips:
     def test_archived_chip_has_no_paren_zero(
-        self, browser, django_server,
-    ):
+        self, browser, django_server):
         from accounts.models import User
 
         _wipe_crm()
@@ -565,8 +511,7 @@ class TestStaffCrmListChips:
                 "crm-staff-597@test.com",
                 "crm-active-1@test.com",
                 "crm-active-2@test.com",
-            ],
-        ).delete()
+            ]).delete()
         connection.close()
 
         staff = _create_staff_user("crm-staff-597@test.com")
@@ -575,19 +520,16 @@ class TestStaffCrmListChips:
 
         from crm.models import CRMRecord
         CRMRecord.objects.create(
-            user=m1, created_by=staff, status="active",
-        )
+            user=m1, created_by=staff)
         CRMRecord.objects.create(
-            user=m2, created_by=staff, status="active",
-        )
+            user=m2, created_by=staff)
         connection.close()
 
         ctx = _auth_context(browser, "crm-staff-597@test.com")
         page = ctx.new_page()
         page.goto(
             f"{django_server}/studio/crm/",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
 
         active_chip = page.locator('[data-testid="crm-filter-active"]')
         archived_chip = page.locator('[data-testid="crm-filter-archived"]')

@@ -19,9 +19,7 @@ import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import DEFAULT_PASSWORD, VIEWPORT
-from playwright_tests.conftest import (
-    create_session_for_user as _create_session_for_user,
-)
+from playwright_tests.conftest import create_session_for_user as _create_session_for_user
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -48,12 +46,10 @@ def _seed_users():
         *,
         subscription_id="",
         pending_slug=None,
-        billing_period_end=None,
-    ):
+        billing_period_end=None):
         user, _ = User.objects.get_or_create(
             email=email,
-            defaults={"email_verified": True},
-        )
+            defaults={"email_verified": True})
         user.set_password(DEFAULT_PASSWORD)
         user.email_verified = True
         user.tier = tiers.get(tier_slug)
@@ -75,8 +71,7 @@ def _seed_users():
         subscription_id="sub_main_test_123",
         billing_period_end=timezone.make_aware(
             datetime.datetime(2026, 4, 1, 12, 0, 0)
-        ),
-    )
+        ))
 
     # Scenario 3: Premium user, current plan, no pending change.
     upsert(
@@ -85,8 +80,7 @@ def _seed_users():
         subscription_id="sub_premium_test_123",
         billing_period_end=timezone.make_aware(
             datetime.datetime(2026, 5, 1, 12, 0, 0)
-        ),
-    )
+        ))
 
     # Scenario 4: Main with pending downgrade to Basic.
     upsert(
@@ -96,8 +90,7 @@ def _seed_users():
         pending_slug="basic",
         billing_period_end=timezone.make_aware(
             datetime.datetime(2026, 4, 1, 12, 0, 0)
-        ),
-    )
+        ))
 
     # Scenario 5: Main with pending cancellation (pending_tier = free).
     upsert(
@@ -107,8 +100,7 @@ def _seed_users():
         pending_slug="free",
         billing_period_end=timezone.make_aware(
             datetime.datetime(2026, 5, 15, 12, 0, 0)
-        ),
-    )
+        ))
 
     # Scenario 6: Basic with active temporary Premium override.
     override_user = upsert(
@@ -117,15 +109,13 @@ def _seed_users():
         subscription_id="sub_basic_override_123",
         billing_period_end=timezone.make_aware(
             datetime.datetime(2026, 6, 1, 12, 0, 0)
-        ),
-    )
+        ))
     TierOverride.objects.filter(user=override_user).delete()
     TierOverride.objects.create(
         user=override_user,
         original_tier=tiers["basic"],
         override_tier=tiers["premium"],
-        expires_at=timezone.now() + datetime.timedelta(days=14),
-    )
+        expires_at=timezone.now() + datetime.timedelta(days=14))
 
     # Scenarios 2 / 8 require a Plan + a teammate so cohort logic also
     # has data on the dashboard side.
@@ -138,20 +128,16 @@ def _seed_users():
             "start_date": datetime.date(2026, 5, 1),
             "duration_weeks": 4,
             "status": "active",
-        },
-    )
+        })
     Plan.objects.filter(member=main_user).delete()
     Plan.objects.create(
-        member=main_user, sprint=sprint, status="active", visibility="cohort",
-    )
+        member=main_user, sprint=sprint, visibility="cohort")
     teammate, _ = User.objects.get_or_create(
         email="teammate-581@test.com",
-        defaults={"email_verified": True, "tier": tiers["main"]},
-    )
+        defaults={"email_verified": True, "tier": tiers["main"]})
     Plan.objects.get_or_create(
         member=teammate, sprint=sprint,
-        defaults={"status": "active", "visibility": "cohort"},
-    )
+        defaults={"status": "active", "visibility": "cohort"})
 
     connection.close()
 

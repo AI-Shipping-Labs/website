@@ -49,22 +49,13 @@ def _clear_plan_data():
 
 def _seed_goal_plan(*, goal='Ship one project', visibility='cohort'):
     from accounts.models import User
-    from plans.models import (
-        Checkpoint,
-        Deliverable,
-        NextStep,
-        Plan,
-        Sprint,
-        SprintEnrollment,
-        Week,
-    )
+    from plans.models import Checkpoint, Deliverable, NextStep, Plan, Sprint, SprintEnrollment, Week
 
     sprint = Sprint.objects.create(
         name='Goal Sprint',
         slug='goal-sprint',
         start_date=datetime.date(2026, 5, 1),
-        duration_weeks=2,
-    )
+        duration_weeks=2)
     owner = User.objects.get(email='member@test.com')
     teammate = User.objects.get(email='teammate@test.com')
     SprintEnrollment.objects.create(sprint=sprint, user=owner)
@@ -72,12 +63,10 @@ def _seed_goal_plan(*, goal='Ship one project', visibility='cohort'):
     plan = Plan.objects.create(
         member=owner,
         sprint=sprint,
-        status='shared',
         visibility=visibility,
         goal=goal,
         summary_goal='Long reflection...',
-        summary_main_gap='Need ML chops',
-    )
+        summary_main_gap='Need ML chops')
     week = Week.objects.create(plan=plan, week_number=1, position=0)
     Checkpoint.objects.create(week=week, description='Build skeleton', position=0)
     Deliverable.objects.create(plan=plan, description='Record demo', position=0)
@@ -100,8 +89,7 @@ class TestSprintPlanGoal584:
             page = context.new_page()
             page.goto(
                 f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
-                wait_until='domcontentloaded',
-            )
+                wait_until='domcontentloaded')
 
             goal = page.locator('[data-testid="plan-goal"]')
             weeks = page.locator('[data-testid="plan-weeks"]')
@@ -112,8 +100,7 @@ class TestSprintPlanGoal584:
             expect(details).to_be_visible()
             expect(details).to_contain_text('Goal (long-form)')
             expect(details).to_contain_text(
-                "Only you can see this section. Use it for personal context that doesn't need to be shared.",
-            )
+                "Only you can see this section. Use it for personal context that doesn't need to be shared.")
         finally:
             context.close()
 
@@ -129,12 +116,10 @@ class TestSprintPlanGoal584:
             page = context.new_page()
             page.goto(
                 f"{django_server}/sprints/{data['sprint_slug']}/plans/{data['plan_id']}",
-                wait_until='domcontentloaded',
-            )
+                wait_until='domcontentloaded')
 
             expect(page.locator('[data-testid="plan-goal"]')).to_contain_text(
-                'Ship one project',
-            )
+                'Ship one project')
             assert page.locator('[data-testid="plan-details"]').count() == 0
             assert page.get_by_text('Need ML chops').count() == 0
             assert page.get_by_text('Long reflection...').count() == 0
@@ -153,30 +138,25 @@ class TestSprintPlanGoal584:
             page = context.new_page()
             page.goto(
                 f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
-                wait_until='domcontentloaded',
-            )
+                wait_until='domcontentloaded')
             goal = page.locator('[data-testid="plan-goal"]')
             expect(goal).to_contain_text('Old goal')
             goal.locator('[data-testid="plan-goal-edit"]').click()
             goal.locator('[data-testid="plan-goal-input"]').fill(
-                'Ship one shipped project this sprint',
-            )
+                'Ship one shipped project this sprint')
             with page.expect_response('**/goal') as response_info:
                 goal.locator('[data-testid="plan-goal-save"]').click()
             assert response_info.value.ok
             expect(goal.locator('[data-testid="plan-goal-text"]')).to_contain_text(
-                'Ship one shipped project this sprint',
-            )
+                'Ship one shipped project this sprint')
             page.reload(wait_until='domcontentloaded')
             expect(page.locator('[data-testid="plan-goal-text"]')).to_contain_text(
-                'Ship one shipped project this sprint',
-            )
+                'Ship one shipped project this sprint')
         finally:
             context.close()
 
     def test_empty_goal_is_owner_placeholder_but_hidden_from_teammate(
-        self, django_server, browser,
-    ):
+        self, django_server, browser):
         _ensure_tiers()
         _clear_plan_data()
         _create_user('member@test.com', tier_slug='free', email_verified=True)
@@ -188,11 +168,9 @@ class TestSprintPlanGoal584:
             page = owner_context.new_page()
             page.goto(
                 f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
-                wait_until='domcontentloaded',
-            )
+                wait_until='domcontentloaded')
             expect(page.locator('[data-testid="plan-goal"]')).to_contain_text(
-                "Add a one-sentence goal so teammates know what you're shipping this sprint.",
-            )
+                "Add a one-sentence goal so teammates know what you're shipping this sprint.")
         finally:
             owner_context.close()
 
@@ -201,8 +179,7 @@ class TestSprintPlanGoal584:
             page = teammate_context.new_page()
             page.goto(
                 f"{django_server}/sprints/{data['sprint_slug']}/plans/{data['plan_id']}",
-                wait_until='domcontentloaded',
-            )
+                wait_until='domcontentloaded')
             assert page.locator('[data-testid="plan-goal"]').count() == 0
             expect(page.locator('[data-testid="plan-weeks"]')).to_be_visible()
         finally:
@@ -221,8 +198,7 @@ class TestSprintPlanGoal584:
             page = context.new_page()
             page.goto(
                 f"{django_server}/studio/plans/{data['plan_id']}/edit/",
-                wait_until='domcontentloaded',
-            )
+                wait_until='domcontentloaded')
             goal_input = page.locator('[data-field="goal"]')
             expect(goal_input).to_have_value('Old goal')
             with page.expect_response('**/api/plans/*') as response_info:
@@ -235,11 +211,9 @@ class TestSprintPlanGoal584:
                 owner_page = owner_context.new_page()
                 owner_page.goto(
                     f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
-                    wait_until='domcontentloaded',
-                )
+                    wait_until='domcontentloaded')
                 expect(owner_page.locator('[data-testid="plan-goal-text"]')).to_contain_text(
-                    'Staff-curated sprint goal',
-                )
+                    'Staff-curated sprint goal')
             finally:
                 owner_context.close()
         finally:

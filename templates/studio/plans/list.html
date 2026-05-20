@@ -15,22 +15,13 @@
   </a>
 </div>
 
-<form method="get" action="{% url 'studio_plan_list' %}" autocomplete="off" class="bg-card border border-border rounded-lg p-4 mb-6 grid grid-cols-1 sm:grid-cols-4 gap-3">
+<form method="get" action="{% url 'studio_plan_list' %}" autocomplete="off" class="bg-card border border-border rounded-lg p-4 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
   <div>
     <label class="block text-xs text-muted-foreground mb-1">Sprint</label>
     <select name="sprint" autocomplete="off" class="studio-select w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
       <option value="">All sprints</option>
       {% for sprint in sprints %}
       <option value="{{ sprint.pk }}" {% if sprint.pk == sprint_filter_id %}selected{% endif %}>{{ sprint.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div>
-    <label class="block text-xs text-muted-foreground mb-1">Status</label>
-    <select name="status" autocomplete="off" class="studio-select w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
-      <option value="">All statuses</option>
-      {% for value, label in plan_status_choices %}
-      <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
   </div>
@@ -61,7 +52,6 @@
       <tr>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Member</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Sprint</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Shared</th>
         <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
       </tr>
@@ -73,7 +63,6 @@
           <a href="{% url 'studio_user_detail' user_id=plan.member.pk %}" class="text-accent hover:underline" data-testid="plan-list-member-link">{{ plan.member.email }}</a>
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ plan.sprint.name }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ plan.get_status_display }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">
           {% if plan.shared_at %}{{ plan.shared_at|date:"Y-m-d" }}{% else %}-{% endif %}
         </td>

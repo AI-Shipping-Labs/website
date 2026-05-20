@@ -22,7 +22,6 @@ so staff tokens can be audited and revoked independently.
 import json
 
 from accounts.models import Token
-from plans.models import PLAN_STATUS_CHOICES
 
 
 def _serialize_checkpoint(checkpoint):
@@ -125,7 +124,6 @@ def serialize_plan_detail(plan):
         ),
         'user_email': plan.member.email,
         'user_id': plan.member_id,
-        'status': plan.status,
         'goal': plan.goal,
         'summary': {
             'current_situation': plan.summary_current_situation,
@@ -221,7 +219,6 @@ def build_plan_editor_context(plan, *, viewer, token_name):
         'plan_json': json.dumps(plan_payload),
         'api_token': token.key,
         'api_base': '/api/',
-        'plan_status_choices': PLAN_STATUS_CHOICES,
         'weeks_count': weeks_count,
         'checkpoints_count': checkpoints_count,
     }

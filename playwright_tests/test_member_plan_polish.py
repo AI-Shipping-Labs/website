@@ -48,22 +48,13 @@ def _clear_plan_data():
 
 def _seed_polish_plan(owner_email="member@test.com", teammate_email="teammate@test.com"):
     from accounts.models import User
-    from plans.models import (
-        Checkpoint,
-        Deliverable,
-        NextStep,
-        Plan,
-        Sprint,
-        SprintEnrollment,
-        Week,
-    )
+    from plans.models import Checkpoint, Deliverable, NextStep, Plan, Sprint, SprintEnrollment, Week
 
     sprint = Sprint.objects.create(
         name="Plan Polish Sprint",
         slug="plan-polish",
         start_date=datetime.date(2026, 5, 1),
-        duration_weeks=6,
-    )
+        duration_weeks=6)
     owner = User.objects.get(email=owner_email)
     teammate = User.objects.get(email=teammate_email)
     SprintEnrollment.objects.create(sprint=sprint, user=owner)
@@ -72,33 +63,27 @@ def _seed_polish_plan(owner_email="member@test.com", teammate_email="teammate@te
     plan = Plan.objects.create(
         member=owner,
         sprint=sprint,
-        status="shared",
         visibility="cohort",
-        summary_goal="Ship **markdown** safely",
-    )
+        summary_goal="Ship **markdown** safely")
     Week.objects.create(plan=plan, week_number=1, position=0)
     week = plan.weeks.get(week_number=1)
     checkpoint = Checkpoint.objects.create(
         week=week,
         description="Build **prototype**",
-        position=0,
-    )
+        position=0)
     deliverable = Deliverable.objects.create(
         plan=plan,
         description="Record demo",
-        position=0,
-    )
+        position=0)
     next_step = NextStep.objects.create(
         plan=plan,
         description="Book review",
-        position=0,
-    )
+        position=0)
 
     teammate_plan = Plan.objects.create(
         member=teammate,
         sprint=sprint,
-        visibility="private",
-    )
+        visibility="private")
     connection.close()
     return {
         "sprint_id": sprint.pk,
@@ -124,8 +109,7 @@ class TestMemberPlanPolish:
         page = context.new_page()
         page.goto(
             f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
 
         assert page.locator('[data-testid="header-plan-link"]').get_attribute("href") == (
             f"/sprints/{data['sprint_slug']}/plan/{data['plan_id']}"
@@ -187,8 +171,7 @@ class TestMemberPlanPolish:
         page = context.new_page()
         page.goto(
             f"{django_server}/sprints/{data['sprint_slug']}/plans/{data['plan_id']}",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
 
         assert page.locator("strong", has_text="prototype").count() >= 1
         assert page.locator('[data-testid="plan-row-done-toggle"]').count() == 0
@@ -197,8 +180,7 @@ class TestMemberPlanPolish:
         context.close()
 
     def test_mobile_visibility_control_fits_390px_workspace(
-        self, django_server, browser, tmp_path,
-    ):
+        self, django_server, browser, tmp_path):
         _ensure_tiers()
         _clear_plan_data()
         _create_user("member@test.com", tier_slug="free", email_verified=True)
@@ -210,16 +192,13 @@ class TestMemberPlanPolish:
         page.set_viewport_size({"width": 390, "height": 844})
         page.goto(
             f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
         page.locator('[data-testid="plan-visibility-form"]').wait_for(
-            state="visible",
-        )
+            state="visible")
 
         page.screenshot(
             path=str(tmp_path / "owner-workspace-visibility-390.png"),
-            full_page=True,
-        )
+            full_page=True)
         assert page.evaluate(
             "() => document.documentElement.scrollWidth"
             " <= document.documentElement.clientWidth"
@@ -256,14 +235,12 @@ class TestMemberPlanPolish:
 
         page.goto(f"{django_server}/studio/plans/", wait_until="domcontentloaded")
         page.locator("tr", has_text="member@test.com").get_by_role(
-            "link", name="View plan",
-        ).click()
+            "link", name="View plan").click()
         page.wait_for_url(f"{django_server}/studio/plans/{data['plan_id']}/")
 
         page.goto(
             f"{django_server}/studio/sprints/{data['sprint_id']}/",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
         page.get_by_role("link", name="member@test.com").click()
         page.wait_for_url(f"{django_server}/studio/users/*/")
         context.close()

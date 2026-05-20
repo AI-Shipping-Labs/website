@@ -51,7 +51,6 @@ class PlansPatchReconcileTestBase(TestCase):
         """Build a small but representative plan for reconcile tests."""
         plan = Plan.objects.create(
             member=self.member, sprint=self.sprint,
-            status="draft",
             goal="orig goal",
             accountability="orig",
             focus_main="m",
@@ -207,7 +206,7 @@ class PatchReconcileWeeksTest(PlansPatchReconcileTestBase):
         seed = self._seed_plan()
         plan = seed["plan"]
         # No collection keys in payload.
-        response = self._patch(plan.id, {"status": "active"})
+        response = self._patch(plan.id, {"goal": "x"})
         self.assertEqual(response.status_code, 200)
         # Every week + checkpoint + resource is still there.
         self.assertEqual(Week.objects.filter(plan=plan).count(), 2)
@@ -522,17 +521,17 @@ class PatchReconcileInterviewNotesTest(PlansPatchReconcileTestBase):
         seed = self._seed_plan()
         plan = seed["plan"]
         # Pre-existing data we'll prove stays intact on validation failure.
-        before_status = plan.status
+        before_goal = plan.goal
         response = self._patch(plan.id, {
-            "status": "active",
+            "goal": "new goal",
             "interview_notes": [
                 {"visibility": "nope", "kind": "general", "body": "x"},
             ],
         })
         self.assertEqual(response.status_code, 422)
-        # status didn't change (atomic rollback).
+        # goal didn't change (atomic rollback).
         plan.refresh_from_db()
-        self.assertEqual(plan.status, before_status)
+        self.assertEqual(plan.goal, before_goal)
 
 
 @tag("core")
@@ -540,7 +539,7 @@ class PatchTopLevelOnlyRegressionTest(PlansPatchReconcileTestBase):
     """Existing PATCH callers that only send top-level fields must NOT
     see any behaviour change after issue #734."""
 
-    def test_status_only_patch_does_not_touch_children(self):
+    def test_goal_only_patch_does_not_touch_children(self):
         seed = self._seed_plan()
         plan = seed["plan"]
         before_week_count = Week.objects.filter(plan=plan).count()
@@ -549,10 +548,10 @@ class PatchTopLevelOnlyRegressionTest(PlansPatchReconcileTestBase):
         before_deliverable_count = Deliverable.objects.filter(plan=plan).count()
         before_next_step_count = NextStep.objects.filter(plan=plan).count()
 
-        response = self._patch(plan.id, {"status": "active"})
+        response = self._patch(plan.id, {"goal": "new"})
         self.assertEqual(response.status_code, 200)
         plan.refresh_from_db()
-        self.assertEqual(plan.status, "active")
+        self.assertEqual(plan.goal, "new")
 
         # Nothing in any child collection moved.
         self.assertEqual(
@@ -737,13 +736,6 @@ class PatchReconcileSharedValidatorsTest(PlansPatchReconcileTestBase):
         plan = seed["plan"]
         response = self._patch(plan.id, {"goal": "x" * 281})
         self.assertEqual(response.status_code, 422)
-
-    def test_invalid_status_returns_422(self):
-        seed = self._seed_plan()
-        plan = seed["plan"]
-        response = self._patch(plan.id, {"status": "not-a-status"})
-        self.assertEqual(response.status_code, 422)
-        self.assertEqual(response.json()["code"], "validation_error")
 
     def test_weeks_entry_not_a_dict_returns_422(self):
         seed = self._seed_plan()

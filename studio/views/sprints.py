@@ -31,7 +31,6 @@ from content.access import LEVEL_MAIN
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from events.models import EventSeries
 from plans.models import (
-    PLAN_STATUS_CHOICES,
     SPRINT_STATUS_CHOICES,
     Plan,
     PlanRequest,
@@ -501,10 +500,8 @@ def sprint_add_member(request, sprint_id):
             'form_data': {
                 'member': '',
                 'sprint': str(sprint.pk),
-                'status': 'draft',
             },
             'sprint': sprint,
-            'plan_status_choices': PLAN_STATUS_CHOICES,
             'user_search_url': user_search_url,
             'picker_extra_query': picker_extra_query,
             'prefill_member_display': '',
@@ -516,7 +513,6 @@ def sprint_add_member(request, sprint_id):
     form_data = {
         'member': raw_member,
         'sprint': str(sprint.pk),
-        'status': 'draft',
     }
 
     def _render_with_error(error, status=400):
@@ -526,7 +522,6 @@ def sprint_add_member(request, sprint_id):
             'form_action_url': request.path,
             'form_data': form_data,
             'sprint': sprint,
-            'plan_status_choices': PLAN_STATUS_CHOICES,
             'user_search_url': user_search_url,
             'picker_extra_query': picker_extra_query,
             'prefill_member_display': _prefill_display(raw_member),

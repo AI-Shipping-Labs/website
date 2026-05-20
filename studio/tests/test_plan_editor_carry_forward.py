@@ -47,7 +47,7 @@ class PlanEditorCarryForwardButtonRenderTest(TestCase):
             name='S', slug='s', start_date=datetime.date(2026, 5, 1),
         )
         cls.plan = Plan.objects.create(
-            member=cls.member, sprint=cls.sprint, status='draft',
+            member=cls.member, sprint=cls.sprint,
         )
         cls.week_1 = Week.objects.create(
             plan=cls.plan, week_number=1, position=0,
@@ -153,7 +153,7 @@ class PlanEditorCarryForwardSingleWeekPlanTest(TestCase):
             name='S', slug='s', start_date=datetime.date(2026, 5, 1),
         )
         cls.plan = Plan.objects.create(
-            member=cls.member, sprint=cls.sprint, status='draft',
+            member=cls.member, sprint=cls.sprint,
         )
         Week.objects.create(plan=cls.plan, week_number=1, position=0)
 

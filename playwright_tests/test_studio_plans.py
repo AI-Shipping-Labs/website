@@ -163,7 +163,7 @@ class TestStaffCapturesInterviewNotes:
             start_date="2026-05-01",
         )
         member = User.objects.get(email="member@test.com")
-        plan = Plan.objects.create(member=member, sprint=sprint, status="draft")
+        plan = Plan.objects.create(member=member, sprint=sprint)
         connection.close()
 
         context = _auth_context(browser, "staff@test.com")

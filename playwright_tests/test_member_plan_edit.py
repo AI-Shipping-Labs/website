@@ -13,18 +13,10 @@ import os
 
 import pytest
 
-from playwright_tests.conftest import (
-    auth_context as _auth_context,
-)
-from playwright_tests.conftest import (
-    create_staff_user as _create_staff_user,
-)
-from playwright_tests.conftest import (
-    create_user as _create_user,
-)
-from playwright_tests.conftest import (
-    ensure_tiers as _ensure_tiers,
-)
+from playwright_tests.conftest import auth_context as _auth_context
+from playwright_tests.conftest import create_staff_user as _create_staff_user
+from playwright_tests.conftest import create_user as _create_user
+from playwright_tests.conftest import ensure_tiers as _ensure_tiers
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -59,8 +51,7 @@ def _clear_plans_data():
     SprintEnrollment.objects.all().delete()
     Sprint.objects.all().delete()
     Token.objects.filter(
-        name__in=["studio-plan-editor", "member-plan-editor"],
-    ).delete()
+        name__in=["studio-plan-editor", "member-plan-editor"]).delete()
     connection.close()
 
 
@@ -83,21 +74,16 @@ def _seed_plan_with_two_checkpoints(member_email, sprint=None):
                 "name": "Spring Cohort",
                 "start_date": datetime.date(2026, 5, 1),
                 "duration_weeks": 6,
-            },
-        )
+            })
     member = User.objects.get(email=member_email)
     plan = Plan.objects.create(
-        member=member, sprint=sprint, status="draft",
-    )
+        member=member, sprint=sprint)
     week = Week.objects.create(
-        plan=plan, week_number=1, position=0,
-    )
+        plan=plan, week_number=1, position=0)
     Checkpoint.objects.create(
-        week=week, description="Read paper", position=0,
-    )
+        week=week, description="Read paper", position=0)
     Checkpoint.objects.create(
-        week=week, description="Build prototype", position=1,
-    )
+        week=week, description="Build prototype", position=1)
     plan_pk = plan.pk
     connection.close()
     return plan_pk
@@ -109,13 +95,11 @@ class TestMemberOpensOwnPlan:
 
     @pytest.mark.core
     def test_member_sees_editor_with_their_email_and_sprint(
-        self, django_server, browser,
-    ):
+        self, django_server, browser):
         _ensure_tiers()
         _clear_plans_data()
         _create_user(
-            "member@test.com", tier_slug="free", email_verified=True,
-        )
+            "member@test.com", tier_slug="free", email_verified=True)
         plan_pk = _seed_plan_with_two_checkpoints("member@test.com")
 
         context = _auth_context(browser, "member@test.com")
@@ -123,14 +107,12 @@ class TestMemberOpensOwnPlan:
 
         page.goto(
             f"{django_server}/sprints/spring-cohort/plan/{plan_pk}",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
         page.locator('[data-testid="member-plan"]').wait_for(state="visible")
         assert "Spring Cohort" in page.locator("body").inner_text()
         page.locator('[data-testid="plan-weeks"]').wait_for(state="visible")
         page.locator('[data-testid="plan-checkpoint"]').first.wait_for(
-            state="visible",
-        )
+            state="visible")
 
         context.close()
 
@@ -146,23 +128,18 @@ class TestMemberCannotViewOtherMembersPlan:
         _ensure_tiers()
         _clear_plans_data()
         _create_user(
-            "alice@test.com", tier_slug="free", email_verified=True,
-        )
+            "alice@test.com", tier_slug="free", email_verified=True)
         _create_user(
-            "bob@test.com", tier_slug="free", email_verified=True,
-        )
+            "bob@test.com", tier_slug="free", email_verified=True)
         # Alice and Bob are members of the SAME sprint per the spec.
         sprint = Sprint.objects.create(
             name="Spring Cohort", slug="spring-cohort",
             start_date=datetime.date(2026, 5, 1),
-            duration_weeks=6,
-        )
+            duration_weeks=6)
         alice_plan_pk = _seed_plan_with_two_checkpoints(
-            "alice@test.com", sprint=sprint,
-        )
+            "alice@test.com", sprint=sprint)
         bob_plan_pk = _seed_plan_with_two_checkpoints(
-            "bob@test.com", sprint=sprint,
-        )
+            "bob@test.com", sprint=sprint)
 
         context = _auth_context(browser, "bob@test.com")
         page = context.new_page()
@@ -170,8 +147,7 @@ class TestMemberCannotViewOtherMembersPlan:
         # Bob hits Alice's plan id -> 404.
         response = page.goto(
             f"{django_server}/sprints/spring-cohort/plan/{alice_plan_pk}",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
         assert response is not None
         assert response.status == 404
         body = page.content()
@@ -180,8 +156,7 @@ class TestMemberCannotViewOtherMembersPlan:
         # Bob hits his OWN plan id -> 200 with editor.
         page.goto(
             f"{django_server}/sprints/spring-cohort/plan/{bob_plan_pk}",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
         page.locator('[data-testid="member-plan"]').wait_for(state="visible")
         page.locator('[data-testid="plan-weeks"]').wait_for(state="visible")
 
@@ -193,8 +168,7 @@ class TestAnonymousRedirectedToLogin:
     """An anonymous browser hitting the member URL gets login redirect."""
 
     def test_anonymous_redirects_to_login_with_next(
-        self, django_server, browser,
-    ):
+        self, django_server, browser):
         _ensure_tiers()
         _clear_plans_data()
 
@@ -203,14 +177,11 @@ class TestAnonymousRedirectedToLogin:
 
         sprint = Sprint.objects.create(
             name="S", slug="s",
-            start_date=datetime.date(2026, 5, 1),
-        )
+            start_date=datetime.date(2026, 5, 1))
         member = User.objects.create_user(
-            email="member@test.com", password="x",
-        )
+            email="member@test.com", password="x")
         plan = Plan.objects.create(
-            member=member, sprint=sprint, status="draft",
-        )
+            member=member, sprint=sprint)
         plan_pk = plan.pk
         connection.close()
 
@@ -219,8 +190,7 @@ class TestAnonymousRedirectedToLogin:
 
         page.goto(
             f"{django_server}/sprints/s/plan/{plan_pk}",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
         # Final URL must be on the login page with next preserved.
         assert "/accounts/login/" in page.url
         assert f"next=/sprints/s/plan/{plan_pk}" in page.url
@@ -237,8 +207,7 @@ class TestStaffEditorRegression:
         _clear_plans_data()
         _create_staff_user("staff@test.com")
         _create_user(
-            "member@test.com", tier_slug="free", email_verified=True,
-        )
+            "member@test.com", tier_slug="free", email_verified=True)
         plan_pk = _seed_plan_with_two_checkpoints("member@test.com")
 
         context = _auth_context(browser, "staff@test.com")
@@ -246,8 +215,7 @@ class TestStaffEditorRegression:
 
         page.goto(
             f"{django_server}/studio/plans/{plan_pk}/edit/",
-            wait_until="domcontentloaded",
-        )
+            wait_until="domcontentloaded")
         # Header, weeks column, side panels render.
         page.locator(
             '[data-testid="plan-editor-header"]'

@@ -33,7 +33,6 @@ from django.views.decorators.http import require_POST
 
 from notifications.services.notification_service import NotificationService
 from plans.models import (
-    PLAN_STATUS_CHOICES,
     InterviewNote,
     Plan,
     Sprint,
@@ -53,13 +52,6 @@ User = get_user_model()
 EDITOR_TOKEN_NAME = 'studio-plan-editor'
 
 
-def _normalize_plan_status(raw):
-    valid = {choice[0] for choice in PLAN_STATUS_CHOICES}
-    if raw in valid:
-        return raw
-    return 'draft'
-
-
 class HttpResponseTemporaryRedirect(HttpResponseRedirect):
     """RFC 7231 section 6.4.7: 307 preserves method and body."""
 
@@ -68,10 +60,9 @@ class HttpResponseTemporaryRedirect(HttpResponseRedirect):
 
 @staff_required
 def plan_list(request):
-    """Table of plans. Filters: ?sprint=, ?member=, ?status=, ?q=."""
+    """Table of plans. Filters: ?sprint=, ?member=, ?q=."""
     sprint_filter = (request.GET.get('sprint') or '').strip()
     member_filter = (request.GET.get('member') or '').strip()
-    status_filter = (request.GET.get('status') or '').strip()
     search = (request.GET.get('q') or '').strip()
 
     plans = Plan.objects.select_related('member', 'sprint').order_by('-created_at')
@@ -86,9 +77,6 @@ def plan_list(request):
         member_filter_id = int(member_filter)
         plans = plans.filter(member_id=member_filter_id)
 
-    if status_filter:
-        plans = plans.filter(status=status_filter)
-
     if search:
         plans = plans.filter(
             Q(member__email__icontains=search)
@@ -101,9 +89,7 @@ def plan_list(request):
         'sprints': Sprint.objects.order_by('-start_date'),
         'sprint_filter_id': sprint_filter_id,
         'member_filter_id': member_filter_id,
-        'status_filter': status_filter,
         'search': search,
-        'plan_status_choices': PLAN_STATUS_CHOICES,
     })
 
 
@@ -147,7 +133,7 @@ def _picker_extra_query_for(sprint_id_str):
 
 @staff_required
 def plan_create(request):
-    """Form: pick member, pick sprint. ``status`` defaults to draft.
+    """Form: pick member, pick sprint.
 
     The plan-creation path goes through
     :func:`plans.services.create_plan_for_enrollment` (issue #444) so
@@ -188,10 +174,8 @@ def plan_create(request):
             'form_data': {
                 'member': prefill_member,
                 'sprint': prefill_sprint,
-                'status': 'draft',
             },
             'sprints': sprints,
-            'plan_status_choices': PLAN_STATUS_CHOICES,
             'user_search_url': user_search_url,
             'picker_extra_query': _picker_extra_query_for(prefill_sprint),
             'prefill_member_display': _picker_prefill_display(prefill_member),
@@ -202,7 +186,6 @@ def plan_create(request):
     form_data = {
         'member': (request.POST.get('member') or '').strip(),
         'sprint': (request.POST.get('sprint') or '').strip(),
-        'status': (request.POST.get('status') or '').strip(),
     }
 
     def _render_with_error(error, status=400):
@@ -211,7 +194,6 @@ def plan_create(request):
             'form_action': 'create',
             'form_data': form_data,
             'sprints': sprints,
-            'plan_status_choices': PLAN_STATUS_CHOICES,
             'user_search_url': user_search_url,
             'picker_extra_query': _picker_extra_query_for(form_data['sprint']),
             'prefill_member_display': _picker_prefill_display(form_data['member']),

@@ -165,7 +165,9 @@ class EventJoinRedirectTest(TierSetupMixin, TestCase):
         response = self.client.get('/events/past-event-recording/join')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Watch the recording')
-        self.assertContains(response, 'href="/workshops/past-workshop"')
+        self.assertContains(
+            response, 'href="/workshops/2025-01-01-past-workshop"',
+        )
         # Must not point at the announcement-only event page or the
         # retired standalone recording surface.
         self.assertNotContains(response, '/event-recordings/')

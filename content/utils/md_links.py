@@ -245,13 +245,17 @@ def rewrite_workshop_md_links(
     source_path=None,
     sync_errors=None,
     cross_workshop_lookup=None,
+    workshop_url_key=None,
 ):
     """Rewrite intra-workshop ``.md`` links in ``body`` to platform URLs.
 
     Workshops live in flat folders (``YYYY-MM-DD-<slug>/<NN-page>.md``), so
     valid intra-workshop links are sibling references only — no ``..`` or
     nested subfolders. The rewriter resolves each sibling ``.md`` filename to
-    ``/workshops/<workshop_slug>/tutorial/<page_slug>`` (no trailing slash).
+    ``/workshops/<workshop_url_key>/tutorial/<page_slug>`` (no trailing
+    slash). Issue #750: ``workshop_url_key`` is the ``<YYYY-MM-DD>-<slug>``
+    composite. When unset (legacy callers, tests pre-#750), the rewriter
+    falls back to ``workshop_slug`` so existing behaviour is preserved.
 
     Beyond URL resolution, when the link's visible text equals the bare
     filename (modulo surrounding whitespace, case-insensitive) the rewriter
@@ -362,8 +366,13 @@ def rewrite_workshop_md_links(
         if resolved is None:
             return match.group(0)
         page_meta, fragment, canonical = resolved
+        # Issue #750: prefer the date-slug ``url_key`` when supplied so
+        # rewritten URLs are content-derivable. Fall back to the bare
+        # workshop slug to keep pre-#750 callers (tests, older lookups)
+        # working unchanged.
+        path_key = workshop_url_key or workshop_slug
         url = page_meta.get('url') or (
-            f'/workshops/{workshop_slug}/tutorial/{page_meta["slug"]}'
+            f'/workshops/{path_key}/tutorial/{page_meta["slug"]}'
         )
         title = match.group('title') or ''
         label = match.group('label')
@@ -507,7 +516,11 @@ def rewrite_cross_workshop_md_links(
         if sub.endswith('/'):
             sub = sub[:-1]
 
-        landing_url = target.get('url') or f'/workshops/{target["slug"]}'
+        # Issue #750: cross-workshop URLs use the date-slug key when the
+        # lookup carries one (current sync). Falls back to the bare slug
+        # for older lookups / hand-built test fixtures.
+        target_key = target.get('url_key') or target['slug']
+        landing_url = target.get('url') or f'/workshops/{target_key}'
 
         # Empty sub == workshop landing.
         if not sub:
@@ -540,7 +553,7 @@ def rewrite_cross_workshop_md_links(
             return None
 
         return (
-            f'/workshops/{target["slug"]}/tutorial/{page["slug"]}{frag}'
+            f'/workshops/{target_key}/tutorial/{page["slug"]}{frag}'
         )
 
     def _replace(match):

@@ -95,7 +95,7 @@ class WorkshopDetailGitHubIconTest(TierSetupMixin, TestCase):
         cls.workshop = _make_workshop()
 
     def test_github_button_renders_inline_svg_not_lucide_placeholder(self):
-        response = self.client.get('/workshops/ws')
+        response = self.client.get('/workshops/2026-04-21-ws')
         self.assertEqual(response.status_code, 200)
         button = _isolate_repo_button(
             response.content.decode(), 'workshop-code-repo-link',
@@ -106,7 +106,7 @@ class WorkshopDetailGitHubIconTest(TierSetupMixin, TestCase):
         self.assertNotIn('data-lucide="github"', button)
 
     def test_github_icon_uses_currentcolor_for_theme_inheritance(self):
-        response = self.client.get('/workshops/ws')
+        response = self.client.get('/workshops/2026-04-21-ws')
         button = _isolate_repo_button(
             response.content.decode(), 'workshop-code-repo-link',
         )
@@ -115,14 +115,14 @@ class WorkshopDetailGitHubIconTest(TierSetupMixin, TestCase):
         self.assertIn('stroke="currentColor"', button)
 
     def test_button_label_unchanged(self):
-        response = self.client.get('/workshops/ws')
+        response = self.client.get('/workshops/2026-04-21-ws')
         self.assertContains(response, 'View code on GitHub')
 
     def test_sibling_lucide_icons_still_use_placeholder(self):
         """The fix is scoped to the GitHub glyph. The trailing
         ``external-link`` icon next to the button text still uses Lucide
         client-side hydration, so its placeholder must remain."""
-        response = self.client.get('/workshops/ws')
+        response = self.client.get('/workshops/2026-04-21-ws')
         button = _isolate_repo_button(
             response.content.decode(), 'workshop-code-repo-link',
         )
@@ -151,7 +151,7 @@ class WorkshopReaderSidebarGitHubIconTest(TierSetupMixin, TestCase):
         )
 
     def test_sidebar_github_button_renders_inline_svg(self):
-        response = self.client.get('/workshops/reader-ws/tutorial/intro')
+        response = self.client.get('/workshops/2026-04-21-reader-ws/tutorial/intro')
         self.assertEqual(response.status_code, 200)
         button = _isolate_repo_button(
             response.content.decode(), 'sidebar-code-repo-link',

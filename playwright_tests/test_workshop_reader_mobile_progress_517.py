@@ -289,9 +289,9 @@ class TestNavigateBetweenPagesFromDrawer:
 
             # Click the CLI page link inside the drawer.
             page.locator(
-                '#sidebar-nav a[href="/workshops/regional-setup/tutorial/cli"]',
+                '#sidebar-nav a[href="/workshops/2026-04-21-regional-setup/tutorial/cli"]',
             ).click()
-            page.wait_for_url("**/workshops/regional-setup/tutorial/cli")
+            page.wait_for_url("**/workshops/2026-04-21-regional-setup/tutorial/cli")
 
             text = page.locator(
                 '[data-testid="reader-mobile-progress-text"]',

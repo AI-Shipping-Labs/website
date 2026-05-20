@@ -108,7 +108,7 @@
            page list; individual tutorial pages are already linked above. -->
       <div class="mb-12 space-y-4" data-testid="workshop-actions">
         <!-- Video card -->
-        <a href="{% url 'workshop_video' workshop.slug %}"
+        <a href="{% url 'workshop_video' workshop.url_key %}"
            class="group flex flex-col rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50"
            data-testid="workshop-video-link">
           <div class="mb-3 flex items-center gap-3">

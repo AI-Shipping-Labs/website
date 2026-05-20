@@ -286,21 +286,20 @@ def event_join_redirect(request, slug):
     #   - 5 min < delta <= 10 min -> live countdown page (HTTP 200)
     #   - delta <= 5 min AND now is still inside the live window -> 302
     #   - now is past the live-window cutoff -> 'past' unavailable page
-    # The live window is ``[start, end_datetime]`` when ``end_datetime``
-    # is set, otherwise ``[start, start + 3h]`` (grace covers extended
-    # Q&A on a 60-120 min workshop that hasn't been completed by cron
-    # yet).
+    # Issue #712: the live window is ``[start, Event.effective_end_datetime]``
+    # — ``end_datetime`` when set, otherwise ``start + 1h``. The 1h
+    # fallback is shared with ``complete_finished_events``, the .ics
+    # export, the calendar deep-link builders, and Studio's default
+    # duration so every surface agrees on "this event is over".
     now = timezone.now()
     delta = event.start_datetime - now
-    end_or_grace_cutoff = (
-        event.end_datetime
-        if event.end_datetime
-        else event.start_datetime + timedelta(hours=3)
-    )
 
-    if now > end_or_grace_cutoff:
+    if now > event.effective_end_datetime:
         # Past the live window — treat as a past event even if the cron
-        # has not yet flipped ``status`` to ``completed``.
+        # has not yet flipped ``status`` to ``completed``. This branch
+        # is intentionally evaluated against the timestamp only, not
+        # ``event.status``, so a stale ``status='upcoming'`` row past
+        # its end still blocks here.
         return render(request, 'events/join_unavailable.html', {
             'event': event,
             'reason': 'past',

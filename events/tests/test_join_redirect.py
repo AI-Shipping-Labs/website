@@ -322,17 +322,104 @@ class EventJoinTimeWindowTest(TierSetupMixin, TestCase):
             1,
         )
 
-    @freeze_time('2026-03-01T15:01:00Z')  # 1 min after start, no end_datetime
+    @freeze_time('2026-03-01T15:30:00Z')  # 30 min after start, no end_datetime
     def test_redirect_during_live_event_with_no_end_datetime(self):
-        """Event is live (3-hour grace covers it)."""
+        """Event is live under the 1h fallback (issue #712)."""
         self._login()
         response = self.client.get('/events/window-event/join')
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], 'https://zoom.us/j/stub')
 
-    @freeze_time('2026-03-01T19:00:00Z')  # 4 hours after start, no end_datetime
+    @freeze_time('2026-03-01T16:01:00Z')  # 1h 1min after start, no end_datetime
     def test_past_grace_cutoff_renders_unavailable_when_no_end_datetime(self):
-        """Past the 3-hour grace window: 'past' unavailable page renders."""
+        """Past the 1h fallback: 'past' unavailable page renders.
+
+        Issue #712: the fallback for events with null ``end_datetime``
+        is ``start + 1h`` (matches ``complete_finished_events``, the
+        .ics export, and Studio's default duration). At ``start + 61
+        min`` we are just past the cutoff.
+        """
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_unavailable.html')
+        self.assertContains(response, 'This event has ended')
+        self.assertEqual(EventJoinClick.objects.count(), 0)
+
+    @freeze_time('2026-03-01T17:00:00Z')  # 2h after start, no end_datetime
+    def test_past_two_hour_mark_renders_unavailable_when_no_end_datetime(self):
+        """Regression guard vs the pre-issue-#712 3h grace.
+
+        Under the old fallback (``start + 3h``) this request would have
+        302'd to Zoom. Under the new 1h fallback (issue #712) it must
+        render the 'past' unavailable page.
+        """
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_unavailable.html')
+        self.assertContains(response, 'This event has ended')
+        self.assertEqual(EventJoinClick.objects.count(), 0)
+
+    def test_stale_upcoming_status_blocked_past_explicit_end_datetime(self):
+        """``status='upcoming'`` past ``end_datetime`` still blocks.
+
+        Issue #712: pin the invariant that the time-gate is independent
+        of ``event.status``. A cron-delayed row with stale
+        ``status='upcoming'`` AND ``now > end_datetime`` falls through
+        the status branch (which only catches ``completed``/
+        ``cancelled``) and is caught by the timestamp branch.
+        """
+        # Set explicit end_datetime in the past while keeping status='upcoming'.
+        _move_event_to(
+            self.event,
+            start_offset=timedelta(hours=-2),
+            end_offset=timedelta(minutes=-30),
+        )
+        # Sanity check: status is still 'upcoming' (cron has not run).
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.status, 'upcoming')
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_unavailable.html')
+        self.assertContains(response, 'This event has ended')
+        self.assertEqual(EventJoinClick.objects.count(), 0)
+
+    def test_stale_upcoming_status_blocked_past_one_hour_fallback(self):
+        """``status='upcoming'`` past the 1h fallback (null end) still blocks.
+
+        Issue #712: same invariant as
+        ``test_stale_upcoming_status_blocked_past_explicit_end_datetime``
+        but for events with null ``end_datetime``. ``start + 2h``
+        without an explicit end is past the 1h fallback cutoff, so the
+        request must NOT 302 and no ``EventJoinClick`` must be written.
+        """
+        _move_event_to(self.event, start_offset=timedelta(hours=-2))
+        # No end_datetime, still 'upcoming'.
+        self.event.refresh_from_db()
+        self.assertIsNone(self.event.end_datetime)
+        self.assertEqual(self.event.status, 'upcoming')
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_unavailable.html')
+        self.assertContains(response, 'This event has ended')
+        self.assertEqual(EventJoinClick.objects.count(), 0)
+
+    def test_cancelled_event_blocked_inside_live_window(self):
+        """``status='cancelled'`` short-circuits before the time branch.
+
+        Issue #712: the status-based gate already catches cancelled
+        events; this test pins the regression so a future refactor that
+        re-orders the branches still blocks Zoom redirects on cancelled
+        rows whose timestamps would otherwise be inside the live
+        window.
+        """
+        # Move the event so it is live (start 30 min ago), then cancel it.
+        _move_event_to(self.event, start_offset=timedelta(minutes=-30))
+        self.event.status = 'cancelled'
+        self.event.save(update_fields=['status'])
         self._login()
         response = self.client.get('/events/window-event/join')
         self.assertEqual(response.status_code, 200)
@@ -421,6 +508,39 @@ class EventJoinTimeWindowTest(TierSetupMixin, TestCase):
         self._login()
         response = self.client.get('/events/window-event/join')
         self.assertContains(response, '15:00 UTC')
+
+
+class EventEffectiveEndDatetimePropertyTest(TestCase):
+    """Test ``Event.effective_end_datetime`` (issue #712).
+
+    Single source of truth for "when did this event end?" consumed by
+    the join-redirect view, the ``complete_finished_events`` cron, the
+    ``.ics`` export, and the calendar deep-link builders.
+    """
+
+    def test_returns_explicit_end_datetime_when_set(self):
+        start = datetime.datetime(2026, 3, 1, 15, 0, 0, tzinfo=datetime.UTC)
+        end = datetime.datetime(2026, 3, 1, 17, 30, 0, tzinfo=datetime.UTC)
+        event = Event.objects.create(
+            title='Explicit End',
+            slug='explicit-end',
+            start_datetime=start,
+            end_datetime=end,
+            status='upcoming',
+        )
+        self.assertEqual(event.effective_end_datetime, end)
+
+    def test_falls_back_to_start_plus_one_hour_when_null(self):
+        start = datetime.datetime(2026, 3, 1, 15, 0, 0, tzinfo=datetime.UTC)
+        event = Event.objects.create(
+            title='Implicit End',
+            slug='implicit-end',
+            start_datetime=start,
+            end_datetime=None,
+            status='upcoming',
+        )
+        expected = start + timedelta(hours=1)
+        self.assertEqual(event.effective_end_datetime, expected)
 
 
 class EventJoinClickCountPropertyTest(TestCase):

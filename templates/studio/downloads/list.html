@@ -12,13 +12,7 @@
 </div>
 
 <!-- Search -->
-<div class="flex items-center space-x-4 mb-6">
-  <form method="get" class="flex items-center space-x-4 flex-1">
-    <input type="text" name="q" value="{{ search }}" placeholder="Search downloads..."
-           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-64 focus:outline-none focus:ring-1 focus:ring-accent">
-    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
-  </form>
-</div>
+{% studio_list_filter search "" "Search downloads..." None False %}
 
 <!-- Download List -->
 <div class="bg-card border border-border rounded-lg overflow-hidden">

@@ -18,19 +18,7 @@
 {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 
 <!-- Filters -->
-<div class="flex items-center space-x-4 mb-6">
-  <form method="get" class="flex items-center space-x-4 flex-1">
-    <input type="text" name="q" value="{{ search }}" placeholder="Search campaigns..."
-           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-64 focus:outline-none focus:ring-1 focus:ring-accent">
-    <select name="status" class="studio-select bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <option value="">All statuses</option>
-      <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
-      <option value="sending" {% if status_filter == 'sending' %}selected{% endif %}>Sending</option>
-      <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>Sent</option>
-    </select>
-    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
-  </form>
-</div>
+{% studio_list_filter search status_filter "Search campaigns..." "campaign" False %}
 
 {% if campaigns %}
 <!-- Campaign List -->

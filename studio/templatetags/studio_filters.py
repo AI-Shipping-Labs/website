@@ -83,6 +83,11 @@ STATUS_OPTIONS = {
         ('completed', 'Completed'),
         ('cancelled', 'Cancelled'),
     ],
+    'campaign': [
+        ('draft', 'Draft'),
+        ('sending', 'Sending'),
+        ('sent', 'Sent'),
+    ],
 }
 
 
@@ -149,12 +154,22 @@ def studio_list_filter(
     status_kind='publication',
     auto_submit=True,
 ):
-    """Render the shared Studio list search/status filter form."""
+    """Render the shared Studio list search/status filter form.
+
+    Pass ``status_kind=None`` (or an empty string) to render in search-only
+    mode — the status dropdown is omitted entirely. This lets list pages
+    that don't have a status concept (recordings, downloads) reuse the
+    canonical search shell without rolling their own ``<form>``.
+    """
+    if status_kind:
+        status_options = STATUS_OPTIONS.get(status_kind)
+    else:
+        status_options = None
     return {
         'search': search,
         'status_filter': status_filter,
         'placeholder': placeholder,
-        'status_options': STATUS_OPTIONS.get(status_kind, STATUS_OPTIONS['publication']),
+        'status_options': status_options,
         'auto_submit': auto_submit,
     }
 

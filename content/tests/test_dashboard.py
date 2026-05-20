@@ -975,8 +975,10 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         self.assertIn('target="_blank"', content)
         self.assertIn('rel="noopener"', content)
 
-    def test_slack_connected_replaces_join_card(self):
-        """Once slack_member is True, show connected status instead of join."""
+    def test_slack_connected_hides_card_on_dashboard(self):
+        """Issue #729: when slack_member is True, the dashboard does NOT
+        render the partial at all — neither the connected panel nor the
+        join CTA. /account/ continues to render the connected panel."""
         # Issue #358: gate changed from slack_user_id to slack_member.
         self._create_user(
             'main-connected@test.com', tier=self.main_tier,
@@ -985,10 +987,19 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         self.client.login(email='main-connected@test.com', password='testpass')
         with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
             response = self.client.get('/')
-        content = response.content.decode()
-        self.assertNotIn('Join our Slack community', content)
-        self.assertIn('Connected to Slack', content)
-        self.assertIn('AI Shipping Labs community workspace', content)
+        # Dashboard: neither state renders.
+        self.assertNotContains(response, 'Connected to Slack')
+        self.assertNotContains(response, 'Join our Slack community')
+        self.assertNotContains(response, 'data-testid="slack-account-card"')
+
+        # Regression pin: /account/ still renders the connected panel for
+        # the same user. Removing the connected card from /account/ is the
+        # scope of issue #730, not this one.
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            account_response = self.client.get('/account/')
+        self.assertEqual(account_response.status_code, 200)
+        self.assertContains(account_response, 'Connected to Slack')
+        self.assertContains(account_response, 'AI Shipping Labs community workspace')
 
     def test_free_user_sees_no_slack_section(self):
         """Free tier users do not see any Slack-related content."""

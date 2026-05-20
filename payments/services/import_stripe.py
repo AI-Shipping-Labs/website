@@ -11,7 +11,7 @@ from accounts.models import IMPORT_SOURCE_STRIPE
 from accounts.services.import_users import ImportRow, register_import_adapter
 from integrations.config import get_config
 from payments.models import Tier
-from payments.services.stripe_client import _subscription_period_end
+from payments.services.stripe_client import _subscription_period_end, _subscription_price_id
 
 logger = logging.getLogger(__name__)
 
@@ -146,16 +146,6 @@ def _select_active_subscription(subscriptions, price_to_tier):
 def _tier_level_for_subscription(subscription, price_to_tier):
     tier = price_to_tier.get(_subscription_price_id(subscription))
     return tier.level if tier else -1
-
-
-def _subscription_price_id(subscription):
-    items = _get(subscription, "items", {}) or {}
-    data = _get(items, "data", []) or []
-    if not data:
-        return ""
-    first_item = data[0]
-    price = _get(first_item, "price", {}) or {}
-    return _get(price, "id", "") or ""
 
 
 def _price_to_tier_map():

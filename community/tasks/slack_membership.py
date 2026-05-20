@@ -40,7 +40,7 @@ from accounts.models import User
 from accounts.utils.names import set_name_from_external
 from community.models import CommunityAuditLog
 from community.services import get_community_service
-from jobs.tasks import async_task
+from jobs.tasks import async_task, build_task_name
 
 logger = logging.getLogger(__name__)
 
@@ -257,6 +257,11 @@ def refresh_slack_membership(
         if more_remaining:
             async_task(
                 'community.tasks.slack_membership.refresh_slack_membership',
+                task_name=build_task_name(
+                    'Refresh Slack membership',
+                    f'chunk follow-up ({total_checked} checked)',
+                    'Slack membership chain',
+                ),
             )
             enqueued_followup = True
 

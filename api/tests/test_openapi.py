@@ -22,7 +22,9 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
+from accounts.models import Token
 from api.openapi import OPENAPI_SPEC_ATTR, build_spec
 from api.urls import urlpatterns
 
@@ -130,7 +132,13 @@ class SprintsModuleHasOpenApiSpecTest(TestCase):
 
 
 class OpenApiJsonViewTest(TestCase):
-    """Access control on ``GET /api/openapi.json``."""
+    """Access control on ``GET /api/openapi.json``.
+
+    The route is dual-auth: a staff browser session OR a staff-owned
+    ``Authorization: Token <key>`` header. The matrix below covers
+    every cell of (anon, non-staff session, staff session) x
+    (no header, malformed header, non-staff token, staff token).
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -140,6 +148,17 @@ class OpenApiJsonViewTest(TestCase):
         cls.member = User.objects.create_user(
             email="member@test.com", password="pw",
         )
+        cls.staff_token = Token.objects.create(user=cls.staff, name="staff-tok")
+        # Non-staff token: bypass the manager's staff-only validator by
+        # constructing the row directly. Models the legacy case where a
+        # token was minted while the user was staff but the user has
+        # since been demoted.
+        cls.non_staff_token = Token(
+            key="non-staff-token-key",
+            user=cls.member,
+            name="legacy-non-staff",
+        )
+        Token.objects.bulk_create([cls.non_staff_token])
 
     def test_anonymous_is_redirected_to_login(self):
         response = self.client.get("/api/openapi.json")
@@ -160,6 +179,61 @@ class OpenApiJsonViewTest(TestCase):
         body = json.loads(response.content)
         self.assertEqual(body["openapi"], "3.1.0")
         self.assertIn("/api/sprints", body["paths"])
+
+    def test_staff_token_gets_200_application_json(self):
+        response = self.client.get(
+            "/api/openapi.json",
+            HTTP_AUTHORIZATION=f"Token {self.staff_token.key}",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/json")
+        body = json.loads(response.content)
+        self.assertEqual(body["openapi"], "3.1.0")
+        self.assertIn("/api/sprints", body["paths"])
+
+    def test_non_staff_token_gets_401(self):
+        # Matches ``token_required`` masking semantics: non-staff tokens
+        # report as ``Invalid token`` (not 403), so the response shape
+        # does not leak whether the key exists.
+        response = self.client.get(
+            "/api/openapi.json",
+            HTTP_AUTHORIZATION=f"Token {self.non_staff_token.key}",
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"error": "Invalid token"})
+
+    def test_malformed_authorization_header_returns_401(self):
+        # Anything other than the literal "Token <key>" scheme is treated
+        # as a malformed token attempt rather than falling back to the
+        # session redirect. API clients should not be redirected to a
+        # browser login page.
+        response = self.client.get(
+            "/api/openapi.json",
+            HTTP_AUTHORIZATION="Bearer xyz",
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            response.json(),
+            {"error": "Authentication token required"},
+        )
+
+    def test_token_path_bumps_last_used_at(self):
+        # Proves the token branch runs through ``token_required`` rather
+        # than a parallel implementation that would skip the bump.
+        fresh = Token.objects.create(user=self.staff, name="bump-check")
+        self.assertIsNone(fresh.last_used_at)
+
+        before = timezone.now()
+        response = self.client.get(
+            "/api/openapi.json",
+            HTTP_AUTHORIZATION=f"Token {fresh.key}",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        fresh.refresh_from_db()
+        self.assertIsNotNone(fresh.last_used_at)
+        self.assertGreaterEqual(fresh.last_used_at, before)
+        self.assertLessEqual(fresh.last_used_at, timezone.now())
 
 
 class DocsPageViewTest(TestCase):

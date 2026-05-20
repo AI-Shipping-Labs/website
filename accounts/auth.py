@@ -9,7 +9,8 @@ that should never be redirected to a browser login page.
 
 from functools import wraps
 
-from django.http import JsonResponse
+from django.contrib.auth.decorators import user_passes_test
+from django.http import HttpResponseForbidden, JsonResponse
 from django.utils import timezone
 
 from accounts.models import Token
@@ -60,5 +61,56 @@ def token_required(view_func):
 
         request.user = token.user
         return view_func(request, *args, **kwargs)
+
+    return wrapper
+
+
+def staff_session_or_token_required(view_func):
+    """Allow EITHER a staff session OR a staff-owned API token.
+
+    Composes ``token_required`` (staff-owned token, JSON 401 on failure)
+    with the staff-session gate used by the API-docs routes (browser
+    callers redirect to login when anonymous, get a flat 403 when
+    authenticated but not staff).
+
+    Dispatch rule:
+
+    - If the request carries an ``Authorization`` header, route the
+      caller through ``token_required``. That helper already enforces
+      staff-owned tokens (see ``token_required`` lines 55-56) and bumps
+      ``last_used_at`` on success. A missing ``Token`` scheme, an
+      unknown key, or a non-staff token all surface the existing JSON
+      401 shape; we never fall back to the session path because the
+      client clearly intended to authenticate as an API caller and
+      should not be silently redirected to a browser login page.
+    - Otherwise, fall back to the staff-session gate: anonymous callers
+      receive a 302 to ``LOGIN_URL`` with ``next=`` (so the browser-only
+      UI flow keeps working); authenticated but non-staff callers
+      receive a flat 403 (the user IS authenticated, they just lack the
+      right role).
+
+    Pick this helper for the OpenAPI spec route, where the same URL must
+    serve both Swagger UI's in-browser fetch (staff session, no token)
+    and external tooling like Postman or ``openapi-generator`` (token
+    header, no session). Prefer ``token_required`` for pure API
+    endpoints (no session path) and ``api.utils.token_or_session_required``
+    for endpoints that intentionally accept any authenticated session
+    plus CSRF (e.g. browser-driven mutations that share a route with
+    scripted callers); that helper does NOT require staff on the
+    session path, which is the wrong default for the docs surface.
+    """
+    token_view = token_required(view_func)
+
+    @user_passes_test(lambda u: getattr(u, "is_authenticated", False))
+    def _session_view(request, *args, **kwargs):
+        if not request.user.is_staff:
+            return HttpResponseForbidden("Staff access required.")
+        return view_func(request, *args, **kwargs)
+
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if request.headers.get("Authorization"):
+            return token_view(request, *args, **kwargs)
+        return _session_view(request, *args, **kwargs)
 
     return wrapper

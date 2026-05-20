@@ -88,14 +88,14 @@ class Command(BaseCommand):
         # Reminder runs first (07:00 UTC) so users get a 24h heads-up
         # before the purge sweep (08:00 UTC) on the same calendar day.
         schedule(
-            'accounts.tasks.remind_unverified_users',
+            'accounts.tasks.remind_unverified_users.remind_unverified_users',
             cron='0 7 * * *',
             name='remind-unverified-users',
         )
         self.stdout.write(self.style.SUCCESS('Registered: remind-unverified-users (daily at 07:00 UTC)'))
 
         schedule(
-            'accounts.tasks.purge_unverified_users',
+            'accounts.tasks.purge_unverified_users.purge_unverified_users',
             cron='0 8 * * *',
             name='purge-unverified-users',
         )

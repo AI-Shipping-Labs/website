@@ -22,6 +22,7 @@ from payments.models import ConversionAttribution, Tier, WebhookEvent
 from payments.services import (
     _get_subscription_period_end,
     _get_subscription_price_id,
+    _subscription_price_id,
     _tier_for_price_id,
     _tier_from_subscription,
     cancel_subscription,
@@ -272,6 +273,49 @@ class SubscriptionExtractionTest(TestCase):
         self.assertEqual(attribution.billing_period, "yearly")
         self.assertEqual(attribution.amount_eur, self.basic.price_eur_year)
         self.assertEqual(attribution.mrr_eur, self.basic.price_eur_year // 12)
+
+
+@tag('core')
+class SubscriptionPriceIdLowLevelTest(TestCase):
+    """Pin low-level ``_subscription_price_id`` against both payload shapes.
+
+    The helper used to live in ``payments.services.import_stripe`` and was a
+    weaker re-implementation that did not handle the StripeObject ``.items``
+    method-name collision. After issue #686 collapsed both copies onto the
+    canonical ``stripe_client`` implementation, the import adapter and the
+    backfill path share the webhook-grade extractor. These tests pin both
+    payload shapes so a regression in either branch would fail.
+    """
+
+    def test_returns_exact_price_id_for_dict_payload(self):
+        subscription = {
+            "items": {
+                "data": [
+                    {"price": {"id": "price_dict_payload"}},
+                ],
+            },
+        }
+
+        self.assertEqual(
+            _subscription_price_id(subscription),
+            "price_dict_payload",
+        )
+
+    def test_returns_exact_price_id_for_stripe_object_with_items_method(self):
+        subscription = StripeMappingObject(
+            items={
+                "data": [
+                    StripeMappingObject(
+                        price=StripeMappingObject(id="price_object_payload"),
+                    ),
+                ],
+            },
+        )
+
+        self.assertEqual(
+            _subscription_price_id(subscription),
+            "price_object_payload",
+        )
 
 
 @tag('core')

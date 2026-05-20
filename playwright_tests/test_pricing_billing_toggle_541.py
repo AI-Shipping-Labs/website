@@ -3,7 +3,12 @@ import os
 import pytest
 from playwright.sync_api import expect
 
-pytestmark = pytest.mark.django_db(transaction=True)
+# Issue #656: this module seeds pricing tiers via Tier.objects.update_or_create
+# and cannot run against the deployed dev environment.
+pytestmark = [
+    pytest.mark.django_db(transaction=True),
+    pytest.mark.local_only,
+]
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 PRICING_TIERS = [

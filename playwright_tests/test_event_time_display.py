@@ -10,6 +10,11 @@ from playwright_tests.conftest import create_session_for_user as _create_session
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
+# Issue #656: this module uses local-only fixtures (DB seeding,
+# session-cookie injection, etc.) and cannot run against the
+# deployed dev environment. See _docs/testing-guidelines.md.
+pytestmark = pytest.mark.local_only
+
 
 def _clear_events_settings_and_users():
     from django.db import connection

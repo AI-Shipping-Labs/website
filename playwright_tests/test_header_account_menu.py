@@ -9,7 +9,7 @@ from playwright_tests.conftest import auth_context, create_staff_user, create_us
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.local_only]
 
 
 def _email(prefix):

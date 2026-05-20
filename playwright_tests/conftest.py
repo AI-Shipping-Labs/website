@@ -3,12 +3,24 @@ Playwright E2E test configuration.
 
 Provides fixtures to start the Django dev server in a background thread
 for Playwright tests to run against.
+
+The fixtures honor ``PLAYWRIGHT_BASE_URL``. When that env var points at a
+remote host (e.g. ``https://dev.aishippinglabs.com``), the in-process
+``runserver`` thread is NOT started and tests marked ``local_only`` or
+``creates_data`` are skipped automatically. The ``django_db`` marker is
+NOT auto-skipped — anonymous tests carrying it without actually issuing
+queries still run against dev. Tests that genuinely need the local DB
+must tag themselves ``local_only``. See
+``.github/workflows/scheduled-playwright-dev.yml`` and
+``_docs/testing-guidelines.md`` ("Marker taxonomy") for the dev-suite
+policy.
 """
 
 import os
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 from django.core.management import call_command
@@ -21,6 +33,65 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 DJANGO_HOST = "127.0.0.1"
 DJANGO_PORT = int(os.environ.get("PLAYWRIGHT_DJANGO_PORT", "8765"))
 DJANGO_BASE_URL = f"http://{DJANGO_HOST}:{DJANGO_PORT}"
+
+_LOCAL_HOSTS = {"127.0.0.1", "localhost", "0.0.0.0", "::1"}
+
+
+def _resolved_base_url():
+    """Return the effective Playwright base URL.
+
+    If ``PLAYWRIGHT_BASE_URL`` is set, use it verbatim. Otherwise fall back to
+    the in-process Django dev server URL (``http://127.0.0.1:8765``).
+    """
+    return os.environ.get("PLAYWRIGHT_BASE_URL", "").strip() or DJANGO_BASE_URL
+
+
+def _base_url_is_local(url):
+    """Return True when the configured base URL points at a local host.
+
+    Local hosts always use the in-process ``runserver`` thread + the SQLite
+    test DB. Non-local hosts (dev / prod) must NOT start a local server and
+    must skip tests that depend on local DB fixtures.
+    """
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except (ValueError, AttributeError):
+        return True
+    return host in _LOCAL_HOSTS
+
+
+def base_url_is_local():
+    """Public helper: True when running against a local Django runserver."""
+    return _base_url_is_local(_resolved_base_url())
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip local-only / creates_data tests when running against a deployed env.
+
+    When ``PLAYWRIGHT_BASE_URL`` points at a non-local host the in-process
+    Django server is not started and the SQLite test database does not exist.
+    Tests explicitly marked ``local_only`` or ``creates_data`` are skipped so
+    the dev suite only runs the anonymous, read-only subset. Tests that carry
+    the pytest-django ``django_db`` marker are NOT auto-skipped here: many
+    Playwright tests use ``django_db`` to allow stray ORM reads in helpers
+    that never actually touch the local DB on a dev-targeted run. Each such
+    file is responsible for tagging itself ``local_only`` when it genuinely
+    needs the local DB. Local runs (default ``PLAYWRIGHT_BASE_URL`` unset,
+    or set to a 127.0.0.1 / localhost URL) are unaffected.
+    """
+    base_url = _resolved_base_url()
+    if _base_url_is_local(base_url):
+        return
+
+    skip_local = pytest.mark.skip(
+        reason=(
+            f"Skipped: requires local Django runserver "
+            f"(PLAYWRIGHT_BASE_URL={base_url!r} is non-local)."
+        )
+    )
+    for item in items:
+        if item.get_closest_marker("local_only") or item.get_closest_marker("creates_data"):
+            item.add_marker(skip_local)
 
 
 @pytest.fixture(scope="session")
@@ -105,8 +176,27 @@ def _start_django_server():
 
 
 @pytest.fixture(scope="session")
-def django_server(django_db_setup, django_db_blocker):
-    """Start the Django dev server for the test session."""
+def django_server(request):
+    """Provide the base URL for Playwright tests.
+
+    When ``PLAYWRIGHT_BASE_URL`` is unset (or points at a local host) this
+    starts the in-process Django dev server using pytest-django's test
+    database and yields ``http://127.0.0.1:8765``. When ``PLAYWRIGHT_BASE_URL``
+    points at a remote host (dev / prod), no local server is started and the
+    configured URL is yielded as-is — local-only and ``django_db`` tests have
+    already been skipped by ``pytest_collection_modifyitems``.
+    """
+    base_url = _resolved_base_url()
+    if not _base_url_is_local(base_url):
+        yield base_url.rstrip("/")
+        return
+
+    # Local path: run the in-process Django server, using pytest-django's
+    # test DB. We request the django_db_setup + django_db_blocker fixtures
+    # lazily so the dev-suite run (which has no test DB) is never forced to
+    # build one.
+    request.getfixturevalue("django_db_setup")
+    django_db_blocker = request.getfixturevalue("django_db_blocker")
     with django_db_blocker.unblock():
         _start_django_server()
         yield DJANGO_BASE_URL

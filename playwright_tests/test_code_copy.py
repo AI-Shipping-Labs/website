@@ -22,6 +22,10 @@ import pytest
 # check would otherwise raise SynchronousOnlyOperation when we make ORM calls.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
+# Issue #656: this module seeds Articles via Article.objects.create and
+# cannot run against the deployed dev environment.
+pytestmark = pytest.mark.local_only
+
 from django.db import connection  # noqa: E402
 
 

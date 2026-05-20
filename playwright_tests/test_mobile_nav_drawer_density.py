@@ -42,7 +42,7 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.local_only]
 
 PIXEL_7 = {"width": 412, "height": 915}
 DESKTOP = {"width": 1280, "height": 800}

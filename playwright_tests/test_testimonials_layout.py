@@ -102,6 +102,9 @@ def test_homepage_testimonials_desktop_and_mobile_screenshots(django_server, pag
     _screenshot_section(page, "homepage-mobile")
 
 
+# Issue #656: this test seeds a course via Course.objects.update_or_create
+# and cannot run against the deployed dev environment.
+@pytest.mark.local_only
 @pytest.mark.django_db(transaction=True)
 def test_course_testimonials_shared_layout_and_source_link(django_server, page):
     _ensure_testimonial_course()

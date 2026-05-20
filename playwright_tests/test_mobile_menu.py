@@ -25,7 +25,7 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.local_only]
 
 MOBILE_VIEWPORTS = [
     {"width": 412, "height": 915},  # Pixel 7

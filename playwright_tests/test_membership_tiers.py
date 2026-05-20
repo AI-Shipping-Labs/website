@@ -22,7 +22,14 @@ from django.conf import settings
 # survive into the running Django server's connection. With the default
 # (non-transactional) mode, the fixture's INSERTs roll back before the
 # server thread queries the table.
-pytestmark = pytest.mark.django_db(transaction=True)
+#
+# Issue #656: this module uses the local-only autouse ``_seed_tier_data``
+# fixture (Tier.objects.update_or_create) and cannot run against the
+# deployed dev environment. See _docs/testing-guidelines.md.
+pytestmark = [
+    pytest.mark.django_db(transaction=True),
+    pytest.mark.local_only,
+]
 
 VIEWPORT = {"width": 1280, "height": 720}
 

@@ -54,7 +54,7 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.local_only]
 
 # Mobile viewport used by the matrix test. The bug was reported at
 # 390x844 (iPhone 14 / 15 default). The accordion behavior is unchanged

@@ -61,7 +61,7 @@
         <th class="px-4 py-3">Last updated</th>
         <th class="px-4 py-3">Plans</th>
         <th class="px-4 py-3">Notes</th>
-        <th class="px-4 py-3"></th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-border">
@@ -98,10 +98,12 @@
         <td class="px-4 py-3 text-muted-foreground">{{ row.updated_at|date:"Y-m-d" }}</td>
         <td class="px-4 py-3 text-foreground" data-testid="crm-row-plans-count">{{ row.plans_count }}</td>
         <td class="px-4 py-3 text-foreground" data-testid="crm-row-notes-count">{{ row.notes_count }}</td>
-        <td class="px-4 py-3">
-          <a href="{% url 'studio_user_detail' user_id=row.user_pk %}"
-             data-testid="crm-row-profile-link"
-             class="text-xs text-muted-foreground hover:text-foreground hover:underline">Profile</a>
+        <td class="px-4 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            <a href="{% url 'studio_user_detail' user_id=row.user_pk %}"
+               data-testid="crm-row-profile-link"
+               class="{% studio_action_class 'secondary' %}">Profile</a>
+          </div>
         </td>
       </tr>
       {% endfor %}

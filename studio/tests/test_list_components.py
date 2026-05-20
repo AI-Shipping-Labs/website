@@ -1,6 +1,7 @@
 """Regression tests for shared Studio content list components."""
 
 import datetime
+import re
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
@@ -254,3 +255,248 @@ class StudioListComponentRenderTest(TestCase):
         self.assertContains(empty_response, 'data-testid="workshops-empty-state"')
         self.assertContains(empty_response, 'No workshops match your filters.')
         self.assertContains(empty_response, 'Clear filters')
+
+
+class StudioListRowActionPillStyleTest(TestCase):
+    """Issue #740 — row-action cells must use the canonical pill style.
+
+    The right-aligned actions ``<td>`` may not contain bare ``text-accent``
+    underlined links; every action must go through ``studio_list_action``
+    or ``studio_action_class`` so the geometry stays consistent across
+    Studio list pages.
+    """
+
+    # Each tuple: (template_path, [(expected_substring, description), ...])
+    # The expected_substring patterns appear in the action cell and prove
+    # the cell uses the canonical helpers.
+    canonical_call_sites = [
+        ('templates/studio/plans/list.html', [
+            "studio_list_action plan_detail_url 'View plan' 'primary'",
+            "studio_list_action plan_edit_url 'Edit' 'secondary'",
+        ]),
+        ('templates/studio/sprints/list.html', [
+            "studio_list_action sprint_edit_url 'Edit' 'secondary'",
+        ]),
+        ('templates/studio/downloads/list.html', [
+            "studio_list_action download.get_absolute_url 'View on site' 'secondary' True 'noopener noreferrer'",
+        ]),
+        ('templates/studio/email_templates/list.html', [
+            "studio_action_class 'destructive'",
+            "studio_action_class 'secondary'",
+        ]),
+        ('templates/studio/crm/list.html', [
+            "studio_action_class 'secondary'",
+            'data-testid="crm-row-profile-link"',
+        ]),
+        ('templates/studio/api_tokens/list.html', [
+            "studio_action_class 'destructive'",
+        ]),
+    ]
+
+    # Files inspected — none of these may contain bare text-accent links
+    # inside the right-aligned actions <td>. The regex below extracts the
+    # innermost actions <td> by matching the literal data-label="Actions"
+    # anchor that the canonical cells emit.
+    row_action_template_paths = [
+        'templates/studio/plans/list.html',
+        'templates/studio/sprints/list.html',
+        'templates/studio/downloads/list.html',
+        'templates/studio/email_templates/list.html',
+        'templates/studio/crm/list.html',
+        'templates/studio/api_tokens/list.html',
+    ]
+
+    def _template_source(self, relative_path):
+        return (REPO_ROOT / relative_path).read_text()
+
+    def _action_td_blocks(self, source):
+        """Return the bodies of <td> elements that mark themselves Actions.
+
+        Every canonical row-action cell carries ``data-label="Actions"``;
+        the matching close-tag is the next ``</td>`` after that marker.
+        """
+        blocks = []
+        marker = 'data-label="Actions"'
+        cursor = 0
+        while True:
+            anchor = source.find(marker, cursor)
+            if anchor == -1:
+                break
+            # Walk back to the opening <td so the block is the whole cell.
+            td_start = source.rfind('<td', 0, anchor)
+            td_end = source.find('</td>', anchor)
+            if td_start == -1 or td_end == -1:
+                break
+            blocks.append(source[td_start:td_end])
+            cursor = td_end + len('</td>')
+        return blocks
+
+    def test_row_action_cells_have_no_bare_text_accent_links(self):
+        text_accent_pattern = re.compile(r'class="[^"]*\btext-accent\b[^"]*"')
+        for path in self.row_action_template_paths:
+            with self.subTest(path=path):
+                source = self._template_source(path)
+                blocks = self._action_td_blocks(source)
+                self.assertTrue(
+                    blocks,
+                    msg=f"{path} has no data-label=\"Actions\" <td> block",
+                )
+                for block in blocks:
+                    self.assertIsNone(
+                        text_accent_pattern.search(block),
+                        msg=(
+                            f"{path}: row-action <td> still contains a bare "
+                            'text-accent class. Use studio_list_action / '
+                            'studio_action_class instead.'
+                        ),
+                    )
+
+    def test_row_action_cells_use_canonical_helpers(self):
+        for path, expected_calls in self.canonical_call_sites:
+            with self.subTest(path=path):
+                source = self._template_source(path)
+                blocks = self._action_td_blocks(source)
+                self.assertTrue(
+                    blocks,
+                    msg=f"{path} has no data-label=\"Actions\" <td> block",
+                )
+                joined = '\n'.join(blocks)
+                for expected in expected_calls:
+                    self.assertIn(
+                        expected,
+                        joined,
+                        msg=(
+                            f"{path}: row-action <td> is missing the expected "
+                            f"canonical call '{expected}'."
+                        ),
+                    )
+
+    def test_email_templates_no_longer_uses_literal_actions_cell_class(self):
+        source = self._template_source(
+            'templates/studio/email_templates/list.html'
+        )
+        # The literal 'studio-actions-cell' string must come from
+        # studio_list_class('action_cell') — not hand-typed.
+        self.assertNotIn('px-4 py-3 studio-actions-cell', source)
+        self.assertIn("studio_list_class 'action_cell'", source)
+
+    def test_api_token_revoke_uses_destructive_kind(self):
+        source = self._template_source(
+            'templates/studio/api_tokens/list.html'
+        )
+        self.assertIn("studio_action_class 'destructive'", source)
+        self.assertNotIn("studio_action_class 'danger'", source)
+
+
+class StudioListRowActionRenderTest(TestCase):
+    """Rendered pages render the canonical action pill classes.
+
+    Issue #740 — the live HTML for the five updated lists must carry the
+    shared ``studio-action-group`` wrapper and the kind-specific border
+    colours so the operator sees consistent pills.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='row-action-staff@test.com',
+            password='testpass',
+            is_staff=True,
+            is_superuser=True,
+        )
+
+    def setUp(self):
+        self.client.login(
+            email='row-action-staff@test.com', password='testpass',
+        )
+
+    def test_plans_list_action_cell_renders_pill_buttons(self):
+        from plans.models import Plan, Sprint
+
+        sprint = Sprint.objects.create(
+            name='Sprint A',
+            slug='sprint-a',
+            start_date=datetime.date(2026, 1, 1),
+            duration_weeks=4,
+        )
+        member = User.objects.create_user(
+            email='plan-member@test.com', password='testpass',
+        )
+        Plan.objects.create(member=member, sprint=sprint, goal='Ship it.')
+
+        response = self.client.get('/studio/plans/')
+        self.assertContains(response, 'studio-action-group')
+        self.assertContains(response, 'border-accent bg-accent')
+        self.assertContains(response, 'border-border bg-secondary')
+        # No bare text-accent link inside the row.
+        self.assertNotContains(
+            response,
+            'class="text-sm text-accent hover:underline">View plan',
+        )
+
+    def test_sprints_list_action_cell_renders_pill_buttons(self):
+        from plans.models import Sprint
+
+        Sprint.objects.create(
+            name='Sprint B',
+            slug='sprint-b',
+            start_date=datetime.date(2026, 1, 1),
+            duration_weeks=4,
+        )
+        response = self.client.get('/studio/sprints/')
+        self.assertContains(response, 'studio-action-group')
+        self.assertContains(response, 'border-accent bg-accent')
+        self.assertContains(response, 'border-border bg-secondary')
+        self.assertNotContains(
+            response,
+            'class="text-sm text-accent hover:underline">Edit',
+        )
+
+    def test_downloads_list_action_cell_preserves_view_on_site_testid(self):
+        Download.objects.create(
+            title='Pill Download',
+            slug='pill-download',
+            file_url='https://example.com/pill.pdf',
+            published=True,
+        )
+        response = self.client.get('/studio/downloads/')
+        self.assertContains(response, 'studio-action-group')
+        self.assertContains(response, 'border-accent bg-accent')
+        self.assertContains(response, 'data-testid="view-on-site"')
+        self.assertContains(response, 'rel="noopener noreferrer"')
+
+    def test_email_templates_list_uses_destructive_pill_for_reset(self):
+        from email_app.models import EmailTemplateOverride
+
+        EmailTemplateOverride.objects.create(
+            template_name='welcome',
+            subject='Welcome',
+            body_markdown='Hi there.',
+        )
+        response = self.client.get('/studio/email-templates/')
+        self.assertContains(response, 'studio-action-group')
+        # Edit pill (primary)
+        self.assertContains(response, 'border-accent bg-accent')
+        # Reset to default pill (destructive)
+        self.assertContains(response, 'border-red-500/40')
+        self.assertContains(response, 'Reset to default')
+
+    def test_crm_list_profile_action_renders_secondary_pill_with_testid(self):
+        from crm.models import CRMRecord
+
+        tracked = User.objects.create_user(
+            email='crm-tracked@test.com', password='testpass',
+        )
+        CRMRecord.objects.create(user=tracked, status='active')
+        response = self.client.get('/studio/crm/')
+        self.assertContains(response, 'studio-action-group')
+        self.assertContains(response, 'data-testid="crm-row-profile-link"')
+        self.assertContains(response, 'border-border bg-secondary')
+
+    def test_api_tokens_revoke_button_renders_destructive_pill(self):
+        from accounts.models import Token
+
+        Token.objects.create(user=self.staff, name='Test token')
+        response = self.client.get('/studio/api-tokens/')
+        self.assertContains(response, 'data-testid="api-token-revoke"')
+        self.assertContains(response, 'border-red-500/40')

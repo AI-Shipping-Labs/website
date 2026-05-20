@@ -1,7 +1,7 @@
 """Background job: refresh Slack workspace membership per user.
 
-Runs every 30 minutes. For users whose ``slack_checked_at`` is NULL or
-older than ``SLACK_MEMBERSHIP_REFRESH_DAYS``, calls Slack's
+Runs every 30 minutes (cron). For users whose ``slack_checked_at`` is
+NULL or older than ``SLACK_MEMBERSHIP_REFRESH_DAYS``, calls Slack's
 ``users.lookupByEmail`` and updates the canonical ``slack_member`` flag
 plus ``slack_checked_at`` timestamp.
 
@@ -9,6 +9,25 @@ Issue #358: ``slack_user_id`` is a poor proxy for "is in the workspace"
 (OAuth populates it without a join), so we maintain an explicit verified
 ``slack_member`` boolean. Used by the dashboard CTA and campaign
 targeting.
+
+Issue #715 — chunked chain pattern
+----------------------------------
+The task processes at most ``SLACK_MEMBERSHIP_CHUNK_SIZE`` users per
+run. Sizing math: the global ``Q_CLUSTER['timeout']`` is 300s and each
+call costs ~1.5s of pacing + up to 10s of HTTP timeout; 120 users x
+1.5s = 180s, leaving ~120s of headroom for slow calls. Prior behaviour
+(1000 users in one task) repeatedly tripped the 300s timeout on prod.
+
+When more users still match the predicate after a chunk completes, we
+enqueue a follow-up ``async_task`` pointing at this same function so
+the backlog drains in chains of ~3-4 min runs instead of one giant
+25-min run. The 30-min cron in ``setup_schedules.py`` is unchanged —
+it just kicks off the first link of each chain.
+
+All-unknown guard: if every user in the chunk came back ``unknown``
+(Slack integration unconfigured or in a hard outage), we do NOT
+enqueue the follow-up. Without this guard, the same users would
+re-match the predicate on the next run and chain forever.
 """
 
 import json
@@ -21,6 +40,7 @@ from accounts.models import User
 from accounts.utils.names import set_name_from_external
 from community.models import CommunityAuditLog
 from community.services import get_community_service
+from jobs.tasks import async_task
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +48,16 @@ logger = logging.getLogger(__name__)
 # while still picking up users who joined Slack after signup.
 SLACK_MEMBERSHIP_REFRESH_DAYS = 7
 
-# Per-run cap. Slack Tier 4 limit is 50 RPM (~3000/hour). With 1.5s
-# inter-call sleep that gives ~40 RPM, so 1000 users takes about 25 min,
-# well under the 30-min schedule cadence.
+# Per-chunk cap. Each scheduled run processes up to this many users and
+# enqueues a follow-up ``async_task`` if more remain. Sized to fit
+# comfortably inside the 300s ``Q_CLUSTER['timeout']`` ceiling: 120
+# users x 1.5s pacing = 180s base, leaving ~120s headroom even when
+# individual calls hit their 10s HTTP timeout. See issue #715.
+SLACK_MEMBERSHIP_CHUNK_SIZE = 120
+
+# Absolute per-run hard ceiling. Retained for callers that explicitly
+# request a larger ``batch_size`` (e.g. one-off backfills); the periodic
+# scheduled run uses ``SLACK_MEMBERSHIP_CHUNK_SIZE`` instead.
 SLACK_MEMBERSHIP_BATCH_SIZE = 1000
 
 # Sleep between API calls to stay under Slack's Tier 4 rate limit.
@@ -106,9 +133,10 @@ def refresh_slack_membership(
 ):
     """Refresh ``slack_member`` for users with stale or missing checks.
 
-    Selects up to ``batch_size`` users where ``slack_checked_at`` is
-    NULL or older than ``refresh_days``, ordered NULLs first. For each
-    user calls ``service.check_workspace_membership(email)``:
+    Selects up to ``batch_size`` users (default
+    ``SLACK_MEMBERSHIP_CHUNK_SIZE``) where ``slack_checked_at`` is NULL
+    or older than ``refresh_days``, ordered NULLs first. For each user
+    calls ``service.check_workspace_membership(email)``:
 
     - ``("member", uid)``: set ``slack_member=True``, fill
       ``slack_user_id`` if empty, set ``slack_checked_at=now()``.
@@ -121,11 +149,20 @@ def refresh_slack_membership(
     returns ``unknown`` for everyone and this function becomes a safe
     no-op.
 
+    Chain pattern (issue #715): if the chunk completes with at least
+    one definite outcome (``member`` or ``not_member``) AND more users
+    still match the predicate, this function enqueues a follow-up
+    ``async_task`` so the backlog drains in chains without raising the
+    global ``Q_CLUSTER['timeout']``. If every user in the chunk came
+    back ``unknown`` (integration unconfigured / total outage), we do
+    NOT enqueue the follow-up — those users would just match again on
+    the next run and chain forever.
+
     Returns:
         dict: counts keyed by ``members``, ``not_members``, ``unknown``,
-        ``total_checked``, ``transitions``.
+        ``total_checked``, ``transitions``, ``enqueued_followup``.
     """
-    batch_size = batch_size or SLACK_MEMBERSHIP_BATCH_SIZE
+    batch_size = batch_size or SLACK_MEMBERSHIP_CHUNK_SIZE
     refresh_days = refresh_days or SLACK_MEMBERSHIP_REFRESH_DAYS
     if sleep_seconds is None:
         sleep_seconds = SLACK_MEMBERSHIP_SLEEP_SECONDS
@@ -203,12 +240,33 @@ def refresh_slack_membership(
                 transitions += 1
                 _log_check_transition(user, previous_member, False)
 
+    total_checked = len(users)
+
+    # Decide whether to chain a follow-up run. We chain only when (a)
+    # at least one user in this chunk resolved to a definite outcome
+    # (so we know the Slack integration is actually working) AND (b)
+    # more users still match the predicate. Without (a) we'd loop
+    # forever on an unconfigured environment where every call returns
+    # ``unknown``; without (b) we'd kick off a guaranteed-empty run.
+    enqueued_followup = False
+    made_progress = total_checked > 0 and unknown < total_checked
+    if made_progress:
+        more_remaining = User.objects.filter(
+            models_q_null_or_old(cutoff)
+        ).exists()
+        if more_remaining:
+            async_task(
+                'community.tasks.slack_membership.refresh_slack_membership',
+            )
+            enqueued_followup = True
+
     summary = {
-        "total_checked": len(users),
+        "total_checked": total_checked,
         "members": members,
         "not_members": not_members,
         "unknown": unknown,
         "transitions": transitions,
+        "enqueued_followup": enqueued_followup,
     }
     logger.info("Slack membership refresh complete: %s", summary)
     return summary

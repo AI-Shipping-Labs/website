@@ -10,9 +10,12 @@ Endpoints:
 - ``DELETE /api/plans/<id>/`` -- delete (staff)
 """
 
+import logging
+
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.http import JsonResponse
+from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 
@@ -27,6 +30,7 @@ from api.views._permissions import (
     bearer_is_admin,
     visible_plans_for,
 )
+from notifications.services.notification_service import NotificationService
 from plans.models import (
     KIND_CHOICES,
     PLAN_STATUS_CHOICES,
@@ -50,6 +54,8 @@ def _coerce_datetime(value):
         return parse_datetime(value)
     return value
 
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -569,10 +575,42 @@ def plan_detail(request, plan_id):
             )
         update_fields.extend(focus_fields)
 
+    # Issue #732: ``shared_at`` is the explicit share trigger. Non-null
+    # values are server-clamped to ``timezone.now()`` (we don't trust
+    # client clocks for the share moment). ``null`` clears the
+    # timestamp WITHOUT firing notifications — operator un-share is
+    # silent by design. Staff-only, same gate as DELETE.
+    fire_plan_shared = False
+    if "shared_at" in data:
+        if not bearer_is_admin(request.user):
+            return error_response(
+                "Plan share is staff-only",
+                "forbidden_other_user_plan",
+                status=403,
+            )
+        if data["shared_at"] is None:
+            plan.shared_at = None
+        else:
+            plan.shared_at = timezone.now()
+            fire_plan_shared = True
+        update_fields.append("shared_at")
+
     if update_fields:
         # Always touch updated_at so the API contract stays consistent
         # with `auto_now=True` semantics on direct model save.
         plan.save(update_fields=list(set(update_fields)) + ["updated_at"])
+
+    # Issue #732: fire bell + email AFTER the save so the timestamp is
+    # already committed. A failure in the notification helper must not
+    # roll back the PATCH; the helper itself logs SES exceptions.
+    if fire_plan_shared:
+        try:
+            NotificationService.create_plan_shared(plan)
+        except Exception:
+            logger.exception(
+                'Failed to fire plan_shared notification for plan %s',
+                plan.pk,
+            )
 
     plan.refresh_from_db()
     plan = (

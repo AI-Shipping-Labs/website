@@ -40,6 +40,12 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # an unsubscribed user still receives it, same policy as
     # event_reminder / event_rescheduled.
     "post_event_followup",
+    # Issue #732: staff explicitly shared a sprint plan with the
+    # member. Transactional because the recipient is a named paid
+    # sprint participant and the email is about an artefact created
+    # for them; unsubscribed users still receive it (same policy as
+    # event_registration / event_reminder).
+    "plan_shared",
 }
 
 PROMOTIONAL_EMAIL_TYPES = {

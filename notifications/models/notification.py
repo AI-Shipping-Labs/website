@@ -9,6 +9,10 @@ NOTIFICATION_TYPE_CHOICES = [
     # Created for every active staff user when an enrolled member with
     # no plan clicks "Ask the team to plan with me" on the cohort board.
     ('plan_request', 'Plan Request'),
+    # Issue #732: fired when staff shares a sprint plan with the member
+    # (Studio button OR PATCH /api/plans/<id>/ with {"shared_at": ...}).
+    # Targets exactly one user (the plan owner) — no tier fan-out.
+    ('plan_shared', 'Plan Shared'),
 ]
 
 

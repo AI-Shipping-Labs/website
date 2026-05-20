@@ -20,13 +20,17 @@ a staff member glancing at the page understands the visibility before
 reading.
 """
 
+import logging
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.http import HttpResponsePermanentRedirect, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views.decorators.http import require_POST
 
+from notifications.services.notification_service import NotificationService
 from plans.models import (
     PLAN_STATUS_CHOICES,
     InterviewNote,
@@ -36,6 +40,8 @@ from plans.models import (
 from plans.services import create_plan_for_enrollment
 from studio.decorators import staff_required
 from studio.services.plan_editor import build_plan_editor_context
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -287,3 +293,48 @@ def interview_note_delete(request, plan_id, note_id):
         kwargs={'user_id': note.member_id, 'note_id': note.pk},
     )
     return HttpResponseTemporaryRedirect(target)
+
+
+@staff_required
+@require_POST
+def plan_share(request, plan_id):
+    """Share / re-share a sprint plan with the member (issue #732).
+
+    Stamps ``Plan.shared_at`` to ``timezone.now()`` and fires the
+    ``plan_shared`` bell + transactional email via
+    :meth:`NotificationService.create_plan_shared`.
+
+    Re-share is allowed by design — every POST creates a fresh
+    notification and a fresh email log. The template wraps the
+    re-share button in a JS ``confirm()`` prompt so a stray click
+    does not surprise-notify the member.
+
+    The save is the source of truth: even if the notification helper
+    raises (unlikely — it already swallows SES exceptions), the
+    ``shared_at`` save has already committed.
+    """
+    plan = get_object_or_404(
+        Plan.objects.select_related('member', 'sprint'),
+        pk=plan_id,
+    )
+    was_already_shared = plan.shared_at is not None
+    plan.mark_shared()
+
+    try:
+        NotificationService.create_plan_shared(plan)
+    except Exception:
+        logger.exception(
+            'Failed to fire plan_shared notification for plan %s',
+            plan.pk,
+        )
+
+    if was_already_shared:
+        messages.success(
+            request, f'Re-shared plan with {plan.member.email}.'
+        )
+    else:
+        messages.success(
+            request, f'Plan shared with {plan.member.email}.'
+        )
+
+    return redirect('studio_plan_edit', plan_id=plan.pk)

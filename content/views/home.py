@@ -1,9 +1,13 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.db.models import Count, Q
 from django.shortcuts import render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+from accounts.services.timezones import format_user_datetime
 from community.services.slack_links import build_slack_profile_url
 from content.access import get_active_override, get_user_level
 from content.models import (
@@ -243,6 +247,12 @@ def _dashboard(request):
     # --- Upcoming events ---
     upcoming_events = _get_upcoming_events(user)
 
+    # --- Starting soon card (issue #705) ---
+    # The same imminent event continues to appear in ``upcoming_events`` —
+    # we intentionally do not dedupe. The card is the urgency surface,
+    # the list is the context.
+    starting_soon = _get_starting_soon_event(user)
+
     # --- Recent content ---
     recent_content = _get_recent_content(user_level)
 
@@ -280,6 +290,7 @@ def _dashboard(request):
         'hidden_learning_count': hidden_learning_count,
         'in_progress_learning_total_count': len(all_in_progress_learning),
         'upcoming_events': upcoming_events,
+        'starting_soon': starting_soon,
         'recent_content': recent_content,
         'active_polls': active_polls,
         'quick_actions': quick_actions,
@@ -610,6 +621,67 @@ def _get_upcoming_events(user):
         event__status='upcoming',
     ).select_related('event').order_by('event__start_datetime')[:3]
     return [reg.event for reg in registrations]
+
+
+def _get_starting_soon_event(user):
+    """Return data for the dashboard "Starting soon" card (issue #705).
+
+    Returns a dict for the soonest event the user is registered for whose
+    ``start_datetime`` is in the half-open window ``(now, now + 10min]``;
+    otherwise returns ``None``.
+
+    Boundary decisions:
+    - ``start_datetime > now`` excludes events that have already started.
+      Once the event is in progress, the card vanishes and the user
+      relies on the regular Join button on the event detail page
+      (#704 handles the time-gated 302 to Zoom).
+    - ``start_datetime <= now + 10 min`` means a ``delta`` of exactly
+      10 min is INSIDE the window (card visible at the 10-minute mark).
+    - ``join_label`` flips at ``delta <= 5 min``: delta == 5 min is
+      INCLUSIVE on the "Join now" side, matching the boundary in
+      ``events.views.pages.event_join_redirect``.
+
+    The Join button URL is always ``/events/<slug>/join``; #704 branches
+    server-side between the countdown page (delta > 5 min) and the Zoom
+    302 (delta <= 5 min). The label is purely a UX hint.
+    """
+    from events.models import EventRegistration
+    now = timezone.now()
+    window_end = now + timedelta(minutes=10)
+    registration = (
+        EventRegistration.objects
+        .filter(
+            user=user,
+            event__start_datetime__gt=now,
+            event__start_datetime__lte=window_end,
+            event__status='upcoming',
+        )
+        .select_related('event')
+        .order_by('event__start_datetime')
+        .first()
+    )
+    if registration is None:
+        return None
+
+    event = registration.event
+    delta = event.start_datetime - now
+    seconds_until_start = max(int(delta.total_seconds()), 0)
+    minutes_until_start = seconds_until_start // 60
+    remaining_seconds = seconds_until_start % 60
+    join_label = (
+        'Join now'
+        if delta <= timedelta(minutes=5)
+        else 'Open join page'
+    )
+    return {
+        'event': event,
+        'seconds_until_start': seconds_until_start,
+        'minutes_until_start': minutes_until_start,
+        'remaining_seconds': remaining_seconds,
+        'event_start_local': format_user_datetime(event.start_datetime, user),
+        'join_url': reverse('event_join', kwargs={'slug': event.slug}),
+        'join_label': join_label,
+    }
 
 
 def _get_recent_content(user_level):

@@ -3,6 +3,19 @@
 
 {% block title %}Dashboard | AI Shipping Labs{% endblock %}
 
+{% block extra_head %}
+{% if starting_soon %}
+{% comment %}
+  Issue #705: re-evaluate the "Starting soon" window every 30s so the
+  card naturally vanishes when delta drops below 0 (the event started)
+  or flips its label when delta crosses 5 min. Emitted ONLY when the
+  card is showing — we do not want every authenticated dashboard
+  visit to auto-refresh every 30s.
+{% endcomment %}
+<meta http-equiv="refresh" content="30">
+{% endif %}
+{% endblock %}
+
 {% block body %}
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24">
@@ -67,6 +80,10 @@
     <div class="grid gap-10 lg:gap-8 lg:grid-cols-3 overflow-hidden">
       <!-- Main content: 2 columns wide -->
       <div class="lg:col-span-2 space-y-8 min-w-0">
+
+        {% if starting_soon %}
+        {% include "content/_starting_soon_card.html" %}
+        {% endif %}
 
         <!-- Continue Learning -->
         <section>

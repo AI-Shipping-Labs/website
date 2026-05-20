@@ -136,7 +136,7 @@ class WorkshopLandingMaterialsTest(TierSetupMixin, TestCase):
 
     def test_landing_renders_materials_from_workshop(self):
         response = self.client.get(
-            f'/workshops/{self.workshop_with_materials.slug}',
+            self.workshop_with_materials.get_absolute_url(),
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="workshop-materials"')
@@ -156,7 +156,7 @@ class WorkshopLandingMaterialsTest(TierSetupMixin, TestCase):
                 {'title': 'Secret', 'url': 'https://example.com/secret'},
             ],
         )
-        response = self.client.get(f'/workshops/{workshop.slug}')
+        response = self.client.get(workshop.get_absolute_url())
         self.assertNotContains(response, 'data-testid="workshop-materials"')
         # The pages paywall is the single CTA.
         self.assertContains(response, 'data-testid="workshop-pages-paywall"')
@@ -172,7 +172,7 @@ class WorkshopLandingMaterialsTest(TierSetupMixin, TestCase):
             slug='fb', materials=[], event=event,
             landing=0, pages=0, recording=0,
         )
-        response = self.client.get(f'/workshops/{workshop.slug}')
+        response = self.client.get(workshop.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="workshop-materials"')
         self.assertContains(response, 'https://example.com/event-doc')
@@ -180,7 +180,7 @@ class WorkshopLandingMaterialsTest(TierSetupMixin, TestCase):
 
     def test_landing_no_materials_block_when_resolved_empty(self):
         bare = _make_workshop(slug='bare', materials=[], event=None)
-        response = self.client.get(f'/workshops/{bare.slug}')
+        response = self.client.get(bare.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="workshop-materials"')
         # And no stray Materials heading anywhere on the page.
@@ -227,7 +227,7 @@ class WorkshopVideoMaterialsTest(TierSetupMixin, TestCase):
             event=event,
         )
         self.client.force_login(self.user_basic)
-        response = self.client.get(f'/workshops/{workshop.slug}/video')
+        response = self.client.get(f'{workshop.get_absolute_url()}/video')
         # Recording is paywalled (Basic < Main) but materials still show.
         self.assertEqual(response.status_code, 403)
         self.assertContains(
@@ -258,7 +258,7 @@ class WorkshopVideoMaterialsTest(TierSetupMixin, TestCase):
             event=event,
         )
         self.client.force_login(self.user_main)
-        response = self.client.get(f'/workshops/{workshop.slug}/video')
+        response = self.client.get(f'{workshop.get_absolute_url()}/video')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="video-materials"')
         self.assertContains(response, 'https://example.com/cheat.pdf')
@@ -284,7 +284,7 @@ class WorkshopVideoMaterialsTest(TierSetupMixin, TestCase):
             event=event,
         )
         self.client.force_login(self.user_basic)
-        response = self.client.get(f'/workshops/{workshop.slug}/video')
+        response = self.client.get(f'{workshop.get_absolute_url()}/video')
         self.assertEqual(response.status_code, 403)
         self.assertNotContains(
             response, 'data-testid="video-materials"', status_code=403,
@@ -309,7 +309,7 @@ class WorkshopVideoMaterialsTest(TierSetupMixin, TestCase):
             materials=[],
             event=event,
         )
-        response = self.client.get(f'/workshops/{workshop.slug}/video')
+        response = self.client.get(f'{workshop.get_absolute_url()}/video')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="video-materials"')
         self.assertNotContains(response, 'Materials</h2>')
@@ -336,7 +336,7 @@ class WorkshopMaterialsOverrideTest(TierSetupMixin, TestCase):
             ],
             event=event,
         )
-        response = self.client.get(f'/workshops/{workshop.slug}')
+        response = self.client.get(workshop.get_absolute_url())
         self.assertContains(response, 'NEW')
         self.assertContains(response, 'https://example.com/new')
         self.assertNotContains(response, 'OLD')
@@ -360,7 +360,7 @@ class WorkshopMaterialsOverrideTest(TierSetupMixin, TestCase):
             ],
             event=event,
         )
-        response = self.client.get(f'/workshops/{workshop.slug}/video')
+        response = self.client.get(f'{workshop.get_absolute_url()}/video')
         self.assertContains(response, 'NEW')
         self.assertContains(response, 'https://example.com/new')
         self.assertNotContains(response, 'OLD')

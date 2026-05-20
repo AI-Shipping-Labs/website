@@ -654,6 +654,7 @@ def _build_course_unit_lookup(course_dir, course_ignore_patterns=None, stats=Non
 
 def _build_workshop_page_lookup(
     workshop_dir, workshop_slug, workshop_title=None, copy_file=None,
+    workshop_url_key=None,
 ):
     """Build a ``{filename: {'slug', 'title', 'url'}}`` map for a workshop folder.
 
@@ -685,6 +686,12 @@ def _build_workshop_page_lookup(
             workshop landing URL (so a link like
             ``[01-intro.md](01-intro.md)`` rewrites to ``/workshops/<slug>``
             instead of the tutorial URL).
+        workshop_url_key: Issue #750 — the ``<YYYY-MM-DD>-<slug>`` URL key.
+            When supplied, virtual entries and tutorial URLs use this key
+            so rewritten links match the new canonical URL shape. When
+            omitted, the bare ``workshop_slug`` is used (pre-#750
+            behaviour) for backward compatibility with older callers and
+            tests.
     """
     lookup = {}
     if not os.path.isdir(workshop_dir):
@@ -720,7 +727,9 @@ def _build_workshop_page_lookup(
             continue
 
         slug = metadata.get('slug') or derive_slug(filename)
-        url = f'/workshops/{workshop_slug}/tutorial/{slug}'
+        # Issue #750: prefer the date-slug URL key when supplied.
+        path_key = workshop_url_key or workshop_slug
+        url = f'/workshops/{path_key}/tutorial/{slug}'
         lookup[filename] = {
             'slug': slug,
             'title': title,
@@ -733,7 +742,9 @@ def _build_workshop_page_lookup(
     # rule from #301 surfaces the workshop title as the visible link text
     # when the link label equals the bare filename.
     if workshop_title:
-        landing_url = f'/workshops/{workshop_slug}'
+        # Issue #750: landing URL also uses the date-slug key when set.
+        path_key = workshop_url_key or workshop_slug
+        landing_url = f'/workshops/{path_key}'
         readme_path = os.path.join(workshop_dir, 'README.md')
         if os.path.isfile(readme_path):
             lookup['README.md'] = {

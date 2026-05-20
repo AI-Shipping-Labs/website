@@ -3,12 +3,12 @@
 Renders the user-facing surface for the ``Workshop`` content type:
 
 - ``/workshops`` — catalog of all published workshops.
-- ``/workshops/<slug>`` — landing page (description + metadata) gated by
-  ``landing_required_level``.
-- ``/workshops/<slug>/video`` — recording panel + materials, gated by
-  ``recording_required_level``.
-- ``/workshops/<slug>/tutorial/<page_slug>`` — single tutorial page gated by
-  ``pages_required_level`` with prev/next navigation.
+- ``/workshops/<date>-<slug>`` — landing page (description + metadata)
+  gated by ``landing_required_level``.
+- ``/workshops/<date>-<slug>/video`` — recording panel + materials,
+  gated by ``recording_required_level``.
+- ``/workshops/<date>-<slug>/tutorial/<page_slug>`` — single tutorial page
+  gated by ``pages_required_level`` with prev/next navigation.
 
 Every section gates against its own field, so a Workshop with
 ``landing=0, pages=10, recording=20`` lets free visitors see the landing,
@@ -16,15 +16,23 @@ Basic+ members read the tutorial, and Main+ members watch the recording.
 
 The catalog always shows every published workshop (with a tier badge) so
 users see what they would unlock by upgrading.
+
+Issue #750: detail routes are keyed on ``<YYYY-MM-DD>-<slug>`` so URLs
+are derivable from the content repo. Legacy slug-only URLs (the shape
+that lived in last month's emails) still resolve via 301 redirects.
 """
 
+import logging
+import re
+from datetime import date as date_cls
 from urllib.parse import urlencode
 
 from django.http import Http404, HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
-from django.urls import reverse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
+
+logger = logging.getLogger(__name__)
 
 from accounts.oauth_context import get_oauth_provider_context
 from content.access import (
@@ -104,9 +112,78 @@ def workshops_list(request):
     return render(request, 'content/workshops_list.html', context)
 
 
-def _resolve_workshop(slug):
-    """Fetch a published workshop or 404."""
-    return get_object_or_404(Workshop, slug=slug, status='published')
+# Issue #750: a date-slug URL is ``YYYY-MM-DD-<slug>``. The date is
+# exactly 10 chars (4-2-2 with two dashes), followed by a dash, followed
+# by the workshop slug. We parse with a regex so the canonical views can
+# 404 cleanly on malformed input — the URL resolver then falls through to
+# the legacy slug-only routes registered after the canonical ones.
+_DATE_SLUG_RE = re.compile(
+    r'^(?P<date>\d{4}-\d{2}-\d{2})-(?P<slug>[a-z0-9][a-z0-9-]*)$',
+)
+
+
+def _parse_date_slug(date_slug):
+    """Split ``YYYY-MM-DD-<slug>`` into ``(date, slug)`` or raise Http404.
+
+    Malformed prefixes (missing date, wrong length, invalid month/day)
+    raise Http404 so the URL resolver falls through to the legacy
+    slug-only patterns. Note this is a pure parser — it does not touch
+    the database; the caller is responsible for the lookup.
+    """
+    match = _DATE_SLUG_RE.match(date_slug)
+    if match is None:
+        raise Http404('Workshop not found')
+    try:
+        parsed_date = date_cls.fromisoformat(match.group('date'))
+    except ValueError:
+        # date_cls.fromisoformat rejects out-of-range months/days
+        # (e.g. ``9999-99-99``). 404 so the legacy fallback gets a turn.
+        raise Http404('Workshop not found')  # noqa: B904
+    return parsed_date, match.group('slug')
+
+
+def _resolve_workshop_by_key(date_slug):
+    """Parse ``<YYYY-MM-DD>-<slug>`` and fetch the matching published workshop.
+
+    Issue #750. Raises ``Http404`` on malformed prefixes so the URL
+    resolver falls through to the legacy slug-only routes registered
+    after the canonical ones. Also raises ``Http404`` when the (date,
+    slug) pair does not match a published workshop — that's the same
+    behaviour as the old slug-only resolver.
+    """
+    parsed_date, slug = _parse_date_slug(date_slug)
+    return get_object_or_404(
+        Workshop, date=parsed_date, slug=slug, status='published',
+    )
+
+
+def _lookup_legacy_workshop(slug):
+    """Pick the newest published workshop with this slug, log if >1 exists.
+
+    Issue #750. Two workshops can share a slug now that the canonical
+    URL also carries the date (e.g. an annual rerun). When that happens,
+    the legacy slug-only redirect picks the most recent workshop and
+    emits a WARNING-level log line naming both candidates so we can see
+    stale URLs landing on the older content. Raises Http404 when no
+    workshop matches.
+    """
+    qs = Workshop.objects.filter(
+        slug=slug, status='published',
+    ).order_by('-date')
+    workshop = qs.first()
+    if workshop is None:
+        raise Http404('Workshop not found')
+    if qs.count() > 1:
+        other = qs[1]
+        logger.warning(
+            'Legacy slug-only workshop URL "/workshops/%s" resolved to '
+            'multiple workshops (picked the most recent: %s, %s; other '
+            'candidate: %s, %s). Update the link to /workshops/%s.',
+            slug, workshop.date.isoformat(), workshop.title,
+            other.date.isoformat(), other.title,
+            workshop.url_key,
+        )
+    return workshop
 
 
 def _build_landing_context(workshop, user):
@@ -250,7 +327,7 @@ def _resolve_materials_for_render(workshop, can_access_pages,
 
 
 @ensure_csrf_cookie
-def workshop_detail(request, slug):
+def workshop_detail(request, date_slug):
     """Landing page: description, metadata, links to video and tutorial.
 
     The landing is always rendered for SEO — anonymous visitors see title
@@ -261,8 +338,12 @@ def workshop_detail(request, slug):
     set on the landing page so the inline register form (shown on the
     pages-paywall for anonymous visitors) can POST to /api/register
     without a 403.
+
+    Issue #750: ``date_slug`` is the canonical ``<YYYY-MM-DD>-<slug>``
+    key. Malformed input raises Http404 so the resolver falls through to
+    the legacy slug-only redirect registered after this route.
     """
-    workshop = _resolve_workshop(slug)
+    workshop = _resolve_workshop_by_key(date_slug)
     user = request.user
 
     pages = list(workshop.pages.all().order_by('sort_order'))
@@ -362,7 +443,7 @@ def _build_timestamps_with_pages(event, workshop):
     return annotated
 
 
-def workshop_video(request, slug):
+def workshop_video(request, date_slug):
     """Video page: embedded recording + materials, gated by recording level.
 
     Lifted from the recording panel in ``templates/events/event_detail.html``
@@ -373,8 +454,10 @@ def workshop_video(request, slug):
     to the recording, the embed is initialised at that offset. Each
     timestamp on the page that exact-matches a tutorial page's
     ``video_start`` shows a "-> Tutorial: <title>" sub-link.
+
+    Issue #750: ``date_slug`` is the canonical ``<YYYY-MM-DD>-<slug>`` key.
     """
-    workshop = _resolve_workshop(slug)
+    workshop = _resolve_workshop_by_key(date_slug)
     user = request.user
 
     context = _build_landing_context(workshop, user)
@@ -567,7 +650,7 @@ def _build_video_gated_context(request, workshop, event):
     )
 
 
-def workshop_page_detail(request, slug, page_slug):
+def workshop_page_detail(request, date_slug, page_slug):
     """Single tutorial page within a workshop, gated by pages level.
 
     Returns the page even when the user is below the gate so the page is
@@ -575,8 +658,10 @@ def workshop_page_detail(request, slug, page_slug):
     plus an upgrade or sign-in card. Mirrors the course-unit teaser
     layout from issue #248 so the gating UX stays consistent across
     content types.
+
+    Issue #750: ``date_slug`` is the canonical ``<YYYY-MM-DD>-<slug>`` key.
     """
-    workshop = _resolve_workshop(slug)
+    workshop = _resolve_workshop_by_key(date_slug)
     pages = list(workshop.pages.all().order_by('sort_order'))
     page = next((p for p in pages if p.slug == page_slug), None)
     if page is None:
@@ -796,22 +881,63 @@ def _build_page_gated_context(request, workshop, page):
     )
 
 
+def _append_query(target_url, request):
+    """Return ``target_url`` with the request query string appended if any.
+
+    Used by every legacy redirect so deep-link query params (notably
+    ``?t=`` on video URLs and tracking params on landing URLs) survive
+    the 301. Returns ``target_url`` unchanged when the query string is
+    empty.
+    """
+    query_string = request.META.get('QUERY_STRING')
+    if query_string:
+        return f'{target_url}?{query_string}'
+    return target_url
+
+
+def legacy_workshop_landing_redirect(request, slug):
+    """301 ``/workshops/<slug>`` -> ``/workshops/<date>-<slug>``.
+
+    Issue #750. Legacy slug-only landing URLs (the shape that lived in
+    last month's newsletter) keep working via this 301. When two
+    workshops share a slug, ``_lookup_legacy_workshop`` picks the most
+    recent one and logs a WARNING with both candidates.
+    """
+    workshop = _lookup_legacy_workshop(slug)
+    target_url = _append_query(workshop.get_absolute_url(), request)
+    return HttpResponsePermanentRedirect(target_url)
+
+
+def legacy_workshop_video_redirect(request, slug):
+    """301 ``/workshops/<slug>/video`` -> ``/workshops/<date>-<slug>/video``.
+
+    Issue #750. Preserves the ``?t=`` deep-link timestamp so old links
+    in emails / Slack still drop the viewer at the right offset.
+    """
+    workshop = _lookup_legacy_workshop(slug)
+    target_url = _append_query(
+        f'{workshop.get_absolute_url()}/video', request,
+    )
+    return HttpResponsePermanentRedirect(target_url)
+
+
 def legacy_workshop_page_redirect(request, slug, page_slug):
-    """Redirect old /workshops/<slug>/<page_slug> links to tutorial URLs."""
+    """Redirect old /workshops/<slug>/tutorial/<page_slug> links.
+
+    Issue #750: now routes through ``_lookup_legacy_workshop`` so the
+    collision-aware lookup applies to legacy tutorial URLs too. The
+    target URL is built from the canonical ``url_key`` (no more
+    slug-only path).
+    """
     if page_slug in {'tutorial', 'video'}:
         raise Http404('Workshop page not found')
 
-    workshop = _resolve_workshop(slug)
+    workshop = _lookup_legacy_workshop(slug)
     get_object_or_404(WorkshopPage, workshop=workshop, slug=page_slug)
 
-    target_url = reverse(
-        'workshop_page_detail',
-        kwargs={'slug': slug, 'page_slug': page_slug},
+    target_url = _append_query(
+        f'{workshop.get_absolute_url()}/tutorial/{page_slug}', request,
     )
-    query_string = request.META.get('QUERY_STRING')
-    if query_string:
-        target_url = f'{target_url}?{query_string}'
-
     return HttpResponsePermanentRedirect(target_url)
 
 
@@ -832,7 +958,12 @@ def api_workshop_page_complete(request, slug, page_slug):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Authentication required'}, status=401)
 
-    workshop = _resolve_workshop(slug)
+    # Issue #750: the public detail surface moved to date-slug URLs but
+    # the completion API stays slug-only (internal endpoint, out of
+    # scope for the URL change). When a slug collision exists between
+    # two published workshops, we route to the newest one — same rule
+    # as the legacy redirect helper.
+    workshop = _lookup_legacy_workshop(slug)
     page = get_object_or_404(WorkshopPage, workshop=workshop, slug=page_slug)
     user = request.user
 

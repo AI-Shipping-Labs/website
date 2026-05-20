@@ -327,9 +327,16 @@ def _sync_single_workshop(
         # entries for README.md (and an explicit copy_file when set), so
         # ``[README.md](README.md)`` resolves to the landing URL instead
         # of emitting a broken-link warning.
+        #
+        # Issue #750: emit the date-slug URL shape (``<date>-<slug>``) so
+        # rewritten links match the new canonical URL. The key is
+        # derived inline (Workshop.url_key isn't reachable here — the
+        # row may not exist yet).
+        workshop_url_key = f'{workshop_date.isoformat()}-{slug}'
         page_lookup = _build_workshop_page_lookup(
             workshop_dir, slug, workshop_title=title,
             copy_file=data.get('copy_file'),
+            workshop_url_key=workshop_url_key,
         )
 
         # Resolve the landing description: copy_file (explicit) -> README.md
@@ -446,6 +453,7 @@ def _sync_single_workshop(
             cross_workshop_lookup=cross_workshop_lookup,
             workshops_repo_name=workshops_repo_name,
             source_workshop_folder=source_workshop_folder,
+            workshop_url_key=workshop_url_key,
         )
 
     except Exception as e:
@@ -629,7 +637,7 @@ def _sync_workshop_pages(
     workshop, workshop_dir, repo_dir, repo_name, commit_sha, stats,
     known_images=None, page_lookup=None,
     cross_workshop_lookup=None, workshops_repo_name=None,
-    source_workshop_folder=None,
+    source_workshop_folder=None, workshop_url_key=None,
 ):
     """Sync ``*.md`` pages under a workshop folder into ``WorkshopPage`` rows.
 
@@ -763,6 +771,11 @@ def _sync_workshop_pages(
                 source_path=rel_path,
                 sync_errors=stats.get('errors'),
                 cross_workshop_lookup=cross_workshop_lookup,
+                # Issue #750: rewrite to the date-slug URL shape. The
+                # dispatcher passes the pre-computed key; fall back to
+                # the Workshop.url_key property when called directly
+                # without the threaded value.
+                workshop_url_key=workshop_url_key or workshop.url_key,
             )
             # Issue #526: rewrite cross-workshop links AFTER the
             # intra-workshop pass so it picks up the ``..``-prefixed and

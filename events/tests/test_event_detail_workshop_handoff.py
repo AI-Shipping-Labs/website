@@ -136,7 +136,9 @@ class EventDetailWorkshopHandoffTest(TestCase):
         self.assertContains(
             response, 'data-testid="event-workshop-writeup-link"'
         )
-        self.assertContains(response, '/workshops/linked-workshop')
+        self.assertContains(
+            response, '/workshops/2026-04-21-linked-workshop',
+        )
 
     def test_linked_event_shows_announcement_description(self):
         # The event's announcement copy still renders independently of the

@@ -50,7 +50,7 @@ Test: visit `/studio/settings/` and confirm 10 integration groups are listed (St
 
 ## 3. OAuth login providers
 
-Configure in Studio > Settings > Auth & Login. Each provider has its own card with the callback URL ready to copy + the developer-console link.
+Configure in Studio > Settings > Auth & Login. Each provider has its own card with the callback URL ready to copy + the developer-console link. For a local-development shortcut that pre-populates `SocialApp` rows from `.env` via `seed_data`, see [`_docs/setup.md`](setup.md) "OAuth (Google, GitHub, Slack)".
 
 Per provider, fill in: Provider, Name, Client id, Secret key, and assign your site (`aishippinglabs.com` or equivalent) to the "Chosen sites" box.
 
@@ -244,7 +244,7 @@ Test: in `Studio > Sync`, click "Sync now" on a content source; confirm the sync
 
 Studio path: `Studio > Settings > S3 Content Images`.
 
-Provider console: AWS S3 + CloudFront. Bucket policy, CORS, and Origin Access Control details are in `_docs/content-images-s3.md` — follow that document for the bucket and CloudFront setup before filling in the keys here.
+Provider console: AWS S3 + CloudFront. Bucket policy, CORS, and Origin Access Control details are in [`_docs/integrations/s3_content.md`](integrations/s3_content.md) — follow that document for the bucket and CloudFront setup before filling in the keys here.
 
 Production deploys MUST set the env var `S3_ENABLED=true` to actually upload images to S3 during content sync. The flag defaults to `false` everywhere — local dev, CI, Playwright, `manage.py test` — so `upload_images_to_s3` short-circuits before constructing any boto3 client and returns a no-op stats dict. Without `S3_ENABLED=true` in prod, content sync still runs but image uploads are skipped (the markdown still resolves to the configured `CONTENT_CDN_BASE`, so existing CDN images keep working). Issue #532.
 
@@ -338,11 +338,6 @@ Run this checklist after configuring everything. Each item is one click, end to 
 
 ## Future updates
 
-This doc is locked against TODAY's codebase. As the linked issues ship, update the corresponding lines.
+This section tracks doc updates pending on still-open feature work. Add a row when a new issue is opened that will require a doc edit; remove the row once the issue ships and the doc is updated.
 
-| Trigger | What changes in the doc |
-|---------|-------------------------|
-| #321 ships | Done — section 1 mentions Studio's host-mismatch banner; the legacy `SITE_URL` setting was deleted. |
-| #322 ships | Done — section 3 points to Studio > Settings > Auth & Login; the legacy "configure via Django admin" path was removed. |
-| #323 ships | Add a one-liner in section 13: "You can export and import settings via Studio (with a secret-handling policy)." |
-| #324 ships | Add one sentence in section 1: "Studio shows a source badge per field — `db` or `env` — so you can see which value is winning." |
+No pending doc updates at this time.

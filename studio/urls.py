@@ -126,6 +126,7 @@ from studio.views.sprints import (
     sprint_detail,
     sprint_edit,
     sprint_list,
+    sprint_plan_request_create_plan,
 )
 from studio.views.sprints_enroll import sprint_bulk_enroll
 from studio.views.sync import (
@@ -565,6 +566,17 @@ urlpatterns = [
         'sprints/<int:sprint_id>/add-member',
         sprint_add_member,
         name='studio_sprint_add_member',
+    ),
+    # Inbox: one-click plan creation from a pending PlanRequest (issue
+    # #718). POST-only, staff-only, idempotent. The button lives on the
+    # sprint detail page; the URL takes ``member_id`` rather than the
+    # PlanRequest pk because the audit table may have multiple rows
+    # per ``(sprint, member)`` and we want all of them to be cleared
+    # from the inbox in a single click.
+    path(
+        'sprints/<int:sprint_id>/plan-requests/<int:member_id>/create-plan/',
+        sprint_plan_request_create_plan,
+        name='studio_sprint_plan_request_create_plan',
     ),
 
     # Plans (issue #432, drag-drop editor #434). Members section.

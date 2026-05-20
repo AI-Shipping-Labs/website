@@ -14,11 +14,6 @@
     </div>
     <div class="flex items-center gap-2" data-testid="studio-header-actions">
       {% include "studio/includes/_admin_link.html" with obj=sprint %}
-      <a href="{% url 'studio_sprint_add_member' sprint_id=sprint.pk %}"
-         class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-         data-testid="sprint-add-member-link">
-        Add member
-      </a>
       <a href="{% url 'studio_sprint_bulk_enroll' sprint_id=sprint.pk %}"
          class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
          data-testid="sprint-bulk-enroll-link">
@@ -112,6 +107,70 @@
     </a>
   {% endif %}
 </div>
+
+<section id="pending-requests" class="mb-8" data-testid="sprint-pending-requests-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">
+    Pending plan requests ({{ pending_plan_requests|length }})
+  </h2>
+  {% if pending_plan_requests %}
+  <div class="bg-card border border-border rounded-lg overflow-hidden">
+    <table class="w-full" data-testid="sprint-pending-requests-table">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Member</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Requests</th>
+          <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Action</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in pending_plan_requests %}
+        <tr class="hover:bg-secondary/50 transition-colors" data-testid="sprint-pending-request-row">
+          <td class="px-6 py-4 text-sm">
+            <div class="text-foreground" data-testid="sprint-pending-request-name">
+              {% if row.member.get_full_name %}{{ row.member.get_full_name }}{% else %}(no name){% endif %}
+            </div>
+            <div class="text-xs text-muted-foreground" data-testid="sprint-pending-request-email">{{ row.member.email }}</div>
+          </td>
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="sprint-pending-request-meta">
+            Requested {{ row.request_count }} time{{ row.request_count|pluralize }}, last at {{ row.last_requested_at|date:"Y-m-d H:i" }}
+          </td>
+          <td class="px-6 py-4 text-right">
+            <form method="post"
+                  action="{% url 'studio_sprint_plan_request_create_plan' sprint_id=sprint.pk member_id=row.member.pk %}"
+                  data-testid="sprint-pending-request-form">
+              {% csrf_token %}
+              <button type="submit"
+                      class="bg-accent text-accent-foreground px-3 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+                      data-testid="sprint-pending-request-create-button">
+                Create plan from request
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm"
+       data-testid="sprint-pending-requests-empty">
+    No pending plan requests for this sprint.
+  </div>
+  {% endif %}
+
+  <details class="mt-4" data-testid="sprint-add-member-details">
+    <summary class="cursor-pointer text-sm text-muted-foreground hover:text-foreground transition-colors">
+      Add a member who didn't request a plan
+    </summary>
+    <div class="mt-3">
+      <a href="{% url 'studio_sprint_add_member' sprint_id=sprint.pk %}"
+         class="inline-flex items-center bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+         data-testid="sprint-add-member-link">
+        Add member without a request
+      </a>
+    </div>
+  </details>
+</section>
 
 <h2 class="text-lg font-semibold text-foreground mb-4">Plans in this sprint</h2>
 {% if plans %}

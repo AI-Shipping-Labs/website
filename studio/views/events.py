@@ -23,6 +23,7 @@ from accounts.services.timezones import (
 from events.models import Event, EventRegistration
 from events.models.event import EXTERNAL_HOST_CHOICES
 from events.tasks.notify_reschedule import enqueue_reschedule_notice
+from events.tasks.send_post_event_followup import enqueue_post_event_followup
 from integrations.services.zoom import create_meeting
 from studio.decorators import staff_required
 from studio.utils import get_github_edit_url, is_synced
@@ -380,6 +381,14 @@ def event_edit(request, event_id):
                 request.POST.get('external_host', ''),
             )
 
+            # Issue #680: post_event_summary is a host-authored recap body
+            # for the follow-up email. Editable even on synced rows so
+            # staff can write the recap without round-tripping through
+            # the content repo.
+            event.post_event_summary = request.POST.get(
+                'post_event_summary', '',
+            )
+
             event.save()
         else:
             # Issue #670: snapshot the persisted start time BEFORE we
@@ -447,6 +456,13 @@ def event_edit(request, event_id):
                 event.zoom_join_url = request.POST.get('custom_url', '').strip()
                 event.zoom_meeting_id = ''
 
+            # Issue #680: post_event_summary is a host-authored recap body
+            # for the follow-up email. Markdown; blank is permitted (the
+            # task substitutes a generic fallback string).
+            event.post_event_summary = request.POST.get(
+                'post_event_summary', '',
+            )
+
             event.save()
 
             # Issue #670: detect a meaningful start-time change and
@@ -463,6 +479,13 @@ def event_edit(request, event_id):
     context['github_edit_url'] = get_github_edit_url(event)
     context['notify_url'] = reverse('studio_event_notify', kwargs={'event_id': event.pk})
     context['announce_url'] = reverse('studio_event_announce_slack', kwargs={'event_id': event.pk})
+    # Issue #680: manual "Send follow-up now" button. The button is
+    # enabled only when the event is completed AND has a recording URL
+    # (gated in the template). The view itself accepts only completed
+    # events with a recording — see ``event_send_followup`` below.
+    context['send_followup_url'] = reverse(
+        'studio_event_send_followup', kwargs={'event_id': event.pk},
+    )
     # ``form_values`` and ``errors`` are only meaningful on the create flow
     # (issue #574). Provide empty defaults here so the shared template's
     # ``form_values.foo`` lookups resolve cleanly when rendering edit.
@@ -534,6 +557,73 @@ def event_registrations_csv(request, event_id):
         ])
 
     return response
+
+
+@staff_required
+@require_POST
+def event_send_followup(request, event_id):
+    """Issue #680: manual "Send follow-up now" trigger.
+
+    The Studio button on completed events fires this endpoint. The
+    handler is the documented escape hatch for cases where the cron
+    skipped the follow-up because the recording URL was empty at the
+    moment the event flipped to ``completed`` — staff populate the
+    URL later and press the button to fan out.
+
+    Gates (must hold; otherwise the request flashes an error and
+    redirects back to the edit page without enqueuing):
+
+    - ``event.status == 'completed'``.
+    - ``event.recording_s3_url`` or ``event.recording_url`` is set.
+
+    Idempotency:
+
+    - The per-user task already dedups via
+      ``EventReminderLog.get_or_create(event, user, interval='followup')``.
+      A second press over the same audience is a no-op — every user
+      already has a log row.
+    - We also surface a different flash message ("already sent") when
+      the cron has already enqueued a fan-out for this event, so the
+      operator gets immediate feedback instead of waiting for the
+      worker to no-op.
+    """
+    event = get_object_or_404(Event, pk=event_id)
+
+    if event.status != 'completed':
+        messages.error(
+            request,
+            'Follow-up emails can only be sent for completed events.',
+        )
+        return redirect('studio_event_edit', event_id=event.pk)
+
+    recording_url = event.recording_s3_url or event.recording_url
+    if not recording_url:
+        messages.error(
+            request,
+            'Set a recording URL before sending the follow-up email.',
+        )
+        return redirect('studio_event_edit', event_id=event.pk)
+
+    from notifications.models import EventReminderLog
+
+    if EventReminderLog.objects.filter(
+        event=event, interval='followup',
+    ).exists():
+        messages.info(
+            request,
+            'A post-event follow-up has already been sent for this event.',
+        )
+        return redirect('studio_event_edit', event_id=event.pk)
+
+    enqueue_post_event_followup(event.pk)
+
+    registration_count = EventRegistration.objects.filter(event=event).count()
+    label = 'attendee' if registration_count == 1 else 'attendees'
+    messages.success(
+        request,
+        f'Follow-up email queued for {registration_count} {label}.',
+    )
+    return redirect('studio_event_edit', event_id=event.pk)
 
 
 @staff_required

@@ -35,6 +35,11 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # Issue #703: paid-signup automation.
     "cofounder_welcome",
     "staff_signup_notification",
+    # Issue #680: post-event follow-up (recap + recording + notes).
+    # Transactional because the recipient registered for this event;
+    # an unsubscribed user still receives it, same policy as
+    # event_reminder / event_rescheduled.
+    "post_event_followup",
 }
 
 PROMOTIONAL_EMAIL_TYPES = {

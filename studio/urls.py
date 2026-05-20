@@ -72,6 +72,7 @@ from studio.views.events import (
     event_edit,
     event_list,
     event_registrations_csv,
+    event_send_followup,
 )
 from studio.views.impersonate import impersonate_user, stop_impersonation
 from studio.views.member_notes import (
@@ -268,6 +269,11 @@ urlpatterns = [
     ),
     path('events/<int:event_id>/notify', event_notify, name='studio_event_notify'),
     path('events/<int:event_id>/announce-slack', event_announce_slack, name='studio_event_announce_slack'),
+    path(
+        'events/<int:event_id>/send-followup',
+        event_send_followup,
+        name='studio_event_send_followup',
+    ),
 
     # Event series (issue #564, renamed from event-groups in #575). The
     # literal ``new`` route is registered before the ``<int:series_id>``

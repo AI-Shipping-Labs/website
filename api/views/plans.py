@@ -73,6 +73,48 @@ SUMMARY_FIELDS = (
     "why_this_plan",
 )
 
+# Issue #725: the plans-API write surface has multiple ``max_length``-
+# constrained CharField/URLField columns that previously slipped through
+# without validation and triggered a 500 at DB time. The map below is the
+# single source of truth used by ``_check_max_length`` and the create /
+# PATCH / bulk-import paths. We pull the cap from ``Model._meta.get_field``
+# rather than hardcoding integers so a future migration that widens (or
+# narrows) the column stays in sync automatically.
+#
+# Only ``Plan.summary_weekly_hours`` is currently validated here at the
+# *summary* level; the rest are validated inline at their nested call site
+# (``weeks[].theme`` -> Week.theme, ``resources[].title/url`` -> Resource.*).
+# ``Plan.goal`` keeps its own check but it now also reads from ``_meta`` so
+# the cap can't drift between the migration and the view.
+
+
+def _check_max_length(model, field_name, value, field_path, *, index=None):
+    """Reject ``value`` if it exceeds the model column's ``max_length``.
+
+    Returns ``(ok, error_response_or_None)``. ``ok`` is False only when a
+    422 should be sent. ``field_path`` is the dotted/bracketed path the
+    client sent (e.g. ``"summary.weekly_hours"`` or ``"weeks[0].theme"``);
+    it becomes the key in ``details`` so the client can locate the offence.
+    ``index`` (bulk import) is forwarded into ``details`` when present.
+    """
+    if not isinstance(value, str):
+        return True, None
+    max_length = model._meta.get_field(field_name).max_length
+    if max_length is None or len(value) <= max_length:
+        return True, None
+    details = {
+        field_path: f"must be {max_length} characters or fewer",
+        "max_length": max_length,
+    }
+    if index is not None:
+        details["index"] = index
+    return False, error_response(
+        f"Invalid {field_path}",
+        "validation_error",
+        status=422,
+        details=details,
+    )
+
 
 def _apply_summary(plan, summary_dict):
     """Copy a ``{key: value}`` summary dict onto the plan instance.
@@ -122,6 +164,20 @@ def _build_summary_from_payload(data):
         if flat_key in data:
             summary[key] = data[flat_key]
     return summary
+
+
+def _summary_field_path(data, key):
+    """Return the field path the client used for summary key ``key``.
+
+    Mirrors the input shape so error responses point the caller at exactly
+    the JSON path they sent (``summary.weekly_hours`` for nested input,
+    ``summary_weekly_hours`` for flat input). Flat takes precedence because
+    ``_build_summary_from_payload`` lets flat override nested.
+    """
+    flat_key = f"summary_{key}"
+    if flat_key in data:
+        return flat_key
+    return f"summary.{key}"
 
 
 def _create_plan_from_payload(plan_data, sprint, *, index=None):
@@ -182,8 +238,12 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
     goal_value = plan_data.get("goal", "")
     if goal_value is None:
         goal_value = ""
-    if not isinstance(goal_value, str) or len(goal_value) > 280:
-        details = {"goal": "must be a string of 280 characters or fewer"}
+    goal_max = Plan._meta.get_field("goal").max_length
+    if not isinstance(goal_value, str) or len(goal_value) > goal_max:
+        details = {
+            "goal": f"must be a string of {goal_max} characters or fewer",
+            "max_length": goal_max,
+        }
         if index is not None:
             details["index"] = index
         return None, error_response(
@@ -193,6 +253,24 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
             details=details,
         )
 
+    # Issue #725: validate every ``max_length``-constrained summary field
+    # *before* save. ``summary_weekly_hours`` is the field that motivated
+    # the bug; the same check applies to any other summary key that maps
+    # to a CharField with a cap. Field path mirrors the input shape so the
+    # client sees the exact JSON pointer they sent.
+    summary = _build_summary_from_payload(plan_data)
+    for key, value in summary.items():
+        model_field = f"summary_{key}"
+        if Plan._meta.get_field(model_field).max_length is None:
+            continue
+        ok, err = _check_max_length(
+            Plan, model_field, value or "",
+            _summary_field_path(plan_data, key),
+            index=index,
+        )
+        if not ok:
+            return None, err
+
     plan = Plan(
         member=member,
         sprint=sprint,
@@ -201,7 +279,6 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
         accountability=plan_data.get("accountability", "") or "",
     )
 
-    summary = _build_summary_from_payload(plan_data)
     _apply_summary(plan, summary)
 
     focus = plan_data.get("focus")
@@ -245,10 +322,20 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
                 details=details,
             )
         week_number = week_data.get("week_number", week_index + 1)
+        theme_value = week_data.get("theme", "") or ""
+        # Issue #725: ``Week.theme`` has ``max_length=200``; without this
+        # the DB driver raises a 500 instead of a structured 422.
+        ok, err = _check_max_length(
+            Week, "theme", theme_value,
+            f"weeks[{week_index}].theme",
+            index=index,
+        )
+        if not ok:
+            return None, err
         week = Week.objects.create(
             plan=plan,
             week_number=week_number,
-            theme=week_data.get("theme", "") or "",
+            theme=theme_value,
             position=week_data.get("position", week_index),
         )
         cps = week_data.get("checkpoints") or []
@@ -290,6 +377,20 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
             if not isinstance(row, dict):
                 continue
             kwargs = {f: (row.get(f) or "") for f in fields}
+            # Issue #725: validate any ``max_length`` fields on this model
+            # before insert. Only Resource currently has caps (title=300,
+            # url=600); Deliverable/NextStep use TextField (no cap). The
+            # loop is generic so it picks up future caps automatically.
+            for f in fields:
+                if model._meta.get_field(f).max_length is None:
+                    continue
+                ok, err = _check_max_length(
+                    model, f, kwargs[f],
+                    f"{collection_name}[{row_index}].{f}",
+                    index=index,
+                )
+                if not ok:
+                    return None, err
             kwargs["plan"] = plan
             kwargs["position"] = row.get("position", row_index)
             if "done_at" in row:
@@ -550,17 +651,35 @@ def plan_detail(request, plan_id):
                 status=422,
                 details={"goal": "must be a string"},
             )
-        if len(goal) > 280:
+        # Issue #725: cap pulled from ``_meta`` so a migration that
+        # widens ``Plan.goal`` does not require touching the view.
+        goal_max = Plan._meta.get_field("goal").max_length
+        if len(goal) > goal_max:
             return error_response(
                 "Invalid goal",
                 "validation_error",
                 status=422,
-                details={"goal": "must be 280 characters or fewer"},
+                details={
+                    "goal": f"must be {goal_max} characters or fewer",
+                    "max_length": goal_max,
+                },
             )
         plan.goal = goal
         update_fields.append("goal")
 
     summary = _build_summary_from_payload(data)
+    # Issue #725: enforce ``max_length`` on PATCH the same way the
+    # create path does; without this PATCH would 500 on overflow.
+    for key, value in summary.items():
+        model_field = f"summary_{key}"
+        if Plan._meta.get_field(model_field).max_length is None:
+            continue
+        ok, err = _check_max_length(
+            Plan, model_field, value or "",
+            _summary_field_path(data, key),
+        )
+        if not ok:
+            return err
     if summary:
         update_fields.extend(_apply_summary(plan, summary))
 

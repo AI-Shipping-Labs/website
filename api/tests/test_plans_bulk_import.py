@@ -15,6 +15,7 @@ from plans.models import (
     Plan,
     Resource,
     Sprint,
+    Week,
 )
 
 User = get_user_model()
@@ -201,3 +202,55 @@ class BulkImportFailureModesTest(BulkImportTestBase):
         )
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["code"], "unknown_sprint")
+
+
+class BulkImportMaxLengthValidationTest(BulkImportTestBase):
+    """Issue #725: overflow in any nested string field rejects the whole
+    batch with 422, names the row via ``index``, and rolls back atomically.
+    """
+
+    def test_overlong_summary_weekly_hours_rejects_and_rolls_back(self):
+        max_len = Plan._meta.get_field("summary_weekly_hours").max_length
+        before = Plan.objects.count()
+        # Build 4 rows; the 4th (index 3) overflows.
+        rows = [
+            {"user_email": "m1@test.com"},
+            {"user_email": "m2@test.com"},
+            {"user_email": "m3@test.com"},
+            {
+                "user_email": "staff@test.com",
+                "summary": {"weekly_hours": "x" * (max_len + 1)},
+            },
+        ]
+        response = self._post({"plans": rows})
+
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("summary.weekly_hours", body["details"])
+        self.assertEqual(body["details"]["max_length"], max_len)
+        self.assertEqual(body["details"]["index"], 3)
+        # Atomic: rows 0-2 are also rolled back.
+        self.assertEqual(Plan.objects.count(), before)
+
+    def test_overlong_week_theme_rejects_and_rolls_back(self):
+        max_len = Week._meta.get_field("theme").max_length
+        before = Plan.objects.count()
+        response = self._post({
+            "plans": [
+                {"user_email": "m1@test.com"},
+                {
+                    "user_email": "m2@test.com",
+                    "weeks": [
+                        {"week_number": 1, "theme": "x" * (max_len + 1)},
+                    ],
+                },
+            ],
+        })
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("weeks[0].theme", body["details"])
+        self.assertEqual(body["details"]["max_length"], max_len)
+        self.assertEqual(body["details"]["index"], 1)
+        self.assertEqual(Plan.objects.count(), before)

@@ -130,7 +130,13 @@ class TestStudioUserSlackId:
             f"{django_server}/studio/users/",
             wait_until="domcontentloaded",
         )
-        page.locator("input[name='q']").fill("U01ADA123")
+        # The users list renders TWO inputs named ``q``: the visible
+        # search box (``type="text"``) and a hidden mirror inside the
+        # tag-picker form (issue #694) that only appears after the page
+        # is loaded with a ``?q=...`` query param. Disambiguate with the
+        # ``type`` attribute so Playwright's strict locator matches only
+        # the visible search box on every step.
+        page.locator("input[type='text'][name='q']").fill("U01ADA123")
         page.locator("button:has-text('Search')").click()
         page.wait_for_load_state("domcontentloaded")
 
@@ -140,7 +146,7 @@ class TestStudioUserSlackId:
         assert "grace@example.com" not in body
 
         # 2. Clear, paste a lowercase substring of Grace's Slack ID.
-        search_box = page.locator("input[name='q']")
+        search_box = page.locator("input[type='text'][name='q']")
         search_box.fill("u02grace")
         page.locator("button:has-text('Search')").click()
         page.wait_for_load_state("domcontentloaded")

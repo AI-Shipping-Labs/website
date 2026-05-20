@@ -30,7 +30,7 @@
   {# or a sprint-scoped route (``studio_sprint_add_member``) without #}
   {# branching the <form action> attribute itself. Default keeps the #}
   {# original create-plan form working unchanged. #}
-  <form method="post" action="{{ form_action_url|default:'' }}{% if not form_action_url %}{% url 'studio_plan_create' %}{% endif %}" autocomplete="off">
+  <form id="plan-edit-form" method="post" action="{{ form_action_url|default:'' }}{% if not form_action_url %}{% url 'studio_plan_create' %}{% endif %}" autocomplete="off">
     {% csrf_token %}
 
     <div class="mb-6">
@@ -84,21 +84,9 @@
     </div>
     {% endif %}
 
-    <div class="flex items-center space-x-4">
-      <button type="submit"
-              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-        {% if sprint %}Add member{% else %}Create plan{% endif %}
-      </button>
-      {% if sprint %}
-      <a href="{% url 'studio_sprint_detail' sprint_id=sprint.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-        Cancel
-      </a>
-      {% else %}
-      <a href="{% url 'studio_plan_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-        Cancel
-      </a>
-      {% endif %}
-    </div>
   </form>
 </div>
+
+{% if sprint %}{% url 'studio_sprint_detail' sprint_id=sprint.pk as plan_cancel_url %}{% else %}{% url 'studio_plan_list' as plan_cancel_url %}{% endif %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="plan-edit-form" title="Plan changes" subtitle="Save remains available while you review the form." can_save=True primary_label=primary_label cancel_url=plan_cancel_url %}
 {% endblock %}

@@ -80,7 +80,7 @@ class TestScenario1CreateSeries:
         # studio/_partials/datetime_picker.html, not a free-text input.
         page.select_option('select[name="timezone"]', "Europe/Berlin")
 
-        page.locator('[data-testid="event-series-submit"]').click()
+        page.locator('[data-testid="sticky-save-action"]').click()
         page.wait_for_url(re.compile(r".*/studio/event-series/\d+/$"))
 
         rows = page.locator('[data-testid="event-series-member-row"]')
@@ -429,7 +429,7 @@ class TestScenario7ValidationGuard:
             "document.querySelector('input[name=\"occurrences\"]').removeAttribute('min')"
         )
         page.fill('input[name="occurrences"]', "0")
-        page.locator('[data-testid="event-series-submit"]').click()
+        page.locator('[data-testid="sticky-save-action"]').click()
         # Stay on /new, error rendered, no rows created.
         page.wait_for_load_state("domcontentloaded")
         assert "/studio/event-series/new" in page.url
@@ -446,7 +446,7 @@ class TestScenario7ValidationGuard:
             "document.querySelector('input[name=\"occurrences\"]').removeAttribute('max')"
         )
         page.fill('input[name="occurrences"]', "27")
-        page.locator('[data-testid="event-series-submit"]').click()
+        page.locator('[data-testid="sticky-save-action"]').click()
         page.wait_for_load_state("domcontentloaded")
         assert "/studio/event-series/new" in page.url
         assert page.locator('[data-testid="error-occurrences"]').is_visible()

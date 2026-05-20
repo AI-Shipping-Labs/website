@@ -146,6 +146,7 @@ def plan_create(request):
             'members': members,
             'plan_status_choices': PLAN_STATUS_CHOICES,
             'error': '',
+            'primary_label': 'Create plan',
         })
 
     form_data = {
@@ -163,6 +164,7 @@ def plan_create(request):
             'members': members,
             'plan_status_choices': PLAN_STATUS_CHOICES,
             'error': error,
+            'primary_label': 'Create plan',
         }, status=status)
 
     if not form_data['member'].isdigit():

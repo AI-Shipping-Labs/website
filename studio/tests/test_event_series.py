@@ -45,7 +45,7 @@ class StudioEventSeriesAccessTest(StaffMixin, TestCase):
     def test_staff_get_new_returns_200(self):
         response = self.client.get('/studio/event-series/new')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'event-series-submit')
+        self.assertContains(response, 'sticky-save-action')
 
 
 class StudioEventSeriesCreateTest(StaffMixin, TestCase):

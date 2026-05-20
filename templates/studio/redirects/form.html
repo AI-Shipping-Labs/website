@@ -24,7 +24,7 @@
 {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 
 <div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
-  <form method="post" action="{% if form_action == 'edit' %}{% url 'studio_redirect_edit' redirect_id=redirect_obj.pk %}{% else %}{% url 'studio_redirect_create' %}{% endif %}">
+  <form id="redirect-edit-form" method="post" action="{% if form_action == 'edit' %}{% url 'studio_redirect_edit' redirect_id=redirect_obj.pk %}{% else %}{% url 'studio_redirect_create' %}{% endif %}">
     {% csrf_token %}
 
     <div class="mb-6">
@@ -60,15 +60,9 @@
       </label>
     </div>
 
-    <div class="flex items-center space-x-4">
-      <button type="submit"
-              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-        {% if form_action == 'edit' %}Save Changes{% else %}Create Redirect{% endif %}
-      </button>
-      <a href="{% url 'studio_redirect_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-        Cancel
-      </a>
-    </div>
   </form>
 </div>
+
+{% url 'studio_redirect_list' as redirect_cancel_url %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="redirect-edit-form" title="Redirect changes" subtitle="Save remains available while you review the form." can_save=True primary_label=primary_label cancel_url=redirect_cancel_url %}
 {% endblock %}

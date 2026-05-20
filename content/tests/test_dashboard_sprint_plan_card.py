@@ -32,7 +32,7 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
             status='active',
         )
         plan = Plan.objects.create(
-            member=user, sprint=sprint, status='active',
+            member=user, sprint=sprint,
         )
 
         self.client.login(email='member@test.com', password='pw')
@@ -161,7 +161,7 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
             min_tier_level=LEVEL_MAIN,
         )
         plan = Plan.objects.create(
-            member=user, sprint=current, status='active',
+            member=user, sprint=current,
         )
 
         self.client.login(email='planned-sprint@test.com', password='pw')

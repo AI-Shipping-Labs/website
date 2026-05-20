@@ -116,10 +116,10 @@ class PlansListTest(PlansApiTestBase):
     def setUpTestData(cls):
         super().setUpTestData()
         cls.member_plan = Plan.objects.create(
-            member=cls.member, sprint=cls.sprint, status="shared",
+            member=cls.member, sprint=cls.sprint,
         )
         cls.other_plan = Plan.objects.create(
-            member=cls.other, sprint=cls.sprint, status="draft",
+            member=cls.other, sprint=cls.sprint,
         )
 
     def test_staff_sees_all_plans(self):
@@ -202,7 +202,7 @@ class PlanPatchTest(PlansApiTestBase):
         super().setUpTestData()
         cls.plan = Plan.objects.create(
             member=cls.member, sprint=cls.sprint,
-            status="draft", summary_goal="orig goal",
+            summary_goal="orig goal",
             accountability="orig",
         )
         cls.original_created_at = cls.plan.created_at
@@ -216,17 +216,28 @@ class PlanPatchTest(PlansApiTestBase):
             **self._auth(token),
         )
 
-    def test_patch_updates_status_and_summary(self):
+    def test_patch_updates_summary(self):
         response = self._patch({
-            "status": "active",
             "summary": {"goal": "new goal"},
         })
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        self.assertEqual(body["status"], "active")
         self.assertEqual(body["summary"]["goal"], "new goal")
         # Other summary fields untouched.
         self.assertEqual(body["accountability"], "orig")
+
+    def test_patch_silently_ignores_status(self):
+        """Issue #728: ``status`` is no longer a model field.
+
+        A PATCH that includes the legacy ``status`` key returns 200, the
+        response shape does NOT include ``status``, and no other top-
+        level field is corrupted by the unknown key.
+        """
+        response = self._patch({"status": "active", "goal": "kept goal"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertNotIn("status", body)
+        self.assertEqual(body["goal"], "kept goal")
 
     def test_patch_updates_short_goal(self):
         response = self._patch({"goal": "Ship one project"})
@@ -249,16 +260,18 @@ class PlanPatchTest(PlansApiTestBase):
             "id": 9999,
             "user_email": "evil@x.com",
             "sprint": "evil-sprint",
-            "status": "shared",
+            "goal": "kept goal",
         })
         self.assertEqual(response.status_code, 200)
         body = response.json()
         # The mutable field DID change, proving the request reached the
         # endpoint -- but the immutable fields did not.
-        self.assertEqual(body["status"], "shared")
+        self.assertEqual(body["goal"], "kept goal")
         self.assertEqual(body["id"], self.original_id)
         self.assertEqual(body["user_email"], "member@test.com")
         self.assertEqual(body["sprint"], "may-2026")
+        # Issue #728: ``status`` is gone from both model and response.
+        self.assertNotIn("status", body)
 
 
 class PlanDeleteTest(PlansApiTestBase):

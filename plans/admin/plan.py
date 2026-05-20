@@ -42,10 +42,10 @@ class SprintEnrollmentAdmin(admin.ModelAdmin):
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
     list_display = [
-        'id', 'member', 'sprint', 'status', 'visibility',
+        'id', 'member', 'sprint', 'visibility',
         'created_at', 'updated_at', 'studio_link',
     ]
-    list_filter = ['status', 'visibility', 'sprint']
+    list_filter = ['visibility', 'sprint']
     search_fields = ['member__email', 'sprint__name', 'sprint__slug']
     raw_id_fields = ['member']
     readonly_fields = [

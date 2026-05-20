@@ -130,7 +130,7 @@ For every nested-collection key present in the body, the server reconciles in pl
 | Key set to `[]` | DELETE every row in the collection. |
 | Key set to a list of rows | Per row: row has matching `id` -> UPDATE; row has no `id` -> CREATE; existing rows whose `id` is not in the list -> DELETE. |
 
-Six collection keys participate: `weeks`, `weeks[].checkpoints`, `resources`, `deliverables`, `next_steps`, `interview_notes`. Top-level fields (`status`, `goal`, `accountability`, `summary`, `focus`, `shared_at`) keep the old partial-update behaviour — a PATCH that sends only those keys does NOT touch any child collection.
+Six collection keys participate: `weeks`, `weeks[].checkpoints`, `resources`, `deliverables`, `next_steps`, `interview_notes`. Top-level fields (`goal`, `accountability`, `summary`, `focus`, `shared_at`) keep the old partial-update behaviour — a PATCH that sends only those keys does NOT touch any child collection. Plan visibility is governed by `shared_at` (issue #728 removed the legacy `status` field).
 
 The whole PATCH is wrapped in `transaction.atomic()`. If any validation fails partway through, every change rolls back; the database state matches the pre-call snapshot.
 

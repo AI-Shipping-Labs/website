@@ -87,13 +87,16 @@ class PlanListFilterTest(TestCase):
         )
 
         cls.plan_a_x = Plan.objects.create(
-            member=cls.member_a, sprint=cls.sprint_x, status='draft',
+            member=cls.member_a, sprint=cls.sprint_x,
+            goal='goal A in X',
         )
         cls.plan_a_y = Plan.objects.create(
-            member=cls.member_a, sprint=cls.sprint_y, status='shared',
+            member=cls.member_a, sprint=cls.sprint_y,
+            goal='goal A in Y',
         )
         cls.plan_b_x = Plan.objects.create(
-            member=cls.member_b, sprint=cls.sprint_x, status='active',
+            member=cls.member_b, sprint=cls.sprint_x,
+            goal='goal B in X',
         )
 
     def setUp(self):
@@ -123,15 +126,21 @@ class PlanListFilterTest(TestCase):
         # The out-of-sprint plan's row link is absent.
         self.assertNotContains(response, f'href="/studio/plans/{self.plan_a_y.pk}/"')
 
-    def test_plan_list_filters_by_status(self):
-        response = self.client.get('/studio/plans/?status=draft')
-        ctx_plans = list(response.context['plans'])
-        self.assertEqual(ctx_plans, [self.plan_a_x])
+    def test_plan_list_has_no_status_filter_or_column(self):
+        """Issue #728: the Plan.status field and its surface are gone.
 
-        # Only the draft plan's detail link is rendered as a row.
-        self.assertContains(response, f'href="/studio/plans/{self.plan_a_x.pk}/"')
-        self.assertNotContains(response, f'href="/studio/plans/{self.plan_a_y.pk}/"')
-        self.assertNotContains(response, f'href="/studio/plans/{self.plan_b_x.pk}/"')
+        Status filter dropdown removed from the filter row; Status column
+        removed from the table; table now has four columns
+        (Member, Sprint, Shared, Actions).
+        """
+        response = self.client.get('/studio/plans/')
+        self.assertEqual(response.status_code, 200)
+        # No status filter input present in the filter form.
+        self.assertNotContains(response, 'name="status"')
+        # No Status column header in the table.
+        self.assertNotContains(response, '>Status</th>')
+        # The Shared column header is still there.
+        self.assertContains(response, '>Shared</th>')
 
     def test_plan_list_filters_by_member(self):
         response = self.client.get(f'/studio/plans/?member={self.member_a.pk}')
@@ -166,16 +175,24 @@ class PlanCreateTest(TestCase):
         response = self.client.post('/studio/plans/new', {
             'member': str(self.member.pk),
             'sprint': str(self.sprint.pk),
-            'status': 'draft',
         })
         self.assertEqual(Plan.objects.count(), before + 1)
         plan = Plan.objects.get(member=self.member, sprint=self.sprint)
-        self.assertEqual(plan.status, 'draft')
         self.assertRedirects(response, f'/studio/plans/{plan.pk}/')
+
+    def test_plan_create_form_has_no_status_select(self):
+        """Issue #728: the New plan form must not render a status select."""
+        response = self.client.get('/studio/plans/new')
+        self.assertEqual(response.status_code, 200)
+        # No status <select> in the form (the only other status= reference
+        # left in the codebase is sprint.status which lives on a different
+        # form). Asserting the select is absent rather than just the
+        # label so a future label-only render also fails the test.
+        self.assertNotContains(response, 'name="status"')
 
     def test_plan_create_rejects_duplicate_member_sprint(self):
         Plan.objects.create(
-            member=self.member, sprint=self.sprint, status='draft',
+            member=self.member, sprint=self.sprint,
         )
         before = Plan.objects.filter(
             member=self.member, sprint=self.sprint,
@@ -183,7 +200,6 @@ class PlanCreateTest(TestCase):
         response = self.client.post('/studio/plans/new', {
             'member': str(self.member.pk),
             'sprint': str(self.sprint.pk),
-            'status': 'draft',
         })
         self.assertEqual(response.status_code, 400)
         self.assertContains(response, 'already exists', status_code=400)
@@ -350,7 +366,6 @@ class PlanCreateTest(TestCase):
         response = self.client.post('/studio/plans/new', {
             'member': str(self.member.pk),
             'sprint': str(self.sprint.pk),
-            'status': 'draft',
         })
         self.assertEqual(Plan.objects.count(), before + 1)
         plan = Plan.objects.get(member=self.member, sprint=self.sprint)

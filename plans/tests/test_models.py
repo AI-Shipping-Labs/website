@@ -6,14 +6,15 @@ testing Django ORM round-trips (CharField save/read) and default
 
 - Unique constraints (`(member, sprint)`, `(plan, week_number)`).
 - The non-default ``on_delete=PROTECT`` on ``Plan.sprint``.
-- Choice enforcement on ``Plan.status`` and ``InterviewNote.visibility``.
+- Choice enforcement on ``InterviewNote.visibility``.
 - Variable sprint duration (4 and 8 weeks) saving + validating cleanly.
+- Guard that ``Plan.status`` stays gone (issue #728).
 """
 
 import datetime
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
+from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from django.test import TestCase
@@ -57,14 +58,13 @@ class PlanModelConstraintsTest(TestCase):
         with self.assertRaises(ProtectedError):
             self.sprint.delete()
 
-    def test_plan_status_choices_enforced(self):
-        plan = Plan(member=self.member, sprint=self.sprint, status='template')
-        with self.assertRaises(ValidationError):
-            plan.full_clean()
-
-        plan.status = 'shared'
-        # Should validate cleanly. ``full_clean`` would raise otherwise.
-        plan.full_clean()
+    def test_plan_has_no_status_field(self):
+        """Issue #728 dropped Plan.status; reintroducing it must be a
+        deliberate choice, not an accident. Guarding here means a future
+        ``status = models.CharField(...)`` reintroduction fails this test.
+        """
+        with self.assertRaises(FieldDoesNotExist):
+            Plan._meta.get_field('status')
 
 
 class WeekModelConstraintsTest(TestCase):

@@ -111,7 +111,7 @@ class PlanEditorBootstrapPayloadTest(TestCase):
             start_date=datetime.date(2026, 5, 1), duration_weeks=6,
         )
         cls.plan = Plan.objects.create(
-            member=cls.member, sprint=cls.sprint, status='shared',
+            member=cls.member, sprint=cls.sprint,
             goal='Short sprint goal',
             summary_current_situation='SITN',
             summary_goal='GOAL',
@@ -179,7 +179,8 @@ class PlanEditorBootstrapPayloadTest(TestCase):
         self.assertEqual(self.payload['id'], self.plan.pk)
         self.assertEqual(self.payload['sprint'], 'may-2026')
         self.assertEqual(self.payload['user_email'], 'carlos@example.com')
-        self.assertEqual(self.payload['status'], 'shared')
+        # Issue #728: ``status`` was removed from the payload entirely.
+        self.assertNotIn('status', self.payload)
         self.assertEqual(self.payload['duration_weeks'], 6)
         self.assertEqual(self.payload['goal'], 'Short sprint goal')
 
@@ -257,7 +258,7 @@ class PlanEditorRenderTest(TestCase):
             start_date=datetime.date(2026, 5, 1),
         )
         cls.plan = Plan.objects.create(
-            member=cls.member, sprint=cls.sprint, status='draft',
+            member=cls.member, sprint=cls.sprint,
         )
         Week.objects.create(plan=cls.plan, week_number=1, position=0)
         Week.objects.create(plan=cls.plan, week_number=2, position=1)
@@ -289,7 +290,7 @@ class StudioPlanParticipantNavigationTest(TestCase):
             start_date=datetime.date(2026, 5, 1),
         )
         cls.plan = Plan.objects.create(
-            member=cls.member, sprint=cls.sprint, status='draft',
+            member=cls.member, sprint=cls.sprint,
         )
         Week.objects.create(plan=cls.plan, week_number=1, position=0)
         Week.objects.create(plan=cls.plan, week_number=2, position=1)
@@ -326,18 +327,17 @@ class StudioPlanParticipantNavigationTest(TestCase):
         self.assertContains(response, f'href="{user_url}"')
         self.assertContains(response, f'href="{edit_url}"')
 
-    def test_header_renders_status_pill_with_data_attribute(self):
-        """Pill renders the human label and a data attribute the JS reads.
+    def test_editor_header_has_no_status_pill(self):
+        """Issue #728: the legacy status pill is gone.
 
-        The JS toggles the pill via ``data-current-status`` rather than
-        scraping the visible text, so the data attribute must be present
-        and match the plan's status. Asserting on both means the
-        rendering matches the JS contract.
+        The share indicator and Share/Re-share button below it remain —
+        those are the user-meaningful surface and are driven by
+        ``shared_at``, not the dropped status field.
         """
         response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
-        self.assertContains(response, 'data-current-status="draft"')
-        self.assertContains(response, 'data-testid="plan-status-pill"')
-        self.assertContains(response, 'Draft')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-testid="plan-status-pill"')
+        self.assertNotContains(response, 'data-current-status=')
 
     def test_header_renders_not_yet_shared_when_unset(self):
         response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')

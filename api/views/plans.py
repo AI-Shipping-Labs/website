@@ -35,7 +35,6 @@ from api.views._permissions import (
 from notifications.services.notification_service import NotificationService
 from plans.models import (
     KIND_CHOICES,
-    PLAN_STATUS_CHOICES,
     VISIBILITY_CHOICES,
     Checkpoint,
     Deliverable,
@@ -61,17 +60,13 @@ logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
-VALID_PLAN_STATUSES = {choice for choice, _label in PLAN_STATUS_CHOICES}
 VALID_VISIBILITIES = {choice for choice, _label in VISIBILITY_CHOICES}
 VALID_KINDS = {choice for choice, _label in KIND_CHOICES}
-
-_PLAN_STATUS_ENUM = sorted(VALID_PLAN_STATUSES)
 
 _PLAN_FLAT_EXAMPLE = {
     "id": 5,
     "member_email": "alice@example.com",
     "sprint_slug": "may-2026",
-    "status": "active",
     "goal": "Ship the LLM evaluation toolkit",
     "created_at": "2026-04-15T12:00:00+00:00",
     "updated_at": "2026-04-15T12:00:00+00:00",
@@ -213,17 +208,6 @@ def _with_index(details, index):
     return details
 
 
-def _validate_status(value, *, index=None):
-    if value not in VALID_PLAN_STATUSES:
-        return error_response(
-            "Invalid status",
-            "validation_error",
-            status=422,
-            details=_with_index({"status": "Unknown status"}, index),
-        )
-    return None
-
-
 def _validate_goal(value, *, index=None):
     if value is None:
         return None
@@ -350,11 +334,10 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
             details=_with_index({"user_email": user_email}, index),
         )
 
-    status_value = plan_data.get("status", "draft")
-    err = _validate_status(status_value, index=index)
-    if err is not None:
-        return None, err
-
+    # Issue #728: ``status`` is no longer a model field. If a client
+    # sends it in the create payload, it is silently ignored — matching
+    # the existing convention for unknown top-level keys on PATCH (see
+    # ``test_patch_ignores_immutable_fields``).
     goal_value = plan_data.get("goal", "")
     if goal_value is None:
         goal_value = ""
@@ -383,7 +366,6 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
     plan = Plan(
         member=member,
         sprint=sprint,
-        status=status_value,
         goal=goal_value,
         accountability=plan_data.get("accountability", "") or "",
     )
@@ -955,10 +937,6 @@ def _reconcile_interview_notes(plan, payload_rows):
                 "required": ["user_email"],
                 "properties": {
                     "user_email": {"type": "string", "format": "email"},
-                    "status": {
-                        "type": "string",
-                        "enum": _PLAN_STATUS_ENUM,
-                    },
                     "goal": {"type": "string", "maxLength": 280},
                     "accountability": {"type": "string"},
                     "weeks": {
@@ -968,7 +946,6 @@ def _reconcile_interview_notes(plan, payload_rows):
                 },
                 "example": {
                     "user_email": "alice@example.com",
-                    "status": "draft",
                     "goal": "Ship the LLM evaluation toolkit",
                 },
             },
@@ -1091,7 +1068,6 @@ def sprint_plans_collection(request, slug):
                     "plans": [
                         {
                             "user_email": "alice@example.com",
-                            "status": "draft",
                             "goal": "Ship the toolkit",
                         },
                     ],
@@ -1244,10 +1220,6 @@ def _refetch_plan_detail(plan_id):
             ),
             "request_body": {
                 "properties": {
-                    "status": {
-                        "type": "string",
-                        "enum": _PLAN_STATUS_ENUM,
-                    },
                     "goal": {"type": "string", "maxLength": 280},
                     "accountability": {"type": "string"},
                     "summary": {"type": "object"},
@@ -1258,7 +1230,7 @@ def _refetch_plan_detail(plan_id):
                         "nullable": True,
                     },
                 },
-                "example": {"status": "active"},
+                "example": {"goal": "Ship the LLM evaluation toolkit"},
             },
             "responses": {
                 200: {"description": "Plan updated (nested detail shape)."},
@@ -1276,8 +1248,7 @@ def _refetch_plan_detail(plan_id):
                 404: {"description": "Plan not found."},
                 422: {
                     "description": (
-                        "Bad goal length, unknown status, or invalid "
-                        "focus.supporting type."
+                        "Bad goal length or invalid focus.supporting type."
                     ),
                 },
             },
@@ -1422,12 +1393,9 @@ def _apply_top_level_fields(plan, data):
     """
     update_fields = []
 
-    if "status" in data:
-        err = _validate_status(data["status"])
-        if err is not None:
-            return err, False
-        plan.status = data["status"]
-        update_fields.append("status")
+    # Issue #728: ``status`` is no longer a model field. PATCH silently
+    # ignores it for backwards compatibility (matches the existing
+    # convention for ``id`` / ``user_email`` / ``sprint`` on PATCH).
 
     if "accountability" in data:
         plan.accountability = data["accountability"] or ""

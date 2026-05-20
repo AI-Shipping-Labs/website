@@ -87,8 +87,8 @@ class PlanPostSaveSignalTest(TestCase):
     def test_plan_save_does_not_duplicate_enrollment(self):
         """Re-saving an existing plan must NOT create a second enrollment."""
         plan = Plan.objects.create(member=self.member, sprint=self.sprint)
-        plan.status = 'active'
-        plan.save(update_fields=['status', 'updated_at'])
+        plan.accountability = 'x'
+        plan.save(update_fields=['accountability', 'updated_at'])
         self.assertEqual(
             SprintEnrollment.objects.filter(
                 sprint=self.sprint, user=self.member,

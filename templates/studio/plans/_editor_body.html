@@ -31,12 +31,6 @@
       {% if request.user.is_staff %}
       {% include "studio/includes/_admin_link.html" with obj=plan %}
       {% endif %}
-      {# Status pill -- updated via PATCH /api/plans/<id>/. #}
-      <span data-testid="plan-status-pill"
-            data-current-status="{{ plan.status }}"
-            class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-secondary text-foreground border border-border">
-        {{ plan.get_status_display }}
-      </span>
       <p class="text-xs text-muted-foreground" data-testid="plan-share-indicator">
         {% if plan.shared_at %}
           Shared <time datetime="{{ plan.shared_at.isoformat }}">{{ plan.shared_at|date:"Y-m-d H:i" }}</time>

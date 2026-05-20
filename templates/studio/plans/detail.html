@@ -14,7 +14,6 @@
       </h1>
       <p class="text-sm text-muted-foreground mt-1">
         Sprint: <a href="{% url 'studio_sprint_detail' sprint_id=plan.sprint.pk %}" class="text-accent hover:underline">{{ plan.sprint.name }}</a>
-        · Status: {{ plan.get_status_display }}
         {% if plan.shared_at %}· Shared {{ plan.shared_at|date:"Y-m-d" }}{% endif %}
       </p>
     </div>

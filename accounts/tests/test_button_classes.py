@@ -74,7 +74,7 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
             duration_weeks=4,
             status='active',
         )
-        plan = Plan.objects.create(member=user, sprint=sprint, status='active')
+        plan = Plan.objects.create(member=user, sprint=sprint)
         self.client.force_login(user)
 
         response = self.client.get('/')
@@ -162,7 +162,7 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
             duration_weeks=4,
             status='active',
         )
-        plan = Plan.objects.create(member=user, sprint=sprint, status='active')
+        plan = Plan.objects.create(member=user, sprint=sprint)
         self.client.force_login(user)
 
         response = self.client.get(

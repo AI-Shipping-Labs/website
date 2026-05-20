@@ -57,11 +57,10 @@ class CreatePlanForEnrollmentTest(TestCase):
             0,
         )
 
-    def test_plan_defaults_status_draft_and_visibility_private(self):
+    def test_plan_defaults_visibility_private(self):
         plan, _, _ = create_plan_for_enrollment(
             sprint=self.sprint_6, user=self.member, enrolled_by=self.staff,
         )
-        self.assertEqual(plan.status, 'draft')
         self.assertEqual(plan.visibility, 'private')
 
     def test_creates_sprint_enrollment_with_enrolled_by(self):
@@ -149,7 +148,7 @@ class CreatePlanForEnrollmentTest(TestCase):
         # signal in #443 normally back-creates the enrollment when a
         # plan is created; we delete it here to simulate pre-#443 data.
         plan_pre = Plan.objects.create(
-            member=self.member, sprint=self.sprint_6, status='draft',
+            member=self.member, sprint=self.sprint_6,
         )
         SprintEnrollment.objects.filter(
             sprint=self.sprint_6, user=self.member,

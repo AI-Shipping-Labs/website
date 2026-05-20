@@ -86,17 +86,6 @@
         {% endfor %}
       </select>
     </div>
-
-    <div class="mb-6">
-      <label class="block text-sm font-medium text-foreground mb-1">Status</label>
-      <select name="status" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-              autocomplete="off"
-              >
-        {% for value, label in plan_status_choices %}
-        <option value="{{ value }}" {% if form_data.status == value %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
     {% endif %}
 
   </form>

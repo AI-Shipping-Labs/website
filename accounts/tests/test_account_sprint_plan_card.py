@@ -78,7 +78,6 @@ class AccountSprintPlanCardAbsentWithPlanTest(TestCase):
         self.plan = Plan.objects.create(
             member=self.user,
             sprint=self.sprint,
-            status='active',
             visibility='private',
         )
         self.client.force_login(self.user)

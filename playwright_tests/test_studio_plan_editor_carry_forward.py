@@ -86,7 +86,7 @@ def _seed_plan(member_email, weeks_with_checkpoints):
         start_date=datetime.date(2026, 5, 1),
     )
     member = User.objects.get(email=member_email)
-    plan = Plan.objects.create(member=member, sprint=sprint, status="draft")
+    plan = Plan.objects.create(member=member, sprint=sprint)
     for week_idx, items in enumerate(weeks_with_checkpoints, start=1):
         week = Week.objects.create(
             plan=plan, week_number=week_idx, position=week_idx - 1,

@@ -64,7 +64,6 @@ class BulkImportHappyPathTest(BulkImportTestBase):
             "plans": [
                 {
                     "user_email": "m1@test.com",
-                    "status": "shared",
                     "summary": {
                         "current_situation": "now",
                         "goal": "later",
@@ -114,7 +113,6 @@ class BulkImportHappyPathTest(BulkImportTestBase):
         self.assertEqual(Plan.objects.count(), before + 1)
 
         plan = Plan.objects.get(member=self.member1, sprint=self.sprint)
-        self.assertEqual(plan.status, "shared")
         self.assertEqual(plan.focus_supporting, ["evals", "guardrails"])
         self.assertEqual(plan.weeks.count(), 2)
         self.assertEqual(

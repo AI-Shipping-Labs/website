@@ -32,14 +32,6 @@ SPRINT_STATUS_CHOICES = [
     ('completed', 'Completed'),
 ]
 
-PLAN_STATUS_CHOICES = [
-    ('draft', 'Draft'),
-    ('shared', 'Shared'),
-    ('active', 'Active'),
-    ('completed', 'Completed'),
-    ('archived', 'Archived'),
-]
-
 VISIBILITY_CHOICES = [
     ('internal', 'Internal (staff only)'),
     ('external', 'External (shareable with member)'),
@@ -298,8 +290,9 @@ class Plan(TimestampedModelMixin, models.Model):
     """One plan per member per sprint.
 
     Stores the shareable Summary + Plan blocks; weekly content is in the
-    ``Week`` child rows. ``shared_at`` is a real timestamp distinct from
-    ``status='shared'`` so the share moment survives status churn.
+    ``Week`` child rows. ``shared_at`` is the explicit timestamp the
+    staff stamp when they share the plan with the member; absent until
+    that moment.
 
     ``visibility`` (issue #440) controls who can see the plan:
     ``private`` (the default) is owner + staff only; ``cohort`` opens it
@@ -317,11 +310,6 @@ class Plan(TimestampedModelMixin, models.Model):
         Sprint,
         on_delete=models.PROTECT,
         related_name='plans',
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=PLAN_STATUS_CHOICES,
-        default='draft',
     )
     visibility = models.CharField(
         max_length=10,
@@ -354,8 +342,7 @@ class Plan(TimestampedModelMixin, models.Model):
         max_length=120, blank=True, default='',
     )
 
-    # When the plan was actually sent to the member. Distinct from the
-    # ``shared`` status value so we keep a real timestamp.
+    # When the plan was actually sent to the member.
     shared_at = models.DateTimeField(null=True, blank=True)
 
     # Stable UUID bridge to the existing ``comments`` app (issue #499).
@@ -384,8 +371,6 @@ class Plan(TimestampedModelMixin, models.Model):
             ),
         ]
         indexes = [
-            models.Index(fields=['status']),
-            models.Index(fields=['sprint', 'status']),
             models.Index(fields=['sprint', 'visibility']),
         ]
 

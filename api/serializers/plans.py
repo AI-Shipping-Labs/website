@@ -44,7 +44,6 @@ def serialize_plan_flat(plan):
         "id": plan.id,
         "sprint": plan.sprint.slug,
         "user_email": plan.member.email,
-        "status": plan.status,
         "shared_at": _isoformat_or_none(plan.shared_at),
         "created_at": _isoformat_or_none(plan.created_at),
         "updated_at": _isoformat_or_none(plan.updated_at),
@@ -138,7 +137,6 @@ def serialize_plan_detail(plan, *, viewer=None):
         "id": plan.id,
         "sprint": plan.sprint.slug,
         "user_email": plan.member.email,
-        "status": plan.status,
         "goal": plan.goal,
         "summary": {
             "current_situation": plan.summary_current_situation,

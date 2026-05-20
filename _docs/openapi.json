@@ -3593,7 +3593,7 @@
           "content": {
             "application/json": {
               "example": {
-                "status": "active"
+                "goal": "Ship the LLM evaluation toolkit"
               },
               "schema": {
                 "properties": {
@@ -3610,16 +3610,6 @@
                   "shared_at": {
                     "format": "date-time",
                     "nullable": true,
-                    "type": "string"
-                  },
-                  "status": {
-                    "enum": [
-                      "active",
-                      "archived",
-                      "completed",
-                      "draft",
-                      "shared"
-                    ],
                     "type": "string"
                   },
                   "summary": {
@@ -3654,7 +3644,7 @@
             "description": "Plan not found."
           },
           "422": {
-            "description": "Bad goal length, unknown status, or invalid focus.supporting type."
+            "description": "Bad goal length or invalid focus.supporting type."
           }
         },
         "summary": "Update plan-level fields",
@@ -5288,7 +5278,6 @@
                       "id": 5,
                       "member_email": "alice@example.com",
                       "sprint_slug": "may-2026",
-                      "status": "active",
                       "updated_at": "2026-04-15T12:00:00+00:00"
                     }
                   ]
@@ -5331,7 +5320,6 @@
             "application/json": {
               "example": {
                 "goal": "Ship the LLM evaluation toolkit",
-                "status": "draft",
                 "user_email": "alice@example.com"
               },
               "schema": {
@@ -5341,16 +5329,6 @@
                   },
                   "goal": {
                     "maxLength": 280,
-                    "type": "string"
-                  },
-                  "status": {
-                    "enum": [
-                      "active",
-                      "archived",
-                      "completed",
-                      "draft",
-                      "shared"
-                    ],
                     "type": "string"
                   },
                   "user_email": {
@@ -5435,7 +5413,6 @@
                 "plans": [
                   {
                     "goal": "Ship the toolkit",
-                    "status": "draft",
                     "user_email": "alice@example.com"
                   }
                 ]

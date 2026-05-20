@@ -31,8 +31,6 @@
           {{ sprint.name }} &middot; {{ sprint.start_date|date:"M j, Y" }} &middot; {{ sprint.duration_weeks }} week{{ sprint.duration_weeks|pluralize }}
         </p>
         <div class="mt-4 flex flex-wrap items-center gap-3 text-sm">
-          <span class="inline-flex items-center rounded-full border border-border bg-secondary px-3 py-1 text-xs font-medium text-foreground"
-                data-testid="my-plan-status-badge">{{ plan.get_status_display }}</span>
           <span class="text-muted-foreground" data-testid="my-plan-progress">
             {% if plan_progress_total %}
               {{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done

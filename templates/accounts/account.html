@@ -69,6 +69,11 @@
         </form>
       </div>
 
+      <!-- Slack Community Card (shared partial — issue #700; lifted above Membership per #730) -->
+      {% if not slack_connected %}
+      {% include "includes/_slack_account_card.html" %}
+      {% endif %}
+
       <!-- Membership Section -->
       <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mb-8">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
@@ -167,9 +172,6 @@
           {% endif %}
         </div>
       </div>
-
-      <!-- Slack Community Card (shared partial — issue #700) -->
-      {% include "includes/_slack_account_card.html" %}
 
       <!-- Email Preferences Section -->
       <div class="rounded-lg border border-border bg-card p-5 sm:p-6" id="email-preferences-section">

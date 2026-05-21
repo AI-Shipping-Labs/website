@@ -59,10 +59,20 @@ jobs:
           echo "CI_TIMING phase=setup_python seconds=$((now - CI_PHASE_START)) source=runner_clock"
           echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
 
+      # We use `--locked` so any drift between pyproject.toml and uv.lock
+      # fails the install step loudly with "requirements are unsatisfiable"
+      # rather than silently re-resolving (which `--frozen` would mask: it
+      # exits 0 on drift in uv 0.10.11). `--locked` asserts the lock is
+      # already in sync with pyproject.toml and refuses to mutate it — so
+      # the install is deterministic AND drift is a hard failure. The flags
+      # `--frozen` and `--locked` are mutually exclusive in uv 0.10.11, so
+      # we cannot combine them. If this step fails with "requirements are
+      # unsatisfiable" or "lockfile out of date", regenerate uv.lock locally
+      # with `uv sync` and commit it. Refs #657.
       - name: Install dependencies
         run: |
           start=$(date +%s)
-          uv sync
+          uv sync --locked
           end=$(date +%s)
           echo "CI_TIMING phase=uv_sync seconds=$((end - start))"
 
@@ -225,7 +235,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked
 
       - name: Install Playwright browsers
         run: uv run playwright install --with-deps chromium

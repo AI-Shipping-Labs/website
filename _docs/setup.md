@@ -199,6 +199,23 @@ Two GitHub Actions workflows handle deployment:
 
 Both workflows use `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` GitHub secrets for ECR/ECS access.
 
+### Lockfile contract
+
+CI installs Python dependencies with `uv sync --locked`. The `--locked` flag does two things in one:
+
+- It asserts that `uv.lock` is already in sync with `pyproject.toml` and exits 1 with "requirements are unsatisfiable" (or a similar "lockfile out of date" message) if it isn't. This is the drift detection the contract relies on.
+- It refuses to mutate `uv.lock` during the sync. The committed lockfile is what gets installed, byte-for-byte.
+
+We deliberately do not use `uv sync --frozen` (alone). Empirically on `uv` 0.10.11, `uv sync --frozen` exits 0 even when `pyproject.toml` and `uv.lock` have drifted — it skips the resolver entirely and installs whatever is in the lock, which is the silent-mismatch trap the contract exists to prevent. And the two flags cannot be combined: `uv sync --frozen --locked` is rejected by `uv` 0.10.11 with "the argument '--frozen' cannot be used with '--locked'". `--locked` alone is the correct choice — it gives us drift detection AND lock immutability in a single flag.
+
+The contract is: update `uv.lock` locally and commit it on the same branch as the dependency change before deploying. To update dependencies:
+
+1. Run `uv sync` (or `uv add <pkg>` / `uv lock --upgrade-package <pkg>`) locally.
+2. Commit the updated `uv.lock` (and `pyproject.toml` if changed) on the same branch as the dependency change.
+3. Push. CI will then install the new resolution exactly.
+
+If a deploy fails at the "Install dependencies" step with a message about `uv.lock` being out of date or requirements being unsatisfiable, the fix is to regenerate the lock locally and commit it — not to retry the deploy.
+
 ## Deploying and redeploying manually
 
 One command to build, push, and deploy:

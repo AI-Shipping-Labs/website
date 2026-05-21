@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}{{ campaign.name }}{% endblock %}
 
@@ -52,7 +53,7 @@
 <h2 class="text-lg font-semibold text-foreground mb-3">Tracked links</h2>
 
 {% if links %}
-<div class="bg-card border border-border rounded-lg overflow-hidden mb-6">
+<div class="{% studio_list_class 'wrapper' %} mb-6">
   <table class="w-full">
     <thead class="bg-secondary">
       <tr>
@@ -67,15 +68,15 @@
       {% with full_url=link.build_url %}
       <tr class="hover:bg-secondary/50 transition-colors" data-link-row="{{ link.pk }}">
         <td class="px-6 py-4 text-sm text-foreground align-top">{{ link.label|default:"—" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground align-top font-mono">{{ link.utm_content }}</td>
-        <td class="px-6 py-4 align-top">
+        <td class="px-6 py-4 text-sm text-muted-foreground align-top font-mono" data-label="utm_content">{{ link.utm_content }}</td>
+        <td class="px-6 py-4 align-top" data-label="URL">
           <div class="flex items-start space-x-2">
             <code class="font-mono text-xs bg-secondary border border-border rounded px-2 py-1 break-all flex-1" data-utm-url>{{ full_url }}</code>
             <button type="button" class="utm-copy-btn text-xs bg-accent text-accent-foreground rounded px-3 py-1 hover:opacity-90"
                     data-url="{{ full_url }}">Copy</button>
           </div>
         </td>
-        <td class="px-6 py-4 text-right align-top space-x-2">
+        <td class="px-6 py-4 align-top space-x-2 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <a href="{% url 'studio_utm_link_edit' campaign_id=campaign.pk link_id=link.pk %}" class="text-sm text-accent hover:underline">Edit</a>
           <form method="post" action="{% url 'studio_utm_link_archive' campaign_id=campaign.pk link_id=link.pk %}" class="inline"
                 onsubmit="return confirm('Archive this link?');">
@@ -154,7 +155,7 @@
 {% if archived_links %}
 <div class="mt-8">
   <h2 class="text-lg font-semibold text-foreground mb-3">Archived links</h2>
-  <div class="bg-card border border-border rounded-lg overflow-hidden">
+  <div class="{% studio_list_class 'wrapper' %}">
     <table class="w-full">
       <thead class="bg-secondary">
         <tr>
@@ -167,8 +168,8 @@
         {% for link in archived_links %}
         <tr class="opacity-60">
           <td class="px-6 py-4 text-sm text-foreground">{{ link.label|default:"—" }}</td>
-          <td class="px-6 py-4 text-sm text-muted-foreground font-mono">{{ link.utm_content }}</td>
-          <td class="px-6 py-4 text-xs text-muted-foreground font-mono break-all">{{ link.build_url }}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground font-mono" data-label="utm_content">{{ link.utm_content }}</td>
+          <td class="px-6 py-4 text-xs text-muted-foreground font-mono break-all" data-label="URL">{{ link.build_url }}</td>
         </tr>
         {% endfor %}
       </tbody>

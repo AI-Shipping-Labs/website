@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}{{ sprint.name }}{% endblock %}
 
@@ -70,6 +71,7 @@
       </div>
     </div>
     {% if event_series_events %}
+    <div class="{% studio_list_class 'wrapper' %} mb-4">
     <table class="w-full text-sm" data-testid="sprint-event-series-table">
       <thead class="text-xs uppercase tracking-wider text-muted-foreground">
         <tr>
@@ -82,15 +84,16 @@
         {% for ev in event_series_events %}
         <tr data-testid="sprint-event-series-row">
           <td class="py-2 pr-4 text-muted-foreground whitespace-nowrap">{{ ev.start_datetime|date:"Y-m-d H:i" }}</td>
-          <td class="py-2 pr-4">
+          <td class="py-2 pr-4" data-label="Title">
             <a href="{% url 'studio_event_edit' event_id=ev.pk %}"
                class="text-accent hover:underline">{{ ev.title }}</a>
           </td>
-          <td class="py-2 text-muted-foreground">{{ ev.get_status_display }}</td>
+          <td class="py-2 text-muted-foreground" data-label="Status">{{ ev.get_status_display }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
     <p class="text-sm text-muted-foreground" data-testid="sprint-event-series-empty-events">
       This event series has no events yet.
@@ -113,7 +116,7 @@
     Pending plan requests ({{ pending_plan_requests|length }})
   </h2>
   {% if pending_plan_requests %}
-  <div class="bg-card border border-border rounded-lg overflow-hidden">
+  <div class="{% studio_list_class 'wrapper' %}">
     <table class="w-full" data-testid="sprint-pending-requests-table">
       <thead class="bg-secondary">
         <tr>
@@ -131,10 +134,10 @@
             </div>
             <div class="text-xs text-muted-foreground" data-testid="sprint-pending-request-email">{{ row.member.email }}</div>
           </td>
-          <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="sprint-pending-request-meta">
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="sprint-pending-request-meta" data-label="Requests">
             Requested {{ row.request_count }} time{{ row.request_count|pluralize }}, last at {{ row.last_requested_at|date:"Y-m-d H:i" }}
           </td>
-          <td class="px-6 py-4 text-right">
+          <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Action">
             <form method="post"
                   action="{% url 'studio_sprint_plan_request_create_plan' sprint_id=sprint.pk member_id=row.member.pk %}"
                   data-testid="sprint-pending-request-form">
@@ -174,7 +177,7 @@
 
 <h2 class="text-lg font-semibold text-foreground mb-4">Plans in this sprint</h2>
 {% if plans %}
-<div class="bg-card border border-border rounded-lg overflow-hidden">
+<div class="{% studio_list_class 'wrapper' %}">
   <table class="w-full">
     <thead class="bg-secondary">
       <tr>
@@ -190,8 +193,8 @@
           <a href="{% url 'studio_user_detail' user_id=plan.member.pk %}" class="text-accent hover:underline" data-testid="sprint-detail-plan-member-link">{{ plan.member.email }}</a>
           <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="ml-3 text-xs text-muted-foreground hover:text-accent hover:underline">View plan</a>
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ plan.get_status_display }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ plan.created_at|date:"Y-m-d" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Status">{{ plan.get_status_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Created">{{ plan.created_at|date:"Y-m-d" }}</td>
       </tr>
       {% endfor %}
     </tbody>

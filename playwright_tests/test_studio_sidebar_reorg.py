@@ -650,6 +650,7 @@ class TestRenamedLabels:
         assert tracking_labels == [
             "UTM links",
             "UTM analytics",
+            "Signup analytics",
         ], tracking_labels
 
         # Old labels must not appear as <span> link labels anywhere

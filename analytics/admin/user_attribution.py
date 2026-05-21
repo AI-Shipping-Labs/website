@@ -11,19 +11,25 @@ class UserAttributionAdmin(admin.ModelAdmin):
         'user',
         'signup_path',
         'first_touch_utm_campaign',
+        'first_touch_referrer_source',
         'last_touch_utm_campaign',
+        'last_touch_referrer_source',
         'created_at',
     ]
     list_filter = [
         'signup_path',
         'first_touch_utm_source',
         'first_touch_utm_medium',
+        'first_touch_referrer_source',
+        'last_touch_referrer_source',
     ]
     search_fields = [
         'user__email',
         'first_touch_utm_campaign',
         'last_touch_utm_campaign',
         'anonymous_id',
+        'first_touch_referrer_host',
+        'last_touch_referrer_host',
     ]
     readonly_fields = [
         'user',
@@ -34,6 +40,8 @@ class UserAttributionAdmin(admin.ModelAdmin):
         'first_touch_utm_term',
         'first_touch_campaign',
         'first_touch_ts',
+        'first_touch_referrer_host',
+        'first_touch_referrer_source',
         'last_touch_utm_source',
         'last_touch_utm_medium',
         'last_touch_utm_campaign',
@@ -41,6 +49,8 @@ class UserAttributionAdmin(admin.ModelAdmin):
         'last_touch_utm_term',
         'last_touch_campaign',
         'last_touch_ts',
+        'last_touch_referrer_host',
+        'last_touch_referrer_source',
         'signup_path',
         'anonymous_id',
         'created_at',

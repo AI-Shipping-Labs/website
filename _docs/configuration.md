@@ -353,6 +353,10 @@ Run this checklist after configuring everything. Each item is one click, end to 
 - [ ] Trigger a Slack announcement from `/studio/articles/<id>/announce-slack/`; the bot posts to the configured channel.
 - [ ] Send a test email campaign in `/studio/campaigns/`; confirm delivery to a verified SES recipient.
 
+## 12.1. Signup attribution and the anonymous_id join key
+
+UTM and organic-referrer attribution are captured by `analytics.middleware.CampaignTrackingMiddleware`, snapshotted onto `UserAttribution` at signup. The middleware also assigns a stable UUID4 cookie `aslab_aid` (the anonymous_id) to every non-bot visitor, copied onto `UserAttribution.anonymous_id` at signup time. This `anonymous_id` is the cross-system join key: future GA/S3 stitching binds `GA user_id = aslab_aid` on the client and joins on this column. This issue does NOT implement GA binding; it only records the design — operators should not yet expect to see `anonymous_id` in GA. Organic referrers (LinkedIn, YouTube, ChatGPT, Google, …) are bucketed by `analytics.referrer_source.normalize_referrer` and stored on `UserAttribution.{first,last}_touch_referrer_source`; see issue #772.
+
 ## 13. Where to look when something is wrong
 
 - `Studio > Worker` (`/studio/worker/`) — django-q heartbeats and queue depth. If the worker is "NOT running", background sync / email / Slack jobs will queue forever.

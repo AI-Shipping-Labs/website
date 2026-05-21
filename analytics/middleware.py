@@ -16,10 +16,12 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from django.conf import settings
 
 from analytics.bots import is_bot
+from analytics.referrer_source import normalize_referrer
 from analytics.request_context import (
     clear_current_request,
     set_current_request,
@@ -35,6 +37,18 @@ UTM_PARAMS = ('utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_te
 FIRST_TOUCH_COOKIE = 'aslab_ft'
 ANON_ID_COOKIE = 'aslab_aid'
 SESSION_LAST_TOUCH = 'aslab_lt'
+
+# Organic referrer attribution (no UTM). See #772.
+FIRST_TOUCH_REFERRER_COOKIE = 'aslab_ft_ref'
+SESSION_LAST_TOUCH_REFERRER = 'aslab_lt_ref'
+
+# Path prefixes whose referrer we deliberately ignore. The user often
+# arrives at signup via the login page; treating that as a referrer would
+# tag every signup as `internal` even on direct landings.
+REFERRER_SKIP_PATH_PREFIXES = (
+    '/accounts/login',
+    '/accounts/register',
+)
 
 COOKIE_MAX_AGE = 60 * 60 * 24 * 90  # 90 days
 COOKIE_SAMESITE = 'Lax'
@@ -261,10 +275,18 @@ class CampaignTrackingMiddleware:
                 user_id=user_id,
             )
 
-        # 6. Get the response.
+        # 6. Capture organic referrer (no UTM required). See #772.
+        first_touch_referrer_payload = None
+        try:
+            first_touch_referrer_payload = self._capture_referrer(request)
+        except Exception:  # pragma: no cover — defensive
+            # Middleware must never break the request.
+            logger.exception('Referrer capture failed')
+
+        # 7. Get the response.
         response = self.get_response(request)
 
-        # 7. Set cookies on the response.
+        # 8. Set cookies on the response.
         cookie_kwargs = {
             'max_age': COOKIE_MAX_AGE,
             'samesite': COOKIE_SAMESITE,
@@ -283,4 +305,67 @@ class CampaignTrackingMiddleware:
                 **cookie_kwargs,
             )
 
+        if first_touch_referrer_payload is not None:
+            response.set_cookie(
+                FIRST_TOUCH_REFERRER_COOKIE,
+                json.dumps(first_touch_referrer_payload),
+                **cookie_kwargs,
+            )
+
         return response
+
+    def _capture_referrer(self, request):
+        """Capture organic referrer into cookie + session.
+
+        Returns the JSON dict to set as `aslab_ft_ref` cookie on the
+        response, or None if no first-touch write is needed (cookie already
+        present, same-origin, login-page nav, no referrer header).
+
+        Always overwrites the session last-touch when an external referrer
+        survives the filters.
+        """
+        raw = request.META.get('HTTP_REFERER', '') or ''
+        if not raw:
+            return None
+
+        # Login/register pages must not become referrers themselves. Even
+        # if the user is on `/accounts/login` linked from LinkedIn, the
+        # next click within the site will carry `/accounts/login` as its
+        # Referer — we skip the write to avoid clobbering an earlier
+        # legitimate external referrer.
+        path = request.path or ''
+        for prefix in REFERRER_SKIP_PATH_PREFIXES:
+            if path.startswith(prefix):
+                return None
+
+        try:
+            host = (urlparse(raw).hostname or '').lower()
+        except (ValueError, TypeError):
+            return None
+        if not host:
+            return None
+
+        # Same-origin filter: internal navigations must not pollute first
+        # or last touch.
+        own_host = request.get_host().split(':')[0].lower()
+        if host == own_host:
+            return None
+
+        source = normalize_referrer(host)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        payload = {
+            'host': host[:255],
+            'source': source,
+            'ts': now_iso,
+        }
+
+        # Last-touch: always overwrite when an external referrer survived.
+        try:
+            request.session[SESSION_LAST_TOUCH_REFERRER] = payload
+        except Exception:  # pragma: no cover — defensive
+            logger.exception('Failed to set last-touch referrer on session')
+
+        # First-touch: only set if cookie is missing (sticky).
+        if request.COOKIES.get(FIRST_TOUCH_REFERRER_COOKIE):
+            return None
+        return payload

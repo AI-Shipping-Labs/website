@@ -145,8 +145,10 @@ class StudioWorkshopListTest(TestCase):
 
     def test_view_on_site_link_in_row(self):
         response = self.client.get('/studio/workshops/')
-        # Public URL is /workshops/<slug> per get_absolute_url.
-        self.assertContains(response, '/workshops/rag-basics')
+        # Public URL is /workshops/<YYYY-MM-DD>-<slug> per #750
+        # (Workshop.get_absolute_url()). ``rag-basics`` is created via
+        # _make_workshop with the factory-default date 2026-04-21.
+        self.assertContains(response, '/workshops/2026-04-21-rag-basics')
 
     def test_empty_state_shown_when_no_workshops(self):
         """Workshops list renders the canonical fresh-zero empty state when

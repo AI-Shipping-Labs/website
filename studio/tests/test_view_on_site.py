@@ -132,7 +132,8 @@ class RecordingLinkedWorkshopViewOnSiteTest(ViewOnSiteTestMixin, TestCase):
 
     def test_list_has_view_on_site_link(self):
         response = self.client.get('/studio/recordings/')
-        self.assertContains(response, 'href="/workshops/my-workshop"')
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
+        self.assertContains(response, 'href="/workshops/2025-04-01-my-workshop"')
         self.assertContains(response, 'target="_blank"')
         # Must NOT link out to the announcement-only event detail page.
         # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
@@ -144,7 +145,8 @@ class RecordingLinkedWorkshopViewOnSiteTest(ViewOnSiteTestMixin, TestCase):
         response = self.client.get(
             f'/studio/recordings/{self.recording.pk}/edit',
         )
-        self.assertContains(response, 'href="/workshops/my-workshop"')
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
+        self.assertContains(response, 'href="/workshops/2025-04-01-my-workshop"')
         self.assertContains(response, 'target="_blank"')
         self.assertNotContains(
             response, f'href="{self.recording.get_absolute_url()}"',

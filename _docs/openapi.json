@@ -5699,6 +5699,345 @@
         ]
       }
     },
+    "/api/users": {
+      "get": {
+        "description": "Newest-first list of users with optional ``q`` search. Matches the Studio user-search surface: email, first/last name, ``stripe_customer_id``, ``slack_user_id``, and substring matches inside tags. Empty ``q`` returns the newest 50.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "description": "Substring search across email/name/Stripe id/Slack id/tags.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Default 50; clamped to 200.",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "description": "ISO-8601 datetime; only users joined at or after this are returned.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "limit": 50,
+                  "users": [
+                    {
+                      "bounce_state": "none",
+                      "date_joined": "2026-04-15T12:00:00+00:00",
+                      "display_name": "Alice Doe",
+                      "email": "alice@example.com",
+                      "email_verified": true,
+                      "first_name": "Alice",
+                      "last_login": "2026-05-19T08:30:00+00:00",
+                      "last_name": "Doe",
+                      "slack_member": true,
+                      "slack_user_id": "U01ABCDEF",
+                      "soft_bounce_count": 0,
+                      "stripe_customer_id": "cus_xyz",
+                      "subscription_id": "sub_xyz",
+                      "tier": {
+                        "level": 20,
+                        "slug": "main"
+                      },
+                      "tier_override_active": false,
+                      "unsubscribed": false
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "User list page."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "field": "limit",
+                    "value": "abc"
+                  },
+                  "error": "Invalid integer: 'abc'"
+                }
+              }
+            },
+            "description": "Invalid ``limit`` or ``since``."
+          }
+        },
+        "summary": "List users",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users/{email}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bounce_state": "none",
+                  "date_joined": "2026-04-15T12:00:00+00:00",
+                  "display_name": "Alice Doe",
+                  "email": "alice@example.com",
+                  "email_verified": true,
+                  "first_name": "Alice",
+                  "last_login": "2026-05-19T08:30:00+00:00",
+                  "last_name": "Doe",
+                  "slack_member": true,
+                  "slack_user_id": "U01ABCDEF",
+                  "soft_bounce_count": 0,
+                  "stripe_customer_id": "cus_xyz",
+                  "subscription_id": "sub_xyz",
+                  "tags": [
+                    "sprint:may-2026"
+                  ],
+                  "tier": {
+                    "level": 20,
+                    "slug": "main"
+                  },
+                  "tier_override_active": false,
+                  "unsubscribed": false
+                }
+              }
+            },
+            "description": "User payload."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown email."
+          }
+        },
+        "summary": "Get user state",
+        "tags": [
+          "Users"
+        ]
+      },
+      "patch": {
+        "description": "Accepts ``unsubscribed: bool`` and/or ``email_verified: true`` only. Setting ``email_verified: false`` returns 422 ``verification_demote_forbidden``. Any other field returns 422 ``unknown_field``. Every PATCH appends a ``CommunityAuditLog`` row (even no-ops).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "unsubscribed": true
+              },
+              "schema": {
+                "properties": {
+                  "email_verified": {
+                    "description": "Only ``true`` is accepted; demote-via-API is forbidden.",
+                    "type": "boolean"
+                  },
+                  "unsubscribed": {
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bounce_state": "none",
+                  "date_joined": "2026-04-15T12:00:00+00:00",
+                  "display_name": "Alice Doe",
+                  "email": "alice@example.com",
+                  "email_verified": true,
+                  "first_name": "Alice",
+                  "last_login": "2026-05-19T08:30:00+00:00",
+                  "last_name": "Doe",
+                  "slack_member": true,
+                  "slack_user_id": "U01ABCDEF",
+                  "soft_bounce_count": 0,
+                  "stripe_customer_id": "cus_xyz",
+                  "subscription_id": "sub_xyz",
+                  "tags": [
+                    "sprint:may-2026"
+                  ],
+                  "tier": {
+                    "level": 20,
+                    "slug": "main"
+                  },
+                  "tier_override_active": false,
+                  "unsubscribed": false
+                }
+              }
+            },
+            "description": "Updated user payload."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown email."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_field",
+                  "details": {
+                    "field": "tier"
+                  },
+                  "error": "Unknown field: tier"
+                }
+              }
+            },
+            "description": "Body validation failed."
+          }
+        },
+        "summary": "Update user state",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users/{email}/email-log": {
+      "get": {
+        "description": "Newest-first list of ``EmailLog`` rows for the user. Each row carries the raw timing fields plus a derived ``disposition`` reflecting the strongest signal in the order ``sent < delivered < opened < clicked < bounced < complained``. ``kind`` filters on ``email_type`` exact match -- unknown values are valid (they simply return an empty page) since ``email_type`` is not a closed enum at the model layer.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Default 50; clamped to 200.",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "description": "ISO-8601 datetime filter on ``sent_at``.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "description": "Exact ``email_type`` filter (e.g. ``campaign``, ``welcome``, ``verification``).",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "email_logs": [
+                    {
+                      "bounce_subtype": "",
+                      "bounce_type": "",
+                      "bounced_at": null,
+                      "campaign_id": 7,
+                      "clicked_at": null,
+                      "clicks": 0,
+                      "complained_at": null,
+                      "disposition": "opened",
+                      "email_type": "campaign",
+                      "id": 42,
+                      "opened_at": "2026-05-19T09:00:00+00:00",
+                      "opens": 3,
+                      "sent_at": "2026-05-19T08:30:00+00:00",
+                      "ses_message_id": "0103018f-aaaa-bbbb-cccc-000000000000"
+                    }
+                  ],
+                  "limit": 50
+                }
+              }
+            },
+            "description": "Email logs page."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown email."
+          },
+          "422": {
+            "description": "Invalid ``limit`` or ``since``."
+          }
+        },
+        "summary": "List outbound email-log rows",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
     "/api/users/{email}/interview-notes": {
       "get": {
         "description": "Staff-only. Routed by three URL aliases under ``/api/users/<email>/`` -- the OpenAPI spec emits one operation per alias. ``?plan=null`` preserves the inbox-only behaviour; ``?plan=<id>`` narrows to one plan.",
@@ -5894,6 +6233,258 @@
         "summary": "List a user's interview notes",
         "tags": [
           "Interview Notes"
+        ]
+      }
+    },
+    "/api/users/{email}/ses-events": {
+      "get": {
+        "description": "Newest-first list of ``SesEvent`` rows for the user. Filters on ``SesEvent.user_id`` (NOT ``recipient_email``) so the history survives email renames. ``raw_payload`` is deliberately excluded -- the Studio surface owns the deep-dive.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Default 50; clamped to 200.",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "description": "ISO-8601 datetime filter on ``received_at``.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "description": "Filter on ``event_type``.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "limit": 50,
+                  "ses_events": [
+                    {
+                      "action_taken": "unsubscribed and tagged bounced",
+                      "bounce_subtype": "General",
+                      "bounce_type": "Permanent",
+                      "diagnostic_code": "smtp; 550 user unknown",
+                      "email_log_id": 42,
+                      "event_type": "bounce_permanent",
+                      "message_id": "11111111-2222-3333-4444-555555555555",
+                      "received_at": "2026-05-19T08:30:00+00:00",
+                      "recipient_email": "alice@example.com"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "SES events page."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown email."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "allowed": [
+                      "bounce_permanent",
+                      "bounce_transient",
+                      "bounce_other",
+                      "complaint",
+                      "delivery",
+                      "open",
+                      "click",
+                      "subscription_confirmation",
+                      "unsubscribe_confirmation",
+                      "other"
+                    ],
+                    "field": "type",
+                    "value": "invalid"
+                  },
+                  "error": "Invalid event type: 'invalid'"
+                }
+              }
+            },
+            "description": "Invalid filter values."
+          }
+        },
+        "summary": "List inbound SES events",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users/{email}/tags": {
+      "post": {
+        "description": "Idempotent -- adding an existing tag is a no-op but still records an audit row. The input is normalized via ``accounts.utils.tags.normalize_tag``; empty input after normalization returns 422 ``invalid_tag``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "tag": "early-adopter"
+              },
+              "schema": {
+                "properties": {
+                  "tag": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tag"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "email": "alice@example.com",
+                  "tags": [
+                    "sprint:may-2026",
+                    "early-adopter"
+                  ]
+                }
+              }
+            },
+            "description": "Current tag list including the new tag."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown email."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_tag",
+                  "error": "Tag must be a non-empty slug"
+                }
+              }
+            },
+            "description": "Empty or invalid tag input."
+          }
+        },
+        "summary": "Add a single tag",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users/{email}/tags/{tag}": {
+      "delete": {
+        "description": "Idempotent -- removing a tag the user does not carry still returns 200 and writes an audit row. The ``<tag>`` path segment is re-normalized defensively.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "email": "alice@example.com",
+                  "tags": [
+                    "sprint:may-2026"
+                  ]
+                }
+              }
+            },
+            "description": "Current tag list with the tag removed."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown email."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_tag",
+                  "error": "Tag must be a non-empty slug"
+                }
+              }
+            },
+            "description": "Empty or invalid tag input."
+          }
+        },
+        "summary": "Remove a single tag",
+        "tags": [
+          "Users"
         ]
       }
     },

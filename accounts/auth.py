@@ -60,6 +60,11 @@ def token_required(view_func):
         token.save(update_fields=["last_used_at"])
 
         request.user = token.user
+        # Issue #764: stash the token on the request so audit-logging views
+        # (e.g. User Management API writes) can attribute the action to the
+        # bearer without re-parsing the ``Authorization`` header. Existing
+        # views ignore this attribute, so this is a non-breaking addition.
+        request.auth_token = token
         return view_func(request, *args, **kwargs)
 
     return wrapper

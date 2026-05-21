@@ -77,6 +77,12 @@ from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from accounts.utils.bounce import (
+    MAX_BOUNCE_DIAGNOSTIC_LEN,
+    SOFT_BOUNCE_THRESHOLD,
+    mark_permanent_bounce,
+    record_soft_bounce,
+)
 from api.openapi import openapi_spec
 from email_app.models import EmailLog, SesEvent
 from integrations.config import get_config
@@ -86,17 +92,16 @@ logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
-# Number of transient (soft) bounces tolerated before we treat the user as
-# permanently bounced. Three matches what most ESPs use for soft-fail
-# tolerance: a single "mailbox full" hiccup shouldn't unsubscribe anyone, but
-# three consecutive failures is a real signal.
-SOFT_BOUNCE_THRESHOLD = 3
-
-# Cap on the diagnostic text persisted in ``User.last_bounce_diagnostic``
-# (issue #766). SES diagnostics are typically a single SMTP line but the
-# spec is loose enough that an over-long string could waste storage; 500
-# chars is generous for operator triage.
-MAX_BOUNCE_DIAGNOSTIC_LEN = 500
+# ``SOFT_BOUNCE_THRESHOLD`` and ``MAX_BOUNCE_DIAGNOSTIC_LEN`` are imported
+# from ``accounts.utils.bounce`` -- the shared helper module owns the
+# structured-bounce side-effects (issue #784). They are referenced here
+# to keep the module's public surface backward-compatible for any caller
+# that imported them from this file before the refactor.
+__all__ = [
+    "MAX_BOUNCE_DIAGNOSTIC_LEN",
+    "SOFT_BOUNCE_THRESHOLD",
+    "ses_events",
+]
 
 
 @csrf_exempt
@@ -427,10 +432,10 @@ def _handle_bounce(payload, inner, message_id):
         if matched_user is None:
             matched_user = user
         if bounce_type == "Permanent":
-            _mark_permanent_bounce(user, diagnostic=diagnostic)
+            mark_permanent_bounce(user, diagnostic=diagnostic)
             actions.append(f"{address}: unsubscribed and marked permanent bounce")
         elif bounce_type == "Transient":
-            new_count, flipped = _record_soft_bounce(user, diagnostic=diagnostic)
+            new_count, flipped = record_soft_bounce(user, diagnostic=diagnostic)
             if flipped:
                 actions.append(
                     f"{address}: soft bounce threshold reached, "
@@ -794,27 +799,6 @@ def _stamp_email_log_complaint(email_log, event_timestamp):
         email_log.save(update_fields=["complained_at"])
 
 
-def _mark_permanent_bounce(user, diagnostic=""):
-    """Flip ``unsubscribed`` and write the structured permanent-bounce
-    fields on ``User`` (issue #766). Idempotent.
-
-    The most recent bounce is the operative one, so
-    ``bounce_recorded_at`` is refreshed on every call -- a permanent
-    bounce arriving for a row that was already PERMANENT moves the
-    timestamp forward.
-    """
-    user.unsubscribed = True
-    user.bounce_state = User.BounceState.PERMANENT
-    user.bounce_recorded_at = timezone.now()
-    user.last_bounce_diagnostic = (diagnostic or "")[:MAX_BOUNCE_DIAGNOSTIC_LEN]
-    user.save(update_fields=[
-        "unsubscribed",
-        "bounce_state",
-        "bounce_recorded_at",
-        "last_bounce_diagnostic",
-    ])
-
-
 def _mark_complaint(user):
     """Flip ``unsubscribed`` for a complaint. Idempotent.
 
@@ -824,46 +808,6 @@ def _mark_complaint(user):
     if not user.unsubscribed:
         user.unsubscribed = True
         user.save(update_fields=["unsubscribed"])
-
-
-def _record_soft_bounce(user, diagnostic=""):
-    """Increment ``soft_bounce_count``, flipping at the threshold.
-
-    Returns ``(new_count_after_write, flipped_to_unsubscribed)``. On the
-    first soft bounce the row's ``bounce_state`` flips to ``SOFT`` and the
-    diagnostic / timestamp are stored; subsequent soft bounces refresh the
-    timestamp + diagnostic. When the counter reaches
-    ``SOFT_BOUNCE_THRESHOLD`` the row is upgraded to ``PERMANENT`` (issue
-    #766) and the counter is reset so the row is reusable if an operator
-    manually clears ``unsubscribed`` later.
-    """
-    diagnostic_trimmed = (diagnostic or "")[:MAX_BOUNCE_DIAGNOSTIC_LEN]
-    user.soft_bounce_count = (user.soft_bounce_count or 0) + 1
-    now = timezone.now()
-    if user.soft_bounce_count >= SOFT_BOUNCE_THRESHOLD:
-        user.soft_bounce_count = 0
-        user.unsubscribed = True
-        user.bounce_state = User.BounceState.PERMANENT
-        user.bounce_recorded_at = now
-        user.last_bounce_diagnostic = diagnostic_trimmed
-        user.save(update_fields=[
-            "soft_bounce_count",
-            "unsubscribed",
-            "bounce_state",
-            "bounce_recorded_at",
-            "last_bounce_diagnostic",
-        ])
-        return 0, True
-    user.bounce_state = User.BounceState.SOFT
-    user.bounce_recorded_at = now
-    user.last_bounce_diagnostic = diagnostic_trimmed
-    user.save(update_fields=[
-        "soft_bounce_count",
-        "bounce_state",
-        "bounce_recorded_at",
-        "last_bounce_diagnostic",
-    ])
-    return user.soft_bounce_count, False
 
 
 def _record_event(

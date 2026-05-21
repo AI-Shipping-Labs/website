@@ -81,6 +81,7 @@ from api.views.tier_reconcile import (
 from api.views.users import (
     user_detail,
     user_email_log,
+    user_mark_bounced,
     user_ses_events,
     user_tags_add,
     user_tags_remove,
@@ -408,6 +409,14 @@ urlpatterns = [
         "users/<path:email>/tags",
         user_tags_add,
         name="api_user_tags_add",
+    ),
+    # Mark-bounced (issue #784). Registered BEFORE the ``users/<path:email>``
+    # catch-all so the literal ``mark-bounced`` suffix is not swallowed by
+    # the path converter.
+    path(
+        "users/<path:email>/mark-bounced",
+        user_mark_bounced,
+        name="api_user_mark_bounced",
     ),
     path(
         "users",

@@ -29,6 +29,11 @@ class CommunityAuditLog(models.Model):
         ("api_unsubscribe", "API: unsubscribe toggle"),
         ("api_verify", "API: email verification"),
         ("api_tag", "API: tag add/remove"),
+        # Operator-triggered bounce mark (issue #784). Webhook-equivalent
+        # side-effects (synthetic SesEvent row + bounce-state writes) run
+        # through ``accounts.utils.bounce``; the audit row records the
+        # attempt regardless of whether it actually changed state.
+        ("api_mark_bounced", "API: mark bounced"),
     ]
 
     user = models.ForeignKey(

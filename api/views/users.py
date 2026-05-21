@@ -46,9 +46,11 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Q
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from accounts.utils.bounce import mark_permanent_bounce, record_soft_bounce
 from accounts.utils.tags import add_tag, normalize_tag, remove_tag
 from api.openapi import openapi_spec
 from api.safety import error_response
@@ -820,6 +822,249 @@ def user_tags_add(request, email):
         {"email": user.email, "tags": list(user.tags or [])},
         status=200,
     )
+
+
+# ---- Mark-bounced write -----------------------------------------------------
+
+# Body keys accepted by the mark-bounced endpoint. Any other key returns
+# 422 ``unknown_field`` (mirrors PATCH's strict-keys behaviour).
+_MARK_BOUNCED_ALLOWED_FIELDS = {"bounce_type", "diagnostic", "reason"}
+
+# Allowed ``bounce_type`` values. Order matters: matches the spec's
+# ``["permanent", "soft"]`` so 422 ``details.allowed`` is stable.
+_MARK_BOUNCED_TYPES = ["permanent", "soft"]
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Users",
+    summary="Manually mark a user as bounced",
+    methods={
+        "POST": {
+            "summary": "Mark a user as bounced (mirrors the SES webhook)",
+            "description": (
+                "Operator-triggered bounce mark for the rare cases where "
+                "the SES -> SNS webhook is unavailable (e.g. SNS HTTPS "
+                "subscription not yet wired) or where staff need to "
+                "reproduce post-bounce state at will. Side-effects are "
+                "shared with the webhook via "
+                "``accounts.utils.bounce`` so the resulting state is "
+                "indistinguishable from a real bounce. Idempotent: "
+                "calling again with the same ``bounce_type`` on a user "
+                "already in that state returns 200, writes no new "
+                "``SesEvent`` row, but still records an audit row "
+                "annotated ``no-op``."
+            ),
+            "request_body": {
+                "required": ["bounce_type"],
+                "properties": {
+                    "bounce_type": {
+                        "type": "string",
+                        "enum": _MARK_BOUNCED_TYPES,
+                    },
+                    "diagnostic": {
+                        "type": "string",
+                        "description": (
+                            "Optional SMTP diagnostic to persist on "
+                            "``User.last_bounce_diagnostic``."
+                        ),
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": (
+                            "Optional free-form operator note recorded in "
+                            "the audit log."
+                        ),
+                    },
+                },
+                "example": {
+                    "bounce_type": "permanent",
+                    "diagnostic": "smtp; 550 5.1.1 user unknown",
+                    "reason": "real bounce arrived; SNS not wired yet",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": (
+                        "User payload after the (possibly no-op) mark."
+                    ),
+                    "example": _USER_EXAMPLE,
+                },
+                404: {
+                    "description": "Unknown email.",
+                    "example": {
+                        "error": "User not found",
+                        "code": "user_not_found",
+                    },
+                },
+                422: {
+                    "description": "Body validation failed.",
+                    "example": {
+                        "error": "Invalid bounce_type",
+                        "code": "validation_error",
+                        "details": {
+                            "field": "bounce_type",
+                            "value": "hard",
+                            "allowed": _MARK_BOUNCED_TYPES,
+                        },
+                    },
+                },
+            },
+        },
+    },
+)
+def user_mark_bounced(request, email):
+    """``POST /api/users/<email>/mark-bounced`` -- operator mark-bounced."""
+    user = _find_user(email)
+    if user is None:
+        return _user_not_found_response()
+
+    data, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return parse_error
+    if not isinstance(data, dict):
+        return error_response(
+            "Body must be a JSON object",
+            "invalid_type",
+            details={"field": "body", "expected": "object"},
+        )
+
+    # Strict-keys: unknown body fields return 422 ``unknown_field`` so
+    # callers immediately see the typo rather than silently dropping it.
+    for key in data:
+        if key not in _MARK_BOUNCED_ALLOWED_FIELDS:
+            return error_response(
+                f"Unknown field: {key}",
+                "unknown_field",
+                status=422,
+                details={"field": key},
+            )
+
+    bounce_type = data.get("bounce_type")
+    if bounce_type is None:
+        return error_response(
+            "bounce_type is required",
+            "validation_error",
+            status=422,
+            details={
+                "field": "bounce_type",
+                "allowed": list(_MARK_BOUNCED_TYPES),
+            },
+        )
+    if bounce_type not in _MARK_BOUNCED_TYPES:
+        return error_response(
+            f"Invalid bounce_type: {bounce_type!r}",
+            "validation_error",
+            status=422,
+            details={
+                "field": "bounce_type",
+                "value": bounce_type,
+                "allowed": list(_MARK_BOUNCED_TYPES),
+            },
+        )
+
+    raw_diagnostic = data.get("diagnostic")
+    if raw_diagnostic is None or raw_diagnostic == "":
+        # Default diagnostic mirrors what an operator would write by
+        # hand. The helper trims to ``MAX_BOUNCE_DIAGNOSTIC_LEN``.
+        diagnostic = "manual operator mark via API"
+    else:
+        diagnostic = str(raw_diagnostic)
+
+    reason = data.get("reason")
+    if reason is not None:
+        reason = str(reason)
+
+    actor = _actor_label(request)
+    body_bounce_type = bounce_type  # preserved for audit / raw_payload
+
+    target_state = (
+        User.BounceState.PERMANENT
+        if bounce_type == "permanent"
+        else User.BounceState.SOFT
+    )
+    synthetic_event_type = (
+        SesEvent.EVENT_TYPE_BOUNCE_PERMANENT
+        if bounce_type == "permanent"
+        else SesEvent.EVENT_TYPE_BOUNCE_TRANSIENT
+    )
+    synthetic_bounce_type_field = (
+        "Permanent" if bounce_type == "permanent" else "Transient"
+    )
+
+    with transaction.atomic():
+        locked = User.objects.select_for_update().select_related("tier").get(pk=user.pk)
+        previous_state = locked.bounce_state
+
+        # Idempotency check: if the user is already in the requested
+        # state, skip helper + SesEvent insert. We still write an audit
+        # row so the operator's attempt is captured.
+        already_at_state = previous_state == target_state
+        if already_at_state:
+            details = (
+                f"no-op: already {previous_state}; "
+                f"mark bounce_type={body_bounce_type!r}; "
+                f"actor_token={actor}; "
+                f"current_state={previous_state!r}"
+            )
+            if reason is not None:
+                details = f"{details}; reason={reason!r}"
+            _audit(locked, "api_mark_bounced", details)
+            user = locked
+        else:
+            if bounce_type == "permanent":
+                mark_permanent_bounce(locked, diagnostic=diagnostic)
+            else:
+                record_soft_bounce(locked, diagnostic=diagnostic)
+
+            # Synthetic SES event row. ``message_id`` uses millisecond
+            # precision so back-to-back legitimate transitions on the
+            # same user don't collide on the unique-message_id index.
+            ms = int(timezone.now().timestamp() * 1000)
+            message_id = f"manual-mark-bounced-{locked.id}-{ms}"
+            action_taken = (
+                f"manual mark via API; actor_token={actor}"
+            )
+            if reason is not None:
+                action_taken = (
+                    f"{action_taken}; reason={reason!r}"
+                )
+            action_taken = action_taken[:255]
+            raw_payload = {
+                "source": "api_mark_bounced",
+                "actor_token": actor,
+                "bounce_type": body_bounce_type,
+                "diagnostic": diagnostic,
+                "reason": reason,
+                "ran_at": timezone.now().isoformat(),
+            }
+            SesEvent.objects.create(
+                message_id=message_id,
+                event_type=synthetic_event_type,
+                raw_payload=raw_payload,
+                recipient_email=locked.email,
+                user=locked,
+                action_taken=action_taken,
+                email_log=None,
+                bounce_type=synthetic_bounce_type_field,
+                bounce_subtype="",
+                diagnostic_code=diagnostic,
+            )
+
+            details = (
+                f"marked bounce_type={body_bounce_type!r}; "
+                f"actor_token={actor}; "
+                f"previous_state={previous_state!r}; "
+                f"diagnostic={diagnostic!r}"
+            )
+            if reason is not None:
+                details = f"{details}; reason={reason!r}"
+            _audit(locked, "api_mark_bounced", details)
+            user = locked
+
+    return JsonResponse(serialize_user_state(user), status=200)
 
 
 @token_required

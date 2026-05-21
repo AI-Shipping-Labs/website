@@ -6104,6 +6104,123 @@
         ]
       }
     },
+    "/api/users/{email}/mark-bounced": {
+      "post": {
+        "description": "Operator-triggered bounce mark for the rare cases where the SES -> SNS webhook is unavailable (e.g. SNS HTTPS subscription not yet wired) or where staff need to reproduce post-bounce state at will. Side-effects are shared with the webhook via ``accounts.utils.bounce`` so the resulting state is indistinguishable from a real bounce. Idempotent: calling again with the same ``bounce_type`` on a user already in that state returns 200, writes no new ``SesEvent`` row, but still records an audit row annotated ``no-op``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "bounce_type": "permanent",
+                "diagnostic": "smtp; 550 5.1.1 user unknown",
+                "reason": "real bounce arrived; SNS not wired yet"
+              },
+              "schema": {
+                "properties": {
+                  "bounce_type": {
+                    "enum": [
+                      "permanent",
+                      "soft"
+                    ],
+                    "type": "string"
+                  },
+                  "diagnostic": {
+                    "description": "Optional SMTP diagnostic to persist on ``User.last_bounce_diagnostic``.",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "description": "Optional free-form operator note recorded in the audit log.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bounce_type"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bounce_state": "none",
+                  "date_joined": "2026-04-15T12:00:00+00:00",
+                  "display_name": "Alice Doe",
+                  "email": "alice@example.com",
+                  "email_verified": true,
+                  "first_name": "Alice",
+                  "last_login": "2026-05-19T08:30:00+00:00",
+                  "last_name": "Doe",
+                  "slack_member": true,
+                  "slack_user_id": "U01ABCDEF",
+                  "soft_bounce_count": 0,
+                  "stripe_customer_id": "cus_xyz",
+                  "subscription_id": "sub_xyz",
+                  "tags": [
+                    "sprint:may-2026"
+                  ],
+                  "tier": {
+                    "level": 20,
+                    "slug": "main"
+                  },
+                  "tier_override_active": false,
+                  "unsubscribed": false
+                }
+              }
+            },
+            "description": "User payload after the (possibly no-op) mark."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown email."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "allowed": [
+                      "permanent",
+                      "soft"
+                    ],
+                    "field": "bounce_type",
+                    "value": "hard"
+                  },
+                  "error": "Invalid bounce_type"
+                }
+              }
+            },
+            "description": "Body validation failed."
+          }
+        },
+        "summary": "Mark a user as bounced (mirrors the SES webhook)",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
     "/api/users/{email}/notes": {
       "get": {
         "description": "Staff-only. Routed by three URL aliases under ``/api/users/<email>/`` -- the OpenAPI spec emits one operation per alias. ``?plan=null`` preserves the inbox-only behaviour; ``?plan=<id>`` narrows to one plan.",

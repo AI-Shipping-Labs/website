@@ -17,13 +17,23 @@ PREVIEW_CONTEXTS = {
         'site_url': 'https://aishippinglabs.com',
         'slack_invite_url': 'https://example.com/slack',
     },
-    'email_verification': {
+    'email_verification_signup': {
         'user_name': 'Ada',
         'verify_url': 'https://aishippinglabs.com/verify?token=demo',
         'site_url': 'https://aishippinglabs.com',
         'ttl_days': 7,
     },
-    'email_verification_reminder': {
+    'email_verification_subscribe': {
+        'user_name': 'Ada',
+        'verify_url': 'https://aishippinglabs.com/verify?token=demo',
+        'site_url': 'https://aishippinglabs.com',
+        'ttl_days': 7,
+    },
+    'email_verification_signup_reminder': {
+        'user_name': 'Ada',
+        'verify_url': 'https://aishippinglabs.com/verify?token=demo',
+    },
+    'email_verification_subscribe_reminder': {
         'user_name': 'Ada',
         'verify_url': 'https://aishippinglabs.com/verify?token=demo',
     },

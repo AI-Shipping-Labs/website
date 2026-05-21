@@ -26,8 +26,12 @@ TRANSACTIONAL_EMAIL_TYPES = {
     "community_invite",
     "lead_magnet_delivery",
     "event_reminder",
-    "email_verification",
-    "email_verification_reminder",
+    # Issue #767: separate templates per signup vs newsletter-subscribe
+    # flow. Both verify slugs and both reminders are transactional.
+    "email_verification_signup",
+    "email_verification_subscribe",
+    "email_verification_signup_reminder",
+    "email_verification_subscribe_reminder",
     "password_reset",
     "event_registration",
     "event_rescheduled",

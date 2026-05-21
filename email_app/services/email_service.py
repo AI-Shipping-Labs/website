@@ -41,11 +41,16 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "email_templates"
 # Default-on for every transactional + campaign email; this set names the
 # template_name values that opt OUT because the footer would be redundant or
 # would derail the user mid-flow.
-#   - "email_verification": the body itself is a verify CTA; duplicating it
-#     in the footer is absurd.
+#   - "email_verification_signup" / "email_verification_subscribe" (issue
+#     #767 split): the body itself is a verify CTA; duplicating it in the
+#     footer is absurd.
 #   - "password_reset": the recipient is here to reset a password; nudging
 #     them to click "verify your email" first would derail that flow.
-EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {"email_verification", "password_reset"}
+EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {
+    "email_verification_signup",
+    "email_verification_subscribe",
+    "password_reset",
+}
 
 # Token lifetime for the footer verify link. 7 days is long enough that an
 # email opened days after delivery still works, but bounded so an old archived

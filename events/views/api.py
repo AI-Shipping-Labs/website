@@ -116,7 +116,7 @@ def _create_unverified_subscriber(email, preferred_timezone=""):
 
 
 def _send_event_verification_email(user):
-    """Send the standard ``email_verification`` email after anonymous register.
+    """Send the standard ``email_verification_signup`` email after anonymous register.
 
     Distinct from the registration confirmation: this lets the new
     user claim the account that was created on their behalf. Failure

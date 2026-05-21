@@ -588,7 +588,7 @@ def _extract_verify_url_from_footer(html):
 
     Returns ``None`` if the CTA is absent. Scoping the regex to the
     ``verify-email-cta`` paragraph guarantees we don't accidentally
-    match the verify link a body template (e.g. ``email_verification``)
+    match the verify link a body template (e.g. ``email_verification_signup``)
     might also contain.
     """
     import re
@@ -656,20 +656,46 @@ class VerifyEmailFooterTest(TestCase):
         self.assertNotIn('/api/verify-email?token=', html)
         assert_no_internal_footer_text(self, html)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-450-3')
-    def test_email_verification_template_does_not_carry_verify_footer(
+    @patch.object(EmailService, '_send_ses', return_value='ses-450-3a')
+    def test_email_verification_signup_template_does_not_carry_verify_footer(
         self, mock_ses,
     ):
-        # The body has its own verify link via ``verify_url``; the footer
-        # CTA must NOT appear on top of that.
+        # Issue #767: the signup-flow body has its own verify link via
+        # ``verify_url``; the footer CTA must NOT duplicate it.
         self.service.send(
             self.unverified,
-            'email_verification',
-            {'verify_url': 'https://example.test/api/verify-email?token=body'},
+            'email_verification_signup',
+            {
+                'verify_url': 'https://example.test/api/verify-email?token=body',
+                'site_url': 'https://example.test',
+                'ttl_days': 7,
+            },
         )
         html = mock_ses.call_args[0][2]
 
         # Body's own verify link is fine; footer CTA paragraph must not exist.
+        self.assertNotIn('<p class="verify-email-cta">', html)
+        self.assertIsNone(_extract_verify_url_from_footer(html))
+        assert_no_internal_footer_text(self, html)
+
+    @patch.object(EmailService, '_send_ses', return_value='ses-450-3b')
+    def test_email_verification_subscribe_template_does_not_carry_verify_footer(
+        self, mock_ses,
+    ):
+        # Issue #767: same footer-suppression rule for the subscribe-flow
+        # body. The body's confirm-subscription CTA must not be duplicated
+        # by the footer.
+        self.service.send(
+            self.unverified,
+            'email_verification_subscribe',
+            {
+                'verify_url': 'https://example.test/api/verify-email?token=body',
+                'site_url': 'https://example.test',
+                'ttl_days': 7,
+            },
+        )
+        html = mock_ses.call_args[0][2]
+
         self.assertNotIn('<p class="verify-email-cta">', html)
         self.assertIsNone(_extract_verify_url_from_footer(html))
         assert_no_internal_footer_text(self, html)

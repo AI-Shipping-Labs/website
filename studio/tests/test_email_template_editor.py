@@ -91,7 +91,7 @@ class EmailTemplateListTest(TestCase):
         names = {r['template_name'] for r in rows}
         for expected in [
             'welcome',
-            'email_verification',
+            'email_verification_signup',
             'password_reset',
             'community_invite',
             'lead_magnet_delivery',
@@ -117,8 +117,8 @@ class EmailTemplateListTest(TestCase):
         self.assertIsNotNone(rows_by_name['welcome']['updated_at'])
 
         # A template without an override should not show the badge.
-        self.assertFalse(rows_by_name['email_verification']['edited'])
-        self.assertIsNone(rows_by_name['email_verification']['updated_at'])
+        self.assertFalse(rows_by_name['email_verification_signup']['edited'])
+        self.assertIsNone(rows_by_name['email_verification_signup']['updated_at'])
 
     def test_list_uses_file_subject_when_no_override(self):
         response = self.client.get('/studio/email-templates/')

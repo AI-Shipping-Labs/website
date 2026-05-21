@@ -99,7 +99,7 @@ class AccountPageFreeUserTest(TestCase):
     def test_unverified_account_shows_latest_verification_send_time(self):
         EmailLog.objects.create(
             user=self.user,
-            email_type="email_verification",
+            email_type="email_verification_signup",
             ses_message_id="ses-test-id",
         )
 

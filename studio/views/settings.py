@@ -78,6 +78,12 @@ SETTINGS_SECTIONS = [
         'description': 'Platform-level URL and display settings.',
         'group_names': {'site'},
     },
+    {
+        'id': 'analytics',
+        'label': 'Analytics',
+        'description': 'Visitor analytics integrations (e.g. Google Analytics).',
+        'group_names': {'analytics'},
+    },
 ]
 
 OTHER_SECTION = {

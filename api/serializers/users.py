@@ -14,11 +14,6 @@ documented in the OpenAPI spec:
   Adds a derived ``disposition`` field whose value is the strongest
   observed signal in the order ``sent < delivered < opened < clicked <
   bounced < complained``.
-
-Bounce state (legacy): v1 derives ``bounce_state`` from the existing
-``soft_bounce_count`` field plus the ``bounced`` tag. When the structured
-``User.bounce_state`` field from issue #766 lands the helper flips to
-read it directly -- see the TODO inline.
 """
 
 from django.utils import timezone
@@ -50,22 +45,21 @@ def _isoformat_or_none(value):
 def _bounce_state(user):
     """Return one of ``"none" | "soft" | "permanent"`` for ``user``.
 
-    Derivation rules (v1; see issue #766):
+    Reads the structured ``User.bounce_state`` field (issue #766) directly.
+    The SES webhook handler and ``process_missed_bounces`` are the only
+    writers; both set this field on permanent and soft bounces.
 
-    - ``"permanent"`` when the legacy ``bounced`` tag is present.
-    - ``"soft"`` when ``soft_bounce_count > 0`` (and no permanent tag).
-    - ``"none"`` otherwise.
+    The module-level ``BOUNCE_STATE_*`` constants pin the wire-format
+    strings the API contract promises. They happen to match the model's
+    ``TextChoices`` values today but are kept independent of that
+    implementation detail so a model rename never silently breaks the API.
 
-    TODO(#766): replace tag-derived state with the structured field once
-    #766 lands -- the serializer change is a single-line flip from this
-    helper to ``user.bounce_state``.
+    Empty / NULL falls back to ``"none"`` -- defensive only; the field has
+    a non-null default at the schema layer. We deliberately do NOT fall
+    back to the legacy ``"bounced"`` tag: a missing ``bounce_state`` on a
+    bouncy row is a backfill bug we want loud, not papered over.
     """
-    tags = list(user.tags or [])
-    if "bounced" in tags:
-        return BOUNCE_STATE_PERMANENT
-    if (user.soft_bounce_count or 0) > 0:
-        return BOUNCE_STATE_SOFT
-    return BOUNCE_STATE_NONE
+    return user.bounce_state or BOUNCE_STATE_NONE
 
 
 def serialize_user_state(user, *, compact=False):

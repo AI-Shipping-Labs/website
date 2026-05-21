@@ -155,7 +155,13 @@ class StudioUserListPaginationTest(PatchedUserListPageSizeMixin, TestCase):
         # Switching filter chips should reset to page 1, so the chip URLs
         # in the rendered template must NOT include the current page=N.
         response = self.client.get('/studio/users/?page=2')
-        self.assertNotContains(response, 'filter=paid&amp;slack=any&amp;page=2')
+        # Issue #766: chips also embed ``bounce=any`` between ``slack``
+        # and any trailing param; the chip URLs still must not carry
+        # ``page=2``.
+        self.assertNotContains(
+            response,
+            'filter=paid&amp;slack=any&amp;bounce=any&amp;page=2',
+        )
 
     def test_pager_partial_does_not_leak_template_comment(self):
         # Regression: Django's ``{# ... #}`` comment syntax is single-line

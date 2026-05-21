@@ -30,11 +30,16 @@ Branching:
 - ``Type=Notification``              -> parse the inner ``Message`` JSON, then
   branch on ``notificationType`` / ``eventType``:
     * ``Bounce`` with ``bounceType=Permanent``  -> for each recipient, set
-      ``User.unsubscribed=True`` and append the ``bounced`` tag.
+      ``User.unsubscribed=True`` and write the structured
+      ``bounce_state=permanent`` / ``bounce_recorded_at`` /
+      ``last_bounce_diagnostic`` fields (issue #766).
     * ``Bounce`` with ``bounceType=Transient``  -> increment
-      ``User.soft_bounce_count``. At ``SOFT_BOUNCE_THRESHOLD`` (3), flip
-      ``unsubscribed=True``, append ``bounced``, reset the counter to 0.
-    * ``Complaint``  -> set ``unsubscribed=True``, append ``complained``.
+      ``User.soft_bounce_count`` and set ``bounce_state=soft``. At
+      ``SOFT_BOUNCE_THRESHOLD`` (3), flip ``unsubscribed=True``, set
+      ``bounce_state=permanent``, reset the counter to 0.
+    * ``Complaint``  -> set ``unsubscribed=True``. (Audit lives in
+      ``SesEvent``; complaints are rarer than bounces and the
+      ``unsubscribed`` flag is sufficient.)
     * ``Delivery``   -> log only.
     * ``Open``       -> set first-open timestamp and increment open count.
     * ``Click``      -> set first-click timestamp and increment click count;
@@ -71,7 +76,6 @@ from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from accounts.utils.tags import add_tag
 from api.openapi import openapi_spec
 from email_app.models import EmailLog, SesEvent
 from integrations.services.ses import validate_sns_notification
@@ -86,8 +90,11 @@ User = get_user_model()
 # three consecutive failures is a real signal.
 SOFT_BOUNCE_THRESHOLD = 3
 
-TAG_BOUNCED = "bounced"
-TAG_COMPLAINED = "complained"
+# Cap on the diagnostic text persisted in ``User.last_bounce_diagnostic``
+# (issue #766). SES diagnostics are typically a single SMTP line but the
+# spec is loose enough that an over-long string could waste storage; 500
+# chars is generous for operator triage.
+MAX_BOUNCE_DIAGNOSTIC_LEN = 500
 
 
 @csrf_exempt
@@ -401,14 +408,14 @@ def _handle_bounce(payload, inner, message_id):
         if matched_user is None:
             matched_user = user
         if bounce_type == "Permanent":
-            _mark_permanent_bounce(user)
-            actions.append(f"{address}: unsubscribed and tagged {TAG_BOUNCED}")
+            _mark_permanent_bounce(user, diagnostic=diagnostic)
+            actions.append(f"{address}: unsubscribed and marked permanent bounce")
         elif bounce_type == "Transient":
-            new_count, flipped = _record_soft_bounce(user)
+            new_count, flipped = _record_soft_bounce(user, diagnostic=diagnostic)
             if flipped:
                 actions.append(
                     f"{address}: soft bounce threshold reached, "
-                    f"unsubscribed and tagged {TAG_BOUNCED}"
+                    f"unsubscribed and marked permanent bounce"
                 )
             else:
                 actions.append(
@@ -448,7 +455,8 @@ def _handle_bounce(payload, inner, message_id):
                 )
     except IntegrityError:
         # Another worker just wrote the audit row for the same MessageId.
-        # Side-effects above are idempotent on retry: ``add_tag`` dedupes,
+        # Side-effects above are idempotent on retry: the structured
+        # ``bounce_state`` / ``bounce_recorded_at`` writes overwrite and
         # ``unsubscribed=True`` is idempotent. The risky one is
         # ``soft_bounce_count`` -- but we only get here if the SesEvent
         # write lost a race AFTER mutating the user. In practice SNS
@@ -512,7 +520,7 @@ def _handle_complaint(payload, inner, message_id):
         if matched_user is None:
             matched_user = user
         _mark_complaint(user)
-        actions.append(f"{address}: unsubscribed and tagged {TAG_COMPLAINED}")
+        actions.append(f"{address}: unsubscribed for complaint")
 
     correlated_user = (
         matched_log.user if matched_log is not None else matched_user
@@ -767,38 +775,75 @@ def _stamp_email_log_complaint(email_log, event_timestamp):
         email_log.save(update_fields=["complained_at"])
 
 
-def _mark_permanent_bounce(user):
-    """Flip unsubscribed and tag ``bounced``. Idempotent."""
-    if not user.unsubscribed:
-        user.unsubscribed = True
-        user.save(update_fields=["unsubscribed"])
-    add_tag(user, TAG_BOUNCED)
+def _mark_permanent_bounce(user, diagnostic=""):
+    """Flip ``unsubscribed`` and write the structured permanent-bounce
+    fields on ``User`` (issue #766). Idempotent.
+
+    The most recent bounce is the operative one, so
+    ``bounce_recorded_at`` is refreshed on every call -- a permanent
+    bounce arriving for a row that was already PERMANENT moves the
+    timestamp forward.
+    """
+    user.unsubscribed = True
+    user.bounce_state = User.BounceState.PERMANENT
+    user.bounce_recorded_at = timezone.now()
+    user.last_bounce_diagnostic = (diagnostic or "")[:MAX_BOUNCE_DIAGNOSTIC_LEN]
+    user.save(update_fields=[
+        "unsubscribed",
+        "bounce_state",
+        "bounce_recorded_at",
+        "last_bounce_diagnostic",
+    ])
 
 
 def _mark_complaint(user):
-    """Flip unsubscribed and tag ``complained``. Idempotent."""
+    """Flip ``unsubscribed`` for a complaint. Idempotent.
+
+    The structured audit trail lives in ``SesEvent``; no per-user
+    complaint flag is needed beyond ``unsubscribed`` (issue #766).
+    """
     if not user.unsubscribed:
         user.unsubscribed = True
         user.save(update_fields=["unsubscribed"])
-    add_tag(user, TAG_COMPLAINED)
 
 
-def _record_soft_bounce(user):
-    """Increment soft_bounce_count, flipping at the threshold.
+def _record_soft_bounce(user, diagnostic=""):
+    """Increment ``soft_bounce_count``, flipping at the threshold.
 
-    Returns (new_count_after_write, flipped_to_unsubscribed). When the
-    threshold is reached the counter is reset to 0 (so the row is reusable
-    if an operator manually clears ``unsubscribed`` later) and the user is
-    marked as if they'd permanently bounced.
+    Returns ``(new_count_after_write, flipped_to_unsubscribed)``. On the
+    first soft bounce the row's ``bounce_state`` flips to ``SOFT`` and the
+    diagnostic / timestamp are stored; subsequent soft bounces refresh the
+    timestamp + diagnostic. When the counter reaches
+    ``SOFT_BOUNCE_THRESHOLD`` the row is upgraded to ``PERMANENT`` (issue
+    #766) and the counter is reset so the row is reusable if an operator
+    manually clears ``unsubscribed`` later.
     """
+    diagnostic_trimmed = (diagnostic or "")[:MAX_BOUNCE_DIAGNOSTIC_LEN]
     user.soft_bounce_count = (user.soft_bounce_count or 0) + 1
+    now = timezone.now()
     if user.soft_bounce_count >= SOFT_BOUNCE_THRESHOLD:
         user.soft_bounce_count = 0
         user.unsubscribed = True
-        user.save(update_fields=["soft_bounce_count", "unsubscribed"])
-        add_tag(user, TAG_BOUNCED)
+        user.bounce_state = User.BounceState.PERMANENT
+        user.bounce_recorded_at = now
+        user.last_bounce_diagnostic = diagnostic_trimmed
+        user.save(update_fields=[
+            "soft_bounce_count",
+            "unsubscribed",
+            "bounce_state",
+            "bounce_recorded_at",
+            "last_bounce_diagnostic",
+        ])
         return 0, True
-    user.save(update_fields=["soft_bounce_count"])
+    user.bounce_state = User.BounceState.SOFT
+    user.bounce_recorded_at = now
+    user.last_bounce_diagnostic = diagnostic_trimmed
+    user.save(update_fields=[
+        "soft_bounce_count",
+        "bounce_state",
+        "bounce_recorded_at",
+        "last_bounce_diagnostic",
+    ])
     return user.soft_bounce_count, False
 
 

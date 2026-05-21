@@ -307,6 +307,48 @@
   </div>
 </section>
 
+{% comment %}
+  Bounce status card (issue #766). Only rendered when the user has a
+  non-``none`` ``bounce_state``; when ``bounce_state == "none"`` we drop
+  the section entirely so the page is unchanged for healthy rows.
+{% endcomment %}
+{% if bounce_has_state %}
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-detail-bounce-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Bounce status</h2>
+  <dl class="space-y-3 text-sm">
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">State</dt>
+      <dd>
+        {% if bounce_state == 'permanent' %}
+        <span class="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30"
+              data-testid="user-detail-bounce-state"
+              data-bounce-state="{{ bounce_state }}">{{ bounce_state_label }}</span>
+        {% else %}
+        <span class="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30"
+              data-testid="user-detail-bounce-state"
+              data-bounce-state="{{ bounce_state }}">{{ bounce_state_label }}</span>
+        {% endif %}
+      </dd>
+    </div>
+    {% if bounce_recorded_at %}
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Recorded</dt>
+      <dd class="text-foreground" data-testid="user-detail-bounce-recorded-at">
+        {{ bounce_recorded_at|date:"Y-m-d H:i" }} UTC
+      </dd>
+    </div>
+    {% endif %}
+    {% if last_bounce_diagnostic %}
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Diagnostic</dt>
+      <dd class="text-foreground font-mono text-xs break-all text-right"
+          data-testid="user-detail-bounce-diagnostic">{{ last_bounce_diagnostic }}</dd>
+    </div>
+    {% endif %}
+  </dl>
+</section>
+{% endif %}
+
 <!-- Tags -->
 <section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-tags-section">
   <h2 class="text-lg font-semibold text-foreground mb-4">Tags</h2>

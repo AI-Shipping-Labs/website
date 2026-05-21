@@ -20,6 +20,19 @@ IMPORT_BATCH_SOURCE_CHOICES = [
 ]
 
 
+class BounceState(models.TextChoices):
+    """Tri-state SES bounce status for a User (issue #766).
+
+    Replaces the legacy ``"bounced"`` contact tag. Stored as the
+    lower-case slug so query strings like ``?bounce=permanent`` round-trip
+    cleanly between the URL and the model field.
+    """
+
+    NONE = "none", "No bounce"
+    SOFT = "soft", "Soft bounce"
+    PERMANENT = "permanent", "Permanent bounce"
+
+
 class UserManager(BaseUserManager):
     """Custom user manager where email is the unique identifier."""
 
@@ -63,6 +76,10 @@ class User(AbstractUser):
 
     objects = UserManager()
 
+    # Re-export BounceState as a class attribute so callers can use
+    # ``User.BounceState.PERMANENT`` (issue #766).
+    BounceState = BounceState
+
     # Profile fields
     email_verified = models.BooleanField(
         default=False,
@@ -99,6 +116,33 @@ class User(AbstractUser):
         help_text=(
             "Running count of transient (soft) SES bounces. Reset to 0 once "
             "the user is auto-unsubscribed at the configured threshold."
+        ),
+    )
+    # Structured bounce state (issue #766). Replaces the legacy "bounced"
+    # contact tag with a first-class tri-state field so bounce data can
+    # be filtered server-side and the eager-purge bucket can drop dead
+    # rows quickly.
+    bounce_state = models.CharField(
+        max_length=16,
+        choices=BounceState.choices,
+        default=BounceState.NONE,
+        db_index=True,
+        help_text="Current SES bounce state for this user.",
+    )
+    bounce_recorded_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When ``bounce_state`` last flipped to a non-``none`` value. "
+            "Powers the 24h eager-purge gate for unverified bounced rows."
+        ),
+    )
+    last_bounce_diagnostic = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "SMTP diagnostic from the most recent bounce (truncated to 500 "
+            "chars for operator triage)."
         ),
     )
     email_preferences = models.JSONField(

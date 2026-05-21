@@ -214,6 +214,7 @@ class Command(BaseCommand):
                     password=user_data['password'],
                     first_name=user_data.get('first_name', ''),
                     last_name=user_data.get('last_name', ''),
+                    signup_source="staff_create",
                 )
             else:
                 user = User.objects.create_user(
@@ -221,6 +222,7 @@ class Command(BaseCommand):
                     password=user_data['password'],
                     first_name=user_data.get('first_name', ''),
                     last_name=user_data.get('last_name', ''),
+                    signup_source="staff_create",
                 )
             user.tier = tier
             user.email_verified = True

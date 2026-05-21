@@ -231,6 +231,7 @@ def reconcile_user(
                 import_source=source,
                 imported_at=timezone.now(),
                 import_metadata=_merged_metadata({}, source, row.source_metadata),
+                signup_source="imported",
             )
             action = "created"
             branch = "create"

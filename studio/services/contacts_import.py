@@ -271,6 +271,7 @@ def import_contact_rows(
                     password=None,
                     email_verified=False,
                     unsubscribed=False,
+                    signup_source="imported",
                 )
                 created_now = True
 

@@ -105,10 +105,22 @@ def register_view(request):
 
 @ensure_csrf_cookie
 def password_reset_request_view(request):
-    """Render the public password-reset request page."""
-    if request.user.is_authenticated:
+    """Render the public password-reset request page.
+
+    Issue #769: the newsletter-only ``/account/`` CTA links here with
+    ``?email=<user.email>`` so the reset form is pre-populated. We keep
+    that behaviour available even for already-authenticated users (the
+    redirect to ``/account/`` only fires when no ``email`` querystring
+    is present) so the trimmed CTA flow works without forcing a logout.
+    """
+    prefill_email = (request.GET.get("email") or "").strip()
+    if request.user.is_authenticated and not prefill_email:
         return redirect("/account/")
-    return render(request, "accounts/password_reset_request.html")
+    return render(
+        request,
+        "accounts/password_reset_request.html",
+        {"prefill_email": prefill_email},
+    )
 
 
 def signup_redirect_view(request):
@@ -670,6 +682,14 @@ def password_reset_api(request):
         user.set_password(new_password)
         user.save(update_fields=["password"])
 
+        # Issue #769: completing the password-reset flow IS the
+        # activation path for newsletter-only subscribers — once they
+        # have a password they're real platform users. ``mark_activated``
+        # is idempotent so this is a no-op for users who were already
+        # activated by some other trigger (#768).
+        from accounts.utils.activation import mark_activated
+        mark_activated(user)
+
         return JsonResponse(
             {"status": "ok", "message": "Password has been reset successfully."}
         )
@@ -724,6 +744,13 @@ def change_password_api(request):
 
     user.set_password(new_password)
     user.save(update_fields=["password"])
+
+    # Issue #769: changing a password is also an activation event so a
+    # newsletter-only subscriber who lands here (after the
+    # password-reset link auto-signed them in, for example) flips out
+    # of the gated state. Idempotent for already-activated users.
+    from accounts.utils.activation import mark_activated
+    mark_activated(user)
 
     # Re-login so the session is not invalidated
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")

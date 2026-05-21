@@ -1,12 +1,14 @@
 from datetime import timedelta
 
 from django.conf import settings
+from django.contrib import messages
 from django.db.models import Count, Q
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+from accounts.gating import is_newsletter_only_user
 from accounts.services.timezones import format_user_datetime
 from community.services.slack_links import build_slack_profile_url
 from content.access import get_active_override, get_user_level
@@ -153,8 +155,23 @@ def home(request):
 
     Authenticated users see a personalized dashboard.
     Anonymous users see the public marketing homepage.
+
+    Issue #769: verified newsletter-only subscribers (signup_source=
+    'newsletter' AND account_activated=False) do not get the full
+    member dashboard. They are redirected to the trimmed /account/
+    page with a one-shot info message explaining why. Setting a
+    password (or any other activation trigger from #768) flips
+    account_activated=True and unblocks the dashboard immediately on
+    the next request.
     """
     if request.user.is_authenticated:
+        if is_newsletter_only_user(request.user):
+            messages.info(
+                request,
+                "You're subscribed to the newsletter. Set a password to "
+                "access the dashboard, courses, and events.",
+            )
+            return redirect("/account/")
         return _dashboard(request)
     return _public_home(request)
 

@@ -143,6 +143,14 @@ known-first-party = ["content", "accounts", "payments", "studio", "integrations"
 # pin, local uv writes a stale [options] block into uv.lock that
 # CI's `uv sync --locked` (per #657) then rejects with "lockfile
 # needs to be updated". Far-future timestamp = effectively no
-# exclude-newer constraint, matching CI's no-config behaviour.
+# exclude-newer constraint.
+#
+# Must be an explicit UTC ISO 8601 timestamp, NOT a bare date
+# ("2099-12-31"): uv parses bare dates relative to the host's
+# local timezone, so on CET hosts the lockfile gets
+# `2099-12-31T23:00:00Z` (end-of-day local), while CI (UTC) parses
+# pyproject's bare date as `2100-01-01T00:00:00Z` and rejects
+# under `--locked`. The explicit Z-suffixed value below resolves
+# identically on every host.
 [tool.uv]
-exclude-newer = "2099-12-31"
+exclude-newer = "2099-12-31T23:00:00Z"

@@ -39,7 +39,27 @@
     })
       .then((response) => {
         if (response.ok) {
-          window.location.reload();
+          // GA4 conversion event. Because the success path triggers a
+          // full page reload, we use event_callback to defer the reload
+          // until gtag has actually pushed the event. A 1.5s fallback
+          // guarantees the reload still happens if gtag is blocked,
+          // absent, or fails to call back. The reloaded flag prevents a
+          // double-reload race between callback + fallback timer.
+          let reloaded = false;
+          const reload = () => {
+            if (reloaded) return;
+            reloaded = true;
+            window.location.reload();
+          };
+          if (typeof gtag === 'function') {
+            gtag('event', 'event_register', {
+              event_slug: slug,
+              event_callback: reload,
+            });
+            setTimeout(reload, 1500);
+          } else {
+            reload();
+          }
           return null;
         }
         return response.json().then((data) => {

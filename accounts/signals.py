@@ -46,17 +46,23 @@ def set_signup_source_oauth_on_social_signup(sender, request, sociallogin, **kwa
       the email AND the user just successfully clicked through to link
       an identity — both branches (new account, existing account
       linking OAuth) are activation events.
+
+    Issue #774: when the row is the placeholder (i.e. this *is* a
+    brand-new OAuth signup, not an existing user linking a new
+    provider), stash a one-shot ``gtag_event_pending`` session flag so
+    the next page render fires ``gtag('event', 'sign_up', ...)``.
     """
     user = sociallogin.user
     if not user.pk:
         return
 
     update_fields = []
+    is_brand_new_oauth_signup = user.signup_source == SIGNUP_SOURCE_UNKNOWN
 
     # Only promote the placeholder ``unknown`` source. An existing
     # ``newsletter`` / ``signup`` user linking Google later keeps
     # their original source — the OAuth link is not the row's origin.
-    if user.signup_source == SIGNUP_SOURCE_UNKNOWN:
+    if is_brand_new_oauth_signup:
         user.signup_source = SIGNUP_SOURCE_OAUTH
         update_fields.append("signup_source")
 
@@ -67,6 +73,28 @@ def set_signup_source_oauth_on_social_signup(sender, request, sociallogin, **kwa
 
     if update_fields:
         user.save(update_fields=update_fields)
+
+    # GA4 conversion (issue #774): only fire on a brand-new OAuth
+    # signup, not on an existing email-signup / newsletter user later
+    # adding Google as a second provider. Re-signing in via OAuth does
+    # not trigger ``social_account_added`` at all, so this handler
+    # already won't run in that case — the placeholder check is just a
+    # belt-and-braces guard against the "existing user links second
+    # provider" path.
+    if (
+        is_brand_new_oauth_signup
+        and request is not None
+        and hasattr(request, 'session')
+    ):
+        provider = ''
+        try:
+            provider = sociallogin.account.provider or ''
+        except AttributeError:
+            provider = ''
+        request.session['gtag_event_pending'] = {
+            'event': 'sign_up',
+            'params': {'method': 'oauth', 'provider': provider},
+        }
 
 
 def _extract_slack_user_id(extra_data):

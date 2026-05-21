@@ -237,6 +237,51 @@ class EnrollViewTest(TierSetupMixin, TestCase):
 
 
 @tag('core')
+class EnrollGtagSessionFlagTest(TierSetupMixin, TestCase):
+    """Issue #774: enroll_course stashes a one-shot gtag_event_pending."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='gtag@example.com', password='testpass', email_verified=True,
+        )
+        self.course, self.units = _make_course_with_units(slug='gtag-course')
+        self.client.login(email='gtag@example.com', password='testpass')
+
+    def test_first_enroll_sets_pending_event(self):
+        self.client.post(f'/courses/{self.course.slug}/enroll')
+        # The session backing the test client should now carry the
+        # one-shot flag. site_context will pop it on the next render.
+        session = self.client.session
+        self.assertEqual(
+            session.get('gtag_event_pending'),
+            {'event': 'course_enroll', 'params': {'course_slug': 'gtag-course'}},
+        )
+
+    def test_idempotent_enroll_does_not_re_set_flag_on_existing_active_row(self):
+        # First enroll: creates the row + sets flag.
+        self.client.post(f'/courses/{self.course.slug}/enroll')
+        # Drain it (simulate a page render that popped the flag).
+        session = self.client.session
+        session.pop('gtag_event_pending', None)
+        session.save()
+        # Second click on Enroll for the same active enrollment is NOT
+        # a new conversion — the flag must stay absent.
+        self.client.post(f'/courses/{self.course.slug}/enroll')
+        session = self.client.session
+        self.assertNotIn('gtag_event_pending', session)
+
+    def test_blocked_enroll_does_not_set_flag(self):
+        # Tier-gated course, free user — no enrollment created, no
+        # conversion event.
+        gated_course, _ = _make_course_with_units(
+            slug='gated-gtag', required_level=LEVEL_PREMIUM,
+        )
+        self.client.post(f'/courses/{gated_course.slug}/enroll')
+        session = self.client.session
+        self.assertNotIn('gtag_event_pending', session)
+
+
+@tag('core')
 class UnenrollViewTest(TierSetupMixin, TestCase):
 
     def setUp(self):

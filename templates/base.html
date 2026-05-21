@@ -57,6 +57,22 @@
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
     gtag('config', '{{ google_analytics_id }}');
+    {% if aslab_anon_id %}
+    // Bind the aslab_aid cookie to GA so server-side joins on
+    // UserAttribution.anonymous_id work against GA exports. The double
+    // gtag('config', ...) (once plain, once with user_id) is the
+    // documented GA4 pattern for setting user_id post-init.
+    gtag('set', 'user_properties', { aslab_aid: '{{ aslab_anon_id }}' });
+    gtag('config', '{{ google_analytics_id }}', { user_id: '{{ aslab_anon_id }}' });
+    {% endif %}
+    {% if gtag_pending_event %}
+    // One-shot conversion event from a server-side flow (course
+    // enroll, OAuth signup, etc.). The session key was popped in
+    // site_context so this fires exactly once. The event name is
+    // validated against a safe identifier regex and the params dict
+    // is pre-serialised to JSON, both in site_context.
+    gtag('event', '{{ gtag_pending_event.event }}', {{ gtag_pending_event.params_json|safe }});
+    {% endif %}
   </script>
   {% endif %}
 

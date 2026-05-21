@@ -78,6 +78,12 @@ function handleSubscribeForm(event, form) {
       messageEl.className = 'subscribe-message mt-3 text-sm text-green-400';
       messageEl.classList.remove('hidden');
       emailInput.value = '';
+      // GA4 conversion: newsletter signup completes inline (no
+      // navigation), so fire the event directly. Guarded so pages
+      // without GA configured (the default) don't ReferenceError.
+      if (typeof gtag === 'function') {
+        gtag('event', 'sign_up', { method: 'newsletter' });
+      }
     } else {
       errorEl.textContent = data.error || 'Something went wrong. Please try again.';
       errorEl.classList.remove('hidden');

@@ -174,7 +174,10 @@ jobs:
           echo "CI_TIMING phase=cached_test_db_validation seconds=$((end - start)) cache_hit=${{ steps.test-db-cache.outputs.cache-hit }} restored_files=${restored_files} deleted=${deleted}"
 
       - name: Run unit and integration tests
-        # Explicit 4 matches ubuntu-latest vCPU count; was 'auto' before #342.
+        # Issue #762: --parallel was dropped because Django's worker IPC crashes
+        # on 'cannot pickle traceback' when a failing test's traceback contains
+        # an unpicklable object, masking follow-on failures. Happy-path runs are
+        # ~5-10 min slower; multi-failure red events are now single-cycle.
         # Issue #532: DJANGO_TEST_DB_NAME makes SQLite tests file-backed so
         # --keepdb can reuse the cached test_db*.sqlite3 files.
         env:
@@ -183,7 +186,7 @@ jobs:
           set -o pipefail
           start=$(date +%s)
           set +e
-          uv run python manage.py test --exclude-tag=visual_regression --parallel 4 --keepdb 2>&1 | tee test-output.log
+          uv run python manage.py test --exclude-tag=visual_regression --keepdb 2>&1 | tee test-output.log
           status=${PIPESTATUS[0]}
           set -e
           end=$(date +%s)

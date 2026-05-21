@@ -303,8 +303,9 @@ def test_events_list_shows_four_plus_rows_at_pixel_7(django_server, browser):
     page.goto(f"{django_server}/studio/events/", wait_until="domcontentloaded")
 
     rows_in_view = _rows_in_initial_viewport(page, "tbody tr")
-    assert rows_in_view >= 4, (
-        f"Expected ≥ 4 event rows in the initial Pixel 7 viewport, "
+    # Threshold relaxed from 4 to 3 after #713 added the time-filter chip row + the Upcoming/Past chip in the Status cell and #755 added Origin/Series cells; polish wave #752/#753/#754/#756/#760 standardised card chrome — see #780.
+    assert rows_in_view >= 3, (
+        f"Expected ≥ 3 event rows in the initial Pixel 7 viewport, "
         f"got {rows_in_view}"
     )
 

@@ -136,9 +136,15 @@ class TestOperatorImportsContactsCsv:
         tier_pill = user_row.locator('[data-testid="user-list-tier-pill"]')
         assert tier_pill.inner_text().strip() == "Main"
         assert tier_pill.get_attribute("data-tier") == "main"
-        assert user_row.locator(
+        # The override pill is an icon-only badge; presence + the
+        # "Tier override active" aria label are the contract.
+        override_pill = user_row.locator(
             '[data-testid="user-list-tier-override-pill"]'
-        ).inner_text().strip() == "Override"
+        )
+        assert override_pill.count() == 1
+        assert override_pill.get_attribute("aria-label") == (
+            "Tier override active"
+        )
 
         # 7. The newly-created user is listed.
         page.goto(

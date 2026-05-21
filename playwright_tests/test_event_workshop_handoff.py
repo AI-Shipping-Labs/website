@@ -176,11 +176,17 @@ class TestWorkshopLinkedEventHandsOff:
             ],
             required_level=0,
         )
-        _create_workshop_linked_to(
+        workshop = _create_workshop_linked_to(
             event,
             slug='linked-workshop',
             title='Linked Workshop',
         )
+
+        # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
+        # Issue #750: canonical workshop URL is
+        # ``/workshops/<YYYY-MM-DD>-<slug>``.
+        event_url = event.get_absolute_url()
+        workshop_url = f'/workshops/{workshop.url_key}'
 
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
@@ -188,7 +194,7 @@ class TestWorkshopLinkedEventHandsOff:
 
         # Step 1: Land on the event detail page.
         page.goto(
-            f'{django_server}/events/linked-event',
+            f'{django_server}{event_url}',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -212,9 +218,7 @@ class TestWorkshopLinkedEventHandsOff:
             '[data-testid="event-workshop-writeup-link"]'
         )
         assert cta_link.count() == 1
-        assert cta_link.first.get_attribute('href') == (
-            '/workshops/linked-workshop'
-        )
+        assert cta_link.first.get_attribute('href') == workshop_url
 
         # Recording UI must NOT render: no inline recording wrapper, no
         # video iframe in the main column, no recording-only headings.
@@ -233,7 +237,7 @@ class TestWorkshopLinkedEventHandsOff:
         # Step 2: Follow the writeup CTA.
         cta_link.first.click()
         page.wait_for_load_state('domcontentloaded')
-        assert '/workshops/linked-workshop' in page.url
+        assert workshop_url in page.url
 
         # Step 3: From the workshop landing, click "Watch the recording".
         watch = page.locator('a:has-text("Watch the recording")')
@@ -242,7 +246,7 @@ class TestWorkshopLinkedEventHandsOff:
         page.wait_for_load_state('domcontentloaded')
 
         # The recording lives on the workshop video page, not the event.
-        assert '/workshops/linked-workshop/video' in page.url
+        assert f'{workshop_url}/video' in page.url
         video_html = page.locator('main').inner_html()
         assert (
             'data-source="youtube"' in video_html
@@ -271,7 +275,7 @@ class TestOrphanEventIsAnnouncementOnly:
         self, django_server, page,
     ):
         _clear_events_and_workshops()
-        _create_event(
+        event = _create_event(
             slug='orphan-event',
             title='Orphan Past Event',
             description='An older session never promoted to a workshop.',
@@ -288,8 +292,9 @@ class TestOrphanEventIsAnnouncementOnly:
             required_level=0,
         )
 
+        # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
         page.goto(
-            f'{django_server}/events/orphan-event',
+            f'{django_server}{event.get_absolute_url()}',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -360,8 +365,9 @@ class TestUpcomingWorkshopLinkedEventRegisters:
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
 
+        # Issue #673: canonical event URL is ``/events/<id>/<slug>``.
         page.goto(
-            f'{django_server}/events/upcoming-linked',
+            f'{django_server}{event.get_absolute_url()}',
             wait_until='domcontentloaded',
         )
 

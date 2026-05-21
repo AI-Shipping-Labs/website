@@ -213,10 +213,14 @@ class TestCopyFileOverrideAndLink:
         ]
         assert non_info == [], non_info
 
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>; the
+        # synced workshop has date=2026-04-21.
+        landing_url = '/workshops/2026-04-21-copy-override'
+
         # Anonymous user can see the landing (level 0).
         page = browser.new_page()
         page.goto(
-            f'{django_server}/workshops/copy-override',
+            f'{django_server}{landing_url}',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -237,16 +241,16 @@ class TestCopyFileOverrideAndLink:
         ctx = _auth_context(browser, 'basic@test.com')
         tut_page = ctx.new_page()
         tut_page.goto(
-            f'{django_server}/workshops/copy-override/tutorial/next',
+            f'{django_server}{landing_url}/tutorial/next',
             wait_until='domcontentloaded',
         )
         body = tut_page.content()
-        # The link in 02-next.md routes to /workshops/copy-override (landing),
-        # NOT to /workshops/copy-override/tutorial/intro.
+        # The link in 02-next.md routes to the landing (NOT to the
+        # tutorial URL for 01-intro.md).
         link = tut_page.locator('a:has-text("Read the intro")').first
         href = link.get_attribute('href')
-        assert href == '/workshops/copy-override', (
-            f'Expected link to landing /workshops/copy-override, got {href!r}'
+        assert href == landing_url, (
+            f'Expected link to landing {landing_url}, got {href!r}'
         )
         # The tutorial URL for 01-intro.md must NOT appear in the link.
         assert '/tutorial/intro' not in href
@@ -254,7 +258,7 @@ class TestCopyFileOverrideAndLink:
         # Click the link and verify we land on the workshop landing.
         link.click()
         tut_page.wait_for_load_state('domcontentloaded')
-        assert tut_page.url.rstrip('/').endswith('/workshops/copy-override')
+        assert tut_page.url.rstrip('/').endswith(landing_url)
         # Intro content is on this page.
         assert 'Intro body content for the landing.' in tut_page.content()
 
@@ -301,30 +305,34 @@ class TestReadmeLinkRoutesBackToLanding:
             for e in non_info
         ), non_info
 
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>; the
+        # synced workshop has date=2026-04-21.
+        landing_url = '/workshops/2026-04-21-readme-links'
+
         _create_user('basic@test.com', tier_slug='basic')
         ctx = _auth_context(browser, 'basic@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/readme-links/tutorial/qa',
+            f'{django_server}{landing_url}/tutorial/qa',
             wait_until='domcontentloaded',
         )
 
         # Bare-filename label is title-substituted to the workshop title.
         title_link = page.locator(
-            'a[href="/workshops/readme-links"]'
+            f'a[href="{landing_url}"]'
         ).first
         assert title_link.inner_text().strip() == 'Production Agents'
 
         # Anchor-preserving link.
         anchor_link = page.locator(
-            'a[href="/workshops/readme-links#getting-started"]'
+            f'a[href="{landing_url}#getting-started"]'
         ).first
         assert anchor_link.inner_text().strip() == 'see the overview'
 
         # Click the bare-filename link -> lands on the landing.
         title_link.click()
         page.wait_for_load_state('domcontentloaded')
-        assert page.url.rstrip('/').endswith('/workshops/readme-links')
+        assert page.url.rstrip('/').endswith(landing_url)
         # README content visible on the landing.
         assert 'This is the README content.' in page.content()
 

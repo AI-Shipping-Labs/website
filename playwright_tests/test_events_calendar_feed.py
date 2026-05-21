@@ -256,9 +256,12 @@ class TestAnonymousHttpFetchOfFeed:
             status="draft",
             start_datetime=future,
         )
+        # Issue #726: gated events appear in the feed with a
+        # ``[Members only]`` prefix on the SUMMARY; only draft /
+        # cancelled events are excluded outright.
         _create_event(
             slug="gated-evt-feed",
-            title="Gated Should Not Appear",
+            title="Gated Members Event",
             required_level=20,
             start_datetime=future,
         )
@@ -278,8 +281,8 @@ class TestAnonymousHttpFetchOfFeed:
         assert "Open Anonymous Event" in text
         assert "Draft Should Not Appear" not in text
         assert "draft-evt-feed" not in text
-        assert "Gated Should Not Appear" not in text
-        assert "gated-evt-feed" not in text
+        # Gated events appear with the members-only SUMMARY prefix.
+        assert "[Members only] Gated Members Event" in text
 
 
 # --- Scenario 4: ETag short-circuit ---------------------------------------
@@ -465,6 +468,9 @@ class TestGatedAndDraftStayOutOfPublicFeed:
             slug="cancelled-only", title="Cancelled Only",
             status="cancelled", start_datetime=future,
         )
+        # Issue #726: gated events ARE included in the feed with a
+        # ``[Members only]`` SUMMARY prefix; only draft/cancelled stay
+        # out.
         _create_event(
             slug="main-only", title="Main Tier Only",
             required_level=20, start_datetime=future,
@@ -476,9 +482,10 @@ class TestGatedAndDraftStayOutOfPublicFeed:
         assert status == 200
         text = body.decode("utf-8")
         assert "Open Free Event" in text
+        # Gated events surface with the members-only prefix.
+        assert "[Members only] Main Tier Only" in text
         for forbidden in (
             "Draft Only", "draft-only",
             "Cancelled Only", "cancelled-only",
-            "Main Tier Only", "main-only",
         ):
             assert forbidden not in text, f"{forbidden!r} leaked into feed"

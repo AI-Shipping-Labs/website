@@ -11,6 +11,19 @@ AI Shipping Labs community platform — a Django-based website replacing the cur
 - Issues: GitHub Issues on [AI-Shipping-Labs/website](https://github.com/AI-Shipping-Labs/website/issues)
 - Agents: `.claude/agents/` (product-manager, software-engineer, tester, oncall-engineer)
 
+## Repositories
+
+The Django app lives here. AWS infrastructure lives in a separate repo. Knowing the split prevents agents from searching for SES/RDS/Lambda config in this repo when it's not here.
+
+- `AI-Shipping-Labs/website` — this repo. Django app, templates, tests, GitHub Actions for build/deploy. All product code.
+- `AI-Shipping-Labs/ai-shipping-labs-infra` — Terraform for AWS. SES (domain identity, DKIM/SPF/DMARC, configuration sets), SNS topics (`ses-bounces`, `ses-complaints`), RDS, ECS clusters/services, S3 buckets, Route53 DNS, IAM users/roles (including the `ECS-deploy` user used by CI), the inbound `email-forwarder.py` Lambda for `@aishippinglabs.com` mail forwarding. Key files: `email.tf`, `db.tf`, `ecs.tf`, `dns.tf`, `iam_*.tf`. Operator notes in `email-best-practices.md`.
+- `AI-Shipping-Labs/content` — markdown + YAML content (articles, courses, projects, recordings, links, interview questions, tier data). Synced into the Django DB by the content-sync pipeline. The Django repo never edits content here directly.
+- `AI-Shipping-Labs/workshops-content` — workshop markdown source. Same sync pipeline.
+
+When the user asks "is X wired in AWS?" or "where do we configure SES/SNS/RDS/ECS/DNS?", check the infra repo via `gh api repos/AI-Shipping-Labs/ai-shipping-labs-infra/contents/<file>`. If something is missing in the infra repo, file an issue there (`gh issue create -R AI-Shipping-Labs/ai-shipping-labs-infra`) — don't try to provision AWS resources from this repo.
+
+When the user asks about Django code, templates, or the test suite, it's always this repo.
+
 ## Technology Stack
 
 - Backend: Django (Python), managed with uv

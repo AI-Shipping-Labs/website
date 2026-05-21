@@ -160,13 +160,38 @@ Webhook endpoint (for SES bounce/complaint/open/click notifications via SNS): `{
 
 SES bounce / complaint webhook setup (issue #453):
 
-1. Create an SNS topic, e.g. `ses-bounces-prod` (region must match `AWS_SES_REGION`).
-2. SES console -> Configuration -> Configuration sets (or Email destinations) -> enable Bounce and Complaint notifications and point them at the SNS topic. Delivery notifications are optional; the webhook accepts and logs them but takes no action.
-3. SNS console -> Subscriptions -> Create subscription -> Protocol `HTTPS`, Endpoint `https://aishippinglabs.com/api/ses-events`.
-4. AWS posts a `SubscriptionConfirmation` to that endpoint; our webhook auto-confirms by fetching the `SubscribeURL`. The subscription state in SNS will flip from `PendingConfirmation` to `Confirmed` once that succeeds.
-5. Verify by sending an email to the SES `mailbox-simulator` address `bounce@simulator.amazonses.com`; the recipient User row should flip to `unsubscribed=True` and pick up the `bounced` tag, and a row should appear in the `email_app.SesEvent` audit table.
+The AWS-side wiring (SES configuration set, SNS topics, CloudWatch alarms, subscriptions) is managed by Terraform in the [ai-shipping-labs-infra](https://github.com/AI-Shipping-Labs/ai-shipping-labs-infra) repo — primarily `email.tf` for SES + SNS resources and `email-best-practices.md` for the operator notes. Anything that touches AWS for email (SES domain, SNS topics, configuration sets, MX/DKIM/SPF/DMARC DNS, the inbound `email-forwarder.py` Lambda) lives there. Anything that touches our Django code (the `/api/ses-events` webhook, the `SesEvent` audit model, the bounce/complaint handlers, the User mutations) lives in this repo (`api/views/ses_events.py`, `email_app/models/ses_event.py`).
 
-The webhook validates the SNS signature using `integrations.services.ses.validate_sns_notification`. In production keep `SES_WEBHOOK_VALIDATION_ENABLED=true`; in development the default (`DEBUG=True`) skips signature checks so local SNS replay is possible.
+End-to-end pipeline (when wired correctly):
+
+1. Django mailer calls `boto3.SES.send_email(ConfigurationSetName='aishippinglabs', ...)` — controlled by `SES_CONFIGURATION_SET_NAME` in Studio Settings. If the env var is unset, SES does not publish events to the topic, so the webhook never fires.
+2. SES delivers the email or detects a bounce / complaint.
+3. SES publishes a notification to the SNS topic configured on the configuration set (`aws_ses_event_destination.bounces` / `.complaints` in `email.tf`).
+4. SNS fans out the notification to every subscriber on the topic.
+5. One of those subscribers is an HTTPS endpoint pointing at `{SITE_BASE_URL}/api/ses-events`. Our Django webhook validates the SNS signature, dedupes by `MessageId`, and runs `_handle_bounce` / `_handle_complaint` to mutate the User row + audit `SesEvent`.
+
+Required state in the infra repo:
+
+- SNS topics `ses-bounces` and `ses-complaints` exist (already in `email.tf`).
+- SES configuration set `aishippinglabs` exists and is wired to both SNS topics via `aws_ses_event_destination.bounces` / `.complaints` (already in `email.tf`).
+- An `aws_sns_topic_subscription` of `protocol = "https"` and `endpoint = "https://aishippinglabs.com/api/ses-events"` exists for each of the two topics. This is the piece most likely to be missing — confirm in the SNS console that the topic shows a `Confirmed` HTTPS subscriber, not just the operator-email subscribers. If absent, file an infra repo issue.
+- (Defense-in-depth) Optional Lambda forwarder between SNS and the webhook that injects an `X-SES-Webhook-Secret` header from an AWS Secrets Manager value matched against `SES_WEBHOOK_SHARED_SECRET` on the Django side. Even though SNS signature verification already authenticates the caller, the shared secret blocks anyone from POSTing arbitrary `Bounce` JSON to `/api/ses-events` from outside AWS.
+
+Required state in this repo:
+
+- `SES_CONFIGURATION_SET_NAME=aishippinglabs` in prod settings (Studio > Settings > Email (SES)). Without this, SES doesn't publish events.
+- `SES_WEBHOOK_VALIDATION_ENABLED=true` in prod (default everywhere except `DEBUG=True`).
+- (Defense-in-depth, paired with the Lambda above) `SES_WEBHOOK_SHARED_SECRET` set to the same value Secrets Manager hands the Lambda. The webhook then 403s any request missing or with a wrong header. Open work — see follow-up issue.
+
+Verify the pipeline is live:
+
+1. Send to the SES mailbox simulator: `bounce@simulator.amazonses.com`. Use the actual Django mailer code path (e.g. trigger a verification email to a user whose `email` is that address) so the configuration set is tagged on the send.
+2. Wait ~30 seconds.
+3. Studio > Users > search `bounce@simulator.amazonses.com`. The row should show `unsubscribed=True` and a `bounced` tag.
+4. Django admin `/admin/email_app/sesevent/?recipient_email=bounce%40simulator.amazonses.com` should show a row with `event_type=bounce_permanent`.
+5. If neither shows, the SNS HTTPS subscription is missing or returning non-2xx (the latter shows up in CloudWatch logs on the Django side and on the SNS topic's delivery-status metric).
+
+The MAILER-DAEMON email an operator receives at `alexey@aishippinglabs.com` is sent by the SNS `email` subscriber, not by the HTTPS subscriber. Receiving that email proves SES->SNS works but does NOT prove SNS->Django works. Always cross-check with the SesEvent row.
 
 SES engagement tracking setup (issue #454):
 

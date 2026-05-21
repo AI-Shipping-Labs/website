@@ -130,7 +130,7 @@ class UnverifiedEmailBannerContextProcessorTest(TestCase):
         )
         log = EmailLog.objects.create(
             user=user,
-            email_type="email_verification",
+            email_type="email_verification_signup",
         )
         request = type("R", (), {"user": user})()
         result = unverified_email_banner(request)
@@ -146,6 +146,54 @@ class UnverifiedEmailBannerContextProcessorTest(TestCase):
         # Key is present but value is None when the user has no prior
         # verification email logged.
         self.assertEqual(result, {"latest_verification_email": None})
+
+    def test_aggregates_across_both_verify_slugs(self):
+        """Issue #767: the banner query unions both per-flow verify slugs
+        so the timestamp surfaces regardless of which flow sent the latest
+        verification email.
+        """
+        import datetime
+
+        from django.utils import timezone
+
+        user = User.objects.create_user(
+            email="cp-both-flows@example.com", password="test1234"
+        )
+        # Older subscribe-flow send.
+        older = EmailLog.objects.create(
+            user=user,
+            email_type="email_verification_subscribe",
+        )
+        older.sent_at = timezone.now() - datetime.timedelta(hours=6)
+        older.save(update_fields=["sent_at"])
+        # Newer signup-flow send (e.g. the user re-signed up).
+        newer = EmailLog.objects.create(
+            user=user,
+            email_type="email_verification_signup",
+        )
+        newer.sent_at = timezone.now() - datetime.timedelta(minutes=5)
+        newer.save(update_fields=["sent_at"])
+
+        request = type("R", (), {"user": user})()
+        result = unverified_email_banner(request)
+        # The most recent log wins regardless of slug — banner does not
+        # need to know which flow the user is in.
+        self.assertEqual(result["latest_verification_email"], newer)
+
+    def test_subscribe_flow_log_alone_surfaces_in_banner(self):
+        """Issue #767: a user whose only verification log is the
+        subscribe-flow slug still triggers the banner timestamp.
+        """
+        user = User.objects.create_user(
+            email="cp-subscribe-only@example.com", password="test1234"
+        )
+        log = EmailLog.objects.create(
+            user=user,
+            email_type="email_verification_subscribe",
+        )
+        request = type("R", (), {"user": user})()
+        result = unverified_email_banner(request)
+        self.assertEqual(result["latest_verification_email"], log)
 
     def test_no_db_hit_for_verified_user(self):
         """Verified users must not pay the EmailLog query cost on every page."""
@@ -183,7 +231,7 @@ class ResendVerificationNextRedirectTest(TestCase):
         ) as send_mock:
             send_mock.return_value = EmailLog.objects.create(
                 user=user,
-                email_type="email_verification",
+                email_type="email_verification_signup",
             )
             resp = self.client.post(
                 "/account/api/resend-verification",
@@ -203,7 +251,7 @@ class ResendVerificationNextRedirectTest(TestCase):
         ) as send_mock:
             send_mock.return_value = EmailLog.objects.create(
                 user=user,
-                email_type="email_verification",
+                email_type="email_verification_signup",
             )
             resp = self.client.post(
                 "/account/api/resend-verification",

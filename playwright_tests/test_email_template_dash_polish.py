@@ -35,8 +35,12 @@ pytestmark = pytest.mark.local_only
 SHIPPED_EMAIL_TEMPLATES = [
     "welcome",
     "welcome_imported",
-    "email_verification",
-    "email_verification_reminder",
+    # Issue #767: per-flow verify templates (split from legacy
+    # ``email_verification``/``email_verification_reminder``).
+    "email_verification_signup",
+    "email_verification_subscribe",
+    "email_verification_signup_reminder",
+    "email_verification_subscribe_reminder",
     "event_registration",
     "event_reminder",
     "cancellation",
@@ -125,14 +129,14 @@ class TestEventRegistrationPreviewHasNoDoubleDash:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 2: email_verification preview is clean
+# Scenario 2: email_verification_signup preview is clean
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestEmailVerificationPreviewHasNoDoubleDash:
-    """The email_verification preview renders the sign-in sentence
-    without the ASCII ` -- ` sequence."""
+class TestEmailVerificationSignupPreviewHasNoDoubleDash:
+    """The email_verification_signup preview (#767 split) renders the
+    sign-in sentence without the ASCII ` -- ` sequence."""
 
     def test_sign_in_sentence_reads_cleanly(self, django_server, browser):
         _ensure_tiers()
@@ -140,34 +144,25 @@ class TestEmailVerificationPreviewHasNoDoubleDash:
 
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
-        srcdoc = _open_preview(page, django_server, "email_verification")
+        srcdoc = _open_preview(
+            page, django_server, "email_verification_signup",
+        )
 
         assert " -- " not in srcdoc, (
-            "email_verification preview still contains ' -- ' fallback; "
+            "email_verification_signup preview still contains ' -- ' fallback; "
             "expected an em-dash or rewritten sentence."
         )
 
-        # The sign-in copy is either split into two sentences ending in
-        # ``/accounts/login/.`` OR joined with a real em-dash. Accept
-        # either reading so the test does not lock the copywriter into
-        # one specific rewrite.
-        login_split = "/accounts/login/." in srcdoc
-        login_emdash = "/accounts/login/ —" in srcdoc
-        assert login_split or login_emdash, (
-            "email_verification preview should either split the sign-in "
-            "sentence after `/accounts/login/.` or use a real em-dash; "
-            "neither reading was found in the rendered preview."
-        )
-
-        # The sign-in clause must still mention the future password email
-        # so we know the copy was not silently dropped.
-        assert "set a password" in srcdoc, (
-            "email_verification preview no longer mentions the future "
-            "password email; the sentence may have been deleted."
+        # The sign-in copy points users at ``/accounts/login/``. Confirm
+        # the link target still appears so we know the sentence was not
+        # silently dropped during the #767 split.
+        assert "/accounts/login/" in srcdoc, (
+            "email_verification_signup preview no longer mentions "
+            "/accounts/login/; the sign-in sentence may have been dropped."
         )
 
         assert "&mdash;" not in srcdoc, (
-            "email_verification preview must use the literal U+2014 "
+            "email_verification_signup preview must use the literal U+2014 "
             "character, not the &mdash; HTML entity."
         )
 

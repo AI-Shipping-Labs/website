@@ -10,7 +10,7 @@ class SesEventAdmin(admin.ModelAdmin):
     Issue #495: surface the new bounce-correlation fields so staff can
     trace any incoming bounce or complaint back to the campaign or
     transactional EmailLog that produced it. Search now covers
-    ``email_log__email_type`` (e.g. "email_verification", "campaign")
+    ``email_log__email_type`` (e.g. "email_verification_signup", "campaign")
     and ``email_log__campaign__subject`` for newsletter triage, and the
     list adds bounce classification + correlated email metadata.
     """

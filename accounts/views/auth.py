@@ -195,7 +195,7 @@ def _send_verification_email(user):
         service = EmailService()
         return service.send(
             user,
-            "email_verification",
+            "email_verification_signup",
             {
                 "verify_url": verify_url,
                 "site_url": site_url,

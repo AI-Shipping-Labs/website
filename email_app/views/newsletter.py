@@ -104,7 +104,7 @@ def _send_subscribe_verification_email(user, redirect_to=None):
             # user to ``/accounts/login/``.
             service.send(
                 user,
-                "email_verification",
+                "email_verification_subscribe",
                 {
                     "verify_url": verify_url,
                     "site_url": site_url,

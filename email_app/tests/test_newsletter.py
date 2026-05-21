@@ -849,17 +849,17 @@ class SubscribeSharedTtlHelperTest(TestCase):
 
 
 class EmailVerificationTemplateCopyTest(TestCase):
-    """Issue #513: the verification email body discloses that we created
-    a free account, what the account is for, and the auto-deletion
-    window. Both the auth-side and subscribe-side render paths get
-    ``ttl_days`` and ``site_url`` in the context.
+    """Issue #767 split: the subscribe-flow body uses subscription
+    framing (no account-creation threat), and the signup-flow body uses
+    account framing with a 7-day auto-deletion window. Both call paths
+    receive ``ttl_days`` and ``site_url`` in the context.
     """
 
     @patch(
         "email_app.services.email_service.EmailService._send_ses",
         return_value="ses-513-1",
     )
-    def test_subscribe_render_includes_account_disclosure(self, mock_ses):
+    def test_subscribe_render_uses_subscription_framing(self, mock_ses):
         resp = self.client.post(
             "/api/subscribe",
             data=json.dumps({"email": "render-sub@example.com"}),
@@ -869,22 +869,24 @@ class EmailVerificationTemplateCopyTest(TestCase):
 
         mock_ses.assert_called_once()
         self.assertEqual(mock_ses.call_args[0][0], "render-sub@example.com")
-        self.assertIn("Verify", mock_ses.call_args[0][1])
-        html = mock_ses.call_args[0][2]
-        # Account creation is disclosed verbatim per the spec.
-        self.assertIn("we've created a free account for you", html.lower())
-        # Sign-in path is surfaced (uses ``site_url`` from the context).
-        self.assertIn("/accounts/login/", html)
-        # Auto-deletion window is named so the user can ignore the email
-        # safely. Default TTL is 7 days.
-        self.assertIn("7 days", html)
+        # Subject confirms a subscription, not an account.
+        self.assertIn("Confirm", mock_ses.call_args[0][1])
+        self.assertIn("subscription", mock_ses.call_args[0][1])
+
+        html_lower = mock_ses.call_args[0][2].lower()
+        # Subscribe framing: confirm subscription, not "your account".
+        self.assertIn("confirm subscription", html_lower)
+        # Issue #767: subscribe path must NOT use account framing.
+        self.assertNotIn("we've created a free account for you", html_lower)
+        self.assertNotIn("your account will be removed", html_lower)
+        self.assertNotIn("your account will be deleted", html_lower)
 
     @patch("accounts.views.auth._probe_slack_membership_on_signup")
     @patch(
         "email_app.services.email_service.EmailService._send_ses",
         return_value="ses-513-2",
     )
-    def test_register_render_includes_account_disclosure(
+    def test_register_render_uses_account_framing(
         self, mock_ses, _probe,
     ):
         resp = self.client.post(
@@ -899,10 +901,15 @@ class EmailVerificationTemplateCopyTest(TestCase):
 
         mock_ses.assert_called_once()
         self.assertEqual(mock_ses.call_args[0][0], "render-reg@example.com")
+        # Subject mentions "Verify" for the signup flow.
         self.assertIn("Verify", mock_ses.call_args[0][1])
+
         html = mock_ses.call_args[0][2]
-        # Same body / context as the subscribe path — both call paths
-        # render the same template with the same disclosures.
-        self.assertIn("we've created a free account for you", html.lower())
+        html_lower = html.lower()
+        # Signup framing: account creation disclosed.
+        self.assertIn("signing up", html_lower)
         self.assertIn("/accounts/login/", html)
+        # Issue #767: signup path keeps the 7-day auto-deletion disclosure.
         self.assertIn("7 days", html)
+        # And does not use the subscribe-flow phrasing.
+        self.assertNotIn("newsletter", html_lower)

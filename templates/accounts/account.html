@@ -3,17 +3,66 @@
 
 {% block title %}Account | {{ site_name }}{% endblock %}
 
+{# Issue #769: suppress the global messages block so the trimmed #}
+{# /account/ page can render the messages queue inline below its own #}
+{# heading. base.html's default block renders messages BEFORE the body, #}
+{# which lands them behind the fixed site header. #}
+{% block messages %}{% endblock %}
+
 {% block body %}
 <main class="min-h-screen pt-24">
   {% include "includes/header.html" %}
 
     <div class="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
 
+      {# Issue #769: re-render messages inside the page body so the #}
+      {# one-shot info banner from /-redirect for newsletter-only users #}
+      {# is visible on top of the trimmed account page, not hidden #}
+      {# behind the fixed site header. #}
+      {% if messages %}
+      <div class="mb-6 space-y-2" data-testid="account-messages-region" role="status" aria-live="polite">
+        {% for message in messages %}
+        <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'warning' %}bg-yellow-500/20 text-yellow-300{% else %}bg-blue-500/20 text-blue-400{% endif %}"
+             data-message-tag="{{ message.tags }}"
+             data-testid="account-message">
+          {{ message }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
       <div class="mb-8">
         <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">Account</h1>
         <p class="mt-2 text-sm text-muted-foreground">Manage your membership and preferences</p>
       </div>
 
+      {% if is_newsletter_only %}
+      <!-- Newsletter-only "Set a password to do more" CTA (issue #769) -->
+      <div class="rounded-lg border border-accent/30 bg-accent/10 p-5 sm:p-6 mb-8" id="newsletter-only-cta" data-testid="newsletter-only-cta">
+        <div class="flex items-start gap-3 mb-4">
+          <i data-lucide="mail-check" class="h-5 w-5 text-accent mt-0.5 shrink-0"></i>
+          <div>
+            <h2 class="text-xl font-semibold">Set a password to do more</h2>
+            <p class="text-sm text-muted-foreground mt-1">
+              You're subscribed to the AI Shipping Labs newsletter. Set a password
+              to unlock your dashboard, register for events, and join discussions.
+            </p>
+          </div>
+        </div>
+        <p class="text-sm text-foreground mb-4">
+          Signed in as <span class="font-medium">{{ user.email }}</span>.
+        </p>
+        <a href="/accounts/password-reset-request?email={{ user.email|urlencode }}"
+           class="{% button_classes 'primary' %}"
+           data-testid="newsletter-only-set-password-btn"
+           id="newsletter-only-set-password-btn">
+          <i data-lucide="key" class="h-4 w-4"></i>
+          Set a password
+        </a>
+      </div>
+      {% endif %}
+
+      {% if not is_newsletter_only %}
       <!-- Profile Section (issue #447: name form lives inline here) -->
       <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mb-8" id="profile-section">
         <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
@@ -73,6 +122,9 @@
       {% if not slack_connected %}
       {% include "includes/_slack_account_card.html" %}
       {% endif %}
+      {% endif %}{# /not is_newsletter_only — Profile + Slack #}
+
+      {% if not is_newsletter_only %}
 
       <!-- Membership Section -->
       <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mb-8">
@@ -172,6 +224,7 @@
           {% endif %}
         </div>
       </div>
+      {% endif %}{# /not is_newsletter_only — Membership #}
 
       <!-- Email Preferences Section -->
       <div class="rounded-lg border border-border bg-card p-5 sm:p-6" id="email-preferences-section">
@@ -222,6 +275,7 @@
         </p>
       </div>
 
+      {% if not is_newsletter_only %}
       <!-- Display Preferences Section -->
       <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mt-8" id="display-preferences-section">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
@@ -321,6 +375,7 @@
           </div>
         </dl>
       </div>
+      {% endif %}{# /not is_newsletter_only — Display Prefs + Change Password + Account Info #}
 
     </div>
 

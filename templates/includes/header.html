@@ -70,6 +70,7 @@
       </button>
       {% endif %}
       {% if user.is_authenticated %}
+      {% if not is_newsletter_only %}
       <!-- Notification Bell -->
       <div class="relative" id="notification-bell-container">
         <button type="button"
@@ -95,6 +96,7 @@
           </div>
         </div>
       </div>
+      {% endif %}
       <div class="relative" id="account-menu-container" data-testid="account-menu">
         <button type="button"
                 id="account-menu-trigger"
@@ -128,9 +130,11 @@
           </div>
           <div class="py-1">
             <a href="{% url 'account' %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none">Account</a>
+            {% if not is_newsletter_only %}
             <a href="/account/#profile" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none">Profile</a>
             {% if user_latest_plan %}
             <a href="{% url 'my_plan_detail' sprint_slug=user_latest_plan.sprint.slug plan_id=user_latest_plan.pk %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none" data-testid="header-plan-link">Plan</a>
+            {% endif %}
             {% endif %}
             {% if user.is_staff %}
             <a href="{% url 'studio_dashboard' %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-accent hover:bg-secondary focus:bg-secondary focus:outline-none">Studio</a>
@@ -234,14 +238,16 @@
           </span>
           {% endif %}
         </div>
+        {% if not is_newsletter_only %}
         <a href="/notifications" class="relative block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-notifications-link">
           <span data-testid="mobile-notifications-label">Notifications</span>
           <span id="mobile-notification-badge" class="absolute -top-1 -right-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"></span>
         </a>
+        {% endif %}
         <a href="{% url 'account' %}" id="mobile-account-link" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Account
         </a>
-        {% if user_latest_plan %}
+        {% if user_latest_plan and not is_newsletter_only %}
         <a href="{% url 'my_plan_detail' sprint_slug=user_latest_plan.sprint.slug plan_id=user_latest_plan.pk %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-header-plan-link">
           Plan
         </a>

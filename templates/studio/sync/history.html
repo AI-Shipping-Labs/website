@@ -124,6 +124,26 @@
                   {% if item.id %}<a href="/events/{{ item.id }}/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>{% else %}<span class="text-foreground">{{ item.title }}</span>{% endif %}
                   {% elif item.content_type == 'interview_question' %}
                   <a href="/interview/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>
+                  {% elif item.content_type == 'workshop' %}
+                  {# Issue #782 — workshop URLs key on ``<date>-<slug>``; legacy log entries without item.date degrade to title-only. #}
+                  {% if item.date and item.slug %}<a href="/workshops/{{ item.date }}-{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>{% else %}<span class="text-foreground">{{ item.title }}</span>{% endif %}
+                  {% elif item.content_type == 'module' %}
+                  {# Issue #782 — module URLs need the parent course slug; missing parent degrades to title-only. #}
+                  {% if item.course_slug and item.slug %}<a href="/courses/{{ item.course_slug }}/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>{% else %}<span class="text-foreground">{{ item.title }}</span>{% endif %}
+                  {% elif item.content_type == 'unit' %}
+                  {# Issue #782 — unit URLs need course + module slugs; missing parent degrades to title-only. #}
+                  {% if item.course_slug and item.module_slug and item.slug %}<a href="/courses/{{ item.course_slug }}/{{ item.module_slug }}/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>{% else %}<span class="text-foreground">{{ item.title }}</span>{% endif %}
+                  {% comment %}
+                    Issue #782 — the following content types deliberately fall
+                    through to plain text:
+                      - resource: no public per-item detail page exists
+                        (downloads expose only a file endpoint; curated links
+                        render inline on category indexes).
+                      - instructor: no public instructor profile page.
+                      - workshop_page: would need parent workshop date + slug
+                        to build ``/workshops/<date>-<workshop>/tutorial/<page>``;
+                        the entry currently lacks both, deferred.
+                  {% endcomment %}
                   {% else %}
                   <span class="text-foreground">{{ item.title }}</span>
                   {% endif %}

@@ -1961,3 +1961,191 @@ class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
         source.save()
         response = self.client.get('/studio/sync/?fragment=status')
         self.assertNotContains(response, self.LINK_MARKER)
+
+
+class StudioSyncHistoryItemLinksTest(TestCase):
+    """Issue #782 — every content type in ``items_detail`` renders as a link
+    to its public detail page when the entry has the required parent slugs,
+    or degrades to plain text when those parents are missing.
+
+    The history template (``templates/studio/sync/history.html``) builds the
+    URLs inline from ``item.*`` fields without a ``{% url %}`` lookup, so
+    these assertions pin the literal href strings the dispatchers must
+    produce.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        cls.source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/workshops-content',
+        )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def _log_with_item(self, item):
+        """Persist a SyncLog whose ``items_detail`` is a single entry."""
+        SyncLog.objects.create(
+            source=self.source,
+            status='success',
+            items_created=1,
+            items_detail=[item],
+            finished_at=timezone.now(),
+        )
+
+    def test_workshop_item_renders_as_date_slug_link(self):
+        self._log_with_item({
+            'title': 'Event Feedback Sprint',
+            'slug': 'event-feedback',
+            'date': '2026-04-15',
+            'action': 'created',
+            'content_type': 'workshop',
+        })
+        response = self.client.get('/studio/sync/history/')
+        self.assertContains(
+            response,
+            'href="/workshops/2026-04-15-event-feedback"',
+        )
+        self.assertContains(response, 'Event Feedback Sprint')
+
+    def test_workshop_item_without_date_falls_back_to_plain_text(self):
+        """Legacy log rows synced before the dispatcher emitted ``date`` must
+        not render a broken link like ``/workshops/-<slug>``."""
+        self._log_with_item({
+            'title': 'Legacy Workshop',
+            'slug': 'legacy-ws',
+            'action': 'updated',
+            'content_type': 'workshop',
+        })
+        response = self.client.get('/studio/sync/history/')
+        self.assertContains(response, 'Legacy Workshop')
+        self.assertNotContains(response, 'href="/workshops/')
+
+    def test_module_item_renders_as_course_module_link(self):
+        self._log_with_item({
+            'title': 'Fundamentals',
+            'slug': 'fundamentals',
+            'course_slug': 'python-101',
+            'action': 'updated',
+            'content_type': 'module',
+        })
+        response = self.client.get('/studio/sync/history/')
+        self.assertContains(
+            response,
+            'href="/courses/python-101/fundamentals"',
+        )
+        self.assertContains(response, 'Fundamentals')
+
+    def test_module_item_without_course_slug_falls_back_to_plain_text(self):
+        self._log_with_item({
+            'title': 'Orphan Module',
+            'slug': 'orphan',
+            'action': 'updated',
+            'content_type': 'module',
+        })
+        response = self.client.get('/studio/sync/history/')
+        self.assertContains(response, 'Orphan Module')
+        self.assertNotContains(response, 'href="/courses/')
+
+    def test_unit_item_renders_as_course_module_unit_link(self):
+        self._log_with_item({
+            'title': 'Intro lesson',
+            'slug': 'intro',
+            'course_slug': 'python-101',
+            'module_slug': 'fundamentals',
+            'action': 'created',
+            'content_type': 'unit',
+        })
+        response = self.client.get('/studio/sync/history/')
+        self.assertContains(
+            response,
+            'href="/courses/python-101/fundamentals/intro"',
+        )
+        self.assertContains(response, 'Intro lesson')
+
+    def test_unit_item_missing_module_slug_falls_back_to_plain_text(self):
+        self._log_with_item({
+            'title': 'Orphan Unit',
+            'slug': 'orphan-unit',
+            'course_slug': 'python-101',
+            'action': 'updated',
+            'content_type': 'unit',
+        })
+        response = self.client.get('/studio/sync/history/')
+        self.assertContains(response, 'Orphan Unit')
+        # No URL is built when module_slug is missing.
+        self.assertNotContains(
+            response,
+            'href="/courses/python-101/orphan-unit"',
+        )
+
+    def test_resource_item_renders_as_plain_text(self):
+        """No public detail page exists for ``resource``; must not link."""
+        self._log_with_item({
+            'title': 'Cheat Sheet PDF',
+            'slug': 'cheat-sheet',
+            'action': 'created',
+            'content_type': 'resource',
+        })
+        response = self.client.get('/studio/sync/history/')
+        self.assertContains(response, 'Cheat Sheet PDF')
+        self.assertNotContains(response, 'href="/resources/')
+        self.assertNotContains(response, 'href="/downloads/')
+
+    def test_instructor_item_renders_as_plain_text(self):
+        """No public instructor profile page exists; must not link."""
+        self._log_with_item({
+            'title': 'Alice Engineer',
+            'slug': 'alice',
+            'action': 'updated',
+            'content_type': 'instructor',
+        })
+        response = self.client.get('/studio/sync/history/')
+        self.assertContains(response, 'Alice Engineer')
+        self.assertNotContains(response, 'href="/instructors/')
+
+    def test_workshop_page_item_renders_as_plain_text(self):
+        """Workshop pages don't carry parent date + slug yet — keep plain
+        text until the dispatcher provides them.
+        """
+        self._log_with_item({
+            'title': '01 Overview',
+            'slug': 'overview',
+            'action': 'created',
+            'content_type': 'workshop_page',
+        })
+        response = self.client.get('/studio/sync/history/')
+        self.assertContains(response, '01 Overview')
+        # No tutorial URL is rendered for workshop_page entries.
+        self.assertNotContains(response, '/tutorial/')
+
+    def test_existing_link_types_still_render(self):
+        """Regression — issue #782 must not break ``article``, ``course``,
+        ``project``, ``event``, or ``interview_question`` rendering."""
+        SyncLog.objects.create(
+            source=self.source,
+            status='success',
+            items_created=5,
+            items_detail=[
+                {'title': 'A', 'slug': 'a', 'action': 'created',
+                 'content_type': 'article'},
+                {'title': 'C', 'slug': 'c', 'action': 'created',
+                 'content_type': 'course'},
+                {'title': 'P', 'slug': 'p', 'action': 'created',
+                 'content_type': 'project'},
+                {'title': 'E', 'slug': 'e', 'id': 42, 'action': 'created',
+                 'content_type': 'event'},
+                {'title': 'IQ', 'slug': 'iq', 'action': 'created',
+                 'content_type': 'interview_question'},
+            ],
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/history/')
+        self.assertContains(response, 'href="/blog/a"')
+        self.assertContains(response, 'href="/courses/c"')
+        self.assertContains(response, 'href="/projects/p"')
+        self.assertContains(response, 'href="/events/42/e"')
+        self.assertContains(response, 'href="/interview/iq"')

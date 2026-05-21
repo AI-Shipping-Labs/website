@@ -83,9 +83,13 @@ class GoogleAnalyticsLoaderRenderingTest(TestCase):
     def test_home_page_omits_loader_when_unset(self):
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
-        # No GA script tags at all.
-        self.assertNotContains(response, 'gtag')
+        # No GA loader markup. The form-handler ``gtag('event', ...)``
+        # calls are still emitted (issue #774 — they guard with
+        # ``typeof gtag === 'function'`` at runtime), so we narrow the
+        # check to the loader-specific markup.
         self.assertNotContains(response, 'googletagmanager')
+        self.assertNotContains(response, "gtag('js'")
+        self.assertNotContains(response, "gtag('config'")
 
     def test_home_page_renders_loader_when_set(self):
         IntegrationSetting.objects.create(
@@ -105,14 +109,17 @@ class GoogleAnalyticsLoaderRenderingTest(TestCase):
         )
 
     def test_pricing_page_omits_loader_when_unset(self):
-        # AC: no GA on any other public page either when unset.
+        # AC: no GA loader on any other public page either when unset.
+        # The form-handler ``gtag('event', ...)`` calls remain (see
+        # issue #774); narrow the check to loader-specific markup.
         response = self.client.get('/pricing')
         # Pricing may redirect or 200 depending on routing; either way
-        # the rendered HTML body must not contain GA markup.
+        # the rendered HTML body must not contain GA loader markup.
         if response.status_code in (301, 302):
             response = self.client.get(response.url)
-        self.assertNotContains(response, 'gtag')
         self.assertNotContains(response, 'googletagmanager')
+        self.assertNotContains(response, "gtag('js'")
+        self.assertNotContains(response, "gtag('config'")
 
     def test_pricing_page_renders_loader_when_set(self):
         IntegrationSetting.objects.create(

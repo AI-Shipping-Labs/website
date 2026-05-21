@@ -412,13 +412,40 @@
 (function() {
   var params = new URLSearchParams(window.location.search);
   if (params.get('checkout') === 'success') {
+    // GA4 conversion: fire purchase BEFORE we clean the URL so a
+    // mid-render error doesn't lose the event. Value/currency/items
+    // come from query-string params Stripe Payment Links append to
+    // the success URL — see _docs/integrations/analytics.md. Missing
+    // tier/value/billing params just yield a purchase event with no
+    // value, which is still useful for funnel tracking.
+    if (typeof gtag === 'function') {
+      var tierSlug = params.get('tier') || '';
+      var rawValue = params.get('value') || '';
+      var billing = params.get('billing') || '';
+      var purchaseParams = { currency: 'EUR' };
+      var parsedValue = parseFloat(rawValue);
+      if (!isNaN(parsedValue)) {
+        purchaseParams.value = parsedValue;
+      }
+      if (tierSlug || billing) {
+        var item = {};
+        if (tierSlug) item.tier = tierSlug;
+        if (billing) item.billing_period = billing;
+        purchaseParams.items = [item];
+      }
+      gtag('event', 'purchase', purchaseParams);
+    }
     var banner = document.getElementById('checkout-success-banner');
     if (banner) {
       banner.classList.remove('hidden');
     }
-    // Clean the URL so a refresh or share does not re-trigger the banner.
+    // Clean the URL so a refresh or share does not re-trigger the
+    // banner or the purchase event.
     var cleanUrl = new URL(window.location);
     cleanUrl.searchParams.delete('checkout');
+    cleanUrl.searchParams.delete('tier');
+    cleanUrl.searchParams.delete('value');
+    cleanUrl.searchParams.delete('billing');
     history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
   }
   var dismissBtn = document.getElementById('dismiss-success-banner');
@@ -430,6 +457,9 @@
       }
       var url = new URL(window.location);
       url.searchParams.delete('checkout');
+      url.searchParams.delete('tier');
+      url.searchParams.delete('value');
+      url.searchParams.delete('billing');
       history.replaceState(null, '', url.pathname + url.search + url.hash);
     });
   }

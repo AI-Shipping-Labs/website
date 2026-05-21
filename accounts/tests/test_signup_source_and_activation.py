@@ -390,6 +390,72 @@ class OAuthSocialAccountAddedSignalTest(TestCase):
 
 
 @tag('core')
+class OAuthSignupGtagSessionFlagTest(TestCase):
+    """Issue #774: brand-new OAuth signup stashes a one-shot gtag_event_pending."""
+
+    def _trigger_signal(self, user, request, provider='google'):
+        from allauth.socialaccount.signals import social_account_added
+
+        sociallogin = MagicMock()
+        sociallogin.user = user
+        sociallogin.account = MagicMock()
+        sociallogin.account.provider = provider
+        sociallogin.account.extra_data = {}
+        social_account_added.send(
+            sender=type(user),
+            request=request,
+            sociallogin=sociallogin,
+        )
+
+    def _request_with_session(self):
+        from django.contrib.sessions.middleware import SessionMiddleware
+        from django.test import RequestFactory
+        request = RequestFactory().get('/')
+        middleware = SessionMiddleware(lambda r: None)
+        middleware.process_request(request)
+        request.session.save()
+        return request
+
+    def test_brand_new_oauth_signup_sets_pending_sign_up_event(self):
+        user = User.objects.create_user(email='oauthflag@test.com')
+        self.assertEqual(user.signup_source, 'unknown')
+        request = self._request_with_session()
+
+        self._trigger_signal(user, request, provider='google')
+
+        self.assertEqual(
+            request.session.get('gtag_event_pending'),
+            {'event': 'sign_up', 'params': {'method': 'oauth', 'provider': 'google'}},
+        )
+
+    def test_existing_user_linking_oauth_does_not_set_pending_event(self):
+        # An existing email-signup user later adding a Google provider
+        # is NOT a fresh sign_up — the GA event must not fire.
+        user = User.objects.create_user(
+            email='existing+oauth@test.com',
+            signup_source='signup',
+            account_activated=False,
+        )
+        request = self._request_with_session()
+
+        self._trigger_signal(user, request, provider='google')
+
+        self.assertNotIn('gtag_event_pending', request.session)
+
+    def test_no_request_safe_no_crash(self):
+        # Allauth may send the signal with request=None in some edge
+        # paths — the handler must not crash and must skip the flag.
+        user = User.objects.create_user(email='oauthnoreq@test.com')
+
+        # Should not raise.
+        self._trigger_signal(user, request=None, provider='google')
+
+        user.refresh_from_db()
+        # Source still gets promoted via the existing logic.
+        self.assertEqual(user.signup_source, 'oauth')
+
+
+@tag('core')
 class SlackOAuthMembershipActivationTest(TestCase):
     """``_apply_slack_oauth_membership`` activates the user as a side effect."""
 

@@ -66,3 +66,76 @@ traffic out of the production GA property, either:
 Local development and the CI test suite leave the setting blank by
 default; no test setup is required to suppress GA during
 `manage.py test`.
+
+## `aslab_aid` user_property and user_id binding
+
+Every GA event now carries the `aslab_aid` user_property and (on the
+page-load `gtag('config', ...)` call) `user_id`. Both values come from
+the `aslab_aid` cookie set by `analytics.middleware.CampaignTrackingMiddleware`
+and validated in `website.context_processors.site_context`. The same
+UUID is stored on `analytics.UserAttribution.anonymous_id`, so GA
+exports can be joined to our DB on this column for source-attributed
+funnel analysis.
+
+The cookie is `httponly=True`, so JavaScript cannot read it. The value
+is rendered server-side into the inline GA loader script inside
+`templates/base.html`. Bot, admin, and static-asset requests skip the
+middleware (no cookie set), so the template guards on
+`{% if aslab_anon_id %}` to avoid emitting empty values.
+
+## Conversion events
+
+The platform fires the following `gtag('event', ...)` calls. All are
+gated on `GOOGLE_ANALYTICS_ID` being set — when GA is disabled, none
+of these events render or execute.
+
+| Event | Surface | Trigger | Parameters |
+|---|---|---|---|
+| `sign_up` | Newsletter subscribe form (`templates/includes/subscribe_form.html`) | XHR success branch | `method: 'newsletter'` |
+| `sign_up` | Email signup form (`static/js/accounts/inline-register.js`) | XHR success branch | `method: 'email'` |
+| `sign_up` | OAuth signup (Google / GitHub / Slack) | `accounts.signals.set_signup_source_oauth_on_social_signup` (only fires on `social_account_added`, i.e. brand-new social account link) | `method: 'oauth'`, `provider: '<google|github|slack>'` |
+| `event_register` | Live event registration (`static/js/events/event_detail.js`) | XHR success, before page reload (uses `event_callback`) | `event_slug: '<slug>'` |
+| `course_enroll` | Course enroll endpoint (`content/views/courses.py:enroll_course`) | Next-page render after server-side redirect (session flag, one-shot) | `course_slug: '<slug>'` |
+| `purchase` | Stripe checkout return (`templates/content/dashboard.html`) | `?checkout=success` query string on `/account/` | `value: <amount>`, `currency: 'EUR'`, `items: [{ tier: '<slug>', billing_period: '<period>' }]` |
+
+Find each event in GA Reports > Engagement > Events. The
+`aslab_aid` user_property is set on the GA session before any event
+fires, so every conversion above carries it automatically.
+
+### Stripe Payment Link success-URL query parameters
+
+For the `purchase` event to record `value`, `currency`, and `items`,
+Stripe Payment Links must be configured so the success URL appends
+the tier slug, amount, and billing period as query-string parameters:
+
+```
+https://aishippinglabs.com/account?checkout=success&tier={tier_slug}&value={amount}&billing={monthly|yearly}
+```
+
+Stripe Payment Links support success-URL templating in the dashboard
+("After payment" > "Custom URL"). Use the literal slug
+(`basic` / `pro` / `enterprise`), the integer or decimal price in EUR
+(e.g. `29`), and `monthly` or `yearly` for the billing period. Missing
+parameters still fire a `purchase` event but without `value` /
+`items`, which is less useful for revenue reporting in GA.
+
+### Server-side session flag (Pattern C)
+
+Course enroll and OAuth signup both complete on a server-side redirect
+to a fresh page. They use a one-shot session flag instead of a
+client-side hook:
+
+1. The server view (or signal handler) writes
+   `request.session['gtag_event_pending'] = {'event': '<name>',
+   'params': {...}}`.
+2. `website.context_processors.site_context` pops the key on the next
+   render and exposes it as `gtag_pending_event`.
+3. `templates/base.html` (inside the existing `{% if google_analytics_id %}`
+   block) emits a `gtag('event', ...)` call wired to the popped data.
+4. Popping (not just reading) makes it one-shot: a second page render
+   in the same session never re-fires the event.
+
+The event name is validated against `^[A-Za-z][A-Za-z0-9_]{0,39}$` and
+the params dict is JSON-serialised in the context processor before
+template rendering, so the inline script is safe against arbitrary
+content sneaking into the page.

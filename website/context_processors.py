@@ -1,10 +1,40 @@
+import json
 import re
+import uuid
 from urllib.parse import urlparse
 
 from django.conf import settings
 
 from integrations.config import get_config, site_base_url
 from integrations.middleware import get_announcement_banner
+
+# Cookie name for the analytics anonymous-visitor UUID4 set by
+# ``analytics.middleware.CampaignTrackingMiddleware``. Duplicated here
+# (rather than imported from ``analytics.middleware``) to avoid an
+# import cycle: ``website`` is loaded extremely early and importing
+# ``analytics.middleware`` would drag in the analytics models and
+# their app config before Django is ready in some test paths.
+_ASLAB_AID_COOKIE = 'aslab_aid'
+
+
+def _validated_aslab_anon_id(request):
+    """Return the ``aslab_aid`` cookie value if it parses as a UUID, else ''.
+
+    The cookie is set ``httponly=True`` (see
+    ``analytics/middleware.py:cookie_kwargs``) so JavaScript cannot
+    read it; we render it server-side into GA's ``user_property`` /
+    ``user_id`` calls. Validating as a UUID is defensive — a forged
+    or empty cookie should not be allowed to inject arbitrary content
+    into the template's inline script block.
+    """
+    raw = request.COOKIES.get(_ASLAB_AID_COOKIE, '') or ''
+    if not raw:
+        return ''
+    try:
+        uuid.UUID(str(raw))
+        return raw
+    except (ValueError, TypeError):
+        return ''
 
 # Default ports per scheme. Used by the host-mismatch detector so an
 # explicit ":80" / ":443" compares equal to an omitted port — operators
@@ -123,7 +153,56 @@ def _build_env_mismatch_payload(request):
 
 
 def site_context(request):
-    """Add site-wide context variables to all templates."""
+    """Add site-wide context variables to all templates.
+
+    ``aslab_anon_id`` carries the validated ``aslab_aid`` cookie so
+    ``templates/base.html`` can emit ``gtag('set', 'user_properties',
+    ...)`` + ``gtag('config', GA_ID, { user_id: ... })`` with the
+    same UUID we use server-side on ``UserAttribution.anonymous_id``.
+    The middleware skips bot / admin / static paths so the cookie may
+    be absent — the template guards on the value being truthy.
+
+    ``gtag_pending_event`` is a one-shot conversion-event payload set
+    by server-side flows that complete on a redirect (course enroll,
+    OAuth signup). The session key is *popped* here (not merely read)
+    so the next page render fires the event exactly once, regardless
+    of whether the template branch that emits the ``<script>`` runs
+    multiple times.
+    """
+    pending_event = None
+    if hasattr(request, 'session'):
+        try:
+            raw_pending = request.session.pop('gtag_event_pending', None)
+        except Exception:  # pragma: no cover — defensive
+            # Session backends can raise on edge cases (decoder errors,
+            # missing session row). A broken pop must never break the
+            # page render.
+            raw_pending = None
+        # Shape: {'event': 'sign_up', 'params': {'method': 'oauth', ...}}.
+        # Only accept a dict with a non-empty 'event' name and serialise
+        # the params dict to JSON server-side so the template can splice
+        # it into the gtag() call without quoting headaches.
+        if isinstance(raw_pending, dict):
+            event_name = raw_pending.get('event') or ''
+            params = raw_pending.get('params') or {}
+            # GA event names are ``[A-Za-z][A-Za-z0-9_]{0,39}``. Guard
+            # against arbitrary strings sneaking into the inline script
+            # via a malicious or buggy server flow — only allow names
+            # that match the safe pattern.
+            if (
+                isinstance(event_name, str)
+                and re.match(r'^[A-Za-z][A-Za-z0-9_]{0,39}$', event_name)
+                and isinstance(params, dict)
+            ):
+                try:
+                    params_json = json.dumps(params)
+                except (TypeError, ValueError):
+                    params_json = '{}'
+                pending_event = {
+                    'event': event_name,
+                    'params_json': params_json,
+                }
+
     return {
         'VERSION': settings.VERSION,
         'site_name': settings.SITE_NAME,
@@ -131,6 +210,8 @@ def site_context(request):
         'site_description': settings.SITE_DESCRIPTION,
         'stripe_customer_portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
         'google_analytics_id': get_config('GOOGLE_ANALYTICS_ID', ''),
+        'aslab_anon_id': _validated_aslab_anon_id(request),
+        'gtag_pending_event': pending_event,
         'current_year': __import__('datetime').datetime.now().year,
     }
 

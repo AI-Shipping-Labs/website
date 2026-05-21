@@ -242,7 +242,19 @@ def enroll_course(request, slug):
     if not can_access(user, course):
         return redirect(course.get_absolute_url())
 
+    was_already_enrolled = is_enrolled(user, course)
     ensure_enrollment(user, course)
+
+    # GA4 conversion (issue #774): fire course_enroll on the *next*
+    # page render via a one-shot session flag. site_context pops the
+    # key so the event fires exactly once. Only set on a real new
+    # enrollment — re-clicking Enroll on an already-active row is not
+    # a fresh conversion.
+    if not was_already_enrolled:
+        request.session['gtag_event_pending'] = {
+            'event': 'course_enroll',
+            'params': {'course_slug': course.slug},
+        }
 
     next_unit = course.get_next_unit_for(user)
     if next_unit is not None:

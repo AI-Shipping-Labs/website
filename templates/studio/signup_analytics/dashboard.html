@@ -1,0 +1,243 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Signup Analytics{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-semibold text-foreground">Signup Analytics</h1>
+  <p class="text-muted-foreground mt-1">Where new signups are coming from, by source, referrer, and campaign.</p>
+</div>
+
+{# ---- Filters ---- #}
+<form method="get" class="bg-card border border-border rounded-lg p-4 mb-6" data-testid="signup-analytics-filters">
+  <div class="flex flex-wrap items-end gap-3">
+    <div>
+      <label class="block text-xs font-medium text-muted-foreground mb-1" for="filter-range">Date range</label>
+      <select id="filter-range" name="range" onchange="this.form.submit()" class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="24h" {% if filters.range_key == '24h' %}selected{% endif %}>Last 24 hours</option>
+        <option value="7d" {% if filters.range_key == '7d' %}selected{% endif %}>Last 7 days</option>
+        <option value="30d" {% if filters.range_key == '30d' %}selected{% endif %}>Last 30 days</option>
+        <option value="custom" {% if filters.range_key == 'custom' %}selected{% endif %}>Custom</option>
+      </select>
+    </div>
+
+    {% if filters.range_key == 'custom' %}
+    <div>
+      <label class="block text-xs font-medium text-muted-foreground mb-1" for="filter-start">Start (YYYY-MM-DD)</label>
+      <input id="filter-start" type="date" name="start" value="{{ filters.start_str }}"
+             class="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-muted-foreground mb-1" for="filter-end">End (YYYY-MM-DD)</label>
+      <input id="filter-end" type="date" name="end" value="{{ filters.end_str }}"
+             class="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+    {% endif %}
+
+    <div>
+      <label class="block text-xs font-medium text-muted-foreground mb-1" for="filter-signup-path">Signup path</label>
+      <select id="filter-signup-path" name="signup_path" onchange="this.form.submit()" class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="" {% if not filters.signup_path %}selected{% endif %}>All paths</option>
+        {% for value, label in signup_path_choices %}
+        <option value="{{ value }}" {% if filters.signup_path == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">Apply</button>
+  </div>
+</form>
+
+{# ---- Headline cards (always rolling 24h / 7d / 30d) ---- #}
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6" data-testid="signup-analytics-headlines">
+  {% for card in headline_cards %}
+  <div class="bg-card border border-border rounded-lg p-4">
+    <div class="text-xs font-medium text-muted-foreground uppercase tracking-wider">{{ card.label }}</div>
+    <div class="text-3xl font-semibold text-foreground mt-2">{{ card.count }}</div>
+    <div class="text-xs mt-2
+      {% if card.delta.sign == '+' %}text-green-500
+      {% elif card.delta.sign == '-' %}text-red-500
+      {% else %}text-muted-foreground{% endif %}">
+      {% if card.delta.sign == '=' %}={% else %}{{ card.delta.sign }}{{ card.delta.diff }}{% endif %} vs prior {{ card.window_label }}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{# ---- Section 3: breakdown by signup_path ---- #}
+<div class="mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-3">Breakdown by signup path</h2>
+  {% if signup_path_rows %}
+  <div class="bg-card border border-border rounded-lg overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Signup path</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Count</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">% share</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in signup_path_rows %}
+        <tr class="hover:bg-secondary/50 transition-colors">
+          <td class="px-4 py-3 text-sm text-foreground">{{ row.label }}</td>
+          <td class="px-4 py-3 text-sm text-foreground text-right font-medium">{{ row.n }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground text-right">{{ row.pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="bg-card border border-border rounded-lg p-6 text-center" data-testid="signup-analytics-breakdown-empty">
+    <p class="text-foreground">No signups in this range</p>
+    <p class="text-sm text-muted-foreground mt-1">Try widening the date range.</p>
+  </div>
+  {% endif %}
+</div>
+
+{# ---- Section 4: top first-touch UTM sources ---- #}
+<div class="mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-3">Top first-touch UTM sources</h2>
+  {% if utm_source_rows %}
+  <div class="bg-card border border-border rounded-lg overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Source</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Count</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">% share</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in utm_source_rows %}
+        <tr class="hover:bg-secondary/50 transition-colors">
+          <td class="px-4 py-3 text-sm text-foreground">{{ row.label }}</td>
+          <td class="px-4 py-3 text-sm text-foreground text-right font-medium">{{ row.n }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground text-right">{{ row.pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No signups in this range.</p>
+  {% endif %}
+</div>
+
+{# ---- Section 5: top first-touch referrer sources (gated on #772) ---- #}
+<div class="mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-3">Top first-touch referrer sources</h2>
+  {% if has_referrer_data %}
+    {% if referrer_rows %}
+    <div class="bg-card border border-border rounded-lg overflow-x-auto">
+      <table class="w-full">
+        <thead class="bg-secondary">
+          <tr>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Referrer</th>
+            <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Count</th>
+            <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">% share</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          {% for row in referrer_rows %}
+          <tr class="hover:bg-secondary/50 transition-colors">
+            <td class="px-4 py-3 text-sm text-foreground">{{ row.label }}</td>
+            <td class="px-4 py-3 text-sm text-foreground text-right font-medium">{{ row.n }}</td>
+            <td class="px-4 py-3 text-sm text-muted-foreground text-right">{{ row.pct }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-sm text-muted-foreground">No signups in this range.</p>
+    {% endif %}
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="referrer-placeholder">Referrer attribution lands with #772 — not yet available.</p>
+  {% endif %}
+</div>
+
+{# ---- Section 6: top first-touch campaigns ---- #}
+<div class="mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-3">Top first-touch campaigns</h2>
+  {% if campaign_rows %}
+  <div class="bg-card border border-border rounded-lg overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Campaign</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Count</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">% share</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in campaign_rows %}
+        <tr class="hover:bg-secondary/50 transition-colors">
+          <td class="px-4 py-3 text-sm text-foreground">
+            {% if row.campaign %}
+              <a href="/studio/utm-analytics/campaign/{{ row.slug }}/?range={{ filters.range_key }}"
+                 class="text-accent hover:underline" data-testid="campaign-drill-link">{{ row.label }}</a>
+            {% else %}
+              {{ row.label }}
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 text-sm text-foreground text-right font-medium">{{ row.n }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground text-right">{{ row.pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No signups in this range.</p>
+  {% endif %}
+</div>
+
+{# ---- Section 7: recent signups ---- #}
+<div class="mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-3">Recent signups</h2>
+  {% if recent_signups %}
+  <div class="bg-card border border-border rounded-lg overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Signup path</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">First-touch UTM source</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">First-touch UTM campaign</th>
+          {% if recent_has_referrer %}
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Referrer source</th>
+          {% endif %}
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Signed up</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in recent_signups %}
+        <tr class="hover:bg-secondary/50 transition-colors">
+          <td class="px-4 py-3 text-sm text-foreground">
+            {% if row.user %}
+              <a href="{% url 'studio_user_detail' user_id=row.user_id %}" class="text-accent hover:underline">{{ row.user.email }}</a>
+            {% else %}
+              <span class="text-muted-foreground">(deleted)</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.get_signup_path_display }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.first_touch_utm_source|default:"—" }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.first_touch_utm_campaign|default:"—" }}</td>
+          {% if recent_has_referrer %}
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.first_touch_referrer_source|default:"—" }}</td>
+          {% endif %}
+          <td class="px-4 py-3 text-sm text-muted-foreground text-right" title="{{ row.created_at|date:'Y-m-d H:i:s T' }}">{{ row.created_at|timesince }} ago</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="bg-card border border-border rounded-lg p-6 text-center" data-testid="signup-analytics-recent-empty">
+    <p class="text-foreground">No signups in this range.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -415,6 +415,7 @@ def studio_sidebar_state(path):
     tracking_active = (
         'utm-campaigns' in p
         or 'utm-analytics' in p
+        or 'signup-analytics' in p
     )
     operations_active = (
         '/sync' in p

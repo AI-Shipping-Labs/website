@@ -121,6 +121,7 @@ from studio.views.settings import (
     settings_save_auth_provider,
     settings_save_group,
 )
+from studio.views.signup_analytics import signup_analytics_dashboard
 from studio.views.sprints import (
     sprint_add_member,
     sprint_create,
@@ -400,6 +401,14 @@ urlpatterns = [
         'utm-analytics/campaign/<slug:campaign_slug>/link/<int:link_id>/',
         utm_analytics_link_detail,
         name='studio_utm_link_analytics',
+    ),
+
+    # Signup Analytics (issue #770). Sibling of UTM Analytics — aggregates
+    # ``UserAttribution`` rows rather than ``CampaignVisit``.
+    path(
+        'signup-analytics/',
+        signup_analytics_dashboard,
+        name='studio_signup_analytics',
     ),
 
     # Impersonate

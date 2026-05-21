@@ -145,12 +145,14 @@ class StudioUserListTest(TestCase):
     def test_chip_links_carry_search_value(self):
         # Issue #358: chips also carry the slack filter so combining
         # chip clicks doesn't reset the slack filter back to "any".
+        # Issue #766: chips also carry the bounce filter for the same
+        # reason.
         response = self.client.get('/studio/users/?filter=all&q=alice')
-        self.assertContains(response, '?filter=all&amp;slack=any&amp;q=alice')
-        self.assertContains(response, '?filter=paid&amp;slack=any&amp;q=alice')
-        self.assertContains(response, '?filter=main_plus&amp;slack=any&amp;q=alice')
-        self.assertContains(response, '?filter=premium&amp;slack=any&amp;q=alice')
-        self.assertContains(response, '?filter=subscribers&amp;slack=any&amp;q=alice')
+        self.assertContains(response, '?filter=all&amp;slack=any&amp;bounce=any&amp;q=alice')
+        self.assertContains(response, '?filter=paid&amp;slack=any&amp;bounce=any&amp;q=alice')
+        self.assertContains(response, '?filter=main_plus&amp;slack=any&amp;bounce=any&amp;q=alice')
+        self.assertContains(response, '?filter=premium&amp;slack=any&amp;bounce=any&amp;q=alice')
+        self.assertContains(response, '?filter=subscribers&amp;slack=any&amp;bounce=any&amp;q=alice')
 
     def test_subscribed_column_uses_user_unsubscribed_flag(self):
         response = self.client.get('/studio/users/?filter=all')

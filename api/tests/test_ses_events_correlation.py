@@ -231,7 +231,8 @@ class BounceCorrelationToEmailLogTest(TestCase):
 
         self.user.refresh_from_db()
         self.assertTrue(self.user.unsubscribed)
-        self.assertIn("bounced", self.user.tags)
+        # Issue #766: bounce_state replaces the legacy "bounced" tag.
+        self.assertEqual(self.user.bounce_state, "permanent")
 
     def test_unmatched_ses_message_id_audited_without_link(self):
         """Bounce arrives but no EmailLog matches: log it, don't link, don't crash."""
@@ -283,10 +284,12 @@ class ComplaintCorrelationToEmailLogTest(TestCase):
 
         log.refresh_from_db()
         self.assertIsNotNone(log.complained_at)
-        # User-side effects unchanged.
+        # User-side effects unchanged: still unsubscribed. Issue #766
+        # removed the "complained" tag write; the audit lives in
+        # SesEvent + EmailLog.complained_at.
         self.user.refresh_from_db()
         self.assertTrue(self.user.unsubscribed)
-        self.assertIn("complained", self.user.tags)
+        self.assertNotIn("complained", self.user.tags)
 
     def test_unmatched_complaint_audited_without_link(self):
         response = _post(
@@ -341,9 +344,11 @@ class IdempotencyTest(TestCase):
         # bounced_at frozen at the first observation.
         log.refresh_from_db()
         self.assertEqual(log.bounced_at, first_stamp)
-        # Tag applied exactly once.
+        # Issue #766: bounce_state is the structured signal; duplicate
+        # replay just overwrites the same PERMANENT state idempotently.
         self.user.refresh_from_db()
-        self.assertEqual(self.user.tags.count("bounced"), 1)
+        self.assertEqual(self.user.bounce_state, "permanent")
+        self.assertNotIn("bounced", self.user.tags)
 
     def test_duplicate_complaint_does_not_double_stamp_email_log(self):
         log = EmailLog.objects.create(
@@ -370,8 +375,10 @@ class IdempotencyTest(TestCase):
         )
         log.refresh_from_db()
         self.assertEqual(log.complained_at, first_stamp)
+        # Issue #766: complaint no longer writes the "complained" tag;
+        # the audit is in SesEvent + EmailLog.complained_at.
         self.user.refresh_from_db()
-        self.assertEqual(self.user.tags.count("complained"), 1)
+        self.assertNotIn("complained", self.user.tags)
 
 
 class EventTypePayloadShapeTest(TestCase):
@@ -506,7 +513,7 @@ class AdminVisibilityTest(TestCase):
             bounce_type="Permanent",
             bounce_subtype="NoEmail",
             diagnostic_code="smtp; 550 5.1.1 user unknown",
-            action_taken="unsubscribed and tagged bounced",
+            action_taken="unsubscribed and marked permanent bounce",
         )
 
         url = reverse("admin:email_app_sesevent_changelist")

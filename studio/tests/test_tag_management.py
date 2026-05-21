@@ -75,7 +75,10 @@ class StudioUserListTagPickerTest(TestCase):
         # ``?tag=`` query string intact.
         response = self.client.get('/studio/users/?tag=paid')
         for chip_filter in ('all', 'paid', 'main_plus', 'premium', 'subscribers'):
-            self.assertContains(response, f'?filter={chip_filter}&amp;slack=any&amp;tag=paid')
+            self.assertContains(
+                response,
+                f'?filter={chip_filter}&amp;slack=any&amp;bounce=any&amp;tag=paid',
+            )
 
 
 class StudioTagRenameViewTest(TestCase):

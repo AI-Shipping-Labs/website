@@ -85,6 +85,23 @@ SLACK_FILTER_YES = 'yes'
 SLACK_FILTER_NO = 'no'
 VALID_SLACK_FILTERS = {SLACK_FILTER_ANY, SLACK_FILTER_YES, SLACK_FILTER_NO}
 DEFAULT_SLACK_FILTER = SLACK_FILTER_ANY
+
+# Bounce-state filter (issue #766). Round-trips the lower-case
+# ``BounceState`` slug through the URL so ``?bounce=permanent`` selects
+# permanently-bounced rows directly. ``any`` is the default and skips
+# the filter entirely.
+BOUNCE_FILTER_ANY = 'any'
+BOUNCE_FILTER_NONE = 'none'
+BOUNCE_FILTER_SOFT = 'soft'
+BOUNCE_FILTER_PERMANENT = 'permanent'
+VALID_BOUNCE_FILTERS = {
+    BOUNCE_FILTER_ANY,
+    BOUNCE_FILTER_NONE,
+    BOUNCE_FILTER_SOFT,
+    BOUNCE_FILTER_PERMANENT,
+}
+DEFAULT_BOUNCE_FILTER = BOUNCE_FILTER_ANY
+
 USER_LIST_TAG_LIMIT = 3
 
 # Page size for the Studio users list (issue #438). Hard-coded for v1; the
@@ -115,6 +132,13 @@ def _normalize_slack_filter(value):
     if value in VALID_SLACK_FILTERS:
         return value
     return DEFAULT_SLACK_FILTER
+
+
+def _normalize_bounce_filter(value):
+    """Map the raw ``bounce`` query param to one of ``VALID_BOUNCE_FILTERS``."""
+    if value in VALID_BOUNCE_FILTERS:
+        return value
+    return DEFAULT_BOUNCE_FILTER
 
 
 def _slack_status(user):
@@ -262,7 +286,10 @@ def _user_ids_matching_exact_tag(normalized_tag):
     return user_ids
 
 
-def _apply_user_listing_filters(qs, active_filter, search, tag_filter, slack_filter):
+def _apply_user_listing_filters(
+    qs, active_filter, search, tag_filter, slack_filter,
+    bounce_filter=DEFAULT_BOUNCE_FILTER,
+):
     """Apply the Studio list/export filters to an annotated user queryset."""
     if search:
         normalized_search = normalize_tag(search)
@@ -294,10 +321,20 @@ def _apply_user_listing_filters(qs, active_filter, search, tag_filter, slack_fil
     elif slack_filter == SLACK_FILTER_NO:
         qs = qs.filter(slack_member=False)
 
+    # Bounce-state filter (issue #766). The slug stored on the model is
+    # already the URL value so the filter is a single direct compare.
+    if bounce_filter in {
+        BOUNCE_FILTER_NONE, BOUNCE_FILTER_SOFT, BOUNCE_FILTER_PERMANENT,
+    }:
+        qs = qs.filter(bounce_state=bounce_filter)
+
     return qs
 
 
-def _filtered_user_queryset(active_filter, search, tag_filter, slack_filter):
+def _filtered_user_queryset(
+    active_filter, search, tag_filter, slack_filter,
+    bounce_filter=DEFAULT_BOUNCE_FILTER,
+):
     """Return the filtered, annotated queryset backing list and export."""
     return _apply_user_listing_filters(
         _annotated_user_queryset(),
@@ -305,6 +342,7 @@ def _filtered_user_queryset(active_filter, search, tag_filter, slack_filter):
         search,
         tag_filter,
         slack_filter,
+        bounce_filter=bounce_filter,
     )
 
 
@@ -350,6 +388,15 @@ def _row_tooltip(user, slack_status):
     newsletter_state = 'unsubscribed' if user.unsubscribed else 'subscribed'
     parts.append(f'Newsletter: {newsletter_state}')
     parts.append(f'Slack workspace: {slack_status}')
+    # Bounce state (issue #766). Only appended when the row has a
+    # non-``none`` bounce so unaffected users keep the existing
+    # four-line tooltip layout exactly.
+    if user.bounce_state and user.bounce_state != User.BounceState.NONE:
+        if user.bounce_recorded_at is not None:
+            recorded = user.bounce_recorded_at.date().isoformat()
+            parts.append(f'Bounce: {user.bounce_state} ({recorded})')
+        else:
+            parts.append(f'Bounce: {user.bounce_state}')
     return '\n'.join(parts)
 
 
@@ -399,7 +446,10 @@ def _user_rows_from_users(users):
     return user_rows
 
 
-def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAULT_SLACK_FILTER):
+def _build_user_listing(
+    active_filter, search, tag_filter='', slack_filter=DEFAULT_SLACK_FILTER,
+    bounce_filter=DEFAULT_BOUNCE_FILTER,
+):
     """Build filtered rows plus aggregate counts for the users page/export.
 
     ``tag_filter`` is the raw ``?tag=`` query value; we normalize it
@@ -409,11 +459,17 @@ def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAU
     ``slack_filter`` is the tri-state Slack-membership filter (issue
     #358). It ANDs with the tier and tag filters.
 
+    ``bounce_filter`` is the bounce-state filter (issue #766). Also ANDs
+    with the other filters.
+
     The full filtered list is returned (unpaginated). Pagination for the
     HTML view happens in ``user_list``; the CSV export uses the full list.
     """
     users = list(
-        _filtered_user_queryset(active_filter, search, tag_filter, slack_filter)
+        _filtered_user_queryset(
+            active_filter, search, tag_filter, slack_filter,
+            bounce_filter=bounce_filter,
+        )
     )
     return _user_rows_from_users(users), _user_listing_counts()
 
@@ -464,12 +520,14 @@ def user_list(request):
     """List platform Users with tier and subscriber filter chips."""
     active_filter = _normalize_filter(request.GET.get('filter', ''))
     slack_filter = _normalize_slack_filter(request.GET.get('slack', ''))
+    bounce_filter = _normalize_bounce_filter(request.GET.get('bounce', ''))
     search = request.GET.get('q', '')
     raw_tag = request.GET.get('tag', '')
     active_tag = normalize_tag(raw_tag) if raw_tag else ''
 
     user_queryset = _filtered_user_queryset(
         active_filter, search, tag_filter=raw_tag, slack_filter=slack_filter,
+        bounce_filter=bounce_filter,
     )
     counts = _user_listing_counts()
 
@@ -521,6 +579,7 @@ def user_list(request):
         'filtered_total': paginator.count,
         'active_filter': active_filter,
         'slack_filter': slack_filter,
+        'bounce_filter': bounce_filter,
         'search': search,
         'active_tag': active_tag,
         # Tag picker for the filter row (issue #694). Same sorted source as
@@ -540,6 +599,10 @@ def user_list(request):
         'slack_filter_any': SLACK_FILTER_ANY,
         'slack_filter_yes': SLACK_FILTER_YES,
         'slack_filter_no': SLACK_FILTER_NO,
+        'bounce_filter_any': BOUNCE_FILTER_ANY,
+        'bounce_filter_none': BOUNCE_FILTER_NONE,
+        'bounce_filter_soft': BOUNCE_FILTER_SOFT,
+        'bounce_filter_permanent': BOUNCE_FILTER_PERMANENT,
         'stripe_account_id': stripe_account_id,
         'slack_team_id': slack_team_id,
     })
@@ -562,11 +625,13 @@ def user_export_csv(request):
     """
     active_filter = _normalize_filter(request.GET.get('filter', ''))
     slack_filter = _normalize_slack_filter(request.GET.get('slack', ''))
+    bounce_filter = _normalize_bounce_filter(request.GET.get('bounce', ''))
     search = request.GET.get('q', '')
     raw_tag = request.GET.get('tag', '')
 
     user_rows, _counts = _build_user_listing(
         active_filter, search, tag_filter=raw_tag, slack_filter=slack_filter,
+        bounce_filter=bounce_filter,
     )
 
     timestamp = (
@@ -916,6 +981,15 @@ def user_detail(request, user_id):
         for tag in user_tags
     ]
 
+    # Bounce-status card (issue #766). Only surfaced when the user has
+    # a non-``none`` ``bounce_state``; ``bounce_state_label`` is the
+    # human-readable choice display ("Permanent" / "Soft").
+    bounce_state = user.bounce_state or User.BounceState.NONE
+    bounce_has_state = bounce_state != User.BounceState.NONE
+    bounce_state_label = (
+        user.get_bounce_state_display() if bounce_has_state else ''
+    )
+
     context = {
         'detail_user': user,
         'tier_name': _effective_tier_name(user, override),
@@ -926,6 +1000,11 @@ def user_detail(request, user_id):
         'tags': user_tags,
         'tag_chips': tag_chips,
         'known_tags': _all_known_contact_tags(),
+        'bounce_state': bounce_state,
+        'bounce_has_state': bounce_has_state,
+        'bounce_state_label': bounce_state_label,
+        'bounce_recorded_at': user.bounce_recorded_at,
+        'last_bounce_diagnostic': user.last_bounce_diagnostic or '',
         'status': _user_status(user),
         'crm_record': crm_record,
         'course_enrollments': course_enrollments,

@@ -7,7 +7,7 @@ regression in any of them surfaces a clear failure.
 
 import datetime
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from accounts.models import User
@@ -158,3 +158,183 @@ class PurgeUnverifiedUsersTest(TestCase):
         self.assertFalse(User.objects.filter(pk=a.pk).exists())
         self.assertFalse(User.objects.filter(pk=b.pk).exists())
         self.assertTrue(User.objects.filter(pk=keep.pk).exists())
+
+
+def _make_eager_candidate(email, *, bounce_age_hours, **extra):
+    """Fixture: unverified user with a permanent bounce at the given age.
+
+    Mirrors the production state set by ``_mark_permanent_bounce`` so
+    each eager-bucket test exercises one safety gate without leaking
+    state across tests.
+    """
+    return User.objects.create_user(
+        email=email,
+        password="secure1234",
+        email_verified=False,
+        bounce_state=User.BounceState.PERMANENT,
+        bounce_recorded_at=timezone.now() - datetime.timedelta(
+            hours=bounce_age_hours,
+        ),
+        last_bounce_diagnostic="550 5.1.1 No such mailbox",
+        **extra,
+    )
+
+
+class EagerBounceBucketTest(TestCase):
+    """Pass B: unverified users with a permanent bounce older than 24h."""
+
+    def test_eager_purge_deletes_old_permanent_bounce(self):
+        """The ledger row blocks the standard bucket but not the eager one."""
+        user = _make_eager_candidate(
+            "dead@example.com",
+            bounce_age_hours=48,
+        )
+        # The verification email IS the row that bounced -- it's why
+        # the standard purge would skip the user. The eager bucket
+        # ignores it.
+        EmailLog.objects.create(
+            user=user,
+            email_type="email_verification",
+            ses_message_id="ses-eager-1",
+        )
+
+        result = purge_unverified_users()
+
+        self.assertEqual(result["deleted_eager"], 1)
+        self.assertEqual(result["deleted_standard"], 0)
+        self.assertEqual(result["deleted"], 1)
+        self.assertFalse(User.objects.filter(pk=user.pk).exists())
+
+    def test_eager_purge_skips_fresh_permanent_bounce(self):
+        """Inside the 24h grace window the user stays put."""
+        user = _make_eager_candidate(
+            "wait@example.com",
+            bounce_age_hours=1,
+        )
+
+        result = purge_unverified_users()
+
+        self.assertEqual(result["deleted_eager"], 0)
+        self.assertEqual(result["deleted"], 0)
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+
+    def test_eager_purge_skips_verified_user(self):
+        """Eager bucket only touches unverified rows."""
+        user = User.objects.create_user(
+            email="verified-bounced@example.com",
+            password="secure1234",
+            email_verified=True,
+            bounce_state=User.BounceState.PERMANENT,
+            bounce_recorded_at=timezone.now() - datetime.timedelta(days=30),
+        )
+
+        result = purge_unverified_users()
+
+        self.assertEqual(result["deleted_eager"], 0)
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+
+    def test_eager_purge_skips_user_with_stripe_customer_id(self):
+        """Payments still block even when the email is dead."""
+        user = _make_eager_candidate(
+            "paid-dead@example.com",
+            bounce_age_hours=48,
+            stripe_customer_id="cus_X",
+        )
+
+        result = purge_unverified_users()
+
+        self.assertEqual(result["deleted_eager"], 0)
+        self.assertEqual(result["skipped_eager"], 1)
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+
+    def test_eager_purge_skips_soft_bounce(self):
+        """Soft state never triggers the eager bucket."""
+        user = User.objects.create_user(
+            email="soft@example.com",
+            password="secure1234",
+            email_verified=False,
+            bounce_state=User.BounceState.SOFT,
+            bounce_recorded_at=timezone.now() - datetime.timedelta(days=30),
+        )
+
+        result = purge_unverified_users()
+
+        self.assertEqual(result["deleted_eager"], 0)
+        self.assertEqual(result["deleted"], 0)
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+
+    def test_purge_return_dict_has_all_six_counters(self):
+        """Both buckets contribute to a shape that monitors can consume."""
+        # One eager-bucket candidate, one standard-bucket candidate.
+        eager_user = _make_eager_candidate(
+            "eager-row@example.com", bounce_age_hours=48,
+        )
+        EmailLog.objects.create(
+            user=eager_user,
+            email_type="email_verification",
+            ses_message_id="ses-eager-2",
+        )
+        standard_user = _make_unverified(
+            "standard-row@example.com", expires_offset_hours=-48,
+        )
+
+        result = purge_unverified_users()
+
+        expected_keys = {
+            "deleted",
+            "deleted_standard",
+            "deleted_eager",
+            "skipped",
+            "skipped_standard",
+            "skipped_eager",
+        }
+        self.assertEqual(set(result.keys()), expected_keys)
+
+        self.assertEqual(result["deleted_standard"], 1)
+        self.assertEqual(result["deleted_eager"], 1)
+        # Legacy totals stay backwards-compatible.
+        self.assertEqual(
+            result["deleted"],
+            result["deleted_standard"] + result["deleted_eager"],
+        )
+        self.assertEqual(
+            result["skipped"],
+            result["skipped_standard"] + result["skipped_eager"],
+        )
+        self.assertFalse(User.objects.filter(pk=eager_user.pk).exists())
+        self.assertFalse(User.objects.filter(pk=standard_user.pk).exists())
+
+    def test_eager_purge_emits_audit_log_with_email_and_recorded_at(self):
+        """Each eager-bucket delete logs at INFO with audit fields."""
+        user = _make_eager_candidate(
+            "audit@example.com",
+            bounce_age_hours=48,
+        )
+        recorded_iso = user.bounce_recorded_at.isoformat()
+
+        with self.assertLogs(
+            "accounts.tasks.purge_unverified_users",
+            level="INFO",
+        ) as logs:
+            purge_unverified_users()
+
+        # Find the per-row eager-purge audit line (not the summary).
+        eager_lines = [m for m in logs.output if "Eager-purged" in m]
+        self.assertTrue(eager_lines, f"no eager-purge audit line in {logs.output}")
+        line = eager_lines[0]
+        self.assertIn("audit@example.com", line)
+        self.assertIn(recorded_iso, line)
+        self.assertIn("550 5.1.1 No such mailbox", line)
+
+    @override_settings(BOUNCE_PURGE_DELAY_HOURS=1)
+    def test_eager_purge_honors_settings_override(self):
+        """A 90-minute-old bounce is purged when the override drops to 1h."""
+        user = _make_eager_candidate(
+            "tweaked@example.com",
+            bounce_age_hours=1.5,
+        )
+
+        result = purge_unverified_users()
+
+        self.assertEqual(result["deleted_eager"], 1)
+        self.assertFalse(User.objects.filter(pk=user.pk).exists())

@@ -320,14 +320,18 @@ class SesEventsBounceTest(TestCase):
             content_type="application/json",
         )
 
-    def test_permanent_bounce_unsubscribes_user_and_tags(self):
+    def test_permanent_bounce_unsubscribes_user_and_marks_state(self):
         with mock.patch(VALIDATOR_PATH, return_value=True):
             response = self._post(_bounce_payload("m-perm-1", self.user_email))
         self.assertEqual(response.status_code, 200)
 
         self.user.refresh_from_db()
         self.assertTrue(self.user.unsubscribed)
-        self.assertIn("bounced", self.user.tags)
+        # Structured bounce_state replaces the legacy "bounced" tag
+        # (issue #766). The tag namespace stays clean for operator use.
+        self.assertEqual(self.user.bounce_state, "permanent")
+        self.assertIsNotNone(self.user.bounce_recorded_at)
+        self.assertNotIn("bounced", self.user.tags)
 
         event = SesEvent.objects.get(message_id="m-perm-1")
         self.assertEqual(event.event_type, SesEvent.EVENT_TYPE_BOUNCE_PERMANENT)
@@ -355,7 +359,10 @@ class SesEventsBounceTest(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.soft_bounce_count, 1)
         self.assertFalse(self.user.unsubscribed)
-        self.assertNotIn("bounced", self.user.tags)
+        # First soft bounce flips bounce_state to SOFT (not PERMANENT)
+        # so the row is filterable in Studio without touching tags.
+        self.assertEqual(self.user.bounce_state, "soft")
+        self.assertIsNotNone(self.user.bounce_recorded_at)
 
     def test_three_transient_bounces_unsubscribe(self):
         with mock.patch(VALIDATOR_PATH, return_value=True):
@@ -379,7 +386,9 @@ class SesEventsBounceTest(TestCase):
         # Threshold reached -> flipped + counter reset.
         self.assertEqual(self.user.soft_bounce_count, 0)
         self.assertTrue(self.user.unsubscribed)
-        self.assertIn("bounced", self.user.tags)
+        # Threshold breach upgrades bounce_state to PERMANENT (issue
+        # #766). The legacy "bounced" tag is no longer written.
+        self.assertEqual(self.user.bounce_state, "permanent")
 
 
 class SesEventsComplaintTest(TestCase):
@@ -389,7 +398,7 @@ class SesEventsComplaintTest(TestCase):
         self.user.tags = []
         self.user.save(update_fields=["unsubscribed", "tags"])
 
-    def test_complaint_unsubscribes_and_tags(self):
+    def test_complaint_unsubscribes_user(self):
         with mock.patch(VALIDATOR_PATH, return_value=True):
             response = self.client.post(
                 URL,
@@ -400,7 +409,10 @@ class SesEventsComplaintTest(TestCase):
 
         self.user.refresh_from_db()
         self.assertTrue(self.user.unsubscribed)
-        self.assertIn("complained", self.user.tags)
+        # Issue #766: complaints no longer write the legacy "complained"
+        # tag. The audit trail lives in SesEvent and the unsubscribed
+        # flag is the operative signal.
+        self.assertNotIn("complained", self.user.tags)
 
         event = SesEvent.objects.get(message_id="m-cmp-1")
         self.assertEqual(event.event_type, SesEvent.EVENT_TYPE_COMPLAINT)
@@ -576,8 +588,10 @@ class SesEventsIdempotencyTest(TestCase):
 
         self.user.refresh_from_db()
         self.assertTrue(self.user.unsubscribed)
-        # Tag appended exactly once even after the retry.
-        self.assertEqual(self.user.tags.count("bounced"), 1)
+        # Bounce state is the structured signal now (issue #766);
+        # tag namespace is untouched on duplicate replay.
+        self.assertEqual(self.user.bounce_state, "permanent")
+        self.assertNotIn("bounced", self.user.tags)
 
         # And only one audit row landed.
         self.assertEqual(

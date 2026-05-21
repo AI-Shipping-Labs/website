@@ -14,7 +14,7 @@
       <i data-lucide="upload" class="h-4 w-4"></i>
       <span>Import contacts</span>
     </a>
-    <a href="{% url 'studio_user_export' %}?filter={{ active_filter }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+    <a href="{% url 'studio_user_export' %}?filter={{ active_filter }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2">
       <i data-lucide="download" class="h-4 w-4"></i>
       <span>Export CSV</span>
@@ -62,19 +62,19 @@
 <div class="mb-6 space-y-3">
   <div class="flex flex-wrap items-center gap-2" data-testid="user-filter-chips">
     {% with chip_base="px-4 py-1.5 rounded-full text-sm border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
-    <a href="?filter={{ filter_all }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+    <a href="?filter={{ filter_all }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-filter="{{ filter_all }}"
        class="{{ chip_base }} {% if active_filter == filter_all %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">All</a>
-    <a href="?filter={{ filter_paid }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+    <a href="?filter={{ filter_paid }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-filter="{{ filter_paid }}"
        class="{{ chip_base }} {% if active_filter == filter_paid %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Paid</a>
-    <a href="?filter={{ filter_main_plus }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+    <a href="?filter={{ filter_main_plus }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-filter="{{ filter_main_plus }}"
        class="{{ chip_base }} {% if active_filter == filter_main_plus %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Main+</a>
-    <a href="?filter={{ filter_premium }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+    <a href="?filter={{ filter_premium }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-filter="{{ filter_premium }}"
        class="{{ chip_base }} {% if active_filter == filter_premium %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Premium</a>
-    <a href="?filter={{ filter_subscribers }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+    <a href="?filter={{ filter_subscribers }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-filter="{{ filter_subscribers }}"
        class="{{ chip_base }} {% if active_filter == filter_subscribers %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Subscribers</a>
     {% endwith %}
@@ -83,7 +83,7 @@
   <div class="flex items-center" data-testid="active-tag-chip">
     <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-accent/10 border border-accent/30 text-accent">
       Tag: {{ active_tag }}
-      <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
+      <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
          data-testid="active-tag-clear"
          class="text-muted-foreground hover:text-foreground" aria-label="Clear tag filter">x</a>
     </span>
@@ -92,20 +92,44 @@
   <div class="flex flex-wrap items-center gap-2" data-testid="user-slack-filter-chips">
     <span class="text-xs text-muted-foreground mr-1">Slack:</span>
     {% with chip_base="px-3 py-1 rounded-full text-xs border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
-    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter_any }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter_any }}&amp;bounce={{ bounce_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-slack-filter="{{ slack_filter_any }}"
        class="{{ chip_base }} {% if slack_filter == slack_filter_any %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Any</a>
-    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter_yes }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter_yes }}&amp;bounce={{ bounce_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-slack-filter="{{ slack_filter_yes }}"
        class="{{ chip_base }} {% if slack_filter == slack_filter_yes %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Members</a>
-    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter_no }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter_no }}&amp;bounce={{ bounce_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-slack-filter="{{ slack_filter_no }}"
        class="{{ chip_base }} {% if slack_filter == slack_filter_no %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Not in Slack</a>
+    {% endwith %}
+  </div>
+  {% comment %}
+    Bounce-state filter row (issue #766). Mirrors the Slack tri-state
+    pattern, but adds an extra "None" chip so operators can call out
+    only-clean users. The slug stored on the model round-trips through
+    the URL so ``?bounce=permanent`` selects the matching rows directly.
+  {% endcomment %}
+  <div class="flex flex-wrap items-center gap-2" data-testid="user-bounce-filter-chips">
+    <span class="text-xs text-muted-foreground mr-1">Bounce:</span>
+    {% with chip_base="px-3 py-1 rounded-full text-xs border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
+    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter_any }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+       data-bounce-filter="{{ bounce_filter_any }}"
+       class="{{ chip_base }} {% if bounce_filter == bounce_filter_any %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Any</a>
+    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter_none }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+       data-bounce-filter="{{ bounce_filter_none }}"
+       class="{{ chip_base }} {% if bounce_filter == bounce_filter_none %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">None</a>
+    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter_soft }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+       data-bounce-filter="{{ bounce_filter_soft }}"
+       class="{{ chip_base }} {% if bounce_filter == bounce_filter_soft %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Soft</a>
+    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter }}&amp;bounce={{ bounce_filter_permanent }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
+       data-bounce-filter="{{ bounce_filter_permanent }}"
+       class="{{ chip_base }} {% if bounce_filter == bounce_filter_permanent %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Permanent</a>
     {% endwith %}
   </div>
   <form method="get" class="flex flex-wrap items-center gap-3" autocomplete="off">
     <input type="hidden" name="filter" value="{{ active_filter }}">
     <input type="hidden" name="slack" value="{{ slack_filter }}">
+    <input type="hidden" name="bounce" value="{{ bounce_filter }}">
     {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag }}">{% endif %}
     <input type="text" name="q" value="{{ search }}" placeholder="Email, name, Stripe ID, Slack ID, or tag"
            autocomplete="off"
@@ -125,6 +149,7 @@
   <form method="get" class="flex flex-wrap items-center gap-2" autocomplete="off" data-testid="user-tag-picker-form">
     <input type="hidden" name="filter" value="{{ active_filter }}">
     <input type="hidden" name="slack" value="{{ slack_filter }}">
+    <input type="hidden" name="bounce" value="{{ bounce_filter }}">
     {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
     <label for="user-tag-picker" class="text-xs text-muted-foreground">Tag:</label>
     <select id="user-tag-picker"

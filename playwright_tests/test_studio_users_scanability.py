@@ -161,8 +161,9 @@ class TestStudioUsersScanability:
         assert status_pill.inner_text().strip() == "Active"
 
         export_href = page.locator("a", has_text="Export CSV").get_attribute("href")
+        # Issue #766 added ``&bounce=<state>`` to the preserved filters.
         assert export_href.endswith(
-            "/studio/users/export?filter=paid&slack=yes&q=avery"
+            "/studio/users/export?filter=paid&slack=yes&bounce=any&q=avery"
         )
 
         # Tag filter is now applied via the standalone tag picker / active
@@ -177,7 +178,7 @@ class TestStudioUsersScanability:
         assert "Tag: early-adopter" in active_chip.inner_text()
         export_href = page.locator("a", has_text="Export CSV").get_attribute("href")
         assert export_href.endswith(
-            "/studio/users/export?filter=paid&slack=yes&q=avery&tag=early-adopter"
+            "/studio/users/export?filter=paid&slack=yes&bounce=any&q=avery&tag=early-adopter"
         )
 
         row = page.locator("tbody tr", has_text=email).first

@@ -172,6 +172,9 @@ def _cleanup_stale_workshops_for_source(source, seen_slugs, failed_slugs, stats)
         detail=lambda ws, action: {
             'title': ws.title,
             'slug': ws.slug,
+            # Issue #782: include the workshop date so the Studio sync history
+            # template can render a ``/workshops/<date>-<slug>`` link.
+            'date': ws.date.isoformat(),
             'action': action,
             'content_type': 'workshop',
         },
@@ -402,6 +405,10 @@ def _sync_single_workshop(
             detail=lambda obj, action: {
                 'title': title,
                 'slug': slug,
+                # Issue #782: include the workshop date so the Studio sync
+                # history template can render a ``/workshops/<date>-<slug>``
+                # link.
+                'date': workshop_date.isoformat(),
                 'action': action,
                 'content_type': 'workshop',
             },

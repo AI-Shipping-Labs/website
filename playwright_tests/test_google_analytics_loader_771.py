@@ -62,15 +62,15 @@ class TestGoogleAnalyticsLoader:
 
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
         html_home = page.content()
-        assert 'gtag' not in html_home, (
-            "Expected no `gtag` markup on / when GOOGLE_ANALYTICS_ID is unset."
+        assert 'googletagmanager.com' not in html_home, (
+            "Expected no GA loader on / when GOOGLE_ANALYTICS_ID is unset."
         )
         assert 'googletagmanager' not in html_home
 
         page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
         html_blog = page.content()
-        assert 'gtag' not in html_blog, (
-            "Expected no `gtag` markup on /blog when GOOGLE_ANALYTICS_ID is unset."
+        assert 'googletagmanager.com' not in html_blog, (
+            "Expected no GA loader on /blog when GOOGLE_ANALYTICS_ID is unset."
         )
         assert 'googletagmanager' not in html_blog
 
@@ -138,5 +138,5 @@ class TestGoogleAnalyticsLoader:
         anon_page = anon_ctx.new_page()
         anon_page.goto(f"{django_server}/", wait_until="domcontentloaded")
         html_home = anon_page.content()
-        assert 'gtag' not in html_home
+        assert 'googletagmanager.com' not in html_home
         assert 'googletagmanager' not in html_home

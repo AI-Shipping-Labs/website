@@ -377,9 +377,16 @@ class StudioUserSlackIdSetEndpointTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class StudioUserListSlackPillAnchorTest(_SlackTeamIdSettingMixin, TestCase):
-    """The list view's Slack pill becomes an anchor when both halves of the
-    deep-link are configured."""
+class StudioUserListSlackRowTooltipTest(_SlackTeamIdSettingMixin, TestCase):
+    """Slack ID surfaces in the row tooltip on /studio/users/ (issue #451).
+
+    Issue #561's original implementation rendered an inline Slack pill in
+    the Membership column and wrapped it in an "Open in Slack" anchor
+    when both halves of the deep-link were configured. Issue #451
+    removed the per-row Membership column, so the listing now carries
+    only the Slack ID inside the row-level ``<tr title="...">`` hover
+    tooltip; the clickable deep-link moves to the user detail page.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -398,52 +405,36 @@ class StudioUserListSlackPillAnchorTest(_SlackTeamIdSettingMixin, TestCase):
         self.client.login(email='staff@test.com', password='pw')
         self._reset_team_id()
 
-    def test_pill_text_unchanged_in_both_modes(self):
-        # The pill text ("Slack" / "No Slack" / "Slack unchecked") is the
-        # contract older tests rely on; wrapping it in an anchor must not
-        # change the visible label.
-        response = self.client.get('/studio/users/?q=ada@example.com')
-        row_html = _row_html(response.content.decode(), self.linked.pk)
-        self.assertIn('data-testid="slack-status"', row_html)
-
-    def test_pill_is_anchor_when_user_has_id_and_team_id_set(self):
-        self._set_team_id('T01TEAM123')
-        response = self.client.get('/studio/users/?q=ada@example.com')
-        row_html = _row_html(response.content.decode(), self.linked.pk)
-        # Anchor wrapper with a stable test-id and aria-label.
-        self.assertIn('data-testid="slack-profile-link"', row_html)
-        self.assertIn(
-            'href="https://app.slack.com/client/T01TEAM123/U01ADA123"',
-            row_html,
+    def _tr_attrs(self, html, user_pk):
+        match = re.search(
+            r'<tr([^>]*data-testid="user-row-' + str(user_pk)
+            + r'"[^>]*)>',
+            html,
         )
-        self.assertIn(
-            f'aria-label="Open {self.linked.email} in Slack"', row_html,
+        self.assertIsNotNone(
+            match,
+            f'Could not find <tr data-testid="user-row-{user_pk}">.',
         )
-        # New-tab + noopener attributes on the wrapping anchor specifically.
-        anchor_match = re.search(
-            r'<a([^>]*data-testid="slack-profile-link"[^>]*)>',
-            row_html,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(anchor_match)
-        attrs = anchor_match.group(1)
-        self.assertIn('target="_blank"', attrs)
-        self.assertIn('rel="noopener"', attrs)
+        return match.group(1)
 
-    def test_pill_is_not_anchor_when_team_id_blank(self):
-        # Linked user, no team ID — anchor wrapper must be absent.
-        self.assertEqual(get_config(SETTINGS_KEY), '')
+    def test_slack_id_present_in_row_tooltip_when_set(self):
         response = self.client.get('/studio/users/?q=ada@example.com')
-        row_html = _row_html(response.content.decode(), self.linked.pk)
-        self.assertNotIn('data-testid="slack-profile-link"', row_html)
-        # Pill itself still renders.
-        self.assertIn('data-testid="slack-status"', row_html)
+        attrs = self._tr_attrs(response.content.decode(), self.linked.pk)
+        self.assertIn('Slack ID: U01ADA123', attrs)
 
-    def test_pill_is_not_anchor_when_user_has_no_slack_id(self):
-        # Team ID configured but user has no slack_user_id → no anchor.
-        self._set_team_id('T01TEAM123')
+    def test_slack_id_omitted_from_row_tooltip_when_user_has_none(self):
         response = self.client.get('/studio/users/?q=alan@example.com')
-        row_html = _row_html(response.content.decode(), self.unlinked.pk)
+        attrs = self._tr_attrs(response.content.decode(), self.unlinked.pk)
+        self.assertNotIn('Slack ID:', attrs)
+
+    def test_per_row_slack_pill_and_anchor_are_removed_from_listing(self):
+        # Issue #451 regression guard: the inline Slack pill and the
+        # optional anchor wrapper both disappear from the row. The
+        # workspace deep-link lives on the user detail page now.
+        self._set_team_id('T01TEAM123')
+        response = self.client.get('/studio/users/?q=ada@example.com')
+        row_html = _row_html(response.content.decode(), self.linked.pk)
+        self.assertNotIn('data-testid="slack-status"', row_html)
         self.assertNotIn('data-testid="slack-profile-link"', row_html)
 
 

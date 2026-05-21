@@ -2,18 +2,28 @@
 
 Issue #451 surfaces ``first_name`` / ``last_name`` on every user row and
 makes the row's headline render the full name (when available) above the
-email. The browser-only assertions below verify:
+email. It also collapses the listing from 6 columns to 4 (User / Status /
+Last login / Actions): the tier pill and override pill move INTO the User
+cell, the Membership / Tags columns are gone, and the operator-relevant
+Slack ID / Stripe customer ID / Newsletter / Slack-workspace facts move
+into a row-level ``<tr title="...">`` hover tooltip via the view's
+``_row_tooltip`` helper.
+
+The browser-only assertions below verify:
 
 - the data-testid + visible text contracts for every name combination
   (both / first only / last only / neither);
 - the visual stacking (name bounding-box top < email bounding-box top);
-- the Stripe glyph + Slack badge from earlier issues still render in the
-  denser Membership cell;
-- the tag overflow chip and pager from earlier issues are intact;
+- the tier pill / override pill render INLINE in the User cell;
+- the row-level tooltip carries Slack ID / Stripe customer / Newsletter
+  / Slack-workspace lines on a paid Slack member;
+- the Last login cell exposes the two-line ``YYYY-MM-DD`` / ``HH:MM``
+  format (and ``-- never --`` fallback);
+- the pager from earlier issues is intact;
 - a ``1280x900`` viewport shows at least 18 rows without scrolling and
   has no horizontal scrollbar;
 - a ``390x900`` viewport keeps the stacked-card layout with the four
-  ``data-label`` headings.
+  ``data-label`` headings (User / Status / Last login / Actions).
 
 The Django unit tests (``studio/tests/test_user_list_name_display.py``)
 own the row-dict + DOM-string contract; this suite owns the browser-only
@@ -78,27 +88,8 @@ def _set_user_names(email, first_name='', last_name=''):
     connection.close()
 
 
-def _set_stripe_dashboard_account(value):
-    """Persist STRIPE_DASHBOARD_ACCOUNT_ID via the same path Studio uses
-    so the Stripe glyph anchors at /acct_TEST/customers/cus_PREMIUM."""
-    from integrations.config import clear_config_cache
-    from integrations.models import IntegrationSetting
-
-    IntegrationSetting.objects.update_or_create(
-        key='STRIPE_DASHBOARD_ACCOUNT_ID',
-        defaults={
-            'value': value,
-            'is_secret': False,
-            'group': 'stripe',
-            'description': '',
-        },
-    )
-    clear_config_cache()
-    connection.close()
-
-
 def _set_user_extras(email, *, stripe_customer_id='', tags=None,
-                    slack_member=False):
+                    slack_member=False, slack_user_id=''):
     from accounts.models import User
 
     user = User.objects.get(email=email)
@@ -106,6 +97,8 @@ def _set_user_extras(email, *, stripe_customer_id='', tags=None,
         user.stripe_customer_id = stripe_customer_id
     if tags is not None:
         user.tags = list(tags)
+    if slack_user_id:
+        user.slack_user_id = slack_user_id
     if slack_member:
         user.slack_member = True
         user.slack_checked_at = timezone.now()
@@ -133,7 +126,7 @@ def _seed_dense_paid_users(count):
 
     Used by the 18-rows-visible scenario; we want enough rows to fill
     the viewport with data, all with names so the User cell is at its
-    tallest layout (name + email + joined).
+    tallest layout (name + email).
     """
     from accounts.models import User
     from payments.models import Tier
@@ -331,26 +324,80 @@ class TestStudioUsersNameLayout:
             row.locator('[data-testid="user-email"]').inner_text()
             == 'no-name@example.com'
         )
-        # The Joined line is still rendered as the tertiary line.
-        assert 'Joined ' in row.inner_text()
+        # The User cell no longer renders a tertiary "Joined" line --
+        # the four-column layout drops that to keep rows scannable.
+        # Regression guard against re-adding it.
+        assert 'Joined ' not in row.inner_text()
 
         context.close()
 
-    def test_stripe_glyph_and_slack_badge_render_in_dense_membership_cell(
+    def test_tier_pill_and_override_pill_render_inline_in_user_cell(
         self, django_server, browser,
     ):
+        """Tier pill + icon-only override pill move INTO the User cell.
+
+        Issue #451 deletes the per-row Membership column. The tier pill
+        now lives inline after the name/email headline, and an active
+        tier override surfaces as a small icon-only pill next to it.
+        """
         _ensure_tiers()
-        staff_email = 'name-layout-stripe-admin@test.com'
+        staff_email = 'name-layout-tier-admin@test.com'
         _create_staff_user(staff_email)
         _clear_users_except_staff(staff_email)
-        _set_stripe_dashboard_account('acct_TEST')
 
-        # Premium user, slack member, with a stripe customer id.
         _create_user('premium-cust@example.com', tier_slug='premium')
         _set_user_names('premium-cust@example.com', 'Premium', 'Customer')
+
+        context = _auth_context(browser, staff_email)
+        page = context.new_page()
+        page.set_viewport_size(DESKTOP_VIEWPORT)
+        page.goto(
+            f"{django_server}/studio/users/?q=premium-cust",
+            wait_until="domcontentloaded",
+        )
+
+        row = page.locator(
+            'tbody tr', has_text='premium-cust@example.com'
+        ).first
+        assert row.is_visible()
+
+        # Tier pill is in the User cell, not in a separate Membership column.
+        user_cell = row.locator('td[data-label="User"]')
+        tier_pill = user_cell.locator('[data-testid="user-list-tier-pill"]')
+        assert tier_pill.count() == 1
+        assert tier_pill.inner_text().strip() == 'Premium'
+        assert tier_pill.get_attribute('data-tier') == 'premium'
+
+        # The legacy Membership column is gone -- the row has exactly four
+        # td cells with the new data-label set.
+        labels = row.locator('td').evaluate_all(
+            "nodes => nodes.map(n => n.getAttribute('data-label'))"
+        )
+        assert labels == ['User', 'Status', 'Last login', 'Actions']
+
+        context.close()
+
+    def test_row_tooltip_surfaces_slack_stripe_and_newsletter_state(
+        self, django_server, browser,
+    ):
+        """Row-level ``<tr title>`` carries Slack/Stripe/Newsletter facts.
+
+        With the Membership column gone, hover-on-row is the only place
+        the operator can see Slack ID, Stripe customer ID, Newsletter
+        state, and Slack workspace status without clicking through to
+        the detail page.
+        """
+        _ensure_tiers()
+        staff_email = 'name-layout-tooltip-admin@test.com'
+        _create_staff_user(staff_email)
+        _clear_users_except_staff(staff_email)
+
+        _create_user('hover@example.com', tier_slug='premium')
+        _set_user_names('hover@example.com', 'Hover', 'Target')
         _set_user_extras(
-            'premium-cust@example.com',
-            stripe_customer_id='cus_PREMIUM',
+            'hover@example.com',
+            stripe_customer_id='cus_HOVER',
+            slack_user_id='U01HOVER1',
             slack_member=True,
         )
 
@@ -358,66 +405,81 @@ class TestStudioUsersNameLayout:
         page = context.new_page()
         page.set_viewport_size(DESKTOP_VIEWPORT)
         page.goto(
-            f"{django_server}/studio/users/?q=cus_PREMIUM",
+            f"{django_server}/studio/users/?q=hover@example.com",
             wait_until="domcontentloaded",
         )
 
         row = page.locator(
-            'tbody tr', has_text='premium-cust@example.com'
+            'tbody tr', has_text='hover@example.com'
         ).first
-        badges = row.locator('[data-testid="membership-badges"]')
-        assert badges.is_visible()
-
-        slack = row.locator('[data-testid="slack-status"]')
-        assert slack.inner_text().strip() == 'Slack'
-
-        stripe = row.locator('[data-testid="stripe-indicator"]')
-        href = stripe.get_attribute('href')
-        assert href == (
-            'https://dashboard.stripe.com/acct_TEST/customers/cus_PREMIUM'
-        )
-
-        # All four badge categories are present.
-        badge_text = badges.inner_text()
-        assert 'Premium' in badge_text
-        assert 'Newsletter' in badge_text
-        assert 'Active' in badge_text
+        tooltip = row.get_attribute('title') or ''
+        # All four facts present, newline-joined.
+        assert 'Slack ID: U01HOVER1' in tooltip
+        assert 'Stripe customer: cus_HOVER' in tooltip
+        assert 'Newsletter: subscribed' in tooltip
+        assert 'Slack workspace: Member' in tooltip
 
         context.close()
 
-    def test_tags_overflow_chip_keeps_three_visible_plus_count(
+    def test_last_login_cell_renders_two_line_date_and_never_fallback(
         self, django_server, browser,
     ):
+        """Last login cell uses the two-line ``YYYY-MM-DD`` / ``HH:MM`` format
+        when the user has logged in, and ``-- never --`` otherwise."""
         _ensure_tiers()
-        staff_email = 'name-layout-tags-admin@test.com'
+        staff_email = 'name-layout-lastlogin-admin@test.com'
         _create_staff_user(staff_email)
         _clear_users_except_staff(staff_email)
 
-        _create_user('tagged@example.com', tier_slug='premium')
-        _set_user_names('tagged@example.com', 'Tagged', 'User')
-        _set_user_extras(
-            'tagged@example.com',
-            tags=['early-adopter', 'beta', 'paid-2026', 'vip', 'cohort-a'],
+        # User who has logged in.
+        _create_user('returning@example.com', tier_slug='free')
+        from accounts.models import User
+        ts = timezone.now().replace(microsecond=0)
+        User.objects.filter(email='returning@example.com').update(
+            last_login=ts,
         )
+        connection.close()
+
+        # User who has never logged in.
+        _create_user('absent@example.com', tier_slug='free')
+        User.objects.filter(email='absent@example.com').update(
+            last_login=None,
+        )
+        connection.close()
 
         context = _auth_context(browser, staff_email)
         page = context.new_page()
         page.set_viewport_size(DESKTOP_VIEWPORT)
+
+        # First: assert the two-line YYYY-MM-DD / HH:MM format on the
+        # user who has logged in.
         page.goto(
-            f"{django_server}/studio/users/?q=tagged@example.com",
+            f"{django_server}/studio/users/?q=returning@example.com",
             wait_until="domcontentloaded",
         )
+        logged_in_row = page.locator(
+            'tbody tr', has_text='returning@example.com'
+        ).first
+        last_login_cell = logged_in_row.locator(
+            '[data-testid="user-last-login"]'
+        )
+        assert last_login_cell.count() == 1
+        cell_text = last_login_cell.inner_text()
+        assert ts.strftime('%Y-%m-%d') in cell_text
+        assert ts.strftime('%H:%M') in cell_text
 
-        row = page.locator('tbody tr', has_text='tagged@example.com').first
-        tag_links = row.locator('[data-testid="user-tags-cell"] a')
-        assert tag_links.count() == 3
-        assert tag_links.nth(0).inner_text().strip() == 'early-adopter'
-        assert tag_links.nth(1).inner_text().strip() == 'beta'
-        assert tag_links.nth(2).inner_text().strip() == 'paid-2026'
-
-        overflow = row.locator('[data-testid="user-tags-overflow"]')
-        assert overflow.inner_text().strip() == '+2'
-        assert 'vip, cohort-a' in (overflow.get_attribute('aria-label') or '')
+        # Then: assert the ``-- never --`` fallback on the user with no
+        # last_login. Use a separate query to avoid Playwright picking
+        # the wrong row when both names share a substring.
+        page.goto(
+            f"{django_server}/studio/users/?q=absent@example.com",
+            wait_until="domcontentloaded",
+        )
+        never_row = page.locator(
+            'tbody tr', has_text='absent@example.com'
+        ).first
+        never_cell = never_row.locator('[data-testid="user-last-login"]')
+        assert '-- never --' in never_cell.inner_text()
 
         context.close()
 
@@ -539,7 +601,6 @@ class TestStudioUsersNameLayout:
 
         _create_user('avery.mobile@example.com', tier_slug='main')
         _set_user_names('avery.mobile@example.com', 'Avery', 'Garcia')
-        _set_user_extras('avery.mobile@example.com', tags=['early-adopter'])
 
         context = _auth_context(browser, staff_email)
         page = context.new_page()
@@ -555,20 +616,20 @@ class TestStudioUsersNameLayout:
         assert row.is_visible()
 
         cells = row.locator('td')
-        # Four data-label cells in fixed order: User / Membership / Tags / Actions.
+        # Four data-label cells in fixed order (issue #451):
+        # User / Status / Last login / Actions. The Membership and Tags
+        # columns are gone.
         assert cells.nth(0).get_attribute('data-label') == 'User'
-        assert cells.nth(1).get_attribute('data-label') == 'Membership'
-        assert cells.nth(2).get_attribute('data-label') == 'Tags'
+        assert cells.nth(1).get_attribute('data-label') == 'Status'
+        assert cells.nth(2).get_attribute('data-label') == 'Last login'
         assert cells.nth(3).get_attribute('data-label') == 'Actions'
 
-        # The User card includes the full name AND email AND joined.
+        # The User card includes the full name AND email.
         user_cell_text = cells.nth(0).inner_text()
         assert 'Avery Garcia' in user_cell_text
         assert 'avery.mobile@example.com' in user_cell_text
 
-        # The Tags cell still carries the chip; the Actions cell still
-        # has both buttons.
-        assert 'early-adopter' in cells.nth(2).inner_text()
+        # The Actions cell still has both buttons.
         view = row.locator('[data-testid="user-view-link"]')
         login_as = row.get_by_role('button', name='Login as')
         assert view.is_visible()

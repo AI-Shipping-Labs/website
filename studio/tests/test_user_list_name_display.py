@@ -1,22 +1,38 @@
-"""Tests for the User cell name/email layout on /studio/users/ (issue #451).
+"""Tests for the /studio/users/ list density rework (issue #451).
 
-Issue #451 surfaces ``first_name`` / ``last_name`` on every row dict and
-makes the User cell show ``full_name`` (when set) as the headline above
-the email. When neither name is set, email stays as the headline and the
-``user-name`` test-id is not rendered at all. The Joined date stays
-underneath both lines as the tertiary line.
+Issue #451 reshapes the user list table from four columns
+(User / Membership / Tags / Actions) to four leaner columns
+(User / Status / Last login / Actions). The User cell now carries the
+identity AND the tier pill (and an icon-only override pill) inline; the
+Status column gets its own slot; the Last login column surfaces a fact
+that was previously invisible; and a row-level ``<tr title="...">``
+tooltip carries Slack ID, Stripe customer ID, Newsletter state, and
+Slack workspace state on hover.
 
-The cell-padding / badge-padding / button-padding density tightening
-shipped alongside this change is only asserted indirectly: the structural
-markers (``data-testid``, ``aria-label``, ``truncate``, ``title``) are
-the contract the Playwright scanability suite relies on, and those still
-have to round-trip through this template.
+Tests in this module own:
+
+- the table-header contract (exactly four headers, in order, with the
+  Membership / Tags headers explicitly gone)
+- the User cell render matrix (full_name vs email fallback)
+- the tier + override pill placement inside the User cell
+- the Status pill values
+- the Last login two-line format and ``-- never --`` fallback
+- the row tooltip surface
+
+The Django unit tests own the rendered-string contract. The Playwright
+suite owns visual stacking, viewport row counts, and mobile reflow.
 """
 
+import datetime
 import re
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
+
+from accounts.models import TierOverride
+from payments.models import Tier
+from studio.views.users import _row_tooltip
 
 User = get_user_model()
 
@@ -60,14 +76,75 @@ def _extract_div_text(row_html, testid):
     return match.group(1)
 
 
-class UserListingFullNameRowDictTest(TestCase):
-    """``_build_user_listing`` must surface ``first_name``/``last_name``/``full_name``.
+def _extract_tr_attrs(html, user_pk):
+    """Return the attribute string of the ``<tr ...>`` open tag for a row."""
+    pattern = r'<tr([^>]*data-testid="user-row-' + str(user_pk) + r'"[^>]*)>'
+    match = re.search(pattern, html)
+    if not match:
+        raise AssertionError(
+            f'Could not locate user-row-{user_pk} <tr> in rendered HTML.'
+        )
+    return match.group(1)
 
-    The view-layer change is the source of truth for all four name
-    combinations; the template branches on ``row.full_name`` truthiness,
-    and the search-by-name regression already lives in
-    ``test_user_list_search.py``.
+
+class UserListHeaderRowTest(TestCase):
+    """The ``<thead>`` row must carry exactly the four new column headers.
+
+    The chosen layout is documented in issue #451 and the spec asks for
+    a hard regression guard so a future refactor cannot re-introduce the
+    Membership or Tags columns without flipping this test.
     """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        # A handful of users so the listing actually renders rows; the
+        # table-header contract is independent of row content.
+        cls.free = User.objects.create_user(
+            email='free@example.com', password='testpass',
+        )
+        cls.paid = User.objects.create_user(
+            email='paid@example.com', password='testpass',
+            tier=Tier.objects.get(slug='main'),
+        )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def _header_cells(self):
+        response = self.client.get('/studio/users/')
+        html = response.content.decode()
+        # Scope to thead so a stray ``<th>`` somewhere else can't satisfy
+        # the assertion.
+        thead_match = re.search(r'<thead[^>]*>(.*?)</thead>', html, re.DOTALL)
+        self.assertIsNotNone(
+            thead_match, 'No <thead> in rendered users list.',
+        )
+        thead_html = thead_match.group(1)
+        return re.findall(
+            r'<th[^>]*>\s*(.*?)\s*</th>', thead_html, re.DOTALL,
+        )
+
+    def test_header_row_has_exactly_four_cells_in_order(self):
+        cells = self._header_cells()
+        self.assertEqual(
+            cells,
+            ['User', 'Status', 'Last login', 'Actions'],
+        )
+
+    def test_header_does_not_contain_membership(self):
+        cells = self._header_cells()
+        self.assertNotIn('Membership', cells)
+
+    def test_header_does_not_contain_tags(self):
+        cells = self._header_cells()
+        self.assertNotIn('Tags', cells)
+
+
+class UserListingFullNameRowDictTest(TestCase):
+    """``_build_user_listing`` must surface every name field on every row."""
 
     @classmethod
     def setUpTestData(cls):
@@ -132,7 +209,7 @@ class UserListingFullNameRowDictTest(TestCase):
 
 
 class UserListingNameRenderingTest(TestCase):
-    """The User cell renders four distinct shapes for the four name combos."""
+    """The User cell renders different shapes for the four name combos."""
 
     @classmethod
     def setUpTestData(cls):
@@ -244,7 +321,7 @@ class UserListingNameRenderingTest(TestCase):
         response = self.client.get('/studio/users/?q=no-name')
         row_html = _row_html(response.content.decode(), self.neither.pk)
 
-        # No ``user-name`` div at all — the User cell is just email + Joined.
+        # No ``user-name`` div at all — the User cell is just email + tier.
         self.assertNotIn('data-testid="user-name"', row_html)
         # Email is still rendered with the same data-testid so the
         # Stripe/Slack/scanability tests keep working.
@@ -253,28 +330,398 @@ class UserListingNameRenderingTest(TestCase):
             'no-name@example.com',
         )
 
-    def test_no_name_row_still_shows_joined_date(self):
+    def test_no_name_row_renders_email_exactly_once(self):
+        # Issue #451: email-as-headline rows must NOT emit a secondary
+        # email line. Two ``user-email`` divs in one row is the bug.
         response = self.client.get('/studio/users/?q=no-name')
         row_html = _row_html(response.content.decode(), self.neither.pk)
-        self.assertIn('Joined ', row_html)
+        self.assertEqual(row_html.count('data-testid="user-email"'), 1)
 
-    def test_named_row_still_shows_joined_date(self):
-        # The Joined line is the tertiary line under both name + email
-        # for any row that has a name.
+    def test_named_row_does_not_render_joined_line(self):
+        # Issue #451 dropped the tertiary Joined line in favour of the
+        # Last login column. Regression guard so nobody puts it back.
         response = self.client.get('/studio/users/?q=avery.garcia')
         row_html = _row_html(response.content.decode(), self.both.pk)
-        self.assertIn('Joined ', row_html)
+        self.assertNotIn('Joined ', row_html)
+
+
+class UserListTierPillInsideUserCellTest(TestCase):
+    """The tier pill (and icon-only override pill) sit inside the User cell."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        cls.main = Tier.objects.get(slug='main')
+        cls.premium = Tier.objects.get(slug='premium')
+
+        cls.free_named = User.objects.create_user(
+            email='free@example.com', password='testpass',
+            first_name='Free', last_name='User',
+        )
+        cls.premium_named = User.objects.create_user(
+            email='premium@example.com', password='testpass',
+            first_name='Premium', last_name='User',
+            tier=cls.premium,
+        )
+
+        # User on Free with an active upgrade to Premium via override.
+        cls.upgraded = User.objects.create_user(
+            email='upgraded@example.com', password='testpass',
+            first_name='Upgraded', last_name='User',
+        )
+        TierOverride.objects.create(
+            user=cls.upgraded,
+            original_tier=None,
+            override_tier=cls.premium,
+            expires_at=timezone.now() + datetime.timedelta(days=30),
+            granted_by=cls.staff,
+            is_active=True,
+        )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def test_tier_pill_carries_data_attributes_and_label(self):
+        response = self.client.get('/studio/users/?q=premium@example.com')
+        row_html = _row_html(response.content.decode(), self.premium_named.pk)
+        # The pill carries the documented test-id and data-tier value.
+        pill_match = re.search(
+            r'<span([^>]*data-testid="user-list-tier-pill"[^>]*)>([^<]*)</span>',
+            row_html,
+        )
+        self.assertIsNotNone(pill_match)
+        attrs = pill_match.group(1)
+        self.assertIn('data-tier="premium"', attrs)
+        # Tier-coloured pill text equals the canonical tier display name.
+        self.assertEqual(pill_match.group(2).strip(), 'Premium')
+
+    def test_tier_pill_renders_inside_user_cell(self):
+        # The User cell is the first <td data-label="User"> in the row;
+        # the tier pill must live inside that cell so the operator scans
+        # name + tier as a single visual unit.
+        response = self.client.get('/studio/users/?q=premium@example.com')
+        row_html = _row_html(response.content.decode(), self.premium_named.pk)
+        user_cell_match = re.search(
+            r'<td[^>]*data-label="User"[^>]*>(.*?)</td>',
+            row_html,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(user_cell_match)
+        user_cell = user_cell_match.group(1)
+        self.assertIn('data-testid="user-list-tier-pill"', user_cell)
+
+    def test_email_as_headline_row_still_carries_tier_pill_inline(self):
+        # No name → primary line is email; tier pill still sits inline.
+        unnamed_premium = User.objects.create_user(
+            email='premium-anon@example.com', password='testpass',
+            tier=self.premium,
+        )
+        response = self.client.get(
+            '/studio/users/?q=premium-anon@example.com',
+        )
+        row_html = _row_html(response.content.decode(), unnamed_premium.pk)
+        # The User cell's primary line carries both email and tier pill.
+        user_cell_match = re.search(
+            r'<td[^>]*data-label="User"[^>]*>(.*?)</td>',
+            row_html,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(user_cell_match)
+        user_cell = user_cell_match.group(1)
+        self.assertIn('data-testid="user-email"', user_cell)
+        self.assertIn('data-testid="user-list-tier-pill"', user_cell)
+
+    def test_active_override_renders_icon_only_pill_in_user_cell(self):
+        response = self.client.get('/studio/users/?q=upgraded@example.com')
+        row_html = _row_html(response.content.decode(), self.upgraded.pk)
+
+        # Override pill has the documented test-id and title tooltip.
+        pill_match = re.search(
+            r'<span([^>]*data-testid="user-list-tier-override-pill"[^>]*)>(.*?)</span>',
+            row_html,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(pill_match)
+        attrs = pill_match.group(1)
+        self.assertIn('title="Tier override active"', attrs)
+        # Icon-only: the pill body is a <i data-lucide="shield-check"> and
+        # no human-readable "Override" text leaks into the DOM. The
+        # tooltip on the pill itself is what the operator sees on hover.
+        pill_body = pill_match.group(2)
+        self.assertIn('data-lucide="shield-check"', pill_body)
+        # Strip whitespace and the icon tag, then assert the remaining
+        # visible text is empty.
+        visible_text = re.sub(r'<[^>]+>', '', pill_body).strip()
+        self.assertEqual(visible_text, '')
+
+    def test_user_with_no_override_omits_override_pill(self):
+        response = self.client.get('/studio/users/?q=premium@example.com')
+        row_html = _row_html(response.content.decode(), self.premium_named.pk)
+        self.assertNotIn(
+            'data-testid="user-list-tier-override-pill"', row_html,
+        )
+
+
+class UserListStatusColumnTest(TestCase):
+    """The Status column renders the correct pill for each status value."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.viewer = User.objects.create_user(
+            email='viewer@test.com', password='testpass', is_staff=True,
+        )
+        cls.staff = User.objects.create_user(
+            email='staff-user@example.com', password='testpass', is_staff=True,
+        )
+        cls.active = User.objects.create_user(
+            email='active@example.com', password='testpass',
+        )
+        cls.inactive = User.objects.create_user(
+            email='inactive@example.com', password='testpass',
+            is_active=False,
+        )
+
+    def setUp(self):
+        self.client.login(email='viewer@test.com', password='testpass')
+
+    def _status_text(self, html, user_pk):
+        row_html = _row_html(html, user_pk)
+        # Status pill is a <span data-testid="user-status">...</span>.
+        match = re.search(
+            r'<span[^>]*data-testid="user-status"[^>]*>([^<]*)</span>',
+            row_html,
+        )
+        if match is None:
+            return None
+        return match.group(1).strip()
+
+    def test_status_renders_staff_pill_for_staff_user(self):
+        response = self.client.get('/studio/users/?q=staff-user@example.com')
+        self.assertEqual(
+            self._status_text(response.content.decode(), self.staff.pk),
+            'Staff',
+        )
+
+    def test_status_renders_active_pill_for_non_staff_active_user(self):
+        response = self.client.get('/studio/users/?q=active@example.com')
+        self.assertEqual(
+            self._status_text(response.content.decode(), self.active.pk),
+            'Active',
+        )
+
+    def test_status_renders_inactive_pill_for_disabled_user(self):
+        response = self.client.get('/studio/users/?q=inactive@example.com')
+        self.assertEqual(
+            self._status_text(response.content.decode(), self.inactive.pk),
+            'Inactive',
+        )
+
+    def test_status_pill_inside_status_cell(self):
+        # The pill must live inside the new <td data-label="Status"> cell;
+        # regression guard against accidentally putting it back in the
+        # User cell as part of a future refactor.
+        response = self.client.get('/studio/users/?q=active@example.com')
+        row_html = _row_html(response.content.decode(), self.active.pk)
+        status_cell_match = re.search(
+            r'<td[^>]*data-label="Status"[^>]*>(.*?)</td>',
+            row_html,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(status_cell_match)
+        self.assertIn(
+            'data-testid="user-status"', status_cell_match.group(1),
+        )
+
+
+class UserListLastLoginColumnTest(TestCase):
+    """The Last login cell renders date+time or ``-- never --``."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        cls.recent = User.objects.create_user(
+            email='recent@example.com', password='testpass',
+        )
+        cls.recent.last_login = datetime.datetime(
+            2026, 5, 19, 14, 22, 11, tzinfo=datetime.timezone.utc,
+        )
+        cls.recent.save(update_fields=['last_login'])
+
+        cls.never = User.objects.create_user(
+            email='never@example.com', password='testpass',
+        )
+        # ``create_user`` leaves last_login as None — the explicit assign
+        # below documents the contract.
+        cls.never.last_login = None
+        cls.never.save(update_fields=['last_login'])
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def _last_login_cell(self, html, user_pk):
+        row_html = _row_html(html, user_pk)
+        match = re.search(
+            r'<td[^>]*data-testid="user-last-login"[^>]*>(.*?)</td>',
+            row_html,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, 'Last login cell missing from row.')
+        return match.group(1)
+
+    def test_recent_login_renders_date_on_first_line_and_time_on_second(self):
+        response = self.client.get('/studio/users/?q=recent@example.com')
+        cell = self._last_login_cell(
+            response.content.decode(), self.recent.pk,
+        )
+        # Both the date and the HH:mm time appear in the cell.
+        self.assertIn('2026-05-19', cell)
+        # The exact rendered hour depends on TIME_ZONE; the issue spec
+        # uses operator timezone. In CI the default settings.TIME_ZONE
+        # is UTC so HH:mm is exactly 14:22.
+        self.assertIn('14:22', cell)
+        # Two visible lines: the date sits inside a div, the time inside
+        # a separate div. Two ``<div`` tags is the minimum.
+        self.assertGreaterEqual(cell.count('<div'), 2)
+
+    def test_null_last_login_renders_literal_never(self):
+        response = self.client.get('/studio/users/?q=never@example.com')
+        cell = self._last_login_cell(
+            response.content.decode(), self.never.pk,
+        )
+        self.assertIn('-- never --', cell)
+        # And no digits — would imply a stray date/time slipped through.
+        text = re.sub(r'<[^>]+>', '', cell)
+        self.assertFalse(
+            re.search(r'\d', text),
+            f'Expected no digits in the Last login cell, got: {text!r}',
+        )
+
+
+class RowTooltipHelperTest(TestCase):
+    """``_row_tooltip`` produces the newline-joined hover string."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.full = User.objects.create_user(
+            email='full@example.com', password='testpass',
+            stripe_customer_id='cus_ABC',
+            slack_user_id='U01ABC123',
+        )
+        cls.full.slack_member = True
+        cls.full.slack_checked_at = timezone.now()
+        cls.full.save(update_fields=['slack_member', 'slack_checked_at'])
+
+        cls.minimal = User.objects.create_user(
+            email='minimal@example.com', password='testpass',
+            unsubscribed=True,
+        )
+        # Never checked Slack workspace.
+        cls.minimal.slack_checked_at = None
+        cls.minimal.save(update_fields=['slack_checked_at'])
+
+    def test_tooltip_has_all_four_lines_when_slack_and_stripe_set(self):
+        tooltip = _row_tooltip(self.full, 'Member')
+        self.assertIn('Slack ID: U01ABC123', tooltip)
+        self.assertIn('Stripe customer: cus_ABC', tooltip)
+        self.assertIn('Newsletter: subscribed', tooltip)
+        self.assertIn('Slack workspace: Member', tooltip)
+
+    def test_tooltip_omits_slack_id_line_when_user_has_no_slack_id(self):
+        tooltip = _row_tooltip(self.minimal, 'Never checked')
+        self.assertNotIn('Slack ID:', tooltip)
+
+    def test_tooltip_omits_stripe_line_when_user_has_no_customer_id(self):
+        tooltip = _row_tooltip(self.minimal, 'Never checked')
+        self.assertNotIn('Stripe customer:', tooltip)
+
+    def test_tooltip_always_includes_newsletter_and_slack_workspace(self):
+        # Even with neither Slack ID nor Stripe ID, hover must not be empty.
+        tooltip = _row_tooltip(self.minimal, 'Never checked')
+        self.assertIn('Newsletter: unsubscribed', tooltip)
+        self.assertIn('Slack workspace: Never checked', tooltip)
+
+    def test_tooltip_lines_are_newline_joined(self):
+        # The template renders ``title="{{ row.row_tooltip }}"`` raw, so
+        # newline-joining is the right operator-visible separator. Most
+        # browsers render \n inside title attributes as a line break.
+        tooltip = _row_tooltip(self.full, 'Member')
+        # All four parts present and separated by single newlines.
+        self.assertEqual(tooltip.count('\n'), 3)
+
+
+class RowTooltipRenderedOnTrTest(TestCase):
+    """Each ``<tr>`` carries the row tooltip as a ``title`` attribute."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        cls.with_ids = User.objects.create_user(
+            email='with-ids@example.com', password='testpass',
+            stripe_customer_id='cus_ABC',
+            slack_user_id='U01ABC123',
+        )
+        cls.with_ids.slack_member = True
+        cls.with_ids.slack_checked_at = timezone.now()
+        cls.with_ids.save(update_fields=['slack_member', 'slack_checked_at'])
+
+        cls.minimal = User.objects.create_user(
+            email='minimal-row@example.com', password='testpass',
+            unsubscribed=True,
+        )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def test_tr_title_contains_slack_id_when_set(self):
+        response = self.client.get('/studio/users/?q=with-ids@example.com')
+        attrs = _extract_tr_attrs(
+            response.content.decode(), self.with_ids.pk,
+        )
+        self.assertIn('Slack ID: U01ABC123', attrs)
+
+    def test_tr_title_contains_stripe_customer_when_set(self):
+        response = self.client.get('/studio/users/?q=with-ids@example.com')
+        attrs = _extract_tr_attrs(
+            response.content.decode(), self.with_ids.pk,
+        )
+        self.assertIn('Stripe customer: cus_ABC', attrs)
+
+    def test_tr_title_contains_newsletter_state(self):
+        response = self.client.get('/studio/users/?q=with-ids@example.com')
+        attrs = _extract_tr_attrs(
+            response.content.decode(), self.with_ids.pk,
+        )
+        self.assertIn('Newsletter: subscribed', attrs)
+
+    def test_tr_title_contains_slack_workspace_state(self):
+        response = self.client.get('/studio/users/?q=with-ids@example.com')
+        attrs = _extract_tr_attrs(
+            response.content.decode(), self.with_ids.pk,
+        )
+        self.assertIn('Slack workspace: Member', attrs)
+
+    def test_tr_title_omits_slack_and_stripe_lines_when_unset(self):
+        response = self.client.get('/studio/users/?q=minimal-row@example.com')
+        attrs = _extract_tr_attrs(
+            response.content.decode(), self.minimal.pk,
+        )
+        # No Slack ID, no Stripe — those substrings must not appear in
+        # the title at all.
+        self.assertNotIn('Slack ID:', attrs)
+        self.assertNotIn('Stripe customer:', attrs)
+        # Newsletter + Slack workspace always present.
+        self.assertIn('Newsletter: unsubscribed', attrs)
+        self.assertIn('Slack workspace: Never checked', attrs)
 
 
 class UserListingNameSearchRoundTripTest(TestCase):
-    """Search by name surfaces the matched row, and the row carries the name.
-
-    The search-engine OR-match against ``first_name`` / ``last_name``
-    already has dedicated coverage in ``test_user_list_search.py``; this
-    test guards the additional contract introduced by issue #451 — when
-    you search by name, the matched row's ``data-testid="user-name"``
-    cell contains the matched substring.
-    """
+    """Search by name surfaces the matched row, and the row carries the name."""
 
     @classmethod
     def setUpTestData(cls):
@@ -318,85 +765,8 @@ class UserListingNameSearchRoundTripTest(TestCase):
         self.assertNotIn('no-name@example.com', emails)
 
 
-class UserListingPreservesPriorFeaturesTest(TestCase):
-    """Prior issues' features must survive the density tightening.
-
-    Density-only changes can silently drop test-ids or attributes when
-    refactoring the markup. Lock the contract so the next density tweak
-    fails fast instead of breaking the Playwright suite.
-    """
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        # Premium user with: name set, slack member, stripe ID, several tags.
-        cls.user = User.objects.create_user(
-            email='avery.garcia@example.com', password='testpass',
-            first_name='Avery', last_name='Garcia',
-            stripe_customer_id='cus_PREMIUM',
-        )
-        cls.user.tags = ['early-adopter', 'beta', 'paid-2026', 'vip', 'cohort-a']
-        cls.user.slack_member = True
-        cls.user.slack_checked_at = cls.user.date_joined
-        cls.user.save(update_fields=['tags', 'slack_member', 'slack_checked_at'])
-
-    def setUp(self):
-        self.client.login(email='staff@test.com', password='testpass')
-
-    def test_slack_badge_still_renders_for_member(self):
-        response = self.client.get('/studio/users/?q=avery.garcia')
-        row_html = _row_html(response.content.decode(), self.user.pk)
-        # Slack is a tri-state badge from issue #358; the testid + label
-        # are the contract.
-        self.assertIn('data-testid="slack-status"', row_html)
-        self.assertIn('>Slack<', row_html)
-
-    def test_stripe_indicator_renders_for_user_with_customer_id(self):
-        # Stripe glyph from issue #441; visibility is keyed off
-        # ``row.stripe_customer_id`` and unchanged by the density tweak.
-        response = self.client.get('/studio/users/?q=cus_PREMIUM')
-        row_html = _row_html(response.content.decode(), self.user.pk)
-        self.assertIn('data-testid="stripe-indicator"', row_html)
-
-    def test_tags_overflow_chip_caps_at_three_visible_plus_count(self):
-        # Tag overflow from issue #410: 5 tags -> 3 visible + +2.
-        response = self.client.get('/studio/users/?q=avery.garcia')
-        row_html = _row_html(response.content.decode(), self.user.pk)
-        self.assertIn('data-testid="user-tags-overflow">+2<', row_html)
-        # The hidden-tag tooltip on the overflow chip stays as-is.
-        self.assertIn('aria-label="2 more tags: vip, cohort-a"', row_html)
-
-    def test_action_buttons_still_present_at_view_and_login_as(self):
-        # Action button padding tightened, but both buttons stay visible
-        # with text labels (no icon-only switch).
-        response = self.client.get('/studio/users/?q=avery.garcia')
-        row_html = _row_html(response.content.decode(), self.user.pk)
-        self.assertIn('data-testid="user-view-link"', row_html)
-        self.assertIn('Login as', row_html)
-
-    def test_data_label_attributes_preserve_mobile_stacked_layout(self):
-        # Mobile fallback CSS keys off data-label — the four cells' labels
-        # must stay exactly User / Membership / Tags / Actions so the
-        # cards keep their headings.
-        response = self.client.get('/studio/users/?q=avery.garcia')
-        row_html = _row_html(response.content.decode(), self.user.pk)
-        self.assertIn('data-label="User"', row_html)
-        self.assertIn('data-label="Membership"', row_html)
-        self.assertIn('data-label="Tags"', row_html)
-        self.assertIn('data-label="Actions"', row_html)
-
-
 class UserListingDensityClassesTest(TestCase):
-    """The density tightening reaches the rendered HTML.
-
-    These assertions are the cheapest way to guard the new spacing
-    contract from a future refactor that drifts the cell padding back to
-    ``px-4 py-2.5``. The Playwright scanability test enforces the
-    measured row-count target; this test enforces the class-name
-    contract.
-    """
+    """The density tightening reaches the rendered HTML."""
 
     @classmethod
     def setUpTestData(cls):
@@ -419,7 +789,7 @@ class UserListingDensityClassesTest(TestCase):
         self.assertIn('px-3 py-1.5', row_html)
         self.assertNotIn('px-4 py-2.5', row_html)
 
-    def test_membership_badges_use_tightened_padding(self):
+    def test_tier_pill_uses_tightened_padding(self):
         response = self.client.get('/studio/users/?q=dense')
         row_html = _row_html(response.content.decode(), self.user.pk)
         # Badges drop from px-2 to px-1.5 and leading-5 to leading-4.
@@ -434,3 +804,43 @@ class UserListingDensityClassesTest(TestCase):
         # rendered class attribute.
         response = self.client.get('/studio/users/?q=dense')
         self.assertContains(response, 'px-2.5 py-1')
+
+
+class UserListFilteredCountMatchesRowCountTest(TestCase):
+    """The chip stat count equals the rendered tbody row count."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        cls.main = Tier.objects.get(slug='main')
+        # 4 paid users, 3 free.
+        for idx in range(4):
+            User.objects.create_user(
+                email=f'paid-{idx}@example.com', password='testpass',
+                tier=cls.main,
+            )
+        for idx in range(3):
+            User.objects.create_user(
+                email=f'free-{idx}@example.com', password='testpass',
+            )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def test_paid_filter_row_count_equals_paid_chip_stat(self):
+        response = self.client.get('/studio/users/?filter=paid')
+        # Paid stat in the context is 4.
+        self.assertEqual(response.context['paid_count'], 4)
+        # Rendered rows are 4.
+        html = response.content.decode()
+        tbody_match = re.search(
+            r'<tbody[^>]*>(.*?)</tbody>', html, re.DOTALL,
+        )
+        self.assertIsNotNone(tbody_match)
+        tbody = tbody_match.group(1)
+        row_count = len(re.findall(
+            r'<tr[^>]*data-testid="user-row-\d+"', tbody,
+        ))
+        self.assertEqual(row_count, 4)

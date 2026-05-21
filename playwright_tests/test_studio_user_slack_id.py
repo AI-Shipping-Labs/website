@@ -1,6 +1,7 @@
 """Playwright E2E for the Studio Slack ID surface (issue #561).
 
-Covers the eight scenarios from the groomed spec:
+Covers the remaining scenarios from the groomed spec after #451
+narrowed Slack deep-linking to the user detail page:
 
 1. Operator finds a member by pasting their Slack ID into the users-list
    search box.
@@ -14,10 +15,11 @@ Covers the eight scenarios from the groomed spec:
    row).
 6. Non-staff users cannot reach the slack-id edit endpoint (POST is
    rejected and the DB is unchanged).
-7. Member list lets the operator click straight from a row to Slack
-   when both halves of the deep-link are configured.
-8. Operator updates the team ID once and every member link in the listing
-   starts working without per-user edits.
+7. (Deleted in #451) Per-row Slack anchor on the listing -- the listing
+   surfaces Slack ID via the row's ``<tr title>`` tooltip now; the
+   clickable "Open in Slack" link is detail-page only (Scenario 2).
+8. Operator updates the team ID once and the member detail page's
+   "Open in Slack" link starts working without per-user edits.
 
 Usage:
     uv run pytest playwright_tests/test_studio_user_slack_id.py -v
@@ -225,16 +227,23 @@ class TestStudioUserSlackId:
             == "Configure SLACK_TEAM_ID to enable the link"
         )
 
-        # On the users list, the row's Slack pill is NOT a clickable anchor.
+        # Issue #451 removed the per-row Slack pill from /studio/users/.
+        # The Slack ID still surfaces via the row-level ``<tr title>``
+        # tooltip, and the row is not made clickable as a Slack anchor
+        # (that lives on the user detail page now). Confirm the tooltip
+        # carries the ID even though the team_id is unset -- the missing
+        # team_id only suppresses the detail-page anchor.
         page.goto(
             f"{django_server}/studio/users/?q=ada@example.com",
             wait_until="domcontentloaded",
         )
         row = page.locator(f'[data-testid="user-row-{member_pk}"]')
         assert row.is_visible()
-        # Pill still renders.
-        assert row.locator('[data-testid="slack-status"]').count() == 1
-        # But there is no slack-profile-link anchor wrapping it.
+        tooltip = row.get_attribute("title") or ""
+        assert "Slack ID: U01ADA123" in tooltip
+        # The deleted per-row glyphs from the old Membership column must
+        # not reappear -- those have moved to the detail page / tooltip.
+        assert row.locator('[data-testid="slack-status"]').count() == 0
         assert row.locator('[data-testid="slack-profile-link"]').count() == 0
         context.close()
 
@@ -388,67 +397,46 @@ class TestStudioUserSlackId:
         context.close()
 
     # ---------------- Scenario 7 --------------------------------------------
-
-    def test_list_row_pill_links_directly_to_slack_when_configured(
-        self, django_server, browser,
-    ):
-        staff_email = "slack-rowlink-admin@test.com"
-        _create_staff_user(staff_email)
-        _reset_users_and_settings(staff_email)
-        _set_team_id("T01TEAM123")
-        ada_pk = _create_member("ada@example.com", slack_user_id="U01ADA123")
-        alan_pk = _create_member("alan@example.com")  # no slack id
-
-        context = _auth_context(browser, staff_email)
-        page = context.new_page()
-        page.goto(
-            f"{django_server}/studio/users/",
-            wait_until="domcontentloaded",
-        )
-
-        # Ada's row: pill IS a clickable anchor with the right href.
-        ada_row = page.locator(f'[data-testid="user-row-{ada_pk}"]')
-        assert ada_row.is_visible()
-        link = ada_row.locator('[data-testid="slack-profile-link"]')
-        assert link.count() == 1
-        assert (
-            link.get_attribute("href")
-            == "https://app.slack.com/client/T01TEAM123/U01ADA123"
-        )
-        assert link.get_attribute("target") == "_blank"
-
-        # Alan's row: pill is NOT a clickable anchor (no Slack ID).
-        alan_row = page.locator(f'[data-testid="user-row-{alan_pk}"]')
-        assert alan_row.is_visible()
-        assert alan_row.locator('[data-testid="slack-profile-link"]').count() == 0
-        # The "Slack unchecked" pill text still renders.
-        assert alan_row.locator('[data-testid="slack-status"]').count() == 1
-        context.close()
+    # Issue #451 removed the per-row Slack profile anchor from the
+    # /studio/users/ listing -- the Slack ID now surfaces via the row's
+    # ``<tr title>`` tooltip and the clickable "Open in Slack" anchor
+    # lives on /studio/users/<id>/ only (covered by Scenario 2 and the
+    # detail-page scenarios). The old
+    # ``test_list_row_pill_links_directly_to_slack_when_configured`` test
+    # was deleted as part of this collapse -- the contract it asserted
+    # (``slack-profile-link`` on the listing row) no longer exists.
 
     # ---------------- Scenario 8 --------------------------------------------
 
-    def test_updating_team_id_once_enables_every_member_link(
+    def test_updating_team_id_once_enables_member_detail_link(
         self, django_server, browser,
     ):
-        # Start with no team ID set and three members carrying Slack IDs.
+        # Issue #451 narrowed Slack deep-linking to the user detail page.
+        # The "operator updates the team ID once and every member link
+        # starts working" intent is still meaningful: setting the team ID
+        # is what flips every user-detail page's anchor on. We exercise
+        # the flow end-to-end with a single representative member
+        # (Scenario 2 already locks the detail-page anchor format).
         staff_email = "slack-config-admin@test.com"
         _create_staff_user(staff_email)
         _reset_users_and_settings(staff_email)
         ada_pk = _create_member("ada@example.com", slack_user_id="U01ADA123")
-        grace_pk = _create_member("grace@example.com", slack_user_id="U02GRACE9")
-        linus_pk = _create_member("linus@example.com", slack_user_id="U03LINUS0")
 
         context = _auth_context(browser, staff_email)
         page = context.new_page()
 
-        # Before saving the team ID: no anchors on any row.
+        # Before saving the team ID: detail page renders the ID but no
+        # "Open in Slack" anchor (matches Scenario 3).
         page.goto(
-            f"{django_server}/studio/users/",
+            f"{django_server}/studio/users/{ada_pk}/",
             wait_until="domcontentloaded",
         )
-        for pk in (ada_pk, grace_pk, linus_pk):
-            row = page.locator(f'[data-testid="user-row-{pk}"]')
-            assert row.locator('[data-testid="slack-profile-link"]').count() == 0
+        assert (
+            page.locator(
+                '[data-testid="user-detail-slack-profile-link"]'
+            ).count()
+            == 0
+        )
 
         # 1. Visit /studio/settings/.
         page.goto(
@@ -456,38 +444,31 @@ class TestStudioUserSlackId:
             wait_until="domcontentloaded",
         )
         # 2. Set SLACK_TEAM_ID to T01TEAM123 and save.
-        # Use the form helper directly — the page renders one input per
-        # registered key inside the slack group's form.
+        # The page renders one input per registered key inside the slack
+        # group's form; submit via the form helper to avoid disambiguating
+        # multiple group save buttons.
         team_id_input = page.locator('input[name="SLACK_TEAM_ID"]')
         assert team_id_input.count() == 1, (
             "Settings dashboard must render an input for SLACK_TEAM_ID"
         )
         team_id_input.fill("T01TEAM123")
-        # The slack group's save button submits the form scoped to that group.
-        # The Settings page co-locates each group's submit; submit via JS
-        # to avoid CSS-tricks needed to disambiguate visually overlapping
-        # buttons across groups.
         team_id_input.evaluate("el => el.form.submit()")
         page.wait_for_load_state("domcontentloaded")
 
-        # 3. After save, every member row in /studio/users/ now has a
-        #    clickable Slack anchor pointing at the right URL.
+        # 3. After save, Ada's detail page has the clickable Slack
+        #    anchor pointing at the right URL.
         page.goto(
-            f"{django_server}/studio/users/",
+            f"{django_server}/studio/users/{ada_pk}/",
             wait_until="domcontentloaded",
         )
-        for pk, slack_id in (
-            (ada_pk, "U01ADA123"),
-            (grace_pk, "U02GRACE9"),
-            (linus_pk, "U03LINUS0"),
-        ):
-            row = page.locator(f'[data-testid="user-row-{pk}"]')
-            link = row.locator('[data-testid="slack-profile-link"]')
-            assert link.count() == 1, (
-                f"Row for pk={pk} should have a Slack anchor after team ID set"
-            )
-            assert (
-                link.get_attribute("href")
-                == f"https://app.slack.com/client/T01TEAM123/{slack_id}"
-            )
+        link = page.locator(
+            '[data-testid="user-detail-slack-profile-link"]'
+        )
+        assert link.count() == 1, (
+            "User detail page should expose the Slack anchor after team ID set"
+        )
+        assert (
+            link.get_attribute("href")
+            == "https://app.slack.com/client/T01TEAM123/U01ADA123"
+        )
         context.close()

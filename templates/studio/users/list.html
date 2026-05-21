@@ -148,148 +148,99 @@
   {% if show_pager %}{% include "studio/users/_pager.html" %}{% endif %}
   <table class="w-full table-fixed">
     <colgroup>
-      <col class="w-[30%]">
-      <col class="w-[31%]">
-      <col class="w-[21%]">
-      <col class="w-[18%]">
+      <col class="w-[44%]">
+      <col class="w-[14%]">
+      <col class="w-[22%]">
+      <col class="w-[20%]">
     </colgroup>
     <thead class="bg-secondary">
       <tr>
         <th class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
-        <th class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Membership</th>
-        <th class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tags</th>
+        <th class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Last login</th>
         <th class="text-right px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-border">
       {% for row in page.object_list %}
-      <tr class="hover:bg-secondary/50 transition-colors" data-testid="user-row-{{ row.pk }}">
+      {% comment %}
+        Issue #451: Row-level tooltip surfaces Slack ID, Stripe customer
+        ID, Newsletter state, and Slack workspace state on hover so the
+        per-row Membership/Tags columns can drop away without losing
+        operator-relevant context. Tooltip contents come from the view's
+        ``_row_tooltip`` helper (newline-joined fields).
+      {% endcomment %}
+      <tr class="hover:bg-secondary/50 transition-colors"
+          data-testid="user-row-{{ row.pk }}"
+          title="{{ row.row_tooltip }}">
         <td class="px-3 py-1.5 align-top min-w-0" data-label="User">
           {% comment %}
             The User cell's identity area links to /studio/users/<id>/. The
             row keeps an explicit `View` action in the actions column so we
             satisfy both AC bullets: clickable identity AND a discoverable
             row action that matches the Studio table-action pattern.
+
+            Layout (issue #451):
+            - Primary line: name (when ``full_name`` is set) OR email
+              (when ``full_name`` is empty), with the tier pill and the
+              icon-only override pill inline immediately after.
+            - Secondary line: email (only when the primary line was the
+              name). Omitted entirely for email-as-headline rows so the
+              cell doesn't render the email twice.
           {% endcomment %}
           <a href="{% url 'studio_user_detail' row.pk %}"
              data-testid="user-row-link"
              class="block min-w-0 hover:text-accent focus:outline-none focus:ring-1 focus:ring-accent rounded-sm">
-            {% if row.full_name %}
-            <div class="text-sm font-medium text-foreground truncate"
-                 title="{{ row.full_name }}"
-                 aria-label="Name {{ row.full_name }}"
-                 data-testid="user-name">{{ row.full_name }}</div>
-            <div class="flex min-w-0 items-center gap-1 text-xs leading-4 text-muted-foreground">
-              <div class="truncate"
+            <div class="flex min-w-0 items-center gap-2">
+              {% if row.full_name %}
+              <div class="truncate text-sm font-medium text-foreground"
+                   title="{{ row.full_name }}"
+                   aria-label="Name {{ row.full_name }}"
+                   data-testid="user-name">{{ row.full_name }}</div>
+              {% else %}
+              <div class="truncate text-sm font-medium text-foreground"
                    title="{{ row.email }}"
                    aria-label="Email {{ row.email }}"
                    data-testid="user-email">{{ row.email }}</div>
-              <span class="shrink-0 text-[11px]">&middot; Joined {{ row.date_joined|date:"M d, Y" }}</span>
+              {% endif %}
+              <span class="shrink-0 inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium leading-4 {{ row.tier_slug|studio_tier_pill_classes }}"
+                    data-testid="user-list-tier-pill"
+                    data-tier="{{ row.tier_slug }}">{{ row.tier_name }}</span>
+              {% if row.tier_source == 'override' %}
+              <span class="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-amber-300 border border-amber-500/30"
+                    data-testid="user-list-tier-override-pill"
+                    title="Tier override active"
+                    aria-label="Tier override active">
+                <i data-lucide="shield-check" class="w-3 h-3"></i>
+              </span>
+              {% endif %}
             </div>
-            {% else %}
-            <div class="text-sm font-medium text-foreground truncate"
+            {% if row.full_name %}
+            <div class="truncate text-xs leading-4 text-muted-foreground"
                  title="{{ row.email }}"
                  aria-label="Email {{ row.email }}"
                  data-testid="user-email">{{ row.email }}</div>
-            <div class="text-[11px] leading-4 text-muted-foreground">Joined {{ row.date_joined|date:"M d, Y" }}</div>
             {% endif %}
           </a>
         </td>
-        <td class="px-3 py-1.5 align-top" data-label="Membership">
-          <div class="flex flex-wrap items-center gap-1" data-testid="membership-badges" aria-label="Membership state for {{ row.email }}">
-            <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium leading-4 {{ row.tier_slug|studio_tier_pill_classes }}"
-                  data-testid="user-list-tier-pill"
-                  data-tier="{{ row.tier_slug }}">{{ row.tier_name }}</span>
-            {% if row.tier_source == 'override' %}
-            <span class="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-amber-300 border border-amber-500/30"
-                  data-testid="user-list-tier-override-pill">
-              <i data-lucide="shield-check" class="w-3 h-3"></i>
-              Override
-            </span>
-            {% endif %}
-            {% if row.is_subscribed %}
-            <span class="inline-flex items-center rounded-full bg-green-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-green-300">Newsletter</span>
-            {% else %}
-            <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground">No newsletter</span>
-            {% endif %}
-            {% comment %}
-              Slack pill (issue #358) + optional deep-link anchor (issue #561).
-              When the user has a slack_user_id AND the operator has set
-              SLACK_TEAM_ID in Studio, the pill is wrapped in an <a> that
-              opens the member's Slack profile in a new tab. Pill text
-              stays unchanged ("Slack" / "No Slack" / "Slack unchecked")
-              so existing pill assertions keep passing.
-            {% endcomment %}
-            {% if row.slack_user_id and slack_team_id %}
-            <a href="https://app.slack.com/client/{{ slack_team_id }}/{{ row.slack_user_id }}"
-               target="_blank" rel="noopener"
-               data-testid="slack-profile-link"
-               aria-label="Open {{ row.email }} in Slack"
-               class="inline-flex">
-              {% if row.slack_status == 'Member' %}
-              <span class="inline-flex items-center rounded-full bg-purple-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-purple-300" data-testid="slack-status">Slack</span>
-              {% elif row.slack_status == 'Not in Slack' %}
-              <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground" data-testid="slack-status">No Slack</span>
-              {% else %}
-              <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground" data-testid="slack-status">Slack unchecked</span>
-              {% endif %}
-            </a>
-            {% else %}
-              {% if row.slack_status == 'Member' %}
-              <span class="inline-flex items-center rounded-full bg-purple-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-purple-300" data-testid="slack-status">Slack</span>
-              {% elif row.slack_status == 'Not in Slack' %}
-              <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground" data-testid="slack-status">No Slack</span>
-              {% else %}
-              <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground" data-testid="slack-status">Slack unchecked</span>
-              {% endif %}
-            {% endif %}
-            {% if row.stripe_customer_id %}
-              {% if stripe_account_id %}
-              <a href="https://dashboard.stripe.com/{{ stripe_account_id }}/customers/{{ row.stripe_customer_id }}"
-                 target="_blank" rel="noopener"
-                 aria-label="Stripe customer"
-                 title="Open {{ row.stripe_customer_id }} in Stripe"
-                 data-testid="stripe-indicator"
-                 class="inline-flex items-center text-muted-foreground hover:text-foreground">
-                {% include "studio/_icons.html" with name="stripe" %}
-              </a>
-              {% else %}
-              <span aria-label="Stripe customer"
-                    title="{{ row.stripe_customer_id }}"
-                    data-testid="stripe-indicator"
-                    class="inline-flex items-center text-muted-foreground">
-                {% include "studio/_icons.html" with name="stripe" %}
-              </span>
-              {% endif %}
-            {% endif %}
-            {% if row.status == 'Staff' %}
-            <span class="inline-flex items-center rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-blue-300">Staff</span>
-            {% elif row.status == 'Inactive' %}
-            <span class="inline-flex items-center rounded-full bg-red-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-red-300">Inactive</span>
-            {% else %}
-            <span class="inline-flex items-center rounded-full bg-green-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-green-300">Active</span>
-            {% endif %}
-          </div>
-        </td>
-        <td class="px-3 py-1.5 align-top" data-label="Tags" data-testid="user-tags-cell">
-          {% if row.tags %}
-          <div class="flex flex-wrap items-center gap-1" aria-label="Visible tags for {{ row.email }}">
-            {% for tag in row.visible_tags %}
-            <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}&amp;tag={{ tag|urlencode }}"
-               class="inline-flex max-w-[9rem] items-center rounded-full border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[11px] leading-4 text-accent hover:bg-accent/20"
-               title="Filter by tag {{ tag }}">
-              <span class="truncate">{{ tag }}</span>
-            </a>
-            {% endfor %}
-            {% if row.tag_overflow_count %}
-            <span class="inline-flex items-center rounded-full border border-border bg-secondary px-1.5 py-0.5 text-[11px] leading-4 text-muted-foreground"
-                  title="Hidden tags: {{ row.hidden_tags_label }}"
-                  aria-label="{{ row.tag_overflow_count }} more tags: {{ row.hidden_tags_label }}"
-                  data-testid="user-tags-overflow">+{{ row.tag_overflow_count }}</span>
-            {% endif %}
-          </div>
+        <td class="px-3 py-1.5 align-top" data-label="Status">
+          {% if row.status == 'Staff' %}
+          <span class="inline-flex items-center rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-blue-300"
+                data-testid="user-status">Staff</span>
+          {% elif row.status == 'Inactive' %}
+          <span class="inline-flex items-center rounded-full bg-red-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-red-300"
+                data-testid="user-status">Inactive</span>
           {% else %}
-          <span class="text-xs text-muted-foreground">-</span>
+          <span class="inline-flex items-center rounded-full bg-green-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-green-300"
+                data-testid="user-status">Active</span>
+          {% endif %}
+        </td>
+        <td class="px-3 py-1.5 align-top" data-label="Last login" data-testid="user-last-login">
+          {% if row.last_login %}
+          <div class="text-xs text-foreground">{{ row.last_login|date:"Y-m-d" }}</div>
+          <div class="text-[11px] leading-4 text-muted-foreground">{{ row.last_login|date:"H:i" }}</div>
+          {% else %}
+          <span class="text-xs text-muted-foreground">-- never --</span>
           {% endif %}
         </td>
         <td class="px-3 py-1.5 align-top {% studio_list_class 'action_cell' %}" data-label="Actions">

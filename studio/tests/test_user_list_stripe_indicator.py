@@ -1,16 +1,26 @@
-"""Tests for the per-row Stripe indicator on /studio/users/ (issue #441).
+"""Tests for surfacing Stripe customer data on /studio/users/ (issue #441).
 
-When a user has a non-empty ``stripe_customer_id`` the listing renders an
-inline Stripe glyph in the Membership cell. When the operator has set
-``STRIPE_DASHBOARD_ACCOUNT_ID`` in Studio the glyph is wrapped in an
-``<a>`` that deep-links to the matching customer page on the Stripe
-dashboard; otherwise it renders as a non-interactive ``<span>`` with the
-``cus_*`` ID in a ``title`` tooltip so the operator can still copy it.
+Issue #441 introduced an inline Stripe glyph on each row that carried
+a ``cus_*`` ID; issue #451 removed the per-row Membership column and
+moved the Stripe deep-link to the user detail page. On the listing the
+``cus_*`` ID now appears in the row-level ``<tr title="...">`` hover
+tooltip alongside Slack ID, Newsletter state, and Slack workspace
+state.
+
+Tests in this module verify:
+
+- the row tooltip carries ``Stripe customer: <cus_id>`` when the user
+  has a stripe_customer_id;
+- the tooltip omits the Stripe line when the user has no
+  stripe_customer_id;
+- the imported paid user's tier rendering is not corrupted (regression
+  guard from #441's original spec);
+- the Stripe settings save view still upserts STRIPE_DASHBOARD_ACCOUNT_ID
+  (config round-trip unrelated to the row layout).
 
 Each test scopes its assertions to the per-row container
 (``data-testid="user-row-<pk>"``) so coincidental matches elsewhere on
-the page (Slack badge, search placeholder, etc.) cannot satisfy the
-assertion.
+the page cannot satisfy the assertion.
 """
 
 import os
@@ -109,22 +119,49 @@ class StudioUserListStripeIndicatorTest(TestCase):
         clear_config_cache()
 
     # ------------------------------------------------------------------
-    # Visibility: shown when stripe_customer_id present, hidden otherwise
+    # Row tooltip: Stripe customer ID surfaces in the <tr title="..."> only
+    # when the user has a stripe_customer_id (issue #451)
     # ------------------------------------------------------------------
 
-    def test_stripe_icon_shown_when_user_has_stripe_customer_id(self):
+    def _tr_attrs(self, html, user_pk):
+        """Return the ``<tr ...>`` open-tag attribute string for a row."""
+        match = re.search(
+            r'<tr([^>]*data-testid="user-row-' + str(user_pk)
+            + r'"[^>]*)>',
+            html,
+        )
+        self.assertIsNotNone(
+            match,
+            f'Could not find <tr data-testid="user-row-{user_pk}">.',
+        )
+        return match.group(1)
+
+    def test_stripe_customer_id_appears_in_row_tooltip_when_set(self):
         response = self.client.get('/studio/users/')
         self.assertEqual(response.status_code, 200)
+        attrs = self._tr_attrs(
+            response.content.decode(), self.user_with_stripe.pk,
+        )
+        # Tooltip carries the documented "Stripe customer: <cus_*>" line.
+        self.assertIn('Stripe customer: cus_ABC', attrs)
 
-        row_html = _row_html(response.content.decode(), self.user_with_stripe.pk)
-        self.assertIn('data-testid="stripe-indicator"', row_html)
-        self.assertIn('aria-label="Stripe customer"', row_html)
-
-    def test_stripe_icon_hidden_when_user_has_no_stripe_customer_id(self):
+    def test_stripe_customer_omitted_from_row_tooltip_when_unset(self):
         response = self.client.get('/studio/users/')
         self.assertEqual(response.status_code, 200)
+        attrs = self._tr_attrs(
+            response.content.decode(), self.user_without_stripe.pk,
+        )
+        # No Stripe line at all when the user has no customer ID.
+        self.assertNotIn('Stripe customer:', attrs)
 
-        row_html = _row_html(response.content.decode(), self.user_without_stripe.pk)
+    def test_per_row_stripe_indicator_glyph_is_removed_from_listing(self):
+        # Issue #451 regression guard: the inline glyph anchor / span
+        # both disappear from the row; the Stripe deep-link lives on the
+        # user detail page instead.
+        response = self.client.get('/studio/users/')
+        row_html = _row_html(
+            response.content.decode(), self.user_with_stripe.pk,
+        )
         self.assertNotIn('data-testid="stripe-indicator"', row_html)
 
     def test_stripe_imported_paid_user_shows_base_tier_without_override_badge(self):
@@ -134,79 +171,6 @@ class StudioUserListStripeIndicatorTest(TestCase):
         row_html = _row_html(response.content.decode(), self.imported_paid_user.pk)
         self.assertIn('Main', row_html)
         self.assertNotIn('(override)', row_html)
-
-    # ------------------------------------------------------------------
-    # Linking: <a> when account configured, <span> when not
-    # ------------------------------------------------------------------
-
-    def test_stripe_icon_links_to_dashboard_when_account_configured(self):
-        self._set_account_id('acct_TEST123')
-        # Sanity check: the value really did make it through the cache.
-        self.assertEqual(get_config(ENV_KEY), 'acct_TEST123')
-
-        response = self.client.get('/studio/users/')
-        row_html = _row_html(response.content.decode(), self.user_with_stripe.pk)
-
-        # Exact URL with both placeholders interpolated correctly.
-        self.assertIn(
-            'href="https://dashboard.stripe.com/acct_TEST123/customers/cus_ABC"',
-            row_html,
-        )
-
-    def test_stripe_icon_no_link_when_account_not_configured(self):
-        # No IntegrationSetting row, no env var (popped in setUp). Confirm.
-        self.assertEqual(get_config(ENV_KEY), '')
-
-        response = self.client.get('/studio/users/')
-        row_html = _row_html(response.content.decode(), self.user_with_stripe.pk)
-
-        # The indicator is rendered, but as a <span>, not an <a>. We assert
-        # both: the indicator exists, and the host element is a span with a
-        # title tooltip showing the cus_id.
-        self.assertIn('data-testid="stripe-indicator"', row_html)
-        # ``re.DOTALL`` so the regex can span the multi-line tag attributes
-        # the template renders for readability.
-        self.assertIsNone(
-            re.search(
-                r'<a[^>]*data-testid="stripe-indicator"',
-                row_html,
-                re.DOTALL,
-            ),
-            'Indicator must NOT be wrapped in <a> when account is unset.',
-        )
-        self.assertIsNotNone(
-            re.search(
-                r'<span[^>]*data-testid="stripe-indicator"',
-                row_html,
-                re.DOTALL,
-            ),
-            'Without an account ID the indicator host must be a <span>.',
-        )
-        # Title tooltip on the span must show the exact cus_id so the
-        # operator can copy it out of the DOM.
-        self.assertIn('title="cus_ABC"', row_html)
-
-    def test_dashboard_link_uses_target_blank_and_noopener(self):
-        self._set_account_id('acct_TEST123')
-
-        response = self.client.get('/studio/users/')
-        row_html = _row_html(response.content.decode(), self.user_with_stripe.pk)
-
-        # Find the indicator anchor and verify both attributes are present
-        # on the SAME element. Two separate ``assertIn`` checks would pass
-        # on a row that had a different unrelated <a target="_blank"> link.
-        anchor_match = re.search(
-            r'<a([^>]*data-testid="stripe-indicator"[^>]*)>',
-            row_html,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(
-            anchor_match,
-            'Stripe indicator anchor not found when account ID is configured.',
-        )
-        anchor_attrs = anchor_match.group(1)
-        self.assertIn('target="_blank"', anchor_attrs)
-        self.assertIn('rel="noopener"', anchor_attrs)
 
     # ------------------------------------------------------------------
     # Settings round-trip: the new key really is editable in Studio

@@ -10,6 +10,8 @@ Covers:
 - staff-only access on every endpoint
 """
 
+import re
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
@@ -81,37 +83,27 @@ class StudioUserListTagFilterTest(TestCase):
         self.assertIn('carol@test.com', emails)
         self.assertEqual(response.context['active_tag'], '')
 
-    def test_tags_column_shows_chips(self):
-        response = self.client.get('/studio/users/')
-        # Alice's chips appear in the Tags column.
-        self.assertContains(response, 'early-adopter')
-        self.assertContains(response, 'beta')
-
     def test_list_rows_render_single_line_email_with_full_value_access(self):
         long_email = 'very-long-address-for-studio-scanability@example.test'
         User.objects.create_user(email=long_email, password='testpass')
 
         response = self.client.get('/studio/users/?q=very-long-address')
 
+        # Issue #451: when the user has no name, email is the primary
+        # line and still uses the same data-testid + truncation classes.
         self.assertContains(response, 'data-testid="user-email"')
-        self.assertContains(response, 'class="text-sm font-medium text-foreground truncate"')
+        self.assertContains(
+            response,
+            'truncate text-sm font-medium text-foreground',
+        )
         self.assertContains(response, f'title="{long_email}"')
         self.assertContains(response, f'aria-label="Email {long_email}"')
 
-    def test_membership_state_is_grouped_into_compact_badges(self):
-        self.alice.slack_member = True
-        self.alice.slack_checked_at = self.alice.date_joined
-        self.alice.save(update_fields=['slack_member', 'slack_checked_at'])
-
-        response = self.client.get('/studio/users/?q=alice')
-
-        self.assertContains(response, 'data-testid="membership-badges"')
-        self.assertContains(response, self.alice.tier.name)
-        self.assertContains(response, 'Newsletter')
-        self.assertContains(response, 'Slack')
-        self.assertContains(response, 'Active')
-
-    def test_tag_display_is_bounded_with_visible_filter_links_and_overflow(self):
+    def test_row_dict_still_carries_tag_data_for_export_consumers(self):
+        # Issue #451 removed the per-row Tags column from the listing
+        # template, but the CSV export and the tag-picker still consume
+        # ``tags`` / ``visible_tags`` / ``tag_overflow_count`` /
+        # ``hidden_tags_label`` from the row dict. Lock the contract.
         self.alice.tags = [
             'early-adopter',
             'beta',
@@ -119,24 +111,33 @@ class StudioUserListTagFilterTest(TestCase):
             'vip',
             'cohort-a',
         ]
-        self.alice.slack_member = True
-        self.alice.slack_checked_at = self.alice.date_joined
         self.alice.tier = self.main_tier
-        self.alice.save(update_fields=['tags', 'slack_member', 'slack_checked_at', 'tier'])
+        self.alice.save(update_fields=['tags', 'tier'])
 
-        response = self.client.get('/studio/users/?filter=paid&slack=yes&q=alice')
+        response = self.client.get('/studio/users/?filter=paid&q=alice')
         row = response.context['user_rows'][0]
 
         self.assertEqual(row['visible_tags'], ['early-adopter', 'beta', 'paid-2026'])
         self.assertEqual(row['tag_overflow_count'], 2)
         self.assertEqual(row['hidden_tags_label'], 'vip, cohort-a')
-        self.assertContains(
-            response,
-            '?filter=paid&amp;slack=yes&amp;q=alice&amp;tag=early-adopter',
+
+    def test_per_row_tags_column_is_removed(self):
+        # Issue #451 regression guard: the Tags <th>, the Tags <td>, and
+        # the tag-chip anchors inside rows must all be gone.
+        self.alice.tags = ['early-adopter', 'beta']
+        self.alice.save(update_fields=['tags'])
+        response = self.client.get('/studio/users/?q=alice')
+        # Old structural markers must not appear.
+        self.assertNotContains(response, 'data-testid="user-tags-cell"')
+        self.assertNotContains(response, 'data-testid="user-tags-overflow"')
+        self.assertNotContains(response, 'data-label="Tags"')
+        # Confirm via header text too: no <th>Tags</th> in <thead>.
+        html = response.content.decode()
+        thead_match = re.search(
+            r'<thead[^>]*>(.*?)</thead>', html, re.DOTALL,
         )
-        self.assertContains(response, 'data-testid="user-tags-overflow">+2</span>')
-        self.assertContains(response, 'aria-label="2 more tags: vip, cohort-a"')
-        self.assertNotContains(response, '>vip</a>')
+        self.assertIsNotNone(thead_match)
+        self.assertNotIn('>Tags<', thead_match.group(1))
 
     def test_active_tag_chip_renders_with_clear_link(self):
         response = self.client.get('/studio/users/?tag=early-adopter&filter=paid&q=dan')

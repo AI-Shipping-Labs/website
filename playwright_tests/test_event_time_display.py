@@ -361,10 +361,10 @@ def test_completed_zoom_location_hidden_but_upcoming_zoom_kept(
 
     # Issue #673: canonical URL is ``/events/<id>/<slug>``.
     page.goto(f'{django_server}{completed_event.get_absolute_url()}', wait_until='domcontentloaded')
-    assert 'Zoom' not in page.locator('article header').inner_text()
+    assert 'Zoom' not in page.locator('article header').first.inner_text()
 
     page.goto(f'{django_server}{upcoming_event.get_absolute_url()}', wait_until='domcontentloaded')
-    assert 'Zoom' in page.locator('article header').inner_text()
+    assert 'Zoom' in page.locator('article header').first.inner_text()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -395,7 +395,7 @@ def test_registered_member_keeps_upcoming_zoom_attendance_flow(
         wait_until='domcontentloaded',
     )
 
-    header_text = page.locator('article header').inner_text()
+    header_text = page.locator('article header').first.inner_text()
     assert 'Zoom' in header_text
     assert "You're registered!" in page.locator('article').inner_text()
     assert page.locator('#unregister-btn').is_visible()

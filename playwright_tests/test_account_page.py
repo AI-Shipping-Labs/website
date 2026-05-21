@@ -936,7 +936,7 @@ class TestScenarioResendVerificationEmail:
         assert page.url.rstrip("/").endswith("/account")
 
         success = page.locator(
-            '[data-testid="messages-region"] [data-message-tag="success"]'
+            '[data-testid="account-messages-region"] [data-message-tag="success"]'
         )
         expect(success).to_be_visible(timeout=5000)
         assert "Verification email sent" in success.inner_text()
@@ -958,19 +958,19 @@ class TestScenarioResendVerificationEmail:
         page.click("#resend-verification-btn")
         page.wait_for_load_state("domcontentloaded")
         success = page.locator(
-            '[data-testid="messages-region"] [data-message-tag="success"]'
+            '[data-testid="account-messages-region"] [data-message-tag="success"]'
         )
         expect(success).to_be_visible(timeout=5000)
 
         page.click("#resend-verification-btn")
         page.wait_for_load_state("domcontentloaded")
         warning = page.locator(
-            '[data-testid="messages-region"] [data-message-tag="warning"]'
+            '[data-testid="account-messages-region"] [data-message-tag="warning"]'
         )
         expect(warning).to_be_visible(timeout=5000)
         assert "minute" in warning.inner_text()
         assert page.locator(
-            '[data-testid="messages-region"] [data-message-tag="success"]'
+            '[data-testid="account-messages-region"] [data-message-tag="success"]'
         ).count() == 0
         ctx.close()
 

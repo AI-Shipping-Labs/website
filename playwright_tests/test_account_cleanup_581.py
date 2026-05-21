@@ -137,7 +137,7 @@ def _seed_users():
         defaults={"email_verified": True, "tier": tiers["main"]})
     Plan.objects.get_or_create(
         member=teammate, sprint=sprint,
-        defaults={"status": "active", "visibility": "cohort"})
+        defaults={"visibility": "cohort"})
 
     connection.close()
 

@@ -307,6 +307,10 @@ class TestScenario1YouTubeRecordingTimestamps:
             required_level=0,
         )
 
+        from content.models import Workshop
+        workshop = Workshop.objects.get(slug="ai-workshop")
+        workshop_path = f"/workshops/{workshop.url_key}"
+
         # Navigate to past recordings listing — past events always link to
         # the linked Workshop (issue #426).
         page.goto(
@@ -321,11 +325,11 @@ class TestScenario1YouTubeRecordingTimestamps:
             'a[data-testid="past-card-workshop-link"]'
         ).first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/workshops/ai-workshop" in page.url
+        assert workshop_path in page.url
 
         page.locator('a:has-text("Watch the recording")').first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/workshops/ai-workshop/video" in page.url
+        assert f"{workshop_path}/video" in page.url
 
         # Verify YouTube embed is present
         body = page.content()

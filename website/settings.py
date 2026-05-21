@@ -214,6 +214,12 @@ FORM_RENDERER = 'django.forms.renderers.TemplatesSetting'
 WSGI_APPLICATION = 'website.wsgi.application'
 
 
+# Test runner — uses tblib pickling support so --parallel doesn't crash
+# on the first failure with "cannot pickle 'traceback' object" (Django
+# ticket #29023). See website/test_runner.py for the full rationale.
+TEST_RUNNER = 'website.test_runner.PicklableTracebackRunner'
+
+
 # Database
 DATABASES = {
     'default': dj_database_url.config(

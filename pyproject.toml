@@ -88,6 +88,7 @@ exclude_lines = [
 dev = [
     "honcho>=2.0.0",
     "ruff>=0.11.0",
+    "tblib>=3.2.2",
 ]
 
 [tool.ruff]

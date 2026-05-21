@@ -178,6 +178,7 @@ class StudioSidebarStructureTest(TestCase):
         # Tracking
         ('/studio/utm-campaigns/', 'UTM links'),
         ('/studio/utm-analytics/', 'UTM analytics'),
+        ('/studio/signup-analytics/', 'Signup analytics'),
         # Operations
         ('/studio/sync/', 'Content sync'),
         ('/studio/worker/', 'Worker'),

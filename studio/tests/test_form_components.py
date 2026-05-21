@@ -138,3 +138,69 @@ class GlobalSelectStyleTest(SimpleTestCase):
         html = self._template('studio/base.html')
 
         self.assertNotIn('select.studio-select {', html)
+
+    def test_every_select_in_templates_has_canonical_class(self):
+        """Every <select> opening tag in templates/ must carry the canonical
+        chrome class (`app-select` or `studio-select`).
+
+        The scan walks every `.html` file under `templates/`, strips out
+        regions where a `<select>` substring is not a real form control
+        (`{% comment %}` blocks, `{# ... #}` single-line tags, and
+        `<script>...</script>` bodies), then locates each `<select` opening
+        tag with a multi-line aware regex so tags whose attributes wrap
+        across lines (see `templates/studio/_partials/datetime_picker.html`)
+        are matched as a single string. Each matched tag must contain
+        `app-select` or `studio-select` in its class attribute.
+
+        On failure the test fails ONCE with the full `(file, line, snippet)`
+        list so a future contributor can fix every violation in one pass
+        instead of running the suite repeatedly. See `_docs/design-system.md`
+        Form Controls section for the canonical class string.
+        """
+        templates_root = Path(settings.BASE_DIR, 'templates')
+        # `re.DOTALL` lets `.` match newlines so multi-line opening tags
+        # (attributes wrapped across lines) are captured as one string.
+        tag_re = re.compile(r'<select\b[^>]*?>', re.DOTALL)
+        comment_block_re = re.compile(
+            r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', re.DOTALL,
+        )
+        script_re = re.compile(
+            r'<script\b[^>]*>.*?</script>', re.DOTALL | re.IGNORECASE,
+        )
+        line_comment_re = re.compile(r'\{#.*?#\}', re.DOTALL)
+
+        violations = []
+        for path in sorted(templates_root.rglob('*.html')):
+            text = path.read_text()
+            # Strip non-control regions before scanning for <select> tags.
+            scrubbed = comment_block_re.sub('', text)
+            scrubbed = script_re.sub('', scrubbed)
+            scrubbed = line_comment_re.sub('', scrubbed)
+            for match in tag_re.finditer(scrubbed):
+                tag = match.group(0)
+                if 'app-select' in tag or 'studio-select' in tag:
+                    continue
+                # Look up the line number against the ORIGINAL text so the
+                # snippet points the contributor at the real source line.
+                # The 40-char prefix is enough to disambiguate against any
+                # other `<select` opening in the file.
+                offset = text.find(tag[:40])
+                line_no = (
+                    text.count('\n', 0, offset) + 1 if offset >= 0 else None
+                )
+                rel = path.relative_to(settings.BASE_DIR)
+                snippet = ' '.join(tag.split())[:160]
+                violations.append((str(rel), line_no, snippet))
+
+        if violations:
+            lines = [
+                'Found <select> elements missing app-select / studio-select:',
+            ]
+            for rel, line_no, snippet in violations:
+                lines.append(f'  {rel}:{line_no}  {snippet!r}')
+            lines.append(
+                'Add "app-select" (public templates) or "studio-select" '
+                '(under /studio/) to the class attribute. See '
+                '_docs/design-system.md Form Controls.'
+            )
+            self.fail('\n'.join(lines))

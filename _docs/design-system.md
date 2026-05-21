@@ -227,6 +227,39 @@ Distinguish the two cases in the view by exposing the search / status / tag filt
 
 Sync-managed entities (workshops, courses, articles, projects, downloads, recordings) call the partial with `create_url` omitted so the fresh-zero card renders without a CTA — content for those tables comes from the GitHub content sync, not from a Studio create form.
 
+## Form Controls
+
+### `<select>` chrome
+
+Every `<select>` element must carry one of two equivalent class names so the global CSS rule in `templates/base.html` can apply the shared chrome (hidden native chevron, CSS-gradient caret, theme-aware colors):
+
+- `app-select` — for any `<select>` reachable outside `/studio/` (public pages, `/account`, plan pages).
+- `studio-select` — for any `<select>` inside `/studio/`.
+
+Both names map to the same CSS rule (`select.app-select, select.studio-select { ... }`) defined once in `templates/base.html`. The split is a naming convention so a contributor reading a template can tell which surface the control belongs to; it does NOT produce a visual difference.
+
+Canonical class string to pair with `app-select` / `studio-select` on a Studio select:
+
+```html
+class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+```
+
+For a `<select>` that sits inside a `bg-secondary` panel and should look visually inset (the `/account` timezone field is the reference), use `bg-background` and `rounded-md` instead:
+
+```html
+class="app-select w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+```
+
+### Chevron technique
+
+The custom caret is rendered with two `linear-gradient` backgrounds in the global CSS rule (`templates/base.html`, around the `select.app-select, select.studio-select` block). It is theme-aware, requires zero extra DOM nodes, and needs no JS init. Do not replace it with a Lucide overlay or a per-template SVG — the gradient approach is in production, accessible, and already covered by `studio.tests.test_form_components.GlobalSelectStyleTest`.
+
+Do not add per-template `appearance: none` overrides or background-image rules to `<select>` elements. If a new visual variant is needed, extend the global rule, not the local template.
+
+### Regression coverage
+
+The unit test `studio.tests.test_form_components.GlobalSelectStyleTest.test_every_select_in_templates_has_canonical_class` walks every `*.html` file under `templates/` and asserts each `<select>` opening tag carries `app-select` or `studio-select`. If you add a new `<select>` and CI fails on that test, add the canonical class — do not allowlist the file.
+
 ## Pills, Badges, and Chips
 
 Canonical shape: `inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium`.

@@ -131,7 +131,7 @@
             name="tag"
             onchange="this.form.submit()"
             data-testid="user-tag-picker"
-            class="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+            class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       <option value="" {% if not active_tag %}selected{% endif %}>All tags</option>
       {% for tag in known_tags %}
       <option value="{{ tag }}" {% if tag == active_tag %}selected{% endif %}>{{ tag }}</option>

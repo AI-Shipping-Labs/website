@@ -14,7 +14,7 @@
   {% include "studio/includes/_people_picker.html" with name="user_id" id_prefix="tier-override-user" search_url="/studio/api/users/search/" placeholder="Search by name or email..." on_select_action="navigate" navigate_url_template="/studio/users/{id}/tier_override/" %}
 </div>
 
-<div class="bg-card border border-border rounded-lg overflow-hidden mb-8"
+<div class="{% studio_list_class 'wrapper' %} mb-8"
      data-testid="active-overrides-section">
   <div class="px-6 py-4 border-b border-border flex items-center justify-between">
     <h2 class="text-lg font-semibold text-foreground">Active overrides</h2>
@@ -58,13 +58,15 @@
           {% endwith %}
         </td>
         <td class="px-6 py-4 text-sm text-foreground"
-            data-testid="active-override-effective-tier">
+            data-testid="active-override-effective-tier"
+            data-label="Effective tier">
           <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ override.override_tier.slug|studio_tier_pill_classes }}"
                 data-testid="active-override-effective-tier-pill"
                 data-tier="{{ override.override_tier.slug }}">{{ override.override_tier.name }}</span>
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground"
-            data-testid="active-override-base-tier">
+            data-testid="active-override-base-tier"
+            data-label="Base tier">
           {% if override.original_tier %}
           <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ override.original_tier.slug|studio_tier_pill_classes }}"
                 data-testid="active-override-base-tier-pill"
@@ -74,15 +76,18 @@
           {% endif %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground"
-            data-testid="active-override-set-at">{{ override.created_at|date:"M d, Y H:i" }}</td>
+            data-testid="active-override-set-at"
+            data-label="Set at">{{ override.created_at|date:"M d, Y H:i" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground"
-            data-testid="active-override-expires-at">
+            data-testid="active-override-expires-at"
+            data-label="Expires">
           <div>{{ override.expires_at|date:"M d, Y H:i" }}</div>
           <div class="text-xs">in {{ override.expires_at|timeuntil }}</div>
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground"
-            data-testid="active-override-set-by">{% if override.granted_by %}{{ override.granted_by.email }}{% else %}-{% endif %}</td>
-        <td class="px-6 py-4">
+            data-testid="active-override-set-by"
+            data-label="Set by">{% if override.granted_by %}{{ override.granted_by.email }}{% else %}-{% endif %}</td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <form method="post" action="{% url 'studio_user_tier_override_revoke' override.user.pk %}"
                 onsubmit="return confirm('Revoke this override? The user will immediately lose upgraded access.');">
             {% csrf_token %}

@@ -227,14 +227,36 @@ class ActiveOverridesRenderTest(ActiveOverridesListTestBase):
             is_active=True,
         )
         response = self.client.get(self.url)
-        self.assertContains(
-            response,
-            (
-                '<td class="px-6 py-4 text-sm text-muted-foreground"\n'
-                '            data-testid="active-override-set-by">-</td>'
-            ),
-            html=False,
-        )
+        # When granted_by is null the Set by cell renders a literal dash
+        # ("-"). The exact ``<td>`` markup carries extra attributes
+        # (``data-testid``, ``data-label`` after #761) so we assert on the
+        # cell's text content via the testid rather than a brittle full
+        # markup match.
+        from html.parser import HTMLParser
+
+        class _SetByExtractor(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.capture = False
+                self.text = ''
+
+            def handle_starttag(self, tag, attrs):
+                if tag == 'td' and dict(attrs).get(
+                    'data-testid'
+                ) == 'active-override-set-by':
+                    self.capture = True
+
+            def handle_endtag(self, tag):
+                if tag == 'td' and self.capture:
+                    self.capture = False
+
+            def handle_data(self, data):
+                if self.capture:
+                    self.text += data
+
+        parser = _SetByExtractor()
+        parser.feed(response.content.decode())
+        self.assertEqual(parser.text.strip(), '-')
 
     def test_search_form_still_renders_on_same_page(self):
         response = self.client.get(self.url)

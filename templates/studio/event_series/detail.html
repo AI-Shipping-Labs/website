@@ -60,7 +60,7 @@
 
   <!-- Member events table -->
   <div class="space-y-4 min-w-0">
-    <div class="bg-card border border-border rounded-lg overflow-hidden">
+    <div class="{% studio_list_class 'wrapper' %}">
       <table class="w-full">
         <thead class="bg-muted/40">
           <tr>
@@ -77,14 +77,14 @@
           {% for event in events %}
           <tr data-testid="event-series-member-row">
             <td class="px-4 py-3 text-sm text-muted-foreground" data-testid="series-position">{{ event.series_position|default:"—" }}</td>
-            <td class="px-4 py-3 text-sm text-foreground">
+            <td class="px-4 py-3 text-sm text-foreground" data-label="Title">
               <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="hover:text-accent">{{ event.title }}</a>
             </td>
-            <td class="px-4 py-3 text-sm text-muted-foreground" data-testid="event-start">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
-            <td class="px-4 py-3 text-sm text-muted-foreground">{% if event.end_datetime %}{{ event.end_datetime|date:"M d, Y H:i" }}{% else %}—{% endif %}</td>
-            <td class="px-4 py-3 text-sm">{% studio_status_badge event.status event.get_status_display %}</td>
-            <td class="px-4 py-3 text-sm text-muted-foreground">{{ event.registration_count }}</td>
-            <td class="px-4 py-3 text-sm text-right space-x-3">
+            <td class="px-4 py-3 text-sm text-muted-foreground" data-testid="event-start" data-label="Start">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
+            <td class="px-4 py-3 text-sm text-muted-foreground" data-label="End">{% if event.end_datetime %}{{ event.end_datetime|date:"M d, Y H:i" }}{% else %}—{% endif %}</td>
+            <td class="px-4 py-3 text-sm" data-label="Status">{% studio_status_badge event.status event.get_status_display %}</td>
+            <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Registrations">{{ event.registration_count }}</td>
+            <td class="px-4 py-3 text-sm space-x-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
               <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="text-accent hover:underline" data-testid="member-event-edit">Edit</a>
             </td>
           </tr>

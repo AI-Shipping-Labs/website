@@ -419,6 +419,7 @@ def studio_sidebar_state(path):
     operations_active = (
         '/sync' in p
         or '/worker' in p
+        or '/ses-events' in p
         or 'redirects' in p
         or '/settings' in p
         or '/api-tokens' in p

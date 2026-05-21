@@ -64,6 +64,7 @@ PARTIAL_USERS = {
     'event_series/list.html',
     'crm/list.html',
     'imports/list.html',
+    'ses_events/list.html',
 }
 
 

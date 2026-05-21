@@ -76,6 +76,18 @@ jobs:
           end=$(date +%s)
           echo "CI_TIMING phase=uv_sync seconds=$((end - start))"
 
+      # Issue #787: catches model/migration drift before deploy. If a developer
+      # edits a model field (e.g. help_text, choices, max_length) without
+      # running `makemigrations`, this step fails loudly. Re-homed to
+      # deploy-dev.yml (not ci.yml) for the same reason as the OpenAPI drift
+      # gate: ci.yml is pull_request-only and this project uses local merges.
+      - name: Check for missing migrations
+        run: |
+          start=$(date +%s)
+          uv run python manage.py makemigrations --check --dry-run
+          end=$(date +%s)
+          echo "CI_TIMING phase=makemigrations_check seconds=$((end - start))"
+
       # Issue #722: the committed _docs/openapi.json must match what the
       # @openapi_spec decorators currently describe. CI fails the build
       # if a developer edits a decorator without regenerating the spec.

@@ -83,12 +83,17 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
         # Empty-state copy.
         page.locator("text=No sprints yet").wait_for(state="visible")
 
-        # Step 3: create a sprint. Use a role+name selector so we click
-        # the header "New sprint" CTA and not the empty-state "Create
-        # your first sprint" link, which both target the same href.
+        # Step 3: create a sprint. Scope the locator to the header
+        # ``data-testid="sprints-header"`` so we click the header
+        # "New sprint" CTA and not the empty-state CTA (issue #756 +
+        # #752 means BOTH render the same accessible name on an empty
+        # list; an unscoped ``get_by_role`` resolves to two elements
+        # and Playwright's strict mode refuses the click — issue #776).
         # ``exact=True`` is required because Playwright's accessible-
         # name match is substring by default.
-        page.get_by_role("link", name="New sprint", exact=True).click()
+        page.locator(
+            '[data-testid="sprints-header"]'
+        ).get_by_role("link", name="New sprint", exact=True).click()
         page.wait_for_url(f"{django_server}/studio/sprints/new")
         page.locator('input[name="name"]').fill("May 2026 sprint")
         page.locator('input[name="slug"]').fill("may-2026")
@@ -105,11 +110,14 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
         page.locator('#studio-sidebar-nav a[href="/studio/plans/"]').click()
         page.wait_for_url(f"{django_server}/studio/plans/")
 
-        # Step 5: create a plan. Same strict-mode rationale as above:
-        # the empty-state "Create a new plan" link shares the href with
-        # the header "New plan" CTA. ``exact=True`` distinguishes
-        # "New plan" from "Create a new plan".
-        page.get_by_role("link", name="New plan", exact=True).click()
+        # Step 5: create a plan. Same scope-by-header rationale as
+        # above: the empty-state CTA renders the same "New plan"
+        # accessible name as the header CTA, so we narrow to
+        # ``data-testid="plans-header"`` to keep the click unique on
+        # an empty list (issue #776).
+        page.locator(
+            '[data-testid="plans-header"]'
+        ).get_by_role("link", name="New plan", exact=True).click()
         page.wait_for_url(f"{django_server}/studio/plans/new")
         # Issue #735 swapped the inline ``<select name="member">`` for the
         # reusable people picker (testid prefix ``plan-member``). Drive

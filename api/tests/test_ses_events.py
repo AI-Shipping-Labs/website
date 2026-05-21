@@ -10,7 +10,7 @@ import json
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils.dateparse import parse_datetime
 
 from email_app.models import EmailLog, SesEvent
@@ -21,6 +21,11 @@ User = get_user_model()
 URL = "/api/ses-events"
 VALIDATOR_PATH = "api.views.ses_events.validate_sns_notification"
 URLOPEN_PATH = "api.views.ses_events.urllib.request.urlopen"
+
+# Shared secret used by SesEventsSharedSecretTest. Defined at module
+# scope because @override_settings is evaluated at class-decoration time
+# (before class attributes exist), so the value must be in module scope.
+SES_TEST_SHARED_SECRET = "top-secret-value"
 
 
 def _bounce_payload(message_id, email, bounce_type="Permanent"):
@@ -151,6 +156,108 @@ class SesEventsSignatureTest(TestCase):
         self.assertEqual(response.status_code, 403)
         # Rule 12: rejected requests have no side-effects.
         self.assertEqual(User.objects.count(), users_before)
+        self.assertEqual(SesEvent.objects.count(), events_before)
+
+
+class SesEventsSharedSecretTest(TestCase):
+    """Issue #765 — shared-secret header check on the webhook.
+
+    The matrix is (secret-set vs unset) crossed with the kind of header
+    the request carries (none / wrong / right) plus, for the right
+    cases, the SNS signature path so that the right-secret + valid-
+    signature combo still hits 200 and the right-secret + invalid-
+    signature combo still falls through to the existing 403.
+    """
+
+    def _post(self, headers=None):
+        return self.client.post(
+            URL,
+            data=json.dumps(_bounce_payload("m-secret-1", "x@example.com")),
+            content_type="application/json",
+            **(headers or {}),
+        )
+
+    # ---- Secret UNSET (local-dev / unconfigured): header check skipped ----
+
+    @override_settings(SES_WEBHOOK_SHARED_SECRET="")
+    def test_secret_unset_no_header_passes_to_signature(self):
+        with mock.patch(VALIDATOR_PATH, return_value=True):
+            response = self._post()
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(SES_WEBHOOK_SHARED_SECRET="")
+    def test_secret_unset_wrong_header_still_passes_to_signature(self):
+        with mock.patch(VALIDATOR_PATH, return_value=True):
+            response = self._post(
+                headers={"HTTP_X_SES_WEBHOOK_SECRET": "garbage"},
+            )
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(SES_WEBHOOK_SHARED_SECRET="")
+    def test_secret_unset_right_header_still_passes_to_signature(self):
+        with mock.patch(VALIDATOR_PATH, return_value=True):
+            response = self._post(
+                headers={
+                    "HTTP_X_SES_WEBHOOK_SECRET": SES_TEST_SHARED_SECRET,
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(SES_WEBHOOK_SHARED_SECRET="")
+    def test_secret_unset_invalid_signature_returns_403(self):
+        with mock.patch(VALIDATOR_PATH, return_value=False):
+            response = self._post()
+        self.assertEqual(response.status_code, 403)
+
+    # ---- Secret SET: header check enforced before signature check ----
+
+    @override_settings(SES_WEBHOOK_SHARED_SECRET=SES_TEST_SHARED_SECRET)
+    def test_secret_set_no_header_returns_403(self):
+        events_before = SesEvent.objects.count()
+        with mock.patch(VALIDATOR_PATH, return_value=True) as validator_mock:
+            response = self._post()
+        self.assertEqual(response.status_code, 403)
+        # The signature path must NOT be reached, and no SesEvent row
+        # may be written from a failed-auth request (audit log hygiene).
+        validator_mock.assert_not_called()
+        self.assertEqual(SesEvent.objects.count(), events_before)
+
+    @override_settings(SES_WEBHOOK_SHARED_SECRET=SES_TEST_SHARED_SECRET)
+    def test_secret_set_wrong_header_returns_403(self):
+        events_before = SesEvent.objects.count()
+        with mock.patch(VALIDATOR_PATH, return_value=True) as validator_mock:
+            response = self._post(
+                headers={"HTTP_X_SES_WEBHOOK_SECRET": "definitely-not-it"},
+            )
+        self.assertEqual(response.status_code, 403)
+        validator_mock.assert_not_called()
+        self.assertEqual(SesEvent.objects.count(), events_before)
+
+    @override_settings(SES_WEBHOOK_SHARED_SECRET=SES_TEST_SHARED_SECRET)
+    def test_secret_set_right_header_valid_signature_returns_200(self):
+        with mock.patch(VALIDATOR_PATH, return_value=True):
+            response = self._post(
+                headers={
+                    "HTTP_X_SES_WEBHOOK_SECRET": SES_TEST_SHARED_SECRET,
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        # Audit row written -- the request did pass through to handling.
+        self.assertTrue(
+            SesEvent.objects.filter(message_id="m-secret-1").exists()
+        )
+
+    @override_settings(SES_WEBHOOK_SHARED_SECRET=SES_TEST_SHARED_SECRET)
+    def test_secret_set_right_header_invalid_signature_returns_403(self):
+        events_before = SesEvent.objects.count()
+        with mock.patch(VALIDATOR_PATH, return_value=False):
+            response = self._post(
+                headers={
+                    "HTTP_X_SES_WEBHOOK_SECRET": SES_TEST_SHARED_SECRET,
+                },
+            )
+        self.assertEqual(response.status_code, 403)
+        # 403 from the signature path still writes no audit row.
         self.assertEqual(SesEvent.objects.count(), events_before)
 
 

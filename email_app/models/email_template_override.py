@@ -14,7 +14,7 @@ class EmailTemplateOverride(models.Model):
     """Operator-edited override of one filesystem template.
 
     The ``template_name`` is the slug of the on-disk template, e.g.
-    ``welcome`` or ``email_verification``. ``subject`` and
+    ``welcome`` or ``email_verification_signup``. ``subject`` and
     ``body_markdown`` shadow the YAML frontmatter subject and the markdown
     body respectively. ``footer_note`` is appended to the chrome footer
     block on render.
@@ -25,7 +25,7 @@ class EmailTemplateOverride(models.Model):
         unique=True,
         help_text=(
             'Slug of the on-disk template this row overrides '
-            '(e.g. "welcome", "email_verification").'
+            '(e.g. "welcome", "email_verification_signup").'
         ),
     )
     subject = models.CharField(

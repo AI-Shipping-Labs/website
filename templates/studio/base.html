@@ -467,6 +467,13 @@ double-rendering. See issue #347.
                 <span>UTM analytics</span>
               </a>
             </li>
+            <li>
+              <a href="{% url 'studio_signup_analytics' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'signup-analytics' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="user-plus" class="w-4 h-4"></i>
+                <span>Signup analytics</span>
+              </a>
+            </li>
           </ul>
         </div>
 

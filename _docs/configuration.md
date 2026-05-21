@@ -46,7 +46,7 @@ Test: `curl -I {SITE_BASE_URL}/ping` returns `200 OK`. Then visit `{SITE_BASE_UR
 3. Sign in at `{SITE_BASE_URL}/accounts/login/` with the superuser email + password.
 4. Open `{SITE_BASE_URL}/studio/settings/`. Every integration group from `INTEGRATION_GROUPS` is rendered there with a status badge (`configured`, `partial`, `not_configured`).
 
-Test: visit `/studio/settings/` and confirm 10 integration groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, YouTube, GitHub App, Slack, Site, Auth).
+Test: visit `/studio/settings/` and confirm 11 integration groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, YouTube, GitHub App, Slack, Site, Analytics, Auth).
 
 ## 3. OAuth login providers
 
@@ -153,8 +153,9 @@ Keys to set in Studio:
 | `AWS_SES_REGION` | non-secret | e.g. `us-east-1`, `eu-west-1`. |
 | `SES_TRANSACTIONAL_FROM_EMAIL` | non-secret | Sender for required account/service email. Defaults to `noreply@aishippinglabs.com`; must be a verified sender (or be on a verified domain) in SES. |
 | `SES_PROMOTIONAL_FROM_EMAIL` | non-secret | Sender for campaigns/newsletters/marketing email. Defaults to `content@aishippinglabs.com`; must be a verified sender (or be on a verified domain) in SES. |
-| `SES_CONFIGURATION_SET_NAME` | non-secret | Optional SES configuration set name for delivery, open, and click event publishing. |
+| `SES_CONFIGURATION_SET_NAME` | non-secret | SES configuration set name for delivery, open, bounce, and click event publishing. Required in prod: set to `aishippinglabs` (matches `ai-shipping-labs-infra/email.tf`). When blank, SES publishes no events to SNS regardless of how the HTTPS subscription is wired — the bounce / complaint webhook never fires. |
 | `SES_WEBHOOK_VALIDATION_ENABLED` | non-secret | `true` in prod to validate incoming SNS webhook signatures. |
+| `SES_WEBHOOK_SHARED_SECRET` | secret | Optional shared secret enforced by the `/api/ses-events` webhook (`X-SES-Webhook-Secret` header). When set, requests missing the header or carrying the wrong value return 403 *before* SNS signature validation runs. Leave blank locally to keep `manage.py runserver` replay workflows working; set in prod and inject from the infra-side Lambda forwarder. |
 
 Webhook endpoint (for SES bounce/complaint/open/click notifications via SNS): `{SITE_BASE_URL}/api/ses-events` (no trailing slash; the slashless form avoids the trailing-slash redirect that strips POST bodies). Configure in your SNS topic subscription.
 
@@ -181,7 +182,7 @@ Required state in this repo:
 
 - `SES_CONFIGURATION_SET_NAME=aishippinglabs` in prod settings (Studio > Settings > Email (SES)). Without this, SES doesn't publish events.
 - `SES_WEBHOOK_VALIDATION_ENABLED=true` in prod (default everywhere except `DEBUG=True`).
-- (Defense-in-depth, paired with the Lambda above) `SES_WEBHOOK_SHARED_SECRET` set to the same value Secrets Manager hands the Lambda. The webhook then 403s any request missing or with a wrong header. Open work — see follow-up issue.
+- (Defense-in-depth, paired with the Lambda above) `SES_WEBHOOK_SHARED_SECRET` set to the same value Secrets Manager hands the Lambda. The webhook then 403s any request missing or with a wrong header (`hmac.compare_digest`, constant-time). The check runs *before* SNS signature validation so an attacker without the secret never reaches the signature path, and rejected requests do not pollute the `SesEvent` audit log. Leave blank locally to keep `manage.py runserver` replay workflows working.
 
 Verify the pipeline is live:
 
@@ -351,6 +352,10 @@ Run this checklist after configuring everything. Each item is one click, end to 
 - [ ] Upload a workshop recording to S3 via `/studio/recordings/<id>/edit`; click "Publish to YouTube"; the YouTube URL is stored.
 - [ ] Trigger a Slack announcement from `/studio/articles/<id>/announce-slack/`; the bot posts to the configured channel.
 - [ ] Send a test email campaign in `/studio/campaigns/`; confirm delivery to a verified SES recipient.
+
+## 12.1. Signup attribution and the anonymous_id join key
+
+UTM and organic-referrer attribution are captured by `analytics.middleware.CampaignTrackingMiddleware`, snapshotted onto `UserAttribution` at signup. The middleware also assigns a stable UUID4 cookie `aslab_aid` (the anonymous_id) to every non-bot visitor, copied onto `UserAttribution.anonymous_id` at signup time. This `anonymous_id` is the cross-system join key: future GA/S3 stitching binds `GA user_id = aslab_aid` on the client and joins on this column. This issue does NOT implement GA binding; it only records the design — operators should not yet expect to see `anonymous_id` in GA. Organic referrers (LinkedIn, YouTube, ChatGPT, Google, …) are bucketed by `analytics.referrer_source.normalize_referrer` and stored on `UserAttribution.{first,last}_touch_referrer_source`; see issue #772.
 
 ## 13. Where to look when something is wrong
 

@@ -195,7 +195,7 @@ def _send_verification_email(user):
         service = EmailService()
         return service.send(
             user,
-            "email_verification",
+            "email_verification_signup",
             {
                 "verify_url": verify_url,
                 "site_url": site_url,
@@ -369,6 +369,7 @@ def register_api(request):
         email=email,
         password=password,
         verification_expires_at=verification_expires_at,
+        signup_source="signup",
     )
     # email_verified defaults to False, tier defaults to free (in model save)
 
@@ -455,6 +456,17 @@ def verify_email_api(request):
         user.save(
             update_fields=["email_verified", "verification_expires_at"],
         )
+        # Issue #768: an email+password signup completing verification
+        # is the canonical "first real platform action" — flip
+        # ``account_activated``. Newsletter-only subscribers
+        # (signup_source='newsletter') intentionally stay inactive
+        # because they have never set a password and have not done
+        # anything else.
+        from accounts.models.user import SIGNUP_SOURCE_SIGNUP
+        from accounts.utils.activation import mark_activated
+
+        if user.signup_source == SIGNUP_SOURCE_SIGNUP:
+            mark_activated(user)
     elif user.verification_expires_at is not None:
         # Defensive: if a user is already verified but still has an
         # expiry hanging around (e.g. legacy data), clear it.

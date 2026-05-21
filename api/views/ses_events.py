@@ -62,6 +62,7 @@ unmatched recipients is intentional -- a missing user is not a webhook
 failure, just a no-op event we still log for audit.
 """
 
+import hmac
 import json
 import logging
 import urllib.request
@@ -78,6 +79,7 @@ from django.views.decorators.http import require_http_methods
 
 from api.openapi import openapi_spec
 from email_app.models import EmailLog, SesEvent
+from integrations.config import get_config
 from integrations.services.ses import validate_sns_notification
 
 logger = logging.getLogger(__name__)
@@ -186,6 +188,23 @@ def ses_events(request):
 
     if not isinstance(payload, dict):
         return JsonResponse({"error": "Invalid payload"}, status=400)
+
+    # Shared-secret defense-in-depth (issue #765). Runs BEFORE SNS signature
+    # validation so an attacker without the secret never reaches the
+    # signature path. When the setting is blank (local dev / unconfigured)
+    # the check is skipped entirely, preserving runserver replay workflows.
+    # No SesEvent row is written on a 403 -- failed-auth requests must not
+    # pollute the audit log.
+    expected_secret = get_config("SES_WEBHOOK_SHARED_SECRET", "").strip()
+    if expected_secret:
+        provided_secret = request.headers.get("X-SES-Webhook-Secret", "") or ""
+        if not hmac.compare_digest(expected_secret, provided_secret):
+            logger.warning(
+                "SES webhook rejected payload with invalid shared secret: type=%s message_id=%s",
+                payload.get("Type"),
+                payload.get("MessageId"),
+            )
+            return HttpResponse(status=403)
 
     if not validate_sns_notification(payload):
         logger.warning(

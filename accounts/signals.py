@@ -1,5 +1,10 @@
 from django.utils import timezone
 
+from accounts.models.user import (
+    SIGNUP_SOURCE_OAUTH,
+    SIGNUP_SOURCE_UNKNOWN,
+)
+from accounts.utils.activation import mark_activated
 from accounts.utils.names import set_name_from_external
 
 
@@ -21,6 +26,47 @@ def mark_email_verified_on_social_signup(sender, request, sociallogin, **kwargs)
     if user.pk and not user.email_verified:
         user.email_verified = True
         user.save(update_fields=["email_verified"])
+
+
+def set_signup_source_oauth_on_social_signup(sender, request, sociallogin, **kwargs):
+    """Stamp ``signup_source='oauth'`` and ``account_activated=True`` on social signup.
+
+    Fires on ``social_account_added`` (allauth signal for a brand-new
+    social account being linked to a user — covers both fresh signups
+    and an existing email-signup user later linking an OAuth provider).
+
+    Two safety rails (issue #768):
+
+    - A no-op when the user already has a non-``unknown`` signup source
+      (e.g. an existing email-signup or newsletter user later linking
+      Google). The original source is canonical and must not be
+      overwritten — only the ``unknown`` placeholder gets upgraded
+      to ``oauth``.
+    - Always sets ``account_activated=True``. OAuth providers verified
+      the email AND the user just successfully clicked through to link
+      an identity — both branches (new account, existing account
+      linking OAuth) are activation events.
+    """
+    user = sociallogin.user
+    if not user.pk:
+        return
+
+    update_fields = []
+
+    # Only promote the placeholder ``unknown`` source. An existing
+    # ``newsletter`` / ``signup`` user linking Google later keeps
+    # their original source — the OAuth link is not the row's origin.
+    if user.signup_source == SIGNUP_SOURCE_UNKNOWN:
+        user.signup_source = SIGNUP_SOURCE_OAUTH
+        update_fields.append("signup_source")
+
+    # OAuth link is always an activation event.
+    if not user.account_activated:
+        user.account_activated = True
+        update_fields.append("account_activated")
+
+    if update_fields:
+        user.save(update_fields=update_fields)
 
 
 def _extract_slack_user_id(extra_data):
@@ -62,6 +108,13 @@ def _apply_slack_oauth_membership(user, sociallogin):
 
     if update_fields:
         user.save(update_fields=update_fields)
+
+    # Issue #768: a Slack-membership-flip via OAuth proves the user
+    # joined our community workspace — flip ``account_activated`` so
+    # platform-only UI starts surfacing for them. ``mark_activated`` is
+    # idempotent and uses its own ``save(update_fields=...)`` call,
+    # so it does not collide with the slack save above.
+    mark_activated(user)
 
 
 def set_slack_user_id_on_social_login(sender, request, sociallogin, **kwargs):

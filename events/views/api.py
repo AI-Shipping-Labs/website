@@ -111,11 +111,12 @@ def _create_unverified_subscriber(email, preferred_timezone=""):
         email=email,
         verification_expires_at=verification_expires_at,
         preferred_timezone=preferred_timezone,
+        signup_source="signup",
     )
 
 
 def _send_event_verification_email(user):
-    """Send the standard ``email_verification`` email after anonymous register.
+    """Send the standard ``email_verification_signup`` email after anonymous register.
 
     Distinct from the registration confirmation: this lets the new
     user claim the account that was created on their behalf. Failure
@@ -370,6 +371,11 @@ def register_for_event(request, slug):
     registration = EventRegistration.objects.create(
         event=event, user=request.user,
     )
+
+    # Issue #768: event registration is a real platform action — flip
+    # ``account_activated`` for the authenticated user. Idempotent.
+    from accounts.utils.activation import mark_activated
+    mark_activated(request.user)
 
     # Send confirmation email with calendar invite (non-blocking)
     try:

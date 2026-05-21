@@ -31,9 +31,19 @@ def unverified_email_banner(request):
     if user.email_verified:
         return {}
 
+    # Issue #767: verification template was split into per-flow slugs
+    # (signup vs subscribe). The banner aggregates across both so it
+    # surfaces the latest verification send regardless of which path
+    # the user came in on.
     latest_verification_email = (
         EmailLog.objects
-        .filter(user=user, email_type="email_verification")
+        .filter(
+            user=user,
+            email_type__in=[
+                "email_verification_signup",
+                "email_verification_subscribe",
+            ],
+        )
         .order_by("-sent_at")
         .first()
     )

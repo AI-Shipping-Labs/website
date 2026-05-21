@@ -9,11 +9,11 @@ Scenarios mirror the spec in issue #513:
    ``verification_expires_at`` extension.
 3. Anonymous visitor registers for a free upcoming event with email
    only — User + EventRegistration rows are created, both
-   ``event_registration`` and ``email_verification`` EmailLog rows
+   ``event_registration`` and ``email_verification_signup`` EmailLog rows
    exist, the page reloads to a confirmation block.
 4. Anonymous visitor registers using an email that already maps to a
    verified user — the existing user is not touched, only
-   ``event_registration`` is sent (no ``email_verification``).
+   ``event_registration`` is sent (no ``email_verification_*``).
 5. Anonymous email-only registration on a gated event is rejected with
    403 and creates no User row.
 6. Subscriber clicks the verification link and lands on a verified
@@ -123,7 +123,7 @@ class TestSubscribeAutoCreatesAccount:
 
         from email_app.models import EmailLog
         log = EmailLog.objects.filter(
-            user=user, email_type='email_verification',
+            user=user, email_type='email_verification_subscribe',
         )
         assert log.count() == 1
 
@@ -161,7 +161,7 @@ class TestSubscribeAutoCreatesAccount:
         # A second verification email is recorded (re-sent on resubmit).
         from email_app.models import EmailLog
         log_count = EmailLog.objects.filter(
-            user=rows[0], email_type='email_verification',
+            user=rows[0], email_type='email_verification_subscribe',
         ).count()
         assert log_count >= 1
 
@@ -240,8 +240,10 @@ class TestAnonymousEventRegistrationE2E:
         assert EmailLog.objects.filter(
             user=user, email_type='event_registration',
         ).count() == 1
+        # Issue #767: event anonymous registration proxies through the
+        # signup-flow verification helper.
         assert EmailLog.objects.filter(
-            user=user, email_type='email_verification',
+            user=user, email_type='email_verification_signup',
         ).count() == 1
 
     def test_existing_verified_user_email_is_not_reset(
@@ -287,10 +289,15 @@ class TestAnonymousEventRegistrationE2E:
         ).count() == 1
 
         # No verification email sent to a verified user — only the
-        # event registration confirmation.
+        # event registration confirmation. Issue #767: assert both new
+        # verify slugs to make sure neither one leaked through.
         from email_app.models import EmailLog
         assert EmailLog.objects.filter(
-            user=existing, email_type='email_verification',
+            user=existing,
+            email_type__in=[
+                'email_verification_signup',
+                'email_verification_subscribe',
+            ],
         ).count() == 0
         assert EmailLog.objects.filter(
             user=existing, email_type='event_registration',
@@ -405,16 +412,17 @@ class TestSubscribePageDiscloseAccount:
         message = page.locator('.subscribe-message').inner_text()
         assert "account" in message.lower()
 
-        # The verification email body — rendered through the same
-        # template the user receives — says "we've created a free
-        # account for you" verbatim.
+        # Issue #767: the verification email body — rendered through the
+        # subscribe-flow template the user receives — confirms the
+        # subscription in subscribe framing and does NOT carry the
+        # "your account" framing reserved for the signup path.
         from accounts.models import User
         user = User.objects.get(email=emails[0])
         from accounts.services.verification import resolve_unverified_ttl_days
         from email_app.services.email_service import EmailService
         rendered_subject, rendered_html = (
             EmailService()._render_template(
-                'email_verification',
+                'email_verification_subscribe',
                 user,
                 {
                     'verify_url': 'https://example.test/verify?token=t',
@@ -423,4 +431,10 @@ class TestSubscribePageDiscloseAccount:
                 },
             )
         )
-        assert "we've created a free account for you" in rendered_html.lower()
+        rendered_lower = rendered_html.lower()
+        assert "confirm" in rendered_lower
+        assert "subscription" in rendered_lower or "subscribe" in rendered_lower
+        # Subscribe framing must not threaten account deletion.
+        assert "your account" not in rendered_lower
+        assert "account will be deleted" not in rendered_lower
+        assert "account will be removed" not in rendered_lower

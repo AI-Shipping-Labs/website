@@ -148,6 +148,11 @@ def create_comment(request, content_id):
         body=body,
     )
 
+    # Issue #768: posting a comment is a real platform action. Flip
+    # ``account_activated`` if not already set. Idempotent.
+    from accounts.utils.activation import mark_activated
+    mark_activated(request.user)
+
     return JsonResponse({
         'id': comment.id,
         'body': comment.body,
@@ -202,6 +207,11 @@ def reply_to_comment(request, comment_id):
         parent=parent,
         body=body,
     )
+
+    # Issue #768: posting a reply is a real platform action. Flip
+    # ``account_activated`` if not already set. Idempotent.
+    from accounts.utils.activation import mark_activated
+    mark_activated(request.user)
 
     return JsonResponse({
         'id': reply.id,

@@ -18,7 +18,7 @@ container — ``.dockerignore`` excludes it (issue #664). Entries without
 ``docs_url`` keep working — the icon simply isn't rendered for them.
 
 NOTE: ``_docs/configuration.md`` references the count and names of these
-groups in the Studio sign-in section ("confirm 10 integration groups are
+groups in the Studio sign-in section ("confirm 11 integration groups are
 listed (...)"). When adding, removing, or renaming a group here, update
 that line of the doc in the same PR.
 """
@@ -78,8 +78,34 @@ INTEGRATION_GROUPS = [
             {'key': 'AWS_SES_REGION', 'is_secret': False, 'description': 'AWS region for SES (e.g. eu-west-1). Must match the verified domain region.', 'docs_url': '_docs/integrations/ses.md#aws_ses_region'},
             {'key': 'SES_TRANSACTIONAL_FROM_EMAIL', 'is_secret': False, 'description': 'Sender address for required account and service email. Must be verified in SES.', 'docs_url': '_docs/integrations/ses.md#ses_transactional_from_email'},
             {'key': 'SES_PROMOTIONAL_FROM_EMAIL', 'is_secret': False, 'description': 'Sender address for campaigns, newsletters, and marketing email. Must be verified in SES.', 'docs_url': '_docs/integrations/ses.md#ses_promotional_from_email'},
-            {'key': 'SES_CONFIGURATION_SET_NAME', 'is_secret': False, 'description': 'Optional SES configuration set name that publishes delivery, open, and click events to SNS.', 'docs_url': '_docs/integrations/ses.md#ses_configuration_set_name'},
+            {
+                'key': 'SES_CONFIGURATION_SET_NAME',
+                'is_secret': False,
+                'description': (
+                    'SES configuration set name that publishes delivery, '
+                    'open, bounce, and click events to SNS. Required in '
+                    'production: set to "aishippinglabs" (matches the '
+                    'configuration set in ai-shipping-labs-infra/email.tf). '
+                    'When blank, SES publishes no events to SNS regardless '
+                    'of the HTTPS subscription wiring, so the bounce / '
+                    'complaint webhook never fires. Safe to leave blank '
+                    'only in local dev.'
+                ),
+                'docs_url': '_docs/integrations/ses.md#ses_configuration_set_name',
+            },
             {'key': 'SES_WEBHOOK_VALIDATION_ENABLED', 'is_secret': False, 'is_boolean': True, 'description': 'Set true to verify SNS bounce/complaint signatures (recommended in production).', 'docs_url': '_docs/integrations/ses.md#ses_webhook_validation_enabled'},
+            {
+                'key': 'SES_WEBHOOK_SHARED_SECRET',
+                'is_secret': True,
+                'optional': True,
+                'description': (
+                    'Optional shared secret required in the '
+                    'X-SES-Webhook-Secret header on the SES webhook. Set in '
+                    'prod and inject from the infra-side Lambda forwarder. '
+                    'Leave blank locally to allow runserver replay.'
+                ),
+                'docs_url': '_docs/integrations/ses.md#ses_webhook_shared_secret',
+            },
         ],
     },
     {
@@ -192,6 +218,23 @@ INTEGRATION_GROUPS = [
                 ),
                 'optional': True,
                 'docs_url': '_docs/integrations/site.md#staff_signup_notify_email',
+            },
+        ],
+    },
+    {
+        'name': 'analytics',
+        'label': 'Analytics',
+        'keys': [
+            {
+                'key': 'GOOGLE_ANALYTICS_ID',
+                'is_secret': False,
+                'optional': True,
+                'description': (
+                    'Google Analytics 4 measurement ID (e.g. G-XXXXXXXXXX). '
+                    'When blank, no GA loader is emitted. Find it in GA: '
+                    'Admin > Data Streams > [your stream] > Measurement ID.'
+                ),
+                'docs_url': '_docs/integrations/analytics.md#google_analytics_id',
             },
         ],
     },

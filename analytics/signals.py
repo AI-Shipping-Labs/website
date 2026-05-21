@@ -47,9 +47,12 @@ from django.db import DatabaseError, transaction
 from analytics.middleware import (
     ANON_ID_COOKIE,
     FIRST_TOUCH_COOKIE,
+    FIRST_TOUCH_REFERRER_COOKIE,
     SESSION_LAST_TOUCH,
+    SESSION_LAST_TOUCH_REFERRER,
 )
 from analytics.models import CampaignVisit, UserAttribution
+from analytics.referrer_source import ReferrerSource
 from analytics.request_context import (
     consume_stripe_user_creation,
     get_current_request,
@@ -86,6 +89,37 @@ def _read_last_touch(request):
         return None
     try:
         return request.session.get(SESSION_LAST_TOUCH)
+    except AttributeError:
+        return None
+
+
+def _read_first_touch_referrer(request):
+    """Parse the `aslab_ft_ref` cookie. Returns dict or None.
+
+    Shape: `{"host": "...", "source": "...", "ts": "..."}`. The middleware
+    writes this cookie only when an external (non-same-origin, non-login)
+    referrer is observed.
+    """
+    if request is None:
+        return None
+    raw = request.COOKIES.get(FIRST_TOUCH_REFERRER_COOKIE, '')
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (ValueError, TypeError):
+        logger.warning(
+            'Could not parse %s cookie: %r', FIRST_TOUCH_REFERRER_COOKIE, raw,
+        )
+        return None
+
+
+def _read_last_touch_referrer(request):
+    """Read the `aslab_lt_ref` session value. Returns dict or None."""
+    if request is None:
+        return None
+    try:
+        return request.session.get(SESSION_LAST_TOUCH_REFERRER)
     except AttributeError:
         return None
 
@@ -133,11 +167,28 @@ def create_user_attribution(sender, instance, created, **kwargs):
 
     first_touch = _read_first_touch(request) or {}
     last_touch = _read_last_touch(request) or {}
+    first_touch_ref = _read_first_touch_referrer(request) or {}
+    last_touch_ref = _read_last_touch_referrer(request) or {}
     anon_id = _read_anonymous_id(request)
     signup_path = _resolve_signup_path(request, stripe_flag)
 
     first_campaign_slug = _truncate(first_touch.get('campaign', ''))
     last_campaign_slug = _truncate(last_touch.get('campaign', ''))
+
+    # Referrer host/source: when the cookie/session is missing OR the host
+    # is empty, write '' for host and `direct` for source. Distinguishes
+    # "user landed directly on the signup page" from "user came from a
+    # non-bucketed referrer" (which keeps its `other` source).
+    first_ref_host = _truncate(first_touch_ref.get('host', ''))
+    first_ref_source = _truncate(
+        first_touch_ref.get('source') or ReferrerSource.DIRECT.value,
+        max_len=64,
+    ) if first_ref_host else ReferrerSource.DIRECT.value
+    last_ref_host = _truncate(last_touch_ref.get('host', ''))
+    last_ref_source = _truncate(
+        last_touch_ref.get('source') or ReferrerSource.DIRECT.value,
+        max_len=64,
+    ) if last_ref_host else ReferrerSource.DIRECT.value
 
     try:
         with transaction.atomic():
@@ -157,6 +208,10 @@ def create_user_attribution(sender, instance, created, **kwargs):
                 last_touch_utm_term=_truncate(last_touch.get('term', '')),
                 last_touch_campaign=_resolve_campaign(last_campaign_slug),
                 last_touch_ts=_parse_iso_ts(last_touch.get('ts')),
+                first_touch_referrer_host=first_ref_host,
+                first_touch_referrer_source=first_ref_source,
+                last_touch_referrer_host=last_ref_host,
+                last_touch_referrer_source=last_ref_source,
                 signup_path=signup_path,
                 anonymous_id=_truncate(anon_id, max_len=64),
             )

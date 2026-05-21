@@ -37,7 +37,8 @@ logger = logging.getLogger(__name__)
 # think about (onboarding -> account -> billing -> events -> imports).
 TEMPLATE_DISPLAY_ORDER = [
     'welcome',
-    'email_verification',
+    'email_verification_signup',
+    'email_verification_subscribe',
     'password_reset',
     'community_invite',
     'lead_magnet_delivery',

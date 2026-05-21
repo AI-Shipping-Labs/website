@@ -14,6 +14,9 @@ Skip conditions:
   treats it as a real account that just hasn't toggled the verified
   flag, and the purge job will skip it for the same reason.
 - ``verification_reminder_sent_at`` already set — one reminder per user.
+
+Issue #767: the reminder template is chosen per user based on the slug
+of the most recent verification ``EmailLog`` row (signup vs subscribe).
 """
 
 import datetime
@@ -25,7 +28,12 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 REMINDER_WINDOW = datetime.timedelta(hours=24)
-REMINDER_TEMPLATE_NAME = "email_verification_reminder"
+SIGNUP_REMINDER_TEMPLATE_NAME = "email_verification_signup_reminder"
+SUBSCRIBE_REMINDER_TEMPLATE_NAME = "email_verification_subscribe_reminder"
+VERIFICATION_SLUGS = (
+    "email_verification_signup",
+    "email_verification_subscribe",
+)
 
 
 def _build_verify_url(user):
@@ -39,6 +47,31 @@ def _build_verify_url(user):
 
     token = _generate_verification_token(user.pk)
     return f"{site_base_url()}/api/verify-email?token={token}"
+
+
+def _pick_reminder_template(user):
+    """Choose the reminder template based on the user's latest verification log.
+
+    Returns ``email_verification_subscribe_reminder`` when the user's most
+    recent verification EmailLog is ``email_verification_subscribe``;
+    otherwise returns ``email_verification_signup_reminder`` (safe default
+    that also covers users with no prior verification log — e.g. legacy
+    users whose original send predates this split or was wiped).
+    """
+    # Inline import: ``email_app.models`` pulls in the user model
+    # indirectly via FK metadata, which would be a circular dep at the
+    # accounts.tasks module-load boundary.
+    from email_app.models import EmailLog  # noqa: PLC0415
+
+    latest = (
+        EmailLog.objects
+        .filter(user=user, email_type__in=VERIFICATION_SLUGS)
+        .order_by("-sent_at")
+        .first()
+    )
+    if latest is not None and latest.email_type == "email_verification_subscribe":
+        return SUBSCRIBE_REMINDER_TEMPLATE_NAME
+    return SIGNUP_REMINDER_TEMPLATE_NAME
 
 
 def remind_unverified_users():
@@ -68,10 +101,11 @@ def remind_unverified_users():
     skipped = 0
     for user in candidates:
         verify_url = _build_verify_url(user)
+        template_name = _pick_reminder_template(user)
         try:
             email_log = service.send(
                 user,
-                REMINDER_TEMPLATE_NAME,
+                template_name,
                 {
                     "verify_url": verify_url,
                     "expires_at": user.verification_expires_at,

@@ -141,7 +141,7 @@ class BounceCorrelationToEmailLogTest(TestCase):
     def test_verification_bounce_traceable_via_email_type(self):
         log = EmailLog.objects.create(
             user=self.user,
-            email_type="email_verification",
+            email_type="email_verification_signup",
             ses_message_id="ses-verify-1",
         )
 
@@ -161,7 +161,7 @@ class BounceCorrelationToEmailLogTest(TestCase):
         event = SesEvent.objects.get(message_id="m-bounce-verify-1")
         self.assertEqual(event.email_log_id, log.pk)
         # Staff can answer "what kind of email bounced?" via email_log.email_type.
-        self.assertEqual(event.email_log.email_type, "email_verification")
+        self.assertEqual(event.email_log.email_type, "email_verification_signup")
         self.assertEqual(event.bounce_subtype, "NoEmail")
 
         log.refresh_from_db()
@@ -171,7 +171,7 @@ class BounceCorrelationToEmailLogTest(TestCase):
     def test_verification_reminder_bounce_correlates(self):
         log = EmailLog.objects.create(
             user=self.user,
-            email_type="email_verification_reminder",
+            email_type="email_verification_signup_reminder",
             ses_message_id="ses-remind-1",
         )
 
@@ -188,7 +188,7 @@ class BounceCorrelationToEmailLogTest(TestCase):
         event = SesEvent.objects.get(message_id="m-bounce-remind-1")
         self.assertEqual(event.email_log_id, log.pk)
         self.assertEqual(
-            event.email_log.email_type, "email_verification_reminder",
+            event.email_log.email_type, "email_verification_signup_reminder",
         )
 
     def test_lead_magnet_delivery_bounce_correlates(self):
@@ -215,7 +215,7 @@ class BounceCorrelationToEmailLogTest(TestCase):
     def test_permanent_bounce_still_unsubscribes_when_correlation_succeeds(self):
         EmailLog.objects.create(
             user=self.user,
-            email_type="email_verification",
+            email_type="email_verification_signup",
             ses_message_id="ses-side-1",
         )
 
@@ -448,7 +448,7 @@ class NoEmailDiagnosticTest(TestCase):
         user = User.objects.create_user(email="ghost@example.com")
         EmailLog.objects.create(
             user=user,
-            email_type="email_verification",
+            email_type="email_verification_signup",
             ses_message_id="ses-noemail-1",
         )
 
@@ -566,7 +566,7 @@ class AdminVisibilityTest(TestCase):
         user = User.objects.create_user(email="byemailtype@example.com")
         log = EmailLog.objects.create(
             user=user,
-            email_type="email_verification_reminder",
+            email_type="email_verification_signup_reminder",
             ses_message_id="ses-byet-1",
         )
         SesEvent.objects.create(
@@ -595,7 +595,7 @@ class AdminVisibilityTest(TestCase):
         )
 
         url = reverse("admin:email_app_sesevent_changelist")
-        response = self.client.get(url, {"q": "email_verification_reminder"})
+        response = self.client.get(url, {"q": "email_verification_signup_reminder"})
         self.assertEqual(response.status_code, 200)
         cl = response.context["cl"]
         ids = list(cl.queryset.values_list("message_id", flat=True))

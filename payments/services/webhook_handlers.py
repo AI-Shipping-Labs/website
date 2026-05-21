@@ -75,7 +75,15 @@ def handle_checkout_completed(session_data):
         # (the webhook runs without an HttpRequest bound to the thread).
         from analytics.request_context import set_stripe_user_creation
         set_stripe_user_creation()
-        user = User.objects.create_user(email=customer_email)
+        # Issue #768: Stripe checkout creating a brand-new user lands
+        # them as ``imported`` (we did not own the signup flow) and
+        # auto-activates the row — they just paid, so they are
+        # inarguably active.
+        user = User.objects.create_user(
+            email=customer_email,
+            signup_source="imported",
+            account_activated=True,
+        )
         was_new_user = True
 
     if user is None:
@@ -160,6 +168,14 @@ def handle_checkout_completed(session_data):
     _services.logger.info(
         "checkout.session.completed: user=%s tier=%s", user.email, tier.slug,
     )
+
+    # Issue #768: a successful tier checkout (including upgrades on an
+    # existing row that did NOT take the new-user branch above) is the
+    # canonical paid activation signal — flip ``account_activated``
+    # if it was not already True. ``mark_activated`` is idempotent so
+    # the new-user branch that already set the flag is a no-op here.
+    from accounts.utils.activation import mark_activated
+    mark_activated(user)
 
     # Determine billing period from the Stripe subscription's price ID.
     billing_period = ""

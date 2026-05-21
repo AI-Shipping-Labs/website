@@ -14,6 +14,7 @@ class AccountsConfig(AppConfig):
             mark_email_verified_on_social_login,
             mark_email_verified_on_social_signup,
             populate_name_from_social,
+            set_signup_source_oauth_on_social_signup,
             set_slack_user_id_on_social_login,
             set_slack_user_id_on_social_signup,
         )
@@ -24,6 +25,9 @@ class AccountsConfig(AppConfig):
         social_account_added.connect(set_slack_user_id_on_social_signup)
         pre_social_login.connect(populate_name_from_social)
         social_account_added.connect(populate_name_from_social)
+        # Issue #768: stamp signup_source='oauth' + account_activated=True
+        # when a brand-new social account is linked.
+        social_account_added.connect(set_signup_source_oauth_on_social_signup)
 
         from accounts.services.import_course_db import register_course_db_import_adapter
 

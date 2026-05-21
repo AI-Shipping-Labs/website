@@ -3,6 +3,8 @@
 from django.conf import settings
 from django.db import models
 
+from analytics.referrer_source import ReferrerSource
+
 SIGNUP_PATH_CHOICES = [
     ('email_password', 'Email + password'),
     ('newsletter', 'Newsletter'),
@@ -52,6 +54,17 @@ class UserAttribution(models.Model):
     )
     first_touch_ts = models.DateTimeField(null=True, blank=True)
 
+    # First-touch HTTP referrer (organic, no UTM). See #772.
+    first_touch_referrer_host = models.CharField(
+        max_length=255, blank=True, default='',
+    )
+    first_touch_referrer_source = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        choices=ReferrerSource.choices,
+    )
+
     # Last-touch (the most recent UTM landing this session)
     last_touch_utm_source = models.CharField(max_length=255, blank=True, default='')
     last_touch_utm_medium = models.CharField(max_length=255, blank=True, default='')
@@ -67,6 +80,17 @@ class UserAttribution(models.Model):
         help_text='Resolved by matching last-touch utm_campaign to UtmCampaign.slug at signup.',
     )
     last_touch_ts = models.DateTimeField(null=True, blank=True)
+
+    # Last-touch HTTP referrer (organic, no UTM). See #772.
+    last_touch_referrer_host = models.CharField(
+        max_length=255, blank=True, default='',
+    )
+    last_touch_referrer_source = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        choices=ReferrerSource.choices,
+    )
 
     # How the user signed up
     signup_path = models.CharField(

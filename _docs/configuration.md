@@ -153,8 +153,9 @@ Keys to set in Studio:
 | `AWS_SES_REGION` | non-secret | e.g. `us-east-1`, `eu-west-1`. |
 | `SES_TRANSACTIONAL_FROM_EMAIL` | non-secret | Sender for required account/service email. Defaults to `noreply@aishippinglabs.com`; must be a verified sender (or be on a verified domain) in SES. |
 | `SES_PROMOTIONAL_FROM_EMAIL` | non-secret | Sender for campaigns/newsletters/marketing email. Defaults to `content@aishippinglabs.com`; must be a verified sender (or be on a verified domain) in SES. |
-| `SES_CONFIGURATION_SET_NAME` | non-secret | Optional SES configuration set name for delivery, open, and click event publishing. |
+| `SES_CONFIGURATION_SET_NAME` | non-secret | SES configuration set name for delivery, open, bounce, and click event publishing. Required in prod: set to `aishippinglabs` (matches `ai-shipping-labs-infra/email.tf`). When blank, SES publishes no events to SNS regardless of how the HTTPS subscription is wired — the bounce / complaint webhook never fires. |
 | `SES_WEBHOOK_VALIDATION_ENABLED` | non-secret | `true` in prod to validate incoming SNS webhook signatures. |
+| `SES_WEBHOOK_SHARED_SECRET` | secret | Optional shared secret enforced by the `/api/ses-events` webhook (`X-SES-Webhook-Secret` header). When set, requests missing the header or carrying the wrong value return 403 *before* SNS signature validation runs. Leave blank locally to keep `manage.py runserver` replay workflows working; set in prod and inject from the infra-side Lambda forwarder. |
 
 Webhook endpoint (for SES bounce/complaint/open/click notifications via SNS): `{SITE_BASE_URL}/api/ses-events` (no trailing slash; the slashless form avoids the trailing-slash redirect that strips POST bodies). Configure in your SNS topic subscription.
 
@@ -181,7 +182,7 @@ Required state in this repo:
 
 - `SES_CONFIGURATION_SET_NAME=aishippinglabs` in prod settings (Studio > Settings > Email (SES)). Without this, SES doesn't publish events.
 - `SES_WEBHOOK_VALIDATION_ENABLED=true` in prod (default everywhere except `DEBUG=True`).
-- (Defense-in-depth, paired with the Lambda above) `SES_WEBHOOK_SHARED_SECRET` set to the same value Secrets Manager hands the Lambda. The webhook then 403s any request missing or with a wrong header. Open work — see follow-up issue.
+- (Defense-in-depth, paired with the Lambda above) `SES_WEBHOOK_SHARED_SECRET` set to the same value Secrets Manager hands the Lambda. The webhook then 403s any request missing or with a wrong header (`hmac.compare_digest`, constant-time). The check runs *before* SNS signature validation so an attacker without the secret never reaches the signature path, and rejected requests do not pollute the `SesEvent` audit log. Leave blank locally to keep `manage.py runserver` replay workflows working.
 
 Verify the pipeline is live:
 

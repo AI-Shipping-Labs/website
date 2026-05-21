@@ -225,13 +225,22 @@ via the `X-SES-CONFIGURATION-SET` header. Read by
 `email_app/services/email_service.py:452`. A configuration set is
 the SES feature that publishes per-message delivery, open, bounce, and
 click events to SNS (and from there to the platform's webhook at
-`/api/webhooks/ses-events`).
+`/api/ses-events`).
+
+Required in production: set to `aishippinglabs` to match the
+configuration set defined in
+`ai-shipping-labs-infra/email.tf`. When this value is blank, SES
+publishes no events to SNS regardless of how the HTTPS subscription
+is wired — the bounce / complaint webhook never fires and bounced
+users are never unsubscribed. The "Optional" label in older docs
+referred to the local-dev case only.
 
 Without it: Outbound mail still sends — SES does not require a
 configuration set. But the platform loses delivery / bounce / open
 telemetry. Suppression-list updates from hard bounces stop, so
 repeated sends to bad addresses degrade the sending domain's
-reputation. Optional, but strongly recommended in production.
+reputation, and the entire bounce-handling pipeline silently
+no-ops in prod.
 
 Where to find it:
 
@@ -293,3 +302,49 @@ new value.
 Test vs live: Set to `true` in production. Leaving it `false` in
 production is safe behaviour-wise (the platform still processes
 events) but loses the spoofing defence.
+
+## SES_WEBHOOK_SHARED_SECRET
+
+Purpose: Optional shared secret enforced by `api/views/ses_events.py`
+on the `POST /api/ses-events` webhook. When set, the view requires
+the request to carry an `X-SES-Webhook-Secret` header equal to this
+value (constant-time compare via `hmac.compare_digest`). The check
+runs *before* SNS signature validation, so an attacker without the
+secret never reaches the signature path. Rejected requests log a
+WARNING and return 403; no `SesEvent` audit row is written, which
+prevents an unauthenticated peer from poisoning the audit log.
+
+SNS signature verification already authenticates the caller
+cryptographically — the shared secret is defense-in-depth against
+anyone who somehow gets hold of a valid SNS payload (leaked logs,
+screenshots) and tries to replay it from outside AWS.
+
+Without it: Leave blank in local dev so `manage.py runserver` can
+replay captured SNS payloads without forging the header. The webhook
+falls back to SNS-signature validation as the sole auth layer, which
+is the today-shipping behaviour from issue #453.
+
+Where to find it: This setting is paired with the infra-side Lambda
+forwarder defined in
+`AI-Shipping-Labs/ai-shipping-labs-infra` (`email.tf`). The Lambda
+pulls the secret from AWS Secrets Manager and injects it into the
+`X-SES-Webhook-Secret` header before forwarding the SNS payload to
+the Django webhook. The two values must match.
+
+Prereqs:
+- An entry in AWS Secrets Manager holding the shared secret string.
+- A Lambda (infra repo) subscribed between SNS and the Django
+  webhook that reads the secret and adds the header.
+- The same secret stored in Studio (Email (SES) > `SES_WEBHOOK_SHARED_SECRET`).
+
+Rotation: Generate a new random secret, update Secrets Manager and
+Studio in either order — there is a tiny window where the Lambda
+and Django side disagree. Set on both sides as close in time as
+possible. The webhook returns 403 for the mismatched-secret window,
+SNS retries, and once both sides match the retry succeeds. No
+events are lost.
+
+Test vs live: Set this in production. Leave blank in local dev. CI
+and Playwright tests do not need it set — the test suite mocks the
+webhook directly and does not depend on the secret being either
+present or absent.

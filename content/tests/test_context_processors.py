@@ -14,6 +14,7 @@ class SiteContextProcessorTest(TestCase):
         self.assertIn('site_url', context)
         self.assertIn('site_description', context)
         self.assertIn('stripe_customer_portal_url', context)
+        self.assertIn('google_analytics_id', context)
         self.assertIn('current_year', context)
 
     def test_site_name(self):

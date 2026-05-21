@@ -49,14 +49,16 @@
     })();
   </script>
 
+  {% if google_analytics_id %}
   <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-HXSHF376NY"></script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id={{ google_analytics_id }}"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
-    gtag('config', 'G-HXSHF376NY');
+    gtag('config', '{{ google_analytics_id }}');
   </script>
+  {% endif %}
 
   <!-- Structured Data -->
   {% block structured_data %}{% structured_data %}{% endblock %}

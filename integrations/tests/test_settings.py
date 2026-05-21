@@ -330,7 +330,7 @@ class SettingsDashboardViewTest(TestCase):
         section_ids = [section['id'] for section in sections]
         self.assertEqual(
             section_ids,
-            ['auth', 'payments', 'content', 'messaging', 'storage', 'site'],
+            ['auth', 'payments', 'content', 'messaging', 'storage', 'site', 'analytics'],
         )
 
         groups_by_section = {
@@ -342,6 +342,7 @@ class SettingsDashboardViewTest(TestCase):
         self.assertEqual(groups_by_section['messaging'], ['ses', 'slack'])
         self.assertEqual(groups_by_section['storage'], ['s3_recordings', 's3_content'])
         self.assertEqual(groups_by_section['site'], ['site'])
+        self.assertEqual(groups_by_section['analytics'], ['analytics'])
 
         assigned_group_names = [
             group['name']
@@ -389,7 +390,9 @@ class SettingsDashboardViewTest(TestCase):
         summary = response.context['status_summary']
         expected_total_items = len(response.context['auth_providers']) + len(response.context['groups'])
         self.assertEqual(summary['total_items'], expected_total_items)
-        self.assertEqual(summary['configured_count'], 1)
+        # Google OAuth + the `analytics` group (all keys optional, so
+        # "configured" by default even with no value set).
+        self.assertEqual(summary['configured_count'], 2)
         # Stripe has one DB-backed key, SES has one env-backed key, and
         # GitHub has the default Secrets Manager path but no App IDs.
         self.assertEqual(summary['partial_count'], 3)

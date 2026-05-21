@@ -37,7 +37,7 @@ class AuthLoginDashboardTest(TestCase):
         # one legacy "integrations" zone.
         self.assertContains(response, 'data-settings-section="auth"')
         self.assertContains(response, 'id="auth"')
-        for section_id in ('payments', 'content', 'messaging', 'storage', 'site'):
+        for section_id in ('payments', 'content', 'messaging', 'storage', 'site', 'analytics'):
             self.assertContains(response, f'data-settings-section="{section_id}"')
             self.assertContains(response, f'href="#{section_id}"')
         self.assertContains(response, 'id="integration-stripe"')

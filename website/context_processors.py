@@ -130,6 +130,7 @@ def site_context(request):
         'site_url': site_base_url(),
         'site_description': settings.SITE_DESCRIPTION,
         'stripe_customer_portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
+        'google_analytics_id': get_config('GOOGLE_ANALYTICS_ID', ''),
         'current_year': __import__('datetime').datetime.now().year,
     }
 

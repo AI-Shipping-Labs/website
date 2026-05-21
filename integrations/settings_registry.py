@@ -18,7 +18,7 @@ container — ``.dockerignore`` excludes it (issue #664). Entries without
 ``docs_url`` keep working — the icon simply isn't rendered for them.
 
 NOTE: ``_docs/configuration.md`` references the count and names of these
-groups in the Studio sign-in section ("confirm 10 integration groups are
+groups in the Studio sign-in section ("confirm 11 integration groups are
 listed (...)"). When adding, removing, or renaming a group here, update
 that line of the doc in the same PR.
 """
@@ -192,6 +192,23 @@ INTEGRATION_GROUPS = [
                 ),
                 'optional': True,
                 'docs_url': '_docs/integrations/site.md#staff_signup_notify_email',
+            },
+        ],
+    },
+    {
+        'name': 'analytics',
+        'label': 'Analytics',
+        'keys': [
+            {
+                'key': 'GOOGLE_ANALYTICS_ID',
+                'is_secret': False,
+                'optional': True,
+                'description': (
+                    'Google Analytics 4 measurement ID (e.g. G-XXXXXXXXXX). '
+                    'When blank, no GA loader is emitted. Find it in GA: '
+                    'Admin > Data Streams > [your stream] > Measurement ID.'
+                ),
+                'docs_url': '_docs/integrations/analytics.md#google_analytics_id',
             },
         ],
     },

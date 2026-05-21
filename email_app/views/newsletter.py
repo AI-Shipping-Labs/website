@@ -170,6 +170,7 @@ def subscribe_api(request):
         user = User.objects.create_user(
             email=email,
             verification_expires_at=verification_expires_at,
+            signup_source="newsletter",
         )
         _send_subscribe_verification_email(
             user, redirect_to=redirect_to or None

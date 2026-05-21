@@ -16,6 +16,7 @@ add a third surface, copy-paste it" drift the orchestrator flagged.
 
 from django.db import IntegrityError, transaction
 
+from accounts.utils.activation import mark_activated
 from plans.models import Plan, SprintEnrollment, Week
 
 
@@ -83,6 +84,10 @@ def create_plan_for_enrollment(*, sprint, user, enrolled_by):
                     position=week_index,
                     theme='',
                 )
+            # Issue #768: creating a sprint plan is a real platform
+            # action. Flip ``account_activated`` if not already set.
+            # Idempotent — only the first plan creation writes the row.
+            mark_activated(user)
             return plan, enrollment, True
     except IntegrityError:
         # Race: another request created the plan between the

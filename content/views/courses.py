@@ -562,6 +562,13 @@ def api_course_unit_complete(request, slug, unit_id):
         return JsonResponse({'completed': False})
 
     completion_service.mark_completed(user, unit)
+
+    # Issue #768: marking a course unit complete is a real platform
+    # action. Flip ``account_activated`` if not already set.
+    # Idempotent — only the first completion writes the row.
+    from accounts.utils.activation import mark_activated
+    mark_activated(user)
+
     return JsonResponse({'completed': True})
 
 

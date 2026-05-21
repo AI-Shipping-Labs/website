@@ -680,6 +680,11 @@ def user_create(request):
         last_name=last_name,
         is_active=True,
         email_verified=True,
+        # Issue #768: staff-created users come from a staff member who
+        # vouched for them; mark the row as ``staff_create`` and
+        # pre-activated so they bypass the newsletter-only UI gates.
+        signup_source="staff_create",
+        account_activated=True,
     )
     if make_admin:
         # Admins bypass tier gates everywhere they appear, so the tier value

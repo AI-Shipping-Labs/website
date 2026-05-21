@@ -20,6 +20,30 @@ IMPORT_BATCH_SOURCE_CHOICES = [
 ]
 
 
+# Signup source values (issue #768). Tracks how a ``User`` row was
+# originally created so downstream features (per-source retention TTLs,
+# per-source verification email copy, UI gating for newsletter-only
+# users) can branch on origin without re-deriving it. The ``unknown``
+# default exists only as the fallback for pre-existing rows the schema
+# migration leaves alone — all new rows are written by their entry
+# point with an explicit non-``unknown`` value.
+SIGNUP_SOURCE_UNKNOWN = "unknown"
+SIGNUP_SOURCE_NEWSLETTER = "newsletter"
+SIGNUP_SOURCE_SIGNUP = "signup"
+SIGNUP_SOURCE_OAUTH = "oauth"
+SIGNUP_SOURCE_IMPORTED = "imported"
+SIGNUP_SOURCE_STAFF_CREATE = "staff_create"
+
+SIGNUP_SOURCE_CHOICES = [
+    (SIGNUP_SOURCE_UNKNOWN, "Unknown (pre-existing row)"),
+    (SIGNUP_SOURCE_NEWSLETTER, "Newsletter subscribe"),
+    (SIGNUP_SOURCE_SIGNUP, "Email + password signup"),
+    (SIGNUP_SOURCE_OAUTH, "OAuth signup"),
+    (SIGNUP_SOURCE_IMPORTED, "Bulk import (Stripe / CSV / course DB)"),
+    (SIGNUP_SOURCE_STAFF_CREATE, "Staff-created (Studio)"),
+]
+
+
 class UserManager(BaseUserManager):
     """Custom user manager where email is the unique identifier."""
 
@@ -204,6 +228,29 @@ class User(AbstractUser):
         default=dict,
         blank=True,
         help_text="Source-keyed import metadata for audit/debugging, not querying.",
+    )
+
+    # Origin of the user row (issue #768). Set at creation by the
+    # specific entry point (newsletter, register, OAuth, Stripe webhook,
+    # bulk import, Studio create). Pre-existing rows sit at the
+    # ``unknown`` default — no heuristic backfill.
+    signup_source = models.CharField(
+        max_length=32,
+        choices=SIGNUP_SOURCE_CHOICES,
+        default=SIGNUP_SOURCE_UNKNOWN,
+        db_index=True,
+        help_text="How the user row was created (issue #768).",
+    )
+    # Flips True the first time the user does a platform action
+    # (verifies email, pays, comments, registers for an event,
+    # completes a course unit, links Slack). Idempotent.
+    account_activated = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text=(
+            "True once the user has taken a platform action (issue #768). "
+            "Used to gate platform-only UI for newsletter-only subscribers."
+        ),
     )
 
     class Meta:

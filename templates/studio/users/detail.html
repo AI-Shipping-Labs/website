@@ -159,6 +159,33 @@
               data-status="{{ status|lower }}">{{ status }}</span>
       </dd>
     </div>
+    {% comment %}
+      Signup source + activation chips (issue #768). Read-only;
+      reuse the existing chip classes already on this page so the
+      row matches the visual rhythm of Newsletter / Slack.
+    {% endcomment %}
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Source</dt>
+      <dd>
+        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"
+              data-testid="user-detail-signup-source"
+              data-signup-source="{{ detail_user.signup_source }}">{{ detail_user.get_signup_source_display }}</span>
+      </dd>
+    </div>
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Activated</dt>
+      <dd>
+        {% if detail_user.account_activated %}
+        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400"
+              data-testid="user-detail-account-activated"
+              data-account-activated="yes">Yes</span>
+        {% else %}
+        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"
+              data-testid="user-detail-account-activated"
+              data-account-activated="no">No</span>
+        {% endif %}
+      </dd>
+    </div>
     <div class="flex justify-between gap-4">
       <dt class="text-muted-foreground">Newsletter</dt>
       <dd>

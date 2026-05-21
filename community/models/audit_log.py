@@ -22,6 +22,13 @@ class CommunityAuditLog(models.Model):
         ("link", "Link"),
         ("check", "Check"),
         ("email_synced_from_stripe", "Email synced from Stripe"),
+        # User Management API writes (issue #764). The audit row's
+        # ``user`` FK stays the SUBJECT of the action (the user being
+        # mutated); the actor identity (API token name) lives in
+        # ``details`` as ``actor_token=<name or key_prefix>``.
+        ("api_unsubscribe", "API: unsubscribe toggle"),
+        ("api_verify", "API: email verification"),
+        ("api_tag", "API: tag add/remove"),
     ]
 
     user = models.ForeignKey(

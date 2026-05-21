@@ -78,6 +78,14 @@ from api.views.tier_reconcile import (
     tier_reconcile_apply,
     tier_reconcile_diagnostics,
 )
+from api.views.users import (
+    user_detail,
+    user_email_log,
+    user_ses_events,
+    user_tags_add,
+    user_tags_remove,
+    users_collection,
+)
 from api.views.weeks import plan_weeks_collection, week_detail
 from api.views.worker import (
     worker_task_detail,
@@ -373,6 +381,43 @@ urlpatterns = [
     path(
         "users/<path:email>/notes/",
         user_interview_notes,
+    ),
+    # ---- User Management API (issue #764) -----------------------------
+    # Read state + read SES history + safe writes (unsubscribe, tags,
+    # verify). The tag-DELETE route is registered BEFORE the tag-POST
+    # collection so the ``<str:tag>`` capture lands. The single-user
+    # detail route is registered AFTER the more-specific sub-resources
+    # (``ses-events``, ``email-log``, ``tags``) so the ``<path:email>``
+    # converter does not swallow the literal suffix.
+    path(
+        "users/<path:email>/ses-events",
+        user_ses_events,
+        name="api_user_ses_events",
+    ),
+    path(
+        "users/<path:email>/email-log",
+        user_email_log,
+        name="api_user_email_log",
+    ),
+    path(
+        "users/<path:email>/tags/<str:tag>",
+        user_tags_remove,
+        name="api_user_tag_remove",
+    ),
+    path(
+        "users/<path:email>/tags",
+        user_tags_add,
+        name="api_user_tags_add",
+    ),
+    path(
+        "users",
+        users_collection,
+        name="api_users_collection",
+    ),
+    path(
+        "users/<path:email>",
+        user_detail,
+        name="api_user_detail",
     ),
     path(
         "interview-notes",

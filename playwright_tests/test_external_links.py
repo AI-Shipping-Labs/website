@@ -143,14 +143,14 @@ class TestWorkshopExternalLinkOpensInNewTab:
         self, browser, django_server,
     ):
         _clear_workshops_and_articles()
-        _create_workshop_with_links()
+        workshop = _create_workshop_with_links()
         _create_user('free@test.com', tier_slug='free')
 
         ctx = _auth_context(browser, 'free@test.com')
         page = ctx.new_page()
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
         page.goto(
-            f'{django_server}/workshops/architecture-walk-through/'
-            f'tutorial/qa',
+            f'{django_server}/workshops/{workshop.url_key}/tutorial/qa',
             wait_until='domcontentloaded',
         )
 
@@ -167,14 +167,14 @@ class TestWorkshopExternalLinkOpensInNewTab:
         self, browser, django_server,
     ):
         _clear_workshops_and_articles()
-        _create_workshop_with_links()
+        workshop = _create_workshop_with_links()
         _create_user('free@test.com', tier_slug='free')
 
         ctx = _auth_context(browser, 'free@test.com')
         page = ctx.new_page()
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
         page.goto(
-            f'{django_server}/workshops/architecture-walk-through/'
-            f'tutorial/qa',
+            f'{django_server}/workshops/{workshop.url_key}/tutorial/qa',
             wait_until='domcontentloaded',
         )
 
@@ -203,14 +203,16 @@ class TestWorkshopExternalLinkOpensInNewTab:
         self, browser, django_server,
     ):
         _clear_workshops_and_articles()
-        _create_workshop_with_links()
+        workshop = _create_workshop_with_links()
         _create_user('free@test.com', tier_slug='free')
+
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
+        tutorial_path = f'/workshops/{workshop.url_key}/tutorial/qa'
 
         ctx = _auth_context(browser, 'free@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/architecture-walk-through/'
-            f'tutorial/qa',
+            f'{django_server}{tutorial_path}',
             wait_until='domcontentloaded',
         )
 
@@ -235,9 +237,7 @@ class TestWorkshopExternalLinkOpensInNewTab:
         # The original tab is still on the workshop page (proof the
         # click did not navigate the original tab).
         assert new_page is not None
-        assert (
-            '/workshops/architecture-walk-through/tutorial/qa' in page.url
-        )
+        assert tutorial_path in page.url
 
         ctx.close()
 

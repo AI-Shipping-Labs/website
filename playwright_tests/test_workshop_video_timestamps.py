@@ -123,26 +123,31 @@ class TestWatchBarRoundTrip:
         self, browser, django_server,
     ):
         _clear_workshops()
-        _create_workshop_with_timestamps()
+        workshop = _create_workshop_with_timestamps()
         _create_user('main@test.com', tier_slug='main')
+
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
+        url_key = workshop.url_key
 
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
 
         # Step 1: Land on Page C; expect the watch bar.
         page.goto(
-            f'{django_server}/workshops/ws/tutorial/page-c',
+            f'{django_server}/workshops/{url_key}/tutorial/page-c',
             wait_until='domcontentloaded',
         )
         bar = page.locator('[data-testid="watch-this-section"]')
         assert bar.count() == 1, 'Watch bar should be visible on page C'
-        assert bar.get_attribute('href') == '/workshops/ws/video?t=16:00'
+        assert bar.get_attribute('href') == (
+            f'/workshops/{url_key}/video?t=16:00'
+        )
         assert 'Watch this section (16:00)' in bar.inner_text()
 
         # Step 2: Click the watch bar; assert URL + start=960 propagation.
         bar.click()
         page.wait_for_load_state('domcontentloaded')
-        assert page.url.endswith('/workshops/ws/video?t=16:00')
+        assert page.url.endswith(f'/workshops/{url_key}/video?t=16:00')
 
         body = page.content()
         # YouTube playerVars.start is rendered with the parsed seconds.
@@ -164,12 +169,12 @@ class TestWatchBarRoundTrip:
         # on Page B with the watch bar reading "0:00".
         page_b_link = page.locator(
             '[data-testid="timestamp-tutorial-link"]'
-            '[href="/workshops/ws/tutorial/page-b"]'
+            f'[href="/workshops/{url_key}/tutorial/page-b"]'
         )
         assert page_b_link.count() == 1
         page_b_link.click()
         page.wait_for_load_state('domcontentloaded')
-        assert page.url.endswith('/workshops/ws/tutorial/page-b')
+        assert page.url.endswith(f'/workshops/{url_key}/tutorial/page-b')
         bar = page.locator('[data-testid="watch-this-section"]')
         assert bar.count() == 1
         assert 'Watch this section (0:00)' in bar.inner_text()

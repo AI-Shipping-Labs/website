@@ -546,16 +546,31 @@ class TestIssue358SlackMemberHidesCTA:
 
         context = _auth_context(browser, "slack-member@test.com")
         page = context.new_page()
-        page.goto(
-            f"{django_server}/",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-        assert "Join our Slack community" not in body
-        assert "Connected to Slack" in body
+        # Issue #729 / #730: when ``slack_connected`` is true, neither the
+        # dashboard nor /account/ render the slack card at all — the
+        # template wraps the include in ``{% if not slack_connected %}``.
+        # A connected member must therefore see the join CTA on NEITHER
+        # surface; the absence of ``slack-account-card`` and the absence
+        # of the "Join our Slack community" headline are what we verify.
+        for path in ("/", "/account/"):
+            page.goto(
+                f"{django_server}{path}",
+                wait_until="domcontentloaded",
+            )
+            body = page.content()
+            assert "Join our Slack community" not in body, (
+                f"Join CTA leaked to a connected member on {path}"
+            )
+            assert (
+                page.locator('[data-testid="slack-account-card"]').count()
+                == 0
+            ), f"Slack join card rendered for a connected member on {path}"
 
-        # Reload — the CTA must still not appear (no flicker / race).
+        # Reload the account page — the gating must still hold (no
+        # flicker / race between the page render and any JS).
         page.reload(wait_until="domcontentloaded")
         body_after = page.content()
         assert "Join our Slack community" not in body_after
-        assert "Connected to Slack" in body_after
+        assert (
+            page.locator('[data-testid="slack-account-card"]').count() == 0
+        )

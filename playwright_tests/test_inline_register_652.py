@@ -310,11 +310,14 @@ class TestInlineRegisterCard:
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
-            _seed_anon_pages_workshop()
+            workshop, _ = _seed_anon_pages_workshop()
         email = _new_email("workshop-signup")
 
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
+        landing_url = workshop.get_absolute_url()
+
         page.goto(
-            f"{django_server}/workshops/inline-652-ws",
+            f"{django_server}{landing_url}",
             wait_until="domcontentloaded",
         )
         # Pages paywall renders the inline card, not the "Create a free
@@ -334,7 +337,7 @@ class TestInlineRegisterCard:
         success = page.locator("#register-success")
         success.wait_for(state="visible")
         return_link = success.locator("a")
-        assert return_link.get_attribute("href") == "/workshops/inline-652-ws"
+        assert return_link.get_attribute("href") == landing_url
 
     def test_logged_in_free_user_on_free_course_sees_no_inline_form(
         self, django_server, browser, django_db_blocker

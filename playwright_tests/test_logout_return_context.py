@@ -173,17 +173,19 @@ class TestLogoutReturnContext:
         with django_db_blocker.unblock():
             _reset_fixtures()
             create_user("logout-ctx@test.com", password=DEFAULT_PASSWORD)
-            _seed_workshop()
+            workshop = _seed_workshop()
 
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
+        workshop_path = f"/workshops/{workshop.url_key}"
         context = auth_context(browser, "logout-ctx@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/workshops/logout-ctx-workshop",
+            f"{django_server}{workshop_path}",
             wait_until="domcontentloaded",
         )
         _logout_via_header(page)
         page.wait_for_url(
-            f"{django_server}/workshops/logout-ctx-workshop", timeout=10000
+            f"{django_server}{workshop_path}", timeout=10000
         )
         assert page.locator('a:has-text("Sign in")').count() >= 1
         context.close()

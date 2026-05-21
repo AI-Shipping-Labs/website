@@ -143,11 +143,14 @@ class TestAnonymousPreviewsPageOne:
         self, django_server, page,
     ):
         _clear_workshops()
-        _create_workshop(slug='preview-ws', pages=5, recording=20)
+        workshop = _create_workshop(slug='preview-ws', pages=5, recording=20)
+
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
+        url_key = workshop.url_key
 
         # Page 1 — full body renders for anonymous (override 0).
         response = page.goto(
-            f'{django_server}/workshops/preview-ws/tutorial/page-one',
+            f'{django_server}/workshops/{url_key}/tutorial/page-one',
             wait_until='domcontentloaded',
         )
         assert response.status == 200
@@ -159,11 +162,11 @@ class TestAnonymousPreviewsPageOne:
         next_btn = page.locator('[data-testid="page-next-btn"]')
         assert next_btn.count() >= 1
         next_href = next_btn.first.get_attribute('href')
-        assert '/workshops/preview-ws/tutorial/page-two' in next_href
+        assert f'/workshops/{url_key}/tutorial/page-two' in next_href
 
         # Page 2 — registered wall, sign-in CTA.
         response2 = page.goto(
-            f'{django_server}/workshops/preview-ws/tutorial/page-two',
+            f'{django_server}/workshops/{url_key}/tutorial/page-two',
             wait_until='domcontentloaded',
         )
         assert response2.status == 403
@@ -329,10 +332,13 @@ class TestLandingPageStaysOpen:
         self, django_server, page,
     ):
         _clear_workshops()
-        _create_workshop(slug='landing-ws', pages=5, recording=20)
+        workshop = _create_workshop(slug='landing-ws', pages=5, recording=20)
+
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
+        url_key = workshop.url_key
 
         response = page.goto(
-            f'{django_server}/workshops/landing-ws',
+            f'{django_server}/workshops/{url_key}',
             wait_until='domcontentloaded',
         )
         assert response.status == 200
@@ -342,8 +348,8 @@ class TestLandingPageStaysOpen:
         # No paywall card on the landing itself.
         assert 'data-testid="page-paywall"' not in body
         # Pages list links to tutorial URLs.
-        assert '/workshops/landing-ws/tutorial/page-one' in body
-        assert '/workshops/landing-ws/tutorial/page-two' in body
+        assert f'/workshops/{url_key}/tutorial/page-one' in body
+        assert f'/workshops/{url_key}/tutorial/page-two' in body
 
 
 # ---------------------------------------------------------------------
@@ -357,15 +363,20 @@ class TestSignInRoundTrip:
         self, django_server, page,
     ):
         _clear_workshops()
-        _create_workshop(slug='roundtrip-ws', pages=5, recording=20)
+        workshop = _create_workshop(
+            slug='roundtrip-ws', pages=5, recording=20,
+        )
         _create_user(
             email='roundtrip@test.com', tier_slug='free',
             email_verified=True, password=DEFAULT_PASSWORD,
         )
 
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
+        gated_path = f'/workshops/{workshop.url_key}/tutorial/page-two'
+
         # Visit gated page 2 anonymously.
         page.goto(
-            f'{django_server}/workshops/roundtrip-ws/tutorial/page-two',
+            f'{django_server}{gated_path}',
             wait_until='domcontentloaded',
         )
         # Click Sign In CTA.
@@ -378,9 +389,9 @@ class TestSignInRoundTrip:
         page.fill('#login-email', 'roundtrip@test.com')
         page.fill('#login-password', DEFAULT_PASSWORD)
         page.click('#login-submit')
-        page.wait_for_url('**/workshops/roundtrip-ws/tutorial/page-two')
+        page.wait_for_url(f'**{gated_path}')
 
-        assert '/workshops/roundtrip-ws/tutorial/page-two' in page.url
+        assert gated_path in page.url
         body = page.content()
         # Full body renders post-login.
         assert 'data-testid="page-body"' in body

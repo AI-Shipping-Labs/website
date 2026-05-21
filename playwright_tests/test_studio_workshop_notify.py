@@ -164,8 +164,9 @@ class TestStudioWorkshopNotifyFlow:
         assert 'New workshop: Build a RAG App' in dropdown_text
 
         # The link points at the workshop landing page.
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
         link = user_page.locator(
-            '#notification-list a[href="/workshops/build-a-rag-app"]',
+            f'#notification-list a[href="/workshops/{workshop.url_key}"]',
         )
         assert link.count() >= 1
 
@@ -343,15 +344,17 @@ class TestMemberDiscoversWorkshopViaBell:
             timeout=10000,
         )
 
-        # Click the workshop notification — landing page is /workshops/<slug>.
+        # Click the workshop notification — landing page is
+        # /workshops/<YYYY-MM-DD>-<slug> (issue #750).
+        landing_path = workshop.get_absolute_url()
         link = page.locator(
-            '#notification-list a[href="/workshops/gated-rag"]',
+            f'#notification-list a[href="{landing_path}"]',
         )
         assert link.count() >= 1
         link.first.click()
 
-        page.wait_for_url('**/workshops/gated-rag**', timeout=10000)
-        assert '/workshops/gated-rag' in page.url
+        page.wait_for_url(f'**{landing_path}**', timeout=10000)
+        assert landing_path in page.url
 
         # Reload home and confirm the badge decremented (or hid).
         page.goto(f'{django_server}/', wait_until='domcontentloaded')

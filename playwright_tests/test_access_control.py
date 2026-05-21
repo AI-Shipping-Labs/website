@@ -109,7 +109,10 @@ def _create_recording(
     if tags is None:
         tags = []
     if date is None:
-        date = datetime.date.today()
+        # Issue #713: ``/events?filter=past`` filters by ``start_datetime``
+        # not ``status``, so use yesterday to guarantee the row lands in
+        # the past bucket regardless of the wall-clock hour CI runs at.
+        date = datetime.date.today() - datetime.timedelta(days=1)
 
     start_dt = timezone.make_aware(
         datetime.datetime.combine(date, datetime.time(12, 0))

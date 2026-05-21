@@ -492,9 +492,12 @@ class TestSharedReaderWorkshopBehavior:
             },
         ])
         page = ctx.new_page()
+        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>;
+        # ``_create_workshop`` pins date to 2026-04-21.
+        url_key = '2026-04-21-shared-reader'
         try:
             page.goto(
-                f'{django_server}/workshops/shared-reader/tutorial/intro',
+                f'{django_server}/workshops/{url_key}/tutorial/intro',
                 wait_until='domcontentloaded',
             )
             assert not page.locator(
@@ -506,9 +509,9 @@ class TestSharedReaderWorkshopBehavior:
             toggle.click()
             page.locator('#sidebar-nav').wait_for(state='visible')
             page.locator(
-                '#sidebar-nav a[href="/workshops/shared-reader/tutorial/setup"]',
+                f'#sidebar-nav a[href="/workshops/{url_key}/tutorial/setup"]',
             ).click()
-            page.wait_for_url('**/workshops/shared-reader/tutorial/setup')
+            page.wait_for_url(f'**/workshops/{url_key}/tutorial/setup')
             assert page.locator('[data-testid="page-body"]').is_visible()
         finally:
             ctx.close()

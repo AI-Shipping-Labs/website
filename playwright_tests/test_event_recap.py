@@ -30,10 +30,19 @@ def _clear_events():
 def _create_event_with_recap(slug='launch', status='completed'):
     from events.models import Event
 
+    # Issue #713: ``is_upcoming`` is derived from ``start_datetime`` now,
+    # not the stored status. Pin the timestamp to the past for completed
+    # events and to the future for upcoming events so the time-derived
+    # flag matches the scenario each test wants.
+    if status == 'upcoming':
+        start_dt = timezone.now() + datetime.timedelta(days=7)
+    else:
+        start_dt = timezone.now() - datetime.timedelta(days=2)
+
     event = Event.objects.create(
         title='AI Shipping Labs Community Launch',
         slug=slug,
-        start_datetime=timezone.now() - datetime.timedelta(days=2),
+        start_datetime=start_dt,
         status=status,
         recap_html=(
             '<h2>Watch the recording</h2>'

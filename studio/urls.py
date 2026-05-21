@@ -114,6 +114,7 @@ from studio.views.plans import (
 from studio.views.projects import project_list, project_review
 from studio.views.recordings import recording_edit, recording_list, recording_publish_youtube
 from studio.views.redirects import redirect_create, redirect_delete, redirect_edit, redirect_list, redirect_toggle
+from studio.views.ses_events import ses_event_detail, ses_event_list
 from studio.views.settings import (
     settings_dashboard,
     settings_export,
@@ -733,6 +734,21 @@ urlpatterns = [
         'worker/failed/bulk-delete/',
         worker_bulk_delete_failed,
         name='studio_worker_bulk_delete_failed',
+    ),
+
+    # SES events browser (issue #763). Read-only audit-log surface; the
+    # writer is the SNS webhook at ``/api/ses-events``. The follow-up
+    # JSON API (issue #764) reuses the queryset filter in
+    # ``studio.views.ses_events``.
+    path(
+        'ses-events/',
+        ses_event_list,
+        name='studio_ses_event_list',
+    ),
+    path(
+        'ses-events/<int:pk>/',
+        ses_event_detail,
+        name='studio_ses_event_detail',
     ),
 
     # Content Sync

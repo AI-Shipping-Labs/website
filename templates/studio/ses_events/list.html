@@ -1,0 +1,218 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}SES events{% endblock %}
+
+{% block studio_content %}
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">SES events</h1>
+    <p class="text-muted-foreground mt-1 hidden md:block">
+      Read-only audit log of incoming SES bounce / complaint / delivery webhooks.
+      The bounce handler at <code class="font-mono text-xs">/api/ses-events</code>
+      is the only writer.
+    </p>
+  </div>
+</div>
+
+{% comment %}
+  Stats strip — independent of the active filter. PM ruling on simplicity:
+  three top-line counters covering the last 30 days, no per-user / per-tag
+  breakdowns. The current-filter total is the pager's "Showing N of T".
+{% endcomment %}
+<div class="grid grid-cols-3 gap-2 sm:gap-4 mb-6" data-testid="ses-event-stats">
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-sm text-muted-foreground">Bounces (30d)</p>
+    <p class="text-xl font-semibold text-red-400" data-testid="ses-event-stat-bounce">{{ last_30d_bounce_permanent }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-sm text-muted-foreground">Complaints (30d)</p>
+    <p class="text-xl font-semibold text-red-400" data-testid="ses-event-stat-complaint">{{ last_30d_complaint }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-sm text-muted-foreground">Total events (30d)</p>
+    <p class="text-xl font-semibold text-foreground" data-testid="ses-event-stat-total">{{ last_30d_total }}</p>
+  </div>
+</div>
+
+{% comment %}
+  Filter chips + search shell.
+
+  Each chip is an anchor link carrying ``?type=<value>`` plus the active
+  ``q`` so re-clicking does not lose the search box value. The "More
+  filters" expander is a ``<details>`` so it works without JavaScript and
+  the open state survives a server-render when any secondary filter is
+  set.
+{% endcomment %}
+<div class="mb-6 space-y-3">
+  <div class="flex flex-wrap items-center gap-2" data-testid="ses-event-type-chips">
+    {% with chip_base="px-4 py-1.5 rounded-full text-sm border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
+    {% for value, label in type_chips %}
+    <a href="?type={{ value }}{% if search %}&amp;q={{ search }}{% endif %}{% if bounce_type %}&amp;bounce_type={{ bounce_type }}{% endif %}{% if bounce_subtype %}&amp;bounce_subtype={{ bounce_subtype }}{% endif %}{% if since %}&amp;since={{ since }}{% endif %}{% if until %}&amp;until={{ until }}{% endif %}"
+       data-type-filter="{{ value }}"
+       class="{{ chip_base }} {% if type_filter == value %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">{{ label }}</a>
+    {% endfor %}
+    {% endwith %}
+  </div>
+
+  <form method="get" class="flex flex-wrap items-center gap-3" autocomplete="off"
+        data-testid="ses-event-search-form">
+    <input type="hidden" name="type" value="{{ type_filter }}">
+    {% if bounce_type %}<input type="hidden" name="bounce_type" value="{{ bounce_type }}">{% endif %}
+    {% if bounce_subtype %}<input type="hidden" name="bounce_subtype" value="{{ bounce_subtype }}">{% endif %}
+    {% if since %}<input type="hidden" name="since" value="{{ since }}">{% endif %}
+    {% if until %}<input type="hidden" name="until" value="{{ until }}">{% endif %}
+    <input type="text" name="q" value="{{ search }}" placeholder="Search by recipient email..."
+           autocomplete="off"
+           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-72 focus:outline-none focus:ring-1 focus:ring-accent">
+    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
+  </form>
+
+  <details class="bg-card border border-border rounded-lg"
+           data-testid="ses-event-more-filters"
+           {% if more_filters_open %}open{% endif %}>
+    <summary class="cursor-pointer select-none px-4 py-2 text-sm text-muted-foreground hover:text-foreground">
+      More filters
+    </summary>
+    <form method="get" class="px-4 pb-4 flex flex-wrap items-end gap-3" autocomplete="off"
+          data-testid="ses-event-more-filters-form">
+      <input type="hidden" name="type" value="{{ type_filter }}">
+      {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
+      <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+        <span>Bounce type</span>
+        <select name="bounce_type"
+                class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          {% for value, label in bounce_type_choices %}
+          <option value="{{ value }}" {% if bounce_type == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% if bounce_type %}
+      <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+        <span>Bounce subtype</span>
+        <input type="text" name="bounce_subtype" value="{{ bounce_subtype }}"
+               placeholder="General, NoEmail, ..."
+               class="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </label>
+      {% endif %}
+      <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+        <span>Since (UTC)</span>
+        <input type="date" name="since" value="{{ since }}"
+               class="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </label>
+      <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+        <span>Until (UTC)</span>
+        <input type="date" name="until" value="{{ until }}"
+               class="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </label>
+      <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Apply</button>
+      <a href="{% url 'studio_ses_event_list' %}"
+         class="text-xs text-muted-foreground hover:text-foreground self-center"
+         data-testid="ses-event-more-filters-clear">Clear all</a>
+    </form>
+  </details>
+</div>
+
+{% if has_any_event %}
+<div class="{% studio_list_class 'wrapper' %}" data-testid="studio-ses-events-list">
+  {% if show_pager %}{% include "studio/ses_events/_pager.html" %}{% endif %}
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
+      <tr>
+        <th class="{% studio_list_class 'th' %}">Received</th>
+        <th class="{% studio_list_class 'th' %}">Type</th>
+        <th class="{% studio_list_class 'th' %}">Recipient</th>
+        <th class="{% studio_list_class 'th' %}">Bounce type</th>
+        <th class="{% studio_list_class 'th' %}">Email log</th>
+        <th class="{% studio_list_class 'th' %}">Action taken</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="{% studio_list_class 'tbody' %}">
+      {% for row in rows %}
+      <tr class="{% studio_list_class 'row' %}"
+          data-testid="ses-event-row-{{ row.event.pk }}">
+        <td class="px-6 py-3 text-sm text-foreground" data-label="Received">
+          <span title="{{ row.event.received_at|date:'Y-m-d H:i:s' }} UTC">{{ row.event.received_at|date:'Y-m-d H:i' }}</span>
+        </td>
+        <td class="px-6 py-3" data-label="Type">
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ row.pill_class }}"
+                data-testid="ses-event-type-pill"
+                data-event-type="{{ row.event.event_type }}">{{ row.event.get_event_type_display }}</span>
+        </td>
+        <td class="px-6 py-3 text-sm text-foreground" data-label="Recipient">
+          {% if row.event.recipient_email %}
+            <span class="font-mono">{{ row.event.recipient_email }}</span>
+            {% if row.event.user_id %}
+            <a href="{% url 'studio_user_detail' row.event.user_id %}"
+               class="ml-1 inline-flex items-center text-muted-foreground hover:text-accent"
+               title="Open user profile"
+               data-testid="ses-event-user-link">
+              <i data-lucide="user" class="w-3.5 h-3.5"></i>
+            </a>
+            {% endif %}
+          {% else %}
+            <span class="text-muted-foreground">&mdash;</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-3 text-sm text-muted-foreground" data-label="Bounce type">
+          {% if row.event.bounce_type or row.event.bounce_subtype %}
+            {{ row.event.bounce_type }}{% if row.event.bounce_type and row.event.bounce_subtype %} &middot; {% endif %}{{ row.event.bounce_subtype }}
+          {% else %}
+            <span>&mdash;</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-3 text-sm" data-label="Email log">
+          {% if row.event.email_log_id %}
+            {% if row.event.email_log.campaign_id %}
+              <a href="{% url 'studio_campaign_detail' row.event.email_log.campaign_id %}"
+                 class="text-accent hover:underline"
+                 data-testid="ses-event-campaign-link">
+                {{ row.event.email_log.email_type }}
+                <span class="text-muted-foreground">&middot; {{ row.event.email_log.campaign.subject|truncatechars:40 }}</span>
+              </a>
+            {% else %}
+              <span class="text-foreground">{{ row.event.email_log.email_type }}</span>
+            {% endif %}
+          {% else %}
+            <span class="text-muted-foreground">&mdash;</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-3 text-sm text-muted-foreground" data-label="Action taken">
+          {% if row.event.action_taken %}
+            <span title="{{ row.event.action_taken }}">{{ row.event.action_taken|truncatechars:60 }}</span>
+          {% else %}
+            <span>&mdash;</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            <a href="{% url 'studio_ses_event_detail' row.event.pk %}"
+               class="{% studio_action_class 'primary' %}"
+               data-testid="ses-event-view-link">View</a>
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+        {% url 'studio_ses_event_list' as ses_clear_url %}
+        {% studio_empty_state 'filter' entity_label='SES event' entity_label_plural='SES events' clear_url=ses_clear_url colspan=7 %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if show_pager %}{% include "studio/ses_events/_pager.html" %}{% endif %}
+</div>
+{% else %}
+  {% comment %}
+    Fresh empty state — no SES events have ever been received. The
+    canonical helper hides the CTA when ``create_url`` is falsy, which
+    is exactly what we want for this read-only surface. We still pass
+    ``cta_label`` for documentation purposes (it would only render if a
+    future caller supplied a ``create_url``).
+  {% endcomment %}
+  {% studio_empty_state 'fresh' entity_label='SES event' entity_label_plural='SES events' create_url=None cta_label='Open SES bounce webhook docs' testid_suffix='ses-events' %}
+  <p class="mt-3 text-center text-xs text-muted-foreground" data-testid="ses-event-empty-help">
+    SES events arrive on the <code class="font-mono">/api/ses-events</code> webhook;
+    none have been received yet.
+  </p>
+{% endif %}
+{% endblock %}

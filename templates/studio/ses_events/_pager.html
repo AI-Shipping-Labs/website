@@ -1,0 +1,52 @@
+{% comment %}
+Pager partial for the Studio SES events list (issue #763).
+
+Shape copied from ``templates/studio/users/_pager.html``. Same context
+keys, same disabled-button rendering, same "Showing N-M of T" math.
+Testids are namespaced under ``ses-event-list-pager`` so per-page
+selectors don't collide with the users pager.
+
+Inputs (from ses_event_list view):
+  - page                   Django Page instance
+  - paginator              Django Paginator instance
+  - pager_first_url        ?page=1&...  or None when on page 1
+  - pager_prev_url         ?page=N-1&... or None when on page 1
+  - pager_next_url         ?page=N+1&... or None on the last page
+  - pager_last_url         ?page=last&... or None on the last page
+  - page_start_index       1-indexed start of the visible slice
+  - page_end_index         1-indexed end of the visible slice
+  - filtered_total         total rows in the filtered set (paginator.count)
+{% endcomment %}
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2 text-xs text-muted-foreground border-t border-border bg-secondary/40"
+     data-testid="ses-event-list-pager">
+  <div data-testid="ses-event-list-pager-range">
+    Showing {{ page_start_index }}-{{ page_end_index }} of {{ filtered_total }}
+  </div>
+  <div class="flex items-center gap-1">
+    {% with btn_base="px-2 py-1 rounded border text-xs" btn_active="bg-secondary border-border text-foreground hover:bg-muted transition-colors" btn_disabled="bg-secondary border-border text-muted-foreground opacity-50 cursor-not-allowed" %}
+    {% if pager_first_url %}
+    <a href="{{ pager_first_url }}" class="{{ btn_base }} {{ btn_active }}" data-testid="ses-event-list-pager-first">&laquo; first</a>
+    {% else %}
+    <span aria-disabled="true" class="{{ btn_base }} {{ btn_disabled }}" data-testid="ses-event-list-pager-first">&laquo; first</span>
+    {% endif %}
+    {% if pager_prev_url %}
+    <a href="{{ pager_prev_url }}" class="{{ btn_base }} {{ btn_active }}" data-testid="ses-event-list-pager-prev">&lsaquo; prev</a>
+    {% else %}
+    <span aria-disabled="true" class="{{ btn_base }} {{ btn_disabled }}" data-testid="ses-event-list-pager-prev">&lsaquo; prev</span>
+    {% endif %}
+    <span class="px-2 py-1 text-muted-foreground" data-testid="ses-event-list-pager-status">
+      page {{ page.number }} of {{ paginator.num_pages }}
+    </span>
+    {% if pager_next_url %}
+    <a href="{{ pager_next_url }}" class="{{ btn_base }} {{ btn_active }}" data-testid="ses-event-list-pager-next">next &rsaquo;</a>
+    {% else %}
+    <span aria-disabled="true" class="{{ btn_base }} {{ btn_disabled }}" data-testid="ses-event-list-pager-next">next &rsaquo;</span>
+    {% endif %}
+    {% if pager_last_url %}
+    <a href="{{ pager_last_url }}" class="{{ btn_base }} {{ btn_active }}" data-testid="ses-event-list-pager-last">last &raquo;</a>
+    {% else %}
+    <span aria-disabled="true" class="{{ btn_base }} {{ btn_disabled }}" data-testid="ses-event-list-pager-last">last &raquo;</span>
+    {% endif %}
+    {% endwith %}
+  </div>
+</div>

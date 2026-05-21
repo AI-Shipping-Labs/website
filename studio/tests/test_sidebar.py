@@ -182,6 +182,7 @@ class StudioSidebarStructureTest(TestCase):
         # Operations
         ('/studio/sync/', 'Content sync'),
         ('/studio/worker/', 'Worker'),
+        ('/studio/ses-events/', 'SES events'),
         ('/studio/redirects/', 'Redirects'),
         ('/studio/settings/', 'Settings'),
     ]

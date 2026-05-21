@@ -37,3 +37,10 @@ a coloured `Premium` pill. If a temporary override is active, an amber
 | User status | Inactive | `bg-red-500/15 text-red-300` |
 
 Newsletter and Slack pills keep their existing colours.
+
+## Operations surfaces
+
+Operations is the sidebar group that hosts read-only audit logs and
+infrastructure-facing tooling. Current entries: Content sync, Worker,
+SES events (`/studio/ses-events/` — read-only browser over
+`email_app.SesEvent`, see issue #763), Redirects, Settings, API tokens.

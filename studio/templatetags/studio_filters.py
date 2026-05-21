@@ -46,17 +46,15 @@ STATUS_BADGE_CLASSES = {
     'published': 'bg-green-500/20 text-green-400',
     'draft': 'bg-yellow-500/20 text-yellow-400',
     'upcoming': 'bg-blue-500/20 text-blue-400',
-    # ``active`` (sprints, etc.) reads as a live/in-progress state — same
-    # green as ``published`` so the two read consistently. ``completed``
-    # is the archived/done state and stays grey-muted.
+    # ``active`` reads as the "currently happening" / "in-progress" state
+    # across surfaces (content publishing, sprints, etc.) — same green as
+    # ``published`` so the two read consistently. ``completed`` is the
+    # archived/done state and stays grey-muted; ``archived`` aliases it
+    # for the sprint vocabulary.
     'active': 'bg-green-500/20 text-green-400',
     'completed': 'bg-secondary text-muted-foreground',
-    'cancelled': 'bg-red-500/20 text-red-400',
-    # Sprint statuses (#753): ``active`` reads as the "currently happening"
-    # equivalent of ``published`` for content. ``archived`` aliases the
-    # muted-grey ``completed`` treatment.
-    'active': 'bg-green-500/20 text-green-400',
     'archived': 'bg-secondary text-muted-foreground',
+    'cancelled': 'bg-red-500/20 text-red-400',
     # User-import batch statuses (#753): align the imports list pill colors
     # with the canonical palette instead of inline ``{% if %}`` blocks.
     'failed': 'bg-red-500/20 text-red-400',

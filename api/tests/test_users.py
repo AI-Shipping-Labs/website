@@ -109,27 +109,65 @@ class UserDetailGetTest(_UserApiBase):
         # domain is lowercased.
         self.assertEqual(user.email, "MixedCase@test.com")
 
-    def test_bounce_state_permanent_when_bounced_tag_present(self):
+    def test_bounce_state_permanent_reflects_structured_field(self):
         user = self._make_user(email="bounced@test.com")
-        user.tags = ["bounced"]
-        user.save(update_fields=["tags"])
+        user.bounce_state = User.BounceState.PERMANENT
+        user.save(update_fields=["bounce_state"])
         response = self.client.get(
             f"/api/users/{user.email}",
             **self._auth_headers(),
         )
         self.assertEqual(response.json()["bounce_state"], "permanent")
 
-    def test_bounce_state_soft_when_count_positive(self):
+    def test_bounce_state_soft_reflects_structured_field(self):
         user = self._make_user(email="soft@test.com")
+        user.bounce_state = User.BounceState.SOFT
+        user.save(update_fields=["bounce_state"])
+        response = self.client.get(
+            f"/api/users/{user.email}",
+            **self._auth_headers(),
+        )
+        self.assertEqual(response.json()["bounce_state"], "soft")
+
+    def test_soft_bounce_count_is_surfaced(self):
+        # ``soft_bounce_count`` is independent of ``bounce_state`` -- it
+        # tracks the running count of soft bounces seen, while
+        # ``bounce_state`` is the tri-state flag. Both ship in the payload.
+        user = self._make_user(email="softcount@test.com")
         user.soft_bounce_count = 2
         user.save(update_fields=["soft_bounce_count"])
         response = self.client.get(
             f"/api/users/{user.email}",
             **self._auth_headers(),
         )
-        body = response.json()
-        self.assertEqual(body["bounce_state"], "soft")
-        self.assertEqual(body["soft_bounce_count"], 2)
+        self.assertEqual(response.json()["soft_bounce_count"], 2)
+
+    def test_bounce_state_reflects_what_ses_handler_writes(self):
+        """SES permanent-bounce handler writes ``bounce_state="permanent"`` --
+        the API serializer must surface that value (not the legacy tag)."""
+        user = self._make_user(email="bouncy@test.com")
+        # Simulate what the SES webhook handler does on a permanent bounce
+        # (see ``api/tests/test_ses_events.py`` lines 332/364/391 -- the
+        # handler writes ``bounce_state`` directly and does NOT touch the
+        # legacy ``"bounced"`` tag any more).
+        user.bounce_state = User.BounceState.PERMANENT
+        user.unsubscribed = True
+        user.bounce_recorded_at = timezone.now()
+        user.save(update_fields=[
+            "bounce_state", "unsubscribed", "bounce_recorded_at",
+        ])
+        # Regression guard: if anyone re-introduces the tag-derived path
+        # "as a fallback", this assertion would fail loudly because the
+        # serializer would then return "permanent" via the tag instead of
+        # the field, and the test below would still pass but for the
+        # wrong reason. Pinning the tag absent makes the test honest.
+        self.assertNotIn("bounced", user.tags)
+
+        response = self.client.get(
+            f"/api/users/{user.email}",
+            **self._auth_headers(),
+        )
+        self.assertEqual(response.json()["bounce_state"], "permanent")
 
     def test_anonymous_returns_401_not_redirect(self):
         self._make_user(email="alice@test.com")

@@ -1,8 +1,10 @@
 import datetime
 import os
 import re
+from datetime import timedelta
 
 import pytest
+from django.utils import timezone
 from playwright.sync_api import expect
 
 from playwright_tests.conftest import DEFAULT_PASSWORD, VIEWPORT
@@ -32,17 +34,21 @@ def _clear_events_settings_and_users():
     connection.close()
 
 
-def _create_fixed_event(slug='local-time-event', status='upcoming', location='Zoom'):
+def _create_fixed_event(slug='local-time-event', status='upcoming', location='Zoom', start_datetime=None):
     from django.db import connection
 
     from events.models import Event
+
+    if start_datetime is None:
+        start_datetime = datetime.datetime(2026, 4, 13, 16, 30, tzinfo=datetime.UTC)
+    end_datetime = start_datetime + timedelta(minutes=90)
 
     event = Event.objects.create(
         title='Local Time Event',
         slug=slug,
         description='Timezone display test event.',
-        start_datetime=datetime.datetime(2026, 4, 13, 16, 30, tzinfo=datetime.UTC),
-        end_datetime=datetime.datetime(2026, 4, 13, 18, 0, tzinfo=datetime.UTC),
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
         status=status,
         location=location,
         timezone='Europe/Berlin',
@@ -352,11 +358,13 @@ def test_completed_zoom_location_hidden_but_upcoming_zoom_kept(
             slug='completed-zoom-event',
             status='completed',
             location='Zoom',
+            start_datetime=timezone.now() - timedelta(days=2),
         )
         upcoming_event = _create_fixed_event(
             slug='upcoming-zoom-event',
             status='upcoming',
             location='Zoom',
+            start_datetime=timezone.now() + timedelta(days=14),
         )
 
     # Issue #673: canonical URL is ``/events/<id>/<slug>``.
@@ -377,6 +385,7 @@ def test_registered_member_keeps_upcoming_zoom_attendance_flow(
             slug='registered-upcoming-zoom-event',
             status='upcoming',
             location='Zoom',
+            start_datetime=timezone.now() + timedelta(days=14),
         )
         user = _create_user('registered@timezone.test')
 

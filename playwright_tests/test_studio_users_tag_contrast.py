@@ -11,6 +11,12 @@ The canonical bordered-accent pill per ``_docs/design-system.md`` is
 pill keeps ``bg-accent text-accent-foreground`` because the foreground is
 intentionally paired with the full-opacity accent surface.
 
+Issue #451 removed the per-row Tags column on /studio/users/, so the
+two remaining sites for the bordered-accent pill in this surface are:
+
+- the ``?tag=<name>`` active-tag chip in the page header
+- the per-tag chip on /studio/users/<id>/
+
 This module mirrors the channel-delta approach used by
 ``playwright_tests/test_dark_mode_contrast.py`` (issue #362):
 
@@ -182,10 +188,12 @@ def _user_pk(email):
 class TestStudioUserTagContrast:
     """Tag pills in Studio Users must be legible in BOTH dark and light mode.
 
-    Covers the three sites of the bug:
-    - user row tag pill on /studio/users/
-    - active-tag filter chip on /studio/users/?tag=<tag>
-    - per-tag chip on /studio/users/<id>/
+    Covers the two remaining sites of the bordered-accent pill after #451:
+    - the active-tag filter chip on /studio/users/?tag=<tag>
+    - the per-tag chip on /studio/users/<id>/
+
+    The per-row tag pill was removed from /studio/users/ in issue #451;
+    the per-row tooltip + tag-picker dropdown replace it.
     """
 
     def test_tag_pills_legible_in_dark_and_light_modes(
@@ -205,42 +213,15 @@ class TestStudioUserTagContrast:
         _force_dark_mode(dark_context)
         page = dark_context.new_page()
 
-        # /studio/users/ -- the user-row tag pill
-        page.goto(
-            f"{django_server}/studio/users/",
-            wait_until="domcontentloaded",
-        )
-        assert page.evaluate(
-            "() => document.documentElement.classList.contains('dark')"
-        ) is True, "expected /studio/users/ to render in dark mode"
-
-        row_tag_pill = page.locator(
-            '[data-testid="user-tags-cell"] a[href*="tag="]'
-        )
-        assert row_tag_pill.count() >= 1, (
-            "expected at least one tag pill in the Studio users row"
-        )
-        bg, fg = _computed_bg_and_fg(page, row_tag_pill)
-        delta = _max_channel_delta(_parse_rgb(bg), _parse_rgb(fg))
-        assert delta >= CHANNEL_DELTA_THRESHOLD, (
-            f"row tag pill on /studio/users/ has illegible label in dark "
-            f"mode: bg={bg}, color={fg}, max channel delta={delta} "
-            f"< {CHANNEL_DELTA_THRESHOLD}. Use "
-            f"border-accent/30 bg-accent/10 text-accent."
-        )
-        # The chip text must read as lime/green-family (the accent),
-        # not near-black. Green channel must dominate the text color.
-        r, g, b = _parse_rgb(fg)
-        assert g > r and g > b, (
-            f"row tag pill text color is not the lime accent: "
-            f"rgb={r},{g},{b}. Use text-accent, not text-accent-foreground."
-        )
-
         # /studio/users/?tag=early-bird -- the active-tag filter chip
         page.goto(
             f"{django_server}/studio/users/?tag=early-bird",
             wait_until="domcontentloaded",
         )
+        assert page.evaluate(
+            "() => document.documentElement.classList.contains('dark')"
+        ) is True, "expected /studio/users/?tag=... to render in dark mode"
+
         active_tag_chip = page.locator(
             '[data-testid="active-tag-chip"] span'
         )
@@ -255,6 +236,13 @@ class TestStudioUserTagContrast:
             f"in dark mode: bg={bg}, color={fg}, max channel delta={delta} "
             f"< {CHANNEL_DELTA_THRESHOLD}. Use "
             f"bg-accent/10 border-accent/30 text-accent."
+        )
+        # The chip text must read as lime/green-family (the accent),
+        # not near-black. Green channel must dominate the text color.
+        r, g, b = _parse_rgb(fg)
+        assert g > r and g > b, (
+            f"active-tag chip text color is not the lime accent: "
+            f"rgb={r},{g},{b}. Use text-accent, not text-accent-foreground."
         )
 
         # /studio/users/<id>/ -- per-tag chip in the Tags section
@@ -304,19 +292,19 @@ class TestStudioUserTagContrast:
             f"must work in both themes."
         )
 
-        # Also re-verify the row tag pill in light mode.
+        # Also verify the active-tag chip on the listing in light mode.
         page.goto(
-            f"{django_server}/studio/users/",
+            f"{django_server}/studio/users/?tag=early-bird",
             wait_until="domcontentloaded",
         )
-        light_row_pill = page.locator(
-            '[data-testid="user-tags-cell"] a[href*="tag="]'
+        light_active_chip = page.locator(
+            '[data-testid="active-tag-chip"] span'
         )
-        bg, fg = _computed_bg_and_fg(page, light_row_pill)
+        bg, fg = _computed_bg_and_fg(page, light_active_chip)
         delta = _max_channel_delta(_parse_rgb(bg), _parse_rgb(fg))
         assert delta >= CHANNEL_DELTA_THRESHOLD, (
-            f"row tag pill on /studio/users/ has illegible label in LIGHT "
-            f"mode: bg={bg}, color={fg}, max channel delta={delta} "
+            f"active-tag chip on /studio/users/?tag=... has illegible label "
+            f"in LIGHT mode: bg={bg}, color={fg}, max channel delta={delta} "
             f"< {CHANNEL_DELTA_THRESHOLD}."
         )
 

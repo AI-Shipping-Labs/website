@@ -1,4 +1,11 @@
-"""Playwright coverage for the denser Studio users list (issue #410)."""
+"""Playwright coverage for the denser Studio users list (issues #410, #451).
+
+Issue #410 introduced the dense user-row layout; issue #451 collapsed
+the listing to four columns (User / Status / Last login / Actions),
+moved the tier pill INTO the User cell, and surfaces Slack ID, Stripe
+customer ID, Newsletter and Slack-workspace state via the row-level
+``<tr title="...">`` hover tooltip.
+"""
 
 import os
 from pathlib import Path
@@ -52,8 +59,13 @@ def _seed_scanability_user():
         "cohort-a",
     ]
     user.slack_member = True
+    user.slack_user_id = "U01SCAN999"
+    user.stripe_customer_id = "cus_SCANABILITY"
     user.slack_checked_at = timezone.now()
-    user.save(update_fields=["tags", "slack_member", "slack_checked_at"])
+    user.save(update_fields=[
+        "tags", "slack_member", "slack_user_id",
+        "stripe_customer_id", "slack_checked_at",
+    ])
     user_pk = user.pk
     connection.close()
     return email, user_pk
@@ -97,7 +109,7 @@ def _capture_screenshot(page, name):
 
 @pytest.mark.django_db(transaction=True)
 class TestStudioUsersScanability:
-    def test_dense_rows_preserve_filters_tags_export_and_actions(
+    def test_dense_rows_preserve_filters_tooltip_export_and_actions(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -129,29 +141,37 @@ class TestStudioUsersScanability:
             }"""
         )
 
-        badges = row.locator('[data-testid="membership-badges"] span')
-        assert badges.count() == 4
-        badge_text = row.locator('[data-testid="membership-badges"]').inner_text()
-        assert "Premium" in badge_text
-        assert "Newsletter" in badge_text
-        assert "Slack" in badge_text
-        assert "Active" in badge_text
+        # Issue #451: tier pill is inside the User cell (not a separate
+        # Membership column), and Slack ID / Stripe customer / Newsletter
+        # / Slack workspace facts are surfaced via the row's title attribute.
+        user_cell = row.locator('td[data-label="User"]')
+        tier_pill = user_cell.locator('[data-testid="user-list-tier-pill"]')
+        assert tier_pill.count() == 1
+        assert tier_pill.inner_text().strip() == "Premium"
 
-        tag_links = row.locator('[data-testid="user-tags-cell"] a')
-        assert tag_links.count() == 3
-        assert tag_links.nth(0).inner_text().strip() == "early-adopter"
-        overflow = row.locator('[data-testid="user-tags-overflow"]')
-        assert overflow.inner_text().strip() == "+2"
-        assert "vip, cohort-a" in overflow.get_attribute("aria-label")
+        tooltip = row.get_attribute("title") or ""
+        assert "Slack ID: U01SCAN999" in tooltip
+        assert "Stripe customer: cus_SCANABILITY" in tooltip
+        assert "Newsletter: subscribed" in tooltip
+        assert "Slack workspace: Member" in tooltip
+
+        # Status pill renders the user's active state in its own cell.
+        status_pill = row.locator('[data-testid="user-status"]')
+        assert status_pill.count() == 1
+        assert status_pill.inner_text().strip() == "Active"
 
         export_href = page.locator("a", has_text="Export CSV").get_attribute("href")
         assert export_href.endswith(
             "/studio/users/export?filter=paid&slack=yes&q=avery"
         )
 
-        tag_links.nth(0).click()
-        page.wait_for_load_state("domcontentloaded")
-        assert "tag=early-adopter" in page.url
+        # Tag filter is now applied via the standalone tag picker / active
+        # chip header, not via per-row chips (those were removed in #451).
+        # Apply via the ?tag= query directly.
+        page.goto(
+            f"{django_server}/studio/users/?filter=paid&slack=yes&q=avery&tag=early-adopter",
+            wait_until="domcontentloaded",
+        )
         active_chip = page.locator('[data-testid="active-tag-chip"]')
         assert active_chip.is_visible()
         assert "Tag: early-adopter" in active_chip.inner_text()
@@ -198,7 +218,10 @@ class TestStudioUsersScanability:
         row = page.locator("tbody tr", has_text=email).first
         assert row.is_visible()
         assert row.locator('[data-testid="user-email"]').is_visible()
-        assert row.locator('[data-testid="membership-badges"]').is_visible()
+        # Tier pill lives inside the User cell now (issue #451).
+        assert row.locator(
+            'td[data-label="User"] [data-testid="user-list-tier-pill"]'
+        ).is_visible()
 
         view = row.locator('[data-testid="user-view-link"]')
         login_as = row.get_by_role("button", name="Login as")

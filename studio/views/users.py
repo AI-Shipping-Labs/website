@@ -321,6 +321,38 @@ def _user_listing_counts():
     return {key: value or 0 for key, value in counts.items()}
 
 
+def _row_tooltip(user, slack_status):
+    """Return the per-row ``<tr title="...">`` tooltip string (issue #451).
+
+    The new four-column users list drops the per-row Membership/Tags
+    columns. To preserve at-a-glance access to the Slack ID, Stripe
+    customer ID, Newsletter state, and Slack workspace state, those four
+    facts move into a hover tooltip on the row itself.
+
+    Order matters because the tooltip renders as a single newline-joined
+    string in DOM order:
+
+    - ``Slack ID: <id>`` only when set.
+    - ``Stripe customer: <cus_id>`` only when set.
+    - ``Newsletter: subscribed|unsubscribed`` always.
+    - ``Slack workspace: <status>`` always (the three-state label from
+      ``_slack_status``: ``Member`` / ``Not in Slack`` / ``Never checked``).
+
+    The Newsletter and Slack-workspace facts are always present so a row
+    with no Slack ID and no Stripe ID still has something useful on
+    hover.
+    """
+    parts = []
+    if user.slack_user_id:
+        parts.append(f'Slack ID: {user.slack_user_id}')
+    if user.stripe_customer_id:
+        parts.append(f'Stripe customer: {user.stripe_customer_id}')
+    newsletter_state = 'unsubscribed' if user.unsubscribed else 'subscribed'
+    parts.append(f'Newsletter: {newsletter_state}')
+    parts.append(f'Slack workspace: {slack_status}')
+    return '\n'.join(parts)
+
+
 def _user_rows_from_users(users):
     """Build Studio row dictionaries for already-filtered user objects."""
     users = list(users)
@@ -337,6 +369,7 @@ def _user_rows_from_users(users):
         # repeated across templates). When both names are blank it is the
         # empty string and the User cell falls back to email-as-headline.
         full_name = f'{first_name} {last_name}'.strip()
+        slack_status = _slack_status(user)
         user_rows.append({
             'pk': user.pk,
             'email': user.email,
@@ -356,11 +389,12 @@ def _user_rows_from_users(users):
             'visible_tags': tags[:USER_LIST_TAG_LIMIT],
             'tag_overflow_count': max(len(tags) - USER_LIST_TAG_LIMIT, 0),
             'hidden_tags_label': ', '.join(tags[USER_LIST_TAG_LIMIT:]),
-            'slack_status': _slack_status(user),
+            'slack_status': slack_status,
             'slack_member': bool(user.slack_member),
             'slack_checked_at': user.slack_checked_at,
             'slack_user_id': user.slack_user_id or '',
             'stripe_customer_id': user.stripe_customer_id or '',
+            'row_tooltip': _row_tooltip(user, slack_status),
         })
     return user_rows
 

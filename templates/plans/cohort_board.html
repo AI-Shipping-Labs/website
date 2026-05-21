@@ -54,7 +54,7 @@
           <form method="post" action="{% url 'sprint_leave' sprint_slug=sprint.slug %}" class="inline-block" onsubmit="return confirm('Leave {{ sprint.name|escapejs }}? Your plan stays but is set to private and you’ll no longer see the cohort board.');">
             {% csrf_token %}
             <button type="submit"
-                    class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                    class="{% button_classes 'secondary' %}"
                     data-testid="cohort-board-leave-sprint">
               Leave sprint
             </button>
@@ -70,7 +70,7 @@
           <div class="flex flex-wrap items-center gap-3">
             {% if viewer_pinged_recently %}
             <button type="button" disabled
-                    class="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-4 py-2 text-sm font-medium text-muted-foreground cursor-not-allowed"
+                    class="{% button_classes 'secondary' extra='!bg-secondary/40 !text-muted-foreground cursor-not-allowed' %}"
                     data-testid="ask-team-button">
               Pinged the team &mdash; they will be in touch soon
             </button>
@@ -78,7 +78,7 @@
             <form method="post" action="{% url 'sprint_ask_team' sprint_slug=sprint.slug %}" class="inline-block">
               {% csrf_token %}
               <button type="submit"
-                      class="inline-flex items-center gap-2 rounded-md bg-accent text-accent-foreground px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
+                      class="{% button_classes 'primary' %}"
                       data-testid="ask-team-button">
                 Ask the team to plan with me
               </button>
@@ -87,7 +87,7 @@
             <form method="post" action="{% url 'sprint_leave' sprint_slug=sprint.slug %}" class="inline-block" onsubmit="return confirm('Leave {{ sprint.name|escapejs }}? Your plan stays but is set to private and you’ll no longer see the cohort board.');">
               {% csrf_token %}
               <button type="submit"
-                      class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                      class="{% button_classes 'secondary' %}"
                       data-testid="cohort-board-leave-sprint">
                 Leave sprint
               </button>
@@ -171,10 +171,14 @@
                 <p class="text-sm text-muted-foreground">Progress only; plan details are private.</p>
                 {% else %}
                 <div data-testid="progress-row-no-plan-{{ row.member.pk }}">
+                  {# Issue #598: per-row table actions are deliberately the
+                     `sm` size — they sit inside a dense cohort comparison
+                     table where a 44px tap target would dominate the row.
+                     This mirrors the Studio compact-row-action convention. #}
                   {% if row.is_self %}
                     {% if viewer_pinged_recently %}
                     <button type="button" disabled
-                            class="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground cursor-not-allowed"
+                            class="{% button_classes 'secondary' size='sm' extra='!bg-secondary/40 !text-muted-foreground cursor-not-allowed' %}"
                             data-testid="ask-team-button">
                       Pinged the team &mdash; they will be in touch soon
                     </button>
@@ -182,7 +186,7 @@
                     <form method="post" action="{% url 'sprint_ask_team' sprint_slug=sprint.slug %}" class="inline-block">
                       {% csrf_token %}
                       <button type="submit"
-                              class="inline-flex items-center gap-2 rounded-md bg-accent text-accent-foreground px-3 py-1 text-xs font-medium hover:opacity-90 transition-opacity"
+                              class="{% button_classes 'primary' size='sm' %}"
                               data-testid="ask-team-button">
                         Ask the team to plan with me
                       </button>
@@ -206,7 +210,7 @@
           As teammates enroll, they will appear here with their progress.
         </p>
         {% if viewer_plan %}
-        <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}" class="mt-4 inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+        <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}" class="mt-4 {% button_classes 'secondary' %}">
           View your own plan
         </a>
         {% endif %}

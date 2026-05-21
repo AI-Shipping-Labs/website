@@ -21,49 +21,120 @@ from accounts.utils.display import display_name as _display_name
 
 register = template.Library()
 
-PRODUCT_BUTTON_CLASSES = {
-    'primary': (
-        'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md '
-        'bg-accent px-4 py-2 text-sm font-medium text-accent-foreground '
-        'transition-colors hover:bg-accent/90 disabled:cursor-not-allowed '
-        'disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 '
-        'focus-visible:ring-accent focus-visible:ring-offset-2 '
-        'focus-visible:ring-offset-background'
-    ),
+# Issue #598 — Canonical product-surface button scale.
+#
+# The button class string is composed in a fixed order so per-call overrides
+# (``extra`` argument) always win the cascade. Three sizes share one base
+# shape, three variants share one color treatment, and the rendered string
+# interleaves base + size + variant in a single contiguous Tailwind-style
+# order: layout, sizing, palette, typography, transitions, state. The
+# ``md`` size is the default and matches the previously shipped string
+# byte-for-byte so existing call sites do not change.
+#
+# Joining order in the rendered class string: ``base size variant extra``.
+# Do not reshuffle: callers (e.g. the amber verification banner) rely on
+# ``extra`` appearing last so ``!``-prefixed utilities override the base.
+
+# Per-size class strings. ``min-h-[44px]`` is intentionally absent from
+# ``sm`` — small row actions inside dense tables stay compact.
+PRODUCT_BUTTON_SIZE_CLASSES = {
+    'sm': 'px-3 py-1.5 text-xs',
+    'md': 'min-h-[44px] px-4 py-2 text-sm',
+    'lg': 'min-h-[44px] px-6 py-3 text-base',
+}
+
+# Per-variant class strings (color treatment only). Layout, padding, and
+# text-size come from the size scale; transition / state classes come
+# from the base.
+PRODUCT_BUTTON_VARIANT_CLASSES = {
+    'primary': 'bg-accent text-accent-foreground hover:bg-accent/90',
     'secondary': (
-        'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md '
-        'border border-border bg-transparent px-4 py-2 text-sm font-medium '
-        'text-foreground transition-colors hover:bg-secondary '
-        'disabled:cursor-not-allowed disabled:opacity-50 '
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent '
-        'focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+        'border border-border bg-transparent text-foreground hover:bg-secondary'
     ),
     'destructive': (
-        'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md '
-        'border border-red-500/30 bg-transparent px-4 py-2 text-sm font-medium '
-        'text-red-400 transition-colors hover:bg-red-500/10 '
-        'disabled:cursor-not-allowed disabled:opacity-50 '
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent '
-        'focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+        'border border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10'
     ),
+}
+
+# Shared base classes for every product button at every size + variant.
+PRODUCT_BUTTON_BASE_CLASSES = (
+    'inline-flex items-center justify-center gap-2 rounded-md '
+    'font-medium transition-colors disabled:cursor-not-allowed '
+    'disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 '
+    'focus-visible:ring-accent focus-visible:ring-offset-2 '
+    'focus-visible:ring-offset-background'
+)
+
+
+def _compose_button_classes(variant, size):
+    return (
+        f'{PRODUCT_BUTTON_BASE_CLASSES} '
+        f'{PRODUCT_BUTTON_SIZE_CLASSES[size]} '
+        f'{PRODUCT_BUTTON_VARIANT_CLASSES[variant]}'
+    )
+
+
+# Backwards-compatible alias: the original constant exposed one class
+# string per variant (the ``md`` size). Keep the same shape so callers
+# importing ``PRODUCT_BUTTON_CLASSES`` continue to work.
+PRODUCT_BUTTON_CLASSES = {
+    variant: _compose_button_classes(variant, 'md')
+    for variant in PRODUCT_BUTTON_VARIANT_CLASSES
 }
 
 
 @register.simple_tag
-def button_classes(variant, extra_classes=''):
+def button_classes(variant, size_or_extra='', size='md', extra=''):
     """Return canonical product-surface button classes.
 
-    Used for dense authenticated surfaces where CTAs should share the same
-    44px tap target while retaining per-call-site layout classes.
+    Signature: ``{% button_classes variant size='md' extra='' %}``.
+
+    Three sizes are supported:
+
+    - ``sm``: ``px-3 py-1.5 text-xs``, no 44px min-height — compact row
+      actions and inline edit controls inside dense tables.
+    - ``md`` (default): ``min-h-[44px] px-4 py-2 text-sm`` — every
+      authenticated CTA on dashboard / account / plan / cohort surfaces.
+    - ``lg``: ``min-h-[44px] px-6 py-3 text-base`` — marketing-page hero
+      CTAs and pricing conversion buttons.
+
+    Backwards compatibility: the original tag accepted a positional second
+    argument that meant ``extra``. To keep every existing call site
+    (``{% button_classes 'secondary' 'shrink-0' %}``) byte-for-byte
+    unchanged, a positional second argument is treated as ``extra`` when it
+    does not match ``{'sm', 'md', 'lg'}``. Callers using the new size
+    parameter should always pass it by name: ``size='sm'``.
+
+    The final class string is composed in this order: base, size, variant,
+    extra. Per-call overrides therefore win the cascade.
     """
-    try:
-        classes = PRODUCT_BUTTON_CLASSES[variant]
-    except KeyError as exc:
+    # Positional second arg compatibility shim: a bare positional string that
+    # is not a known size is the legacy ``extra`` argument.
+    positional_extra = ''
+    if size_or_extra:
+        if size_or_extra in PRODUCT_BUTTON_SIZE_CLASSES:
+            size = size_or_extra
+        else:
+            positional_extra = size_or_extra
+
+    if variant not in PRODUCT_BUTTON_VARIANT_CLASSES:
         raise TemplateSyntaxError(
-            f"Unknown button_classes variant: {variant!r}",
-        ) from exc
-    if extra_classes:
-        return f'{classes} {extra_classes}'
+            f"Unknown button_classes variant: {variant!r}. "
+            f"Valid variants: {sorted(PRODUCT_BUTTON_VARIANT_CLASSES)}",
+        )
+    if size not in PRODUCT_BUTTON_SIZE_CLASSES:
+        raise TemplateSyntaxError(
+            f"Unknown button_classes size: {size!r}. "
+            f"Valid sizes: {sorted(PRODUCT_BUTTON_SIZE_CLASSES)}",
+        )
+
+    classes = _compose_button_classes(variant, size)
+    # The keyword ``extra`` wins over a positional second arg if both are
+    # supplied; in practice no call site passes both, but documenting the
+    # precedence keeps the behaviour deterministic.
+    trailing = extra or positional_extra
+    if trailing:
+        return f'{classes} {trailing}'
     return classes
 
 

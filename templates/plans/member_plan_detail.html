@@ -30,11 +30,11 @@
           {{ plan.member|display_name }}'s plan
         </h1>
         <nav class="mt-5 flex flex-wrap gap-3 text-sm" aria-label="Sprint plan navigation">
-          <a href="{% url 'sprint_detail' sprint_slug=sprint.slug %}" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+          <a href="{% url 'sprint_detail' sprint_slug=sprint.slug %}" class="{% button_classes 'secondary' %}" data-testid="view-sprint-detail-cta">
             <i data-lucide="arrow-left" class="h-4 w-4"></i>
             Sprint detail
           </a>
-          <a href="{% url 'cohort_board' sprint_slug=sprint.slug %}" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+          <a href="{% url 'cohort_board' sprint_slug=sprint.slug %}" class="{% button_classes 'secondary' %}" data-testid="view-cohort-board-cta">
             <i data-lucide="users" class="h-4 w-4"></i>
             Cohort board
           </a>

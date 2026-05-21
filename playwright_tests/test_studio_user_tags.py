@@ -72,8 +72,11 @@ class TestOperatorTagsContactAndFiltersByTag:
             wait_until="domcontentloaded",
         )
         assert "/studio/users/" in page.url
-        # The new Tags column header is present.
-        assert "Tags" in page.content()
+        # Issue #451: the Tags column was dropped from the list, but the
+        # tag-filter affordance still lives in the page header as a
+        # standalone <select> picker (issue #694). Assert on that as the
+        # behavioral guarantee for "operators can drive search by tag".
+        assert page.locator('[data-testid="user-tag-picker"]').count() == 1
 
         # 2. Click "View" on the row for member@test.com.
         member_row = page.locator("tr", has_text="member@test.com")

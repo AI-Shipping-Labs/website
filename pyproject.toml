@@ -135,3 +135,14 @@ select = ["F", "I", "PLC0415"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["content", "accounts", "payments", "studio", "integrations", "events", "community", "notifications", "voting", "email_app", "jobs"]
+
+
+# uv settings — pinned at the project level so CI's uv (no user
+# config) and local uv (which may have a ~/.config/uv/uv.toml
+# exclude-newer setting) agree on lockfile resolution. Without this
+# pin, local uv writes a stale [options] block into uv.lock that
+# CI's `uv sync --locked` (per #657) then rejects with "lockfile
+# needs to be updated". Far-future timestamp = effectively no
+# exclude-newer constraint, matching CI's no-config behaviour.
+[tool.uv]
+exclude-newer = "2099-12-31"

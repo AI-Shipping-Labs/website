@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load accounts_extras %}
 
 {% block title %}{{ sprint.name }} | {{ site_name }}{% endblock %}
 
@@ -75,7 +76,7 @@
       <div class="rounded-2xl border border-border bg-card p-6">
         {% if not is_authenticated %}
           <a href="/accounts/login/?next=/sprints/{{ sprint.slug }}"
-             class="inline-flex items-center gap-2 rounded-md bg-accent text-accent-foreground px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
+             class="{% button_classes 'primary' %}"
              data-testid="sprint-cta-login">
             Log in to join
           </a>
@@ -84,13 +85,13 @@
           <div class="mt-4 flex flex-wrap items-center gap-3">
             {% if viewer_plan %}
             <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}"
-               class="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary/80 transition-colors"
+               class="{% button_classes 'primary' %}"
                data-testid="sprint-cta-open-plan">
               Open my plan
             </a>
             {% else %}
             <a href="{% url 'cohort_board' sprint_slug=sprint.slug %}"
-               class="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary/80 transition-colors"
+               class="{% button_classes 'secondary' %}"
                data-testid="sprint-cta-board">
               Your plan is being prepared
             </a>
@@ -98,7 +99,7 @@
             <form method="post" action="{% url 'sprint_leave' sprint_slug=sprint.slug %}" class="inline-block" onsubmit="return confirm('Leave {{ sprint.name|escapejs }}? Your plan stays but is set to private and you’ll no longer see the cohort board.');">
               {% csrf_token %}
               <button type="submit"
-                      class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                      class="{% button_classes 'secondary' %}"
                       data-testid="sprint-cta-leave">
                 Leave sprint
               </button>
@@ -112,15 +113,19 @@
             This sprint requires the {{ required_tier_name }} tier.
           </p>
           <a href="/pricing"
-             class="mt-4 inline-flex items-center gap-2 rounded-md bg-accent text-accent-foreground px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
+             class="mt-4 {% button_classes 'primary' %}"
              data-testid="sprint-cta-upgrade">
             Upgrade to {{ required_tier_name }} to join
           </a>
         {% else %}
           <form method="post" action="{% url 'sprint_join' sprint_slug=sprint.slug %}" class="inline-block">
             {% csrf_token %}
+            {# Issue #598: Join sprint keeps its emerald color override.
+               Uses the `!`-prefixed pattern (same as the amber verification
+               banner) so per-call utilities win the cascade against the
+               canonical primary `bg-accent`. #}
             <button type="submit"
-                    class="inline-flex items-center gap-2 rounded-md bg-emerald-500 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-600 transition-colors"
+                    class="{% button_classes 'primary' extra='!bg-emerald-500 hover:!bg-emerald-600 !text-white' %}"
                     data-testid="sprint-cta-join">
               Join sprint
             </button>

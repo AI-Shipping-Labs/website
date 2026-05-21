@@ -134,48 +134,90 @@ Reach for these before writing a new inline component.
 
 ## Buttons
 
-Primary filled action:
+Primary filled action (marketing `lg` size):
 
 ```html
 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90
 ```
 
-Secondary/outlined action:
+Secondary/outlined action (marketing `lg` size):
 
 ```html
 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary
 ```
 
-Top-level CTAs commonly add `w-full sm:w-auto` on mobile-to-desktop transitions. Real `<button>` elements should include disabled styling such as `disabled:cursor-not-allowed disabled:opacity-50` when the state exists.
+These two snippets describe the marketing-page hero / pricing CTAs (the `lg` row in the size scale below). Top-level CTAs commonly add `w-full sm:w-auto` on mobile-to-desktop transitions. Real `<button>` elements should include disabled styling such as `disabled:cursor-not-allowed disabled:opacity-50` when the state exists. New product CTAs go through `{% button_classes %}` — see the size scale.
 
-Product surfaces (dashboard / plan / account):
+### Button size scale
 
-Use these denser button classes for authenticated product CTAs on `templates/content/dashboard.html`, `templates/plans/my_plan_detail.html`, and `templates/accounts/account.html`. Inline edit controls inside `templates/plans/_plan_body.html` stay compact and are not page-level CTAs.
+Issue #598 — product buttons use one of three named sizes. Pick by role, not by visual taste.
+
+| Name | Padding         | Text size  | `min-h-[44px]` | Use case                                                                  |
+|------|-----------------|------------|----------------|---------------------------------------------------------------------------|
+| `sm` | `px-3 py-1.5`   | `text-xs`  | no             | Compact per-row table actions, inline edit controls, narrow card chrome.  |
+| `md` | `px-4 py-2`     | `text-sm`  | yes            | Default for every authenticated CTA — dashboard, account, plans, cohort.  |
+| `lg` | `px-6 py-3`     | `text-base`| yes            | Marketing-page hero CTAs, pricing, top-of-page conversion buttons.        |
+
+Tag signature:
+
+```django
+{% load accounts_extras %}
+{% button_classes variant size='md' extra='' %}
+```
+
+- `variant` is positional and required. One of `primary`, `secondary`, `destructive`.
+- `size` defaults to `md` so every existing call site stays byte-for-byte unchanged.
+- `extra` appends after the canonical classes so per-call overrides win the cascade (used by the amber verification banner and the emerald Join sprint button).
+- A positional second argument is treated as `extra` when it is not one of `{sm, md, lg}` — preserves backward compatibility with `{% button_classes 'secondary' 'shrink-0' %}` calls.
+
+Use examples:
 
 ```django
 {% load accounts_extras %}
 <a href="..." class="{% button_classes 'primary' %}">Open</a>
 <a href="..." class="{% button_classes 'secondary' 'shrink-0' %}">View</a>
 <button type="button" class="{% button_classes 'destructive' %}">Cancel</button>
+<a href="/pricing" class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}">Upgrade</a>
+<button type="button" class="{% button_classes 'primary' size='sm' %}">Ping</button>
 ```
 
-Product primary:
+Joining order in the rendered class string is `base size variant extra`. Do not reshuffle: per-call overrides rely on appearing last.
+
+Rendered class strings, per (variant, size):
+
+Primary, `sm`:
 
 ```html
-inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background
+inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background px-3 py-1.5 text-xs bg-accent text-accent-foreground hover:bg-accent/90
 ```
 
-Product secondary:
+Primary, `md` (default):
 
 ```html
-inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background
+inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background min-h-[44px] px-4 py-2 text-sm bg-accent text-accent-foreground hover:bg-accent/90
 ```
 
-Product destructive:
+Primary, `lg`:
 
 ```html
-inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-red-500/30 bg-transparent px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background
+inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background min-h-[44px] px-6 py-3 text-base bg-accent text-accent-foreground hover:bg-accent/90
 ```
+
+Secondary differs from primary only in the trailing variant cluster:
+
+```html
+border border-border bg-transparent text-foreground hover:bg-secondary
+```
+
+Destructive likewise differs only in the variant cluster:
+
+```html
+border border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10
+```
+
+Surfaces covered today by the tag at `size='md'`: `templates/content/dashboard.html`, `templates/accounts/account.html`, `templates/plans/my_plan_detail.html`, `templates/plans/member_plan_detail.html`, `templates/plans/sprint_detail.html`, `templates/plans/cohort_board.html`. Per-row cohort table actions in `cohort_board.html` use `size='sm'` deliberately — they are inline row actions, not page-level CTAs. Inline edit controls in `templates/plans/_plan_body.html` keep their bare `px-3 py-1.5` chrome and are not migrated. Public/marketing surfaces (course detail, reader, footer, login/register) are explicitly NOT migrated yet; a follow-up issue will move them to `size='lg'` once a visual review confirms the chrome matches.
+
+A regression lint (`accounts/tests/test_button_class_lint.py`) scans the six scoped templates and fails if a hand-rolled button class with `px-5`, bare `py-2.5`, or bare `py-1` reappears. The lint includes a self-test that injects a known-bad string to prove the regex catches what it claims to catch.
 
 ### Studio header + action row
 

@@ -10,7 +10,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.templatetags.accounts_extras import (
+    PRODUCT_BUTTON_BASE_CLASSES,
     PRODUCT_BUTTON_CLASSES,
+    PRODUCT_BUTTON_SIZE_CLASSES,
+    PRODUCT_BUTTON_VARIANT_CLASSES,
     button_classes,
 )
 from plans.models import Plan, Sprint
@@ -57,6 +60,79 @@ class ButtonClassesTagTest(TestCase):
 
         with self.assertRaises(TemplateSyntaxError):
             template.render(Context({}))
+
+    # Issue #598 — three-size scale ----------------------------------------
+
+    def test_default_size_md_matches_shipped_constant_byte_for_byte(self):
+        """Default size produces the same string as the original constant.
+
+        Existing call sites pass only the variant; this guarantees they
+        keep producing the same canonical ``md`` class string after the
+        size-scale rollout.
+        """
+        for variant in ('primary', 'secondary', 'destructive'):
+            with self.subTest(variant=variant):
+                self.assertEqual(
+                    button_classes(variant),
+                    PRODUCT_BUTTON_CLASSES[variant],
+                )
+                self.assertEqual(
+                    button_classes(variant, size='md'),
+                    PRODUCT_BUTTON_CLASSES[variant],
+                )
+
+    def test_sm_size_renders_compact_class_string_without_min_height(self):
+        result = button_classes('primary', size='sm')
+        self.assertIn('px-3 py-1.5', result)
+        self.assertIn('text-xs', result)
+        # ``sm`` is the only size without the 44px tap target.
+        self.assertNotIn('min-h-[44px]', result)
+        # Variant color treatment still applied.
+        self.assertIn('bg-accent', result)
+
+    def test_lg_size_renders_marketing_class_string_with_min_height(self):
+        result = button_classes('primary', size='lg')
+        self.assertIn('px-6 py-3', result)
+        self.assertIn('text-base', result)
+        self.assertIn('min-h-[44px]', result)
+        self.assertIn('bg-accent', result)
+
+    def test_positional_extra_still_works_without_size_argument(self):
+        """Legacy ``{% button_classes 'secondary' 'shrink-0' %}`` still works.
+
+        The size scale rollout must not break any existing call site that
+        passes a positional second argument as the ``extra`` classes.
+        """
+        result = button_classes('secondary', 'shrink-0')
+        self.assertEqual(
+            result,
+            f"{PRODUCT_BUTTON_CLASSES['secondary']} shrink-0",
+        )
+
+    def test_size_lg_with_extra_appends_classes_after_canonical(self):
+        result = button_classes('primary', size='lg', extra='w-full sm:w-auto')
+        self.assertIn('px-6 py-3', result)
+        self.assertIn('text-base', result)
+        self.assertTrue(result.endswith(' w-full sm:w-auto'))
+
+    def test_unknown_size_raises_template_syntax_error_with_valid_sizes(self):
+        with self.assertRaises(TemplateSyntaxError) as cm:
+            button_classes('primary', size='xl')
+        # Message lists the valid sizes so the developer sees the scale.
+        message = str(cm.exception)
+        for size in PRODUCT_BUTTON_SIZE_CLASSES:
+            self.assertIn(size, message)
+
+    def test_exported_constants_are_dicts_with_expected_keys(self):
+        """Constants must be importable for tests and downstream consumers."""
+        self.assertIsInstance(PRODUCT_BUTTON_BASE_CLASSES, str)
+        self.assertEqual(
+            set(PRODUCT_BUTTON_SIZE_CLASSES), {'sm', 'md', 'lg'},
+        )
+        self.assertEqual(
+            set(PRODUCT_BUTTON_VARIANT_CLASSES),
+            {'primary', 'secondary', 'destructive'},
+        )
 
 
 class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):

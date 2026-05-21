@@ -144,7 +144,7 @@ Why no PRs: the team's review pipeline is the agent flow (PM groom → SWE → t
 - SWE and tester must update acceptance criteria checkboxes in the issue body (`- [ ]` → `- [x]`)
 - Never commit directly without tester review, even for "simple" changes
 - Never use `gh pr create` or `gh pr merge` — see "Merging — local only, no PRs"
-- After tester PASS, ALWAYS launch the `product-manager` agent for acceptance. Never write the ACCEPT comment inline as the orchestrator, even for trivial CI fixes, 2-line YAML bumps, or "obviously safe" changes. The PM agent provides an independent operator-perspective check distinct from the tester's technical check, and the issue's comment history is the durable audit trail for "who signed off and why". An orchestrator-authored ACCEPT comment conflates merge coordination with formal product sign-off and loses the second pair of eyes. If the API is rate-limited (e.g. 529), retry the PM agent rather than shortcut to inline acceptance
+- Default to launching the `product-manager` agent for acceptance after tester PASS — that's the second pair of eyes and the durable audit-trail comment. Inline orchestrator-authored acceptance is OK occasionally (tiny CI-fix, decisive tester verdict, rate-limited API) but shouldn't become the norm
 - After push, always run oncall-engineer agent to monitor CI — do not just check manually or wait on CI as the orchestrator's main task
 
 ### How to Pick Issues

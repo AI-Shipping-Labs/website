@@ -166,6 +166,98 @@ class SharedAcrossHelpersTest(SimpleTestCase):
         self.assertIn('<div class="mermaid">', render_event_md(md))
 
 
+class BrTagToNewlineConversionTest(SimpleTestCase):
+    """``<br>`` variants inside a mermaid fence must be converted to a
+    literal newline BEFORE ``html.escape`` so Mermaid 10 (with
+    ``securityLevel: 'strict'``) renders the label as two lines instead
+    of rejecting the diagram (issue #791).
+    """
+
+    def test_br_slash_in_node_label_becomes_newline(self):
+        md = (
+            "```mermaid\n"
+            "flowchart LR\n"
+            '    A["x<br/>y"]\n'
+            "```\n"
+        )
+        html = render_article_md(md)
+        # Newline lives between the escaped quotes, in place of <br/>.
+        self.assertIn('A[&quot;x\ny&quot;]', html)
+        # The literal tag must not survive in any form.
+        self.assertNotIn('&lt;br', html)
+        self.assertNotIn('<br', html)
+
+    def test_br_no_slash_becomes_newline(self):
+        md = (
+            "```mermaid\n"
+            "flowchart LR\n"
+            '    A["x<br>y"]\n'
+            "```\n"
+        )
+        html = render_article_md(md)
+        self.assertIn('A[&quot;x\ny&quot;]', html)
+        self.assertNotIn('&lt;br', html)
+
+    def test_br_with_space_becomes_newline(self):
+        md = (
+            "```mermaid\n"
+            "flowchart LR\n"
+            '    A["x<br />y"]\n'
+            "```\n"
+        )
+        html = render_article_md(md)
+        self.assertIn('A[&quot;x\ny&quot;]', html)
+        self.assertNotIn('&lt;br', html)
+
+    def test_uppercase_br_becomes_newline(self):
+        md = (
+            "```mermaid\n"
+            "flowchart LR\n"
+            '    A["x<BR/>y"] --> B["p<BR>q"]\n'
+            "```\n"
+        )
+        html = render_article_md(md)
+        self.assertIn('A[&quot;x\ny&quot;]', html)
+        self.assertIn('B[&quot;p\nq&quot;]', html)
+        self.assertNotIn('&lt;br', html)
+        self.assertNotIn('&lt;BR', html)
+
+    def test_br_outside_mermaid_fence_is_preserved(self):
+        """The substitution must be scoped to the captured mermaid source
+        only — a ``<br/>`` in surrounding markdown stays intact."""
+        md = (
+            "line1<br/>line2\n\n"
+            "```mermaid\n"
+            "flowchart LR\n"
+            '    A["x<br/>y"] --> B\n'
+            "```\n"
+        )
+        html = render_article_md(md)
+        # The paragraph still carries the raw <br/> (python-markdown
+        # passes inline HTML through unchanged).
+        self.assertIn('<br/>', html)
+        # The mermaid div has the newline-converted label.
+        self.assertIn('<div class="mermaid">', html)
+        self.assertIn('A[&quot;x\ny&quot;]', html)
+
+    def test_existing_xss_escape_still_works_alongside_br_substitution(self):
+        """The new ``<br>`` substitution must not weaken the XSS guard —
+        ``<script>`` inside the fence is still escaped, and the ``<br/>``
+        beside it is still translated to a newline."""
+        md = (
+            "```mermaid\n"
+            "flowchart LR\n"
+            '    A["<script>alert(1)</script><br/>tail"] --> B\n'
+            "```\n"
+        )
+        html = render_article_md(md)
+        self.assertNotIn('<script>', html)
+        self.assertIn('&lt;script&gt;', html)
+        # The <br/> between the script payload and 'tail' became a newline.
+        self.assertIn('&lt;/script&gt;\ntail', html)
+        self.assertNotIn('&lt;br', html)
+
+
 class MermaidScriptTagInclusionTest(TestCase):
     """Lazy-load contract from issue #320: the mermaid renderer shim is
     only emitted on pages that render markdown-derived HTML. Non-content

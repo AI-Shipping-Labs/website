@@ -7,6 +7,7 @@ from django.utils.text import slugify
 from content.models import Article
 from integrations.services.banner_generator import is_enabled as banner_generator_is_enabled
 from studio.decorators import staff_required
+from studio.services.banner_status import get_last_banner_task
 from studio.utils import get_github_edit_url, is_synced
 from studio.views.form_helpers import (
     parse_comma_separated_tags,
@@ -72,6 +73,7 @@ def article_edit(request, article_id):
 
         return redirect('studio_article_edit', article_id=article.pk)
 
+    banner_enabled = banner_generator_is_enabled()
     context = {
         'article': article,
         'form_action': 'edit',
@@ -85,6 +87,9 @@ def article_edit(request, article_id):
             'studio_article_regenerate_banner',
             kwargs={'article_id': article.pk},
         ),
-        'banner_generator_enabled': banner_generator_is_enabled(),
+        'banner_generator_enabled': banner_enabled,
+        'banner_last_task': (
+            get_last_banner_task('article', article.pk) if banner_enabled else None
+        ),
     }
     return render(request, 'studio/articles/form.html', context)

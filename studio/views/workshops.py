@@ -31,6 +31,7 @@ from content.models import Workshop
 from integrations.models import ContentSource
 from integrations.services.banner_generator import is_enabled as banner_generator_is_enabled
 from studio.decorators import staff_required
+from studio.services.banner_status import get_last_banner_task
 from studio.utils import get_github_edit_url
 from studio.views.sync import _mark_source_queued, _worker_warning_suffix
 
@@ -271,6 +272,10 @@ def workshop_edit(request, workshop_id):
             kwargs={'workshop_id': workshop.pk},
         ),
         'banner_generator_enabled': banner_generator_is_enabled(),
+        'banner_last_task': (
+            get_last_banner_task('workshop', workshop.pk)
+            if banner_generator_is_enabled() else None
+        ),
     })
 
 

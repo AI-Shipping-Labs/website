@@ -7,6 +7,7 @@ from django.urls import reverse
 from content.models import Project
 from integrations.services.banner_generator import is_enabled as banner_generator_is_enabled
 from studio.decorators import staff_required
+from studio.services.banner_status import get_last_banner_task
 from studio.utils import get_github_edit_url, is_synced
 
 
@@ -48,6 +49,7 @@ def project_review(request, project_id):
             project.reject()
         return redirect('studio_project_list')
 
+    banner_enabled = banner_generator_is_enabled()
     return render(request, 'studio/projects/review.html', {
         'project': project,
         'is_synced': synced,
@@ -58,5 +60,8 @@ def project_review(request, project_id):
             'studio_project_regenerate_banner',
             kwargs={'project_id': project.pk},
         ),
-        'banner_generator_enabled': banner_generator_is_enabled(),
+        'banner_generator_enabled': banner_enabled,
+        'banner_last_task': (
+            get_last_banner_task('project', project.pk) if banner_enabled else None
+        ),
     })

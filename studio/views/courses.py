@@ -14,6 +14,7 @@ from django.views.decorators.http import require_POST
 from content.models import Course, CourseAccess, Enrollment, Module, Unit
 from integrations.services.banner_generator import is_enabled as banner_generator_is_enabled
 from studio.decorators import staff_required
+from studio.services.banner_status import get_last_banner_task
 from studio.utils import get_github_edit_url, is_synced
 from studio.views.form_helpers import (
     parse_comma_separated_tags,
@@ -92,6 +93,7 @@ def course_edit(request, course_id):
         course=course, unenrolled_at__isnull=True,
     ).count()
 
+    banner_enabled = banner_generator_is_enabled()
     return render(request, 'studio/courses/form.html', {
         'course': course,
         'modules': modules,
@@ -109,7 +111,10 @@ def course_edit(request, course_id):
             'studio_course_regenerate_banner',
             kwargs={'course_id': course.pk},
         ),
-        'banner_generator_enabled': banner_generator_is_enabled(),
+        'banner_generator_enabled': banner_enabled,
+        'banner_last_task': (
+            get_last_banner_task('course', course.pk) if banner_enabled else None
+        ),
     })
 
 

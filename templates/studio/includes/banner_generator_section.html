@@ -6,6 +6,9 @@ Required context:
   - banner_regenerate_url: POST URL for the per-content-type regenerate view.
   - banner_generator_enabled: bool — when False the button renders disabled
     with a tooltip linking to ``/studio/settings/#content_tools``.
+  - banner_last_task: dict from ``studio.services.banner_status.get_last_banner_task``
+    (issue #790). Drives the four-state hint (none / success / failed /
+    in_progress) and the "in-flight" disabled-button variant.
 {% endcomment %}
 <div class="bg-card border border-border rounded-lg p-4 mt-4"
      data-testid="banner-generator-section">
@@ -23,12 +26,22 @@ Required context:
         data-testid="banner-generator-form">
     {% csrf_token %}
     {% if banner_generator_enabled %}
-      <button type="submit"
-              class="bg-secondary border border-border text-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-muted transition-colors flex items-center space-x-1"
-              data-testid="banner-generator-regenerate-button">
-        <i data-lucide="refresh-cw" class="w-3 h-3"></i>
-        <span>Regenerate banner</span>
-      </button>
+      {% if banner_last_task.state == 'in_progress' %}
+        <a href="#"
+           title="A regeneration task is already queued for this record."
+           class="bg-secondary border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-xs font-medium opacity-60 cursor-not-allowed flex items-center space-x-1"
+           data-testid="banner-generator-regenerate-button-disabled-inflight">
+          <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+          <span>Regenerate banner</span>
+        </a>
+      {% else %}
+        <button type="submit"
+                class="bg-secondary border border-border text-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-muted transition-colors flex items-center space-x-1"
+                data-testid="banner-generator-regenerate-button">
+          <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+          <span>Regenerate banner</span>
+        </button>
+      {% endif %}
     {% else %}
       <a href="/studio/settings/#content_tools"
          title="Configure banner generator in Settings to enable"
@@ -39,4 +52,28 @@ Required context:
       </a>
     {% endif %}
   </form>
+  {% if banner_generator_enabled and banner_last_task %}
+    {% if banner_last_task.state == 'success' %}
+      <p class="mt-2 text-xs text-muted-foreground"
+         title="{{ banner_last_task.started_at|date:'Y-m-d H:i:s T' }}"
+         data-testid="banner-generator-last-success">
+        Last regenerated {{ banner_last_task.started_at|timesince }} ago.
+      </p>
+    {% elif banner_last_task.state == 'failed' %}
+      <p class="mt-2 text-xs text-muted-foreground"
+         title="{{ banner_last_task.started_at|date:'Y-m-d H:i:s T' }}"
+         data-testid="banner-generator-last-failure">
+        Last attempt failed {{ banner_last_task.started_at|timesince }} ago.
+        <a href="{{ banner_last_task.task_detail_url }}" class="text-foreground underline">View task.</a>
+      </p>
+      {% if banner_last_task.result_excerpt %}
+        <span class="text-xs text-muted-foreground block">{{ banner_last_task.result_excerpt }}</span>
+      {% endif %}
+    {% elif banner_last_task.state == 'in_progress' %}
+      <p class="mt-2 text-xs text-muted-foreground"
+         data-testid="banner-generator-in-progress">
+        Regeneration in progress — refresh in a few seconds.
+      </p>
+    {% endif %}
+  {% endif %}
 </div>

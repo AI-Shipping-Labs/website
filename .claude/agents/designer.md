@@ -42,16 +42,24 @@ Use `scripts/capture_screenshots.py`:
 ```bash
 uv run python scripts/capture_screenshots.py \
   --urls /projects \
-  --output /tmp/designer-audit-projects-desktop \
+  --output .tmp/designer-audit-projects-desktop \
   --viewport 1280x900
 
 uv run python scripts/capture_screenshots.py \
   --urls /projects \
-  --output /tmp/designer-audit-projects-pixel7 \
+  --output .tmp/designer-audit-projects-pixel7 \
   --viewport 393x851
 ```
 
-When posting screenshots to an issue, pass `--issue {N}`. Non-default viewport captures include the viewport in filenames and issue comments so desktop and mobile captures do not overwrite each other.
+Non-default viewport captures include the viewport in filenames so desktop and mobile captures do not overwrite each other. The capture script writes PNGs to disk only — it does not upload.
+
+To share a CloudFront URL with the user or embed it in the audit report below, upload each PNG via the `upload-screenshot` CLI. Follow `.claude/skills/screenshots/SKILL.md` for the upload mechanics, install precondition, and the token-hygiene rule. Example:
+
+```bash
+upload-screenshot .tmp/designer-audit-projects-desktop/projects_1280x900.png
+```
+
+The CLI prints `{"url": "https://<cloudfront>/...", "key": "..."}` — use the `url` value in the report template.
 
 ### 2. Read Rendering Code
 
@@ -88,9 +96,11 @@ Post or return one structured Markdown report:
 
 ### Screenshots
 
-- Desktop 1280x900: {path or raw GitHub image URL}
-- Pixel 7 393x851: {path or raw GitHub image URL}
-- Authenticated variants, if relevant: {paths or URLs}
+- Desktop 1280x900: {CloudFront URL from upload-screenshot}
+- Pixel 7 393x851: {CloudFront URL from upload-screenshot}
+- Authenticated variants, if relevant: {CloudFront URLs from upload-screenshot}
+
+Upload each PNG via `upload-screenshot` per `.claude/skills/screenshots/SKILL.md`. Do not paste local file paths or any non-CloudFront URL.
 
 ### Summary
 

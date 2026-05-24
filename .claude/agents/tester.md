@@ -193,22 +193,60 @@ COMMENT
 
 ### 7. Capture Screenshots (MANDATORY)
 
-This step is NOT optional. Screenshots are used by agents to verify pages rendered correctly, not just for human review. After tests pass, capture screenshots of the feature's key pages and attach them to the issue:
+This step is NOT optional. Screenshots are used by agents to verify pages rendered correctly, not just for human review. After tests pass, capture screenshots of the feature's key pages, upload each one via the `sandbox-screenshots` service, and post a single comment on the issue with the resulting CloudFront URLs.
+
+#### 7a. Capture
 
 ```bash
-uv run python scripts/capture_screenshots.py --urls {relevant URLs} --issue {NUMBER} --output .tmp/screenshots
+uv run python scripts/capture_screenshots.py --urls {relevant URLs} --output .tmp/screenshots
 ```
 
-For authenticated pages, add `--login-email main@test.com` (or another test user).
+For authenticated pages, add `--login-email main@test.com` (or another test user) and optionally `--login-password ...`. For non-default viewports, add `--viewport WIDTHxHEIGHT` (e.g., `--viewport 393x851` for Pixel 7). Do NOT pass `--issue`; that flag no longer exists.
 
-This uploads screenshots to the `screenshots` orphan branch and posts a comment with embedded images on the issue.
+IMPORTANT: Use URLs without trailing slashes (e.g., `/downloads` not `/downloads/`). Many Django routes don't have trailing slashes and will return 404.
 
-**IMPORTANT: Use URLs without trailing slashes** (e.g., `/downloads` not `/downloads/`). Many Django routes don't have trailing slashes and will return 404.
+After capturing, read each screenshot file to verify:
 
-After capturing, **read each screenshot file** to verify:
 - The page rendered correctly (not a 404, error page, or stack trace)
 - Content is visible and not empty
 - If any screenshot shows an error, fix the URL and recapture
+
+#### 7b. Upload each PNG to `sandbox-screenshots`
+
+Follow `.claude/skills/screenshots/SKILL.md` for the upload mechanics, install precondition, and the token-hygiene rule (`SCREENSHOT_UPLOAD_TOKEN` never appears in this repo or in issue comments).
+
+Run the CLI once per captured file:
+
+```bash
+upload-screenshot .tmp/screenshots/home.png
+upload-screenshot .tmp/screenshots/pricing.png
+```
+
+Collect the `url` returned by each invocation. If `upload-screenshot` is not on `$PATH`, stop and surface the install instruction from the skill doc — do not auto-install.
+
+#### 7c. Post a single `## Screenshots` comment on the issue
+
+Build one comment using exactly this structure. One bullet per captured page. Page path in backticks. Viewport label and auth context in parentheses. CloudFront URL last so the list is scannable:
+
+```
+## Screenshots
+
+- `/` (desktop 1280x720): https://<cloudfront>/YYYY/MM/DD/home.png
+- `/pricing` (desktop 1280x720): https://<cloudfront>/YYYY/MM/DD/pricing.png
+- `/account` (desktop 1280x720, logged in as main@test.com): https://<cloudfront>/YYYY/MM/DD/account.png
+```
+
+Post it with:
+
+```bash
+gh issue comment {NUMBER} --repo AI-Shipping-Labs/website --body "$(cat <<'COMMENT'
+## Screenshots
+
+- `/` (desktop 1280x720): https://<cloudfront>/YYYY/MM/DD/home.png
+- `/pricing` (desktop 1280x720): https://<cloudfront>/YYYY/MM/DD/pricing.png
+COMMENT
+)"
+```
 
 ### 8. Give Verdict
 

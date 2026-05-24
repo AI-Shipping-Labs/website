@@ -19,8 +19,12 @@ Parameters:
   this lesson..."): placeholder text for the new-comment textarea.
 - ``composer_button_label`` (optional, default "Post Question"): label
   for the submit button.
-- ``composer_signin_prompt`` (optional, default "to ask questions"):
-  trailing copy after the "Sign in" anchor in the anonymous branch.
+- ``composer_signin_prompt`` (optional, default "to ask questions,
+  track your progress, and get access to other workshops"): trailing
+  copy after the primary "Sign up" anchor in the anonymous branch.
+  A secondary "Already have an account? Sign in" link is always
+  rendered after the prompt, pointing at ``/accounts/login/?next=``
+  with the current path.
 - ``composer_disabled`` (optional, default False): when True the
   authenticated branch hides the textarea and renders a "discussion
   not available" notice instead. Used by private-plan owner pages
@@ -58,7 +62,9 @@ Parameters:
     {% endif %}
   {% else %}
   <div class="mb-8 rounded-lg border border-border bg-card p-4 text-center text-sm text-muted-foreground">
-    <a href="/accounts/login/" class="text-accent hover:underline">Sign in</a> {{ composer_signin_prompt|default:"to ask questions" }}
+    <a href="/accounts/signup/?next={{ request.get_full_path|urlencode }}" class="text-accent hover:underline">Sign up</a> {{ composer_signin_prompt|default:"to ask questions, track your progress, and get access to other workshops" }}
+    <span class="mx-1 text-muted-foreground">&middot;</span>
+    <a href="/accounts/login/?next={{ request.get_full_path|urlencode }}" class="text-accent hover:underline">Already have an account? Sign in</a>
   </div>
   {% endif %}
 

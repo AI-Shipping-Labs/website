@@ -395,3 +395,86 @@ class MyPlanRendersCommentsSectionTest(_PlanCommentsBase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="plan-comments-section"')
         self.assertContains(response, 'id="qa-new-question"')
+
+
+class PlanSurfaceSigninPromptOverrideTest(TestCase):
+    """Issue #792 regression guard for plan-caller subtitle overrides.
+
+    The three plan callers (``templates/plans/my_plan_detail.html``,
+    ``templates/plans/member_plan_detail.html`` and
+    ``templates/studio/plans/detail.html``) all pass
+    ``composer_signin_prompt="to comment on this plan"`` when including
+    ``comments/_qa_section.html``. Issue #792 changes the partial's
+    DEFAULT prompt to the longer workshop copy and adds a new "Sign up"
+    primary CTA -- but the plan-specific override must keep winning for
+    anonymous-branch renders.
+
+    The plan views themselves are ``@login_required`` (or
+    ``@staff_required`` for the studio surface), so the anonymous
+    branch is unreachable through the live URLs. This test exercises
+    the partial directly with the override the plan templates pass, to
+    lock in the contract: the new "Sign up" verb appears, the
+    secondary "Already have an account? Sign in" link appears, but the
+    workshop default subtitle ("to ask questions, track your progress,
+    and get access to other workshops") does NOT -- the plan override
+    wins.
+    """
+
+    def _render_partial(self, **context_kwargs):
+        """Render the partial with a manufactured anonymous request.
+
+        Global context processors read ``request.session`` and
+        ``request.user``; a bare ``RequestFactory`` request has
+        neither, so we attach a fresh in-memory session and an
+        ``AnonymousUser`` before rendering.
+        """
+        from importlib import import_module
+
+        from django.conf import settings
+        from django.contrib.auth.models import AnonymousUser
+        from django.template.loader import render_to_string
+        from django.test import RequestFactory
+        request = RequestFactory().get('/my/plan/path')
+        engine = import_module(settings.SESSION_ENGINE)
+        request.session = engine.SessionStore()
+        request.user = AnonymousUser()
+        return render_to_string(
+            'comments/_qa_section.html',
+            {
+                'content_id': uuid.uuid4(),
+                'user_authenticated': False,
+                **context_kwargs,
+            },
+            request=request,
+        )
+
+    def test_plan_override_keeps_plan_subtitle_and_picks_up_signup_verb(self):
+        rendered = self._render_partial(
+            composer_signin_prompt='to comment on this plan',
+        )
+        # The new primary "Sign up" verb ripples to plan surfaces.
+        self.assertIn('>Sign up</a>', rendered)
+        self.assertIn('/accounts/signup/?next=', rendered)
+        # The plan-specific subtitle override wins.
+        self.assertIn('to comment on this plan', rendered)
+        # The workshop default subtitle must NOT leak onto plan pages.
+        self.assertNotIn(
+            'to ask questions, track your progress, and get access to other workshops',
+            rendered,
+        )
+        # Secondary "Already have an account? Sign in" link appears.
+        self.assertIn('Already have an account? Sign in', rendered)
+        self.assertIn('/accounts/login/?next=', rendered)
+
+    def test_default_subtitle_used_when_no_override(self):
+        """Mirror assertion: without the plan override, the workshop
+        default copy ships. Keeps the override test honest -- if both
+        copies happened to ship together, the regression test above
+        would still pass otherwise.
+        """
+        rendered = self._render_partial()
+        self.assertIn(
+            'to ask questions, track your progress, and get access to other workshops',
+            rendered,
+        )
+        self.assertNotIn('to comment on this plan', rendered)

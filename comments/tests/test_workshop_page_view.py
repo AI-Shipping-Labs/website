@@ -92,22 +92,58 @@ class WorkshopPageQASectionTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'id="qa-section"')
 
-    def test_anonymous_user_sees_sign_in_link(self):
-        response = self.client.get('/workshops/2026-04-21-open-ws/tutorial/intro')
+    def test_anonymous_visitor_sees_signup_cta(self):
+        """Issue #792: anonymous visitor on a workshop tutorial page
+        sees a primary "Sign up" CTA, the new expanded subtitle, and
+        a secondary "Already have an account? Sign in" link. Both
+        links carry a ``?next=`` pointing back at the current path
+        so the visitor lands on the tutorial after auth.
+        """
+        tutorial_path = '/workshops/2026-04-21-open-ws/tutorial/intro'
+        response = self.client.get(tutorial_path)
         self.assertContains(response, 'id="qa-section"')
-        # The sign-in branch in the partial.
-        self.assertContains(response, '/accounts/login/')
-        self.assertContains(response, 'to ask questions')
+
+        # Primary CTA: "Sign up" pointing at /accounts/signup/?next=<path>.
+        self.assertContains(
+            response,
+            f'<a href="/accounts/signup/?next={tutorial_path}"',
+        )
+        self.assertContains(response, '>Sign up</a>')
+
+        # New default subtitle copy (the workshop default — plan callers
+        # override it). Use a specific substring so this test would
+        # fail if the copy regressed.
+        self.assertContains(
+            response,
+            'to ask questions, track your progress, and get access to other workshops',
+        )
+
+        # Secondary "Already have an account? Sign in" link with
+        # the same next param.
+        self.assertContains(
+            response,
+            f'<a href="/accounts/login/?next={tutorial_path}"',
+        )
+        self.assertContains(response, 'Already have an account? Sign in')
+
         # The textarea/post-button must NOT render for anonymous users.
         self.assertNotContains(response, 'id="qa-new-question"')
         self.assertNotContains(response, 'id="qa-post-btn"')
 
-    def test_authenticated_user_sees_textarea_and_post_button(self):
+    def test_authenticated_visitor_does_not_see_signup_cta(self):
+        """Issue #792: signed-in visitors must see the composer,
+        not the anonymous CTA. Guards against the new "Sign up" link
+        leaking into the authenticated branch.
+        """
         self.client.force_login(self.basic_user)
         response = self.client.get('/workshops/2026-04-21-open-ws/tutorial/intro')
+        # Authenticated branch is rendered.
         self.assertContains(response, 'id="qa-new-question"')
         self.assertContains(response, 'id="qa-post-btn"')
         self.assertContains(response, 'Post Question')
+        # The anonymous-only CTA elements must NOT appear.
+        self.assertNotContains(response, '/accounts/signup/?next=')
+        self.assertNotContains(response, 'Already have an account? Sign in')
 
     def test_gated_user_does_not_see_qa_section(self):
         # Free user is below pages_required_level=10. The view sets

@@ -80,6 +80,21 @@ WORKSHOP_XSS_BODY = (
 )
 
 
+# Mermaid source that uses ``<br/>`` to force a two-line node label.
+# Mirrors the three live workshop pages that triggered issue #791. With
+# the server-side ``<br>`` -> ``\n`` substitution in place, Mermaid 10
+# (securityLevel: 'strict') renders this as a two-line label instead of
+# rejecting the diagram.
+WORKSHOP_MERMAID_BR_BODY = (
+    "# Architecture\n\n"
+    "```mermaid\n"
+    "flowchart LR\n"
+    '    SEARCH["search tool<br/>Data Engineering Zoomcamp FAQ"] '
+    '--> AGENT["Agent"]\n'
+    "```\n"
+)
+
+
 @pytest.mark.django_db(transaction=True)
 class TestWorkshopMermaidDiagramRenders:
     """Scenario 1: Reader views an architecture diagram."""
@@ -339,4 +354,127 @@ class TestMermaidEscapesHtmlSpecialCharacters:
         html = page.content()
         assert '<script>alert(1)</script>' not in html, (
             'unescaped <script> leaked into the DOM'
+        )
+
+
+@pytest.mark.django_db(transaction=True)
+class TestWorkshopMermaidBrTagInLabel:
+    """Issue #791: a node label written with ``<br/>`` must render as a
+    two-line label, not raw ``flowchart LR`` source. Reproduces the three
+    live workshop pages broken in prod, scoped to a fixture page so the
+    test does not depend on synced content."""
+
+    @pytest.mark.core
+    def test_br_tag_label_renders_as_svg_two_lines(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='br-tag-walkthrough',
+            title='Br Tag Walkthrough',
+            landing=0,
+            pages=0,
+            recording=0,
+            pages_data=[
+                ('arch', 'Arch', WORKSHOP_MERMAID_BR_BODY),
+            ],
+        )
+
+        # Guard against the XSS regression slipping into this flow: any
+        # alert() during load would hang the page wait_for_function below.
+        dialogs = []
+
+        def _on_dialog(d):
+            dialogs.append(d.message)
+            d.dismiss()
+
+        page.on('dialog', _on_dialog)
+
+        page.goto(
+            f'{django_server}/workshops/br-tag-walkthrough/tutorial/arch',
+            wait_until='domcontentloaded',
+        )
+
+        page.locator('[data-testid="page-body"]').wait_for(
+            state='attached', timeout=2000,
+        )
+
+        # Wait until Mermaid finishes and the two label fragments are
+        # present in the rendered SVG. If the <br/> survived as literal
+        # text, the substring would be 'search tool<br/>Data Engineering
+        # Zoomcamp FAQ' inside a single label and 'Data Engineering
+        # Zoomcamp FAQ' would not appear as its own line.
+        page.wait_for_function(
+            """() => {
+                const fos = document.querySelectorAll(
+                    'div.mermaid foreignObject'
+                );
+                const text = Array.from(fos)
+                    .map(n => n.textContent).join('|');
+                return text.includes('search tool')
+                    && text.includes('Data Engineering Zoomcamp FAQ')
+                    && text.includes('Agent');
+            }""",
+            timeout=15000,
+        )
+
+        # The SVG was actually emitted (i.e. Mermaid didn't bail with a
+        # parse error).
+        assert page.locator('div.mermaid svg').count() == 1, (
+            'expected exactly one rendered SVG inside div.mermaid'
+        )
+
+        # The label must be split across two visual lines. Mermaid 10
+        # turns the ``\n`` in the source into a real ``<br>`` element
+        # inside the node's ``<span class="nodeLabel">`` (proven by
+        # manual inspection — see issue #791). Assert on the rendered
+        # innerHTML of the SEARCH node's label, not on textContent (which
+        # collapses ``<br>`` to an empty string).
+        label_html = page.evaluate(
+            """() => {
+                const fos = document.querySelectorAll(
+                    'div.mermaid foreignObject'
+                );
+                for (const fo of fos) {
+                    const text = fo.textContent || '';
+                    if (text.includes('search tool')
+                        && text.includes('Data Engineering Zoomcamp FAQ')) {
+                        const label = fo.querySelector('.nodeLabel');
+                        return label ? label.innerHTML : '';
+                    }
+                }
+                return '';
+            }"""
+        )
+        # The pre-fix bug emitted '&lt;br/&gt;' (a literal four-char
+        # entity Mermaid wrote into the label as visible text) because
+        # html.escape ran AFTER the source was captured. After the fix,
+        # Mermaid receives '\n' which it turns into a real <br>.
+        assert '<br' in label_html.lower(), (
+            f'expected a <br> inside the rendered label so the two '
+            f'fragments display on separate lines; got {label_html!r}'
+        )
+        assert 'search tool' in label_html, (
+            f'first line missing from rendered label; got {label_html!r}'
+        )
+        assert 'Data Engineering Zoomcamp FAQ' in label_html, (
+            f'second line missing from rendered label; got {label_html!r}'
+        )
+        # Regression guard: the escaped entity from the broken state
+        # must NOT appear anywhere in the rendered label.
+        assert '&lt;br' not in label_html, (
+            f'escaped <br> entity leaked into the rendered label '
+            f'(pre-fix behaviour); got {label_html!r}'
+        )
+
+        # The raw fence source must not still be visible — that was the
+        # symptom of the prod bug.
+        body_text = page.locator('[data-testid="page-body"]').text_content()
+        assert 'flowchart LR' not in (body_text or ''), (
+            'raw mermaid source still visible after render'
+        )
+
+        assert dialogs == [], (
+            f'no dialog should fire on the <br/> label page; '
+            f'got: {dialogs!r}'
         )

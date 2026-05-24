@@ -37,11 +37,20 @@ class MermaidPreprocessor(Preprocessor):
         re.DOTALL | re.MULTILINE,
     )
 
+    # Mermaid 10 with ``securityLevel: 'strict'`` rejects HTML inside
+    # ``"…"`` node labels, so ``<br/>`` survives the server-side escape as
+    # literal text instead of a line break (issue #791). Translate every
+    # ``<br>`` variant to ``\n`` BEFORE escaping — Mermaid renders ``\n``
+    # natively as a line break, and a literal ``\n`` is harmless to
+    # ``html.escape``. Doing the substitution AFTER escape would mean
+    # rewriting ``&lt;br/&gt;``, which Mermaid would render as visible text.
+    BR_TAG = re.compile(r'<br\s*/?>', re.IGNORECASE)
+
     def run(self, lines):
         text = '\n'.join(lines)
 
         def replace(match):
-            source = match.group(1)
+            source = self.BR_TAG.sub('\n', match.group(1))
             escaped = html.escape(source)
             stashed = self.md.htmlStash.store(
                 f'<div class="mermaid">{escaped}</div>'

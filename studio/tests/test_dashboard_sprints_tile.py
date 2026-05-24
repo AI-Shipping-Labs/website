@@ -167,13 +167,40 @@ class StudioDashboardSprintsTileQueryCountTest(TestCase):
         self._warm_process_caches()
 
     def _warm_process_caches(self):
-        """Discard one dashboard response purely to populate caches."""
-        response = self.client.get('/studio/')
-        self.assertEqual(response.status_code, 200)
+        """Populate process-level caches that the dashboard depends on.
+
+        Two layers need explicit warming so each measurement starts from
+        the same warm state — warming via a throwaway ``GET /studio/``
+        alone is insufficient because parallel-worker scheduling and the
+        ``integrations.config._cache_stamp`` round-trip can re-cool the
+        redirect cache between two requests in the same test method (see
+        issue #789 CI failure: baseline=27, scaled=28, the extra query
+        being a ``SELECT FROM integrations_redirect`` cache-miss):
+
+        - ``integrations.middleware.get_active_redirects()`` writes the
+          ``active_redirects`` key into ``caches['django_q']``.
+        - ``integrations.config.get_config()`` populates a module-level
+          dict and records the published stamp from ``caches['django_q']``.
+
+        Hitting both helpers directly is cheaper than a full dashboard
+        render and avoids any incidental side-effects of routing through
+        middleware twice.
+        """
+        from integrations.config import get_config
+        from integrations.middleware import get_active_redirects
+        get_active_redirects()
+        get_config('SITE_BASE_URL')
 
     def _measure_dashboard_queries(self):
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
+        # Re-warm immediately before each measurement: the per-process
+        # caches above can be invalidated between baseline and scaled
+        # measurements when other tests in the same parallel worker bump
+        # the integration-settings stamp. Warming here makes both
+        # measurements observe the same cache state regardless of
+        # interleaving.
+        self._warm_process_caches()
         with CaptureQueriesContext(connection) as ctx:
             response = self.client.get('/studio/')
         self.assertEqual(response.status_code, 200)

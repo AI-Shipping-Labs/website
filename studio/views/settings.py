@@ -61,6 +61,15 @@ SETTINGS_SECTIONS = [
         'group_names': {'github', 'youtube', 'zoom'},
     },
     {
+        'id': 'content_tools',
+        'label': 'Content Tools',
+        'description': (
+            'Operator-side helpers that augment synced content — e.g. '
+            'auto-generated OG banners.'
+        ),
+        'group_names': {'banner_generator'},
+    },
+    {
         'id': 'messaging',
         'label': 'Messaging',
         'description': 'Email, notifications, and community messaging integrations.',
@@ -93,7 +102,10 @@ OTHER_SECTION = {
     'group_names': set(),
 }
 
-HIGH_RISK_GROUP_NAMES = {'stripe', 'ses', 'github', 's3_recordings', 's3_content'}
+HIGH_RISK_GROUP_NAMES = {
+    'stripe', 'ses', 'github', 's3_recordings', 's3_content',
+    'banner_generator',
+}
 HIGH_RISK_AUTH_PROVIDERS = {'google', 'github', 'slack'}
 
 

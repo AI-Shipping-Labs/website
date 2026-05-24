@@ -12,6 +12,7 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from content.models import Course, CourseAccess, Enrollment, Module, Unit
+from integrations.services.banner_generator import is_enabled as banner_generator_is_enabled
 from studio.decorators import staff_required
 from studio.utils import get_github_edit_url, is_synced
 from studio.views.form_helpers import (
@@ -102,6 +103,13 @@ def course_edit(request, course_id):
         'announce_url': reverse('studio_course_announce_slack', kwargs={'course_id': course.pk}),
         'access_count': access_count,
         'active_enrollment_count': active_enrollment_count,
+        # Issue #788: auto-banner regenerate panel.
+        'banner_url': course.auto_banner_url,
+        'banner_regenerate_url': reverse(
+            'studio_course_regenerate_banner',
+            kwargs={'course_id': course.pk},
+        ),
+        'banner_generator_enabled': banner_generator_is_enabled(),
     })
 
 

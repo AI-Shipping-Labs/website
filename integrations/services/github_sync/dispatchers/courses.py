@@ -31,6 +31,8 @@ from integrations.services.github_sync.repo import derive_slug, extract_sort_ord
 
 from integrations.services.github_sync.dispatchers.instructors import _attach_instructors_to_course, _resolve_instructors_for_yaml
 
+from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+
 # Issue #465: maps the operator-facing string keys in YAML (the verb-aligned
 # ``access:`` / ``default_unit_access:`` vocabulary) to the integer levels
 # stored in ``Course.default_unit_required_level`` and ``Unit.required_level``.
@@ -307,6 +309,14 @@ def _sync_single_course(
             course, course_data, course_dir, repo_dir, rel_path, source,
             commit_sha, stats, known_images, course_ignore_patterns,
         )
+
+        # Issue #788: enqueue auto-banner render only on create/update.
+        # ``upsert_synced_object`` flips ``changed`` to True for both
+        # creates and identity/defaults diffs; the dispatcher itself
+        # short-circuits when cover_image_url is set or the title hash
+        # hasn't drifted.
+        if result.changed:
+            _enqueue_banner_if_missing('course', course.pk)
 
     except Exception as e:
         try:

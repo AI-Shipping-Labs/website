@@ -24,6 +24,8 @@ from integrations.services.github_sync.parsing import (
 )
 from integrations.services.github_sync.repo import derive_slug, extract_sort_order, _matches_ignore_patterns
 
+from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+
 def _dispatch_downloads(source, repo_dir, file_list, commit_sha, stats):
     """Walker dispatch handler: process download YAML files.
 
@@ -124,6 +126,12 @@ def _dispatch_downloads(source, repo_dir, file_list, commit_sha, stats):
                 'action': action,
                 'content_type': 'resource',
             })
+
+            # Issue #788: enqueue auto-banner render. Downloads use the
+            # ``download`` content_type (the Lambda payload maps it to
+            # ``kind: "Resource"`` per the spec); the dispatcher
+            # short-circuits when cover_image_url is set.
+            _enqueue_banner_if_missing('download', download.pk)
 
         except Exception as e:
             fallback_slug = os.path.splitext(filename)[0]

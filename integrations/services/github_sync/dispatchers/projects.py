@@ -24,6 +24,8 @@ from integrations.services.github_sync.parsing import (
 )
 from integrations.services.github_sync.repo import derive_slug, extract_sort_order, _matches_ignore_patterns
 
+from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+
 def _dispatch_projects(source, repo_dir, file_list, commit_sha, stats,
                        known_images=None):
     """Walker dispatch handler: process project markdown files.
@@ -175,6 +177,11 @@ def _dispatch_projects(source, repo_dir, file_list, commit_sha, stats,
                 'action': action,
                 'content_type': 'project',
             })
+
+            # Issue #788: enqueue auto-banner render when the project is
+            # new or its title changed (dispatcher itself short-circuits
+            # when cover_image_url is set or the title hash matches).
+            _enqueue_banner_if_missing('project', project.pk)
 
         except Exception as e:
             fallback_slug = os.path.splitext(filename)[0]

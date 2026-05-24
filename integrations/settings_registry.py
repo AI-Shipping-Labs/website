@@ -254,6 +254,32 @@ INTEGRATION_GROUPS = [
             },
         ],
     },
+    {
+        'name': 'banner_generator',
+        'label': 'Banner Generator',
+        'keys': [
+            {
+                'key': 'BANNER_GENERATOR_FUNCTION_URL',
+                'is_secret': False,
+                'description': (
+                    'HTTPS Function URL of the banner-generator Lambda. '
+                    'Used to render OG banners for synced content. Without '
+                    'this auto-banner generation is silently skipped.'
+                ),
+                'docs_url': '_docs/integrations/banner_generator.md#banner_generator_function_url',
+            },
+            {
+                'key': 'BANNER_GENERATOR_AUTH_TOKEN',
+                'is_secret': True,
+                'description': (
+                    'Bearer token used in the Authorization header when '
+                    'calling the banner-generator Lambda. Issued '
+                    'out-of-band by the operator.'
+                ),
+                'docs_url': '_docs/integrations/banner_generator.md#banner_generator_auth_token',
+            },
+        ],
+    },
 ]
 
 

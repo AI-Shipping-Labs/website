@@ -52,13 +52,42 @@ class CourseUnitDetailContentIdTest(TestCase):
         response = self.client.get('/courses/test-course/module-1/unit-2')
         self.assertNotContains(response, 'id="qa-section"')
 
-    def test_anonymous_user_sees_sign_in_link(self):
-        response = self.client.get('/courses/test-course/module-1/unit-1')
-        self.assertContains(response, '/accounts/login/')
-        self.assertContains(response, 'Sign in')
+    def test_anonymous_visitor_sees_signup_cta_on_course_unit(self):
+        """Issue #792: anonymous visitor on a course unit page sees
+        the new "Sign up" primary CTA, the expanded default subtitle,
+        and a secondary "Already have an account? Sign in" link.
+        Mirrors the workshop tutorial test.
+        """
+        unit_path = '/courses/test-course/module-1/unit-1'
+        response = self.client.get(unit_path)
 
-    def test_authenticated_user_sees_textarea(self):
+        # Primary CTA: Sign up with ?next pointing back to the unit.
+        self.assertContains(
+            response,
+            f'<a href="/accounts/signup/?next={unit_path}"',
+        )
+        self.assertContains(response, '>Sign up</a>')
+
+        # Expanded subtitle copy is the new default for non-plan callers.
+        self.assertContains(
+            response,
+            'to ask questions, track your progress, and get access to other workshops',
+        )
+
+        # Secondary "Already have an account? Sign in" with same next.
+        self.assertContains(
+            response,
+            f'<a href="/accounts/login/?next={unit_path}"',
+        )
+        self.assertContains(response, 'Already have an account? Sign in')
+
+    def test_authenticated_visitor_does_not_see_signup_cta(self):
+        """Issue #792: signed-in visitor on a course unit page sees the
+        textarea + Post Question composer, never the anonymous CTA.
+        """
         self.client.login(email='test@test.com', password='pass')
         response = self.client.get('/courses/test-course/module-1/unit-1')
         self.assertContains(response, 'id="qa-new-question"')
         self.assertContains(response, 'Post Question')
+        self.assertNotContains(response, '/accounts/signup/?next=')
+        self.assertNotContains(response, 'Already have an account? Sign in')

@@ -16,6 +16,7 @@ Usage:
 import datetime
 import os
 import uuid
+from urllib.parse import quote
 
 import pytest
 
@@ -194,7 +195,12 @@ class TestWorkshopReaderAsksQuestion:
 
 
 @pytest.mark.django_db(transaction=True)
-class TestAnonymousVisitorSeesSignInPrompt:
+class TestAnonymousVisitorSeesSignupCTA:
+    """Issue #792: the anonymous Q&A CTA is "Sign up" primary +
+    "Already have an account? Sign in" secondary, both carrying
+    ``?next=`` back to the tutorial page.
+    """
+
     def test_logged_out_visitor_on_open_workshop_page(
         self, django_server, page,
     ):
@@ -204,19 +210,86 @@ class TestAnonymousVisitorSeesSignInPrompt:
             pages_data=[('welcome', 'Welcome', '# Welcome body')],
         )
 
+        # Canonical workshop URL is /workshops/<YYYY-MM-DD>-<slug>/...
+        # (Workshop.date=2026-04-21, slug='intro-ws'). The un-prefixed
+        # form 301-redirects, so the template renders the canonical path
+        # in href attributes.
+        tutorial_path = (
+            '/workshops/2026-04-21-intro-ws/tutorial/welcome'
+        )
         page.goto(
-            f'{django_server}/workshops/intro-ws/tutorial/welcome',
+            f'{django_server}{tutorial_path}',
             wait_until='domcontentloaded',
         )
         body = page.content()
 
-        # Heading and sign-in link visible; textarea/button not rendered.
+        # Q&A section + heading visible.
         assert 'id="qa-section"' in body
         assert 'Questions &amp; Answers' in body
-        assert 'href="/accounts/login/"' in body
-        assert 'to ask questions' in body
+        # Primary "Sign up" CTA points at the signup URL with the
+        # current tutorial path preserved in ``next``.
+        assert f'href="/accounts/signup/?next={tutorial_path}"' in body
+        assert '>Sign up</a>' in body
+        # Expanded subtitle copy.
+        assert (
+            'to ask questions, track your progress, and get access to other workshops'
+            in body
+        )
+        # Secondary "Already have an account? Sign in" link with the
+        # same next param.
+        assert f'href="/accounts/login/?next={tutorial_path}"' in body
+        assert 'Already have an account? Sign in' in body
+        # Authenticated composer must NOT render.
         assert 'id="qa-new-question"' not in body
         assert 'id="qa-post-btn"' not in body
+
+    @pytest.mark.core
+    def test_signup_click_lands_on_register_with_next_preserved(
+        self, django_server, page,
+    ):
+        """Issue #792 acceptance: clicking the "Sign up" link in the
+        Q&A CTA sends the visitor to /accounts/register/ (via the
+        signup_redirect_view) with the tutorial URL preserved in
+        ``next`` so post-signup they bounce back to the lesson.
+        """
+        _clear_workshops_and_courses()
+        _create_workshop_with_pages(
+            slug='intro-ws', title='Intro Workshop', pages=0,
+            pages_data=[('welcome', 'Welcome', '# Welcome body')],
+        )
+
+        # Canonical workshop URL is /workshops/<YYYY-MM-DD>-<slug>/...
+        # (Workshop.date=2026-04-21, slug='intro-ws').
+        tutorial_path = (
+            '/workshops/2026-04-21-intro-ws/tutorial/welcome'
+        )
+        page.goto(
+            f'{django_server}{tutorial_path}',
+            wait_until='domcontentloaded',
+        )
+        # Scope to the Q&A section so we don't accidentally click a
+        # different signup link elsewhere on the page (header/footer).
+        qa = page.locator('#qa-section')
+        signup_link = qa.get_by_role('link', name='Sign up', exact=True)
+        # Confirm the href before clicking.
+        assert signup_link.get_attribute('href') == (
+            f'/accounts/signup/?next={tutorial_path}'
+        )
+        signup_link.click()
+        # The signup_redirect_view forwards to /accounts/register/.
+        # The Location header percent-encodes the ``next`` query value,
+        # so the live URL is ``next=%2Fworkshops%2F...`` not
+        # ``next=/workshops/...``.
+        encoded_next = quote(tutorial_path, safe='')
+        page.wait_for_url(
+            f'**/accounts/register/?next={encoded_next}',
+            timeout=5000,
+        )
+        # Sanity-check the URL contains both the register path and
+        # the encoded next.
+        current_url = page.url
+        assert '/accounts/register/' in current_url
+        assert f'next={encoded_next}' in current_url
 
 
 # ----------------------------------------------------------------------

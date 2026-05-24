@@ -99,10 +99,6 @@
 
     {% include "studio/includes/forms/cover_image_url.html" with value=article.cover_image_url disabled=is_synced %}
 
-    {% if article %}
-      {% include "studio/includes/banner_generator_section.html" with banner_url=banner_url banner_regenerate_url=banner_regenerate_url banner_generator_enabled=banner_generator_enabled %}
-    {% endif %}
-
     {% include "studio/includes/forms/tags.html" with tags=article.tags disabled=is_synced %}
   </div>
 
@@ -112,6 +108,10 @@
     {% include "studio/includes/forms/action_row.html" with is_synced=is_synced submit_label="Create Article" cancel_url=article_cancel_url %}
   {% endif %}
 </form>
+
+{% if article %}
+  {% include "studio/includes/banner_generator_section.html" with banner_url=banner_url banner_regenerate_url=banner_regenerate_url banner_generator_enabled=banner_generator_enabled %}
+{% endif %}
 </div>
 
 {% if article %}

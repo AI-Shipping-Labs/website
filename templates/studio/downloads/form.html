@@ -70,10 +70,6 @@
 
     {% include "studio/includes/forms/cover_image_url.html" with value=download.cover_image_url disabled=is_synced %}
 
-    {% if download %}
-      {% include "studio/includes/banner_generator_section.html" with banner_url=banner_url banner_regenerate_url=banner_regenerate_url banner_generator_enabled=banner_generator_enabled %}
-    {% endif %}
-
     <div class="grid grid-cols-2 gap-4">
       <div>
         {% include "studio/includes/forms/required_level.html" with selected=download.required_level disabled=is_synced %}
@@ -97,6 +93,10 @@
     {% include "studio/includes/forms/action_row.html" with is_synced=is_synced submit_label="Create Download" cancel_url=download_cancel_url %}
   {% endif %}
 </form>
+
+{% if download %}
+  {% include "studio/includes/banner_generator_section.html" with banner_url=banner_url banner_regenerate_url=banner_regenerate_url banner_generator_enabled=banner_generator_enabled %}
+{% endif %}
 
 {% if download and download.published %}
 {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url %}

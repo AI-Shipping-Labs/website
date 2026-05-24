@@ -112,8 +112,6 @@
       {% endif %}
     </div>
 
-    {% include "studio/includes/banner_generator_section.html" with banner_url=banner_url banner_regenerate_url=banner_regenerate_url banner_generator_enabled=banner_generator_enabled %}
-
     <div class="border-t border-border pt-5">
       <h3 class="text-sm font-medium text-foreground mb-1">Access gates</h3>
       <p class="text-xs text-muted-foreground mb-4">
@@ -179,6 +177,8 @@
          class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
     </div>
   </form>
+
+  {% include "studio/includes/banner_generator_section.html" with banner_url=banner_url banner_regenerate_url=banner_regenerate_url banner_generator_enabled=banner_generator_enabled %}
 
   {% if workshop.status == 'published' %}
   {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True %}

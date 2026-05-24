@@ -24,6 +24,8 @@ from integrations.services.github_sync.parsing import (
 )
 from integrations.services.github_sync.repo import derive_slug, extract_sort_order, _matches_ignore_patterns
 
+from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+
 def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
                        known_images=None):
     """Walker dispatch handler: process article markdown files.
@@ -215,6 +217,13 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
                 'action': action,
                 'content_type': 'article',
             })
+
+            # Issue #788: enqueue auto-banner render when the article is
+            # new or its title changed. ``_enqueue_banner_if_missing``
+            # itself short-circuits when cover_image_url is set or the
+            # auto_banner_title_hash already matches the current title,
+            # so the dispatcher hot path stays simple.
+            _enqueue_banner_if_missing('article', article.pk)
 
         except Exception as e:
             # Track the slug as failed so it's excluded from cleanup.

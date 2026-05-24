@@ -1,0 +1,42 @@
+{% comment %}
+Renders the "Generated banner" section for a Studio edit page (issue #788).
+
+Required context:
+  - banner_url: current ``auto_banner_url`` on the record ('' when unset).
+  - banner_regenerate_url: POST URL for the per-content-type regenerate view.
+  - banner_generator_enabled: bool — when False the button renders disabled
+    with a tooltip linking to ``/studio/settings/#content_tools``.
+{% endcomment %}
+<div class="bg-card border border-border rounded-lg p-4 mt-4"
+     data-testid="banner-generator-section">
+  <h3 class="text-sm font-medium text-foreground mb-2">Generated banner</h3>
+  {% if banner_url %}
+    <img src="{{ banner_url }}" alt="Auto-generated banner"
+         style="max-width: 200px;"
+         class="rounded border border-border bg-secondary"
+         data-testid="banner-generator-image">
+  {% else %}
+    <p class="text-sm text-muted-foreground"
+       data-testid="banner-generator-placeholder">No banner generated yet</p>
+  {% endif %}
+  <form method="post" action="{{ banner_regenerate_url }}" class="mt-3 inline-flex"
+        data-testid="banner-generator-form">
+    {% csrf_token %}
+    {% if banner_generator_enabled %}
+      <button type="submit"
+              class="bg-secondary border border-border text-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-muted transition-colors flex items-center space-x-1"
+              data-testid="banner-generator-regenerate-button">
+        <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+        <span>Regenerate banner</span>
+      </button>
+    {% else %}
+      <a href="/studio/settings/#content_tools"
+         title="Configure banner generator in Settings to enable"
+         class="bg-secondary border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-xs font-medium opacity-60 cursor-not-allowed flex items-center space-x-1"
+         data-testid="banner-generator-regenerate-button-disabled">
+        <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+        <span>Regenerate banner</span>
+      </a>
+    {% endif %}
+  </form>
+</div>

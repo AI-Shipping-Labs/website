@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils.text import slugify
 
 from content.models import Download
+from integrations.services.banner_generator import is_enabled as banner_generator_is_enabled
 from studio.decorators import staff_required
 from studio.utils import get_github_edit_url, is_synced
 from studio.views.form_helpers import (
@@ -58,5 +59,12 @@ def download_edit(request, download_id):
         'github_edit_url': get_github_edit_url(download),
         'notify_url': reverse('studio_download_notify', kwargs={'download_id': download.pk}),
         'announce_url': reverse('studio_download_announce_slack', kwargs={'download_id': download.pk}),
+        # Issue #788: auto-banner regenerate panel.
+        'banner_url': download.auto_banner_url,
+        'banner_regenerate_url': reverse(
+            'studio_download_regenerate_banner',
+            kwargs={'download_id': download.pk},
+        ),
+        'banner_generator_enabled': banner_generator_is_enabled(),
     }
     return render(request, 'studio/downloads/form.html', context)

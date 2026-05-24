@@ -71,6 +71,10 @@
 
     {% include "studio/includes/forms/cover_image_url.html" with value=course.cover_image_url disabled=is_synced %}
 
+    {% if course %}
+      {% include "studio/includes/banner_generator_section.html" with banner_url=banner_url banner_regenerate_url=banner_regenerate_url banner_generator_enabled=banner_generator_enabled %}
+    {% endif %}
+
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Status</label>

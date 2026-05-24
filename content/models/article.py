@@ -36,6 +36,22 @@ class Article(
     content_markdown = models.TextField(blank=True, default='')
     content_html = models.TextField(blank=True, default='')
     cover_image_url = models.URLField(max_length=500, blank=True, default='')
+    auto_banner_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text=(
+            "Platform-generated OG banner URL (banner-generator Lambda, "
+            "issue #788). Overwritten by the auto-banner pipeline; templates "
+            "should prefer ``cover_image_url`` and fall back to this."
+        ),
+    )
+    auto_banner_title_hash = models.CharField(
+        max_length=64, blank=True, default='',
+        help_text=(
+            "sha256 hex digest of the title used to render the current "
+            "``auto_banner_url``. Detects title drift between syncs so the "
+            "banner is regenerated only when the title actually changed."
+        ),
+    )
     date = models.DateField()
     author = models.CharField(max_length=200, blank=True, default='')
     reading_time = models.CharField(max_length=50, blank=True, default='')

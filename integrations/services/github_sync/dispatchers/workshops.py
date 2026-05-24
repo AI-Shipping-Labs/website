@@ -36,6 +36,8 @@ from integrations.services.github_sync.dispatchers.events import (
 )
 from integrations.services.github_sync.dispatchers.courses import _build_workshop_page_lookup, _parse_access_value, _resolve_workshop_landing_copy
 
+from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+
 def _coerce_workshop_date(value):
     """Parse a workshop ``date:`` frontmatter value into a ``datetime.date``.
 
@@ -424,6 +426,12 @@ def _sync_single_workshop(
             detect_legacy_urls(
                 workshop.description_html, rel_path, stats['errors'],
             )
+
+            # Issue #788: enqueue auto-banner render. The dispatcher
+            # short-circuits when cover_image_url is set or when the
+            # title hash matches, so re-syncs without title changes are
+            # cheap.
+            _enqueue_banner_if_missing('workshop', workshop.pk)
 
         # Resolve instructors: list and attach M2M (post-save).
         resolved_instructors = _resolve_instructors_for_yaml(

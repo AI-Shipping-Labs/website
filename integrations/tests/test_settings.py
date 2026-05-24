@@ -330,7 +330,10 @@ class SettingsDashboardViewTest(TestCase):
         section_ids = [section['id'] for section in sections]
         self.assertEqual(
             section_ids,
-            ['auth', 'payments', 'content', 'messaging', 'storage', 'site', 'analytics'],
+            [
+                'auth', 'payments', 'content', 'content_tools',
+                'messaging', 'storage', 'site', 'analytics',
+            ],
         )
 
         groups_by_section = {

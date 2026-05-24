@@ -9,6 +9,13 @@ from studio.views.api_tokens import (
     studio_api_token_revoke,
 )
 from studio.views.articles import article_edit, article_list
+from studio.views.banner_regenerate import (
+    studio_article_regenerate_banner,
+    studio_course_regenerate_banner,
+    studio_download_regenerate_banner,
+    studio_project_regenerate_banner,
+    studio_workshop_regenerate_banner,
+)
 from studio.views.campaigns import (
     campaign_create,
     campaign_delete,
@@ -228,6 +235,11 @@ urlpatterns = [
     path('courses/<int:course_id>/notify', course_notify, name='studio_course_notify'),
     path('courses/<int:course_id>/announce-slack', course_announce_slack, name='studio_course_announce_slack'),
     path('courses/<int:course_id>/create-stripe-product', course_create_stripe_product, name='studio_course_create_stripe_product'),
+    path(
+        'courses/<int:course_id>/regenerate-banner',
+        studio_course_regenerate_banner,
+        name='studio_course_regenerate_banner',
+    ),
     path('courses/<int:course_id>/peer-reviews', peer_review_management, name='studio_peer_review_management'),
     path('courses/<int:course_id>/peer-reviews/form-batch', peer_review_form_batch, name='studio_peer_review_form_batch'),
     path('courses/<int:course_id>/peer-reviews/issue-certificates', peer_review_issue_certificates, name='studio_peer_review_issue_certificates'),
@@ -259,6 +271,11 @@ urlpatterns = [
     path('articles/<int:article_id>/edit', article_edit, name='studio_article_edit'),
     path('articles/<int:article_id>/notify', article_notify, name='studio_article_notify'),
     path('articles/<int:article_id>/announce-slack', article_announce_slack, name='studio_article_announce_slack'),
+    path(
+        'articles/<int:article_id>/regenerate-banner',
+        studio_article_regenerate_banner,
+        name='studio_article_regenerate_banner',
+    ),
 
     # Events. The literal ``new`` route is registered before the
     # ``<int:event_id>`` routes so the slug is not swallowed (issue #574).
@@ -341,6 +358,11 @@ urlpatterns = [
     path('workshops/<int:workshop_id>/edit', workshop_edit, name='studio_workshop_edit'),
     path('workshops/<int:workshop_id>/notify', workshop_notify, name='studio_workshop_notify'),
     path('workshops/<int:workshop_id>/announce-slack', workshop_announce_slack, name='studio_workshop_announce_slack'),
+    path(
+        'workshops/<int:workshop_id>/regenerate-banner',
+        studio_workshop_regenerate_banner,
+        name='studio_workshop_regenerate_banner',
+    ),
 
     # Recordings
     path('recordings/', recording_list, name='studio_recording_list'),
@@ -424,10 +446,20 @@ urlpatterns = [
     path('downloads/<int:download_id>/edit', download_edit, name='studio_download_edit'),
     path('downloads/<int:download_id>/notify', download_notify, name='studio_download_notify'),
     path('downloads/<int:download_id>/announce-slack', download_announce_slack, name='studio_download_announce_slack'),
+    path(
+        'downloads/<int:download_id>/regenerate-banner',
+        studio_download_regenerate_banner,
+        name='studio_download_regenerate_banner',
+    ),
 
     # Projects
     path('projects/', project_list, name='studio_project_list'),
     path('projects/<int:project_id>/review', project_review, name='studio_project_review'),
+    path(
+        'projects/<int:project_id>/regenerate-banner',
+        studio_project_regenerate_banner,
+        name='studio_project_regenerate_banner',
+    ),
 
     # Tier Overrides
     path('tier_overrides/', tier_override_page, name='studio_tier_overrides_list'),

@@ -356,9 +356,11 @@ class TestWorkshopPageAnonymousNoQA:
         assert "(0)" not in heading_text
         assert "()" not in heading_text
 
-        # Sign-in CTA is visible (anonymous can't post).
+        # Sign-in CTA is visible (anonymous can't post). Issue #792 added
+        # the Sign up + Sign in dual-link variant, so the login link now
+        # carries a `?next=<path>` suffix — match by href prefix.
         assert page.locator(
-            "#qa-section a[href='/accounts/login/']"
+            "#qa-section a[href^='/accounts/login/']"
         ).is_visible()
         assert page.locator("#qa-new-question").count() == 0
 

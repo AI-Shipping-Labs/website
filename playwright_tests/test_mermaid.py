@@ -478,3 +478,157 @@ class TestWorkshopMermaidBrTagInLabel:
             f'no dialog should fire on the <br/> label page; '
             f'got: {dialogs!r}'
         )
+
+
+@pytest.mark.django_db(transaction=True)
+class TestWorkshopMermaidBrTagBackfill:
+    """Issue #791 backfill: a workshop whose stored ``description_html``
+    is the pre-fix (escaped ``&lt;br/&gt;``) shape must render correctly
+    after the backfill migration's ``forwards`` callable runs. Simulates
+    the prod state where the renderer fix shipped but the existing
+    ``description_html`` was never re-rendered because the sync pipeline
+    short-circuits on unchanged source markdown."""
+
+    @pytest.mark.core
+    def test_backfill_recovers_stale_workshop_description_html(
+        self, django_server, page,
+    ):
+        # Step 1: seed the workshop with the post-fix source markdown
+        # (which contains a ``<br/>`` inside a mermaid node label).
+        _clear_workshops()
+        workshop = _create_workshop(
+            slug='br-backfill-walkthrough',
+            title='Br Backfill Walkthrough',
+            landing=0,
+            pages=0,
+            recording=0,
+            description=WORKSHOP_MERMAID_BR_BODY,
+            pages_data=[
+                ('intro', 'Intro', '# Intro\n\nNothing fancy here.'),
+            ],
+        )
+
+        # Step 2: bypass ``save()`` and write the stale pre-fix HTML directly
+        # onto the row — this matches what prod looked like before the fix
+        # re-rendered anything. ``QuerySet.update`` is the canonical way to
+        # skip the model's custom ``save()`` (which would re-render).
+        from content.models import Workshop
+
+        stale_html = (
+            '<div class="mermaid">flowchart LR\n'
+            '    SEARCH[&quot;search tool&lt;br/&gt;'
+            'Data Engineering Zoomcamp FAQ&quot;] --&gt; '
+            'AGENT[&quot;Agent&quot;]</div>'
+        )
+        Workshop.objects.filter(pk=workshop.pk).update(
+            description_html=stale_html,
+        )
+        connection.close()
+
+        # Sanity check: confirm the landing page currently renders the
+        # stale HTML (i.e. the pre-fix prod state is in place).
+        page.goto(
+            f'{django_server}/workshops/br-backfill-walkthrough',
+            wait_until='domcontentloaded',
+        )
+        # Give the page a moment to download Mermaid before checking.
+        page.wait_for_load_state('networkidle', timeout=5000)
+        pre_html = page.content()
+        assert '&lt;br' in pre_html, (
+            'expected the pre-fix stale state to contain &lt;br before '
+            'the backfill runs (sanity check)'
+        )
+
+        # Step 3: invoke the migration's ``forwards`` callable directly
+        # so we don't depend on Django's migration state machine. This
+        # is the same code path ``migrate`` runs on prod deploy.
+        import importlib
+
+        migration = importlib.import_module(
+            'content.migrations.0045_backfill_workshop_rendered_html',
+        )
+        migration.backfill_workshop_rendered_html(None, None)
+        connection.close()
+
+        # Step 4: reload the landing page and assert the SVG renders
+        # cleanly with no ``&lt;br`` artifacts.
+        dialogs = []
+
+        def _on_dialog(d):
+            dialogs.append(d.message)
+            d.dismiss()
+
+        page.on('dialog', _on_dialog)
+
+        page.goto(
+            f'{django_server}/workshops/br-backfill-walkthrough',
+            wait_until='domcontentloaded',
+        )
+
+        page.wait_for_function(
+            """() => {
+                const fos = document.querySelectorAll(
+                    'div.mermaid foreignObject'
+                );
+                const text = Array.from(fos)
+                    .map(n => n.textContent).join('|');
+                return text.includes('search tool')
+                    && text.includes('Data Engineering Zoomcamp FAQ')
+                    && text.includes('Agent');
+            }""",
+            timeout=15000,
+        )
+
+        # Exactly one SVG was emitted (Mermaid did not bail).
+        assert page.locator('div.mermaid svg').count() == 1, (
+            'expected exactly one rendered SVG after the backfill'
+        )
+
+        # The label is split across two visual lines via a real <br>.
+        label_html = page.evaluate(
+            """() => {
+                const fos = document.querySelectorAll(
+                    'div.mermaid foreignObject'
+                );
+                for (const fo of fos) {
+                    const text = fo.textContent || '';
+                    if (text.includes('search tool')
+                        && text.includes('Data Engineering Zoomcamp FAQ')) {
+                        const label = fo.querySelector('.nodeLabel');
+                        return label ? label.innerHTML : '';
+                    }
+                }
+                return '';
+            }"""
+        )
+        assert '<br' in label_html.lower(), (
+            f'expected a <br> inside the rendered label after backfill; '
+            f'got {label_html!r}'
+        )
+        assert '&lt;br' not in label_html, (
+            f'escaped <br> entity still in the label after backfill '
+            f'(stale HTML was not re-rendered); got {label_html!r}'
+        )
+
+        # Restrict the regression check to inside the mermaid div so we
+        # don't trip over an unrelated escaped entity elsewhere on the page.
+        post_mermaid_html = page.evaluate(
+            """() => {
+                const div = document.querySelector('div.mermaid');
+                return div ? div.innerHTML : '';
+            }"""
+        )
+        assert '&lt;br' not in post_mermaid_html, (
+            f'mermaid div still contains stale &lt;br entity after '
+            f'backfill; got {post_mermaid_html!r}'
+        )
+
+        # No alert() can have fired on either visit.
+        assert dialogs == [], (
+            f'no dialog should fire after backfill; got: {dialogs!r}'
+        )
+
+        # Defensive: the raw source line must not be visible to the reader.
+        assert 'flowchart LR' not in (
+            page.locator('main').text_content() or ''
+        ), 'raw mermaid source visible to reader after backfill'

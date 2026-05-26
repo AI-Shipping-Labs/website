@@ -678,6 +678,7 @@ def _sync_workshop_pages(
     # this file). parse_video_timestamp is imported here so the diff
     # against #301 stays localised to this function.
     from content.models import WorkshopPage
+    from content.utils.includes import expand_content_includes
     from content.templatetags.video_utils import parse_video_timestamp
     from content.utils.md_links import (
         rewrite_cross_workshop_md_links,
@@ -869,6 +870,22 @@ def _sync_workshop_pages(
                     'content_type': 'workshop_page',
                 },
             )
+
+            expanded_body_html = expand_content_includes(
+                page_result.instance.body_html,
+                repo_dir=repo_dir,
+                base_dir=os.path.dirname(filepath),
+                context={
+                    'metadata': metadata,
+                    'workshop': workshop,
+                    'page': page_result.instance,
+                },
+            )
+            if expanded_body_html != page_result.instance.body_html:
+                page_result.instance.body_html = expanded_body_html
+                WorkshopPage.objects.filter(pk=page_result.instance.pk).update(
+                    body_html=expanded_body_html,
+                )
 
             # Issue #595: warn (don't block) when the rendered page HTML
             # still links to a retired URL prefix (e.g. /event-recordings/).

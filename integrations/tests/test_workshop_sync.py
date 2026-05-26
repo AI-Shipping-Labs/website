@@ -268,6 +268,38 @@ class WorkshopSyncTutorialOnlyNoEventTest(_WorkshopSyncFixtureBase):
         self.assertEqual(WorkshopPage.objects.filter(workshop=workshop).count(), 1)
         self.assertEqual(Event.objects.count(), 0)
 
+    def test_workshop_page_expands_local_html_includes(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder)
+        self._write(
+            f'{folder}/_includes/show-example-open.html',
+            '<details class="example"><summary>Show example</summary>',
+        )
+        self._write(
+            f'{folder}/_includes/show-example-close.html',
+            '</details>',
+        )
+        self._write_page(
+            folder,
+            '01-overview.md',
+            title='Overview',
+            body=(
+                'Before.\n\n'
+                '<!-- include:_includes/show-example-open.html -->\n\n'
+                'Hidden example.\n\n'
+                '<!-- include:_includes/show-example-close.html -->\n\n'
+                'After.\n'
+            ),
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        page = WorkshopPage.objects.get(slug='overview')
+        self.assertIn('<details class="example">', page.body_html)
+        self.assertIn('Hidden example.', page.body_html)
+        self.assertNotIn('<!-- include:', page.body_html)
+
     def test_empty_recording_url_is_treated_as_tutorial_only(self):
         folder = '2026/2026-04-21-demo'
         self._write_workshop_yaml(

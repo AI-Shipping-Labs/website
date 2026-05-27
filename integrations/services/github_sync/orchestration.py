@@ -853,7 +853,7 @@ def _sync_repo(source, repo_dir, commit_sha, sync_log, known_images=None):
     )
     _dispatch_downloads(
         source, repo_dir, classified['download_files'],
-        commit_sha, stats,
+        commit_sha, stats, known_images=known_images,
     )
     _dispatch_interview_questions(
         source, repo_dir, classified['interview_files'],

@@ -26,12 +26,19 @@ from integrations.services.github_sync.repo import derive_slug, extract_sort_ord
 
 from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
 
-def _dispatch_downloads(source, repo_dir, file_list, commit_sha, stats):
+def _dispatch_downloads(source, repo_dir, file_list, commit_sha, stats,
+                        known_images=None):
     """Walker dispatch handler: process download YAML files.
 
     ``file_list`` is the set of repo-relative ``.yaml``/``.yml`` paths
     under any ``downloads/`` subtree, classified by
     ``_classify_repo_files``.
+
+    ``known_images`` (issue #797) is the set of repo-relative image
+    paths the S3 uploader actually saw — threaded through to
+    ``rewrite_cover_image_url`` so a missing ``cover_image`` reference
+    surfaces in ``stats['errors']`` instead of producing a CDN URL
+    pointing at nothing.
     """
     from content.models import Download
 
@@ -80,6 +87,7 @@ def _dispatch_downloads(source, repo_dir, file_list, commit_sha, stats):
                 'cover_image_url': rewrite_cover_image_url(
                     data.get('cover_image', '') or data.get('cover_image_url', ''),
                     source, rel_path,
+                    known_images=known_images, errors=stats['errors'],
                 ),
                 'tags': data.get('tags', []),
                 'required_level': data.get('required_level', 0),

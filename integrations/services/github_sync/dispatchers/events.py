@@ -334,10 +334,16 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
                 }
 
             # Handle cover_image
+            # Issue #797: validate against the known image set so a missing
+            # reference surfaces as a partial-sync error rather than a
+            # broken CDN URL.
             cover_image_url = _UNSET
             cover_image = data.get('cover_image', '')
             if cover_image:
-                cover_image_url = rewrite_cover_image_url(cover_image, source, rel_path)
+                cover_image_url = rewrite_cover_image_url(
+                    cover_image, source, rel_path,
+                    known_images=known_images, errors=stats['errors'],
+                )
 
             # Handle published_at
             published_at_value = _UNSET

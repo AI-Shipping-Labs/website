@@ -98,6 +98,7 @@ def _dispatch_projects(source, repo_dir, file_list, commit_sha, stats,
                 'cover_image_url': rewrite_cover_image_url(
                     metadata.get('cover_image', '') or metadata.get('cover_image_url', ''),
                     source, rel_path,
+                    known_images=known_images, errors=stats['errors'],
                 ),
                 'required_level': metadata.get('required_level', 0),
                 'published': True,

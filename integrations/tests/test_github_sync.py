@@ -2605,7 +2605,13 @@ class S3ImageUploadTest(TestCase):
 
         self.assertEqual(result['uploaded'], 1)
         self.assertEqual(result['skipped'], 0)
-        self.assertEqual(result['errors'], [])
+        # Issue #797: listing failures now propagate to stats['errors']
+        # tagged ``step='s3_list'`` so the SyncLog "partial" pill lights
+        # up instead of the error being WARN-only. The upload pass still
+        # runs with an empty ``existing_etags`` (uploaded == 1).
+        self.assertEqual(len(result['errors']), 1)
+        self.assertEqual(result['errors'][0]['step'], 's3_list')
+        self.assertEqual(result['errors'][0]['file'], '')
         self.assertTrue(any('Failed to list S3 objects' in line for line in logs.output))
         mock_s3.upload_file.assert_called_once()
 

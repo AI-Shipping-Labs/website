@@ -83,7 +83,9 @@ def rewrite_image_urls(markdown_text, repo_name, base_path=''):
     return result
 
 
-def rewrite_cover_image_url(cover_image, source, rel_path):
+def rewrite_cover_image_url(
+    cover_image, source, rel_path, known_images=None, errors=None,
+):
     """Rewrite a cover_image path from frontmatter to a CDN URL if relative.
 
     Args:
@@ -92,10 +94,25 @@ def rewrite_cover_image_url(cover_image, source, rel_path):
         source: ContentSource instance (used for repo_name).
         rel_path: Relative path of the content file within the repo
             (used to resolve relative image paths).
+        known_images: Optional set of repo-relative image paths the
+            S3 uploader actually saw (issue #797). When provided, a
+            relative ``cover_image`` whose resolved on-disk path is not
+            in the set is treated as missing: this function returns
+            ``''`` and (if ``errors`` is provided) appends a structured
+            entry tagged ``step='cover_image_missing'``. When ``None``
+            (the legacy default), no validation is performed and the
+            function returns the deterministic CDN URL exactly like
+            before, preserving backward compatibility.
+        errors: Optional list to receive structured error entries when
+            ``known_images`` validation finds a missing reference.
+            Each entry has the shape
+            ``{'file': rel_path, 'error': <message>, 'step': 'cover_image_missing'}``.
 
     Returns:
-        str: The CDN URL if the path was relative, the original URL if absolute,
-            or empty string if no cover image.
+        str: The CDN URL if the path was relative and present in
+            ``known_images`` (or ``known_images is None``); the original
+            URL if absolute; or empty string if no cover image or the
+            relative reference is missing from ``known_images``.
     """
     if not cover_image:
         return ''
@@ -104,6 +121,16 @@ def rewrite_cover_image_url(cover_image, source, rel_path):
 
     base_dir = os.path.dirname(rel_path)
     full_path = _resolve_image_path(cover_image, base_dir)
+    if known_images is not None and full_path not in known_images:
+        if errors is not None:
+            errors.append({
+                'file': rel_path,
+                'error': (
+                    f'cover_image references missing file: {cover_image}'
+                ),
+                'step': 'cover_image_missing',
+            })
+        return ''
     image_base, include_repo_prefix = _image_base_url(source.repo_name)
     if include_repo_prefix:
         return f'{image_base}/{source.short_name}/{full_path}'
@@ -167,7 +194,11 @@ def upload_images_to_s3(content_dir, source):
         )
     except (BotoCoreError, ClientError) as e:
         logger.warning('Failed to create S3 client: %s', e)
-        return {'uploaded': 0, 'skipped': 0, 'errors': [{'file': '', 'error': str(e)}]}
+        return {
+            'uploaded': 0,
+            'skipped': 0,
+            'errors': [{'file': '', 'error': str(e), 'step': 's3_client'}],
+        }
 
     # Build index of existing S3 ETags (MD5 for single-part uploads)
     s3_prefix = f'{repo_short}/'
@@ -179,7 +210,14 @@ def upload_images_to_s3(content_dir, source):
                 # ETag is quoted, e.g. '"d41d8cd98f00b204e9800998ecf8427e"'
                 existing_etags[obj['Key']] = obj['ETag'].strip('"')
     except (BotoCoreError, ClientError) as e:
+        # Issue #797: surface listing failures into stats['errors'] tagged
+        # with step='s3_list' so the SyncLog "partial" pill lights up
+        # instead of the failure being WARN-only. Continue with an empty
+        # ``existing_etags`` so the upload pass still runs.
         logger.warning('Failed to list S3 objects: %s', e)
+        stats['errors'].append({
+            'file': '', 'error': str(e), 'step': 's3_list',
+        })
 
     for root, dirs, files in os.walk(content_dir):
         # Skip .git directory
@@ -211,7 +249,9 @@ def upload_images_to_s3(content_dir, source):
                 )
                 stats['uploaded'] += 1
             except (BotoCoreError, ClientError, boto3.exceptions.S3UploadFailedError) as e:
-                stats['errors'].append({'file': rel_path, 'error': str(e)})
+                stats['errors'].append({
+                    'file': rel_path, 'error': str(e), 'step': 's3_upload',
+                })
                 logger.warning('Failed to upload %s to S3: %s', rel_path, e)
 
     logger.info(

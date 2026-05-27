@@ -310,9 +310,14 @@ def _sync_single_workshop(
             )
 
         # Cover image — rewrite relative paths to CDN URLs like course.yaml.
+        # Issue #797: validate the resolved path against the set of images
+        # the S3 uploader actually saw; surface missing references into
+        # ``stats['errors']`` so the SyncLog status downgrades to
+        # ``partial`` instead of shipping a broken CDN URL.
         cover_image_url = rewrite_cover_image_url(
             data.get('cover_image', '') or data.get('cover_image_url', ''),
             source, yaml_rel_path,
+            known_images=known_images, errors=stats['errors'],
         )
 
         # Issue #646: top-level ``materials:`` key on the workshop yaml.

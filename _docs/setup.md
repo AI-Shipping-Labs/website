@@ -268,6 +268,48 @@ To roll back, redeploy a previously known-good tag with `deploy_dev.sh` for dev 
 - `deploy/deploy_prod.sh [tag]` — promotes a tag to prod. If no tag is given, reads the current dev tag. Requires confirmation.
 - `deploy/update_task_def.py` — helper that ensures the worker container exists and updates the image tag plus `VERSION`, `DEBUG`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `SITE_BASE_URL`, and per-container `RUN_MIGRATIONS` in a task definition JSON file.
 
+## Production access model
+
+Production URL: `https://aishippinglabs.com`.
+
+Agents should not treat local files, local SQLite, or an ad hoc database
+tunnel as production data. For live application records, use the
+authenticated production API with a staff token:
+
+```bash
+curl -sS -H "Authorization: Token $API_SHIPPING_LABS_API_TOKEN" \
+  https://aishippinglabs.com/api/users/alice@example.com
+```
+
+Use the API for production user state, SES event history, email logs,
+integration-setting metadata, and narrow operator writes that already
+exist as API endpoints. The settings metadata endpoint is:
+
+```bash
+curl -sS -H "Authorization: Token $API_SHIPPING_LABS_API_TOKEN" \
+  https://aishippinglabs.com/api/integrations/settings
+```
+
+ECS inspection is separate from application data. The local `.env` may
+provide `ECS_AWS_ACCESS_KEY_ID` / `ECS_AWS_SECRET_ACCESS_KEY`, which can
+describe known ECS services and task definitions:
+
+```bash
+AWS_ACCESS_KEY_ID="$ECS_AWS_ACCESS_KEY_ID" \
+AWS_SECRET_ACCESS_KEY="$ECS_AWS_SECRET_ACCESS_KEY" \
+aws ecs describe-services \
+  --cluster ai-shipping-labs \
+  --services ai-shipping-labs-prod ai-shipping-labs-worker-prod \
+  --region eu-west-1
+```
+
+Those ECS deploy credentials are not general production-admin
+credentials. In particular, they may not be able to list SES
+configuration sets, SNS topics, Secrets Manager values, or task
+definitions by wildcard. For SES/SNS wiring, inspect the
+`AI-Shipping-Labs/ai-shipping-labs-infra` repo and file/track infra
+issues there when permissions are missing.
+
 ## Database access
 
 The RDS instance is in a private VPC and only accessible via the bastion host.

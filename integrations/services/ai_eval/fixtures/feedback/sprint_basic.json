@@ -1,0 +1,29 @@
+{
+  "sprint_name": "Sprint 7 - RAG Evaluation",
+  "start_date": "2026-04-06",
+  "duration_weeks": 4,
+  "response_count": 3,
+  "responses": [
+    {
+      "answers": [
+        ["What went well this sprint?", "long_text", "The weekly office hours kept me unblocked, and shipping a small slice each week felt great."],
+        ["What should we improve?", "long_text", "Kickoff scoping ran long; I lost the first few days deciding what to build."],
+        ["How likely are you to join the next sprint?", "scale", "5"]
+      ]
+    },
+    {
+      "answers": [
+        ["What went well this sprint?", "long_text", "Pairing on the eval harness was the highlight."],
+        ["What should we improve?", "long_text", "More concrete examples of a finished project up front would help scoping."],
+        ["How likely are you to join the next sprint?", "scale", "4"]
+      ]
+    },
+    {
+      "answers": [
+        ["What went well this sprint?", "long_text", "Accountability check-ins kept my momentum."],
+        ["What should we improve?", "long_text", "Scoping help early would have saved me time."],
+        ["How likely are you to join the next sprint?", "scale", "5"]
+      ]
+    }
+  ]
+}

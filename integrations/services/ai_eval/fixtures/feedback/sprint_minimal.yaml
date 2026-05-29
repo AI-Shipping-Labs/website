@@ -1,0 +1,6 @@
+sprint_name: "Sprint 1 - Foundations"
+response_count: 1
+responses:
+  - answers:
+      - ["What went well?", "long_text", "Getting set up locally was smooth."]
+      - ["What should we improve?", "long_text", "Need clearer milestones."]

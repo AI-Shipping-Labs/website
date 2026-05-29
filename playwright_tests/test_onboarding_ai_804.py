@@ -107,6 +107,7 @@ def _llm_enabled(enabled=True):
     from integrations.config import clear_config_cache
     from integrations.models import IntegrationSetting
 
+    keys = ["LLM_API_KEY", "LLM_PROVIDER", "ONBOARDING_AI_STREAMING"]
     if enabled:
         IntegrationSetting.objects.update_or_create(
             key="LLM_API_KEY", defaults={"value": "sk-test-fake"},
@@ -114,18 +115,21 @@ def _llm_enabled(enabled=True):
         IntegrationSetting.objects.update_or_create(
             key="LLM_PROVIDER", defaults={"value": "anthropic"},
         )
+        # These v1 tests exercise the NON-streaming chat transport. With
+        # #806 streaming defaults on, so disable it here to keep this
+        # suite testing the v1 POST path deterministically; the streaming
+        # path is covered by test_onboarding_ai_stream_806.py.
+        IntegrationSetting.objects.update_or_create(
+            key="ONBOARDING_AI_STREAMING", defaults={"value": "false"},
+        )
     else:
-        IntegrationSetting.objects.filter(
-            key__in=["LLM_API_KEY", "LLM_PROVIDER"],
-        ).delete()
+        IntegrationSetting.objects.filter(key__in=keys).delete()
     clear_config_cache()
     connection.close()
     try:
         yield
     finally:
-        IntegrationSetting.objects.filter(
-            key__in=["LLM_API_KEY", "LLM_PROVIDER"],
-        ).delete()
+        IntegrationSetting.objects.filter(key__in=keys).delete()
         clear_config_cache()
         connection.close()
 

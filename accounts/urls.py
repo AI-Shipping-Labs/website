@@ -30,6 +30,7 @@ from accounts.views.onboarding import (
 from accounts.views.onboarding_ai import (
     onboarding_chat,
     onboarding_chat_message,
+    onboarding_chat_stream,
 )
 
 urlpatterns = [
@@ -72,6 +73,13 @@ onboarding_urlpatterns = [
         'chat/message',
         onboarding_chat_message,
         name='onboarding_chat_message',
+    ),
+    # SSE streaming turn (#806). Same access control as chat/message; the
+    # client falls back to chat/message when streaming is unavailable.
+    path(
+        'chat/stream',
+        onboarding_chat_stream,
+        name='onboarding_chat_stream',
     ),
     path('<int:response_id>', onboarding_fill, name='onboarding_fill'),
     path('<int:response_id>/submit', onboarding_submit, name='onboarding_submit'),

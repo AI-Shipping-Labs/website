@@ -21,9 +21,11 @@ from questionnaires.onboarding import (
     get_generic_onboarding_questionnaire,
 )
 from questionnaires.onboarding_ai import (
+    OnboardingTurnResult,
     PersonaInfo,
     PersonaQuestion,
     run_onboarding_turn,
+    stream_onboarding_turn,
 )
 from questionnaires.services import build_response_questions
 
@@ -218,6 +220,57 @@ def run_member_turn(conversation, member_message, *, persona_catalog=None):
         finalize_conversation(conversation, result)
 
     return result
+
+
+def stream_member_turn(conversation, member_message, *, persona_catalog=None):
+    """Stream one member turn: yield text deltas, then persist the turn.
+
+    Streaming counterpart to :func:`run_member_turn` (issue #806). It is a
+    generator: it yields incremental ``str`` text deltas as the assistant
+    reply is produced, and finally yields the authoritative
+    :class:`OnboardingTurnResult` (the LAST item).
+
+    Persistence is IDENTICAL to :func:`run_member_turn` and happens only
+    AFTER the authoritative result is assembled: the member message + the
+    assistant reply are appended to the transcript, and on completion the
+    response is finalized into the SAME #800 ``Response`` / ``Answer``
+    rows. Because nothing is written until the stream completes, a
+    mid-stream failure (which raises :class:`LLMError` before any write)
+    leaves no partial state — so a retry via the v1 non-streaming endpoint
+    is the first and only write and cannot create a duplicate turn or
+    duplicate answers.
+
+    Any :class:`~integrations.services.llm.LLMError` propagates to the
+    caller (the streaming view), which signals the client to fall back.
+    """
+    if persona_catalog is None:
+        persona_catalog = build_persona_catalog()
+    transcript = conversation.transcript if isinstance(
+        conversation.transcript, list,
+    ) else []
+
+    result = None
+    for item in stream_onboarding_turn(
+        transcript,
+        member_message=member_message,
+        persona_catalog=persona_catalog,
+    ):
+        if isinstance(item, OnboardingTurnResult):
+            result = item
+        else:
+            yield item
+
+    # Persist only after the authoritative result is in hand (no partial
+    # writes on a mid-stream failure -> no duplicate on a v1 retry).
+    if member_message is not None:
+        conversation.append_turn('user', member_message)
+    conversation.append_turn('assistant', result.assistant_message)
+    conversation.save(update_fields=['transcript', 'updated_at'])
+
+    if result.is_complete:
+        finalize_conversation(conversation, result)
+
+    yield result
 
 
 def get_or_create_ai_onboarding_response(user):

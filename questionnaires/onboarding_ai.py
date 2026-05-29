@@ -567,6 +567,86 @@ def run_onboarding_turn(
     )
 
 
+def stream_onboarding_turn(
+    transcript,
+    *,
+    member_message,
+    persona_catalog,
+    trace=None,
+):
+    """Stream one onboarding turn: yield text deltas, then the result.
+
+    Streaming counterpart to :func:`run_onboarding_turn`. It is a
+    generator that yields incremental ``str`` text deltas as the model
+    produces the conversational reply, and finally yields a single
+    :class:`OnboardingTurnResult` (the LAST item) that is IDENTICAL in
+    shape to what :func:`run_onboarding_turn` produces for the same input.
+
+    Layering choice (option b in the issue): streaming is a transport-only
+    UX concern over the human-readable conversational text. The
+    authoritative turn decision — including the structured final-turn
+    extraction — stays with the non-streaming :func:`run_onboarding_turn`,
+    which the caller's persistence path depends on. Concretely:
+
+    - The opening turn (no member message, empty transcript) yields the
+      deterministic greeting as a single delta then the greeting result,
+      with no model call (mirrors :func:`run_onboarding_turn`).
+    - Otherwise we open ``llm.stream(...)`` (no tools — the conversational
+      text is plain) and yield each text delta as it arrives. The streamed
+      deltas reproduce the assistant's conversational reply token-by-token.
+    - After the stream completes we call :func:`run_onboarding_turn` to
+      obtain the authoritative :class:`OnboardingTurnResult` (same system
+      prompt + messages, the tool-using structured extraction on the final
+      turn) and yield it last. This guarantees the persisted answers are
+      byte-for-byte the same as the non-streaming path.
+
+    This stays Django-independent (no models, no request, no ``django.db``)
+    just like :func:`run_onboarding_turn`.
+
+    Raises:
+        LLMError: when opening the stream fails or the turn's authoritative
+            ``run_onboarding_turn`` call fails. A mid-stream failure (after
+            at least one delta) also surfaces as :class:`LLMError` from the
+            generator so the transport can fall back to the non-streaming
+            path for the same member message.
+    """
+    sink = trace or TraceSink()
+
+    # Opening turn: greet deterministically, no model call. Emit the
+    # greeting as a single delta so the transport renders it uniformly.
+    if member_message is None and not transcript:
+        result = OnboardingTurnResult(
+            assistant_message=GREETING, is_complete=False,
+        )
+        yield GREETING
+        yield result
+        return
+
+    system = _build_system_prompt(persona_catalog)
+    messages = _build_messages(transcript, member_message)
+
+    # Stream the conversational text (no tools on the streaming surface).
+    try:
+        for event in llm.stream(messages, system=system):
+            if event.is_done:
+                break
+            if event.text:
+                yield event.text
+    except LLMError as error:
+        sink.on_error(error=error)
+        raise
+
+    # Authoritative turn decision (structured extraction on the final turn)
+    # via the non-streaming path so the persisted answers are identical.
+    result = run_onboarding_turn(
+        transcript,
+        member_message=member_message,
+        persona_catalog=persona_catalog,
+        trace=trace,
+    )
+    yield result
+
+
 __all__ = [
     'SYSTEM_PROMPT',
     'GREETING',
@@ -586,4 +666,5 @@ __all__ = [
     'CodingAgentUse',
     'PlanHorizon',
     'run_onboarding_turn',
+    'stream_onboarding_turn',
 ]

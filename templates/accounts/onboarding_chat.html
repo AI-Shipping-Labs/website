@@ -48,7 +48,9 @@
 
       <form method="post" action="{% url 'onboarding_chat_message' %}"
             class="mt-4 flex items-end gap-2"
-            data-testid="onboarding-chat-form">
+            data-testid="onboarding-chat-form"
+            data-stream-url="{% url 'onboarding_chat_stream' %}"
+            {% if streaming_enabled %}data-streaming="1"{% endif %}>
         {% csrf_token %}
         <textarea name="message" rows="2" required
                   class="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
@@ -75,4 +77,122 @@
 
   {% include "includes/footer.html" %}
 </main>
+
+{% if streaming_enabled %}
+{# Token-by-token streaming client (#806). Vanilla JS, no build step. #}
+{# Uses fetch + ReadableStream to read the SSE stream because EventSource #}
+{# cannot POST. On any stream failure it submits the same message via the #}
+{# standard non-streaming form, so the member always gets the full reply. #}
+<script>
+(function () {
+  var form = document.querySelector('[data-testid="onboarding-chat-form"]');
+  if (!form || form.getAttribute('data-streaming') !== '1') {
+    return; // streaming off: the form posts normally (v1 transport).
+  }
+  var input = form.querySelector('[data-testid="onboarding-chat-input"]');
+  var transcript = document.querySelector(
+    '[data-testid="onboarding-chat-transcript"]');
+  var streamUrl = form.getAttribute('data-stream-url');
+  var sendBtn = form.querySelector('[data-testid="onboarding-chat-send"]');
+
+  function bubble(role) {
+    var wrap = document.createElement('div');
+    wrap.className = role === 'assistant'
+      ? 'flex justify-start' : 'flex justify-end';
+    wrap.setAttribute('data-testid', 'onboarding-chat-' + role);
+    var inner = document.createElement('div');
+    inner.className = role === 'assistant'
+      ? 'max-w-[85%] rounded-2xl bg-muted px-4 py-3 text-sm text-foreground'
+      : 'max-w-[85%] rounded-2xl bg-accent px-4 py-3 text-sm '
+        + 'text-accent-foreground';
+    wrap.appendChild(inner);
+    transcript.appendChild(wrap);
+    return inner;
+  }
+
+  function fallbackSubmit() {
+    // Re-issue the SAME message through the v1 non-streaming POST. The
+    // server persisted nothing on a stream failure, so this is the first
+    // and only write -> no duplicate turn.
+    form.setAttribute('data-streaming', '0');
+    form.submit();
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var message = (input.value || '').trim();
+    if (!message) { return; }
+    if (sendBtn) { sendBtn.disabled = true; }
+
+    bubble('member').textContent = message;
+    var assistantEl = bubble('assistant');
+
+    var body = new URLSearchParams();
+    body.append('message', message);
+    body.append('csrfmiddlewaretoken',
+      form.querySelector('[name=csrfmiddlewaretoken]').value);
+
+    fetch(streamUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+      credentials: 'same-origin',
+    }).then(function (resp) {
+      if (!resp.ok || !resp.body) { fallbackSubmit(); return; }
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+      var gotDelta = false;
+
+      function handleEvent(name, data) {
+        var payload = {};
+        try { payload = JSON.parse(data); } catch (err) { payload = {}; }
+        if (name === 'delta') {
+          gotDelta = true;
+          assistantEl.textContent += (payload.text || '');
+        } else if (name === 'done') {
+          if (payload.redirect) {
+            window.location.assign(payload.redirect);
+          }
+        } else if (name === 'fallback') {
+          // Stream could not produce the reply -> use the v1 path.
+          fallbackSubmit();
+        }
+      }
+
+      function pump() {
+        return reader.read().then(function (res) {
+          if (res.done) {
+            if (sendBtn) { sendBtn.disabled = false; }
+            input.value = '';
+            return;
+          }
+          buffer += decoder.decode(res.value, { stream: true });
+          var frames = buffer.split('\n\n');
+          buffer = frames.pop();
+          frames.forEach(function (frame) {
+            var name = 'message';
+            var dataLines = [];
+            frame.split('\n').forEach(function (line) {
+              if (line.indexOf('event:') === 0) {
+                name = line.slice(6).trim();
+              } else if (line.indexOf('data:') === 0) {
+                dataLines.push(line.slice(5).trim());
+              }
+            });
+            handleEvent(name, dataLines.join('\n'));
+          });
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function () {
+      // Network error / connection dropped mid-stream: fall back so the
+      // member still gets the complete reply via the v1 path.
+      fallbackSubmit();
+    });
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

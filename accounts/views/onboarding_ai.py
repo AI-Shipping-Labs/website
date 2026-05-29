@@ -15,20 +15,26 @@ onboarding ``Response`` with a friendly message -- never a 500. Internal
 persona names are never surfaced.
 """
 
+import json
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.http import StreamingHttpResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from integrations.services.llm import LLMError
 from questionnaires.onboarding import (
     ai_onboarding_available,
+    ai_onboarding_streaming_enabled,
     get_onboarding_response,
 )
 from questionnaires.services import build_response_questions
 from questionnaires.services_onboarding_ai import (
     get_or_create_ai_onboarding_response,
     run_member_turn,
+    stream_member_turn,
 )
 
 
@@ -70,7 +76,116 @@ def onboarding_chat(request):
         'conversation': conversation,
         'response': response,
         'chat_messages': _conversation_messages(conversation),
+        'streaming_enabled': ai_onboarding_streaming_enabled(),
     })
+
+
+def _sse(event, data):
+    """Format one Server-Sent Event frame (a named event + JSON data)."""
+    payload = json.dumps(data)
+    return f'event: {event}\ndata: {payload}\n\n'
+
+
+@login_required
+@require_POST
+def onboarding_chat_stream(request):
+    """Stream one member turn token-by-token over Server-Sent Events (#806).
+
+    Transport-only upgrade of :func:`onboarding_chat_message`. Same access
+    control (login-required; the member can only stream into THEIR OWN
+    onboarding conversation — there is no conversation id in the URL, so
+    another member's conversation is unreachable; an already-submitted
+    member is sent to the v1 completion confirmation). The persisted #800
+    artifacts are IDENTICAL to the non-streaming path.
+
+    The response is a ``StreamingHttpResponse`` with
+    ``Content-Type: text/event-stream`` and anti-buffering headers
+    (``Cache-Control: no-cache``, ``X-Accel-Buffering: no``). SSE frames:
+
+    - ``delta``: ``{"text": "..."}`` — the next chunk of assistant text.
+    - ``done``: ``{"complete": bool, "redirect": "<url>"|null}`` — the
+      turn finished; on completion ``redirect`` is the v1 thank-you
+      destination.
+    - ``fallback``: ``{"reason": "..."}`` — the stream could not start /
+      failed; the client must re-issue the SAME message via the v1
+      non-streaming endpoint (``onboarding_chat_message``). No data was
+      persisted, so the retry is the first and only write.
+
+    If streaming is disabled, the LLM is unavailable, or the member is
+    ineligible, the client should never call this endpoint; we still guard
+    here and emit a ``fallback`` so a stray call degrades cleanly.
+    """
+    if not ai_onboarding_streaming_enabled():
+        # Streaming off / LLM disabled: tell the client to use the v1 path.
+        return _stream_response(
+            iter([_sse('fallback', {'reason': 'streaming-disabled'})]),
+        )
+
+    existing = get_onboarding_response(request.user)
+    if existing is not None and existing.status == 'submitted':
+        return _stream_response(
+            iter([_sse('done', {
+                'complete': True,
+                'redirect': reverse('onboarding_start'),
+            })]),
+        )
+
+    response, conversation = get_or_create_ai_onboarding_response(request.user)
+    if response is None:
+        return _stream_response(
+            iter([_sse('fallback', {'reason': 'no-questionnaire'})]),
+        )
+
+    member_message = (request.POST.get('message') or '').strip()
+    if not member_message:
+        return _stream_response(
+            iter([_sse('fallback', {'reason': 'empty-message'})]),
+        )
+
+    def event_stream():
+        try:
+            gen = stream_member_turn(conversation, member_message)
+            result = None
+            for item in gen:
+                # The generator yields str deltas then a final
+                # OnboardingTurnResult (the only non-str item).
+                if isinstance(item, str):
+                    yield _sse('delta', {'text': item})
+                else:
+                    result = item
+        except LLMError:
+            # Open/mid-stream failure: nothing persisted. Tell the client
+            # to retry the SAME message via the v1 non-streaming endpoint
+            # (which routes to the #802 form fallback on a hard LLMError).
+            yield _sse('fallback', {'reason': 'stream-error'})
+            return
+        if result is not None and result.is_complete:
+            # The redirect target is the v1 thank-you destination. The flash
+            # message cannot be set here (the streaming response headers are
+            # already sent), so the client lands on home and the submitted
+            # state is the durable signal -- the persisted artifacts match
+            # the non-streaming path either way.
+            yield _sse('done', {
+                'complete': True,
+                'redirect': reverse('home'),
+            })
+        else:
+            yield _sse('done', {'complete': False, 'redirect': None})
+
+    return _stream_response(event_stream())
+
+
+def _stream_response(generator):
+    """Wrap a generator in an SSE ``StreamingHttpResponse`` with headers."""
+    resp = StreamingHttpResponse(
+        generator, content_type='text/event-stream',
+    )
+    # Discourage proxy buffering so deltas arrive incrementally. nginx
+    # honours X-Accel-Buffering; CloudFront may still buffer (the client
+    # fallback is the safety net) -- see _docs/integrations/llm.md.
+    resp['Cache-Control'] = 'no-cache'
+    resp['X-Accel-Buffering'] = 'no'
+    return resp
 
 
 @login_required
@@ -132,4 +247,5 @@ def onboarding_chat_message(request):
 __all__ = [
     'onboarding_chat',
     'onboarding_chat_message',
+    'onboarding_chat_stream',
 ]

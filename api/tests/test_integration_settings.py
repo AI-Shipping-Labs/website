@@ -156,6 +156,22 @@ class IntegrationSettingsApiTest(TestCase):
         self.assertEqual(row.value, "https://cdn.example.com")
         self.assertEqual(row.group, "s3_content")
 
+    def test_post_ses_configuration_set_uses_column_safe_description(self):
+        """Regression for #814: prod Postgres enforces description max_length."""
+        response = self._post_json({
+            "updates": [
+                {
+                    "key": "SES_CONFIGURATION_SET_NAME",
+                    "value": "aishippinglabs",
+                },
+            ],
+        })
+
+        self.assertEqual(response.status_code, 200)
+        row = IntegrationSetting.objects.get(key="SES_CONFIGURATION_SET_NAME")
+        max_len = IntegrationSetting._meta.get_field("description").max_length
+        self.assertLessEqual(len(row.description), max_len)
+
     def test_post_response_does_not_echo_key_or_value(self):
         # First write — fresh key, fresh value.
         first_value = "https://cdn.example.com"

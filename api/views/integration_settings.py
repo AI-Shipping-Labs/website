@@ -48,6 +48,12 @@ from integrations.models import IntegrationSetting
 from integrations.settings_registry import INTEGRATION_GROUPS
 
 
+def _column_safe_description(description):
+    """Return a description that fits ``IntegrationSetting.description``."""
+    max_len = IntegrationSetting._meta.get_field("description").max_length
+    return (description or "")[:max_len]
+
+
 def _build_registry_index():
     """Return ``{key: key_def}`` flattened across all registry groups.
 
@@ -401,7 +407,9 @@ def _integration_settings_set(request):
                     'value': stored_value,
                     'is_secret': key_def.get('is_secret', False),
                     'group': group_name,
-                    'description': key_def.get('description', ''),
+                    'description': _column_safe_description(
+                        key_def.get('description', ''),
+                    ),
                 },
             )
             updated += 1

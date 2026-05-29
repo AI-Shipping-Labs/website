@@ -137,6 +137,38 @@ class SprintDetailEligibleTest(TestCase):
         self.assertContains(response, 'data-testid="sprint-cta-board"')
 
 
+class SprintDetailCommentLeakTest(TestCase):
+    """Issue #807: the #598 developer note must never reach rendered HTML.
+
+    The note sits inside the join-CTA branch, so an eligible,
+    not-yet-enrolled member is used to force it to render. The asserted
+    phrases are substrings of the comment body only -- they appear
+    nowhere in legitimate visible copy. These assertions FAIL against
+    the old multi-line ``{# #}`` template and PASS once it is a
+    ``{% comment %}`` block.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sprint = Sprint.objects.create(
+            name='Premium-only', slug='premium-only',
+            start_date=datetime.date(2026, 5, 1),
+            status='active', min_tier_level=30,
+        )
+        cls.premium_user = _premium_user('p@test.com')
+
+    def test_detail_does_not_leak_598_developer_note(self):
+        self.client.force_login(self.premium_user)
+        url = reverse('sprint_detail', kwargs={'sprint_slug': self.sprint.slug})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        # Confirm the join CTA (which wraps the #598 note) rendered,
+        # otherwise the leak guard would be vacuous.
+        self.assertContains(response, 'data-testid="sprint-cta-join"')
+        self.assertNotContains(response, 'emerald color override')
+        self.assertNotContains(response, 'win the cascade')
+
+
 class SprintDetailTierBadgeTest(TestCase):
     """The tier-name badge mirrors LEVEL_TO_TIER_NAME."""
 

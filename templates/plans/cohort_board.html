@@ -171,10 +171,12 @@
                 <p class="text-sm text-muted-foreground">Progress only; plan details are private.</p>
                 {% else %}
                 <div data-testid="progress-row-no-plan-{{ row.member.pk }}">
-                  {# Issue #598: per-row table actions are deliberately the
-                     `sm` size — they sit inside a dense cohort comparison
-                     table where a 44px tap target would dominate the row.
-                     This mirrors the Studio compact-row-action convention. #}
+                  {% comment %}
+                  Issue #598: per-row table actions are deliberately the
+                  `sm` size — they sit inside a dense cohort comparison
+                  table where a 44px tap target would dominate the row.
+                  This mirrors the Studio compact-row-action convention.
+                  {% endcomment %}
                   {% if row.is_self %}
                     {% if viewer_pinged_recently %}
                     <button type="button" disabled

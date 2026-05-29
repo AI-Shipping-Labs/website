@@ -333,6 +333,7 @@ class SettingsDashboardViewTest(TestCase):
             [
                 'auth', 'payments', 'content', 'content_tools',
                 'messaging', 'storage', 'site', 'analytics', 'ai',
+                'observability',
             ],
         )
 
@@ -347,6 +348,7 @@ class SettingsDashboardViewTest(TestCase):
         self.assertEqual(groups_by_section['site'], ['site'])
         self.assertEqual(groups_by_section['analytics'], ['analytics'])
         self.assertEqual(groups_by_section['ai'], ['llm'])
+        self.assertEqual(groups_by_section['observability'], ['observability'])
 
         assigned_group_names = [
             group['name']
@@ -398,9 +400,11 @@ class SettingsDashboardViewTest(TestCase):
         # "configured" by default even with no value set).
         self.assertEqual(summary['configured_count'], 2)
         # Stripe has one DB-backed key, SES has one env-backed key,
-        # GitHub has the default Secrets Manager path but no App IDs, and
-        # LLM has provider+model defaults but no API key (issue #799).
-        self.assertEqual(summary['partial_count'], 4)
+        # GitHub has the default Secrets Manager path but no App IDs,
+        # LLM has provider+model defaults but no API key (issue #799), and
+        # Observability has the LOGFIRE_ENABLED default ('false', a set
+        # value) but no token (issue #813).
+        self.assertEqual(summary['partial_count'], 5)
         self.assertEqual(
             summary['missing_count'],
             expected_total_items - summary['configured_count'] - summary['partial_count'],

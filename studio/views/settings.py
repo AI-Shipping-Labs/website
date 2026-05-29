@@ -102,6 +102,15 @@ SETTINGS_SECTIONS = [
         ),
         'group_names': {'llm'},
     },
+    {
+        'id': 'observability',
+        'label': 'Observability',
+        'description': (
+            'Production logging and tracing via Pydantic Logfire. Off by '
+            'default; never emits in tests or evals.'
+        ),
+        'group_names': {'observability'},
+    },
 ]
 
 OTHER_SECTION = {

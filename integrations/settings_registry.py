@@ -18,7 +18,7 @@ container — ``.dockerignore`` excludes it (issue #664). Entries without
 ``docs_url`` keep working — the icon simply isn't rendered for them.
 
 NOTE: ``_docs/configuration.md`` references the count and names of these
-groups in the Studio sign-in section ("confirm 13 integration groups are
+groups in the Studio sign-in section ("confirm 14 integration groups are
 listed (...)"). When adding, removing, or renaming a group here, update
 that line of the doc in the same PR.
 """
@@ -372,6 +372,48 @@ INTEGRATION_GROUPS = [
                     'stream.'
                 ),
                 'docs_url': '_docs/integrations/llm.md#onboarding_ai_streaming',
+            },
+        ],
+    },
+    {
+        'name': 'observability',
+        'label': 'Observability',
+        'keys': [
+            {
+                'key': 'LOGFIRE_ENABLED',
+                'is_secret': False,
+                'is_boolean': True,
+                'default': 'false',
+                'description': (
+                    'Explicit on switch for Pydantic Logfire. Default off '
+                    'everywhere; must be true (plus a token, plus not running '
+                    'tests) before Logfire initializes. Keeps local/dev/eval '
+                    'runs silent unless an operator opts in.'
+                ),
+                'docs_url': '_docs/integrations/observability.md#logfire_enabled',
+            },
+            {
+                'key': 'LOGFIRE_TOKEN',
+                'is_secret': True,
+                'description': (
+                    'Logfire write token. Get it from the Logfire project '
+                    'settings. When blank, Logfire is fully off. Masked in '
+                    'Studio.'
+                ),
+                'docs_url': '_docs/integrations/observability.md#logfire_token',
+            },
+            {
+                'key': 'LOGFIRE_ENVIRONMENT',
+                'is_secret': False,
+                'optional': True,
+                'default': 'production',
+                'description': (
+                    'Logfire environment tag passed to '
+                    'logfire.configure(environment=...), so prod traces are '
+                    'separable from any opt-in dev run. Defaults to '
+                    '"production".'
+                ),
+                'docs_url': '_docs/integrations/observability.md#logfire_environment',
             },
         ],
     },

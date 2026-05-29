@@ -342,6 +342,23 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/llm.md#onboarding_ai_enabled',
             },
+            {
+                'key': 'ONBOARDING_AI_STREAMING',
+                'is_secret': False,
+                'is_boolean': True,
+                'default': 'true',
+                'description': (
+                    'Set true to stream the AI onboarding assistant reply '
+                    'token-by-token over Server-Sent Events when the AI path '
+                    'is enabled. When off (or the AI path is disabled), the '
+                    'chat uses the non-streaming request/response transport '
+                    'and opens no SSE connection. Defaults on; switchable '
+                    'without a redeploy. The browser falls back to the '
+                    'non-streaming path automatically if a proxy buffers the '
+                    'stream.'
+                ),
+                'docs_url': '_docs/integrations/llm.md#onboarding_ai_streaming',
+            },
         ],
     },
 ]

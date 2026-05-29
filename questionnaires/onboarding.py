@@ -29,6 +29,13 @@ GENERIC_ONBOARDING_SLUG = 'onboarding-general'
 # ``integrations.settings_registry`` so it is Studio-configurable.
 ONBOARDING_AI_FLAG = 'ONBOARDING_AI_ENABLED'
 
+# Config flag (Studio/.env) gating token-by-token SSE streaming of the AI
+# onboarding chat reply on top of the AI path being available (#806).
+# Defaults on when the AI path is on; when off the chat uses the v1
+# non-streaming transport and never opens an SSE connection. Switchable
+# without a redeploy via Studio.
+ONBOARDING_AI_STREAMING_FLAG = 'ONBOARDING_AI_STREAMING'
+
 # Opaque self-ID values for the two persona-agnostic options. They are
 # not persona ids, so they never collide with a ``Persona.pk`` value.
 SELF_ID_NONE = 'none'
@@ -49,6 +56,22 @@ def ai_onboarding_available():
     # without disabling the whole LLM service. Only an explicit falsey
     # value disables it.
     raw = get_config(ONBOARDING_AI_FLAG, 'true')
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('true', '1', 'yes')
+
+
+def ai_onboarding_streaming_enabled():
+    """True when the onboarding chat should stream replies over SSE (#806).
+
+    Requires the AI onboarding path to be available AND the
+    ``ONBOARDING_AI_STREAMING`` flag to be on (default true). When off (or
+    the AI path is unavailable), the chat uses the v1 non-streaming
+    transport and opens no SSE connection.
+    """
+    if not ai_onboarding_available():
+        return False
+    raw = get_config(ONBOARDING_AI_STREAMING_FLAG, 'true')
     if isinstance(raw, bool):
         return raw
     return str(raw).strip().lower() in ('true', '1', 'yes')

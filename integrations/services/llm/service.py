@@ -84,4 +84,56 @@ def complete(
     )
 
 
-__all__ = ['LLMError', 'complete', 'is_enabled']
+def stream(
+    messages,
+    *,
+    model=None,
+    system=None,
+    max_tokens=DEFAULT_MAX_TOKENS,
+    temperature=None,
+):
+    """Stream a completion, yielding provider-neutral ``StreamEvent``s.
+
+    The streaming counterpart to :func:`complete`. Used by the onboarding
+    chat (#806) to deliver the assistant reply token-by-token over SSE.
+
+    Yields a sequence of ``text_delta`` events (each carrying the next
+    chunk of assistant text) followed by a single terminal ``done`` event
+    whose ``result`` is the fully assembled :class:`LLMResult` — the SAME
+    object :func:`complete` would return for the same input.
+
+    Args:
+        messages: Anthropic-style message list.
+        model: Explicit model name; falls back to ``LLM_MODEL`` config.
+        system: Optional system prompt.
+        max_tokens: Output token ceiling (same default as ``complete``).
+        temperature: Optional sampling temperature.
+
+    Returns:
+        Iterator[StreamEvent].
+
+    Raises:
+        LLMError: when the provider is unimplemented (raised before any
+            network call), the stream fails to open, or the stream fails
+            mid-response. Mid-stream errors are surfaced (not silently
+            retried) so the transport layer can fall back to ``complete``.
+            The API key never appears in the message.
+
+    Tools / structured output are intentionally not part of the streaming
+    surface — the final structured-extraction turn keeps using
+    :func:`complete`.
+    """
+    provider = _resolve_provider()
+    # Select the backend first so an unimplemented provider raises before
+    # any client construction or network call (mirrors ``complete``).
+    backend = get_backend(provider)
+    return backend.stream(
+        messages,
+        model=model,
+        system=system,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+
+
+__all__ = ['LLMError', 'complete', 'is_enabled', 'stream']

@@ -69,6 +69,46 @@ class LLMResult:
         )
 
 
+# Event kinds yielded by ``stream(...)``. Kept as plain string constants so
+# the surface stays provider-neutral and JSON-serialisable at the transport
+# layer (no vendor enum leaks to callers).
+STREAM_TEXT_DELTA = 'text_delta'
+STREAM_DONE = 'done'
+
+
+class StreamEvent:
+    """One provider-neutral event yielded by :func:`stream`.
+
+    Two kinds, distinguished by ``kind``:
+
+    - ``text_delta``: ``text`` carries the next incremental chunk of the
+      assistant's reply. ``result`` is ``None``.
+    - ``done``: the terminal event. ``result`` carries the fully assembled
+      :class:`LLMResult` — the SAME object ``complete()`` would have
+      returned for the same input (``.text`` is the concatenation of every
+      delta; ``.tool_input`` is set when a tool was used). ``text`` is
+      empty on the terminal event.
+
+    A mid-stream transport/SDK failure is NOT signalled as an event: it is
+    re-raised from the generator so the transport layer can trigger the
+    graceful fallback (see :func:`AnthropicBackend.stream`).
+    """
+
+    def __init__(self, *, kind, text='', result=None):
+        self.kind = kind
+        self.text = text
+        self.result = result
+
+    @property
+    def is_done(self):
+        return self.kind == STREAM_DONE
+
+    def __repr__(self):
+        if self.is_done:
+            return f'StreamEvent(done, result={self.result!r})'
+        return f'StreamEvent(text_delta, text={self.text!r})'
+
+
 def _retry_delay(attempt, *, base, cap):
     """Exponential backoff with small jitter (mirrors the reference)."""
     return min(cap, base * (2 ** attempt)) + random.uniform(0, 1)
@@ -198,6 +238,138 @@ class AnthropicBackend:
                 type(last_exc).__name__ if last_exc else 'unknown', api_key,
             )
         )
+
+    def stream(
+        self,
+        messages,
+        *,
+        model=None,
+        system=None,
+        max_tokens=DEFAULT_MAX_TOKENS,
+        temperature=None,
+    ):
+        """Stream a completion, yielding :class:`StreamEvent` objects.
+
+        Yields ``text_delta`` events as the model produces tokens, then a
+        single terminal ``done`` event carrying a fully assembled
+        :class:`LLMResult` (the SAME object ``complete()`` would return for
+        the same input).
+
+        Error contract (documented for the transport fallback):
+
+        - A transport/SDK error while OPENING the stream (before any delta
+          is yielded) raises :class:`LLMError` — same as ``complete()``.
+          The SDK's own ``max_retries`` covers transient connect/open
+          retries; opening the stream is the only retryable phase.
+        - A mid-stream failure (after at least one delta) is re-raised
+          from the generator (wrapped in :class:`LLMError`). It is NOT
+          retried — replaying tokens would corrupt the stream — so the
+          caller (transport layer) catches it and falls back to the
+          non-streaming path for the same member message.
+
+        The API key never appears in any raised message (scrubbed via
+        :func:`_safe_error_message`, mirroring ``complete()``).
+
+        Tools / structured output are intentionally NOT supported here
+        (the final extraction turn keeps using ``complete()``); this
+        surface targets the plain-text conversational turns.
+        """
+        from anthropic import (  # noqa: PLC0415
+            Anthropic,
+            APIConnectionError,
+            APITimeoutError,
+            InternalServerError,
+            RateLimitError,
+        )
+
+        api_key = (get_config('LLM_API_KEY', '') or '').strip()
+        if not api_key:
+            raise LLMError('LLM is not configured (LLM_API_KEY is empty)')
+
+        base_url = (get_config('LLM_BASE_URL', '') or '').strip() or None
+        resolved_model = model or get_config('LLM_MODEL', 'claude-sonnet-4-5')
+        max_retries = _resolve_max_retries()
+
+        client = Anthropic(
+            api_key=api_key,
+            base_url=base_url,
+            max_retries=max_retries,
+        )
+
+        request_kwargs = {
+            'model': resolved_model,
+            'max_tokens': max_tokens,
+            'messages': messages,
+        }
+        if system is not None:
+            request_kwargs['system'] = system
+        if temperature is not None:
+            request_kwargs['temperature'] = temperature
+
+        open_errors = (
+            RateLimitError,
+            APIConnectionError,
+            APITimeoutError,
+            InternalServerError,
+        )
+
+        # Opening the stream is the retryable phase. The SDK's
+        # ``client.messages.stream(...)`` returns a context manager; we
+        # enter it inside the try so an open failure raises LLMError
+        # before any delta has been emitted.
+        try:
+            stream_cm = client.messages.stream(**request_kwargs)
+            manager = stream_cm.__enter__()
+        except open_errors as exc:
+            raise LLMError(
+                'LLM stream failed to open: '
+                + _safe_error_message(type(exc).__name__, api_key)
+            ) from None
+        except Exception as exc:
+            raise LLMError(
+                'LLM stream failed to open: '
+                + _safe_error_message(
+                    f'{type(exc).__name__}: {exc}', api_key,
+                )
+            ) from None
+
+        return self._iter_stream(stream_cm, manager, api_key)
+
+    def _iter_stream(self, stream_cm, manager, api_key):
+        """Generator that yields deltas then the assembled terminal event.
+
+        Separated from :meth:`stream` so that an open failure raises
+        eagerly (before the caller starts iterating) while delta iteration
+        and the terminal assembly happen lazily.
+        """
+        text_parts = []
+        try:
+            for chunk in manager.text_stream:
+                if not chunk:
+                    continue
+                text_parts.append(chunk)
+                yield StreamEvent(kind=STREAM_TEXT_DELTA, text=chunk)
+            final_message = manager.get_final_message()
+        except Exception as exc:
+            # Mid-stream failure: never retried (would replay tokens).
+            # Surface to the caller so the transport falls back.
+            raise LLMError(
+                'LLM stream failed mid-response: '
+                + _safe_error_message(
+                    f'{type(exc).__name__}: {exc}', api_key,
+                )
+            ) from None
+        finally:
+            stream_cm.__exit__(None, None, None)
+
+        result = _parse_response(final_message, api_key)
+        # Defensively prefer the streamed text when the final message did
+        # not echo a text block (some gateways stream text without a final
+        # content block); the assembled deltas are authoritative for text.
+        streamed = ''.join(text_parts).strip()
+        if streamed and not result.text:
+            result.text = streamed
+        yield StreamEvent(kind=STREAM_DONE, result=result)
 
 
 def _parse_response(response, api_key):

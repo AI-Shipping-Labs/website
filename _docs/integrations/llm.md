@@ -182,3 +182,101 @@ is the pattern the onboarding assistant (#804) and feedback synthesis
 - Client construction: the Anthropic client is built per call from
   `get_config()`, never cached at import, so Studio overrides and worker
   processes always read the current key/base-URL/model.
+
+## Streaming (issue #806)
+
+`integrations.services.llm` exposes a `stream(...)` generator alongside
+`complete(...)` for token-by-token delivery:
+
+```python
+from integrations.services import llm
+
+for event in llm.stream(messages, system=system):
+    if event.kind == 'text_delta':
+        write_to_client(event.text)       # incremental chunk
+    elif event.is_done:
+        result = event.result             # fully assembled LLMResult
+```
+
+Contract:
+
+- `stream(messages, *, model=None, system=None, max_tokens=..., temperature=None)`
+  yields `StreamEvent` objects: zero or more `text_delta` events (each
+  carrying the next chunk on `.text`), then exactly one terminal `done`
+  event whose `.result` is the SAME `LLMResult` `complete()` would return
+  for the same input (`.text` is the concatenation of every delta;
+  `.tool_input` is populated when a tool was used).
+- Tools / structured output are intentionally NOT part of the streaming
+  surface — it targets plain-text conversational turns. The onboarding
+  assistant streams the conversational text and keeps the structured
+  final-turn extraction on the non-streaming `complete()` path.
+- Provider selection mirrors `complete()`: the backend is chosen from
+  `LLM_PROVIDER` via the registry; an unimplemented provider raises
+  `LLMError` ("provider X not supported yet") before any network call.
+  Only the `anthropic` backend implements `stream()` (SDK
+  `client.messages.stream(...)`); the client is built per call from
+  `get_config()`, never cached at import. `openai`/`bedrock` are reserved
+  seams — adding streaming there is registering a backend method, not
+  editing callers.
+- Error contract for the transport fallback: a transport/SDK failure while
+  OPENING the stream (before any delta) raises `LLMError` eagerly, just
+  like `complete()`. A mid-stream failure (after at least one delta) is
+  re-raised from the generator (wrapped in `LLMError`) and is NOT retried
+  from scratch — replaying tokens would corrupt the stream — so the caller
+  can fall back to the non-streaming path for the same message. The API
+  key never appears in any raised message (same scrub + test as
+  `complete()`).
+
+### Onboarding chat transport (SSE)
+
+The member-facing onboarding chat (#806) streams the assistant reply to
+the browser over Server-Sent Events.
+
+Transport choice:
+
+| Option | Fit | Verdict |
+|--------|-----|---------|
+| SSE via `StreamingHttpResponse` (`text/event-stream`) | Native browser support, one-directional server->client text, no client build step, plain HTTP/Django WSGI | Chosen |
+| WebSocket (Channels/ASGI) | Requires an async stack the platform does not run (sync gunicorn WSGI, no build step) | Rejected (over-engineered for one-way push) |
+| Chunked long-poll / fetch streaming of plain text | Works, but SSE gives a framed `event:`/`data:` protocol for free | SSE preferred |
+
+The streaming endpoint is `POST /onboarding/chat/stream`. Because
+`EventSource` cannot POST, the client uses `fetch` + a `ReadableStream`
+reader and parses the SSE frames itself (vanilla JS in
+`templates/accounts/onboarding_chat.html`, no build step). SSE event
+kinds: `delta` (`{"text": ...}`), `done`
+(`{"complete": bool, "redirect": url|null}`), and `fallback`
+(`{"reason": ...}`).
+
+Streaming is gated by `ONBOARDING_AI_STREAMING` (default on when the AI
+path is on; Studio-configurable, switchable without a redeploy). When off
+or when the LLM is disabled, the chat uses the non-streaming v1 transport
+(`POST /onboarding/chat/message`) and opens no SSE connection.
+
+Graceful degradation is mandatory: the persisted #800 `Response` /
+`ResponseQuestion` / `Answer` artifacts are IDENTICAL whether the turn
+streamed or not (the streaming view reuses the v1 `run_onboarding_turn`
+decision logic and the v1 finalization). The server persists the turn only
+AFTER the authoritative result is assembled, so a stream failure writes
+nothing — the client then re-issues the SAME message via
+`/onboarding/chat/message`, which is the first and only write (no
+duplicate transcript turn, no duplicate `Answer` rows). A hard `LLMError`
+routes the member to the #802 form fallback with the v1 friendly message.
+
+### Worker-model and proxy implications
+
+- Gunicorn runs sync workers. A long-lived SSE response holds ONE sync
+  worker for the full duration of the stream. Onboarding streams are short
+  and low-concurrency, so sync workers are acceptable here — but an
+  operator scaling this feature up must provision enough workers (and may
+  want a modest per-stream time cap). A future move to `gevent`/async
+  workers would relax the one-worker-per-stream cost.
+- Buffering proxies: nginx and CloudFront may buffer `text/event-stream`,
+  defeating incremental delivery. The response sets `Cache-Control:
+  no-cache` and `X-Accel-Buffering: no` (nginx honours the latter) to
+  discourage buffering. If a proxy buffers anyway, the member still
+  receives the COMPLETE reply (just not token-by-token) — the client
+  fallback is the safety net. Any nginx/CloudFront buffering config lives
+  in the infra repo (`AI-Shipping-Labs/ai-shipping-labs-infra`); file a
+  follow-up there if buffering is observed in production. It is NOT
+  provisioned from this repo.

@@ -41,7 +41,22 @@ The API key never appears in any exception message or log line emitted
 by this service (asserted in tests, mirroring banner_generator).
 """
 
-from .backends import LLMError, LLMResult
-from .service import complete, is_enabled
+from .backends import (
+    STREAM_DONE,
+    STREAM_TEXT_DELTA,
+    LLMError,
+    LLMResult,
+    StreamEvent,
+)
+from .service import complete, is_enabled, stream
 
-__all__ = ['LLMError', 'LLMResult', 'complete', 'is_enabled']
+__all__ = [
+    'STREAM_DONE',
+    'STREAM_TEXT_DELTA',
+    'LLMError',
+    'LLMResult',
+    'StreamEvent',
+    'complete',
+    'is_enabled',
+    'stream',
+]

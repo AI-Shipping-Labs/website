@@ -1,0 +1,89 @@
+{% comment %}
+Reusable member-facing questionnaire fill-in fragment (issue #803).
+
+This is the shared seam #802 (onboarding) will reuse. It renders one
+input per ``ResponseQuestion`` by type and pre-fills the current value.
+Callers provide:
+  - ``form_rows``: output of ``questionnaires.services.build_response_form_rows``
+  - ``save_action``: URL the "Save draft" form posts to
+  - ``submit_action``: URL the "Submit" form posts to
+
+The fragment renders ONE <form> that contains every input. Both the
+"Save draft" and "Submit" buttons live inside it; ``Save`` uses the
+default action while ``Submit`` overrides via ``formaction`` so both
+buttons carry the same answer fields. Keep this fragment generic -- no
+sprint-specific copy lives here.
+{% endcomment %}
+<form method="post" action="{{ save_action }}" data-testid="questionnaire-response-form">
+  {% csrf_token %}
+  <div class="space-y-6">
+    {% for row in form_rows %}
+    <div class="rounded-2xl border border-border bg-card p-5" data-testid="questionnaire-question-row">
+      <label class="block text-sm font-medium text-foreground" for="{{ row.field_name }}">
+        {{ row.question.prompt }}
+        {% if row.question.is_required %}<span class="text-red-400" data-testid="questionnaire-required-marker">*</span>{% endif %}
+      </label>
+      {% if row.question.help_text %}
+      <p class="mt-1 text-xs text-muted-foreground">{{ row.question.help_text }}</p>
+      {% endif %}
+      {% if row.error %}
+      <p class="mt-2 text-xs text-red-400" data-testid="questionnaire-field-error">{{ row.error }}</p>
+      {% endif %}
+
+      <div class="mt-3">
+        {% if row.question.question_type == 'text' %}
+          <input type="text" name="{{ row.field_name }}" id="{{ row.field_name }}"
+                 value="{{ row.text_value }}"
+                 class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                 data-testid="questionnaire-input-text">
+        {% elif row.question.question_type == 'long_text' %}
+          <textarea name="{{ row.field_name }}" id="{{ row.field_name }}" rows="4"
+                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    data-testid="questionnaire-input-long-text">{{ row.text_value }}</textarea>
+        {% elif row.question.question_type == 'single_choice' %}
+          <div class="space-y-2" data-testid="questionnaire-input-single-choice">
+            {% for opt in row.options %}
+            <label class="flex items-center gap-2 text-sm text-foreground">
+              <input type="radio" name="{{ row.field_name }}" value="{{ opt.option.pk }}"
+                     {% if opt.selected %}checked{% endif %}>
+              {{ opt.option.label }}
+            </label>
+            {% endfor %}
+          </div>
+        {% elif row.question.question_type == 'multiple_choice' %}
+          <div class="space-y-2" data-testid="questionnaire-input-multiple-choice">
+            {% for opt in row.options %}
+            <label class="flex items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" name="{{ row.field_name }}" value="{{ opt.option.pk }}"
+                     {% if opt.selected %}checked{% endif %}>
+              {{ opt.option.label }}
+            </label>
+            {% endfor %}
+          </div>
+        {% else %}
+          {# scale / number #}
+          <input type="number" name="{{ row.field_name }}" id="{{ row.field_name }}"
+                 value="{{ row.number_value }}"
+                 {% if row.question.scale_min is not None %}min="{{ row.question.scale_min }}"{% endif %}
+                 {% if row.question.scale_max is not None %}max="{{ row.question.scale_max }}"{% endif %}
+                 class="w-40 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                 data-testid="questionnaire-input-number">
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="mt-6 flex flex-wrap items-center gap-3">
+    <button type="submit"
+            class="rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary/80 transition-colors"
+            data-testid="questionnaire-save-button">
+      Save draft
+    </button>
+    <button type="submit" formaction="{{ submit_action }}"
+            class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
+            data-testid="questionnaire-submit-button">
+      Submit feedback
+    </button>
+  </div>
+</form>

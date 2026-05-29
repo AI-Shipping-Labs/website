@@ -15,9 +15,12 @@ add a third surface, copy-paste it" drift the orchestrator flagged.
 """
 
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from accounts.utils.activation import mark_activated
 from plans.models import Plan, SprintEnrollment, Week
+from questionnaires.models import Response
+from questionnaires.services import build_response_questions
 
 
 def create_plan_for_enrollment(*, sprint, user, enrolled_by):
@@ -96,3 +99,55 @@ def create_plan_for_enrollment(*, sprint, user, enrolled_by):
         plan = Plan.objects.get(member=user, sprint=sprint)
         enrollment = SprintEnrollment.objects.get(sprint=sprint, user=user)
         return plan, enrollment, False
+
+
+def distribute_sprint_feedback(feedback_request, *, actor=None):
+    """Distribute a feedback questionnaire to every enrolled member (issue #803).
+
+    For each :class:`~plans.models.SprintEnrollment` in
+    ``feedback_request.sprint``, ensure a ``draft``
+    :class:`~questionnaires.models.Response` exists for the
+    ``(questionnaire, member)`` pair and that its question set is
+    materialized via
+    :func:`~questionnaires.services.build_response_questions`.
+
+    Idempotent. Re-running never creates duplicate ``Response`` rows (the
+    ``(questionnaire, respondent)`` unique constraint from #800 guards
+    this) nor duplicate ``ResponseQuestion`` rows
+    (``build_response_questions`` is itself idempotent). A member enrolled
+    AFTER the first distribution is picked up on a subsequent run -- they
+    get their response + materialized questions while existing responses
+    are left untouched.
+
+    ``distributed_at`` is stamped on ``feedback_request`` the first time
+    only; re-runs leave it as-is.
+
+    Pure ORM -- no HTTP, no AI, no email. Returns a small summary dict
+    ``{created, existing, total}`` for the Studio success message.
+    """
+    questionnaire = feedback_request.questionnaire
+    enrollments = SprintEnrollment.objects.filter(
+        sprint=feedback_request.sprint,
+    ).select_related('user')
+
+    created = 0
+    existing = 0
+    for enrollment in enrollments:
+        response, was_created = Response.objects.get_or_create(
+            questionnaire=questionnaire,
+            respondent=enrollment.user,
+            defaults={'status': 'draft'},
+        )
+        if was_created:
+            created += 1
+        else:
+            existing += 1
+        # Idempotent per #800: a no-op when the response is already
+        # materialized, so late enrollees still get their questions.
+        build_response_questions(response)
+
+    if feedback_request.distributed_at is None:
+        feedback_request.distributed_at = timezone.now()
+        feedback_request.save(update_fields=['distributed_at', 'updated_at'])
+
+    return {'created': created, 'existing': existing, 'total': created + existing}

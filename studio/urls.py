@@ -152,6 +152,8 @@ from studio.views.sprints import (
     sprint_create,
     sprint_detail,
     sprint_edit,
+    sprint_feedback_attach,
+    sprint_feedback_distribute,
     sprint_list,
     sprint_plan_request_create_plan,
 )
@@ -652,6 +654,18 @@ urlpatterns = [
         'sprints/<int:sprint_id>/plan-requests/<int:member_id>/create-plan/',
         sprint_plan_request_create_plan,
         name='studio_sprint_plan_request_create_plan',
+    ),
+    # Sprint feedback (issue #803). POST-only action verbs, no trailing
+    # slash, matching the other sprint action convention.
+    path(
+        'sprints/<int:sprint_id>/feedback/attach',
+        sprint_feedback_attach,
+        name='studio_sprint_feedback_attach',
+    ),
+    path(
+        'sprints/<int:sprint_id>/feedback/<int:feedback_request_id>/distribute',
+        sprint_feedback_distribute,
+        name='studio_sprint_feedback_distribute',
     ),
 
     # Questionnaires (issue #800). Planning section. The literal ``new``

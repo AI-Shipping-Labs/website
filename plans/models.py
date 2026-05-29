@@ -184,6 +184,64 @@ class SprintEnrollment(TimestampedModelMixin, models.Model):
         return f'{self.user} in {self.sprint}'
 
 
+class SprintFeedbackRequest(TimestampedModelMixin, models.Model):
+    """Associates a feedback questionnaire with a sprint (issue #803).
+
+    The sprint-specific knowledge of "this questionnaire collects this
+    sprint's end-of-sprint feedback" lives ONLY here. The
+    ``questionnaires`` app stays generic and never imports ``plans``; the
+    one-directional FK from ``plans`` to ``questionnaires`` keeps the
+    dependency acyclic.
+
+    ``questionnaire`` is ``PROTECT`` so a questionnaire that already
+    collected sprint feedback cannot be silently hard-deleted out from
+    under its responses. ``sprint`` is ``CASCADE`` -- deleting the sprint
+    removes the linkage (the responses themselves hang off the
+    questionnaire, not the sprint).
+
+    A sprint MAY hold more than one feedback request over time (e.g. a
+    mid-sprint pulse plus an end-of-sprint survey), so ``sprint`` is NOT
+    unique on its own; only ``(sprint, questionnaire)`` is unique, so the
+    same questionnaire is attached at most once.
+
+    ``distributed_at`` is stamped the first time responses are
+    distributed and stays set afterward (re-running distribution to pick
+    up late enrollees does not change it). ``created_by`` is audit-only
+    and survives staff deletion via ``SET_NULL``.
+    """
+
+    sprint = models.ForeignKey(
+        Sprint,
+        on_delete=models.CASCADE,
+        related_name='feedback_requests',
+    )
+    questionnaire = models.ForeignKey(
+        'questionnaires.Questionnaire',
+        on_delete=models.PROTECT,
+        related_name='sprint_feedback_requests',
+    )
+    distributed_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sprint', 'questionnaire'],
+                name='unique_sprint_feedback_questionnaire',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.questionnaire} for {self.sprint}'
+
+
 class PlanQuerySet(models.QuerySet):
     """Visibility-aware queryset for :class:`Plan` (issue #440).
 

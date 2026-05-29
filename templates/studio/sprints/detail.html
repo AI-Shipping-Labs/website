@@ -175,6 +175,129 @@
   </details>
 </section>
 
+<section id="sprint-feedback" class="mb-8" data-testid="sprint-feedback-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Sprint feedback</h2>
+
+  {% if feedback_error %}
+  <div class="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+       data-testid="sprint-feedback-error">
+    {{ feedback_error }}
+  </div>
+  {% endif %}
+
+  <div class="bg-card border border-border rounded-lg p-6">
+    {% if not feedback_request %}
+      <p class="text-sm text-muted-foreground mb-4" data-testid="sprint-feedback-empty">
+        Collect feedback from everyone enrolled in this sprint — how it went,
+        whether they'll join the next one, and what to change in planning.
+      </p>
+      {% if feedback_questionnaire_choices %}
+      <form method="post" action="{% url 'studio_sprint_feedback_attach' sprint_id=sprint.pk %}"
+            class="flex flex-wrap items-end gap-3" data-testid="sprint-feedback-attach-form">
+        {% csrf_token %}
+        <div>
+          <label for="feedback-questionnaire" class="block text-xs text-muted-foreground uppercase mb-1">
+            Feedback questionnaire
+          </label>
+          <select name="questionnaire" id="feedback-questionnaire"
+                  class="studio-select rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  data-testid="sprint-feedback-questionnaire-select">
+            {% for q in feedback_questionnaire_choices %}
+            <option value="{{ q.pk }}">{{ q.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit"
+                class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+                data-testid="sprint-feedback-attach-button">
+          Attach feedback questionnaire
+        </button>
+      </form>
+      {% else %}
+      <p class="text-sm text-muted-foreground" data-testid="sprint-feedback-no-questionnaires">
+        No active feedback questionnaires yet.
+        <a href="{% url 'studio_questionnaire_create' %}" class="text-accent hover:underline"
+           data-testid="sprint-feedback-author-link">Author one</a>
+        with purpose "Feedback" to get started.
+      </p>
+      {% endif %}
+    {% else %}
+      <div class="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <a href="{% url 'studio_questionnaire_detail' questionnaire_id=feedback_request.questionnaire.pk %}"
+             class="text-accent hover:underline text-base font-medium"
+             data-testid="sprint-feedback-questionnaire-link">{{ feedback_request.questionnaire.title }}</a>
+          {% if feedback_request.distributed_at %}
+          <p class="text-sm text-muted-foreground mt-1" data-testid="sprint-feedback-distributed-at">
+            Distributed {{ feedback_request.distributed_at|date:"Y-m-d H:i" }}
+          </p>
+          {% else %}
+          <p class="text-sm text-muted-foreground mt-1" data-testid="sprint-feedback-not-distributed">
+            Not yet sent to enrolled members.
+          </p>
+          {% endif %}
+        </div>
+        <form method="post"
+              action="{% url 'studio_sprint_feedback_distribute' sprint_id=sprint.pk feedback_request_id=feedback_request.pk %}"
+              data-testid="sprint-feedback-distribute-form">
+          {% csrf_token %}
+          <button type="submit"
+                  class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+                  data-testid="sprint-feedback-distribute-button">
+            {% if feedback_request.distributed_at %}Send to newly enrolled members{% else %}Send to enrolled members{% endif %}
+          </button>
+        </form>
+      </div>
+
+      {% if feedback_request.distributed_at %}
+      <p class="text-sm text-foreground mb-3" data-testid="sprint-feedback-aggregate">
+        {{ feedback_submitted_count }} of {{ feedback_total_count }} submitted
+      </p>
+      {% if feedback_completion_rows %}
+      <div class="{% studio_list_class 'wrapper' %}">
+        <table class="w-full text-sm" data-testid="sprint-feedback-completion-table">
+          <thead class="text-xs uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th class="text-left py-2 px-4 font-medium">Member</th>
+              <th class="text-left py-2 px-4 font-medium">Status</th>
+              <th class="text-left py-2 px-4 font-medium">Submitted</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            {% for row in feedback_completion_rows %}
+            <tr data-testid="sprint-feedback-completion-row">
+              <td class="py-2 px-4">
+                <div class="text-foreground">{% if row.member.get_full_name %}{{ row.member.get_full_name }}{% else %}(no name){% endif %}</div>
+                <div class="text-xs text-muted-foreground">{{ row.member.email }}</div>
+              </td>
+              <td class="py-2 px-4" data-label="Status" data-testid="sprint-feedback-completion-status">
+                {{ row.status_label }}
+              </td>
+              <td class="py-2 px-4 text-muted-foreground" data-label="Submitted">
+                {% if row.status_key == 'submitted' %}
+                  {{ row.submitted_at|date:"Y-m-d" }}
+                  &middot;
+                  <a href="{% url 'studio_questionnaire_response_detail' questionnaire_id=feedback_request.questionnaire.pk response_id=row.response_id %}"
+                     class="text-accent hover:underline" data-testid="sprint-feedback-response-link">Read response</a>
+                {% else %}
+                  &mdash;
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-sm text-muted-foreground" data-testid="sprint-feedback-no-members">
+        No enrolled members to collect feedback from yet.
+      </p>
+      {% endif %}
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
+
 <h2 class="text-lg font-semibold text-foreground mb-4">Plans in this sprint</h2>
 {% if plans %}
 <div class="{% studio_list_class 'wrapper' %}">

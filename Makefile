@@ -1,4 +1,4 @@
-.PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift clean
+.PHONY: run run2 worker dev migrate qcache sync seed test test-core test-judge coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift clean
 
 # Default SITE_BASE_URL for local dev so generated links (unsubscribe,
 # calendar invites, password resets, share URLs) point at the running
@@ -54,6 +54,14 @@ test:
 # See _docs/testing-guidelines.md ("Core test subset") for the tagging policy.
 test-core:
 	uv run python manage.py test --tag=core --exclude-tag=visual_regression --parallel
+
+# Run the live LLM-judge scenario tests (tests/live_judge/). These hit the
+# REAL configured provider (LLM_API_KEY must be set) and assert plain-English
+# scenario criteria via an LLM judge. On-demand only: NOT referenced by `test`,
+# `test-core`, `test-all`, or any CI workflow. Skips cleanly (no live calls)
+# when no LLM key is configured. See _docs/testing-guidelines.md.
+test-judge:
+	uv run pytest -m live_judge tests/live_judge/ -n 4
 
 # Run tests with coverage
 coverage:

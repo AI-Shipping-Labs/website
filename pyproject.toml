@@ -42,6 +42,7 @@ markers = [
     "visual_regression: CSS class / Tailwind utility / layout assertion tests, excluded from default CI and run on the scheduled workflow",
     "local_only: requires the local Django runner (DB fixtures, session-cookie injection, in-process auth) and cannot run against a deployed environment (dev/prod). Skipped automatically when PLAYWRIGHT_BASE_URL points at a non-local host.",
     "creates_data: writes real rows on submission (newsletter signup, project submit, register form, etc.) and must not run against a shared dev DB. Skipped automatically when PLAYWRIGHT_BASE_URL points at a non-local host.",
+    "live_judge: live LLM-judge scenario tests (tests/live_judge/) that hit the real configured provider; opt-in via `make test-judge`, never collected by default CI, and skipped when no LLM key is configured. See _docs/testing-guidelines.md.",
 ]
 
 [tool.coverage.run]
@@ -88,6 +89,7 @@ exclude_lines = [
 [dependency-groups]
 dev = [
     "honcho>=2.0.0",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.11.0",
     "tblib>=3.2.2",
 ]
@@ -112,6 +114,9 @@ select = ["F", "I", "PLC0415"]
 "*/admin/*.py" = ["PLC0415"]
 # Tests may use inline imports for setup
 "*/tests/*.py" = ["PLC0415"]
+# Live-judge conftest defers the pytest-django blocker + optional
+# opentelemetry imports (both must stay lazy/optional).
+"tests/live_judge/conftest.py" = ["PLC0415"]
 # Management commands sometimes need inline imports
 "*/management/commands/*.py" = ["PLC0415"]
 # Migrations use inline imports in RunPython operations

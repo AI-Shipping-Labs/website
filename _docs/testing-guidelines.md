@@ -870,3 +870,70 @@ The Playwright server fixture in `playwright_tests/conftest.py` binds port
 two worktrees concurrently produces port-collision failures. Run one suite
 at a time locally; CI runs each job in an isolated runner so this is only a
 local-development concern.
+
+## Live LLM-judge tests (`make test-judge`)
+
+A SEPARATE, opt-in test set that exercises the two shipped AI callables --
+`questionnaires.onboarding_ai.run_onboarding_turn` and
+`integrations.services.feedback_synthesis.synthesize_feedback` -- against
+the REAL configured LLM provider (currently Z.ai / glm via the
+Anthropic-compatible gateway). Each scenario asserts a list of
+plain-English criteria are true of the AI output, judged by an LLM, and
+fails with the judge's own reasoning when a criterion is not met.
+
+### How it differs from core and from the eval suite
+
+- Core (`make test-core`, `make test-playwright-core`) is fully mocked,
+  deterministic, and runs on every push. It makes zero live LLM calls.
+- The eval suite (#812: `integrations/services/ai_eval/`, datasets +
+  metrics) measures assistant quality over labeled datasets. It runs
+  mocked by default and is about metrics, not per-scenario pass/fail.
+- The live-judge set is neither: it is a small set of real-provider
+  user-story scenarios, asserted pass/fail by an LLM judge, run on demand
+  by a human with a key. It is NOT a quality metric and NOT part of CI.
+
+### Location, marker, and CI isolation
+
+- Tests live in `tests/live_judge/` -- a plain pytest package, NOT under
+  `playwright_tests/` and NOT a Django app `tests/` module. CI runs only
+  `manage.py test` (Django/unittest, which does not collect plain pytest
+  functions) and `pytest playwright_tests/`, so neither leg ever collects
+  this set.
+- Every test carries the registered `live_judge` marker
+  (`pytestmark = pytest.mark.live_judge`).
+- The helper logic itself (the `assert_criteria` judge call and the cost
+  tracker) is covered in CI by mocked unit tests in
+  `integrations/tests/test_live_judge_helpers.py` -- those make no live
+  calls and are not marked `live_judge`.
+
+### How to run
+
+```bash
+# With a real provider configured (LLM_API_KEY set):
+make test-judge        # -> uv run pytest -m live_judge tests/live_judge/ -n 4
+```
+
+Without a key, the whole set is SKIPPED (not errored): the conftest checks
+`integrations.services.llm.is_enabled()` at collection time and skips every
+test, so `make test-judge` on a no-key machine reports skips and makes zero
+live calls. The make target is referenced by no CI workflow and by no other
+make target (`test`, `test-core`, `test-all`).
+
+At session end the cost tracker prints a per-model + total USD summary plus
+the number of LLM calls and the percentage of criteria that passed. The
+#799 `LLMResult` carries no token usage today, so the cost prints `$0.00`
+until usage lands; the tracker is defensive and still prints the summary.
+
+### The `LLM_JUDGE_MODEL` knob
+
+The judge model is resolved from the `LLM_JUDGE_MODEL` config key, falling
+back to `LLM_MODEL` when unset (so the default is judge == assistant model,
+zero-config). Set `LLM_JUDGE_MODEL` to point the judge at a stronger or
+cheaper model than the assistant under test without touching the
+assistant's own `LLM_MODEL`.
+
+### Logfire stays off
+
+This set must not emit to Logfire. #813 owns the actual prod-only gating;
+the live-judge conftest inherits it and additionally asserts that no
+Logfire / OpenTelemetry span exporter is active during a run.

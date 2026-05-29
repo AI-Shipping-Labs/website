@@ -294,6 +294,116 @@
       </p>
       {% endif %}
       {% endif %}
+
+      {# AI summary subsection (issue #805). #}
+      <div class="mt-6 pt-6 border-t border-border" data-testid="sprint-feedback-ai-summary">
+        <h3 class="text-base font-semibold text-foreground mb-3">AI summary</h3>
+        {% if not ai_summary_enabled %}
+          <p class="text-sm text-muted-foreground" data-testid="ai-summary-disabled">
+            AI synthesis is off — configure an LLM provider in
+            <a href="{{ ai_summary_settings_url }}" class="text-accent hover:underline"
+               data-testid="ai-summary-settings-link">Settings &gt; AI</a>.
+          </p>
+        {% elif ai_summary %}
+          <div data-testid="ai-summary-result">
+            <p class="text-xs text-muted-foreground mb-3" data-testid="ai-summary-provenance">
+              Generated {{ ai_summary.generated_at|date:"Y-m-d" }} from
+              {{ ai_summary.response_count }} response{{ ai_summary.response_count|pluralize }}
+              {% if ai_summary.generated_by %}by {{ ai_summary.generated_by.email }}{% endif %},
+              model {{ ai_summary.model_name }}.
+            </p>
+            {% if ai_summary_is_stale %}
+            <p class="text-sm text-amber-600 mb-3" data-testid="ai-summary-stale-note">
+              {{ ai_summary_submitted_count }} response{{ ai_summary_submitted_count|pluralize }}
+              now submitted — regenerate to include new responses.
+            </p>
+            {% endif %}
+
+            {% with r=ai_summary.result_json %}
+            {% if r.themes %}
+            <div class="mb-4" data-testid="ai-summary-themes">
+              <h4 class="text-sm font-medium text-foreground mb-2">Themes</h4>
+              <ul class="space-y-2">
+                {% for theme in r.themes %}
+                <li class="text-sm" data-testid="ai-summary-theme">
+                  <span class="text-foreground font-medium">{{ theme.title }}</span>
+                  <span class="text-xs text-muted-foreground">({{ theme.supporting_count }})</span>
+                  <div class="text-muted-foreground">{{ theme.summary }}</div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+
+            {% if r.what_went_well %}
+            <div class="mb-4" data-testid="ai-summary-went-well">
+              <h4 class="text-sm font-medium text-foreground mb-2">What went well</h4>
+              <ul class="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                {% for item in r.what_went_well %}<li>{{ item }}</li>{% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+
+            {% if r.what_to_improve %}
+            <div class="mb-4" data-testid="ai-summary-to-improve">
+              <h4 class="text-sm font-medium text-foreground mb-2">What to improve</h4>
+              <ul class="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                {% for item in r.what_to_improve %}<li>{{ item }}</li>{% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+
+            {% if r.recommendations %}
+            <div class="mb-4" data-testid="ai-summary-recommendations">
+              <h4 class="text-sm font-medium text-foreground mb-2">Recommendations</h4>
+              <ul class="space-y-2">
+                {% for rec in r.recommendations %}
+                <li class="text-sm" data-testid="ai-summary-recommendation">
+                  <span class="text-foreground">{{ rec.recommendation }}</span>
+                  <div class="text-xs text-muted-foreground">{{ rec.rationale }}</div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+
+            {% if r.next_sprint_signal %}
+            <div class="mb-4" data-testid="ai-summary-next-sprint-signal">
+              <h4 class="text-sm font-medium text-foreground mb-2">Next-sprint signal</h4>
+              <p class="text-sm text-muted-foreground">{{ r.next_sprint_signal }}</p>
+            </div>
+            {% endif %}
+            {% endwith %}
+
+            <form method="post"
+                  action="{% url 'studio_sprint_feedback_synthesize' sprint_id=sprint.pk feedback_request_id=feedback_request.pk %}"
+                  data-testid="ai-summary-regenerate-form">
+              {% csrf_token %}
+              <button type="submit"
+                      class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+                      data-testid="ai-summary-regenerate-button">Regenerate</button>
+            </form>
+          </div>
+        {% elif ai_summary_submitted_count == 0 %}
+          <p class="text-sm text-muted-foreground" data-testid="ai-summary-empty">
+            No submitted feedback to summarize yet.
+          </p>
+        {% else %}
+          <p class="text-sm text-muted-foreground mb-3" data-testid="ai-summary-description">
+            Synthesize the {{ ai_summary_submitted_count }} submitted
+            response{{ ai_summary_submitted_count|pluralize }} into themes,
+            insights, and next-sprint recommendations.
+          </p>
+          <form method="post"
+                action="{% url 'studio_sprint_feedback_synthesize' sprint_id=sprint.pk feedback_request_id=feedback_request.pk %}"
+                data-testid="ai-summary-generate-form">
+            {% csrf_token %}
+            <button type="submit"
+                    class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+                    data-testid="ai-summary-generate-button">Generate AI summary</button>
+          </form>
+        {% endif %}
+      </div>
     {% endif %}
   </div>
 </section>

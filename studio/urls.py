@@ -154,6 +154,7 @@ from studio.views.sprints import (
     sprint_edit,
     sprint_feedback_attach,
     sprint_feedback_distribute,
+    sprint_feedback_synthesize,
     sprint_list,
     sprint_plan_request_create_plan,
 )
@@ -666,6 +667,13 @@ urlpatterns = [
         'sprints/<int:sprint_id>/feedback/<int:feedback_request_id>/distribute',
         sprint_feedback_distribute,
         name='studio_sprint_feedback_distribute',
+    ),
+    # AI summary of collected feedback (issue #805). POST-only action verb,
+    # no trailing slash, matching the other sprint action convention.
+    path(
+        'sprints/<int:sprint_id>/feedback/<int:feedback_request_id>/synthesize',
+        sprint_feedback_synthesize,
+        name='studio_sprint_feedback_synthesize',
     ),
 
     # Questionnaires (issue #800). Planning section. The literal ``new``

@@ -25,18 +25,27 @@ from django.db.models import Count, Max
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from content.access import LEVEL_MAIN
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from events.models import EventSeries
+from integrations.config import get_config
+from integrations.services import llm
+from integrations.services.feedback_synthesis import (
+    LLMError,
+    SprintFeedbackInput,
+    synthesize_feedback,
+)
 from plans.models import (
     SPRINT_STATUS_CHOICES,
     Plan,
     PlanRequest,
     Sprint,
     SprintFeedbackRequest,
+    SprintFeedbackSummary,
 )
 from plans.services import create_plan_for_enrollment, distribute_sprint_feedback
 from questionnaires.models import Questionnaire, Response
@@ -455,12 +464,60 @@ def _build_sprint_feedback_context(sprint):
                 'response_id': response_id,
             })
 
-    return {
+    context = {
         'feedback_request': feedback_request,
         'feedback_questionnaire_choices': choices,
         'feedback_completion_rows': rows,
         'feedback_submitted_count': submitted_count,
         'feedback_total_count': total_count,
+    }
+    context.update(_build_ai_summary_context(feedback_request))
+    return context
+
+
+def _submitted_response_count(feedback_request):
+    """Count submitted responses to ``feedback_request``'s questionnaire.
+
+    Independent of the completion-rows aggregate (which is only built for
+    distributed requests) so the AI-summary subsection always knows how
+    many responses are available to synthesize.
+    """
+    if feedback_request is None:
+        return 0
+    return (
+        Response.objects
+        .filter(
+            questionnaire=feedback_request.questionnaire,
+            status='submitted',
+        )
+        .count()
+    )
+
+
+def _build_ai_summary_context(feedback_request):
+    """Build the "AI summary" subsection context for the feedback section.
+
+    Returns the gating state (``ai_summary_enabled``), the current
+    submitted-response count, the stored :class:`SprintFeedbackSummary`
+    (if any), and a ``ai_summary_is_stale`` flag set when more responses
+    have been submitted than the stored summary covered.
+    """
+    enabled = llm.is_enabled()
+    submitted_count = _submitted_response_count(feedback_request)
+    summary = None
+    if feedback_request is not None:
+        summary = SprintFeedbackSummary.objects.filter(
+            feedback_request=feedback_request,
+        ).select_related('generated_by').first()
+    is_stale = bool(
+        summary is not None and summary.response_count != submitted_count
+    )
+    return {
+        'ai_summary_enabled': enabled,
+        'ai_summary_submitted_count': submitted_count,
+        'ai_summary': summary,
+        'ai_summary_is_stale': is_stale,
+        'ai_summary_settings_url': reverse('studio_settings'),
     }
 
 
@@ -548,6 +605,109 @@ def sprint_feedback_distribute(request, sprint_id, feedback_request_id):
             request,
             f'{summary["created"]} feedback response(s) created.',
         )
+    return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+
+def _assemble_feedback_input(sprint, feedback_request):
+    """Map submitted ORM responses to the ORM-free ``SprintFeedbackInput``.
+
+    Reads only ``status='submitted'`` responses for the feedback
+    request's questionnaire, then flattens each response's answers into
+    ``(question_text, question_type, answer_text)`` tuples. All ORM
+    access lives here; the synthesis callable receives plain data only.
+    """
+    responses = (
+        Response.objects
+        .filter(
+            questionnaire=feedback_request.questionnaire,
+            status='submitted',
+        )
+        .prefetch_related('answers__question', 'answers__selected_options')
+        .order_by('submitted_at', 'id')
+    )
+
+    response_entries = []
+    for response in responses:
+        answers = []
+        for answer in response.answers.all():
+            question = answer.question
+            answers.append((
+                question.prompt,
+                question.question_type,
+                answer.display_value,
+            ))
+        response_entries.append({'answers': answers})
+
+    return SprintFeedbackInput(
+        sprint_name=sprint.name,
+        start_date=sprint.start_date.isoformat() if sprint.start_date else '',
+        duration_weeks=sprint.duration_weeks,
+        response_count=len(response_entries),
+        responses=response_entries,
+    )
+
+
+@staff_required
+@require_POST
+def sprint_feedback_synthesize(request, sprint_id, feedback_request_id):
+    """Generate (or regenerate) the AI summary of a sprint's feedback.
+
+    The thin wrapper over
+    :func:`integrations.services.feedback_synthesis.synthesize_feedback`:
+    it does the ORM reads, maps them to the plain ``SprintFeedbackInput``,
+    calls the pure callable, and upserts the single
+    :class:`SprintFeedbackSummary` row via ``update_or_create`` (regenerate
+    overwrites, never duplicates). No prompt or LLM logic lives here.
+
+    Gating: if the LLM service is off, redirect with the disabled message
+    rather than calling the callable. On an ``LLMError`` from the callable,
+    redirect back with an error message and write no row -- no partial
+    summary is ever stored.
+    """
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    feedback_request = get_object_or_404(
+        SprintFeedbackRequest, pk=feedback_request_id, sprint=sprint,
+    )
+
+    if not llm.is_enabled():
+        messages.error(
+            request,
+            'AI synthesis is off — configure an LLM provider in '
+            'Settings > AI before generating a summary.',
+        )
+        return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+    feedback_input = _assemble_feedback_input(sprint, feedback_request)
+    if not feedback_input.responses:
+        messages.error(
+            request,
+            'No submitted feedback to summarize yet.',
+        )
+        return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+    try:
+        result = synthesize_feedback(feedback_input)
+    except LLMError:
+        messages.error(
+            request,
+            'Could not generate summary — the LLM request failed. Try again.',
+        )
+        return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+    SprintFeedbackSummary.objects.update_or_create(
+        feedback_request=feedback_request,
+        defaults={
+            'result_json': result.model_dump(),
+            'response_count': result.response_count,
+            'model_name': get_config('LLM_MODEL', 'claude-sonnet-4-5'),
+            'generated_by': request.user,
+            'generated_at': timezone.now(),
+        },
+    )
+    messages.success(
+        request,
+        f'AI summary generated from {result.response_count} response(s).',
+    )
     return redirect('studio_sprint_detail', sprint_id=sprint.pk)
 
 

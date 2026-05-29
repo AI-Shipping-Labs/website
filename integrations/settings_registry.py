@@ -18,7 +18,7 @@ container — ``.dockerignore`` excludes it (issue #664). Entries without
 ``docs_url`` keep working — the icon simply isn't rendered for them.
 
 NOTE: ``_docs/configuration.md`` references the count and names of these
-groups in the Studio sign-in section ("confirm 11 integration groups are
+groups in the Studio sign-in section ("confirm 13 integration groups are
 listed (...)"). When adding, removing, or renaming a group here, update
 that line of the doc in the same PR.
 """
@@ -277,6 +277,57 @@ INTEGRATION_GROUPS = [
                     'out-of-band by the operator.'
                 ),
                 'docs_url': '_docs/integrations/banner_generator.md#banner_generator_auth_token',
+            },
+        ],
+    },
+    {
+        'name': 'llm',
+        'label': 'LLM Provider',
+        'keys': [
+            {
+                'key': 'LLM_PROVIDER',
+                'is_secret': False,
+                'default': 'anthropic',
+                'description': (
+                    'Which backend the LLM service uses. Only "anthropic" is '
+                    'implemented today (also covers Anthropic-compatible '
+                    'gateways such as Z.ai via LLM_BASE_URL). "openai" and '
+                    '"bedrock" are reserved for future backends.'
+                ),
+                'docs_url': '_docs/integrations/llm.md#llm_provider',
+            },
+            {
+                'key': 'LLM_API_KEY',
+                'is_secret': True,
+                'description': (
+                    'API key/credential for the selected provider. For '
+                    '"anthropic" this is an Anthropic (or compatible-gateway) '
+                    'key. Without it, LLM features are disabled.'
+                ),
+                'docs_url': '_docs/integrations/llm.md#llm_api_key',
+            },
+            {
+                'key': 'LLM_BASE_URL',
+                'is_secret': False,
+                'optional': True,
+                'default': 'https://api.anthropic.com',
+                'description': (
+                    'Base URL of the provider API. Leave as default for '
+                    'Anthropic; override to point at an Anthropic-compatible '
+                    'gateway/proxy (e.g. a Z.ai-style endpoint).'
+                ),
+                'docs_url': '_docs/integrations/llm.md#llm_base_url',
+            },
+            {
+                'key': 'LLM_MODEL',
+                'is_secret': False,
+                'default': 'claude-sonnet-4-5',
+                'description': (
+                    'Default model name used when a caller does not pass an '
+                    'explicit model. Override to pin a different Claude model '
+                    'or a gateway model name.'
+                ),
+                'docs_url': '_docs/integrations/llm.md#llm_model',
             },
         ],
     },

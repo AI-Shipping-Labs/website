@@ -93,6 +93,15 @@ SETTINGS_SECTIONS = [
         'description': 'Visitor analytics integrations (e.g. Google Analytics).',
         'group_names': {'analytics'},
     },
+    {
+        'id': 'ai',
+        'label': 'AI',
+        'description': (
+            'Large-language-model provider used by the onboarding assistant '
+            'and feedback synthesis.'
+        ),
+        'group_names': {'llm'},
+    },
 ]
 
 OTHER_SECTION = {
@@ -104,7 +113,7 @@ OTHER_SECTION = {
 
 HIGH_RISK_GROUP_NAMES = {
     'stripe', 'ses', 'github', 's3_recordings', 's3_content',
-    'banner_generator',
+    'banner_generator', 'llm',
 }
 HIGH_RISK_AUTH_PROVIDERS = {'google', 'github', 'slack'}
 

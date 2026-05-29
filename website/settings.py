@@ -431,6 +431,18 @@ else:
 # CDN base URL for content images uploaded during sync
 CONTENT_CDN_BASE = os.environ.get('CONTENT_CDN_BASE', '/static/content-images')
 
+# Provider-neutral LLM integration (issue #799). Callers depend on the
+# integrations.services.llm wrapper, never a specific vendor. The key is
+# supplied by the operator via .env or Studio; the DB override wins per
+# get_config() resolution order. LLM_MAX_RETRIES tunes the Anthropic SDK
+# max_retries and the wrapper's bounded backoff; it is intentionally not
+# surfaced in the Studio settings GUI.
+LLM_PROVIDER = os.environ.get('LLM_PROVIDER', 'anthropic')
+LLM_API_KEY = os.environ.get('LLM_API_KEY', '')
+LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'https://api.anthropic.com')
+LLM_MODEL = os.environ.get('LLM_MODEL', 'claude-sonnet-4-5')
+LLM_MAX_RETRIES = int(os.environ.get('LLM_MAX_RETRIES', '6'))
+
 # Sync watchdog thresholds (issue #274). The dashboard runs an inline
 # watchdog query at the top of every render to flip stuck rows to ``failed``:
 #  - SYNC_QUEUED_THRESHOLD_MINUTES: a SyncLog stuck in ``queued`` longer than

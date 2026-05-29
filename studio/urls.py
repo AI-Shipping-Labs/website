@@ -135,6 +135,9 @@ from studio.views.questionnaires import (
     questionnaire_list,
     questionnaire_response_detail,
     questionnaire_responses,
+    response_question_create,
+    response_question_delete,
+    response_question_edit,
 )
 from studio.views.recordings import recording_edit, recording_list, recording_publish_youtube
 from studio.views.redirects import redirect_create, redirect_delete, redirect_edit, redirect_list, redirect_toggle
@@ -707,6 +710,22 @@ urlpatterns = [
         'questionnaires/<int:questionnaire_id>/responses/<int:response_id>/',
         questionnaire_response_detail,
         name='studio_questionnaire_response_detail',
+    ),
+    # Per-member response-question customization (issue #802).
+    path(
+        'questionnaires/<int:questionnaire_id>/responses/<int:response_id>/questions/new',
+        response_question_create,
+        name='studio_response_question_create',
+    ),
+    path(
+        'questionnaires/<int:questionnaire_id>/responses/<int:response_id>/questions/<int:rq_id>/edit',
+        response_question_edit,
+        name='studio_response_question_edit',
+    ),
+    path(
+        'questionnaires/<int:questionnaire_id>/responses/<int:response_id>/questions/<int:rq_id>/delete',
+        response_question_delete,
+        name='studio_response_question_delete',
     ),
 
     # Plans (issue #432, drag-drop editor #434). Members section.

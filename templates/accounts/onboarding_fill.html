@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Onboarding | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
+
+      <header class="mb-8">
+        <p class="text-sm uppercase tracking-wide text-muted-foreground">Onboarding</p>
+        <h1 class="text-3xl font-semibold tracking-tight mt-1" data-testid="onboarding-fill-title">
+          Tell us a bit about you
+        </h1>
+        <p class="text-sm text-muted-foreground mt-2" data-testid="onboarding-fill-subtitle">
+          Your answers help us prepare the right plan for the next 6 to 8 weeks.
+          You can save and come back any time before submitting.
+        </p>
+      </header>
+
+      {% if error %}
+      <div class="mb-6 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+           data-testid="onboarding-error">
+        {{ error }}
+      </div>
+      {% endif %}
+
+      {% url 'onboarding_fill' response_id=response.pk as save_action %}
+      {% url 'onboarding_submit' response_id=response.pk as submit_action %}
+      {% include "questionnaires/_response_form.html" with form_rows=form_rows save_action=save_action submit_action=submit_action submit_label="Submit" %}
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

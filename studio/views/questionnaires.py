@@ -26,6 +26,8 @@ from questionnaires.models import (
     Question,
     Questionnaire,
     QuestionOption,
+    ResponseQuestion,
+    ResponseQuestionOption,
 )
 from studio.decorators import staff_required
 
@@ -506,3 +508,183 @@ def questionnaire_response_detail(request, questionnaire_id, response_id):
         'response': response,
         'rows': rows,
     })
+
+
+# ---------------------------------------------------------------------------
+# Per-member response-question customization (issue #802)
+#
+# Staff customize ONE member's onboarding question set by editing that
+# response's ``ResponseQuestion`` rows -- including adding a
+# ``source_question=None`` one-off custom question. This never mutates
+# the shared base ``Question`` rows or any other member's response.
+# ---------------------------------------------------------------------------
+
+
+def _get_response_for_questionnaire(questionnaire_id, response_id):
+    """Fetch a response scoped to its questionnaire, or 404."""
+    questionnaire = get_object_or_404(Questionnaire, pk=questionnaire_id)
+    response = get_object_or_404(
+        questionnaire.responses.select_related('respondent'),
+        pk=response_id,
+    )
+    return questionnaire, response
+
+
+def _render_response_question_form(
+    request, *, questionnaire, response, response_question, form_action,
+    form_data, error='', status=200,
+):
+    context = {
+        'questionnaire': questionnaire,
+        'response': response,
+        'response_question': response_question,
+        'form_action': form_action,
+        'form_data': form_data,
+        'question_type_choices': QUESTION_TYPE_CHOICES,
+        'choice_types': sorted(_CHOICE_TYPES),
+        'error': error,
+        'primary_label': (
+            'Save changes' if form_action == 'edit' else 'Add question'
+        ),
+    }
+    return render(
+        request, 'studio/questionnaires/response_question_form.html', context,
+        status=status,
+    )
+
+
+def _response_question_form_data_from_rq(rq):
+    return {
+        'question_type': rq.question_type,
+        'prompt': rq.prompt,
+        'help_text': rq.help_text,
+        'is_required': rq.is_required,
+        'order': str(rq.order),
+        'scale_min': '' if rq.scale_min is None else str(rq.scale_min),
+        'scale_max': '' if rq.scale_max is None else str(rq.scale_max),
+        'options': '\n'.join(opt.label for opt in rq.options.all()),
+    }
+
+
+@staff_required
+def response_question_create(request, questionnaire_id, response_id):
+    """Add a one-off question to a single member's response.
+
+    The new ``ResponseQuestion`` has ``source_question=None`` so it is a
+    per-respondent custom question that exists only on this response.
+    """
+    questionnaire, response = _get_response_for_questionnaire(
+        questionnaire_id, response_id,
+    )
+
+    if request.method != 'POST':
+        next_order = response.response_questions.count()
+        return _render_response_question_form(
+            request,
+            questionnaire=questionnaire,
+            response=response,
+            response_question=None,
+            form_action='create',
+            form_data={
+                'question_type': 'text',
+                'prompt': '',
+                'help_text': '',
+                'is_required': False,
+                'order': str(next_order),
+                'scale_min': '',
+                'scale_max': '',
+                'options': '',
+            },
+        )
+
+    form_data = _question_form_data_from_post(request)
+    parsed, error = _validate_question_post(form_data)
+    if error:
+        return _render_response_question_form(
+            request, questionnaire=questionnaire, response=response,
+            response_question=None, form_action='create',
+            form_data=form_data, error=error, status=400,
+        )
+
+    options = parsed.pop('options')
+    rq = ResponseQuestion.objects.create(
+        response=response, source_question=None, **parsed,
+    )
+    if rq.is_choice_type:
+        for index, label in enumerate(options):
+            ResponseQuestionOption.objects.create(
+                response_question=rq, label=label, order=index,
+            )
+    messages.success(request, 'Custom question added for this member.')
+    return redirect(
+        'studio_questionnaire_response_detail',
+        questionnaire_id=questionnaire.pk, response_id=response.pk,
+    )
+
+
+@staff_required
+def response_question_edit(request, questionnaire_id, response_id, rq_id):
+    """Edit one member's ``ResponseQuestion`` (never the base question)."""
+    questionnaire, response = _get_response_for_questionnaire(
+        questionnaire_id, response_id,
+    )
+    rq = get_object_or_404(ResponseQuestion, pk=rq_id, response=response)
+
+    if request.method != 'POST':
+        return _render_response_question_form(
+            request,
+            questionnaire=questionnaire,
+            response=response,
+            response_question=rq,
+            form_action='edit',
+            form_data=_response_question_form_data_from_rq(rq),
+        )
+
+    form_data = _question_form_data_from_post(request)
+    parsed, error = _validate_question_post(form_data)
+    if error:
+        return _render_response_question_form(
+            request, questionnaire=questionnaire, response=response,
+            response_question=rq, form_action='edit',
+            form_data=form_data, error=error, status=400,
+        )
+
+    options = parsed.pop('options')
+    for field, value in parsed.items():
+        setattr(rq, field, value)
+    rq.save()
+
+    # Replace the option set wholesale (textarea is the source of truth).
+    rq.options.all().delete()
+    if rq.is_choice_type:
+        for index, label in enumerate(options):
+            ResponseQuestionOption.objects.create(
+                response_question=rq, label=label, order=index,
+            )
+
+    messages.success(request, 'Question updated for this member.')
+    return redirect(
+        'studio_questionnaire_response_detail',
+        questionnaire_id=questionnaire.pk, response_id=response.pk,
+    )
+
+
+@staff_required
+def response_question_delete(request, questionnaire_id, response_id, rq_id):
+    """POST-only delete of one member's ``ResponseQuestion``.
+
+    CASCADE removes any ``Answer`` for the removed question; the response
+    stays valid. The template confirms before posting here.
+    """
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    questionnaire, response = _get_response_for_questionnaire(
+        questionnaire_id, response_id,
+    )
+    rq = get_object_or_404(ResponseQuestion, pk=rq_id, response=response)
+    rq.delete()
+    messages.success(request, 'Question removed from this member’s response.')
+    return redirect(
+        'studio_questionnaire_response_detail',
+        questionnaire_id=questionnaire.pk, response_id=response.pk,
+    )

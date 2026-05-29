@@ -19,6 +19,17 @@
   </div>
 </div>
 
+<div class="mb-4 max-w-3xl flex items-center justify-between">
+  <p class="text-sm text-muted-foreground">
+    Customize this member's question set without touching the shared base questions.
+  </p>
+  <a href="{% url 'studio_response_question_create' questionnaire_id=questionnaire.pk response_id=response.pk %}"
+     class="bg-accent text-accent-foreground px-3 py-2 rounded-lg text-sm font-medium hover:opacity-90 shrink-0"
+     data-testid="response-detail-add-question">
+    Add custom question
+  </a>
+</div>
+
 <div class="space-y-4 max-w-3xl">
   {% for row in rows %}
   <div class="bg-card border border-border rounded-lg p-5" data-testid="response-detail-row">
@@ -38,6 +49,20 @@
       {% else %}
       <p class="text-muted-foreground italic" data-testid="response-detail-blank">(No answer)</p>
       {% endif %}
+    </div>
+    <div class="mt-4 flex items-center gap-3">
+      <a href="{% url 'studio_response_question_edit' questionnaire_id=questionnaire.pk response_id=response.pk rq_id=row.question.pk %}"
+         class="text-xs text-muted-foreground hover:text-foreground transition-colors"
+         data-testid="response-detail-edit-question">Edit</a>
+      <form method="post"
+            action="{% url 'studio_response_question_delete' questionnaire_id=questionnaire.pk response_id=response.pk rq_id=row.question.pk %}"
+            class="inline"
+            onsubmit="return confirm('Remove this question from {{ response.respondent.email|escapejs }}? Any answer to it is also deleted. The shared base questions are unaffected.');">
+        {% csrf_token %}
+        <button type="submit"
+                class="text-xs text-red-400 hover:text-red-300 transition-colors"
+                data-testid="response-detail-remove-question">Remove</button>
+      </form>
     </div>
   </div>
   {% empty %}

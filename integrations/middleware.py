@@ -11,7 +11,7 @@ class RemoveTrailingSlashMiddleware:
     (admin, accounts, allauth, studio, Django static/media).
     """
 
-    SKIP_PREFIXES = ('/admin/', '/accounts/', '/account/', '/studio/', '/static/', '/media/')
+    SKIP_PREFIXES = ('/admin/', '/accounts/', '/account/', '/onboarding/', '/studio/', '/static/', '/media/')
 
     def __init__(self, get_response):
         self.get_response = get_response

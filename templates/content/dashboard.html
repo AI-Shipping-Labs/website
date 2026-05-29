@@ -34,6 +34,26 @@
       </div>
     </div>
 
+    {% if show_onboarding_prompt %}
+    <!-- Onboarding prompt banner (issue #802) -->
+    <div class="mb-6 rounded-xl border border-accent/40 bg-accent/10 p-5" data-testid="onboarding-prompt">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-start gap-3">
+          <i data-lucide="sparkles" class="h-5 w-5 text-accent shrink-0 mt-0.5"></i>
+          <div>
+            <p class="text-sm font-medium text-foreground">Tell us a bit about you so we can build your plan</p>
+            <p class="text-xs text-muted-foreground mt-1">It takes a few minutes and helps us prepare the right plan for you.</p>
+          </div>
+        </div>
+        <a href="{% url 'onboarding_start' %}"
+           class="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
+           data-testid="onboarding-prompt-cta">
+          Start onboarding
+        </a>
+      </div>
+    </div>
+    {% endif %}
+
     {% if plan %}
     <!-- Sprint Plan Section (issue #442) -->
     <section class="mb-8">

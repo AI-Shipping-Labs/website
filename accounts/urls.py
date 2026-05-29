@@ -21,6 +21,12 @@ from accounts.views.auth import (
     signup_redirect_view,
     verify_email_api,
 )
+from accounts.views.onboarding import (
+    onboarding_fill,
+    onboarding_identify,
+    onboarding_start,
+    onboarding_submit,
+)
 
 urlpatterns = [
     path('login/', login_view, name='account_login'),
@@ -43,6 +49,19 @@ auth_api_urlpatterns = [
     path('password-reset-request', password_reset_request_api, name='api_password_reset_request'),
     path('password-reset', password_reset_api, name='api_password_reset'),
     path('account/theme-preference', theme_preference_view, name='api_theme_preference'),
+]
+
+# Member onboarding flow (issue #802), mounted at /onboarding/ in
+# project urls.py. ``/onboarding/`` is added to
+# ``RemoveTrailingSlashMiddleware.SKIP_PREFIXES`` so the landing page
+# keeps its trailing slash like ``/account/``; the action verbs
+# (``identify`` / ``submit``) use no trailing slash, matching the
+# accounts convention.
+onboarding_urlpatterns = [
+    path('', onboarding_start, name='onboarding_start'),
+    path('identify', onboarding_identify, name='onboarding_identify'),
+    path('<int:response_id>', onboarding_fill, name='onboarding_fill'),
+    path('<int:response_id>/submit', onboarding_submit, name='onboarding_submit'),
 ]
 
 # Account page and API endpoints (mounted at /account/ in project urls.py)

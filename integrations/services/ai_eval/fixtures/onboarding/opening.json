@@ -1,0 +1,15 @@
+{
+  "transcript": [],
+  "member_message": null,
+  "persona_catalog": [
+    {
+      "signal": "alex",
+      "archetype": "Experienced engineer new to AI",
+      "description": "Strong software engineering, building AI/ML depth.",
+      "questions": [
+        {"prompt": "What is the one concrete outcome you want by the end of the next 6 to 8 weeks?", "question_type": "long_text"},
+        {"prompt": "How many hours per week can you realistically commit, consistently?", "question_type": "number"}
+      ]
+    }
+  ]
+}

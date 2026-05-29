@@ -342,6 +342,18 @@ class Plan(TimestampedModelMixin, models.Model):
         max_length=120, blank=True, default='',
     )
 
+    # Optional structured persona (issue #801). Additive and backward
+    # compatible: the free-text ``assigned_persona`` above stays the
+    # source of truth until a later issue migrates existing values.
+    # ``SET_NULL`` so deleting a Persona never deletes a Plan.
+    assigned_persona_ref = models.ForeignKey(
+        'questionnaires.Persona',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='plans',
+    )
+
     # When the plan was actually sent to the member.
     shared_at = models.DateTimeField(null=True, blank=True)
 

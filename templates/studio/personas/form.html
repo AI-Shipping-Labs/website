@@ -1,0 +1,95 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if form_action == 'edit' %}Edit persona{% else %}New persona{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_persona_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to Personas
+  </a>
+  <header class="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold text-foreground">
+        {% if form_action == 'edit' %}Edit persona{% else %}New persona{% endif %}
+      </h1>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
+      {% if form_action == 'edit' and persona %}
+      {% include "studio/includes/_admin_link.html" with obj=persona %}
+      {% endif %}
+    </div>
+  </header>
+</div>
+
+{% if error %}
+<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm" data-testid="persona-form-error">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form id="persona-edit-form" method="post" action="{% if form_action == 'edit' %}{% url 'studio_persona_edit' persona_id=persona.pk %}{% else %}{% url 'studio_persona_create' %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Name</label>
+      <input type="text" name="name" value="{{ form_data.name }}" required
+             placeholder="Alex"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Archetype</label>
+      <input type="text" name="archetype" value="{{ form_data.archetype }}" required
+             placeholder="The Engineer transitioning to AI"
+             data-testid="persona-archetype-input"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Required. Shown next to the name everywhere a persona appears.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
+      <input type="text" name="slug" value="{{ form_data.slug }}"
+             placeholder="alex"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">URL-safe id. Leave blank to auto-derive from name.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Description</label>
+      <textarea name="description" rows="3"
+                placeholder="Starting point, main gap, etc. (internal)"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.description }}</textarea>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Default onboarding questionnaire</label>
+      <select name="default_questionnaire"
+              data-testid="persona-default-questionnaire"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
+        <option value="" {% if not form_data.default_questionnaire %}selected{% endif %}>— None —</option>
+        {% for questionnaire in questionnaire_choices %}
+        <option value="{{ questionnaire.pk }}" {% if form_data.default_questionnaire == questionnaire.pk|stringformat:"s" %}selected{% endif %}>{{ questionnaire.title }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">Only onboarding-purpose questionnaires are listed.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Sort order</label>
+      <input type="number" name="order" value="{{ form_data.order }}" min="0"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="mb-6 flex items-center gap-2">
+      <input type="checkbox" name="is_active" id="persona-is-active" {% if form_data.is_active %}checked{% endif %}
+             class="rounded border-border">
+      <label for="persona-is-active" class="text-sm font-medium text-foreground">Active</label>
+    </div>
+
+  </form>
+</div>
+
+{% url 'studio_persona_list' as persona_cancel_url %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="persona-edit-form" title="Persona changes" subtitle="Save remains available while you review the form." can_save=True primary_label=primary_label cancel_url=persona_cancel_url %}
+{% endblock %}

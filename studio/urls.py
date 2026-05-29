@@ -108,6 +108,12 @@ from studio.views.peer_reviews import (
     peer_review_issue_certificates,
     peer_review_management,
 )
+from studio.views.personas import (
+    persona_create,
+    persona_detail,
+    persona_edit,
+    persona_list,
+)
 from studio.views.plans import (
     interview_note_create,
     interview_note_delete,
@@ -600,6 +606,21 @@ urlpatterns = [
         'crm/<int:crm_id>/reactivate',
         crm_reactivate,
         name='studio_crm_reactivate',
+    ),
+
+    # Personas (issue #801). Internal-only member archetypes. Mirror the
+    # sprints block: trailing slash on list/detail, none on edit.
+    path('personas/', persona_list, name='studio_persona_list'),
+    path('personas/new', persona_create, name='studio_persona_create'),
+    path(
+        'personas/<int:persona_id>/',
+        persona_detail,
+        name='studio_persona_detail',
+    ),
+    path(
+        'personas/<int:persona_id>/edit',
+        persona_edit,
+        name='studio_persona_edit',
     ),
 
     # Sprints (issue #432). Members section.

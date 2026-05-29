@@ -16,6 +16,7 @@ dependencies = [
     "freezegun>=1.5.5",
     "gunicorn>=25.1.0",
     "icalendar>=7.0.3",
+    "logfire>=4.34.0",
     "markdown>=3.10.2",
     "pillow>=12.1.1",
     "playwright>=1.58.0",

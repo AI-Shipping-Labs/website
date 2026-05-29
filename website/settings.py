@@ -444,6 +444,17 @@ LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'https://api.anthropic.com')
 LLM_MODEL = os.environ.get('LLM_MODEL', 'claude-sonnet-4-5')
 LLM_MAX_RETRIES = int(os.environ.get('LLM_MAX_RETRIES', '6'))
 
+# Pydantic Logfire observability (issue #813). Production-only by design:
+# Logfire initializes at app startup ONLY when not running tests AND a
+# token is present AND LOGFIRE_ENABLED is true. LOGFIRE_ENABLED defaults
+# to off everywhere so local/dev/eval/judge runs stay silent unless an
+# operator opts in. Values resolve through get_config()/is_enabled() so a
+# Studio save takes effect without a redeploy. See
+# integrations.services.observability and integrations.apps.
+LOGFIRE_TOKEN = os.environ.get('LOGFIRE_TOKEN', '')
+LOGFIRE_ENABLED = os.environ.get('LOGFIRE_ENABLED', '')
+LOGFIRE_ENVIRONMENT = os.environ.get('LOGFIRE_ENVIRONMENT', 'production')
+
 # Sync watchdog thresholds (issue #274). The dashboard runs an inline
 # watchdog query at the top of every render to flip stuck rows to ``failed``:
 #  - SYNC_QUEUED_THRESHOLD_MINUTES: a SyncLog stuck in ``queued`` longer than

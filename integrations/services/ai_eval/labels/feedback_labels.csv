@@ -1,0 +1,18 @@
+id,correctness_label,failure_category,split,notes
+fb-consensus-split,,,test,
+fb-consensus-strong,,,dev,
+fb-edge-empty,,,test,
+fb-edge-no-signal,,,dev,
+fb-fail-fabricated-signal,fail,failure,dev,example: expected-fail injection
+fb-fail-hallucinated-theme,fail,hallucination,dev,example: expected-fail injection
+fb-fail-misranked,fail,misranked,dev,example: expected-fail injection
+fb-next-sprint-signal,,,dev,
+fb-prevalence-high,,,dev,
+fb-prevalence-oneoff,,,dev,
+fb-quality-mixed,,,dev,
+fb-quality-rich,,,test,
+fb-quality-sparse,,,dev,
+fb-quality-wrongterm,,,dev,
+fb-volume-large,,,dev,
+fb-volume-medium,pass,,dev,example: clear pass
+fb-volume-small,pass,,dev,example: clear pass

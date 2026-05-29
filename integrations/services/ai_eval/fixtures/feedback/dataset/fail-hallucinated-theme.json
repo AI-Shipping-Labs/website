@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "id": "fb-fail-hallucinated-theme",
+    "category": "failure-injection",
+    "phrasing": "adversarial",
+    "source": "synthetic",
+    "expected": {
+      "inject": "hallucinated_theme",
+      "input_terms": [
+        "office hours"
+      ]
+    }
+  },
+  "sprint_name": "Sprint N - Hallucination bait",
+  "response_count": 1,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Office hours were good."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Nothing comes to mind."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    }
+  ]
+}

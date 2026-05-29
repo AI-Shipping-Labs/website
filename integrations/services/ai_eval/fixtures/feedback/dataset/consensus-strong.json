@@ -1,0 +1,93 @@
+{
+  "meta": {
+    "id": "fb-consensus-strong",
+    "category": "consensus",
+    "phrasing": "direct",
+    "source": "designed",
+    "expected": {
+      "input_terms": [
+        "scoping"
+      ]
+    }
+  },
+  "sprint_name": "Sprint G - Strong agreement",
+  "response_count": 4,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Liked it."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping help earlier."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Liked it."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping help earlier."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Liked it."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping help earlier."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Need scoping help at kickoff."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    }
+  ]
+}

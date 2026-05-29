@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "id": "fb-quality-rich",
+    "category": "feedback-quality",
+    "phrasing": "direct",
+    "source": "designed",
+    "expected": {
+      "input_terms": [
+        "accountability",
+        "scoping",
+        "office hours"
+      ]
+    }
+  },
+  "sprint_name": "Sprint D - Rich",
+  "response_count": 2,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "The accountability check-ins kept my momentum and the office hours unblocked a gnarly bug."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Kickoff scoping was vague; I want a worked example of a finished project."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Accountability partner was the highlight; office hours were useful."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping support earlier would save days."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    }
+  ]
+}

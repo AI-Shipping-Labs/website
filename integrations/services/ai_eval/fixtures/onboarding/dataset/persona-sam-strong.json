@@ -1,0 +1,68 @@
+{
+  "meta": {
+    "id": "onb-persona-sam",
+    "category": "persona-inference",
+    "phrasing": "vague",
+    "source": "designed",
+    "expected": {
+      "persona_signal": "sam"
+    }
+  },
+  "persona_catalog": [
+    {
+      "signal": "alex",
+      "archetype": "Experienced engineer new to AI",
+      "description": "Strong software engineering, building AI/ML depth.",
+      "questions": [
+        {
+          "prompt": "What is the one concrete outcome you want by the end of the next 6 to 8 weeks?",
+          "question_type": "long_text"
+        },
+        {
+          "prompt": "How many hours per week can you realistically commit, consistently?",
+          "question_type": "number"
+        }
+      ]
+    },
+    {
+      "signal": "priya",
+      "archetype": "Researcher moving toward shipping",
+      "description": "Strong ML, needs deployment and engineering practice.",
+      "questions": [
+        {
+          "prompt": "Do you already have a project or idea, even if rough? Describe it.",
+          "question_type": "long_text"
+        }
+      ]
+    },
+    {
+      "signal": "sam",
+      "archetype": "Career switcher building foundations",
+      "description": "Newer to engineering, building fundamentals.",
+      "questions": [
+        {
+          "prompt": "What would make the next 6-8 weeks worthwhile?",
+          "question_type": "long_text"
+        }
+      ]
+    },
+    {
+      "signal": "taylor",
+      "archetype": "Builder who ships but skips evaluation",
+      "description": "Ships AI features fast, light on evaluation rigor.",
+      "questions": [
+        {
+          "prompt": "How do you currently measure whether your AI feature works?",
+          "question_type": "long_text"
+        }
+      ]
+    }
+  ],
+  "transcript": [
+    {
+      "role": "assistant",
+      "content": "What brings you here?"
+    }
+  ],
+  "member_message": "I'm switching careers from marketing into tech. I did a bootcamp, I can write basic Python, and I want to build foundations and a portfolio project."
+}

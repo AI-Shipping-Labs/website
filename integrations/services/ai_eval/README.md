@@ -128,3 +128,158 @@ maps onto `PersonaInfo`.
 
 A malformed fixture produces a clear parse error naming the file/field and
 a non-zero exit (no raw stack trace).
+
+# Evals (issue #812)
+
+The eval layer measures the QUALITY of the two assistants over a labeled
+dataset and validates an LLM judge against human gold labels. It is
+DISTINCT from a pass/fail build gate: evals answer "how good is the
+assistant, and is config A better than B?", not "is this build correct?".
+
+It builds ON TOP of the #809 harness above. The fixture-loading,
+`runner.run_callable`, and `FileTraceSink` plumbing is reused unchanged;
+only the judge pass, the alignment math, and the report aggregation are
+new. The choice was to extend `run_ai` with `--eval` / `--align` flags
+rather than add a new command, because the suite path is already exactly
+the callable-plus-trace loop evals need.
+
+## The five-step loop (buildcamp v2 `06-evaluation`)
+
+1. Define "good" via a rubric -- one correctness dimension per assistant
+   (see `judge.py`). Let failure categories emerge from labeling.
+2. Build the dataset by equivalence partitioning (the `dataset/` subtrees).
+3. Label manually for a gold standard (the label CSVs; a `[HUMAN]` step).
+4. Build an LLM judge and align it to the labels (`--align`).
+5. Run evals as experiments (`--eval`); compare `% good` across configs.
+
+## Datasets
+
+Eval scenarios live under per-assistant `dataset/` subtrees, separate from
+the few #809 demo fixtures:
+
+- `fixtures/onboarding/dataset/*.json` (~20 scenarios)
+- `fixtures/feedback/dataset/*.json` (~17 scenarios)
+
+Each fixture is the SAME shape `runner.build_onboarding_input` /
+`build_feedback_input` already parse, PLUS a `meta` sidecar the dataset
+loader reads and the callable adapter ignores:
+
+```json
+{
+  "meta": {
+    "id": "onb-persona-alex",
+    "category": "persona-inference",
+    "phrasing": "direct",
+    "source": "designed",
+    "expected": {"persona_signal": "alex"}
+  },
+  "transcript": [...],
+  "member_message": "...",
+  "persona_catalog": [...]
+}
+```
+
+| meta field | meaning |
+|------------|---------|
+| `id` | stable scenario id; the join key to the label CSV |
+| `category` | equivalence-partition group (e.g. `persona-inference`, `failure-injection`) |
+| `phrasing` | `direct` / `vague` / `wrong-terminology` / `broad` / `adversarial` |
+| `source` | `designed` (human-authored) vs `synthetic` (LLM-generated edge case) |
+| `expected` | optional deterministic expectation (e.g. `persona_signal`, `required_fields`, `input_terms`, `no_signal_expected`) so a metric can be computed without the judge |
+
+Both datasets deliberately include EXPECTED-FAIL scenarios (category
+`failure-injection`: persona-name leak, invalid enum, missing field,
+hallucinated theme) so the judge has negatives to catch.
+
+## Gold labels + labeling guide
+
+One CSV per assistant: `labels/onboarding_labels.csv`,
+`labels/feedback_labels.csv`. Columns (buildcamp `labels.csv` shape):
+
+| column | meaning |
+|--------|---------|
+| `id` | matches a dataset scenario `id` |
+| `correctness_label` | `pass` / `fail` (empty = not yet labeled) |
+| `failure_category` | short emergent tag (`persona-leak`, `hallucination`, `missing-field`, `wrong-scope`, ...); empty on a pass |
+| `split` | `dev` (tune the judge) / `test` (final validation) |
+| `notes` | free-form, human-only, never fed to the judge |
+
+This issue ships the SCAFFOLD: every scenario `id` is pre-listed, `split`
+is pre-assigned ~75% dev / ~25% test (stratified so both splits carry pass
+AND fail), and a few example rows are pre-labeled (the obvious expected-
+fail injections + a couple of clear passes). The full human labeling of
+every scenario is a `[HUMAN]` step.
+
+Labeling guide -- "label before you define":
+
+- Use a BINARY label (`pass` / `fail`), not a 1-5 scale.
+- Observe failures FIRST, then name the `failure_category`. Do not predefine
+  categories; let them emerge.
+- BOTH pass and fail examples are required in each split -- an all-pass
+  dataset cannot validate a judge.
+- `notes` is for humans only and is never sent to the judge.
+
+## Running an eval
+
+```
+python manage.py run_ai onboarding --eval \
+  --suite integrations/services/ai_eval/fixtures/onboarding/dataset --live
+python manage.py run_ai feedback --eval \
+  --suite integrations/services/ai_eval/fixtures/feedback/dataset --live
+```
+
+Drop `--live` to run mocked (the default -- the canned judge verdict makes
+the whole flow run with no key/network; that is what CI uses). The run
+writes one out-subdir per scenario (`output.json` + `trace.json`) plus a
+top-level `eval_report.json`, and prints a table:
+
+- `% good` (judge pass rate) overall and per `category`.
+- Deterministic `expected`-based metrics: onboarding (`no_persona_leak`,
+  `extraction_complete`, `correct_persona`), feedback
+  (`theme_ranking_correct`, `no_hallucinated_themes`,
+  `recommendations_actionable`, `next_sprint_signal_correct`).
+- Callable cost + latency and judge cost + latency, tracked SEPARATELY.
+- Run metadata (provider, model, dataset dir, timestamp, judge-prompt
+  version) for experiment comparison across runs.
+
+Token usage/cost is read defensively off the #799 `LLMResult` exactly like
+`FileTraceSink`: the `LLMResult` exposes no usage today, so cost reports
+"usage unavailable" rather than crashing; the moment a future `LLMResult`
+carries usage it is captured automatically.
+
+## Running the alignment step
+
+```
+python manage.py run_ai onboarding --align \
+  --suite integrations/services/ai_eval/fixtures/onboarding/dataset \
+  --labels integrations/services/ai_eval/labels/onboarding_labels.csv --live
+```
+
+This runs the judge over the LABELED scenarios and measures agreement
+against the human gold labels, writing `alignment_report.json`:
+
+- accuracy, precision, recall, and the confusion matrix (TP/FP/TN/FN), with
+  `fail` as the POSITIVE class (we care about catching real failures).
+- dev-set and held-out test-set metrics reported SEPARATELY, so tuning the
+  judge prompt on dev does not leak into the reported test number.
+- per-scenario disagreement rows (human label vs judge label vs judge
+  reasoning) so you can inspect exactly where the judge diverges.
+
+Reading judge-vs-human metrics: the benchmark is human-level AGREEMENT, not
+perfection. A judge that is consistent (even if imperfect) still makes
+relative `% good` comparisons across eval runs meaningful. Iterate the
+judge prompt on the dev disagreements only; the test split is the honest
+final number. Bump `JUDGE_PROMPT_VERSION` in `judge.py` whenever you change
+the judge prompt so reports stay comparable.
+
+## Constraints
+
+- The judge runs the single `correctness` dimension per assistant. A
+  multi-dimension "god evaluator" is a documented FUTURE option
+  (buildcamp `06-evaluation/04`), not built here.
+- Real-provider eval runs (`--live`) are HUMAN-TRIGGERED. The heavy
+  real-provider eval is NOT a default-CI gate; CI only runs the mocked
+  plumbing tests.
+- The eval code does NOT import or initialize Logfire (#813 gates
+  production observability and must not fire in tests or evals); a mocked
+  test asserts no Logfire emission during an eval run.

@@ -1,0 +1,73 @@
+{
+  "meta": {
+    "id": "onb-edge-context-switch",
+    "category": "edge-case",
+    "phrasing": "adversarial",
+    "source": "designed"
+  },
+  "persona_catalog": [
+    {
+      "signal": "alex",
+      "archetype": "Experienced engineer new to AI",
+      "description": "Strong software engineering, building AI/ML depth.",
+      "questions": [
+        {
+          "prompt": "What is the one concrete outcome you want by the end of the next 6 to 8 weeks?",
+          "question_type": "long_text"
+        },
+        {
+          "prompt": "How many hours per week can you realistically commit, consistently?",
+          "question_type": "number"
+        }
+      ]
+    },
+    {
+      "signal": "priya",
+      "archetype": "Researcher moving toward shipping",
+      "description": "Strong ML, needs deployment and engineering practice.",
+      "questions": [
+        {
+          "prompt": "Do you already have a project or idea, even if rough? Describe it.",
+          "question_type": "long_text"
+        }
+      ]
+    },
+    {
+      "signal": "sam",
+      "archetype": "Career switcher building foundations",
+      "description": "Newer to engineering, building fundamentals.",
+      "questions": [
+        {
+          "prompt": "What would make the next 6-8 weeks worthwhile?",
+          "question_type": "long_text"
+        }
+      ]
+    },
+    {
+      "signal": "taylor",
+      "archetype": "Builder who ships but skips evaluation",
+      "description": "Ships AI features fast, light on evaluation rigor.",
+      "questions": [
+        {
+          "prompt": "How do you currently measure whether your AI feature works?",
+          "question_type": "long_text"
+        }
+      ]
+    }
+  ],
+  "transcript": [
+    {
+      "role": "assistant",
+      "content": "What do you want to build in the next 6-8 weeks?"
+    },
+    {
+      "role": "user",
+      "content": "A chatbot."
+    },
+    {
+      "role": "assistant",
+      "content": "Great. How many hours per week can you commit?"
+    }
+  ],
+  "member_message": "Actually forget that, can you instead help me write a cover letter for a job application?"
+}

@@ -1,0 +1,102 @@
+{
+  "meta": {
+    "id": "fb-prevalence-high",
+    "category": "theme-prevalence",
+    "phrasing": "direct",
+    "source": "designed",
+    "expected": {
+      "input_terms": [
+        "scoping",
+        "deploy"
+      ]
+    }
+  },
+  "sprint_name": "Sprint I - High-frequency theme",
+  "response_count": 6,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping took too long."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping took too long."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping took too long."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping took too long."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping took too long."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What should we improve?",
+          "long_text",
+          "Deploy step unclear."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    }
+  ]
+}

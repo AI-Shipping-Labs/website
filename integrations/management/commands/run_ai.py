@@ -25,7 +25,8 @@ from django.core.management.base import BaseCommand, CommandError
 
 from integrations.config import get_config
 from integrations.services import llm
-from integrations.services.ai_eval import runner
+from integrations.services.ai_eval import eval_runner, runner
+from integrations.services.ai_eval.dataset import DatasetError
 from integrations.services.ai_eval.mock_llm import patch_llm
 from integrations.services.ai_eval.runner import FixtureError
 from integrations.services.ai_eval.trace import FileTraceSink
@@ -83,6 +84,30 @@ class Command(BaseCommand):
             '--model',
             help='Override model name (defaults to configured LLM_MODEL).',
         )
+        parser.add_argument(
+            '--eval',
+            action='store_true',
+            help=(
+                'Eval mode: run a labeled dataset (--suite <dataset dir>) '
+                'through the callable, run the LLM judge over each output, '
+                'and write eval_report.json with %% good, per-category, '
+                'deterministic metrics, and callable-vs-judge cost/latency.'
+            ),
+        )
+        parser.add_argument(
+            '--align',
+            action='store_true',
+            help=(
+                'Alignment mode: run the judge over labeled scenarios and '
+                'report judge-vs-human agreement (accuracy/precision/recall '
+                '+ confusion matrix, dev vs held-out test separately). '
+                'Requires --labels <csv>.'
+            ),
+        )
+        parser.add_argument(
+            '--labels',
+            help='Path to the gold-label CSV (required for --align).',
+        )
 
     def handle(self, *args, **options):
         callable_name = options['callable']
@@ -92,9 +117,17 @@ class Command(BaseCommand):
         suite_path = options['suite']
         model = options['model'] or get_config('LLM_MODEL', '') or None
 
+        do_eval = options['eval']
+        do_align = options['align']
+        labels_path = options['labels']
+
         if use_live and use_mock:
             raise CommandError(
                 '--mock and --live are mutually exclusive; pass at most one.'
+            )
+        if do_eval and do_align:
+            raise CommandError(
+                '--eval and --align are mutually exclusive; pass at most one.'
             )
         # Mock is the default: anything that is not an explicit --live is mock.
         live = use_live
@@ -102,6 +135,35 @@ class Command(BaseCommand):
             raise CommandError(
                 'LLM not configured: set LLM_API_KEY / LLM_PROVIDER (and '
                 'optionally LLM_MODEL / LLM_BASE_URL) to use --live.'
+            )
+
+        provider = get_config('LLM_PROVIDER', 'anthropic') or 'anthropic'
+        mode = 'live' if live else 'mock'
+
+        # --- Eval / alignment modes (issue #812) ---
+        if do_eval or do_align:
+            if not suite_path:
+                raise CommandError(
+                    'Eval/align modes need --suite <dataset dir> (the '
+                    'directory of labeled dataset fixtures).'
+                )
+            self.stdout.write(
+                f'{"Aligning" if do_align else "Evaluating"} "{callable_name}" '
+                f'in {mode} mode (provider={provider}, '
+                f'model={model or "(default)"}).'
+            )
+            if do_align:
+                if not labels_path:
+                    raise CommandError(
+                        '--align requires --labels <csv> (the gold-label file).'
+                    )
+                return self._run_align(
+                    callable_name, suite_path, labels_path, options['out'],
+                    provider=provider, model=model, live=live,
+                )
+            return self._run_eval(
+                callable_name, suite_path, options['out'],
+                provider=provider, model=model, live=live,
             )
 
         if not input_path and not suite_path:
@@ -114,8 +176,6 @@ class Command(BaseCommand):
                 '--input and --suite are mutually exclusive.'
             )
 
-        provider = get_config('LLM_PROVIDER', 'anthropic') or 'anthropic'
-        mode = 'live' if live else 'mock'
         self.stdout.write(
             f'Running "{callable_name}" in {mode} mode '
             f'(provider={provider}, model={model or "(default)"}).'
@@ -270,6 +330,142 @@ class Command(BaseCommand):
         )
         sink.write(out_dir / 'trace.json')
         return True, headline, None
+
+    # --- eval mode (issue #812) ---
+
+    def _run_eval(self, callable_name, dataset_path, out, *, provider, model, live):
+        eval_out = self._resolve_out_dir(out, callable_name, suite=True)
+        eval_out.mkdir(parents=True, exist_ok=True)
+        try:
+            report, outputs = eval_runner.run_eval(
+                callable_name, dataset_path,
+                provider=provider, model=model, live=live,
+            )
+        except DatasetError as exc:
+            raise CommandError(f'DatasetError: {exc}') from None
+
+        # Per-fixture artifacts (output + trace) mirror the #809 layout.
+        for scenario_id, artifacts in outputs.items():
+            fixture_out = eval_out / scenario_id
+            fixture_out.mkdir(parents=True, exist_ok=True)
+            (fixture_out / 'output.json').write_text(
+                json.dumps(artifacts['parsed_output'], indent=2,
+                           ensure_ascii=False, default=str),
+                encoding='utf-8',
+            )
+            (fixture_out / 'trace.json').write_text(
+                json.dumps(artifacts['trace'], indent=2,
+                           ensure_ascii=False, default=str),
+                encoding='utf-8',
+            )
+
+        report_path = eval_out / 'eval_report.json'
+        report_path.write_text(
+            json.dumps(report, indent=2, ensure_ascii=False, default=str),
+            encoding='utf-8',
+        )
+        self._print_eval_report(report)
+        self.stdout.write(self.style.SUCCESS(
+            f'Eval complete. Report: {report_path}'
+        ))
+
+    def _print_eval_report(self, report):
+        self.stdout.write('')
+        overall = report['percent_good_overall']
+        self.stdout.write(
+            f'% good (overall): {self._fmt_pct(overall)} '
+            f'({report["judged_count"]}/{report["scenario_count"]} judged)'
+        )
+        self.stdout.write('')
+        self.stdout.write('% good by category:')
+        for category, stats in report['percent_good_by_category'].items():
+            self.stdout.write(
+                f'  {category:<24} {self._fmt_pct(stats["percent_good"])} '
+                f'({stats["good"]}/{stats["total"]})'
+            )
+        self.stdout.write('')
+        self.stdout.write('Deterministic metrics:')
+        for key, stats in report['deterministic_metrics'].items():
+            self.stdout.write(
+                f'  {key:<28} {self._fmt_pct(stats["percent"])} '
+                f'({stats["passed"]}/{stats["total"]})'
+            )
+        self.stdout.write('')
+        latency = report['latency']
+        self.stdout.write(
+            'Latency (avg s): '
+            f'callable={self._fmt_num(latency["callable_avg_seconds"])} '
+            f'judge={self._fmt_num(latency["judge_avg_seconds"])}'
+        )
+        cost = report['cost']
+        self.stdout.write(
+            f'Cost: callable={cost["callable_token_usage"] or "usage unavailable"} '
+            f'judge={cost["judge_token_usage"] or "usage unavailable"}'
+        )
+
+    # --- alignment mode (issue #812) ---
+
+    def _run_align(self, callable_name, dataset_path, labels_path, out, *,
+                   provider, model, live):
+        align_out = self._resolve_out_dir(out, callable_name, suite=True)
+        align_out.mkdir(parents=True, exist_ok=True)
+        try:
+            report = eval_runner.run_alignment(
+                callable_name, dataset_path, labels_path,
+                provider=provider, model=model, live=live,
+            )
+        except DatasetError as exc:
+            raise CommandError(f'DatasetError: {exc}') from None
+
+        report_path = align_out / 'alignment_report.json'
+        report_path.write_text(
+            json.dumps(report, indent=2, ensure_ascii=False, default=str),
+            encoding='utf-8',
+        )
+        self._print_align_report(report)
+        self.stdout.write(self.style.SUCCESS(
+            f'Alignment complete. Report: {report_path}'
+        ))
+
+    def _print_align_report(self, report):
+        self.stdout.write('')
+        self.stdout.write(
+            f'Labeled scenarios: {report["labeled_count"]} '
+            f'(unlabeled skipped: {len(report["unlabeled_ids"])})'
+        )
+        for split in ('dev', 'test'):
+            split_report = report['alignment'].get(split)
+            if not split_report:
+                continue
+            m = split_report['metrics']
+            cm = m['confusion']
+            self.stdout.write('')
+            self.stdout.write(
+                f'[{split}] n={m["n"]} '
+                f'accuracy={self._fmt_pct(m["accuracy"])} '
+                f'precision={self._fmt_pct(m["precision"])} '
+                f'recall={self._fmt_pct(m["recall"])} (fail = positive class)'
+            )
+            self.stdout.write(
+                f'  confusion: TP={cm["tp"]} FP={cm["fp"]} '
+                f'TN={cm["tn"]} FN={cm["fn"]}'
+            )
+            disagreements = split_report['disagreements']
+            if disagreements:
+                self.stdout.write(f'  disagreements ({len(disagreements)}):')
+                for row in disagreements:
+                    self.stdout.write(
+                        f'    {row["id"]}: human={row["human_label"]} '
+                        f'judge={row["judge_label"]}'
+                    )
+
+    @staticmethod
+    def _fmt_pct(value):
+        return f'{value * 100:.1f}%' if value is not None else 'n/a'
+
+    @staticmethod
+    def _fmt_num(value):
+        return f'{value:.3f}' if value is not None else 'n/a'
 
     # --- helpers ---
 

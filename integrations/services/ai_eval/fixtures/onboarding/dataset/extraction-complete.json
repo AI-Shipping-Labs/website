@@ -1,0 +1,92 @@
+{
+  "meta": {
+    "id": "onb-extraction-complete",
+    "category": "extraction-correctness",
+    "phrasing": "direct",
+    "source": "designed",
+    "expected": {
+      "required_fields": [
+        "persona_signal",
+        "eng_comfort",
+        "ai_comfort",
+        "primary_goal",
+        "time_commitment_hours_per_week",
+        "main_blocker",
+        "project_stage"
+      ]
+    }
+  },
+  "persona_catalog": [
+    {
+      "signal": "alex",
+      "archetype": "Experienced engineer new to AI",
+      "description": "Strong software engineering, building AI/ML depth.",
+      "questions": [
+        {
+          "prompt": "What is the one concrete outcome you want by the end of the next 6 to 8 weeks?",
+          "question_type": "long_text"
+        },
+        {
+          "prompt": "How many hours per week can you realistically commit, consistently?",
+          "question_type": "number"
+        }
+      ]
+    },
+    {
+      "signal": "priya",
+      "archetype": "Researcher moving toward shipping",
+      "description": "Strong ML, needs deployment and engineering practice.",
+      "questions": [
+        {
+          "prompt": "Do you already have a project or idea, even if rough? Describe it.",
+          "question_type": "long_text"
+        }
+      ]
+    },
+    {
+      "signal": "sam",
+      "archetype": "Career switcher building foundations",
+      "description": "Newer to engineering, building fundamentals.",
+      "questions": [
+        {
+          "prompt": "What would make the next 6-8 weeks worthwhile?",
+          "question_type": "long_text"
+        }
+      ]
+    },
+    {
+      "signal": "taylor",
+      "archetype": "Builder who ships but skips evaluation",
+      "description": "Ships AI features fast, light on evaluation rigor.",
+      "questions": [
+        {
+          "prompt": "How do you currently measure whether your AI feature works?",
+          "question_type": "long_text"
+        }
+      ]
+    }
+  ],
+  "transcript": [
+    {
+      "role": "assistant",
+      "content": "What do you want to build?"
+    },
+    {
+      "role": "user",
+      "content": "A deployed RAG support bot. I am a strong engineer, comfort 5, AI comfort 2."
+    },
+    {
+      "role": "assistant",
+      "content": "How much time, and what blocks your consistency?"
+    },
+    {
+      "role": "user",
+      "content": "About 10 hours a week, steady. My main blocker is scoping. I have an idea but it is not started yet."
+    },
+    {
+      "role": "assistant",
+      "content": "What would make this worthwhile, and how do you want to use coding agents?"
+    }
+  ],
+  "member_message": "Worthwhile = it answers real customer questions. I want agents for boilerplate only. I think that's everything."
+}

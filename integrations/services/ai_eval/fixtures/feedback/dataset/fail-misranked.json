@@ -1,0 +1,85 @@
+{
+  "meta": {
+    "id": "fb-fail-misranked",
+    "category": "failure-injection",
+    "phrasing": "direct",
+    "source": "synthetic",
+    "expected": {
+      "inject": "misranked_themes"
+    }
+  },
+  "sprint_name": "Sprint O - Misrank bait",
+  "response_count": 5,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping was the big problem."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping was the big problem."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping was the big problem."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping was the big problem."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What should we improve?",
+          "long_text",
+          "Minor: font too small."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    }
+  ]
+}

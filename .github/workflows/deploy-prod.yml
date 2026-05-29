@@ -23,6 +23,7 @@ jobs:
     # failed at that step with a 403 because of the missing grant.
     permissions:
       contents: write
+      id-token: write # assume the AWS deploy role via OIDC
 
     env:
       AWS_REGION: eu-west-1
@@ -39,6 +40,12 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v5
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::387546586013:role/website-deploy
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -79,8 +86,6 @@ jobs:
         run: bash deploy/deploy_prod.sh ${{ github.event.inputs.deployTag }}
         env:
           CONFIRM_DEPLOY: ${{ github.event.inputs.confirmProdDeploy }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
 
       - name: Verify prod deploy landed

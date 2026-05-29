@@ -261,6 +261,10 @@ jobs:
     needs: [test, playwright-core]
     if: github.ref == 'refs/heads/main'
 
+    permissions:
+      contents: read
+      id-token: write # assume the AWS deploy role via OIDC
+
     env:
       AWS_REGION: eu-west-1
       REPO_ROOT: 387546586013.dkr.ecr.eu-west-1.amazonaws.com
@@ -269,6 +273,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::387546586013:role/website-deploy
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Prepare tags
         id: prep
@@ -288,9 +298,6 @@ jobs:
       - name: Log in to Amazon ECR
         run: |
           aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.REPO_ROOT }}
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
       - name: Push Docker image to ECR
         run: |
@@ -300,8 +307,6 @@ jobs:
       - name: Deploy to Dev
         run: bash deploy/deploy_dev.sh ${{ env.TAG }}
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
 
       - name: Verify deploy landed

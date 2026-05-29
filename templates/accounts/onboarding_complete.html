@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Onboarding complete | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
+
+      <header class="mb-8">
+        <p class="text-sm uppercase tracking-wide text-muted-foreground">Onboarding</p>
+        <h1 class="text-3xl font-semibold tracking-tight mt-1" data-testid="onboarding-complete-title">
+          You've completed onboarding
+        </h1>
+        <p class="text-sm text-muted-foreground mt-2" data-testid="onboarding-complete-subtitle">
+          Thanks — we'll use your answers to prepare your plan. Here is what
+          you told us.
+        </p>
+        <div class="mt-4 flex flex-wrap gap-3">
+          <a href="{% url 'home' %}"
+             class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
+             data-testid="onboarding-complete-plan-link">
+            Go to your dashboard
+          </a>
+        </div>
+      </header>
+
+      <div class="space-y-4">
+        {% for row in rows %}
+        <div class="rounded-2xl border border-border bg-card p-5" data-testid="onboarding-complete-row">
+          <h2 class="text-sm font-medium text-foreground" data-testid="onboarding-complete-prompt">{{ row.question.prompt }}</h2>
+          <div class="mt-2 text-sm">
+            {% if row.is_answered %}
+            <p class="text-foreground whitespace-pre-line" data-testid="onboarding-complete-answer">{{ row.answer.display_value }}</p>
+            {% else %}
+            <p class="text-muted-foreground italic" data-testid="onboarding-complete-blank">(No answer)</p>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

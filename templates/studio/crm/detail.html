@@ -92,6 +92,19 @@
              class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full focus:outline-none focus:ring-1 focus:ring-accent">
     </div>
     <div>
+      <label for="crm-persona-ref" class="block text-xs font-medium text-muted-foreground mb-1">Structured persona</label>
+      <select id="crm-persona-ref"
+              name="persona_ref"
+              data-testid="crm-persona-ref-select"
+              class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground w-full focus:outline-none focus:ring-1 focus:ring-accent studio-select">
+        <option value="">— None (use free text above) —</option>
+        {% for persona in persona_choices %}
+        <option value="{{ persona.pk }}" {% if record.persona_ref_id == persona.pk %}selected{% endif %}>{{ persona.display_label }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">Staff-only. Never shown to the member.</p>
+    </div>
+    <div>
       <label for="crm-summary" class="block text-xs font-medium text-muted-foreground mb-1">Summary</label>
       <textarea id="crm-summary"
                 name="summary"

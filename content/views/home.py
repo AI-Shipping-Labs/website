@@ -33,6 +33,7 @@ from plans.dashboard import (
     build_active_sprint_opportunities_context,
     build_sprint_plan_card_context,
 )
+from questionnaires.onboarding import has_completed_onboarding
 
 TESTIMONIALS = [
     {
@@ -299,9 +300,15 @@ def _dashboard(request):
         slack_user_id, get_config('SLACK_TEAM_ID', ''),
     )
 
+    # --- Onboarding prompt (issue #802) ---
+    # Show the dashboard prompt banner until the member has a submitted
+    # onboarding response. Completion is derived (no model field).
+    show_onboarding_prompt = not has_completed_onboarding(user)
+
     context = {
         'tier_name': tier_name,
         'override_tier_name': override_tier_name,
+        'show_onboarding_prompt': show_onboarding_prompt,
         'in_progress_courses': in_progress_courses,
         'in_progress_learning': in_progress_learning,
         'hidden_learning_count': hidden_learning_count,

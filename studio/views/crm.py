@@ -23,6 +23,7 @@ from crm.models import (
     CRMRecord,
 )
 from plans.models import InterviewNote, Plan
+from questionnaires.models import Persona
 from studio.decorators import staff_required
 
 User = get_user_model()
@@ -218,6 +219,12 @@ def _record_detail_context(record):
             f'/admin/accounts/user/{record.user.pk}/change/'
         ),
         'record_status_choices': STATUS_CHOICES,
+        # Structured persona dropdown (issue #802). #801 added the FK but
+        # deferred the Studio control; staff pick an active Persona here.
+        # Blank leaves the free-text ``persona`` as the source of truth.
+        'persona_choices': list(
+            Persona.objects.filter(is_active=True).order_by('order', 'name')
+        ),
     }
 
 
@@ -240,6 +247,14 @@ def crm_edit(request, crm_id):
     record.persona = (request.POST.get('persona') or '').strip()[:120]
     record.summary = (request.POST.get('summary') or '').strip()
     record.next_steps = (request.POST.get('next_steps') or '').strip()
+    # Structured persona (issue #802): blank clears the FK.
+    raw_persona_ref = (request.POST.get('persona_ref') or '').strip()
+    if raw_persona_ref.isdigit():
+        record.persona_ref = Persona.objects.filter(
+            pk=int(raw_persona_ref), is_active=True,
+        ).first()
+    else:
+        record.persona_ref = None
     record.save()
     messages.success(request, 'CRM record updated.')
     return redirect('studio_crm_detail', crm_id=record.pk)

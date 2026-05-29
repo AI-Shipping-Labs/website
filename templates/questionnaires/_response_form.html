@@ -7,6 +7,9 @@ Callers provide:
   - ``form_rows``: output of ``questionnaires.services.build_response_form_rows``
   - ``save_action``: URL the "Save draft" form posts to
   - ``submit_action``: URL the "Submit" form posts to
+  - ``submit_label`` (optional): label for the submit button. Defaults to
+    "Submit feedback" so the sprint-feedback caller is unchanged; the
+    onboarding caller (#802) passes its own label.
 
 The fragment renders ONE <form> that contains every input. Both the
 "Save draft" and "Submit" buttons live inside it; ``Save`` uses the
@@ -83,7 +86,7 @@ sprint-specific copy lives here.
     <button type="submit" formaction="{{ submit_action }}"
             class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
             data-testid="questionnaire-submit-button">
-      Submit feedback
+      {{ submit_label|default:"Submit feedback" }}
     </button>
   </div>
 </form>

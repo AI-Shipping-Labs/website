@@ -1,0 +1,97 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if form_action == 'edit' %}Edit question for this member{% else %}Add custom question for this member{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_questionnaire_response_detail' questionnaire_id=questionnaire.pk response_id=response.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to {{ response.respondent.email }}'s response
+  </a>
+  <header class="mt-2">
+    <h1 class="text-2xl font-semibold text-foreground">
+      {% if form_action == 'edit' %}Edit question for this member{% else %}Add custom question for this member{% endif %}
+    </h1>
+    <p class="text-sm text-muted-foreground mt-1">
+      Changes here affect only {{ response.respondent.email }}'s response — the
+      shared base questions and other members are unaffected.
+    </p>
+  </header>
+</div>
+
+{% if error %}
+<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm" data-testid="response-question-form-error">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form id="response-question-edit-form" method="post"
+        action="{% if form_action == 'edit' %}{% url 'studio_response_question_edit' questionnaire_id=questionnaire.pk response_id=response.pk rq_id=response_question.pk %}{% else %}{% url 'studio_response_question_create' questionnaire_id=questionnaire.pk response_id=response.pk %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Type</label>
+      <select name="question_type" data-testid="response-question-type-select"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
+        {% for value, label in question_type_choices %}
+        <option value="{{ value }}" {% if form_data.question_type == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Prompt</label>
+      <textarea name="prompt" rows="2" data-testid="response-question-prompt-input"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.prompt }}</textarea>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Help text</label>
+      <textarea name="help_text" rows="2" data-testid="response-question-help-text-input"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.help_text }}</textarea>
+    </div>
+
+    <div class="mb-6 flex items-center gap-2">
+      <input type="checkbox" name="is_required" id="response-question-is-required" {% if form_data.is_required %}checked{% endif %}
+             data-testid="response-question-is-required-input"
+             class="rounded border-border bg-secondary text-accent focus:ring-accent">
+      <label for="response-question-is-required" class="text-sm font-medium text-foreground">Required</label>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Order</label>
+      <input type="number" name="order" value="{{ form_data.order }}" min="0"
+             data-testid="response-question-order-input"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="grid grid-cols-2 gap-4 mb-6">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Scale min</label>
+        <input type="number" name="scale_min" value="{{ form_data.scale_min }}"
+               data-testid="response-question-scale-min-input"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Scale max</label>
+        <input type="number" name="scale_max" value="{{ form_data.scale_max }}"
+               data-testid="response-question-scale-max-input"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+    </div>
+    <p class="text-xs text-muted-foreground -mt-4 mb-6">Only used by scale / number questions.</p>
+
+    <div class="mb-2">
+      <label class="block text-sm font-medium text-foreground mb-1">Choice options</label>
+      <textarea name="options" rows="4" data-testid="response-question-options-input"
+                placeholder="One option per line. Only used by single / multiple choice questions."
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.options }}</textarea>
+      <p class="text-xs text-muted-foreground mt-1">One option per line. Required for single / multiple choice; ignored for other types.</p>
+    </div>
+
+  </form>
+</div>
+
+{% url 'studio_questionnaire_response_detail' questionnaire_id=questionnaire.pk response_id=response.pk as rq_cancel_url %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="response-question-edit-form" title="Question" subtitle="Save remains available while you review the form." can_save=True primary_label=primary_label cancel_url=rq_cancel_url %}
+{% endblock %}

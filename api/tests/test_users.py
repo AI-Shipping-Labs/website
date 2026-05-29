@@ -6,8 +6,10 @@ behaviour lives in ``test_users_audit.py`` so each module stays focused.
 
 import json
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db.models.query import QuerySet
 from django.test import TestCase
 from django.utils import timezone
 
@@ -560,6 +562,32 @@ class UserPatchTest(_UserApiBase):
         self.assertTrue(body["unsubscribed"])
         user.refresh_from_db()
         self.assertTrue(user.unsubscribed)
+
+    def test_patch_lock_does_not_join_nullable_tier(self):
+        """Regression: Postgres rejects FOR UPDATE on nullable outer joins."""
+        self._make_user(email="alice@test.com")
+        original_select_for_update = QuerySet.select_for_update
+        original_select_related = QuerySet.select_related
+
+        def mark_for_update(queryset, *args, **kwargs):
+            locked = original_select_for_update(queryset, *args, **kwargs)
+            locked._test_for_update = True
+            return locked
+
+        def reject_nullable_tier_join(queryset, *fields):
+            if getattr(queryset, "_test_for_update", False) and "tier" in fields:
+                raise AssertionError(
+                    "locked user write must not select_related nullable tier"
+                )
+            return original_select_related(queryset, *fields)
+
+        with (
+            patch.object(QuerySet, "select_for_update", mark_for_update),
+            patch.object(QuerySet, "select_related", reject_nullable_tier_join),
+        ):
+            response = self._patch("alice@test.com", {"unsubscribed": True})
+
+        self.assertEqual(response.status_code, 200)
 
     def test_patch_unsubscribed_idempotent_returns_200(self):
         user = self._make_user(email="alice@test.com", unsubscribed=True)

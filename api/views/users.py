@@ -440,7 +440,7 @@ def user_detail(request, email):
     with transaction.atomic():
         # Re-fetch with row-level lock so the audit row reflects the
         # actual transition we wrote (not a stale read).
-        locked = User.objects.select_for_update().select_related("tier").get(pk=user.pk)
+        locked = User.objects.select_for_update().get(pk=user.pk)
 
         if "unsubscribed" in data:
             new_value = bool(data["unsubscribed"])
@@ -995,7 +995,7 @@ def user_mark_bounced(request, email):
     )
 
     with transaction.atomic():
-        locked = User.objects.select_for_update().select_related("tier").get(pk=user.pk)
+        locked = User.objects.select_for_update().get(pk=user.pk)
         previous_state = locked.bounce_state
 
         # Idempotency check: if the user is already in the requested

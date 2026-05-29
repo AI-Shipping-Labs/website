@@ -64,7 +64,7 @@ Parameters:
   <div class="mb-8 rounded-lg border border-border bg-card p-4 text-center text-sm text-muted-foreground">
     <a href="/accounts/signup/?next={{ request.get_full_path|urlencode }}" class="text-accent hover:underline">Sign up</a> {{ composer_signin_prompt|default:"to ask questions, track your progress, and get access to other workshops" }}
     <span class="mx-1 text-muted-foreground">&middot;</span>
-    <a href="/accounts/login/?next={{ request.get_full_path|urlencode }}" class="text-accent hover:underline">Already have an account? Sign in</a>
+    <a href="/accounts/login/?next={{ request.get_full_path|urlencode }}" class="text-muted-foreground hover:text-foreground hover:underline">Already have an account? Sign in</a>
   </div>
   {% endif %}
 

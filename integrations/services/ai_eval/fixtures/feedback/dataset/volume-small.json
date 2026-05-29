@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "id": "fb-volume-small",
+    "category": "response-volume",
+    "phrasing": "direct",
+    "source": "designed",
+    "expected": {
+      "expects_next_sprint_signal": true
+    }
+  },
+  "sprint_name": "Sprint A - Small",
+  "response_count": 1,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Office hours kept me unblocked."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping took too long."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    }
+  ]
+}

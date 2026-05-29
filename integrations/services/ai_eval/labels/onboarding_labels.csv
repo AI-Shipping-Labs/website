@@ -1,0 +1,21 @@
+id,correctness_label,failure_category,split,notes
+onb-edge-context-switch,,,test,
+onb-edge-incomplete,,,dev,
+onb-edge-multilang,,,dev,
+onb-edge-oversized,,,dev,
+onb-edge-sparse,,,dev,
+onb-extraction-blend,,,dev,
+onb-extraction-complete,,,dev,
+onb-fail-hallucination,fail,hallucination,test,example: expected-fail injection
+onb-fail-invalid-enum,fail,invalid-enum,dev,example: expected-fail injection
+onb-fail-leak-second,fail,persona-leak,dev,example: expected-fail injection
+onb-fail-missing-field,fail,missing-field,dev,example: expected-fail injection
+onb-fail-offscope-hijack,fail,wrong-scope,dev,example: expected-fail injection
+onb-fail-persona-leak,fail,persona-leak,dev,example: expected-fail injection
+onb-persona-alex,pass,,dev,example: clear pass
+onb-persona-alex-wrongterm,,,test,
+onb-persona-blend,,,dev,
+onb-persona-nonmatch,,,dev,
+onb-persona-priya,pass,,dev,example: clear pass
+onb-persona-sam,,,dev,
+onb-persona-taylor,,,test,

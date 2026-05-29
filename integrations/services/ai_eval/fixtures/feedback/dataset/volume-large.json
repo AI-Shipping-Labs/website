@@ -1,0 +1,243 @@
+{
+  "meta": {
+    "id": "fb-volume-large",
+    "category": "response-volume",
+    "phrasing": "broad",
+    "source": "synthetic",
+    "expected": {
+      "expects_next_sprint_signal": true
+    }
+  },
+  "sprint_name": "Sprint C - Large",
+  "response_count": 12,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good thing number 0."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Improve area 0."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good thing number 1."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Improve area 1."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good thing number 2."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Improve area 2."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good thing number 3."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Improve area 0."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good thing number 4."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Improve area 1."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good thing number 5."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Improve area 2."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good thing number 6."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Improve area 0."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good thing number 7."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Improve area 1."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good thing number 8."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Improve area 2."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good thing number 9."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Improve area 0."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good thing number 10."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Improve area 1."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good thing number 11."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Improve area 2."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    }
+  ]
+}

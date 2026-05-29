@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "id": "fb-next-sprint-signal",
+    "category": "next-sprint-signal",
+    "phrasing": "direct",
+    "source": "designed",
+    "expected": {
+      "expects_next_sprint_signal": true
+    }
+  },
+  "sprint_name": "Sprint K - Signal",
+  "response_count": 2,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Loved it."
+        ],
+        [
+          "Will you join the next sprint?",
+          "single_choice",
+          "Yes, definitely"
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good."
+        ],
+        [
+          "Will you join the next sprint?",
+          "single_choice",
+          "Maybe"
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "3"
+        ]
+      ]
+    }
+  ]
+}

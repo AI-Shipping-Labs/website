@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "id": "fb-edge-no-signal",
+    "category": "edge-case",
+    "phrasing": "direct",
+    "source": "designed",
+    "expected": {
+      "no_signal_expected": true,
+      "input_terms": [
+        "docs",
+        "examples"
+      ]
+    }
+  },
+  "sprint_name": "Sprint M - No signal question",
+  "response_count": 2,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "The docs were clear."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "More examples please."
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Good examples in docs."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Add more worked examples."
+        ]
+      ]
+    }
+  ]
+}

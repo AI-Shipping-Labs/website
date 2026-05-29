@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "id": "fb-consensus-split",
+    "category": "consensus",
+    "phrasing": "broad",
+    "source": "designed"
+  },
+  "sprint_name": "Sprint H - Split",
+  "response_count": 2,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Office hours were perfect, keep them."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "nothing"
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "nothing really"
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Office hours were a waste of time, drop them."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "2"
+        ]
+      ]
+    }
+  ]
+}

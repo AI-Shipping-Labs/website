@@ -1,0 +1,56 @@
+{
+  "meta": {
+    "id": "fb-quality-wrongterm",
+    "category": "feedback-quality",
+    "phrasing": "wrong-terminology",
+    "source": "synthetic",
+    "expected": {
+      "input_terms": [
+        "standup",
+        "pairing"
+      ]
+    }
+  },
+  "sprint_name": "Sprint P - Wrong terminology",
+  "response_count": 2,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "The daily standup syncs and the buddy-coding were clutch."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "The buddy-coding scheduling was messy."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Pairing sessions were great."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Standup time slot clashed for me."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "3"
+        ]
+      ]
+    }
+  ]
+}

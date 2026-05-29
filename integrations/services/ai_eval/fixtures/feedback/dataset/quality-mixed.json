@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "id": "fb-quality-mixed",
+    "category": "feedback-quality",
+    "phrasing": "broad",
+    "source": "synthetic"
+  },
+  "sprint_name": "Sprint F - Mixed",
+  "response_count": 2,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "The pairing and accountability structure was excellent and detailed."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "meh"
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "ok"
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "The deploy documentation needs concrete step-by-step examples."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "2"
+        ]
+      ]
+    }
+  ]
+}

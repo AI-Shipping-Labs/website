@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "id": "fb-edge-empty",
+    "category": "edge-case",
+    "phrasing": "vague",
+    "source": "designed",
+    "expected": {
+      "expects_empty": true
+    }
+  },
+  "sprint_name": "Sprint L - Empty",
+  "response_count": 1,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          ""
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          ""
+        ]
+      ]
+    }
+  ]
+}

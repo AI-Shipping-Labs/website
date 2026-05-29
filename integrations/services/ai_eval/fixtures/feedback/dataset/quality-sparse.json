@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "id": "fb-quality-sparse",
+    "category": "feedback-quality",
+    "phrasing": "vague",
+    "source": "designed"
+  },
+  "sprint_name": "Sprint E - Sparse",
+  "response_count": 2,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "good"
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "idk"
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "3"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "fine"
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          ""
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "3"
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "id": "fb-volume-medium",
+    "category": "response-volume",
+    "phrasing": "direct",
+    "source": "designed",
+    "expected": {
+      "expects_next_sprint_signal": true,
+      "input_terms": [
+        "office hours",
+        "scoping",
+        "pairing",
+        "deploy"
+      ]
+    }
+  },
+  "sprint_name": "Sprint B - Medium",
+  "response_count": 4,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Office hours were great."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping ran long."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Pairing on the eval harness helped."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Scoping early would help."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "4"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Office hours unblocked me twice."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Deploy docs were thin."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "5"
+        ]
+      ]
+    },
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "Pairing sessions kept momentum."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "Deploy step confusing."
+        ],
+        [
+          "How likely are you to join the next sprint?",
+          "scale",
+          "3"
+        ]
+      ]
+    }
+  ]
+}

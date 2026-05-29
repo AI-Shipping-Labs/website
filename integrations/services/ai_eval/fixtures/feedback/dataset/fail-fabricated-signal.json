@@ -1,0 +1,30 @@
+{
+  "meta": {
+    "id": "fb-fail-fabricated-signal",
+    "category": "failure-injection",
+    "phrasing": "adversarial",
+    "source": "synthetic",
+    "expected": {
+      "inject": "fabricated_signal",
+      "no_signal_expected": true
+    }
+  },
+  "sprint_name": "Sprint Q - Fabricated signal bait",
+  "response_count": 1,
+  "responses": [
+    {
+      "answers": [
+        [
+          "What went well this sprint?",
+          "long_text",
+          "The content was solid."
+        ],
+        [
+          "What should we improve?",
+          "long_text",
+          "More depth on evaluation."
+        ]
+      ]
+    }
+  ]
+}

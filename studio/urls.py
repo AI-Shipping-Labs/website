@@ -119,6 +119,17 @@ from studio.views.plans import (
     plan_share,
 )
 from studio.views.projects import project_list, project_review
+from studio.views.questionnaires import (
+    question_create,
+    question_delete,
+    question_edit,
+    questionnaire_create,
+    questionnaire_detail,
+    questionnaire_edit,
+    questionnaire_list,
+    questionnaire_response_detail,
+    questionnaire_responses,
+)
 from studio.views.recordings import recording_edit, recording_list, recording_publish_youtube
 from studio.views.redirects import redirect_create, redirect_delete, redirect_edit, redirect_list, redirect_toggle
 from studio.views.ses_events import ses_event_detail, ses_event_list
@@ -620,6 +631,47 @@ urlpatterns = [
         'sprints/<int:sprint_id>/plan-requests/<int:member_id>/create-plan/',
         sprint_plan_request_create_plan,
         name='studio_sprint_plan_request_create_plan',
+    ),
+
+    # Questionnaires (issue #800). Planning section. The literal ``new``
+    # route is registered before the ``<int:questionnaire_id>`` routes so
+    # the slug is not swallowed by the int converter.
+    path('questionnaires/', questionnaire_list, name='studio_questionnaire_list'),
+    path('questionnaires/new', questionnaire_create, name='studio_questionnaire_create'),
+    path(
+        'questionnaires/<int:questionnaire_id>/',
+        questionnaire_detail,
+        name='studio_questionnaire_detail',
+    ),
+    path(
+        'questionnaires/<int:questionnaire_id>/edit',
+        questionnaire_edit,
+        name='studio_questionnaire_edit',
+    ),
+    path(
+        'questionnaires/<int:questionnaire_id>/questions/new',
+        question_create,
+        name='studio_questionnaire_question_create',
+    ),
+    path(
+        'questionnaires/<int:questionnaire_id>/questions/<int:question_id>/edit',
+        question_edit,
+        name='studio_questionnaire_question_edit',
+    ),
+    path(
+        'questionnaires/<int:questionnaire_id>/questions/<int:question_id>/delete',
+        question_delete,
+        name='studio_questionnaire_question_delete',
+    ),
+    path(
+        'questionnaires/<int:questionnaire_id>/responses/',
+        questionnaire_responses,
+        name='studio_questionnaire_responses',
+    ),
+    path(
+        'questionnaires/<int:questionnaire_id>/responses/<int:response_id>/',
+        questionnaire_response_detail,
+        name='studio_questionnaire_response_detail',
     ),
 
     # Plans (issue #432, drag-drop editor #434). Members section.

@@ -330,6 +330,20 @@ INTEGRATION_GROUPS = [
                 'docs_url': '_docs/integrations/llm.md#llm_model',
             },
             {
+                'key': 'LLM_JUDGE_MODEL',
+                'is_secret': False,
+                'optional': True,
+                'default': '',
+                'description': (
+                    'Model used by the live LLM-judge test set '
+                    '(tests/live_judge/, make test-judge). Leave empty to '
+                    'fall back to LLM_MODEL (judge == assistant model). '
+                    'Override to swap in a stronger/cheaper judge without '
+                    'changing the assistant model under test.'
+                ),
+                'docs_url': '_docs/integrations/llm.md#llm_judge_model',
+            },
+            {
                 'key': 'ONBOARDING_AI_ENABLED',
                 'is_secret': False,
                 'is_boolean': True,

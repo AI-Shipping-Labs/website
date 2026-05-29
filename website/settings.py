@@ -442,6 +442,11 @@ LLM_PROVIDER = os.environ.get('LLM_PROVIDER', 'anthropic')
 LLM_API_KEY = os.environ.get('LLM_API_KEY', '')
 LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'https://api.anthropic.com')
 LLM_MODEL = os.environ.get('LLM_MODEL', 'claude-sonnet-4-5')
+# Model used by the live LLM-judge test set (tests/live_judge/, issue #811).
+# Empty by default so the judge falls back to LLM_MODEL (judge == assistant
+# model, zero-config). Override to swap in a stronger/cheaper judge model
+# without touching the assistant's own LLM_MODEL.
+LLM_JUDGE_MODEL = os.environ.get('LLM_JUDGE_MODEL', '')
 LLM_MAX_RETRIES = int(os.environ.get('LLM_MAX_RETRIES', '6'))
 
 # Sync watchdog thresholds (issue #274). The dashboard runs an inline

@@ -57,6 +57,7 @@ PARTIAL_USERS = {
     'api_tokens/list.html',
     'workshops/list.html',
     'plans/list.html',
+    'questionnaires/list.html',
     'sprints/list.html',
     'redirects/list.html',
     'campaigns/list.html',

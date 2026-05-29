@@ -1,0 +1,77 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if form_action == 'edit' %}Edit questionnaire{% else %}New questionnaire{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_questionnaire_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to Questionnaires
+  </a>
+  <header class="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold text-foreground">
+        {% if form_action == 'edit' %}Edit questionnaire{% else %}New questionnaire{% endif %}
+      </h1>
+    </div>
+  </header>
+</div>
+
+{% if error %}
+<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm" data-testid="questionnaire-form-error">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form id="questionnaire-edit-form" method="post" action="{% if form_action == 'edit' %}{% url 'studio_questionnaire_edit' questionnaire_id=questionnaire.pk %}{% else %}{% url 'studio_questionnaire_create' %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Title</label>
+      <input type="text" name="title" value="{{ form_data.title }}"
+             placeholder="May Sprint Feedback"
+             data-testid="questionnaire-title-input"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
+      <input type="text" name="slug" value="{{ form_data.slug }}"
+             placeholder="may-sprint-feedback"
+             data-testid="questionnaire-slug-input"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">URL-safe id. Leave blank to auto-derive from title.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Purpose</label>
+      <select name="purpose" data-testid="questionnaire-purpose-select"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
+        {% for value, label in purpose_choices %}
+        <option value="{{ value }}" {% if form_data.purpose == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Description</label>
+      <textarea name="description" rows="4"
+                placeholder="Optional internal note / intro shown to respondents"
+                data-testid="questionnaire-description-input"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.description }}</textarea>
+    </div>
+
+    <div class="mb-2 flex items-center gap-2">
+      <input type="checkbox" name="is_active" id="questionnaire-is-active" {% if form_data.is_active %}checked{% endif %}
+             data-testid="questionnaire-is-active-input"
+             class="rounded border-border bg-secondary text-accent focus:ring-accent">
+      <label for="questionnaire-is-active" class="text-sm font-medium text-foreground">Active</label>
+    </div>
+    <p class="text-xs text-muted-foreground">Inactive questionnaires are hidden from new-response surfaces but keep their data.</p>
+
+  </form>
+</div>
+
+{% url 'studio_questionnaire_list' as questionnaire_cancel_url %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="questionnaire-edit-form" title="Questionnaire" subtitle="Save remains available while you review the form." can_save=True primary_label=primary_label cancel_url=questionnaire_cancel_url %}
+{% endblock %}

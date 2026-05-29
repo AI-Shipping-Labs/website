@@ -400,7 +400,9 @@ def studio_sidebar_state(path):
         or '/users/created' in p
         or '/crm' in p
     )
-    planning_active = '/sprints' in p or '/plans' in p
+    planning_active = (
+        '/sprints' in p or '/plans' in p or '/questionnaires' in p
+    )
     events_active = (
         '/events/' in p
         or p == '/studio/events'

@@ -1,0 +1,125 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}{{ questionnaire.title }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_questionnaire_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to Questionnaires
+  </a>
+  <div class="mt-2 flex items-start justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold text-foreground" data-testid="questionnaire-detail-title">{{ questionnaire.title }}</h1>
+      <p class="text-sm text-muted-foreground mt-1 font-mono">{{ questionnaire.slug }}</p>
+    </div>
+    <div class="flex items-center gap-2" data-testid="studio-header-actions">
+      <a href="{% url 'studio_questionnaire_responses' questionnaire_id=questionnaire.pk %}"
+         class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+         data-testid="questionnaire-responses-link">
+        Responses ({{ response_count }})
+      </a>
+      <a href="{% url 'studio_questionnaire_edit' questionnaire_id=questionnaire.pk %}"
+         class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
+        Edit questionnaire
+      </a>
+    </div>
+  </div>
+</div>
+
+<div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-2xl">
+  <dl class="grid grid-cols-2 gap-4 text-sm">
+    <div>
+      <dt class="text-xs text-muted-foreground uppercase">Purpose</dt>
+      <dd class="text-foreground mt-1">
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-muted-foreground" data-testid="questionnaire-detail-purpose-badge">{{ questionnaire.get_purpose_display }}</span>
+      </dd>
+    </div>
+    <div>
+      <dt class="text-xs text-muted-foreground uppercase">Active</dt>
+      <dd class="text-foreground mt-1" data-testid="questionnaire-detail-active">{% if questionnaire.is_active %}Active{% else %}Inactive{% endif %}</dd>
+    </div>
+    <div>
+      <dt class="text-xs text-muted-foreground uppercase">Questions</dt>
+      <dd class="text-foreground mt-1" data-testid="questionnaire-detail-question-count">{{ questionnaire.question_count }}</dd>
+    </div>
+    <div>
+      <dt class="text-xs text-muted-foreground uppercase">Responses</dt>
+      <dd class="text-foreground mt-1">{{ response_count }}</dd>
+    </div>
+  </dl>
+  {% if questionnaire.description %}
+  <div class="mt-4">
+    <dt class="text-xs text-muted-foreground uppercase">Description</dt>
+    <dd class="text-foreground mt-1 whitespace-pre-line">{{ questionnaire.description }}</dd>
+  </div>
+  {% endif %}
+</div>
+
+<div class="flex items-center justify-between mb-4">
+  <h2 class="text-lg font-semibold text-foreground">Questions</h2>
+  <a href="{% url 'studio_questionnaire_question_create' questionnaire_id=questionnaire.pk %}"
+     class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2"
+     data-testid="questionnaire-add-question-link">
+    <i data-lucide="plus" class="h-4 w-4"></i>
+    <span>Add question</span>
+  </a>
+</div>
+
+{% if questions %}
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Order</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Prompt</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Required</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for question in questions %}
+      <tr class="hover:bg-secondary/50 transition-colors" data-testid="questionnaire-question-row">
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Order">{{ question.order }}</td>
+        <td class="px-6 py-4 text-sm text-foreground" data-testid="questionnaire-question-prompt">
+          {{ question.prompt }}
+          {% if question.help_text %}
+          <div class="text-xs text-muted-foreground mt-1">{{ question.help_text }}</div>
+          {% endif %}
+          {% if question.is_choice_type %}
+          <ul class="text-xs text-muted-foreground mt-1 list-disc list-inside" data-testid="questionnaire-question-options">
+            {% for option in question.options.all %}
+            <li data-testid="questionnaire-question-option">{{ option.label }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Type" data-testid="questionnaire-question-type">{{ question.get_question_type_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Required">{% if question.is_required %}Yes{% else %}No{% endif %}</td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            {% url 'studio_questionnaire_question_edit' questionnaire_id=questionnaire.pk question_id=question.pk as q_edit_url %}
+            {% studio_list_action q_edit_url 'Edit' 'secondary' %}
+            <form method="post"
+                  action="{% url 'studio_questionnaire_question_delete' questionnaire_id=questionnaire.pk question_id=question.pk %}"
+                  class="{% studio_list_class 'action_form' %}"
+                  data-testid="questionnaire-question-delete-form">
+              {% csrf_token %}
+              <button type="submit"
+                      class="{% studio_action_class 'destructive' %}"
+                      data-testid="questionnaire-question-delete-button">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm" data-testid="questionnaire-questions-empty">
+  No questions yet. Add the first question to this questionnaire.
+</div>
+{% endif %}
+{% endblock %}

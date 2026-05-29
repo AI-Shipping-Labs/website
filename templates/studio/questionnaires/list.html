@@ -1,0 +1,69 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Questionnaires{% endblock %}
+
+{% block studio_content %}
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8" data-testid="questionnaires-header">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Questionnaires</h1>
+    <p class="text-muted-foreground mt-1">Free-form question sets for onboarding intake and sprint feedback.</p>
+  </div>
+  <a href="{% url 'studio_questionnaire_create' %}"
+     class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2"
+     data-testid="questionnaire-new-link">
+    <i data-lucide="plus" class="h-4 w-4"></i>
+    <span>New questionnaire</span>
+  </a>
+</div>
+
+{% if questionnaires %}
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Purpose</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Questions</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Responses</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Active</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for q in questionnaires %}
+      <tr class="hover:bg-secondary/50 transition-colors" data-testid="questionnaire-row">
+        <td class="px-6 py-4 text-sm text-foreground">
+          <a href="{% url 'studio_questionnaire_detail' questionnaire_id=q.pk %}" class="text-accent hover:underline" data-testid="questionnaire-title">{{ q.title }}</a>
+          <div class="text-xs text-muted-foreground font-mono">{{ q.slug }}</div>
+        </td>
+        <td class="px-6 py-4" data-label="Purpose">
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-muted-foreground" data-testid="questionnaire-purpose-badge">{{ q.get_purpose_display }}</span>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Questions" data-testid="questionnaire-question-count">{{ q.num_questions }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Responses" data-testid="questionnaire-response-count">{{ q.num_responses }}</td>
+        <td class="px-6 py-4 text-sm" data-label="Active">
+          {% if q.is_active %}
+          <span class="text-green-400" data-testid="questionnaire-active-yes">Active</span>
+          {% else %}
+          <span class="text-muted-foreground" data-testid="questionnaire-active-no">Inactive</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            {% url 'studio_questionnaire_detail' questionnaire_id=q.pk as detail_url %}
+            {% url 'studio_questionnaire_edit' questionnaire_id=q.pk as edit_url %}
+            {% studio_list_action detail_url 'View' 'primary' %}
+            {% studio_list_action edit_url 'Edit' 'secondary' %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  {% url 'studio_questionnaire_create' as questionnaires_create_url %}
+  {% studio_empty_state 'fresh' entity_label='questionnaire' entity_label_plural='questionnaires' create_url=questionnaires_create_url %}
+{% endif %}
+{% endblock %}

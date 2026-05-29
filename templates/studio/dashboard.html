@@ -102,7 +102,10 @@
 <section class="mb-6" aria-labelledby="summary-heading">
   <div class="flex items-center justify-between gap-3 mb-3">
     <h2 id="summary-heading" class="text-lg font-semibold text-foreground">Summary</h2>
-    <a href="{% url 'studio_sprint_list' %}" class="text-sm text-accent hover:underline" data-testid="studio-dashboard-sprints-link">Sprints</a>
+    <div class="flex items-center gap-4">
+      <a href="{% url 'studio_sprint_list' %}" class="text-sm text-accent hover:underline" data-testid="studio-dashboard-sprints-link">Sprints</a>
+      <a href="{% url 'studio_questionnaire_list' %}" class="text-sm text-accent hover:underline" data-testid="studio-dashboard-questionnaires-link">Questionnaires</a>
+    </div>
   </div>
   <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
     {% for metric in summary_metrics %}

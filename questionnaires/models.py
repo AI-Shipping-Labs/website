@@ -385,3 +385,40 @@ class Answer(TimestampedModelMixin, models.Model):
                 return ''
             return str(self.number_value)
         return self.text_value or ''
+
+
+class OnboardingConversation(TimestampedModelMixin, models.Model):
+    """The AI onboarding chat transcript for one member's onboarding (#804).
+
+    The conversational AI path (#804) is an alternative to #802's form.
+    It writes the SAME #800 ``Response`` / ``ResponseQuestion`` /
+    ``Answer`` artifacts, so this row stores ONLY the chat-specific extras
+    that have no home on those models:
+
+    - ``transcript``: the running list of ``{'role', 'content'}`` turns,
+      so a member can resume an in-progress chat. Final answers always
+      land as ``Answer`` rows -- this is never an alternate answer store.
+    - ``persona_signal``: the internal archetype signal the AI inferred,
+      stored Studio-side only and never rendered to the member.
+
+    One conversation per onboarding ``Response`` (a OneToOne), so there is
+    exactly one onboarding response per member regardless of path.
+    """
+
+    response = models.OneToOneField(
+        Response,
+        on_delete=models.CASCADE,
+        related_name='ai_conversation',
+    )
+    transcript = models.JSONField(default=list, blank=True)
+    persona_signal = models.CharField(max_length=20, blank=True, default='')
+
+    def __str__(self):
+        return f'AI onboarding conversation for response {self.response_id}'
+
+    def append_turn(self, role, content):
+        """Append one ``{'role', 'content'}`` turn to the transcript."""
+        if not isinstance(self.transcript, list):
+            self.transcript = []
+        self.transcript.append({'role': role, 'content': content})
+        return self.transcript

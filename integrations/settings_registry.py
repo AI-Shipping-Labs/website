@@ -329,6 +329,19 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/llm.md#llm_model',
             },
+            {
+                'key': 'ONBOARDING_AI_ENABLED',
+                'is_secret': False,
+                'is_boolean': True,
+                'default': 'true',
+                'description': (
+                    'Set true to offer the conversational AI onboarding flow '
+                    'when the LLM is enabled. When off (or the LLM is '
+                    'disabled), /onboarding/ shows the form-first flow only. '
+                    'Defaults on; switchable without a redeploy.'
+                ),
+                'docs_url': '_docs/integrations/llm.md#onboarding_ai_enabled',
+            },
         ],
     },
 ]

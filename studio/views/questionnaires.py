@@ -503,10 +503,19 @@ def questionnaire_response_detail(request, questionnaire_id, response_id):
             'is_custom': rq.is_custom,
         })
 
+    # Staff-only: the internal persona signal inferred by the AI
+    # onboarding chat (#804), when this response came from that path. It
+    # is never rendered on any member-facing surface.
+    persona_signal = ''
+    conversation = getattr(response, 'ai_conversation', None)
+    if conversation is not None:
+        persona_signal = conversation.persona_signal
+
     return render(request, 'studio/questionnaires/response_detail.html', {
         'questionnaire': questionnaire,
         'response': response,
         'rows': rows,
+        'persona_signal': persona_signal,
     })
 
 

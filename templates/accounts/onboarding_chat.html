@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Onboarding | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
+
+      <header class="mb-8">
+        <p class="text-sm uppercase tracking-wide text-muted-foreground">Onboarding</p>
+        <h1 class="text-3xl font-semibold tracking-tight mt-1" data-testid="onboarding-chat-title">
+          Tell us about yourself
+        </h1>
+        <p class="text-sm text-muted-foreground mt-2" data-testid="onboarding-chat-subtitle">
+          Chat with our assistant about your goals so we can build the right plan for you.
+        </p>
+      </header>
+
+      {% if error %}
+      <div class="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-400"
+           data-testid="onboarding-chat-error">
+        {{ error }}
+      </div>
+      {% endif %}
+
+      <div class="rounded-2xl border border-border bg-card p-5 space-y-4"
+           data-testid="onboarding-chat-transcript">
+        {% for message in chat_messages %}
+          {% if message.role == 'assistant' %}
+          <div class="flex justify-start" data-testid="onboarding-chat-assistant">
+            <div class="max-w-[85%] rounded-2xl bg-muted px-4 py-3 text-sm text-foreground">
+              {{ message.content }}
+            </div>
+          </div>
+          {% else %}
+          <div class="flex justify-end" data-testid="onboarding-chat-member">
+            <div class="max-w-[85%] rounded-2xl bg-accent px-4 py-3 text-sm text-accent-foreground">
+              {{ message.content }}
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      <form method="post" action="{% url 'onboarding_chat_message' %}"
+            class="mt-4 flex items-end gap-2"
+            data-testid="onboarding-chat-form">
+        {% csrf_token %}
+        <textarea name="message" rows="2" required
+                  class="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  placeholder="Type your reply..."
+                  data-testid="onboarding-chat-input"></textarea>
+        <button type="submit"
+                class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
+                data-testid="onboarding-chat-send">
+          Send
+        </button>
+      </form>
+
+      <p class="mt-4 text-xs text-muted-foreground">
+        Prefer a form?
+        <a href="{% url 'onboarding_fill' response_id=response.pk %}"
+           class="underline hover:text-foreground"
+           data-testid="onboarding-switch-to-form">
+          Switch to the questions
+        </a>.
+      </p>
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

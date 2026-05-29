@@ -37,7 +37,11 @@ from plans.models import (
     Plan,
     Sprint,
 )
-from plans.services import create_plan_for_enrollment
+from plans.services import (
+    carry_over_unfinished_tasks,
+    create_plan_for_enrollment,
+    find_carry_over_source_plan,
+)
 from studio.decorators import staff_required
 from studio.services.plan_editor import build_plan_editor_context
 
@@ -386,3 +390,45 @@ def plan_share(request, plan_id):
         )
 
     return redirect('studio_plan_edit', plan_id=plan.pk)
+
+
+@staff_required
+@require_POST
+def plan_carry_over(request, plan_id):
+    """Staff trigger: carry the member's unfinished tasks forward (issue #808).
+
+    Calls the same ``plans.services`` carry-over logic the member uses,
+    with the same source-selection rule (the member's own most-recent
+    prior plan) and the same idempotency. Reports the copied count as a
+    Studio flash and stays on the Studio plan detail page.
+    """
+    plan = get_object_or_404(
+        Plan.objects.select_related('member', 'sprint'),
+        pk=plan_id,
+    )
+    source_plan = find_carry_over_source_plan(destination_plan=plan)
+    if source_plan is None:
+        messages.info(
+            request,
+            f'{plan.member.email} has no previous sprint plan to carry '
+            'tasks over from.',
+        )
+        return redirect('studio_plan_detail', plan_id=plan.pk)
+
+    copied = carry_over_unfinished_tasks(
+        source_plan=source_plan,
+        destination_plan=plan,
+    )
+    if copied:
+        messages.success(
+            request,
+            f'Carried over {copied} task{"" if copied == 1 else "s"} from '
+            f'"{source_plan.sprint.name}" into {plan.member.email}\'s plan.',
+        )
+    else:
+        messages.info(
+            request,
+            f'No new tasks to carry over from "{source_plan.sprint.name}" '
+            f'for {plan.member.email} (already up to date).',
+        )
+    return redirect('studio_plan_detail', plan_id=plan.pk)

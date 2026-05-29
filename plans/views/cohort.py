@@ -17,6 +17,7 @@ issue. The interview-note model is deliberately NOT imported here.
 import datetime
 import json
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.http import (
@@ -39,6 +40,12 @@ from plans.models import (
     PlanRequest,
     Sprint,
     SprintEnrollment,
+)
+from plans.services import (
+    carry_over_unfinished_tasks,
+    count_total_unfinished,
+    count_unfinished_carry_over_items,
+    find_carry_over_source_plan,
 )
 
 # Mirrors plans.views.sprints.PLAN_REQUEST_RATE_LIMIT. Imported as a
@@ -258,6 +265,25 @@ def my_plan_detail(request, sprint_slug, plan_id):
         composer_state_for_owner_view(plan, request.user)
     )
 
+    # Carry-over panel (issue #808). Only the owner reaches this view, so
+    # the panel is inherently owner-only. The source is the member's own
+    # most-recent prior plan. The panel hides entirely when there is no
+    # earlier plan OR the earlier plan has zero unfinished tasks; it shows
+    # the "all caught up" notice when there ARE unfinished source tasks but
+    # they have all already been copied into this plan (net count 0).
+    carry_over_source = find_carry_over_source_plan(destination_plan=plan)
+    carry_over_unfinished_count = 0
+    if carry_over_source is not None:
+        raw_unfinished = count_total_unfinished(source_plan=carry_over_source)
+        if raw_unfinished == 0:
+            # Nothing unfinished on the source at all -> hide the panel.
+            carry_over_source = None
+        else:
+            carry_over_unfinished_count = count_unfinished_carry_over_items(
+                source_plan=carry_over_source,
+                destination_plan=plan,
+            )
+
     return render(
         request,
         'plans/my_plan_detail.html',
@@ -271,7 +297,67 @@ def my_plan_detail(request, sprint_slug, plan_id):
             'visibility_choices': PLAN_VISIBILITY_CHOICES,
             'comments_composer_disabled': comments_composer_disabled,
             'comments_disabled_reason': comments_disabled_reason,
+            'carry_over_source': carry_over_source,
+            'carry_over_unfinished_count': carry_over_unfinished_count,
         },
+    )
+
+
+@login_required
+@require_POST
+def carry_over_tasks(request, sprint_slug, plan_id):
+    """Owner-only POST: carry unfinished tasks from the member's prior plan.
+
+    Owner-only via the same 404-not-403 convention as the rest of this
+    app: the plan must belong to ``request.user`` AND to the sprint in the
+    URL, else 404 (so plan IDs stay opaque). Anonymous users are bounced
+    to login by ``login_required`` before any side effect.
+
+    Source selection and the copy itself live in ``plans.services`` so
+    Studio can reuse the same logic; the whole copy is one atomic
+    transaction inside the service. Always redirects back to the workspace
+    with a flash message (success count, or an informational no-op).
+    """
+    plan = get_object_or_404(
+        Plan.objects.filter(
+            pk=plan_id,
+            member=request.user,
+            sprint__slug=sprint_slug,
+        ).select_related('sprint'),
+    )
+
+    source_plan = find_carry_over_source_plan(destination_plan=plan)
+    if source_plan is None:
+        messages.info(
+            request,
+            'No previous sprint plan to carry tasks over from.',
+        )
+        return redirect(
+            'my_plan_detail',
+            sprint_slug=plan.sprint.slug,
+            plan_id=plan.pk,
+        )
+
+    copied = carry_over_unfinished_tasks(
+        source_plan=source_plan,
+        destination_plan=plan,
+    )
+    if copied:
+        messages.success(
+            request,
+            f'Carried over {copied} task{"" if copied == 1 else "s"} '
+            f'from {source_plan.sprint.name}. Add more below.',
+        )
+    else:
+        messages.info(
+            request,
+            'All caught up — nothing left to carry over from '
+            f'{source_plan.sprint.name}.',
+        )
+    return redirect(
+        'my_plan_detail',
+        sprint_slug=plan.sprint.slug,
+        plan_id=plan.pk,
     )
 
 

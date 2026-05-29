@@ -242,6 +242,61 @@ class SprintFeedbackRequest(TimestampedModelMixin, models.Model):
         return f'{self.questionnaire} for {self.sprint}'
 
 
+class SprintFeedbackSummary(TimestampedModelMixin, models.Model):
+    """AI synthesis of a sprint's collected feedback (issue #805).
+
+    Stores the validated structured output of
+    :func:`integrations.services.feedback_synthesis.synthesize_feedback`
+    so staff re-open the sprint detail page without re-paying for an LLM
+    call, and so #809's eval harness can compare stored runs against a
+    real provider. There is at most one current summary per feedback
+    request; regenerating overwrites the single row via
+    ``update_or_create`` keyed on ``feedback_request``.
+
+    ``response_count`` records how many submitted responses fed the
+    synthesis, so the UI can flag a stored summary as stale once more
+    members submit. ``model_name`` records the resolved LLM model for
+    provenance. ``generated_by`` is ``SET_NULL`` because the audit row
+    survives deletion of the staff account that triggered it.
+    """
+
+    feedback_request = models.OneToOneField(
+        SprintFeedbackRequest,
+        on_delete=models.CASCADE,
+        related_name='summary',
+    )
+    result_json = models.JSONField(
+        help_text=(
+            'The validated FeedbackSynthesisResult as a dict (themes, '
+            'what_went_well, what_to_improve, recommendations, '
+            'next_sprint_signal, response_count).'
+        ),
+    )
+    response_count = models.IntegerField(
+        help_text='Number of submitted responses synthesized.',
+    )
+    model_name = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        help_text='Resolved LLM model used, for provenance.',
+    )
+    generated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    generated_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ['-generated_at']
+
+    def __str__(self):
+        return f'Feedback summary for {self.feedback_request}'
+
+
 class PlanQuerySet(models.QuerySet):
     """Visibility-aware queryset for :class:`Plan` (issue #440).
 

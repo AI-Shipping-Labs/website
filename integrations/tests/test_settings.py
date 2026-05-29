@@ -332,7 +332,7 @@ class SettingsDashboardViewTest(TestCase):
             section_ids,
             [
                 'auth', 'payments', 'content', 'content_tools',
-                'messaging', 'storage', 'site', 'analytics',
+                'messaging', 'storage', 'site', 'analytics', 'ai',
             ],
         )
 
@@ -346,6 +346,7 @@ class SettingsDashboardViewTest(TestCase):
         self.assertEqual(groups_by_section['storage'], ['s3_recordings', 's3_content'])
         self.assertEqual(groups_by_section['site'], ['site'])
         self.assertEqual(groups_by_section['analytics'], ['analytics'])
+        self.assertEqual(groups_by_section['ai'], ['llm'])
 
         assigned_group_names = [
             group['name']
@@ -396,9 +397,10 @@ class SettingsDashboardViewTest(TestCase):
         # Google OAuth + the `analytics` group (all keys optional, so
         # "configured" by default even with no value set).
         self.assertEqual(summary['configured_count'], 2)
-        # Stripe has one DB-backed key, SES has one env-backed key, and
-        # GitHub has the default Secrets Manager path but no App IDs.
-        self.assertEqual(summary['partial_count'], 3)
+        # Stripe has one DB-backed key, SES has one env-backed key,
+        # GitHub has the default Secrets Manager path but no App IDs, and
+        # LLM has provider+model defaults but no API key (issue #799).
+        self.assertEqual(summary['partial_count'], 4)
         self.assertEqual(
             summary['missing_count'],
             expected_total_items - summary['configured_count'] - summary['partial_count'],

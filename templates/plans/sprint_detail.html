@@ -120,10 +120,12 @@
         {% else %}
           <form method="post" action="{% url 'sprint_join' sprint_slug=sprint.slug %}" class="inline-block">
             {% csrf_token %}
-            {# Issue #598: Join sprint keeps its emerald color override.
-               Uses the `!`-prefixed pattern (same as the amber verification
-               banner) so per-call utilities win the cascade against the
-               canonical primary `bg-accent`. #}
+            {% comment %}
+            Issue #598: Join sprint keeps its emerald color override.
+            Uses the `!`-prefixed pattern (same as the amber verification
+            banner) so per-call utilities win the cascade against the
+            canonical primary `bg-accent`.
+            {% endcomment %}
             <button type="submit"
                     class="{% button_classes 'primary' extra='!bg-emerald-500 hover:!bg-emerald-600 !text-white' %}"
                     data-testid="sprint-cta-join">

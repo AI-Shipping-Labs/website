@@ -18,6 +18,7 @@ from plans.models import (
     InterviewNote,
     Plan,
     Sprint,
+    SprintEnrollment,
     Week,
 )
 
@@ -345,3 +346,53 @@ class CohortBoardInterviewNoteIsolationTest(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'NOT_FOR_BOARD_BODY')
+
+
+class CohortBoardCommentLeakTest(TestCase):
+    """Issue #807: the #598 developer note must never reach rendered HTML.
+
+    The note lives inside the ``no_plan`` row block, so the board is set
+    up with an enrolled member who has no plan to force that branch to
+    render. The asserted phrases are substrings of the comment body only
+    -- they appear nowhere in legitimate visible copy, so the guard
+    cannot pass falsely. These assertions FAIL against the old
+    multi-line ``{# #}`` template and PASS once it is a
+    ``{% comment %}`` block.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sprint = Sprint.objects.create(
+            name='May 2026', slug='may-2026',
+            start_date=datetime.date(2026, 5, 1),
+        )
+        cls.viewer = User.objects.create_user(
+            email='viewer@test.com', password='pw',
+        )
+        # Plan auto-enrols the viewer via the post_save signal.
+        Plan.objects.create(
+            member=cls.viewer, sprint=cls.sprint, visibility='cohort',
+        )
+        # An enrolled member with NO plan -> renders the no_plan branch
+        # that contains the #598 note.
+        no_plan_member = User.objects.create_user(
+            email='noplan@test.com', password='pw',
+            first_name='No', last_name='Plan',
+        )
+        SprintEnrollment.objects.create(
+            sprint=cls.sprint, user=no_plan_member,
+        )
+
+    def setUp(self):
+        self.client.force_login(self.viewer)
+
+    def test_board_does_not_leak_598_developer_note(self):
+        url = reverse('cohort_board', kwargs={'sprint_slug': self.sprint.slug})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        # Confirm the no_plan branch actually rendered, otherwise the
+        # leak guard would be vacuous.
+        self.assertContains(response, 'data-testid="progress-row-no-plan-')
+        self.assertNotContains(response, 'per-row table actions')
+        self.assertNotContains(response, '44px tap target')
+        self.assertNotContains(response, 'compact-row-action')

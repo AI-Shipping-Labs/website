@@ -7,7 +7,13 @@ primary surface for editing plans; this admin is a low-fi inspector.
 
 from django.contrib import admin
 
-from plans.models import Plan, PlanRequest, Sprint, SprintEnrollment
+from plans.models import (
+    Plan,
+    PlanRequest,
+    Sprint,
+    SprintEnrollment,
+    SprintFeedbackRequest,
+)
 from studio.admin_links import studio_link
 
 
@@ -67,4 +73,15 @@ class PlanRequestAdmin(admin.ModelAdmin):
     list_filter = ['sprint']
     search_fields = ['member__email', 'sprint__name', 'sprint__slug']
     raw_id_fields = ['member']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(SprintFeedbackRequest)
+class SprintFeedbackRequestAdmin(admin.ModelAdmin):
+    list_display = [
+        'sprint', 'questionnaire', 'distributed_at', 'created_by', 'created_at',
+    ]
+    list_filter = ['sprint']
+    search_fields = ['sprint__name', 'sprint__slug', 'questionnaire__title']
+    raw_id_fields = ['sprint', 'questionnaire', 'created_by']
     readonly_fields = ['created_at', 'updated_at']

@@ -23,6 +23,8 @@ from plans.views.notes import (
 from plans.views.sprints import (
     sprint_ask_team,
     sprint_detail,
+    sprint_feedback_fill,
+    sprint_feedback_submit,
     sprint_join,
     sprint_leave,
 )
@@ -60,6 +62,20 @@ urlpatterns = [
         'sprints/<slug:sprint_slug>/ask-team',
         sprint_ask_team,
         name='sprint_ask_team',
+    ),
+    # Sprint feedback fill-in / submit (issue #803). Registered BEFORE
+    # the generic ``<slug:sprint_slug>`` detail route so the literal
+    # ``feedback`` segment is not swallowed by the slug capture, matching
+    # the ``join`` / ``leave`` / ``ask-team`` ordering rule.
+    path(
+        'sprints/<slug:sprint_slug>/feedback/<int:response_id>',
+        sprint_feedback_fill,
+        name='sprint_feedback_fill',
+    ),
+    path(
+        'sprints/<slug:sprint_slug>/feedback/<int:response_id>/submit',
+        sprint_feedback_submit,
+        name='sprint_feedback_submit',
     ),
     path(
         'sprints/<slug:sprint_slug>/plans/<int:plan_id>',

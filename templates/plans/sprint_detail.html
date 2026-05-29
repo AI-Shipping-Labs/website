@@ -73,6 +73,37 @@
       </section>
       {% endif %}
 
+      {% if feedback_response %}
+      <section class="mb-6 rounded-2xl border border-accent/40 bg-accent/10 p-6" data-testid="sprint-feedback-cta-section">
+        {% if feedback_response.status == 'submitted' %}
+        <h2 class="text-lg font-semibold text-foreground mb-1" data-testid="sprint-feedback-cta-submitted">
+          Feedback submitted — thank you
+        </h2>
+        <p class="text-sm text-muted-foreground mb-3">
+          Thanks for telling us how this sprint went — it shapes the next one.
+        </p>
+        <a href="{% url 'sprint_feedback_fill' sprint_slug=sprint.slug response_id=feedback_response.pk %}"
+           class="text-sm text-accent hover:underline"
+           data-testid="sprint-feedback-view-link">
+          View your answers
+        </a>
+        {% else %}
+        <h2 class="text-lg font-semibold text-foreground mb-1" data-testid="sprint-feedback-cta-heading">
+          Sprint feedback
+        </h2>
+        <p class="text-sm text-muted-foreground mb-4" data-testid="sprint-feedback-cta-copy">
+          Tell us how this sprint went — your answers shape the next one. It only
+          takes a couple of minutes.
+        </p>
+        <a href="{% url 'sprint_feedback_fill' sprint_slug=sprint.slug response_id=feedback_response.pk %}"
+           class="inline-flex items-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
+           data-testid="sprint-feedback-cta-link">
+          Share your sprint feedback
+        </a>
+        {% endif %}
+      </section>
+      {% endif %}
+
       <div class="rounded-2xl border border-border bg-card p-6">
         {% if not is_authenticated %}
           <a href="/accounts/login/?next=/sprints/{{ sprint.slug }}"

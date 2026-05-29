@@ -34,7 +34,20 @@ from content.access import LEVEL_TO_TIER_NAME, get_user_level
 from events.models import Event
 from integrations.config import get_config, is_enabled, site_base_url
 from notifications.models import Notification
-from plans.models import Plan, PlanRequest, Sprint, SprintEnrollment
+from plans.models import (
+    Plan,
+    PlanRequest,
+    Sprint,
+    SprintEnrollment,
+    SprintFeedbackRequest,
+)
+from questionnaires.models import Response
+from questionnaires.services import (
+    AnswerSaveError,
+    build_response_form_rows,
+    find_unanswered_required,
+    save_response_answers,
+)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -105,6 +118,8 @@ def sprint_detail(request, sprint_slug):
         getattr(event_series, 'ordered_events', []) if event_series else []
     )
 
+    feedback_response = _viewer_feedback_response(sprint, user)
+
     return render(
         request,
         'plans/sprint_detail.html',
@@ -117,8 +132,170 @@ def sprint_detail(request, sprint_slug):
             'required_tier_name': required_tier_name,
             'event_series': event_series,
             'event_series_events': event_series_events,
+            'feedback_response': feedback_response,
         },
     )
+
+
+def _viewer_feedback_response(sprint, user):
+    """Return the viewer's distributed feedback Response for ``sprint`` or None.
+
+    A response is surfaced only when the questionnaire is attached to this
+    sprint via a :class:`~plans.models.SprintFeedbackRequest` that has
+    been distributed (``distributed_at`` set). Anonymous viewers always
+    get None.
+    """
+    if user is None or not user.is_authenticated:
+        return None
+    questionnaire_ids = list(
+        SprintFeedbackRequest.objects
+        .filter(sprint=sprint, distributed_at__isnull=False)
+        .values_list('questionnaire_id', flat=True)
+    )
+    if not questionnaire_ids:
+        return None
+    return (
+        Response.objects
+        .filter(respondent=user, questionnaire_id__in=questionnaire_ids)
+        .order_by('-created_at')
+        .first()
+    )
+
+
+def _get_member_feedback_response_or_404(request, sprint_slug, response_id):
+    """Resolve ``(sprint, response)`` for a member feedback URL or raise 404.
+
+    The response MUST belong to ``request.user`` AND to a feedback
+    questionnaire attached to this sprint -- otherwise 404, so a member
+    can never open another member's response (and staff browsing this
+    member-facing route get a 404 too; they read responses via Studio).
+    """
+    sprint = _resolve_sprint_or_404(sprint_slug, request.user)
+    questionnaire_ids = list(
+        SprintFeedbackRequest.objects
+        .filter(sprint=sprint)
+        .values_list('questionnaire_id', flat=True)
+    )
+    response = get_object_or_404(
+        Response.objects.select_related('questionnaire'),
+        pk=response_id,
+        respondent=request.user,
+        questionnaire_id__in=questionnaire_ids,
+    )
+    return sprint, response
+
+
+@login_required
+def sprint_feedback_fill(request, sprint_slug, response_id):
+    """Member fill-in / save page for their own sprint feedback response.
+
+    GET renders the reusable questionnaire form fragment with existing
+    answers pre-filled. POST upserts ``Answer`` rows (save draft) and
+    re-renders. Submitted responses are read-only: editing after submit
+    is intentionally out of scope (a member who needs a change asks
+    staff), so a POST to a submitted response is rejected.
+    """
+    sprint, response = _get_member_feedback_response_or_404(
+        request, sprint_slug, response_id,
+    )
+
+    if request.method == 'POST':
+        if response.status == 'submitted':
+            messages.info(
+                request,
+                'This feedback was already submitted and can no longer be '
+                'edited. Contact the team if you need to change an answer.',
+            )
+            return redirect('sprint_feedback_fill',
+                            sprint_slug=sprint.slug, response_id=response.pk)
+        try:
+            save_response_answers(response, request.POST)
+        except AnswerSaveError as exc:
+            form_rows = build_response_form_rows(
+                response, post_data=request.POST, field_errors=exc.field_errors,
+            )
+            return render(request, 'plans/sprint_feedback_fill.html', {
+                'sprint': sprint,
+                'response': response,
+                'form_rows': form_rows,
+                'error': 'Please fix the highlighted answers.',
+            }, status=400)
+        messages.success(request, 'Draft saved. You can come back to finish.')
+        return redirect('sprint_feedback_fill',
+                        sprint_slug=sprint.slug, response_id=response.pk)
+
+    if response.status == 'submitted':
+        # Read-only view of the submitted answers.
+        rows = []
+        answers_by_question = {
+            a.question_id: a
+            for a in response.answers.prefetch_related('selected_options').all()
+        }
+        for rq in response.response_questions.all():
+            answer = answers_by_question.get(rq.pk)
+            rows.append({
+                'question': rq,
+                'answer': answer,
+                'is_answered': answer is not None and answer.display_value != '',
+            })
+        return render(request, 'plans/sprint_feedback_submitted.html', {
+            'sprint': sprint,
+            'response': response,
+            'rows': rows,
+        })
+
+    form_rows = build_response_form_rows(response)
+    return render(request, 'plans/sprint_feedback_fill.html', {
+        'sprint': sprint,
+        'response': response,
+        'form_rows': form_rows,
+        'error': '',
+    })
+
+
+@login_required
+@require_POST
+def sprint_feedback_submit(request, sprint_slug, response_id):
+    """Validate required answers, mark the response submitted, redirect back."""
+    sprint, response = _get_member_feedback_response_or_404(
+        request, sprint_slug, response_id,
+    )
+
+    if response.status == 'submitted':
+        messages.info(request, 'This feedback was already submitted.')
+        return redirect('sprint_detail', sprint_slug=sprint.slug)
+
+    # Persist whatever was typed before validating completeness.
+    try:
+        save_response_answers(response, request.POST)
+    except AnswerSaveError as exc:
+        form_rows = build_response_form_rows(
+            response, post_data=request.POST, field_errors=exc.field_errors,
+        )
+        return render(request, 'plans/sprint_feedback_fill.html', {
+            'sprint': sprint,
+            'response': response,
+            'form_rows': form_rows,
+            'error': 'Please fix the highlighted answers.',
+        }, status=400)
+
+    missing = find_unanswered_required(response)
+    if missing:
+        prompts = ', '.join(rq.prompt for rq in missing)
+        form_rows = build_response_form_rows(response)
+        return render(request, 'plans/sprint_feedback_fill.html', {
+            'sprint': sprint,
+            'response': response,
+            'form_rows': form_rows,
+            'error': f'Please answer the required question(s): {prompts}',
+        }, status=400)
+
+    response.mark_submitted()
+    messages.success(
+        request,
+        'Thank you! Your feedback helps shape the next sprint.',
+    )
+    return redirect('sprint_detail', sprint_slug=sprint.slug)
 
 
 @login_required

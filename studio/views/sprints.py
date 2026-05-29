@@ -26,6 +26,7 @@ from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
+from django.views.decorators.http import require_POST
 
 from content.access import LEVEL_MAIN
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
@@ -35,8 +36,10 @@ from plans.models import (
     Plan,
     PlanRequest,
     Sprint,
+    SprintFeedbackRequest,
 )
-from plans.services import create_plan_for_enrollment
+from plans.services import create_plan_for_enrollment, distribute_sprint_feedback
+from questionnaires.models import Questionnaire, Response
 from studio.decorators import staff_required
 
 User = get_user_model()
@@ -365,6 +368,7 @@ def sprint_detail(request, sprint_id):
         if event_series else []
     )
     pending_plan_requests = _build_pending_plan_requests(sprint)
+    feedback_context = _build_sprint_feedback_context(sprint)
     return render(request, 'studio/sprints/detail.html', {
         'sprint': sprint,
         'plans': plans,
@@ -372,7 +376,179 @@ def sprint_detail(request, sprint_id):
         'event_series': event_series,
         'event_series_events': event_series_events,
         'pending_plan_requests': pending_plan_requests,
+        **feedback_context,
     })
+
+
+def _build_sprint_feedback_context(sprint):
+    """Build the "Sprint feedback" section context for the sprint detail page.
+
+    Returns:
+    - ``feedback_request``: the attached :class:`SprintFeedbackRequest`
+      or None (a sprint may hold several over time; we surface the most
+      recent for the inline section).
+    - ``feedback_questionnaire_choices``: active feedback questionnaires
+      offered by the attach picker.
+    - ``feedback_completion_rows``: per-enrolled-member status rows when
+      distributed; empty otherwise.
+    - ``feedback_submitted_count`` / ``feedback_total_count``: the
+      "X of Y submitted" aggregate.
+    """
+    feedback_request = (
+        SprintFeedbackRequest.objects
+        .filter(sprint=sprint)
+        .select_related('questionnaire')
+        .order_by('-created_at')
+        .first()
+    )
+    choices = list(
+        Questionnaire.objects
+        .filter(purpose='feedback', is_active=True)
+        .order_by('title')
+    )
+
+    rows = []
+    submitted_count = 0
+    total_count = 0
+    if feedback_request and feedback_request.distributed_at:
+        enrollments = list(
+            sprint.enrollments.select_related('user').order_by('enrolled_at')
+        )
+        total_count = len(enrollments)
+        # One Response lookup keyed by respondent for this questionnaire.
+        responses_by_user = {}
+        responses = (
+            Response.objects
+            .filter(questionnaire=feedback_request.questionnaire)
+            .annotate(answer_count=Count('answers', distinct=True))
+        )
+        for resp in responses:
+            responses_by_user[resp.respondent_id] = resp
+        for enrollment in enrollments:
+            resp = responses_by_user.get(enrollment.user_id)
+            if resp is None:
+                status_label = 'Not started'
+                status_key = 'not_started'
+                submitted_at = None
+                response_id = None
+            elif resp.status == 'submitted':
+                status_label = 'Submitted'
+                status_key = 'submitted'
+                submitted_at = resp.submitted_at
+                response_id = resp.pk
+                submitted_count += 1
+            elif resp.answer_count > 0:
+                status_label = 'In progress'
+                status_key = 'in_progress'
+                submitted_at = None
+                response_id = resp.pk
+            else:
+                status_label = 'Not started'
+                status_key = 'not_started'
+                submitted_at = None
+                response_id = resp.pk
+            rows.append({
+                'member': enrollment.user,
+                'status_label': status_label,
+                'status_key': status_key,
+                'submitted_at': submitted_at,
+                'response_id': response_id,
+            })
+
+    return {
+        'feedback_request': feedback_request,
+        'feedback_questionnaire_choices': choices,
+        'feedback_completion_rows': rows,
+        'feedback_submitted_count': submitted_count,
+        'feedback_total_count': total_count,
+    }
+
+
+@staff_required
+@require_POST
+def sprint_feedback_attach(request, sprint_id):
+    """Attach a feedback questionnaire to a sprint (issue #803).
+
+    Validates the chosen questionnaire is ``purpose='feedback'`` and
+    active. On an invalid / missing pick, re-renders the sprint detail
+    page with HTTP 400 and an error -- no ``SprintFeedbackRequest`` row
+    is written.
+    """
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    raw_id = (request.POST.get('questionnaire') or '').strip()
+
+    def _reject(error):
+        plans = (
+            Plan.objects.filter(sprint=sprint)
+            .select_related('member').order_by('-created_at')
+        )
+        event_series = sprint.event_series
+        context = {
+            'sprint': sprint,
+            'plans': plans,
+            'enrollment_count': sprint.enrollments.count(),
+            'event_series': event_series,
+            'event_series_events': (
+                list(event_series.events.all().order_by('start_datetime'))
+                if event_series else []
+            ),
+            'pending_plan_requests': _build_pending_plan_requests(sprint),
+            'feedback_error': error,
+            **_build_sprint_feedback_context(sprint),
+        }
+        return render(request, 'studio/sprints/detail.html', context, status=400)
+
+    if not raw_id.isdigit():
+        return _reject('Pick a feedback questionnaire to attach.')
+    questionnaire = (
+        Questionnaire.objects
+        .filter(pk=int(raw_id), purpose='feedback', is_active=True)
+        .first()
+    )
+    if questionnaire is None:
+        return _reject(
+            'Selected questionnaire is not an active feedback questionnaire.'
+        )
+
+    SprintFeedbackRequest.objects.get_or_create(
+        sprint=sprint,
+        questionnaire=questionnaire,
+        defaults={'created_by': request.user},
+    )
+    messages.success(
+        request,
+        f'Attached "{questionnaire.title}" as feedback for this sprint.',
+    )
+    return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+
+@staff_required
+@require_POST
+def sprint_feedback_distribute(request, sprint_id, feedback_request_id):
+    """Distribute a sprint's feedback questionnaire to enrolled members.
+
+    Idempotent (see :func:`plans.services.distribute_sprint_feedback`):
+    re-running picks up newly enrolled members without duplicating
+    existing responses. Reports created-vs-existing counts.
+    """
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    feedback_request = get_object_or_404(
+        SprintFeedbackRequest, pk=feedback_request_id, sprint=sprint,
+    )
+
+    summary = distribute_sprint_feedback(feedback_request, actor=request.user)
+    if summary['existing']:
+        messages.success(
+            request,
+            f'{summary["created"]} feedback response(s) created; '
+            f'{summary["existing"]} already existed.',
+        )
+    else:
+        messages.success(
+            request,
+            f'{summary["created"]} feedback response(s) created.',
+        )
+    return redirect('studio_sprint_detail', sprint_id=sprint.pk)
 
 
 @staff_required

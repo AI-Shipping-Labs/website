@@ -55,6 +55,17 @@ class CRMRecord(models.Model):
             'Lives on the relationship so it survives across sprints.'
         ),
     )
+    # Optional structured persona (issue #801). Additive and backward
+    # compatible: the free-text ``persona`` above stays the source of
+    # truth and the CRM list search still filters on it. ``SET_NULL`` so
+    # deleting a Persona never deletes a CRMRecord.
+    persona_ref = models.ForeignKey(
+        'questionnaires.Persona',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='crm_records',
+    )
     summary = models.TextField(
         blank=True,
         default='',

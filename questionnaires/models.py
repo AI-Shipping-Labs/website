@@ -90,6 +90,64 @@ class Questionnaire(TimestampedModelMixin, models.Model):
         return self.responses.count()
 
 
+class Persona(TimestampedModelMixin, models.Model):
+    """An internal-only member archetype, authored by staff (issue #801).
+
+    Personas are never rendered to members. They exist so staff can
+    classify an engaged member into a small set of archetypes (Alex,
+    Priya, Sam, Taylor) and pick the right onboarding questionnaire and
+    sprint plan for them.
+
+    A persona's defining relationship is its FK to a ``Questionnaire``
+    whose ``purpose='onboarding'`` -- which is why this model lives in
+    the ``questionnaires`` app rather than a separate ``personas`` app
+    (avoids a circular two-app dependency).
+
+    The ``archetype`` is required and travels with ``name`` everywhere a
+    persona is shown in Studio: a name alone ("Priya") does not convey
+    meaning, so ``__str__`` / ``display_label`` always join the two.
+    """
+
+    name = models.CharField(max_length=120)
+    archetype = models.CharField(
+        max_length=200,
+        help_text=(
+            'Short label shown next to the name everywhere in Studio, '
+            'e.g. "The Engineer transitioning to AI". Required.'
+        ),
+    )
+    slug = models.SlugField(unique=True)
+    description = models.TextField(blank=True, default='')
+    default_questionnaire = models.ForeignKey(
+        'questionnaires.Questionnaire',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='personas',
+        help_text='Optional default onboarding questionnaire for this persona.',
+    )
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order', 'name']
+
+    def __str__(self):
+        return f'{self.name} — {self.archetype}'
+
+    def save(self, *args, **kwargs):
+        # Derive the slug from the name when blank, mirroring the
+        # sprint / questionnaire slug handling.
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
+
+    @property
+    def display_label(self):
+        """``name`` and ``archetype`` joined, for templates."""
+        return f'{self.name} — {self.archetype}'
+
+
 class Question(TimestampedModelMixin, models.Model):
     """A single question in a questionnaire's base set.
 

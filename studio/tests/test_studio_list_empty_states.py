@@ -58,6 +58,7 @@ PARTIAL_USERS = {
     'workshops/list.html',
     'plans/list.html',
     'questionnaires/list.html',
+    'personas/list.html',
     'sprints/list.html',
     'redirects/list.html',
     'campaigns/list.html',

@@ -59,6 +59,9 @@ class QuestionnaireCrudTest(StaffUserMixin, TestCase):
         self.assertContains(response, 'Feedback')
 
     def test_empty_state_shown_when_no_questionnaires(self):
+        # The #801 seed migration creates onboarding questionnaires; clear
+        # them so the fresh empty state is exercised.
+        Questionnaire.objects.all().delete()
         response = self.client.get('/studio/questionnaires/')
         self.assertContains(response, 'studio-empty-state-fresh')
 
@@ -77,13 +80,14 @@ class QuestionnaireCrudTest(StaffUserMixin, TestCase):
         self.assertContains(follow, 'created')
 
     def test_create_missing_title_returns_400_no_row(self):
+        before = Questionnaire.objects.count()
         response = self.client.post('/studio/questionnaires/new', {
             'title': '',
             'purpose': 'general',
         })
         self.assertEqual(response.status_code, 400)
         self.assertContains(response, 'Title is required.', status_code=400)
-        self.assertFalse(Questionnaire.objects.exists())
+        self.assertEqual(Questionnaire.objects.count(), before)
 
     def test_edit_updates_metadata(self):
         q = Questionnaire.objects.create(title='Draft Feedback', purpose='general')

@@ -9,11 +9,20 @@ from django.contrib import admin
 
 from questionnaires.models import (
     Answer,
+    Persona,
     Question,
     Questionnaire,
     QuestionOption,
     Response,
 )
+
+
+@admin.register(Persona)
+class PersonaAdmin(admin.ModelAdmin):
+    list_display = ('name', 'archetype', 'is_active', 'default_questionnaire', 'order')
+    list_filter = ('is_active',)
+    search_fields = ('name', 'archetype')
+    prepopulated_fields = {'slug': ('name',)}
 
 
 @admin.register(Questionnaire)

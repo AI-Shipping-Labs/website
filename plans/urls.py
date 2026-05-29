@@ -8,6 +8,7 @@ at the project root in ``website/urls.py``.
 from django.urls import path
 
 from plans.views.cohort import (
+    carry_over_tasks,
     cohort_board,
     member_plan_detail,
     my_plan_detail,
@@ -105,6 +106,14 @@ urlpatterns = [
         'sprints/<slug:sprint_slug>/plan/<int:plan_id>/goal',
         update_plan_goal,
         name='update_plan_goal',
+    ),
+    # Carry over the member's unfinished tasks from their previous sprint
+    # plan into this plan (issue #808). Owner-only POST; non-owner / wrong
+    # sprint -> 404.
+    path(
+        'sprints/<slug:sprint_slug>/plan/<int:plan_id>/carry-over',
+        carry_over_tasks,
+        name='carry_over_tasks',
     ),
     # Participant week notes (issue #499), now scoped to the sprint
     # workspace URL so form submits keep members in sprint context.

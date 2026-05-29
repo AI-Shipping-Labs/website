@@ -42,6 +42,40 @@ existing tests.
 </section>
 {% endif %}
 
+{% comment %}
+Carry-over panel (issue #808). Owner-only: ``carry_over_source`` is only
+ever placed in the context by ``my_plan_detail`` (the owner workspace).
+The read-only teammate view (``member_plan_detail``) and the cohort board
+never set it, so the panel is structurally absent there. When the source
+plan has unfinished tasks we offer the carry-over button; once everything
+is already copied (count == 0) we show an "all caught up" notice instead.
+{% endcomment %}
+{% if plan_can_edit and carry_over_source %}
+<section class="mt-10 rounded-lg border border-accent/40 bg-accent/5 p-4" data-testid="plan-carry-over-panel">
+  <h2 class="text-base font-semibold text-foreground">Carry over unfinished tasks</h2>
+  {% if carry_over_unfinished_count %}
+  <p class="mt-1 text-sm text-muted-foreground" data-testid="plan-carry-over-message">
+    Bring your unfinished tasks from {{ carry_over_source.sprint.name }} into this plan.
+    {{ carry_over_unfinished_count }} unfinished task{{ carry_over_unfinished_count|pluralize }} available to carry over.
+  </p>
+  <form method="post"
+        action="{% url 'carry_over_tasks' sprint_slug=plan.sprint.slug plan_id=plan.pk %}"
+        class="mt-3">
+    {% csrf_token %}
+    <button type="submit"
+            class="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
+            data-testid="plan-carry-over-submit">
+      Carry over {{ carry_over_unfinished_count }} task{{ carry_over_unfinished_count|pluralize }}
+    </button>
+  </form>
+  {% else %}
+  <p class="mt-1 text-sm text-muted-foreground" data-testid="plan-carry-over-caught-up">
+    All caught up — nothing left to carry over from {{ carry_over_source.sprint.name }}.
+  </p>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="mt-10" data-testid="plan-weeks">
   <div class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
     <div>

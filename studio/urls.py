@@ -118,6 +118,7 @@ from studio.views.plans import (
     interview_note_create,
     interview_note_delete,
     interview_note_edit,
+    plan_carry_over,
     plan_create,
     plan_detail,
     plan_edit,
@@ -726,6 +727,14 @@ urlpatterns = [
         'plans/<int:plan_id>/share/',
         plan_share,
         name='studio_plan_share',
+    ),
+    # Carry the member's unfinished tasks forward from their previous
+    # sprint plan (issue #808). POST-only; staff-only. Same service +
+    # idempotency as the member-facing action.
+    path(
+        'plans/<int:plan_id>/carry-over/',
+        plan_carry_over,
+        name='studio_plan_carry_over',
     ),
     path(
         'plans/<int:plan_id>/notes/new',

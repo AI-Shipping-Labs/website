@@ -18,7 +18,14 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from accounts.utils.activation import mark_activated
-from plans.models import Plan, SprintEnrollment, Week
+from plans.models import (
+    Checkpoint,
+    Deliverable,
+    NextStep,
+    Plan,
+    SprintEnrollment,
+    Week,
+)
 from questionnaires.models import Response
 from questionnaires.services import build_response_questions
 
@@ -151,3 +158,237 @@ def distribute_sprint_feedback(feedback_request, *, actor=None):
         feedback_request.save(update_fields=['distributed_at', 'updated_at'])
 
     return {'created': created, 'existing': existing, 'total': created + existing}
+
+
+def _dedupe_key(description):
+    """Normalize a task description for case-insensitive dedupe.
+
+    Carry-over idempotency keys on a trimmed, lower-cased description so
+    re-running the action never duplicates an item the member already has
+    in the destination plan. Markdown / casing differences that are pure
+    whitespace or letter-case are treated as the same task.
+    """
+    return (description or '').strip().lower()
+
+
+def find_carry_over_source_plan(*, destination_plan):
+    """Return the member's most-recent prior plan, or ``None`` (issue #808).
+
+    The carry-over source is the destination member's own ``Plan`` in some
+    OTHER sprint whose ``sprint.start_date`` is the latest date strictly
+    earlier than the destination sprint's ``start_date``. Ties on
+    ``start_date`` break toward the higher ``sprint.id`` (the more recently
+    created sprint). Only the member's OWN plans are ever a source.
+
+    Returns ``None`` when the member has no earlier plan.
+    """
+    return (
+        Plan.objects.filter(member=destination_plan.member)
+        .exclude(pk=destination_plan.pk)
+        .filter(sprint__start_date__lt=destination_plan.sprint.start_date)
+        .select_related('sprint')
+        .order_by('-sprint__start_date', '-sprint__id')
+        .first()
+    )
+
+
+def count_total_unfinished(*, source_plan):
+    """Total unfinished tasks on a plan, ignoring any destination (issue #808).
+
+    Counts all unfinished (``done_at IS NULL``) ``Checkpoint``,
+    ``Deliverable`` and ``NextStep`` rows on ``source_plan``. Used to
+    decide whether the carry-over panel is shown at all: a source plan with
+    zero unfinished tasks hides the panel, while one whose unfinished items
+    are merely all-already-copied shows the "all caught up" state instead.
+    """
+    checkpoints = Checkpoint.objects.filter(
+        week__plan=source_plan, done_at__isnull=True,
+    ).count()
+    deliverables = source_plan.deliverables.filter(done_at__isnull=True).count()
+    next_steps = source_plan.next_steps.filter(done_at__isnull=True).count()
+    return checkpoints + deliverables + next_steps
+
+
+def count_unfinished_carry_over_items(*, source_plan, destination_plan):
+    """Count source items still needing carry-over (issue #808).
+
+    Counts unfinished (``done_at IS NULL``) ``Checkpoint`` rows across all
+    weeks plus plan-level unfinished ``Deliverable`` and ``NextStep`` rows
+    on ``source_plan`` that are NOT already present in ``destination_plan``
+    under the same dedupe rule used by :func:`carry_over_unfinished_tasks`
+    (trimmed, case-insensitive ``description``; checkpoints scoped to the
+    destination week they would land in).
+
+    This is the "N tasks available to carry over" number the panel shows.
+    It returns the count of rows a carry-over run would actually create, so
+    once everything has been copied it returns 0 and the panel can switch
+    to the "all caught up" state.
+    """
+    dest_weeks = list(destination_plan.weeks.all())
+    weeks_by_number = {week.week_number: week for week in dest_weeks}
+    last_week = max(
+        dest_weeks, key=lambda w: w.week_number,
+    ) if dest_weeks else None
+
+    existing_checkpoints = {}
+    for week in dest_weeks:
+        existing_checkpoints[week.pk] = {
+            _dedupe_key(cp.description) for cp in week.checkpoints.all()
+        }
+    existing_deliverables = {
+        _dedupe_key(d.description) for d in destination_plan.deliverables.all()
+    }
+    existing_next_steps = {
+        _dedupe_key(s.description) for s in destination_plan.next_steps.all()
+    }
+
+    remaining = 0
+    if last_week is not None:
+        source_checkpoints = (
+            Checkpoint.objects.filter(
+                week__plan=source_plan, done_at__isnull=True,
+            )
+            .select_related('week')
+            .order_by('week__week_number', 'position', 'id')
+        )
+        for checkpoint in source_checkpoints:
+            target_week = weeks_by_number.get(
+                checkpoint.week.week_number, last_week,
+            )
+            key = _dedupe_key(checkpoint.description)
+            bucket = existing_checkpoints.setdefault(target_week.pk, set())
+            if key in bucket:
+                continue
+            bucket.add(key)
+            remaining += 1
+
+    for deliverable in source_plan.deliverables.filter(done_at__isnull=True):
+        key = _dedupe_key(deliverable.description)
+        if key in existing_deliverables:
+            continue
+        existing_deliverables.add(key)
+        remaining += 1
+
+    for step in source_plan.next_steps.filter(done_at__isnull=True):
+        key = _dedupe_key(step.description)
+        if key in existing_next_steps:
+            continue
+        existing_next_steps.add(key)
+        remaining += 1
+
+    return remaining
+
+
+def carry_over_unfinished_tasks(*, source_plan, destination_plan):
+    """Copy unfinished tasks from one plan into another (issue #808).
+
+    Copies only rows whose ``done_at IS NULL`` — finished tasks stay on the
+    source plan. Three task types are carried:
+
+    - ``Checkpoint`` (per-week): mapped into the destination plan's ``Week``
+      with the same ``week_number``; if the destination has no such week
+      (shorter sprint) the checkpoint lands in the destination's last week.
+    - ``Deliverable`` (plan-level).
+    - ``NextStep`` (plan-level).
+
+    ``description`` and ``position`` are copied; ``done_at`` is reset to
+    ``NULL`` on every copy regardless of the source value.
+
+    Idempotent: a destination item with a matching trimmed, case-insensitive
+    ``description`` of the same type is treated as already present and is not
+    duplicated. For checkpoints the match is scoped to the destination week
+    the item would land in. Re-running therefore copies only the items not
+    already present and a run with nothing new is a zero-row no-op.
+
+    Nothing else is copied (``Resource``, ``WeekNote``, ``goal``, summary
+    fields, visibility, comments, interview notes).
+
+    Runs inside a single ``transaction.atomic()`` block so a partial copy
+    cannot occur. Returns the integer count of rows actually created.
+    """
+    copied = 0
+    with transaction.atomic():
+        # Destination weeks keyed by ``week_number`` for the week mapping,
+        # plus the last week (highest ``week_number``) as the overflow
+        # bucket for a shorter destination sprint.
+        dest_weeks = list(destination_plan.weeks.all())
+        weeks_by_number = {week.week_number: week for week in dest_weeks}
+        last_week = None
+        if dest_weeks:
+            last_week = max(dest_weeks, key=lambda w: w.week_number)
+
+        # Existing destination dedupe sets. Checkpoints are scoped per
+        # destination week id; deliverables / next steps are plan-level.
+        existing_checkpoints = {}
+        for week in dest_weeks:
+            existing_checkpoints[week.pk] = {
+                _dedupe_key(cp.description)
+                for cp in week.checkpoints.all()
+            }
+        existing_deliverables = {
+            _dedupe_key(d.description)
+            for d in destination_plan.deliverables.all()
+        }
+        existing_next_steps = {
+            _dedupe_key(s.description)
+            for s in destination_plan.next_steps.all()
+        }
+
+        if last_week is not None:
+            source_checkpoints = (
+                Checkpoint.objects.filter(
+                    week__plan=source_plan, done_at__isnull=True,
+                )
+                .select_related('week')
+                .order_by('week__week_number', 'position', 'id')
+            )
+            for checkpoint in source_checkpoints:
+                target_week = weeks_by_number.get(
+                    checkpoint.week.week_number, last_week,
+                )
+                key = _dedupe_key(checkpoint.description)
+                bucket = existing_checkpoints.setdefault(target_week.pk, set())
+                if key in bucket:
+                    continue
+                Checkpoint.objects.create(
+                    week=target_week,
+                    description=checkpoint.description,
+                    position=checkpoint.position,
+                    done_at=None,
+                )
+                bucket.add(key)
+                copied += 1
+
+        source_deliverables = source_plan.deliverables.filter(
+            done_at__isnull=True,
+        ).order_by('position', 'id')
+        for deliverable in source_deliverables:
+            key = _dedupe_key(deliverable.description)
+            if key in existing_deliverables:
+                continue
+            Deliverable.objects.create(
+                plan=destination_plan,
+                description=deliverable.description,
+                position=deliverable.position,
+                done_at=None,
+            )
+            existing_deliverables.add(key)
+            copied += 1
+
+        source_next_steps = source_plan.next_steps.filter(
+            done_at__isnull=True,
+        ).order_by('position', 'id')
+        for step in source_next_steps:
+            key = _dedupe_key(step.description)
+            if key in existing_next_steps:
+                continue
+            NextStep.objects.create(
+                plan=destination_plan,
+                description=step.description,
+                position=step.position,
+                done_at=None,
+            )
+            existing_next_steps.add(key)
+            copied += 1
+
+    return copied

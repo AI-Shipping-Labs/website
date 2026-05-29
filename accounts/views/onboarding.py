@@ -17,8 +17,9 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from questionnaires.models import Response
+from questionnaires.models import OnboardingConversation, Response
 from questionnaires.onboarding import (
+    ai_onboarding_available,
     get_generic_onboarding_questionnaire,
     get_onboarding_response,
     resolve_target_questionnaire,
@@ -50,9 +51,21 @@ def onboarding_start(request):
             'rows': rows,
         })
 
+    ai_available = ai_onboarding_available()
+
     if existing is not None:
-        # Draft in flight: resume the fill-in, never re-ask self-ID.
+        # Draft in flight. If the member started the AI chat, resume it;
+        # otherwise resume the form fill-in. Never re-ask self-ID.
+        if ai_available and OnboardingConversation.objects.filter(
+            response=existing,
+        ).exists():
+            return redirect('onboarding_chat')
         return redirect('onboarding_fill', response_id=existing.pk)
+
+    # No response yet: offer the conversational AI flow when available;
+    # otherwise the form-first self-ID step (#802) unchanged.
+    if ai_available:
+        return redirect('onboarding_chat')
 
     options = self_identification_options()
     generic = get_generic_onboarding_questionnaire()

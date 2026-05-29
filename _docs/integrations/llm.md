@@ -113,6 +113,24 @@ gateway. Callers can still override per call by passing `model=...` to
 Test vs live: Pin a cheaper/faster model in dev if desired; the
 production value is whatever quality/cost trade-off the feature needs.
 
+## ONBOARDING_AI_ENABLED
+
+Purpose: Toggles the conversational AI onboarding flow (issue #804) at
+`/onboarding/`. When on (and the LLM is enabled), new members are offered
+a chat interviewer; when off, `/onboarding/` shows the form-first flow
+only. Defaults on.
+
+Without it: Treated as on whenever the LLM service is enabled. The flag
+exists to turn the AI path off without disabling the whole LLM service,
+and is switchable from Studio without a redeploy.
+
+Where to find it: This is an internal feature flag, not a provider
+credential. Set it to `false` to force the form-first onboarding path
+even when the LLM is configured.
+
+Test vs live: The automated tests mock the LLM at the boundary, so this
+flag is exercised both on and off without a live call.
+
 ## Structured output
 
 `complete(...)` works for plain text and for structured output. For

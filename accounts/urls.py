@@ -27,6 +27,10 @@ from accounts.views.onboarding import (
     onboarding_start,
     onboarding_submit,
 )
+from accounts.views.onboarding_ai import (
+    onboarding_chat,
+    onboarding_chat_message,
+)
 
 urlpatterns = [
     path('login/', login_view, name='account_login'),
@@ -60,6 +64,15 @@ auth_api_urlpatterns = [
 onboarding_urlpatterns = [
     path('', onboarding_start, name='onboarding_start'),
     path('identify', onboarding_identify, name='onboarding_identify'),
+    # AI chat flow (#804). Keyed to the logged-in member's own onboarding
+    # response -- no conversation/response id in the URL, so there is no
+    # way to address another member's conversation.
+    path('chat', onboarding_chat, name='onboarding_chat'),
+    path(
+        'chat/message',
+        onboarding_chat_message,
+        name='onboarding_chat_message',
+    ),
     path('<int:response_id>', onboarding_fill, name='onboarding_fill'),
     path('<int:response_id>/submit', onboarding_submit, name='onboarding_submit'),
 ]

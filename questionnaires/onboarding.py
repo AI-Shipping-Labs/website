@@ -16,16 +16,42 @@ Design notes:
   persona ``id`` as an opaque value and is labeled with the archetype.
 """
 
+from integrations.config import get_config
+from integrations.services import llm
 from questionnaires.models import Persona, Questionnaire, Response
 
 # Slug of the persona-agnostic onboarding questionnaire seeded by #801.
 GENERIC_ONBOARDING_SLUG = 'onboarding-general'
+
+# Config flag (Studio/.env) gating the conversational AI onboarding path
+# on top of the LLM service being enabled. Defaults on when the LLM is
+# enabled; switchable without a redeploy via Studio. Registered in
+# ``integrations.settings_registry`` so it is Studio-configurable.
+ONBOARDING_AI_FLAG = 'ONBOARDING_AI_ENABLED'
 
 # Opaque self-ID values for the two persona-agnostic options. They are
 # not persona ids, so they never collide with a ``Persona.pk`` value.
 SELF_ID_NONE = 'none'
 SELF_ID_MULTIPLE = 'multiple'
 _GENERIC_VALUES = frozenset({SELF_ID_NONE, SELF_ID_MULTIPLE})
+
+
+def ai_onboarding_available():
+    """True when the conversational AI onboarding path should be offered.
+
+    Requires BOTH the LLM service to be enabled (#799 ``is_enabled()``)
+    AND the ``ONBOARDING_AI_ENABLED`` config flag to be on (default true).
+    When either is off, ``/onboarding/`` renders #802's form unchanged.
+    """
+    if not llm.is_enabled():
+        return False
+    # Default ON when unset: the flag exists to turn the AI path OFF
+    # without disabling the whole LLM service. Only an explicit falsey
+    # value disables it.
+    raw = get_config(ONBOARDING_AI_FLAG, 'true')
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('true', '1', 'yes')
 
 
 def has_completed_onboarding(user):

@@ -68,10 +68,34 @@ def _ensure_onboarding_seed():
     connection.close()
 
 
+def _force_form_first_onboarding():
+    """Keep this #802 suite on the form-first fallback path.
+
+    Local operator env can enable the newer AI chat path globally. These
+    tests intentionally verify the legacy form flow, so pin the Studio
+    config flag off in the shared test DB before browser navigation.
+    """
+    from integrations.config import clear_config_cache
+    from integrations.models import IntegrationSetting
+
+    IntegrationSetting.objects.update_or_create(
+        key="ONBOARDING_AI_ENABLED",
+        defaults={
+            "value": "false",
+            "is_secret": False,
+            "group": "llm",
+            "description": "",
+        },
+    )
+    clear_config_cache()
+    connection.close()
+
+
 def _reset_responses():
     from questionnaires.models import Response
 
     _ensure_onboarding_seed()
+    _force_form_first_onboarding()
     Response.objects.all().delete()
     connection.close()
 

@@ -107,13 +107,21 @@ def _llm_enabled(enabled=True):
     from integrations.config import clear_config_cache
     from integrations.models import IntegrationSetting
 
-    keys = ["LLM_API_KEY", "LLM_PROVIDER", "ONBOARDING_AI_STREAMING"]
+    keys = [
+        "LLM_API_KEY",
+        "LLM_PROVIDER",
+        "ONBOARDING_AI_ENABLED",
+        "ONBOARDING_AI_STREAMING",
+    ]
     if enabled:
         IntegrationSetting.objects.update_or_create(
             key="LLM_API_KEY", defaults={"value": "sk-test-fake"},
         )
         IntegrationSetting.objects.update_or_create(
             key="LLM_PROVIDER", defaults={"value": "anthropic"},
+        )
+        IntegrationSetting.objects.update_or_create(
+            key="ONBOARDING_AI_ENABLED", defaults={"value": "true"},
         )
         # These v1 tests exercise the NON-streaming chat transport. With
         # #806 streaming defaults on, so disable it here to keep this
@@ -123,7 +131,12 @@ def _llm_enabled(enabled=True):
             key="ONBOARDING_AI_STREAMING", defaults={"value": "false"},
         )
     else:
-        IntegrationSetting.objects.filter(key__in=keys).delete()
+        IntegrationSetting.objects.update_or_create(
+            key="ONBOARDING_AI_ENABLED", defaults={"value": "false"},
+        )
+        IntegrationSetting.objects.filter(
+            key__in=["LLM_API_KEY", "LLM_PROVIDER", "ONBOARDING_AI_STREAMING"],
+        ).delete()
     clear_config_cache()
     connection.close()
     try:

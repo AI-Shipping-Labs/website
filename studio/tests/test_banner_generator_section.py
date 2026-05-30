@@ -11,6 +11,7 @@ rendering in ``templates/studio/includes/banner_generator_section.html``:
 """
 
 import datetime as dt
+import os
 import uuid
 from unittest.mock import patch
 
@@ -91,6 +92,13 @@ def _make_ormq(content_type, content_pk, lock=None):
 class _CacheCleanupMixin:
     def setUp(self):
         super().setUp()
+        env_patch = patch.dict(os.environ, {
+            'BANNER_GENERATOR_FUNCTION_URL': '',
+            'BANNER_GENERATOR_AUTH_TOKEN': '',
+            'AWS_S3_CONTENT_BUCKET': '',
+        })
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
         clear_config_cache()
         self.addCleanup(clear_config_cache)
 

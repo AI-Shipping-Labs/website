@@ -18,6 +18,7 @@ click-through and the negative access check.
 import datetime as dt
 import os
 import uuid
+from unittest.mock import patch
 
 import pytest
 
@@ -46,12 +47,13 @@ RENDER_TASK_PATH = (
 def _reset_state():
     from django_q.models import OrmQ, Task
 
-    from content.models import Article
+    from content.models import Article, Course
     from integrations.models import IntegrationSetting
 
     OrmQ.objects.all().delete()
     Task.objects.all().delete()
     Article.objects.all().delete()
+    Course.objects.all().delete()
     IntegrationSetting.objects.filter(key__startswith="BANNER_GENERATOR_").delete()
     connection.close()
 
@@ -79,14 +81,46 @@ def _enable_banner_generator():
     connection.close()
 
 
-def _create_article(slug="banner-hint-article", title="Banner Hint Article"):
+def _create_article(slug="banner-hint-article", title="Banner Hint Article", **overrides):
     from content.models import Article
 
-    article = Article.objects.create(
+    defaults = dict(
         slug=slug, title=title, date=dt.date(2026, 1, 1),
     )
+    defaults.update(overrides)
+    article = Article.objects.create(**defaults)
     connection.close()
     return article
+
+
+def _create_course(slug="banner-hint-course", title="Banner Hint Course", **overrides):
+    from content.models import Course
+
+    defaults = dict(slug=slug, title=title, status="published")
+    defaults.update(overrides)
+    course = Course.objects.create(**defaults)
+    connection.close()
+    return course
+
+
+def _simulate_successful_worker(content_type, content_pk):
+    from django_q.models import OrmQ
+
+    from integrations.services.banner_generator.tasks import (
+        render_banner_for_content,
+    )
+
+    with patch(
+        "integrations.services.banner_generator.tasks.render_to_s3",
+        return_value={"ok": True},
+    ), patch(
+        "integrations.services.banner_generator.tasks.delete_generated_banner_object",
+        return_value=True,
+    ):
+        result = render_banner_for_content(content_type, content_pk)
+    OrmQ.objects.all().delete()
+    connection.close()
+    return result
 
 
 def _create_failed_task(content_type, content_pk, result_text):
@@ -217,3 +251,68 @@ class TestBannerGeneratorHintOnArticleEdit:
         # The failure hint is never exposed to anonymous visitors.
         html = page.content()
         assert 'data-testid="banner-generator-last-failure"' not in html
+
+    @pytest.mark.core
+    def test_operator_refreshes_to_cache_busting_jpg_after_worker_success(
+        self, django_server, browser,
+    ):
+        _reset_state()
+        _ensure_tiers()
+        _enable_banner_generator()
+        _create_staff_user(email="staff-banner-jpg@test.com")
+        old_url = "https://cdn.example.com/banners/article/old.jpg"
+        article = _create_article(
+            slug="hint-jpg",
+            title="Hint JPG",
+            auto_banner_url=old_url,
+        )
+
+        context = _auth_context(browser, "staff-banner-jpg@test.com")
+        page = context.new_page()
+        edit_url = f"{django_server}/studio/articles/{article.pk}/edit"
+        page.goto(edit_url, wait_until="domcontentloaded")
+
+        page.locator('[data-testid="banner-generator-regenerate-button"]').click()
+        page.wait_for_url(f"**/studio/articles/{article.pk}/edit", timeout=10000)
+        new_url = _simulate_successful_worker("article", article.pk)
+
+        page.goto(edit_url, wait_until="domcontentloaded")
+        img = page.locator('[data-testid="banner-generator-image"]')
+        assert img.count() == 1
+        src = img.get_attribute("src")
+        assert src == new_url
+        assert src != old_url
+        assert src.startswith("https://cdn.example.com/banners/article/")
+        assert src.endswith(".jpg")
+
+    @pytest.mark.core
+    def test_operator_preserves_manual_cover_while_generated_banner_changes(
+        self, django_server, browser,
+    ):
+        _reset_state()
+        _ensure_tiers()
+        _enable_banner_generator()
+        _create_staff_user(email="staff-banner-cover@test.com")
+        manual_cover = "https://cdn.example.com/manual/article-cover.png"
+        old_url = "https://cdn.example.com/banners/article/old.jpg"
+        article = _create_article(
+            slug="hint-cover",
+            title="Hint Cover",
+            cover_image_url=manual_cover,
+            auto_banner_url=old_url,
+        )
+
+        context = _auth_context(browser, "staff-banner-cover@test.com")
+        page = context.new_page()
+        edit_url = f"{django_server}/studio/articles/{article.pk}/edit"
+        page.goto(edit_url, wait_until="domcontentloaded")
+        page.locator('[data-testid="banner-generator-regenerate-button"]').click()
+        page.wait_for_url(f"**/studio/articles/{article.pk}/edit", timeout=10000)
+        new_url = _simulate_successful_worker("article", article.pk)
+
+        page.goto(edit_url, wait_until="domcontentloaded")
+        assert page.locator('input[name="cover_image_url"]').input_value() == manual_cover
+        src = page.locator('[data-testid="banner-generator-image"]').get_attribute("src")
+        assert src == new_url
+        assert src != old_url
+        assert src.endswith(".jpg")

@@ -11,7 +11,7 @@ The four personas and their onboarding questionnaires (plus the generic
 """
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from questionnaires.models import (
@@ -28,6 +28,7 @@ User = get_user_model()
 PERSONA_NAMES = ['Alex', 'Priya', 'Sam', 'Taylor']
 
 
+@override_settings(ONBOARDING_AI_ENABLED='false')
 class OnboardingAccessControlTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -47,6 +48,7 @@ class OnboardingAccessControlTest(TestCase):
         self.assertEqual(resp.status_code, 200)
 
 
+@override_settings(ONBOARDING_AI_ENABLED='false')
 class SelfIdentificationRoutingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -113,6 +115,7 @@ class SelfIdentificationRoutingTest(TestCase):
         self.assertEqual(first.status_code, 302)
 
 
+@override_settings(ONBOARDING_AI_ENABLED='false')
 class PersonaNameNeverLeaksTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -163,6 +166,7 @@ class PersonaNameNeverLeaksTest(TestCase):
             self.assertIn(f'value="{persona.pk}"', html)
 
 
+@override_settings(ONBOARDING_AI_ENABLED='false')
 class OnboardingCompletionGatingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -203,6 +207,7 @@ class OnboardingCompletionGatingTest(TestCase):
         )
 
 
+@override_settings(ONBOARDING_AI_ENABLED='false')
 class OnboardingSubmitTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -253,6 +258,7 @@ class OnboardingSubmitTest(TestCase):
         self.assertTrue(any('plan' in m.lower() for m in messages))
 
 
+@override_settings(ONBOARDING_AI_ENABLED='false')
 class OnboardingResumeTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -292,6 +298,7 @@ class OnboardingResumeTest(TestCase):
         )
 
 
+@override_settings(ONBOARDING_AI_ENABLED='false')
 class OnboardingCompletedConfirmationTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -321,6 +328,7 @@ class OnboardingCompletedConfirmationTest(TestCase):
         self.assertEqual(resp['Location'], reverse('onboarding_start'))
 
 
+@override_settings(ONBOARDING_AI_ENABLED='false')
 class OnboardingCrossMemberIsolationTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -343,6 +351,7 @@ class OnboardingCrossMemberIsolationTest(TestCase):
         self.assertEqual(resp.status_code, 404)
 
 
+@override_settings(ONBOARDING_AI_ENABLED='false')
 class OnboardingNotReadyTest(TestCase):
     @classmethod
     def setUpTestData(cls):

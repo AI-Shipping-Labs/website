@@ -6,6 +6,7 @@ page renders the placeholder / image / disabled-button states.
 """
 
 import datetime as dt
+import os
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -21,6 +22,13 @@ class _BannerGeneratorCacheCleanupMixin:
 
     def setUp(self):
         super().setUp()
+        env_patch = patch.dict(os.environ, {
+            'BANNER_GENERATOR_FUNCTION_URL': '',
+            'BANNER_GENERATOR_AUTH_TOKEN': '',
+            'AWS_S3_CONTENT_BUCKET': '',
+        })
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
         clear_config_cache()
         self.addCleanup(clear_config_cache)
 
@@ -192,13 +200,13 @@ class ArticleEditBannerSectionTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         _set_banner_generator(enabled=True)
         article = _make_article()
         Article.objects.filter(pk=article.pk).update(
-            auto_banner_url='https://cdn.example.com/banners/article/x.png',
+            auto_banner_url='https://cdn.example.com/banners/article/x.jpg',
         )
         response = self.client.get(f'/studio/articles/{article.pk}/edit')
         self.assertContains(response, 'data-testid="banner-generator-image"')
         self.assertContains(
             response,
-            'src="https://cdn.example.com/banners/article/x.png"',
+            'src="https://cdn.example.com/banners/article/x.jpg"',
         )
 
     def test_regenerate_button_disabled_when_function_url_unset(self):

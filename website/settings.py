@@ -403,7 +403,16 @@ SES_PROMOTIONAL_FROM_EMAIL = os.environ.get(
     'SES_PROMOTIONAL_FROM_EMAIL',
     SES_FROM_EMAIL or 'content@aishippinglabs.com',
 )
-SES_WEBHOOK_VALIDATION_ENABLED = os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED', '') == 'true'
+SES_CONFIGURATION_SET_NAME = (
+    '' if TESTING else os.environ.get('SES_CONFIGURATION_SET_NAME', '')
+)
+SES_WEBHOOK_VALIDATION_ENABLED = (
+    not TESTING
+    and os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED', '') == 'true'
+)
+SES_WEBHOOK_SHARED_SECRET = (
+    '' if TESTING else os.environ.get('SES_WEBHOOK_SHARED_SECRET', '')
+)
 
 # Email campaign chunking: number of recipients per chunked send_campaign_batch task.
 # At ~0.05s/email + SES network latency, a 200-recipient batch finishes in roughly

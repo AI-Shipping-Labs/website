@@ -2,7 +2,7 @@
 
 Thin HTTP wrapper around the deployed ``banner-generator`` Lambda's
 S3-output mode. Used by the content-sync auto-banner pipeline and the
-Studio "Regenerate banner" buttons to render OG-card PNGs for synced
+Studio "Regenerate banner" buttons to render OG-card JPEGs for synced
 content into the existing content CDN bucket.
 
 This module exposes the synchronous building blocks (``is_enabled``,
@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 LAMBDA_REQUEST_TIMEOUT_SECONDS = 30
 DEFAULT_TEMPLATE = 'asl-content-card'
 DEFAULT_SIZE = 'og'
-DEFAULT_FORMAT = 'png'
-DEFAULT_CONTENT_TYPE = 'image/png'
+DEFAULT_FORMAT = 'jpeg'
+DEFAULT_CONTENT_TYPE = 'image/jpeg'
 
 
 class BannerGeneratorError(Exception):
@@ -78,10 +78,10 @@ def render_to_s3(
     Args:
         template: Lambda template name (e.g. ``asl-content-card``).
         size: Preset render size (e.g. ``og`` for 1200x630 OG cards).
-        fmt: Output image format (``png`` or ``jpeg``).
+        fmt: Output image format (``jpeg`` for generated auto-banners).
         data: Dict of template field values (kind, title, kicker, etc.).
         s3_key: Object key under ``AWS_S3_CONTENT_BUCKET`` to upload to.
-        content_type: Content-Type to set on the S3 PUT (default PNG).
+        content_type: Content-Type to set on the S3 PUT (default JPEG).
         timeout: HTTP timeout in seconds.
 
     Returns:

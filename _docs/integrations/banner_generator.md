@@ -6,15 +6,19 @@ This page documents every setting registered in
 Without it, Where to find it, Prereqs, Rotation, Test vs live.
 
 The banner-generator is a separate Lambda (source at
-`AI-Shipping-Labs/banner-generator`) that renders OG-card PNGs from a
+`AI-Shipping-Labs/banner-generator`) that renders OG-card JPEGs from a
 small templated JSON payload. The platform calls it from the content
 sync pipeline (auto-banner on create / title-change) and from the
 Studio "Regenerate banner" buttons on the article / course / project /
 download / workshop edit pages.
 
-The Lambda writes the rendered PNG straight into the existing content
-CDN bucket (`AWS_S3_CONTENT_BUCKET`), so the public URL is stable per
-record: `{CONTENT_CDN_BASE}/banners/<content_type>/<content_id>.png`.
+The Lambda writes the rendered JPEG straight into the existing content
+CDN bucket (`AWS_S3_CONTENT_BUCKET`). Each render uses a new cache-busting
+object key under the generated-banner prefix, for example
+`{CONTENT_CDN_BASE}/banners/<content_type>/<content_id>-<uuid>.jpg`.
+The website persists the exact key sent to the Lambda on
+`auto_banner_url`, so the database URL and uploaded object stay in
+sync without requiring CloudFront invalidation.
 
 ## BANNER_GENERATOR_FUNCTION_URL
 
@@ -41,6 +45,11 @@ Prereqs:
   `s3:PutObject` on `arn:aws:s3:::<bucket>/banners/*`. Without that,
   the Lambda returns HTTP 5xx on every call — the platform logs a
   WARNING and moves on.
+- The website runtime identity should have `s3:DeleteObject` on
+  `arn:aws:s3:::<bucket>/banners/*` so it can remove the previous
+  generated object after a successful re-render. Missing delete
+  permission does not fail regeneration; cleanup logs a WARNING and the
+  new `auto_banner_url` stays persisted.
 - `AWS_S3_CONTENT_BUCKET` and `CONTENT_CDN_BASE` are configured under
   Studio > Settings > Storage. The bucket is the upload target, the
   CDN base is what we persist on `auto_banner_url`.
@@ -86,6 +95,13 @@ sandbox token cannot be used to render against the production bucket.
   django-q2. Failures (network, HTTP 5xx, malformed JSON, `ok: false`)
   are logged at WARNING and never block the sync pipeline or the
   operator-initiated regenerate action.
+- Regeneration writes a new `.jpg` object every time to avoid stale CDN
+  or browser caches. After the database row points at the new URL, the
+  website best-effort deletes the previous generated object only when
+  the old URL is under the configured `CONTENT_CDN_BASE` and the
+  matching `banners/<content_type>/` prefix. External URLs, manual cover
+  images, mismatched prefixes, and suspicious encoded/query URLs are not
+  deleted.
 - The bearer token is `is_secret=True` so the Studio settings page
   renders it in a `<input type="password">` and the JSON export
   redacts it. The token never appears in log lines or rendered

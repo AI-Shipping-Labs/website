@@ -6,8 +6,10 @@ including the ``.update()``-based persistence path.
 """
 
 import datetime as dt
+import os
 from unittest.mock import patch
 
+from botocore.exceptions import ClientError
 from django.test import TestCase
 
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
@@ -22,6 +24,8 @@ from integrations.services.banner_generator.dispatch import (
 from integrations.services.banner_generator.tasks import (
     build_payload,
     cdn_url_for,
+    cdn_url_for_key,
+    delete_generated_banner_object,
     render_banner_for_content,
     s3_key_for,
 )
@@ -42,6 +46,13 @@ class _BannerGeneratorCacheCleanupMixin:
 
     def setUp(self):
         super().setUp()
+        env_patch = patch.dict(os.environ, {
+            'BANNER_GENERATOR_FUNCTION_URL': '',
+            'BANNER_GENERATOR_AUTH_TOKEN': '',
+            'AWS_S3_CONTENT_BUCKET': '',
+        })
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
         from integrations.config import clear_config_cache
         clear_config_cache()
         self.addCleanup(clear_config_cache)
@@ -169,7 +180,7 @@ class EnqueueIfMissingTest(_BannerGeneratorCacheCleanupMixin, TestCase):
     def test_skips_when_banner_url_and_title_hash_match(self, mock_async):
         article = _make_article()
         Article.objects.filter(pk=article.pk).update(
-            auto_banner_url='https://cdn.example.com/banners/article/1.png',
+            auto_banner_url='https://cdn.example.com/banners/article/1.jpg',
             auto_banner_title_hash=title_hash(article.title),
         )
         result = enqueue_if_missing('article', article.pk)
@@ -180,7 +191,7 @@ class EnqueueIfMissingTest(_BannerGeneratorCacheCleanupMixin, TestCase):
     def test_enqueues_when_banner_url_but_title_hash_stale(self, mock_async):
         article = _make_article()
         Article.objects.filter(pk=article.pk).update(
-            auto_banner_url='https://cdn.example.com/banners/article/1.png',
+            auto_banner_url='https://cdn.example.com/banners/article/1.jpg',
             auto_banner_title_hash=title_hash('OLD TITLE'),
         )
         mock_async.return_value = 'task-id-2'
@@ -227,7 +238,7 @@ class EnqueueForceTest(_BannerGeneratorCacheCleanupMixin, TestCase):
     def test_enqueues_even_when_cover_image_set(self, mock_async):
         article = _make_article(cover_image_url='https://cdn.example.com/cover.png')
         Article.objects.filter(pk=article.pk).update(
-            auto_banner_url='https://cdn.example.com/banners/article/x.png',
+            auto_banner_url='https://cdn.example.com/banners/article/x.jpg',
             auto_banner_title_hash=title_hash(article.title),
         )
         mock_async.return_value = 'task-force'
@@ -256,21 +267,39 @@ class S3KeyTest(_BannerGeneratorCacheCleanupMixin, TestCase):
 
     def test_key_shape_per_content_type(self):
         cases = [
-            ('article', 42, 'banners/article/42.png'),
-            ('course', 7, 'banners/course/7.png'),
-            ('project', 3, 'banners/project/3.png'),
-            ('download', 11, 'banners/download/11.png'),
-            ('workshop', 99, 'banners/workshop/99.png'),
+            ('article', 42),
+            ('course', 7),
+            ('project', 3),
+            ('download', 11),
+            ('workshop', 99),
         ]
-        for content_type, pk, expected in cases:
+        for content_type, pk in cases:
             with self.subTest(content_type=content_type):
-                self.assertEqual(s3_key_for(content_type, pk), expected)
+                key = s3_key_for(content_type, pk)
+                self.assertRegex(
+                    key,
+                    rf'^banners/{content_type}/{pk}-[0-9a-f]{{32}}\.jpg$',
+                )
+
+    def test_key_is_unique_for_each_render(self):
+        first = s3_key_for('article', 42)
+        second = s3_key_for('article', 42)
+        self.assertNotEqual(first, second)
 
     def test_cdn_url_uses_content_cdn_base(self):
         _configure_banner_generator()
+        url = cdn_url_for('article', 42)
+        self.assertRegex(
+            url,
+            r'^https://cdn\.example\.com/banners/article/42-[0-9a-f]{32}\.jpg$',
+        )
+
+    def test_cdn_url_for_key_uses_exact_s3_key(self):
+        _configure_banner_generator()
+        key = 'banners/article/42-exact.jpg'
         self.assertEqual(
-            cdn_url_for('article', 42),
-            'https://cdn.example.com/banners/article/42.png',
+            cdn_url_for_key(key),
+            'https://cdn.example.com/banners/article/42-exact.jpg',
         )
 
     def test_cdn_url_empty_when_cdn_base_unset(self):
@@ -283,6 +312,120 @@ class S3KeyTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         # blank-CDN code path that returns the empty string.
         with override_settings(CONTENT_CDN_BASE=''):
             self.assertEqual(cdn_url_for('article', 42), '')
+
+
+class DeleteGeneratedBannerObjectTest(_BannerGeneratorCacheCleanupMixin, TestCase):
+
+    def setUp(self):
+        super().setUp()
+        _configure_banner_generator()
+
+    @patch('integrations.services.banner_generator.tasks.boto3.client')
+    def test_deletes_matching_generated_banner_key(self, mock_client):
+        result = delete_generated_banner_object(
+            'article',
+            'https://cdn.example.com/banners/article/42-old.jpg',
+        )
+        self.assertTrue(result)
+        mock_client.assert_called_once_with(
+            's3',
+            region_name='eu-west-1',
+        )
+        mock_client.return_value.delete_object.assert_called_once_with(
+            Bucket='content-bucket',
+            Key='banners/article/42-old.jpg',
+        )
+
+    @patch('integrations.services.banner_generator.tasks.boto3.client')
+    def test_uses_configured_s3_credentials_when_present(self, mock_client):
+        IntegrationSetting.objects.update_or_create(
+            key='AWS_ACCESS_KEY_ID',
+            defaults={
+                'value': 'AKIA_TEST',
+                'group': 'aws',
+                'is_secret': True,
+            },
+        )
+        IntegrationSetting.objects.update_or_create(
+            key='AWS_SECRET_ACCESS_KEY',
+            defaults={
+                'value': 'SECRET_TEST',
+                'group': 'aws',
+                'is_secret': True,
+            },
+        )
+        from integrations.config import clear_config_cache
+        clear_config_cache()
+
+        result = delete_generated_banner_object(
+            'article',
+            'https://cdn.example.com/banners/article/42-old.jpg',
+        )
+
+        self.assertTrue(result)
+        mock_client.assert_called_once_with(
+            's3',
+            region_name='eu-west-1',
+            aws_access_key_id='AKIA_TEST',
+            aws_secret_access_key='SECRET_TEST',
+        )
+
+    @patch('integrations.services.banner_generator.tasks.boto3.client')
+    def test_does_not_delete_urls_outside_safe_generated_prefixes(self, mock_client):
+        cases = [
+            'https://images.example.org/banners/article/42-old.jpg',
+            'https://cdn.example.com/content/article/42-old.jpg',
+            'https://cdn.example.com/banners/course/42-old.jpg',
+            'https://cdn.example.com/banners/article/42-old.jpg?version=1',
+            'https://cdn.example.com/banners/article/42%2Fold.jpg',
+            'https://cdn.example.com/banners/article/../course/42-old.jpg',
+            '',
+        ]
+        for url in cases:
+            with self.subTest(url=url):
+                self.assertFalse(delete_generated_banner_object('article', url))
+        mock_client.assert_not_called()
+
+    @patch('integrations.services.banner_generator.tasks.boto3.client')
+    def test_missing_bucket_config_logs_warning_and_skips_delete(self, mock_client):
+        IntegrationSetting.objects.filter(key='AWS_S3_CONTENT_BUCKET').delete()
+        from integrations.config import clear_config_cache
+        clear_config_cache()
+        from django.test import override_settings
+        with override_settings(AWS_S3_CONTENT_BUCKET=''):
+            with self.assertLogs(
+                'integrations.services.banner_generator.tasks',
+                level='WARNING',
+            ) as log_cm:
+                result = delete_generated_banner_object(
+                    'article',
+                    'https://cdn.example.com/banners/article/42-old.jpg',
+                )
+        self.assertFalse(result)
+        mock_client.assert_not_called()
+        self.assertIn('bucket unset', '\n'.join(log_cm.output))
+
+    @patch('integrations.services.banner_generator.tasks.boto3.client')
+    def test_delete_error_logs_warning_and_returns_false(self, mock_client):
+        mock_client.return_value.delete_object.side_effect = ClientError(
+            {
+                'Error': {
+                    'Code': 'AccessDenied',
+                    'Message': 'no delete permission',
+                },
+            },
+            'DeleteObject',
+        )
+        with self.assertLogs(
+            'integrations.services.banner_generator.tasks',
+            level='WARNING',
+        ) as log_cm:
+            result = delete_generated_banner_object(
+                'article',
+                'https://cdn.example.com/banners/article/42-old.jpg',
+            )
+        self.assertFalse(result)
+        self.assertIn('failed to delete banners/article/42-old.jpg', '\n'.join(log_cm.output))
 
 
 # --------------------------------------------------------------------------
@@ -419,6 +562,9 @@ class BuildPayloadTest(_BannerGeneratorCacheCleanupMixin, TestCase):
 
 
 CLIENT_PATCH = 'integrations.services.banner_generator.tasks.render_to_s3'
+DELETE_PATCH = (
+    'integrations.services.banner_generator.tasks.delete_generated_banner_object'
+)
 
 
 class RenderBannerForContentTest(_BannerGeneratorCacheCleanupMixin, TestCase):
@@ -427,33 +573,47 @@ class RenderBannerForContentTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         super().setUp()
         _configure_banner_generator()
 
+    @patch(DELETE_PATCH)
     @patch(CLIENT_PATCH)
-    def test_writes_url_and_hash_on_success(self, mock_render):
+    def test_writes_url_and_hash_on_success(self, mock_render, mock_delete):
         mock_render.return_value = {'ok': True}
         article = _make_article(title='Persist Me')
         render_banner_for_content('article', article.pk)
         article.refresh_from_db()
-        self.assertEqual(
+        self.assertRegex(
             article.auto_banner_url,
-            f'https://cdn.example.com/banners/article/{article.pk}.png',
+            rf'^https://cdn\.example\.com/banners/article/'
+            rf'{article.pk}-[0-9a-f]{{32}}\.jpg$',
         )
         self.assertEqual(
             article.auto_banner_title_hash,
             title_hash('Persist Me'),
         )
+        mock_delete.assert_called_once_with('article', '')
 
+    @patch(DELETE_PATCH)
     @patch(CLIENT_PATCH)
-    def test_swallows_banner_generator_error(self, mock_render):
+    def test_swallows_banner_generator_error(self, mock_render, mock_delete):
         mock_render.side_effect = BannerGeneratorError('boom', status_code=500)
-        article = _make_article()
+        article = _make_article(
+            auto_banner_url='https://cdn.example.com/banners/article/old.jpg',
+            auto_banner_title_hash='old-hash',
+        )
         # Should NOT raise.
         render_banner_for_content('article', article.pk)
         article.refresh_from_db()
-        self.assertEqual(article.auto_banner_url, '')
-        self.assertEqual(article.auto_banner_title_hash, '')
+        self.assertEqual(
+            article.auto_banner_url,
+            'https://cdn.example.com/banners/article/old.jpg',
+        )
+        self.assertEqual(article.auto_banner_title_hash, 'old-hash')
+        mock_delete.assert_not_called()
 
+    @patch(DELETE_PATCH)
     @patch(CLIENT_PATCH)
-    def test_persists_via_update_does_not_trigger_article_save(self, mock_render):
+    def test_persists_via_update_does_not_trigger_article_save(
+        self, mock_render, mock_delete,
+    ):
         """``.update()`` skips Article.save(), so derived fields aren't re-run."""
         mock_render.return_value = {'ok': True}
         article = _make_article(content_markdown='# Title\n\nbody')
@@ -470,8 +630,9 @@ class RenderBannerForContentTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         self.assertEqual(article.content_html, original_html)
         self.assertTrue(article.auto_banner_url)
 
+    @patch(DELETE_PATCH)
     @patch(CLIENT_PATCH)
-    def test_persists_for_each_content_type(self, mock_render):
+    def test_persists_for_each_content_type(self, mock_render, mock_delete):
         mock_render.return_value = {'ok': True}
         for content_type, factory in (
             ('article', _make_article),
@@ -484,11 +645,110 @@ class RenderBannerForContentTest(_BannerGeneratorCacheCleanupMixin, TestCase):
                 record = factory()
                 render_banner_for_content(content_type, record.pk)
                 record.refresh_from_db()
-                self.assertEqual(
+                self.assertRegex(
                     record.auto_banner_url,
-                    f'https://cdn.example.com/banners/{content_type}/{record.pk}.png',
+                    rf'^https://cdn\.example\.com/banners/{content_type}/'
+                    rf'{record.pk}-[0-9a-f]{{32}}\.jpg$',
                 )
                 self.assertTrue(record.auto_banner_title_hash)
+
+    @patch(DELETE_PATCH)
+    @patch(CLIENT_PATCH)
+    def test_render_request_key_matches_persisted_url(
+        self, mock_render, mock_delete,
+    ):
+        mock_render.return_value = {'ok': True}
+        article = _make_article()
+        render_banner_for_content('article', article.pk)
+        article.refresh_from_db()
+        s3_key = mock_render.call_args.kwargs['s3_key']
+        self.assertEqual(
+            article.auto_banner_url,
+            f'https://cdn.example.com/{s3_key}',
+        )
+        self.assertTrue(s3_key.endswith('.jpg'))
+        self.assertTrue(s3_key.startswith('banners/article/'))
+        self.assertEqual(mock_render.call_args.kwargs['fmt'], 'jpeg')
+
+    @patch(DELETE_PATCH)
+    @patch(CLIENT_PATCH)
+    def test_two_successful_renders_produce_distinct_urls(
+        self, mock_render, mock_delete,
+    ):
+        mock_render.return_value = {'ok': True}
+        article = _make_article()
+        render_banner_for_content('article', article.pk)
+        article.refresh_from_db()
+        first_url = article.auto_banner_url
+        first_key = mock_render.call_args.kwargs['s3_key']
+
+        render_banner_for_content('article', article.pk)
+        article.refresh_from_db()
+        second_url = article.auto_banner_url
+        second_key = mock_render.call_args.kwargs['s3_key']
+
+        self.assertNotEqual(first_url, second_url)
+        self.assertNotEqual(first_key, second_key)
+        self.assertEqual(second_url, f'https://cdn.example.com/{second_key}')
+        mock_delete.assert_called_with('article', first_url)
+
+    @patch(DELETE_PATCH)
+    @patch(CLIENT_PATCH)
+    def test_force_regenerate_does_not_touch_manual_cover_image(
+        self, mock_render, mock_delete,
+    ):
+        mock_render.return_value = {'ok': True}
+        article = _make_article(
+            cover_image_url='https://cdn.example.com/manual/article-cover.png',
+            auto_banner_url='https://cdn.example.com/banners/article/old.jpg',
+        )
+        render_banner_for_content('article', article.pk)
+        article.refresh_from_db()
+        self.assertEqual(
+            article.cover_image_url,
+            'https://cdn.example.com/manual/article-cover.png',
+        )
+        self.assertRegex(
+            article.auto_banner_url,
+            rf'^https://cdn\.example\.com/banners/article/'
+            rf'{article.pk}-[0-9a-f]{{32}}\.jpg$',
+        )
+        mock_delete.assert_called_once_with(
+            'article',
+            'https://cdn.example.com/banners/article/old.jpg',
+        )
+
+    @patch('integrations.services.banner_generator.tasks.boto3.client')
+    @patch(CLIENT_PATCH)
+    def test_cleanup_failure_does_not_undo_successful_render(
+        self, mock_render, mock_client,
+    ):
+        mock_render.return_value = {'ok': True}
+        mock_client.return_value.delete_object.side_effect = ClientError(
+            {
+                'Error': {
+                    'Code': 'AccessDenied',
+                    'Message': 'no delete permission',
+                },
+            },
+            'DeleteObject',
+        )
+        article = _make_article(
+            auto_banner_url='https://cdn.example.com/banners/article/old.jpg',
+        )
+        with self.assertLogs(
+            'integrations.services.banner_generator.tasks',
+            level='WARNING',
+        ) as log_cm:
+            result = render_banner_for_content('article', article.pk)
+        article.refresh_from_db()
+        self.assertEqual(article.auto_banner_url, result)
+        self.assertRegex(
+            article.auto_banner_url,
+            rf'^https://cdn\.example\.com/banners/article/'
+            rf'{article.pk}-[0-9a-f]{{32}}\.jpg$',
+        )
+        self.assertIn('failed to delete banners/article/old.jpg', '\n'.join(log_cm.output))
 
     @patch(CLIENT_PATCH)
     def test_unsupported_content_type_no_op(self, mock_render):

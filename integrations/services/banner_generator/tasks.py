@@ -16,6 +16,11 @@ sync pipeline or the operator-initiated regenerate action.
 
 import logging
 import re
+import uuid
+from urllib.parse import unquote, urlparse
+
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 from integrations.config import get_config
 from integrations.services.banner_generator import (
@@ -268,28 +273,108 @@ def build_payload(content_type, record):
 
 
 def s3_key_for(content_type, content_id):
-    """Return the stable S3 object key for a content record's banner.
+    """Return a unique S3 object key for a content record's banner.
 
-    Always lowercase, always ``.png``, always under the ``banners/``
-    prefix so the bucket policy can scope the Lambda's PutObject IAM
-    grant tightly. ``content_id`` is the model's primary key (an int);
-    we cast to str so call sites don't need to.
+    Always lowercase, always ``.jpg``, always under the
+    ``banners/<content_type>/`` prefix, and unique per render so CDN
+    caches do not need invalidation. ``content_id`` is the model's
+    primary key (an int); we cast to str so call sites don't need to.
     """
-    return f'banners/{content_type}/{content_id}.png'
+    return f'banners/{content_type}/{content_id}-{uuid.uuid4().hex}.jpg'
 
 
-def cdn_url_for(content_type, content_id):
-    """Return the public CDN URL for a banner, or ``''`` when CDN unset.
-
-    The URL is stable across re-renders (the S3 key is keyed on the
-    model PK, not a content hash), so browsers can cache it
-    aggressively. When ``CONTENT_CDN_BASE`` is not configured we return
-    an empty string — auto-banner persistence then no-ops.
-    """
+def cdn_url_for_key(s3_key):
+    """Return the public CDN URL for ``s3_key``, or ``''`` when CDN unset."""
     cdn_base = (get_config('CONTENT_CDN_BASE', '') or '').rstrip('/')
     if not cdn_base:
         return ''
-    return f'{cdn_base}/{s3_key_for(content_type, content_id)}'
+    return f'{cdn_base}/{s3_key.lstrip("/")}'
+
+
+def cdn_url_for(content_type, content_id):
+    """Return the public CDN URL for a new banner, or ``''`` when CDN unset.
+
+    The URL changes on every render because the S3 key includes a
+    random suffix, so browsers and CloudFront can cache generated
+    banners aggressively without invalidation. When ``CONTENT_CDN_BASE``
+    is not configured we return an empty string — auto-banner
+    persistence then no-ops.
+    """
+    return cdn_url_for_key(s3_key_for(content_type, content_id))
+
+
+def _generated_banner_key_from_url(content_type, url):
+    """Return the generated banner S3 key encoded in ``url``, if safe.
+
+    Cleanup is intentionally narrow: only URLs under the configured CDN
+    base and under ``banners/<supported_content_type>/`` are eligible.
+    """
+    if content_type not in SUPPORTED_CONTENT_TYPES or not url:
+        return ''
+
+    cdn_base = (get_config('CONTENT_CDN_BASE', '') or '').rstrip('/')
+    if not cdn_base:
+        return ''
+
+    expected_prefix = f'banners/{content_type}/'
+    normalized_url = str(url).strip()
+    normalized_base = cdn_base + '/'
+    if not normalized_url.startswith(normalized_base):
+        return ''
+
+    key = normalized_url[len(normalized_base):].lstrip('/')
+    if not key.startswith(expected_prefix):
+        return ''
+    parsed_key = urlparse(key).path.lstrip('/')
+    if parsed_key != key or not parsed_key.startswith(expected_prefix):
+        return ''
+    if unquote(parsed_key) != parsed_key:
+        return ''
+    if any(segment in ('', '.', '..') for segment in parsed_key.split('/')):
+        return ''
+    return parsed_key
+
+
+def delete_generated_banner_object(content_type, url):
+    """Best-effort delete for a previously generated banner object.
+
+    Returns True only when a safe generated-banner key was deleted. It
+    returns False for non-generated URLs, missing config, client errors,
+    or delete errors so banner regeneration never fails because cleanup
+    failed.
+    """
+    key = _generated_banner_key_from_url(content_type, url)
+    if not key:
+        return False
+
+    bucket = (get_config('AWS_S3_CONTENT_BUCKET', '') or '').strip()
+    if not bucket:
+        logger.warning(
+            'delete_generated_banner_object: bucket unset; skipping %s',
+            key,
+        )
+        return False
+
+    region = get_config('AWS_S3_CONTENT_REGION', 'eu-west-1')
+    client_kwargs = {'region_name': region}
+    access_key = get_config('AWS_ACCESS_KEY_ID')
+    secret_key = get_config('AWS_SECRET_ACCESS_KEY')
+    if access_key and secret_key:
+        client_kwargs.update(
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+        )
+    try:
+        s3 = boto3.client('s3', **client_kwargs)
+        s3.delete_object(Bucket=bucket, Key=key)
+    except (BotoCoreError, ClientError) as exc:
+        logger.warning(
+            'delete_generated_banner_object: failed to delete %s: %s',
+            key, exc,
+        )
+        return False
+
+    return True
 
 
 # --------------------------------------------------------------------------
@@ -364,7 +449,8 @@ def render_banner_for_content(content_type, content_pk):
         )
         return None
 
-    banner_url = cdn_url_for(content_type, content_pk)
+    previous_banner_url = getattr(record, 'auto_banner_url', '') or ''
+    banner_url = cdn_url_for_key(s3_key)
     if not banner_url:
         # CONTENT_CDN_BASE missing — we still rendered to S3 but can't
         # persist a usable URL. Log so the operator notices the misconfig
@@ -386,4 +472,5 @@ def render_banner_for_content(content_type, content_pk):
         auto_banner_url=banner_url,
         auto_banner_title_hash=new_hash,
     )
+    delete_generated_banner_object(content_type, previous_banner_url)
     return banner_url

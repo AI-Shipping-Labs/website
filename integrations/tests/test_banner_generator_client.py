@@ -5,6 +5,7 @@ in :mod:`integrations.services.banner_generator`. All HTTP calls are
 mocked at ``integrations.services.banner_generator.requests.post``.
 """
 
+import os
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -32,6 +33,13 @@ class _BannerGeneratorCacheCleanupMixin:
 
     def setUp(self):
         super().setUp()
+        env_patch = patch.dict(os.environ, {
+            'BANNER_GENERATOR_FUNCTION_URL': '',
+            'BANNER_GENERATOR_AUTH_TOKEN': '',
+            'AWS_S3_CONTENT_BUCKET': '',
+        })
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
         clear_config_cache()
         self.addCleanup(clear_config_cache)
 
@@ -83,30 +91,30 @@ class RenderToS3RequestShapeTest(_BannerGeneratorCacheCleanupMixin, TestCase):
     def test_request_payload_includes_all_fields(self, mock_post):
         mock_post.return_value = MagicMock(
             status_code=200,
-            json=lambda: {'ok': True, 's3': {'bucket': 'content-bucket', 'key': 'banners/article/42.png'}},
+            json=lambda: {'ok': True, 's3': {'bucket': 'content-bucket', 'key': 'banners/article/42.jpg'}},
         )
         render_to_s3(
-            template='asl-content-card', size='og', fmt='png',
+            template='asl-content-card', size='og', fmt='jpeg',
             data={
                 'kind': 'Article', 'kicker': 'Guides',
                 'title': 'Hello', 'subtitle': 'Sub',
                 'meta_primary': 'Blog', 'meta_secondary': 'a / b',
                 'footer': 'aishippinglabs.com/blog',
             },
-            s3_key='banners/article/42.png',
+            s3_key='banners/article/42.jpg',
         )
         mock_post.assert_called_once()
         kwargs = mock_post.call_args.kwargs
         # JSON body
         body = kwargs['json']
         self.assertEqual(body['template'], 'asl-content-card')
-        self.assertEqual(body['format'], 'png')
+        self.assertEqual(body['format'], 'jpeg')
         self.assertEqual(body['size'], 'og')
         self.assertEqual(body['data']['kind'], 'Article')
         self.assertEqual(body['data']['title'], 'Hello')
         self.assertEqual(body['s3']['bucket'], 'content-bucket')
-        self.assertEqual(body['s3']['key'], 'banners/article/42.png')
-        self.assertEqual(body['s3']['content_type'], 'image/png')
+        self.assertEqual(body['s3']['key'], 'banners/article/42.jpg')
+        self.assertEqual(body['s3']['content_type'], 'image/jpeg')
         # Headers
         self.assertEqual(
             kwargs['headers']['Authorization'],
@@ -128,8 +136,8 @@ class RenderToS3ErrorTest(_BannerGeneratorCacheCleanupMixin, TestCase):
 
     def _make_payload_kwargs(self):
         return {
-            'template': 'asl-content-card', 'size': 'og', 'fmt': 'png',
-            'data': {'title': 'x'}, 's3_key': 'banners/article/1.png',
+            'template': 'asl-content-card', 'size': 'og', 'fmt': 'jpeg',
+            'data': {'title': 'x'}, 's3_key': 'banners/article/1.jpg',
         }
 
     @patch(PATCH_TARGET)

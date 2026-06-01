@@ -13,6 +13,7 @@ are the real-provider counterpart and are excluded from CI by the
 """
 
 import json
+import os
 from unittest import mock
 
 from django.test import SimpleTestCase, override_settings
@@ -174,3 +175,41 @@ class CostTrackerTest(SimpleTestCase):
         output = '\n'.join(str(c.args[0]) for c in printed.call_args_list if c.args)
         self.assertIn('Total cost: $0.000000', output)
         self.assertIn('LLM calls: 0', output)
+
+    def test_cost_file_path_is_process_scoped(self):
+        # Each process resolves COST_FILE with its own pid, so two parallel
+        # workers necessarily get distinct files and cannot collide.
+        self.assertIn(str(os.getpid()), cost_tracker.COST_FILE.name)
+
+    def test_sibling_process_appends_are_invisible_to_this_process(self):
+        # Simulate a colocated parallel worker (a different pid) appending to
+        # ITS own cost file. After reset, this process's summary must still
+        # report zero calls -- the cross-process race that flaked is gone.
+        cost_tracker.reset_cost_file()
+        sibling = cost_tracker.COST_FILE.with_name(
+            f'live_judge_cost_tracker.{os.getpid() + 1}.jsonl'
+        )
+        self.addCleanup(sibling.unlink, missing_ok=True)
+        sibling.write_text(
+            json.dumps({'model': 'glm-5.1', 'input_tokens': 0, 'output_tokens': 0})
+            + '\n',
+            encoding='utf-8',
+        )
+        with mock.patch('builtins.print') as printed:
+            cost_tracker.display_total_usage()
+        output = '\n'.join(str(c.args[0]) for c in printed.call_args_list if c.args)
+        self.assertIn('LLM calls: 0', output)
+
+    def test_in_process_write_then_read_round_trips(self):
+        # The pytest session-finish path (conftest.py) writes via capture_usage
+        # and reads via display_total_usage in the SAME process; confirm the
+        # per-process file is read back, not orphaned.
+        cost_tracker.reset_cost_file()
+        result = mock.Mock(spec=[])
+        cost_tracker.capture_usage(
+            'glm-5.1', result, criteria_total=1, criteria_passed=1
+        )
+        with mock.patch('builtins.print') as printed:
+            cost_tracker.display_total_usage()
+        output = '\n'.join(str(c.args[0]) for c in printed.call_args_list if c.args)
+        self.assertIn('LLM calls: 1', output)

@@ -19,6 +19,7 @@ imports or initializes Logfire (#813 owns that gating).
 """
 
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -32,7 +33,28 @@ MODEL_PRICES = {
     'glm-5.1': {'input': 0.60, 'output': 2.20},
 }
 
-COST_FILE = Path(tempfile.gettempdir()) / 'live_judge_cost_tracker.jsonl'
+def _cost_file():
+    """The cost file for the CURRENT process.
+
+    The pid is read on every access (not frozen at import) so that each
+    Django ``--parallel`` worker -- which is forked from a parent that has
+    ALREADY imported this module -- still gets a file unique to its own pid.
+    Freezing the pid at import time would hand every forked worker the
+    parent's path and reintroduce the cross-process race. In-process callers
+    (capture_usage / display_total_usage / the pytest conftest session hooks)
+    all resolve the same pid, so a process always reads back the file it
+    wrote.
+    """
+    return Path(tempfile.gettempdir()) / f'live_judge_cost_tracker.{os.getpid()}.jsonl'
+
+
+def __getattr__(name):
+    # Expose ``cost_tracker.COST_FILE`` as a per-process module attribute so
+    # callers and tests that read it see the SAME path the functions use in
+    # this process, while preserving true per-worker isolation under fork.
+    if name == 'COST_FILE':
+        return _cost_file()
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
 
 
 def cost_usd(model, input_tokens, output_tokens):
@@ -46,7 +68,7 @@ def cost_usd(model, input_tokens, output_tokens):
 
 def reset_cost_file():
     """Drop any cost file left over from a previous run."""
-    COST_FILE.unlink(missing_ok=True)
+    _cost_file().unlink(missing_ok=True)
 
 
 def _read_usage(result):
@@ -110,7 +132,7 @@ def capture_usage(model, result=None, *, criteria_total=0, criteria_passed=0):
         'criteria_total': int(criteria_total),
         'criteria_passed': int(criteria_passed),
     }
-    with open(COST_FILE, 'a', encoding='utf-8') as handle:
+    with open(_cost_file(), 'a', encoding='utf-8') as handle:
         handle.write(json.dumps(entry) + '\n')
 
 
@@ -123,7 +145,8 @@ def display_total_usage():
     print()
     print('=== Live LLM-judge usage summary ===')
 
-    if not COST_FILE.exists():
+    cost_file = _cost_file()
+    if not cost_file.exists():
         print('LLM calls: 0')
         print('Total cost: $0.000000')
         return
@@ -132,7 +155,7 @@ def display_total_usage():
     call_count = 0
     criteria_total = 0
     criteria_passed = 0
-    for line in COST_FILE.read_text(encoding='utf-8').splitlines():
+    for line in cost_file.read_text(encoding='utf-8').splitlines():
         if not line.strip():
             continue
         entry = json.loads(line)
@@ -161,9 +184,12 @@ def display_total_usage():
     print(f'Total cost: ${total_cost:.6f}')
 
 
+# ``COST_FILE`` is intentionally NOT a static module global: it is provided
+# per-process via ``__getattr__`` above (so each forked parallel worker gets
+# its own path) and is therefore omitted from ``__all__`` (which only governs
+# ``import *``). It remains readable as ``cost_tracker.COST_FILE``.
 __all__ = [
     'MODEL_PRICES',
-    'COST_FILE',
     'cost_usd',
     'reset_cost_file',
     'capture_usage',

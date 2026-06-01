@@ -10,6 +10,44 @@ from integrations.config import get_config
 DEFAULT_EVENT_DISPLAY_TIMEZONE = 'Europe/Berlin'
 EVENT_DISPLAY_TIMEZONE_SETTING = 'EVENT_DISPLAY_TIMEZONE'
 
+# Issue #691/#817: Fixed multi-zone strip for event link previews and Slack
+# event announcements (west to east). ``Europe/Berlin`` is the representative
+# city for CET — DST flips it to CEST automatically in summer; the visible
+# token in the message stays ``CET`` by design (no per-recipient context in
+# channel broadcasts or anonymous link unfurls).
+EVENT_TZ_STRIP = (
+    ('NYC', 'America/New_York'),
+    ('UTC', 'UTC'),
+    ('CET', 'Europe/Berlin'),
+    ('IST', 'Asia/Kolkata'),
+)
+
+
+def format_event_tz_strip(start_datetime):
+    """Return a fixed multi-zone time strip for event link previews / Slack.
+
+    Format: ``"Thu, May 21 · 10:00 NYC · 14:00 UTC · 16:00 CET · 19:30 IST"``.
+
+    The date label is anchored to NYC (the westernmost zone in the strip);
+    readers in later zones may see "their" clock time pointing to the next
+    day, which is an unavoidable property of a single-date label spanning
+    many timezones. The strip omits the year (Slack reminders fire within
+    the 24h window before an event, so the year is unambiguous).
+
+    Returns ``None`` when ``start_datetime`` is falsy.
+    """
+    if not start_datetime:
+        return None
+    if start_datetime.tzinfo is None:
+        start_datetime = start_datetime.replace(tzinfo=ZoneInfo('UTC'))
+    date_in_nyc = start_datetime.astimezone(ZoneInfo('America/New_York'))
+    date_part = date_in_nyc.strftime('%a, %b %d')
+    times = [
+        f'{start_datetime.astimezone(ZoneInfo(iana)).strftime("%H:%M")} {label}'
+        for label, iana in EVENT_TZ_STRIP
+    ]
+    return f'{date_part} · ' + ' · '.join(times)
+
 
 @dataclass(frozen=True)
 class EventTimeDisplay:

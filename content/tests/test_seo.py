@@ -3,7 +3,9 @@ Tests for SEO features: structured data, meta tags, OpenGraph tags, and sitemap.
 """
 
 import json
-from datetime import date
+import re
+from datetime import date, datetime
+from datetime import timezone as dt_tz
 
 from django.template import Context, Template
 from django.test import RequestFactory, TestCase
@@ -447,6 +449,122 @@ class OgTagsTest(TestCase):
         self.assertNotIn('"Article"', result)
 
 
+class EventPreviewDescriptionTest(TestCase):
+    """Issue #817: event link previews lead with the multi-timezone strip."""
+
+    # 2026-05-21T14:00:00Z (a Thursday) renders the canonical strip.
+    KNOWN_STRIP = 'Thu, May 21 · 10:00 NYC · 14:00 UTC · 16:00 CET · 19:30 IST'
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _render(self, event):
+        template = Template('{% load seo_tags %}{% og_tags event %}')
+        request = self.factory.get('/')
+        context = Context({'event': event, 'request': request})
+        return template.render(context)
+
+    @staticmethod
+    def _meta(content, attr, key):
+        match = re.search(
+            rf'<meta {attr}="{re.escape(key)}" content="([^"]*)">', content,
+        )
+        return match.group(1) if match else None
+
+    def _make_event(self, **kwargs):
+        defaults = {
+            'title': 'RAG Live',
+            'slug': 'rag-live',
+            'start_datetime': datetime(2026, 5, 21, 14, 0, 0, tzinfo=dt_tz.utc),
+            'status': 'upcoming',
+            'description': 'Build a RAG pipeline live with the community.',
+        }
+        defaults.update(kwargs)
+        return Event.objects.create(**defaults)
+
+    def test_og_description_leads_with_strip_then_description(self):
+        event = self._make_event()
+        result = self._render(event)
+        og_desc = self._meta(result, 'property', 'og:description')
+        self.assertTrue(
+            og_desc.startswith(f'{self.KNOWN_STRIP} · '),
+            f'og:description should start with the tz strip, got: {og_desc!r}',
+        )
+        self.assertIn('Build a RAG pipeline', og_desc)
+
+    def test_twitter_description_equals_og_description(self):
+        event = self._make_event()
+        result = self._render(event)
+        og_desc = self._meta(result, 'property', 'og:description')
+        twitter_desc = self._meta(result, 'name', 'twitter:description')
+        self.assertEqual(twitter_desc, og_desc)
+        # Sanity: this is the real combined string, not an empty match.
+        self.assertIn('NYC', og_desc)
+
+    def test_meta_description_equals_og_description_on_page(self):
+        event = self._make_event(slug='meta-match')
+        response = self.client.get(event.get_absolute_url())
+        content = response.content.decode()
+        og_desc = self._meta(content, 'property', 'og:description')
+        meta_desc = self._meta(content, 'name', 'description')
+        self.assertIsNotNone(og_desc)
+        self.assertEqual(meta_desc, og_desc)
+        self.assertIn(self.KNOWN_STRIP, meta_desc)
+
+    def test_long_description_truncated_but_strip_survives(self):
+        event = self._make_event(description='word ' * 80)  # 400 chars
+        result = self._render(event)
+        og_desc = self._meta(result, 'property', 'og:description')
+        self.assertLessEqual(len(og_desc), 200)
+        # The full strip (all four labels) is preserved.
+        for label in ('NYC', 'UTC', 'CET', 'IST'):
+            self.assertIn(label, og_desc)
+        self.assertTrue(og_desc.startswith(f'{self.KNOWN_STRIP} · '))
+        self.assertTrue(
+            og_desc.endswith('...'),
+            f'long description should end with ellipsis, got: {og_desc!r}',
+        )
+
+    def test_no_description_renders_strip_only(self):
+        event = self._make_event(slug='no-desc', description='')
+        result = self._render(event)
+        og_desc = self._meta(result, 'property', 'og:description')
+        # Exact equality proves strip-only: no trailing separator, no
+        # description body, no ellipsis.
+        self.assertEqual(og_desc, self.KNOWN_STRIP)
+        self.assertFalse(og_desc.endswith(' · '))
+
+    def test_missing_start_datetime_falls_back_to_plain_description(self):
+        event = self._make_event(slug='no-time', description='B' * 200)
+        # Bypass the NOT NULL constraint on the in-memory instance only.
+        event.start_datetime = None
+        result = self._render(event)
+        og_desc = self._meta(result, 'property', 'og:description')
+        for label in ('NYC', 'UTC', 'CET', 'IST'):
+            self.assertNotIn(label, og_desc)
+        # Old behaviour: truncated to 160 chars (157 + '...').
+        self.assertLessEqual(len(og_desc), 160)
+        self.assertTrue(og_desc.endswith('...'))
+
+    def test_non_event_content_has_no_time_strip(self):
+        article = Article.objects.create(
+            title='Plain Article',
+            slug='plain-article',
+            description='An article about AI engineering.',
+            content_markdown='# Hello',
+            date=date(2025, 6, 15),
+            published=True,
+        )
+        template = Template('{% load seo_tags %}{% og_tags article %}')
+        request = self.factory.get('/')
+        context = Context({'article': article, 'request': request})
+        result = template.render(context)
+        og_desc = self._meta(result, 'property', 'og:description')
+        for label in ('NYC', 'UTC', 'CET', 'IST'):
+            self.assertNotIn(label, og_desc)
+        self.assertEqual(og_desc, 'An article about AI engineering.')
+
+
 class MetaTagsInViewTest(TestCase):
     """Test that meta tags appear correctly in rendered pages."""
 
@@ -660,7 +778,6 @@ class DescriptionTruncationTest(TestCase):
         content = response.content.decode()
         # Django truncatechars:160 adds '...' making it exactly 160
         # Find the meta description tag
-        import re
         match = re.search(
             r'<meta name="description" content="([^"]*)">', content,
         )

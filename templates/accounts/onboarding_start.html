@@ -13,11 +13,17 @@
       <header class="mb-8">
         <p class="text-sm uppercase tracking-wide text-muted-foreground">Onboarding</p>
         <h1 class="text-3xl font-semibold tracking-tight mt-1" data-testid="onboarding-title">
-          How do you identify yourself?
+          {% if is_changing %}Change your description{% else %}How do you identify yourself?{% endif %}
         </h1>
         <p class="text-sm text-muted-foreground mt-2" data-testid="onboarding-subtitle">
+          {% if is_changing %}
+          Pick a different description if the first one wasn't the right fit.
+          We'll adjust your questions — answers you've already given to shared
+          questions are kept.
+          {% else %}
           Pick the description that fits you best so we can prepare the right
           questions and build your plan. You can pick "not sure" if none fit.
+          {% endif %}
         </p>
       </header>
 
@@ -37,7 +43,7 @@
             <span class="flex items-start gap-3">
               <input type="radio" name="self_id" value="{{ option.value }}"
                      class="mt-1" required
-                     {% if forloop.first %}checked{% endif %}>
+                     {% if current_selection %}{% if option.value == current_selection %}checked{% endif %}{% elif forloop.first %}checked{% endif %}>
               <span>
                 <span class="block text-sm font-medium text-foreground"
                       data-testid="onboarding-option-label">{{ option.label }}</span>
@@ -50,12 +56,19 @@
           {% endfor %}
         </div>
 
-        <div class="mt-6">
+        <div class="mt-6 flex items-center gap-4">
           <button type="submit"
                   class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
                   data-testid="onboarding-continue-button">
             Continue
           </button>
+          {% if is_changing %}
+          <a href="{% url 'onboarding_start' %}"
+             class="text-sm text-muted-foreground hover:underline"
+             data-testid="onboarding-keep-description">
+            Keep my current answers
+          </a>
+          {% endif %}
         </div>
       </form>
       {% endif %}

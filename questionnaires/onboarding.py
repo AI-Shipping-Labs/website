@@ -18,7 +18,15 @@ Design notes:
 
 from integrations.config import get_config
 from integrations.services import llm
-from questionnaires.models import Persona, Questionnaire, Response
+from questionnaires.models import (
+    Answer,
+    Persona,
+    Questionnaire,
+    Response,
+)
+from questionnaires.services import build_response_questions
+
+_CHOICE_TYPES = frozenset({'single_choice', 'multiple_choice'})
 
 # Slug of the persona-agnostic onboarding questionnaire seeded by #801.
 GENERIC_ONBOARDING_SLUG = 'onboarding-general'
@@ -91,9 +99,12 @@ def has_completed_onboarding(user):
 def get_onboarding_response(user):
     """Return the member's onboarding ``Response`` (draft or submitted).
 
-    There is at most one because the self-ID step is asked only once;
-    switching persona mid-flow is a staff action. Returns ``None`` when
-    the member has not started onboarding.
+    There is at most one because the self-ID step is asked only once per
+    submission. While the response is still a DRAFT the member may return
+    to self-identification and re-pick a persona (#822) via
+    :func:`reroute_onboarding_response`; once SUBMITTED, switching persona
+    is a staff action. Returns ``None`` when the member has not started
+    onboarding.
     """
     return (
         Response.objects
@@ -173,3 +184,110 @@ def resolve_target_questionnaire(selection):
 
     # Unknown selection or persona without a questionnaire: fall back.
     return generic
+
+
+def _snapshot_answers_by_prompt(response):
+    """Capture a draft response's current answers keyed by question prompt.
+
+    Returns a dict ``prompt -> {'type', 'text', 'number', 'labels'}`` so the
+    answer can be re-attached to a same-prompt question after the question
+    set is rebuilt for a different persona. Choice answers carry option
+    LABELS (not ids), because the new questionnaire snapshots fresh option
+    rows with new ids; matching by label re-selects the equivalent options.
+    """
+    snapshot = {}
+    answers = (
+        response.answers
+        .select_related('question')
+        .prefetch_related('selected_options')
+    )
+    for answer in answers:
+        rq = answer.question
+        if rq.question_type in _CHOICE_TYPES:
+            labels = [opt.label for opt in answer.selected_options.all()]
+            # An empty choice answer carries no information to preserve.
+            if not labels:
+                continue
+            snapshot[rq.prompt] = {
+                'type': rq.question_type,
+                'labels': labels,
+            }
+        elif answer.text_value:
+            snapshot[rq.prompt] = {
+                'type': rq.question_type,
+                'text': answer.text_value,
+            }
+        elif answer.number_value is not None:
+            snapshot[rq.prompt] = {
+                'type': rq.question_type,
+                'number': answer.number_value,
+            }
+    return snapshot
+
+
+def _restore_answers_by_prompt(response, snapshot):
+    """Re-attach preserved answers to the response's new question set.
+
+    Only questions whose prompt is in ``snapshot`` get an answer; new delta
+    questions stay unanswered. Choice answers re-select the new option rows
+    whose label matches a preserved label; a label with no counterpart in
+    the new question is simply dropped (no orphan, no error).
+    """
+    for rq in response.response_questions.prefetch_related('options').all():
+        saved = snapshot.get(rq.prompt)
+        if saved is None:
+            continue
+        if rq.question_type in _CHOICE_TYPES:
+            # Only restore between matching choice types; a prompt that
+            # flipped type across questionnaires would not be a safe restore.
+            if saved.get('type') not in _CHOICE_TYPES:
+                continue
+            matching = [
+                opt for opt in rq.options.all() if opt.label in saved['labels']
+            ]
+            if not matching:
+                continue
+            answer = Answer.objects.create(response=response, question=rq)
+            answer.selected_options.set(matching)
+        elif 'text' in saved:
+            Answer.objects.create(
+                response=response, question=rq, text_value=saved['text'],
+            )
+        elif 'number' in saved:
+            Answer.objects.create(
+                response=response, question=rq, number_value=saved['number'],
+            )
+
+
+def reroute_onboarding_response(response, target):
+    """Repoint a DRAFT onboarding response to ``target`` questionnaire (#822).
+
+    A member who picked the wrong persona at self-identification may return
+    while their response is still a draft and choose a different one. The
+    question set differs per persona, so this:
+
+    1. Snapshots the member's current answers keyed by question prompt.
+    2. Deletes the old ``ResponseQuestion`` rows (cascading their answers).
+    3. Repoints the response at ``target`` and re-materializes its full
+       question set via :func:`build_response_questions`.
+    4. Restores answers to any question whose prompt is shared (the common
+       spine), matching choice options by label. Answers to delta questions
+       absent from ``target`` are dropped — never silently kept as orphans.
+
+    No-op when ``target`` is ``None`` or already the current questionnaire
+    (besides ensuring the question set is materialized). Returns ``response``.
+    """
+    if target is None:
+        return response
+    if response.questionnaire_id == target.pk:
+        # Same persona re-picked: just make sure questions are materialized.
+        build_response_questions(response)
+        return response
+
+    snapshot = _snapshot_answers_by_prompt(response)
+    response.response_questions.all().delete()
+    response.questionnaire = target
+    response.save(update_fields=['questionnaire', 'updated_at'])
+    build_response_questions(response)
+    _restore_answers_by_prompt(response, snapshot)
+    return response

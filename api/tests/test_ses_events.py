@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils.dateparse import parse_datetime
 
+from api.views.ses_events import _is_permanent_smtp_failure
 from email_app.models import EmailLog, SesEvent
 
 User = get_user_model()
@@ -28,18 +29,41 @@ URLOPEN_PATH = "api.views.ses_events.urllib.request.urlopen"
 SES_TEST_SHARED_SECRET = "top-secret-value"
 
 
-def _bounce_payload(message_id, email, bounce_type="Permanent"):
-    """Build a fully-formed SNS Notification + SES Bounce envelope."""
+def _bounce_payload(
+    message_id,
+    email,
+    bounce_type="Permanent",
+    *,
+    status=None,
+    diagnostic_code=None,
+    bounce_subtype="General",
+    recipients=None,
+):
+    """Build a fully-formed SNS Notification + SES Bounce envelope.
+
+    ``status`` / ``diagnostic_code`` attach the per-recipient SMTP fields
+    the #827 classifier reads (omitted by default to preserve the legacy
+    payload shape). Pass ``recipients`` as a list of dicts to build a
+    multi-recipient bounce directly.
+    """
+    if recipients is None:
+        recipient = {"emailAddress": email}
+        if status is not None:
+            recipient["status"] = status
+        if diagnostic_code is not None:
+            recipient["diagnosticCode"] = diagnostic_code
+        recipients = [recipient]
+    destination = [r.get("emailAddress", email) for r in recipients]
     inner = {
         "notificationType": "Bounce",
         "bounce": {
             "bounceType": bounce_type,
-            "bounceSubType": "General",
-            "bouncedRecipients": [{"emailAddress": email}],
+            "bounceSubType": bounce_subtype,
+            "bouncedRecipients": recipients,
         },
         "mail": {
             "source": "noreply@aishippinglabs.com",
-            "destination": [email],
+            "destination": destination,
         },
     }
     return {
@@ -389,6 +413,239 @@ class SesEventsBounceTest(TestCase):
         # Threshold breach upgrades bounce_state to PERMANENT (issue
         # #766). The legacy "bounced" tag is no longer written.
         self.assertEqual(self.user.bounce_state, "permanent")
+
+    # ------------------------------------------------------------------
+    # Issue #827: SES-mislabeled Transient 5xx hard bounces.
+    # ------------------------------------------------------------------
+
+    def test_mislabeled_transient_5xx_suppressed_on_first_event(self):
+        # The exact reported payload: Transient/General label but a
+        # permanent RFC 3463 status (5.3.0) + a 550 SMTP diagnostic.
+        payload = _bounce_payload(
+            "m-mislabel-1",
+            self.user_email,
+            bounce_type="Transient",
+            bounce_subtype="General",
+            status="5.3.0",
+            diagnostic_code="smtp; 550 recipient <victim@duck.com> denied",
+        )
+        with mock.patch(VALIDATOR_PATH, return_value=True):
+            response = self._post(payload)
+        self.assertEqual(response.status_code, 200)
+
+        self.user.refresh_from_db()
+        # Suppressed on the FIRST event via the permanent path...
+        self.assertTrue(self.user.unsubscribed)
+        self.assertEqual(self.user.bounce_state, "permanent")
+        self.assertIsNotNone(self.user.bounce_recorded_at)
+        # ...and the soft counter was NOT touched (not the soft path).
+        self.assertEqual(self.user.soft_bounce_count, 0)
+
+        event = SesEvent.objects.get(message_id="m-mislabel-1")
+        # Recorded as a permanent bounce for Studio counters/filters...
+        self.assertEqual(event.event_type, SesEvent.EVENT_TYPE_BOUNCE_PERMANENT)
+        # ...while the raw SES label is preserved on the bounce_type column.
+        self.assertEqual(event.bounce_type, "Transient")
+        # The action_taken names the override and the status.
+        self.assertIn("SES mislabeled Transient->permanent", event.action_taken)
+        self.assertIn("5.3.0", event.action_taken)
+
+    def test_transient_4xx_mailbox_full_stays_soft(self):
+        payload = _bounce_payload(
+            "m-soft-4xx",
+            self.user_email,
+            bounce_type="Transient",
+            status="4.2.2",
+            diagnostic_code="smtp; 452 mailbox full",
+        )
+        with mock.patch(VALIDATOR_PATH, return_value=True):
+            response = self._post(payload)
+        self.assertEqual(response.status_code, 200)
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.soft_bounce_count, 1)
+        self.assertFalse(self.user.unsubscribed)
+        self.assertEqual(self.user.bounce_state, "soft")
+
+        event = SesEvent.objects.get(message_id="m-soft-4xx")
+        self.assertEqual(event.event_type, SesEvent.EVENT_TYPE_BOUNCE_TRANSIENT)
+        self.assertNotIn("mislabeled", event.action_taken)
+
+    def test_transient_no_status_no_5xx_stays_soft(self):
+        payload = _bounce_payload(
+            "m-soft-nostatus",
+            self.user_email,
+            bounce_type="Transient",
+            diagnostic_code="smtp; 421 service unavailable, try again later",
+        )
+        with mock.patch(VALIDATOR_PATH, return_value=True):
+            response = self._post(payload)
+        self.assertEqual(response.status_code, 200)
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.soft_bounce_count, 1)
+        self.assertFalse(self.user.unsubscribed)
+        self.assertEqual(self.user.bounce_state, "soft")
+
+    def test_transient_5xx_in_diagnostic_overrides_when_status_absent(self):
+        payload = _bounce_payload(
+            "m-diag-5xx",
+            self.user_email,
+            bounce_type="Transient",
+            diagnostic_code="smtp; 550 recipient denied",
+        )
+        with mock.patch(VALIDATOR_PATH, return_value=True):
+            response = self._post(payload)
+        self.assertEqual(response.status_code, 200)
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.unsubscribed)
+        self.assertEqual(self.user.bounce_state, "permanent")
+        self.assertEqual(self.user.soft_bounce_count, 0)
+
+        event = SesEvent.objects.get(message_id="m-diag-5xx")
+        self.assertEqual(event.event_type, SesEvent.EVENT_TYPE_BOUNCE_PERMANENT)
+        self.assertEqual(event.bounce_type, "Transient")
+        # Diagnostic-fallback marker names the matched 5xx code.
+        self.assertIn("550", event.action_taken)
+
+    def test_genuine_permanent_bounce_unchanged(self):
+        # A real permanent bounce, even carrying a status, keeps its path
+        # and must NOT pick up the mislabel marker.
+        payload = _bounce_payload(
+            "m-real-perm",
+            self.user_email,
+            bounce_type="Permanent",
+            status="5.1.1",
+            diagnostic_code="smtp; 550 no such user",
+        )
+        with mock.patch(VALIDATOR_PATH, return_value=True):
+            response = self._post(payload)
+        self.assertEqual(response.status_code, 200)
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.unsubscribed)
+        self.assertEqual(self.user.bounce_state, "permanent")
+
+        event = SesEvent.objects.get(message_id="m-real-perm")
+        self.assertEqual(event.event_type, SesEvent.EVENT_TYPE_BOUNCE_PERMANENT)
+        self.assertEqual(event.bounce_type, "Permanent")
+        self.assertNotIn("mislabeled", event.action_taken)
+
+    def test_mislabeled_override_replay_is_idempotent(self):
+        payload = _bounce_payload(
+            "m-mislabel-1",
+            self.user_email,
+            bounce_type="Transient",
+            status="5.3.0",
+            diagnostic_code="smtp; 550 recipient denied",
+        )
+        with mock.patch(VALIDATOR_PATH, return_value=True):
+            self._post(payload)
+            # Replay the identical MessageId.
+            response = self._post(payload)
+        self.assertEqual(response.status_code, 200)
+
+        # Exactly one audit row for that MessageId.
+        self.assertEqual(
+            SesEvent.objects.filter(message_id="m-mislabel-1").count(), 1
+        )
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.unsubscribed)
+        self.assertEqual(self.user.bounce_state, "permanent")
+        # No second mutation pushed the soft counter off zero.
+        self.assertEqual(self.user.soft_bounce_count, 0)
+
+    def test_multi_recipient_5xx_and_4xx_mix(self):
+        # One recipient is permanent (5.x.x), one is transient (4.x.x).
+        # The "any recipient" rule fires the override; the matched user
+        # (the existing 5xx one) is suppressed. The 4xx address has no
+        # matching user here, so it is recorded as "no matching user" --
+        # the override still wins at the event level.
+        payload = _bounce_payload(
+            "m-multi",
+            self.user_email,
+            bounce_type="Transient",
+            recipients=[
+                {
+                    "emailAddress": self.user_email,
+                    "status": "5.3.0",
+                    "diagnosticCode": "smtp; 550 denied",
+                },
+                {
+                    "emailAddress": "tempfail@example.com",
+                    "status": "4.2.2",
+                    "diagnosticCode": "smtp; 452 mailbox full",
+                },
+            ],
+        )
+        with mock.patch(VALIDATOR_PATH, return_value=True):
+            response = self._post(payload)
+        self.assertEqual(response.status_code, 200)
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.unsubscribed)
+        self.assertEqual(self.user.bounce_state, "permanent")
+        self.assertEqual(self.user.soft_bounce_count, 0)
+
+        event = SesEvent.objects.get(message_id="m-multi")
+        self.assertEqual(event.event_type, SesEvent.EVENT_TYPE_BOUNCE_PERMANENT)
+        self.assertEqual(event.bounce_type, "Transient")
+
+
+class IsPermanentSmtpFailureTest(TestCase):
+    """Unit tests for the #827 classifier in isolation."""
+
+    def test_permanent_status_codes_return_true(self):
+        for status in ("5.3.0", "5.1.1", "5.7.1"):
+            with self.subTest(status=status):
+                recipients = [{"emailAddress": "a@b.com", "status": status}]
+                self.assertTrue(_is_permanent_smtp_failure(recipients))
+
+    def test_leading_whitespace_status_returns_true(self):
+        recipients = [{"emailAddress": "a@b.com", "status": " 5.3.0"}]
+        self.assertTrue(_is_permanent_smtp_failure(recipients))
+
+    def test_diagnostic_5xx_fallback_when_status_absent(self):
+        for diag in ("smtp; 550 recipient denied", "smtp; 554 rejected"):
+            with self.subTest(diag=diag):
+                recipients = [{"emailAddress": "a@b.com", "diagnosticCode": diag}]
+                self.assertTrue(_is_permanent_smtp_failure(recipients))
+
+    def test_4xx_status_returns_false(self):
+        recipients = [{"emailAddress": "a@b.com", "status": "4.2.2"}]
+        self.assertFalse(_is_permanent_smtp_failure(recipients))
+
+    def test_present_4xx_status_not_overridden_by_5xx_diagnostic(self):
+        # A present non-5xx status is authoritative: a stray 5xx-looking
+        # number in the diagnostic must NOT flip it permanent.
+        recipients = [{
+            "emailAddress": "a@b.com",
+            "status": "4.2.2",
+            "diagnosticCode": "smtp; 550 weird",
+        }]
+        self.assertFalse(_is_permanent_smtp_failure(recipients))
+
+    def test_blank_status_non_5xx_diagnostic_returns_false(self):
+        recipients = [{
+            "emailAddress": "a@b.com",
+            "diagnosticCode": "smtp; 452 try again",
+        }]
+        self.assertFalse(_is_permanent_smtp_failure(recipients))
+
+    def test_empty_recipient_list_returns_false(self):
+        self.assertFalse(_is_permanent_smtp_failure([]))
+
+    def test_missing_status_and_diagnostic_returns_false(self):
+        recipients = [{"emailAddress": "a@b.com"}]
+        self.assertFalse(_is_permanent_smtp_failure(recipients))
+
+    def test_any_recipient_permanent_triggers_true(self):
+        recipients = [
+            {"emailAddress": "a@b.com", "status": "4.2.2"},
+            {"emailAddress": "c@d.com", "status": "5.1.1"},
+        ]
+        self.assertTrue(_is_permanent_smtp_failure(recipients))
 
 
 class SesEventsComplaintTest(TestCase):

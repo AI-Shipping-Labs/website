@@ -228,7 +228,7 @@ def onboarding_chat_message(request):
             "Our assistant is unavailable right now -- let's switch to a "
             "quick form instead.",
         )
-        return redirect('onboarding_fill', response_id=response.pk)
+        return redirect('onboarding_questions')
 
     if result.is_complete:
         messages.success(

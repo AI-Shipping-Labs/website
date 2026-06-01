@@ -23,6 +23,7 @@ from accounts.views.auth import (
 )
 from accounts.views.onboarding import (
     onboarding_fill,
+    onboarding_fill_current,
     onboarding_identify,
     onboarding_start,
     onboarding_submit,
@@ -81,6 +82,17 @@ onboarding_urlpatterns = [
         onboarding_chat_stream,
         name='onboarding_chat_stream',
     ),
+    # Member-facing fill-in page. Id-free and keyed to the logged-in
+    # member's own onboarding ``Response`` (resolved server-side via
+    # ``get_onboarding_response``), mirroring the AI chat routes above --
+    # there is no DB id in the URL the member sees, so this matches the
+    # one-response-per-member model and reads cleanly.
+    path('questions', onboarding_fill_current, name='onboarding_questions'),
+    # Numeric back-compat fill-in route. ``<id>`` is the ``Response``
+    # primary key (a DB id, not a step index). It is no longer linked
+    # anywhere member-facing, kept only so old bookmarks resolve. NOT a
+    # security boundary: the view is ``respondent``-scoped and 404s any
+    # response that is not the requester's own.
     path('<int:response_id>', onboarding_fill, name='onboarding_fill'),
     path('<int:response_id>/submit', onboarding_submit, name='onboarding_submit'),
 ]

@@ -108,8 +108,6 @@ def _create_recording(
         timestamps = []
     if tags is None:
         tags = []
-    if date is None:
-        date = datetime.date.today()
     if core_tools is None:
         core_tools = []
     if learning_objectives is None:
@@ -117,9 +115,21 @@ def _create_recording(
     if materials is None:
         materials = []
 
-    start_dt = timezone.make_aware(
-        datetime.datetime.combine(date, datetime.time(12, 0))
-    )
+    # Recordings are past, completed events. The /events?filter=past
+    # listing derives past-ness from the effective end time
+    # (``end_datetime`` or ``start_datetime + 1h``, see events.views.pages
+    # and Event.effective_end_datetime). A recording started "today at
+    # noon" is NOT yet past when the suite runs before ~13:00 UTC, which
+    # made this wall-clock-dependent and flaked the scheduled full run.
+    # Anchor the start a full day in the past so the effective end is
+    # always behind ``now`` regardless of when the suite runs.
+    if date is None:
+        start_dt = timezone.now() - datetime.timedelta(days=1)
+        date = timezone.localtime(start_dt).date()
+    else:
+        start_dt = timezone.make_aware(
+            datetime.datetime.combine(date, datetime.time(12, 0))
+        )
 
     recording = Event(
         title=title,

@@ -452,8 +452,20 @@ class TestStudioUserSlackId:
             "Settings dashboard must render an input for SLACK_TEAM_ID"
         )
         team_id_input.fill("T01TEAM123")
-        team_id_input.evaluate("el => el.form.submit()")
-        page.wait_for_load_state("domcontentloaded")
+        # Saving a settings group POSTs and the server replies with a
+        # redirect to ``/studio/settings/#<section>`` (studio/views/settings.py
+        # _section redirect). ``el.form.submit()`` fires a native navigation;
+        # waiting only on ``domcontentloaded`` here can resolve against the
+        # already-loaded document while the POST->redirect chain is still in
+        # flight, so the *next* ``goto`` races it and Playwright aborts with
+        # "interrupted by another navigation to .../#messaging" (the scheduled
+        # full-suite flake). Wait for the redirect to actually commit on the
+        # settings URL before navigating away.
+        with page.expect_navigation(
+            url=lambda u: "/studio/settings/" in u,
+            wait_until="domcontentloaded",
+        ):
+            team_id_input.evaluate("el => el.form.submit()")
 
         # 3. After save, Ada's detail page has the clickable Slack
         #    anchor pointing at the right URL.

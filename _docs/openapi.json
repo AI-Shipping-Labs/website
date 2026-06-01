@@ -4695,6 +4695,132 @@
       }
     },
     "/api/ses-events": {
+      "get": {
+        "description": "Newest-first list of ``SesEvent`` rows across every recipient, including events whose ``user`` FK is ``None`` (addresses with no ``User`` row). Lets an operator reconcile a campaign's bounces by window, campaign (``email_log``), recipient substring, or event type. ``raw_payload`` is deliberately excluded. ``count`` is the total number of matching rows across all pages, distinct from the page length. Token-gated (staff tokens only).",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "description": "Exact ``event_type`` match, or the convenience value ``bounce`` (any of bounce_permanent / bounce_transient / bounce_other).",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "description": "ISO-8601 datetime; inclusive lower bound on ``received_at``.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "description": "ISO-8601 datetime; inclusive upper bound on ``received_at``.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "email_log",
+            "required": false,
+            "schema": {
+              "description": "Exact ``email_log_id`` filter (correlate one campaign's send).",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "recipient",
+            "required": false,
+            "schema": {
+              "description": "Case-insensitive substring match on ``recipient_email``.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Page size; default 50, clamped to 200.",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "description": "Pagination offset; default 0.",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "limit": 50,
+                  "offset": 0,
+                  "ses_events": [
+                    {
+                      "action_taken": "unsubscribed and tagged bounced",
+                      "bounce_subtype": "General",
+                      "bounce_type": "Permanent",
+                      "diagnostic_code": "smtp; 550 user unknown",
+                      "email_log_id": 42,
+                      "event_type": "bounce_permanent",
+                      "message_id": "11111111-2222-3333-4444-555555555555",
+                      "received_at": "2026-05-19T08:30:00+00:00",
+                      "recipient_email": "alice@example.com"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "SES events page."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "allowed": [
+                      "bounce_permanent",
+                      "bounce_transient",
+                      "bounce_other",
+                      "complaint",
+                      "delivery",
+                      "open",
+                      "click",
+                      "subscription_confirmation",
+                      "unsubscribe_confirmation",
+                      "other"
+                    ],
+                    "field": "type",
+                    "value": "invalid"
+                  },
+                  "error": "Invalid event type: 'invalid'"
+                }
+              }
+            },
+            "description": "Invalid filter values."
+          }
+        },
+        "summary": "List inbound SES events across all recipients",
+        "tags": [
+          "SES Webhook"
+        ]
+      },
       "post": {
         "description": "Accepts ``SubscriptionConfirmation``, ``UnsubscribeConfirmation``, and ``Notification`` SNS types. The inner SES payload uses either ``notificationType`` (identity notifications) or ``eventType`` (configuration-set destinations); both shapes are handled.",
         "requestBody": {

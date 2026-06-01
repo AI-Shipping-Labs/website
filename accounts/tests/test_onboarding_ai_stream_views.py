@@ -38,11 +38,24 @@ LLM_ON = override_settings(
 )
 
 
-def _scripted_stream(deltas, final_text):
+def _scripted_stream(deltas, final_text, *, tool_input=None, tool_name=None):
+    """Yield text deltas then a terminal ``done`` event.
+
+    The ``done`` event's assembled ``LLMResult`` carries ``tool_input`` on
+    the final turn — mirroring the real backend, which streams text then
+    assembles a final message including any tool call. The streaming
+    onboarding turn (#821) derives the authoritative result from THIS one
+    generation, with no second ``complete`` call.
+    """
     def gen(messages, **kwargs):
         for d in deltas:
             yield StreamEvent(kind=STREAM_TEXT_DELTA, text=d)
-        yield StreamEvent(kind=STREAM_DONE, result=LLMResult(text=final_text))
+        yield StreamEvent(
+            kind=STREAM_DONE,
+            result=LLMResult(
+                text=final_text, tool_input=tool_input, tool_name=tool_name,
+            ),
+        )
     return gen
 
 
@@ -127,21 +140,23 @@ class StreamCompletionTest(TestCase):
         self.client.get('/onboarding/chat')
 
     def test_completion_signals_redirect_and_submits_response(self):
-        tool_result = LLMResult(
-            text='done', tool_input=dict(VALID_EXTRACTION),
-            tool_name='record_onboarding',
-        )
         with patch(
             'questionnaires.onboarding_ai.llm.stream',
-            side_effect=_scripted_stream(['All set. '], 'All set.'),
+            side_effect=_scripted_stream(
+                ['All set. '], 'All set.',
+                tool_input=dict(VALID_EXTRACTION),
+                tool_name='record_onboarding',
+            ),
         ), patch(
             'questionnaires.onboarding_ai.llm.complete',
-            return_value=tool_result,
-        ):
+        ) as mock_complete:
             resp = self.client.post(
                 '/onboarding/chat/stream', {'message': 'all answered'},
             )
             body = _read(resp)
+        # The completing turn rode the SAME streamed generation: no second
+        # ``complete`` round-trip (#821).
+        mock_complete.assert_not_called()
         self.assertIn('event: done', body)
         self.assertIn('"complete": true', body)
         self.assertIn(reverse('home'), body)
@@ -158,7 +173,11 @@ class StreamCompletionTest(TestCase):
         )
         with patch(
             'questionnaires.onboarding_ai.llm.stream',
-            side_effect=_scripted_stream(['All set.'], 'All set.'),
+            side_effect=_scripted_stream(
+                ['All set.'], 'All set.',
+                tool_input=dict(VALID_EXTRACTION),
+                tool_name='record_onboarding',
+            ),
         ), patch(
             'questionnaires.onboarding_ai.llm.complete',
             return_value=tool_result,

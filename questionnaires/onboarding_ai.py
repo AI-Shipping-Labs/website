@@ -536,6 +536,27 @@ def run_onboarding_turn(
     latency_seconds = time.monotonic() - started
     sink.on_result(result=result, latency_seconds=latency_seconds)
 
+    return _turn_result_from_llm(result, persona_catalog, sink)
+
+
+def _turn_result_from_llm(result, persona_catalog, sink):
+    """Build an :class:`OnboardingTurnResult` from one ``LLMResult``.
+
+    Shared by the non-streaming :func:`run_onboarding_turn` and the
+    streaming :func:`stream_onboarding_turn` so both derive the
+    authoritative turn decision (and the final-turn structured extraction)
+    from a SINGLE model generation, byte-for-byte identically.
+
+    Args:
+        result: The :class:`LLMResult` from one ``complete``/``stream``
+            generation (text plus, on the final turn, ``tool_input``).
+        persona_catalog: The persona catalog used to map the extraction.
+        sink: The :class:`TraceSink` for ``on_parsed`` / ``on_error``.
+
+    Raises:
+        LLMError: when a tool call was returned but its input does not
+            validate into an :class:`OnboardingExtraction`.
+    """
     # No tool call -> the interview is still in progress; show the reply.
     if result.tool_input is None:
         return OnboardingTurnResult(
@@ -582,33 +603,38 @@ def stream_onboarding_turn(
     :class:`OnboardingTurnResult` (the LAST item) that is IDENTICAL in
     shape to what :func:`run_onboarding_turn` produces for the same input.
 
-    Layering choice (option b in the issue): streaming is a transport-only
-    UX concern over the human-readable conversational text. The
-    authoritative turn decision — including the structured final-turn
-    extraction — stays with the non-streaming :func:`run_onboarding_turn`,
-    which the caller's persistence path depends on. Concretely:
+    Single-generation contract (issue #821): one streaming turn makes
+    exactly ONE model generation. The tool schema is attached to the
+    ``llm.stream(...)`` call, so the SAME generation that produces the
+    streamed conversational deltas also produces the structured tool call
+    on the final turn. The authoritative :class:`OnboardingTurnResult` is
+    assembled from that single generation's terminal ``done`` event — there
+    is no second ``llm.complete`` round-trip, so the ``done`` event is
+    emitted as soon as the last delta has been streamed. Concretely:
 
     - The opening turn (no member message, empty transcript) yields the
       deterministic greeting as a single delta then the greeting result,
       with no model call (mirrors :func:`run_onboarding_turn`).
-    - Otherwise we open ``llm.stream(...)`` (no tools — the conversational
-      text is plain) and yield each text delta as it arrives. The streamed
-      deltas reproduce the assistant's conversational reply token-by-token.
-    - After the stream completes we call :func:`run_onboarding_turn` to
-      obtain the authoritative :class:`OnboardingTurnResult` (same system
-      prompt + messages, the tool-using structured extraction on the final
-      turn) and yield it last. This guarantees the persisted answers are
-      byte-for-byte the same as the non-streaming path.
+    - Otherwise we open ``llm.stream(..., tools=[tool])`` and yield each
+      text delta as it arrives. The streamed deltas reproduce the
+      assistant's conversational reply token-by-token.
+    - The terminal ``done`` event carries the fully assembled
+      :class:`~integrations.services.llm.LLMResult` (text plus, on the
+      final turn, ``tool_input``). We build the authoritative result from
+      it via the SAME :func:`_turn_result_from_llm` helper the
+      non-streaming path uses, so the persisted answers are byte-for-byte
+      identical.
 
     This stays Django-independent (no models, no request, no ``django.db``)
     just like :func:`run_onboarding_turn`.
 
     Raises:
-        LLMError: when opening the stream fails or the turn's authoritative
-            ``run_onboarding_turn`` call fails. A mid-stream failure (after
-            at least one delta) also surfaces as :class:`LLMError` from the
-            generator so the transport can fall back to the non-streaming
-            path for the same member message.
+        LLMError: when opening the stream fails, the stream fails
+            mid-response, or the final-turn tool input does not validate.
+            A mid-stream failure (after at least one delta) surfaces as
+            :class:`LLMError` from the generator so the transport can fall
+            back to the non-streaming path for the same member message. No
+            partial result is yielded, so the caller writes nothing.
     """
     sink = trace or TraceSink()
 
@@ -624,26 +650,49 @@ def stream_onboarding_turn(
 
     system = _build_system_prompt(persona_catalog)
     messages = _build_messages(transcript, member_message)
+    tool = {
+        'name': _TOOL_NAME,
+        'description': (
+            'Record the structured onboarding intake once the interview is '
+            'complete.'
+        ),
+        'input_schema': OnboardingExtraction.model_json_schema(),
+    }
 
-    # Stream the conversational text (no tools on the streaming surface).
+    sink.on_request(system=system, messages=messages, tool=tool)
+
+    # Stream the conversational text with the tool attached so this single
+    # generation also yields the structured tool call on the final turn.
+    # ``tool_choice`` is left to ``auto`` (the default) so the model only
+    # emits the tool call when it judges the interview complete.
+    llm_result = None
+    started = time.monotonic()
     try:
-        for event in llm.stream(messages, system=system):
+        for event in llm.stream(messages, system=system, tools=[tool]):
             if event.is_done:
+                llm_result = event.result
                 break
             if event.text:
                 yield event.text
     except LLMError as error:
         sink.on_error(error=error)
         raise
+    latency_seconds = time.monotonic() - started
 
-    # Authoritative turn decision (structured extraction on the final turn)
-    # via the non-streaming path so the persisted answers are identical.
-    result = run_onboarding_turn(
-        transcript,
-        member_message=member_message,
-        persona_catalog=persona_catalog,
-        trace=trace,
-    )
+    if llm_result is None:
+        # Defensive: a stream that ended without a terminal ``done`` event
+        # gives us no authoritative result. Surface as LLMError so the
+        # transport falls back rather than persisting an empty turn.
+        error = LLMError('LLM stream ended without a terminal result')
+        sink.on_error(error=error)
+        raise error
+
+    sink.on_result(result=llm_result, latency_seconds=latency_seconds)
+
+    # Authoritative turn decision built from the SAME generation (no second
+    # model round-trip), so the persisted answers are identical to the
+    # non-streaming path.
+    result = _turn_result_from_llm(llm_result, persona_catalog, sink)
     yield result
 
 

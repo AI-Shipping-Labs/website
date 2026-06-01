@@ -125,8 +125,16 @@ def _llm_enabled(enabled=True, streaming=True):
         connection.close()
 
 
-def _stream(deltas, final_text=None):
-    """Side-effect for llm.stream: yield text deltas then a done event."""
+def _stream(deltas, final_text=None, *, tool_input=None, tool_name=None):
+    """Side-effect for llm.stream: yield text deltas then a done event.
+
+    The terminal ``done`` event carries the assembled ``LLMResult`` (text
+    plus, on the completing turn, ``tool_input``/``tool_name``) — mirroring
+    the real backend, which streams text deltas then assembles a final
+    message that includes any tool call (#821). The streaming onboarding
+    path builds the authoritative result from THIS single generation, so
+    no second ``llm.complete()`` round-trip happens on completion.
+    """
     from integrations.services.llm import (
         STREAM_DONE,
         STREAM_TEXT_DELTA,
@@ -139,7 +147,12 @@ def _stream(deltas, final_text=None):
     def gen(messages, **kwargs):
         for d in deltas:
             yield StreamEvent(kind=STREAM_TEXT_DELTA, text=d)
-        yield StreamEvent(kind=STREAM_DONE, result=LLMResult(text=text))
+        yield StreamEvent(
+            kind=STREAM_DONE,
+            result=LLMResult(
+                text=text, tool_input=tool_input, tool_name=tool_name,
+            ),
+        )
 
     return gen
 
@@ -254,12 +267,15 @@ class TestStreamedCompletion:
             page.locator('[data-testid="onboarding-chat-transcript"]').wait_for(
                 state="visible",
             )
+            # #821: the completing turn rides the single streamed ``done``
+            # event -- the tool call is assembled from THAT generation, so
+            # there is no redundant second ``llm.complete()`` round-trip.
             with patch(
                 "questionnaires.onboarding_ai.llm.stream",
-                side_effect=_stream(["All set! "], "All set!"),
-            ), patch(
-                "questionnaires.onboarding_ai.llm.complete",
-                return_value=_reply(text="All set!", tool_input=dict(EXTRACTION)),
+                side_effect=_stream(
+                    ["All set! "], "All set!",
+                    tool_input=dict(EXTRACTION), tool_name="record_onboarding",
+                ),
             ):
                 page.locator('[data-testid="onboarding-chat-input"]').fill(
                     "Here is everything",

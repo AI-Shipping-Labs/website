@@ -172,6 +172,29 @@ class StreamAssemblyTest(_Mixin, TestCase):
         self.assertEqual(ctor_kwargs['api_key'], FAKE_KEY)
         self.assertEqual(ctor_kwargs['max_retries'], 6)
 
+    def test_tools_forwarded_to_stream_request(self):
+        # #821: tools attach to the SAME streamed generation so the
+        # terminal result can carry a tool call without a second complete().
+        tool = {'name': 'record', 'description': 'x', 'input_schema': {}}
+        with patch(ANTHROPIC_PATCH) as mock_cls:
+            mock_cls.return_value.messages.stream.return_value = _stream_cm(
+                ['hi'], _final_text_message('hi'),
+            )
+            list(llm.stream(
+                [{'role': 'user', 'content': 'hi'}], tools=[tool],
+            ))
+        _, stream_kwargs = mock_cls.return_value.messages.stream.call_args
+        self.assertEqual(stream_kwargs['tools'], [tool])
+
+    def test_tools_omitted_from_request_when_not_supplied(self):
+        with patch(ANTHROPIC_PATCH) as mock_cls:
+            mock_cls.return_value.messages.stream.return_value = _stream_cm(
+                ['hi'], _final_text_message('hi'),
+            )
+            list(llm.stream([{'role': 'user', 'content': 'hi'}]))
+        _, stream_kwargs = mock_cls.return_value.messages.stream.call_args
+        self.assertNotIn('tools', stream_kwargs)
+
 
 class StreamProviderSelectionTest(_Mixin, TestCase):
 

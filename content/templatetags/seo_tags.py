@@ -17,6 +17,7 @@ from django import template
 from django.conf import settings
 from django.utils.safestring import mark_safe
 
+from events.services.display_time import format_event_tz_strip
 from integrations.config import site_base_url
 
 register = template.Library()
@@ -46,6 +47,35 @@ def _get_content_type(obj):
     """Determine the content type from the model class name."""
     class_name = obj.__class__.__name__
     return class_name.lower()
+
+
+# Issue #817: event link previews lead with the same multi-timezone time strip
+# used in Slack announcements. The combined preview is capped at 200 chars
+# (wider than the default 160) so the high-value date/time is never truncated.
+_EVENT_PREVIEW_MAX_LENGTH = 200
+
+
+def _event_preview_description(event):
+    """Build the event link-preview description: ``<time-strip> · <description>``.
+
+    The time strip leads and is never truncated; only the description portion
+    is cut at a word boundary with a ``...`` ellipsis so the combined string
+    fits ``_EVENT_PREVIEW_MAX_LENGTH``. Falls back to the plain truncated
+    description when ``start_datetime`` is missing (defensive guard).
+    """
+    time_strip = format_event_tz_strip(getattr(event, 'start_datetime', None))
+    description = (getattr(event, 'description', '') or '').strip()
+
+    if not time_strip:
+        return _truncate_description(description)
+
+    if not description:
+        return time_strip
+
+    separator = ' · '
+    available = _EVENT_PREVIEW_MAX_LENGTH - len(time_strip) - len(separator)
+    truncated_description = _truncate_description(description, max_length=available)
+    return f'{time_strip}{separator}{truncated_description}'
 
 
 def _build_article_jsonld(article):
@@ -412,9 +442,12 @@ def og_tags(context, content=None):
         image_url = ''
     else:
         title = getattr(content, 'title', SITE_NAME)
-        description = _truncate_description(
-            getattr(content, 'description', ''),
-        )
+        if _get_content_type(content) == 'event':
+            description = _event_preview_description(content)
+        else:
+            description = _truncate_description(
+                getattr(content, 'description', ''),
+            )
         og_type = _get_og_type(content)
         canonical_url = f'{site_url}{content.get_absolute_url()}'
         image_url = _get_image_url(content)
@@ -459,6 +492,20 @@ def _escape_attr(value):
         .replace('<', '&lt;')
         .replace('>', '&gt;')
     )
+
+
+@register.simple_tag
+def event_preview_description(event):
+    """Return the event link-preview description string.
+
+    Exposes the same combined ``<time-strip> · <description>`` string used for
+    the event ``og:description``/``twitter:description`` so the page's
+    ``<meta name="description">`` renders identically.
+
+    Usage:
+        {% event_preview_description event %}
+    """
+    return _event_preview_description(event)
 
 
 @register.simple_tag

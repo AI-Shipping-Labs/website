@@ -206,18 +206,16 @@ def _maybe_notify_reschedule(request, event, old_start):
 
 @staff_required
 def event_list(request):
-    """List all events with stored-status and time-based filters.
+    """List all events split into Upcoming and Past sections (#820).
 
-    Issue #713: in addition to the stored-status dropdown (``draft`` /
-    ``upcoming`` / ``completed`` / ``cancelled``), a synthetic
-    ``time_filter`` is offered (``upcoming`` / ``past``) that runs a
-    timestamp-only query and ignores the stored ``status`` field. The
-    two filters can be combined.
+    The stored-status dropdown (``draft`` / ``upcoming`` / ``completed``
+    / ``cancelled``) and the title search still narrow the rows. After
+    filtering, matched events are partitioned into an Upcoming group
+    (sorted soonest-first) and a Past group (sorted most-recent-first),
+    each row carrying a single derived status label/style so the
+    template renders exactly one badge per row.
     """
-    from django.db.models import Q
-
     status_filter = request.GET.get('status', '')
-    time_filter = request.GET.get('time', '')
     search = request.GET.get('q', '')
 
     events = Event.objects.all()
@@ -226,48 +224,52 @@ def event_list(request):
     if search:
         events = events.filter(title__icontains=search)
 
-    if time_filter in ('upcoming', 'past'):
-        now = djtimezone.now()
-        one_hour = timedelta(hours=1)
-        if time_filter == 'upcoming':
-            events = events.filter(
-                Q(end_datetime__gt=now)
-                | Q(
-                    end_datetime__isnull=True,
-                    start_datetime__gt=now - one_hour,
-                )
-            )
-        else:
-            events = events.filter(
-                Q(end_datetime__lte=now)
-                | Q(
-                    end_datetime__isnull=True,
-                    start_datetime__lte=now - one_hour,
-                )
-            )
-
-    # Issue #713: annotate each event with a derived ``is_past_now``
-    # flag so the template can render the "Past" / "Upcoming" chip
-    # without N+1 calls into the property.
     now = djtimezone.now()
     one_hour = timedelta(hours=1)
-    events_list_data = []
+    upcoming_events = []
+    past_events = []
     for event in events:
-        if event.status == 'cancelled':
-            event.is_past_now = True
-        elif event.status == 'draft':
-            event.is_past_now = False
+        effective_end = event.end_datetime or (
+            event.start_datetime + one_hour
+        )
+        is_future = now < effective_end
+
+        # Single-status precedence (#820): draft / cancelled win over the
+        # time-based label; otherwise the label is purely time-derived,
+        # so a legacy ``completed`` row with a future end reads Upcoming.
+        if event.status == 'draft':
+            event.derived_status = 'draft'
+            event.derived_status_label = 'Draft'
+        elif event.status == 'cancelled':
+            event.derived_status = 'cancelled'
+            event.derived_status_label = 'Cancelled'
+        elif is_future:
+            event.derived_status = 'upcoming'
+            event.derived_status_label = 'Upcoming'
         else:
-            effective_end = event.end_datetime or (
-                event.start_datetime + one_hour
-            )
-            event.is_past_now = now >= effective_end
-        events_list_data.append(event)
+            event.derived_status = 'past'
+            event.derived_status_label = 'Past'
+
+        # Grouping: cancelled always sits in Past (consistent with
+        # ``is_past``); everything else groups by the time comparison so
+        # draft rows still land in a logical section.
+        if event.status == 'cancelled':
+            past_events.append(event)
+        elif is_future:
+            upcoming_events.append(event)
+        else:
+            past_events.append(event)
+
+    upcoming_events.sort(key=lambda e: e.start_datetime)
+    past_events.sort(key=lambda e: e.start_datetime, reverse=True)
 
     return render(request, 'studio/events/list.html', {
-        'events': events_list_data,
+        'upcoming_events': upcoming_events,
+        'past_events': past_events,
+        'upcoming_count': len(upcoming_events),
+        'past_count': len(past_events),
+        'has_events': bool(upcoming_events or past_events),
         'status_filter': status_filter,
-        'time_filter': time_filter,
         'search': search,
     })
 

@@ -54,6 +54,9 @@ STATUS_BADGE_CLASSES = {
     'active': 'bg-green-500/20 text-green-400',
     'completed': 'bg-secondary text-muted-foreground',
     'archived': 'bg-secondary text-muted-foreground',
+    # Time-derived label for the Studio events list (#820): a finished
+    # (or past-grouped) event reads grey-muted, same as ``completed``.
+    'past': 'bg-secondary text-muted-foreground',
     'cancelled': 'bg-red-500/20 text-red-400',
     # User-import batch statuses (#753): align the imports list pill colors
     # with the canonical palette instead of inline ``{% if %}`` blocks.

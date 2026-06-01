@@ -27,103 +27,34 @@
 
 {% studio_list_filter search status_filter "Search events..." "event" %}
 
-{% comment %}
-  Issue #713: synthetic Upcoming / Past filter that runs a timestamp
-  query independent of the stored ``status`` field. Combined with the
-  existing stored-status dropdown above. Hidden inputs preserve the
-  status filter and search when the time filter changes.
-{% endcomment %}
-<div class="mb-6 flex flex-wrap items-center gap-2 text-sm" data-testid="event-time-filter">
-  <span class="text-muted-foreground">Time:</span>
-  <a href="?{% if status_filter %}status={{ status_filter }}&amp;{% endif %}{% if search %}q={{ search }}&amp;{% endif %}time="
-     data-testid="event-time-filter-all"
-     class="rounded-md px-3 py-1 {% if not time_filter %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-muted{% endif %}">All</a>
-  <a href="?{% if status_filter %}status={{ status_filter }}&amp;{% endif %}{% if search %}q={{ search }}&amp;{% endif %}time=upcoming"
-     data-testid="event-time-filter-upcoming"
-     class="rounded-md px-3 py-1 {% if time_filter == 'upcoming' %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-muted{% endif %}">Upcoming</a>
-  <a href="?{% if status_filter %}status={{ status_filter }}&amp;{% endif %}{% if search %}q={{ search }}&amp;{% endif %}time=past"
-     data-testid="event-time-filter-past"
-     class="rounded-md px-3 py-1 {% if time_filter == 'past' %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-muted{% endif %}">Past</a>
-</div>
-
-{% if events or search or status_filter or time_filter %}
-<!-- Event List -->
-<div class="{% studio_list_class 'wrapper' %}">
-  <table class="{% studio_list_class 'table' %}">
-    <thead class="{% studio_list_class 'thead' %}">
-      <tr>
-        <th class="{% studio_list_class 'th' %}">Title</th>
-        <th class="{% studio_list_class 'th' %}">Origin</th>
-        <th class="{% studio_list_class 'th' %}">Series</th>
-        <th class="{% studio_list_class 'th' %}">Status</th>
-        <th class="{% studio_list_class 'th' %}">Kind / Platform</th>
-        <th class="{% studio_list_class 'th' %}">Date</th>
-        <th class="{% studio_list_class 'th' %}">Capacity</th>
-        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
-      </tr>
-    </thead>
-    <tbody class="{% studio_list_class 'tbody' %}">
-      {% for event in events %}
-      <tr class="{% studio_list_class 'row' %}">
-        <td class="px-6 py-4">
-          <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ event.title }}</a>
-        </td>
-        <td class="px-6 py-4" data-label="Origin">
-          {% if event.origin == 'github' %}
-          <div data-testid="origin-badge" data-origin="github">
-            <span class="inline-flex items-center rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-400">GitHub</span>
-          </div>
-          {% else %}
-          <div data-testid="origin-badge" data-origin="studio">
-            <span class="inline-flex items-center rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground">Studio</span>
-          </div>
-          {% endif %}
-        </td>
-        <td class="px-6 py-4 text-sm" data-label="Series">
-          {% if event.event_series %}
-          <a href="{% url 'studio_event_series_detail' series_id=event.event_series.pk %}"
-             class="text-accent hover:underline"
-             data-testid="event-series-link">{{ event.event_series.name }}</a>
-          {% else %}
-          <span class="text-xs text-muted-foreground">—</span>
-          {% endif %}
-        </td>
-        <td class="px-6 py-4" data-label="Status">
-          {% studio_status_badge event.status event.get_status_display %}
-          {% comment %}
-            Issue #713: derived Upcoming / Past chip so staff can see
-            at a glance whether the event is past, independent of the
-            legacy stored value. Hidden for drafts (no public state).
-          {% endcomment %}
-          {% if event.status != 'draft' %}
-            {% if event.is_past_now %}
-            <span class="ml-1.5 inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid="event-time-chip" data-time-state="past">Past</span>
-            {% else %}
-            <span class="ml-1.5 inline-flex items-center rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400" data-testid="event-time-chip" data-time-state="upcoming">Upcoming</span>
-            {% endif %}
-          {% endif %}
-        </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Kind / Platform">
-          <span class="text-foreground">{{ event.get_kind_display }}</span>
-          <p class="text-xs text-muted-foreground mt-1">{{ event.get_platform_display }}</p>
-        </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Capacity">{% if event.max_participants %}{{ event.registration_count }}/{{ event.max_participants }}{% else %}Unlimited{% endif %}</td>
-        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
-          {% url 'studio_event_edit' event_id=event.pk as event_edit_url %}
-          <div class="{% studio_list_class 'action_group' %}">
-            {% studio_list_action event_edit_url 'Edit' 'primary' %}
-            {% studio_list_action event.get_absolute_url 'View on site' 'secondary' True %}
-          </div>
-        </td>
-      </tr>
-      {% empty %}
-        {% url 'studio_event_list' as events_clear_url %}
+{% if has_events %}
+  {% comment %}
+    Issue #820: the list is split into an Upcoming section (soonest
+    first) and a Past section (most recent first). Each row carries a
+    single derived status label so the Status cell renders exactly one
+    badge — no overlapping stored-status + time chip.
+  {% endcomment %}
+  {% if upcoming_events %}
+  <section class="mb-10" data-testid="event-section-upcoming">
+    <h2 class="text-lg font-semibold text-foreground mb-3" data-testid="event-section-heading-upcoming">Upcoming ({{ upcoming_count }})</h2>
+    {% include "studio/events/_list_table.html" with events=upcoming_events %}
+  </section>
+  {% endif %}
+  {% if past_events %}
+  <section class="mb-10" data-testid="event-section-past">
+    <h2 class="text-lg font-semibold text-foreground mb-3" data-testid="event-section-heading-past">Past ({{ past_count }})</h2>
+    {% include "studio/events/_list_table.html" with events=past_events %}
+  </section>
+  {% endif %}
+{% elif search or status_filter %}
+  {% url 'studio_event_list' as events_clear_url %}
+  <div class="{% studio_list_class 'wrapper' %}">
+    <table class="{% studio_list_class 'table' %}">
+      <tbody class="{% studio_list_class 'tbody' %}">
         {% studio_empty_state 'filter' entity_label='event' entity_label_plural='events' clear_url=events_clear_url colspan=8 %}
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+      </tbody>
+    </table>
+  </div>
 {% else %}
   {% url 'studio_event_new' as events_create_url %}
   {% studio_empty_state 'fresh' entity_label='event' entity_label_plural='events' create_url=events_create_url %}

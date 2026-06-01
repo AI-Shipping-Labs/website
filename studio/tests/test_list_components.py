@@ -22,7 +22,11 @@ class StudioListComponentTemplateTest(TestCase):
         'templates/studio/articles/list.html',
         'templates/studio/courses/list.html',
         'templates/studio/workshops/list.html',
-        'templates/studio/events/list.html',
+        # Issue #820: the events list owns the search filter shell but
+        # delegates each Upcoming / Past section's table to a shared
+        # partial, so the table/badge/action helpers live there.
+        ('templates/studio/events/list.html',
+         'templates/studio/events/_list_table.html'),
     ]
     compact_origin_template_paths = [
         'templates/studio/articles/list.html',
@@ -32,6 +36,16 @@ class StudioListComponentTemplateTest(TestCase):
     ]
 
     def _template_source(self, relative_path):
+        """Read one template, or concatenate a tuple of templates.
+
+        A list page may split its markup across a wrapper template and a
+        shared row/table partial (#820). The convention guards then apply
+        to the combined source.
+        """
+        if isinstance(relative_path, (tuple, list)):
+            return '\n'.join(
+                (REPO_ROOT / p).read_text() for p in relative_path
+            )
         return (REPO_ROOT / relative_path).read_text()
 
     def test_target_lists_use_shared_filter_and_table_helpers(self):

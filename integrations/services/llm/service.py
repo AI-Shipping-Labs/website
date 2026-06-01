@@ -91,6 +91,7 @@ def stream(
     system=None,
     max_tokens=DEFAULT_MAX_TOKENS,
     temperature=None,
+    tools=None,
 ):
     """Stream a completion, yielding provider-neutral ``StreamEvent``s.
 
@@ -108,6 +109,13 @@ def stream(
         system: Optional system prompt.
         max_tokens: Output token ceiling (same default as ``complete``).
         temperature: Optional sampling temperature.
+        tools: Optional tool specs for structured output. When supplied,
+            the terminal ``done`` event's :class:`LLMResult` carries the
+            model's ``tool_input`` if it called a tool, so a single
+            streamed generation yields both the conversational deltas and
+            (when the model decides to) the structured tool call. This lets
+            the onboarding chat (#821) avoid a redundant second
+            ``complete`` call to obtain the authoritative turn result.
 
     Returns:
         Iterator[StreamEvent].
@@ -118,10 +126,6 @@ def stream(
             mid-response. Mid-stream errors are surfaced (not silently
             retried) so the transport layer can fall back to ``complete``.
             The API key never appears in the message.
-
-    Tools / structured output are intentionally not part of the streaming
-    surface — the final structured-extraction turn keeps using
-    :func:`complete`.
     """
     provider = _resolve_provider()
     # Select the backend first so an unimplemented provider raises before
@@ -133,6 +137,7 @@ def stream(
         system=system,
         max_tokens=max_tokens,
         temperature=temperature,
+        tools=tools,
     )
 
 

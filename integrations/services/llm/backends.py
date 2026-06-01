@@ -247,6 +247,7 @@ class AnthropicBackend:
         system=None,
         max_tokens=DEFAULT_MAX_TOKENS,
         temperature=None,
+        tools=None,
     ):
         """Stream a completion, yielding :class:`StreamEvent` objects.
 
@@ -270,9 +271,13 @@ class AnthropicBackend:
         The API key never appears in any raised message (scrubbed via
         :func:`_safe_error_message`, mirroring ``complete()``).
 
-        Tools / structured output are intentionally NOT supported here
-        (the final extraction turn keeps using ``complete()``); this
-        surface targets the plain-text conversational turns.
+        Tools / structured output: when ``tools`` is supplied, the SDK
+        streams the conversational text deltas as usual and the terminal
+        ``done`` event's :class:`LLMResult` carries the model's
+        ``tool_input`` if it chose to call a tool. A single streamed
+        generation therefore yields both the text and (when the model
+        decides to) the structured tool call — the onboarding chat (#821)
+        relies on this to avoid a redundant second ``complete()`` call.
         """
         from anthropic import (  # noqa: PLC0415
             Anthropic,
@@ -305,6 +310,8 @@ class AnthropicBackend:
             request_kwargs['system'] = system
         if temperature is not None:
             request_kwargs['temperature'] = temperature
+        if tools is not None:
+            request_kwargs['tools'] = tools
 
         open_errors = (
             RateLimitError,

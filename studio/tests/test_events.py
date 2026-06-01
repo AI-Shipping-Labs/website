@@ -14,7 +14,7 @@ Verifies:
 - No datetime-local inputs on the form
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.test import TestCase
 from django.utils import timezone
@@ -96,6 +96,198 @@ class StudioEventListTest(StaffUserMixin, TestCase):
         response = self.client.get('/studio/events/?q=Python')
         self.assertContains(response, 'Python Workshop')
         self.assertNotContains(response, 'Java Workshop')
+
+
+class StudioEventListStatusGroupingTest(StaffUserMixin, TestCase):
+    """Single-status-per-row and Upcoming/Past grouping (#820).
+
+    The list must render exactly one status label per row (no redundant
+    stored-status + time chip) and split rows into an Upcoming section
+    (soonest first) above a Past section (most recent first).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        now = timezone.now()
+        cls.up_soon = Event.objects.create(
+            title='UpSoon', slug='up-soon', status='upcoming',
+            start_datetime=now + timedelta(days=1),
+            end_datetime=now + timedelta(days=1, hours=1),
+        )
+        cls.up_later = Event.objects.create(
+            title='UpLater', slug='up-later', status='upcoming',
+            start_datetime=now + timedelta(days=10),
+            end_datetime=now + timedelta(days=10, hours=1),
+        )
+        cls.past_recent = Event.objects.create(
+            title='PastRecent', slug='past-recent', status='completed',
+            start_datetime=now - timedelta(days=1, hours=1),
+            end_datetime=now - timedelta(days=1),
+        )
+        cls.past_old = Event.objects.create(
+            title='PastOld', slug='past-old', status='completed',
+            start_datetime=now - timedelta(days=30, hours=1),
+            end_datetime=now - timedelta(days=30),
+        )
+        cls.legacy = Event.objects.create(
+            title='LegacyCompletedFuture', slug='legacy', status='completed',
+            start_datetime=now + timedelta(days=5),
+            end_datetime=now + timedelta(days=5, hours=1),
+        )
+        cls.draft = Event.objects.create(
+            title='DraftFuture', slug='draft-future', status='draft',
+            start_datetime=now + timedelta(days=3),
+            end_datetime=now + timedelta(days=3, hours=1),
+        )
+        cls.cancelled = Event.objects.create(
+            title='CancelledEv', slug='cancelled-ev', status='cancelled',
+            start_datetime=now + timedelta(days=2),
+            end_datetime=now + timedelta(days=2, hours=1),
+        )
+
+    def setUp(self):
+        self.client.login(**self.staff_credentials)
+
+    def _ctx(self, response, key):
+        return [e.pk for e in response.context[key]]
+
+    def test_each_row_has_exactly_one_status_badge(self):
+        """No row renders the old duplicate time chip beside the status."""
+        response = self.client.get('/studio/events/')
+        # The removed redundant chip carried this testid.
+        self.assertNotContains(response, 'data-testid="event-time-chip"')
+        body = response.content.decode()
+        # One status badge marker per event row.
+        self.assertEqual(body.count('data-testid="event-status-badge"'), 7)
+
+    def test_upcoming_group_membership(self):
+        response = self.client.get('/studio/events/')
+        upcoming = self._ctx(response, 'upcoming_events')
+        self.assertIn(self.up_soon.pk, upcoming)
+        self.assertIn(self.up_later.pk, upcoming)
+        self.assertIn(self.legacy.pk, upcoming)
+        self.assertIn(self.draft.pk, upcoming)
+        self.assertNotIn(self.cancelled.pk, upcoming)
+        self.assertNotIn(self.past_recent.pk, upcoming)
+
+    def test_past_group_membership(self):
+        response = self.client.get('/studio/events/')
+        past = self._ctx(response, 'past_events')
+        self.assertIn(self.past_recent.pk, past)
+        self.assertIn(self.past_old.pk, past)
+        self.assertIn(self.cancelled.pk, past)
+
+    def test_upcoming_sorted_soonest_first(self):
+        response = self.client.get('/studio/events/')
+        upcoming = self._ctx(response, 'upcoming_events')
+        # up_soon (1d) before up_later (10d).
+        self.assertLess(
+            upcoming.index(self.up_soon.pk),
+            upcoming.index(self.up_later.pk),
+        )
+
+    def test_past_sorted_most_recent_first(self):
+        response = self.client.get('/studio/events/')
+        past = self._ctx(response, 'past_events')
+        # past_recent (1d ago) before past_old (30d ago).
+        self.assertLess(
+            past.index(self.past_recent.pk),
+            past.index(self.past_old.pk),
+        )
+
+    def test_legacy_completed_future_labelled_upcoming(self):
+        response = self.client.get('/studio/events/')
+        event = next(
+            e for e in response.context['upcoming_events']
+            if e.pk == self.legacy.pk
+        )
+        self.assertEqual(event.derived_status, 'upcoming')
+        self.assertEqual(event.derived_status_label, 'Upcoming')
+
+    def test_draft_labelled_draft(self):
+        response = self.client.get('/studio/events/')
+        event = next(
+            e for e in response.context['upcoming_events']
+            if e.pk == self.draft.pk
+        )
+        self.assertEqual(event.derived_status, 'draft')
+        self.assertEqual(event.derived_status_label, 'Draft')
+
+    def test_cancelled_labelled_cancelled(self):
+        response = self.client.get('/studio/events/')
+        event = next(
+            e for e in response.context['past_events']
+            if e.pk == self.cancelled.pk
+        )
+        self.assertEqual(event.derived_status, 'cancelled')
+        self.assertEqual(event.derived_status_label, 'Cancelled')
+
+    def test_past_event_labelled_past(self):
+        response = self.client.get('/studio/events/')
+        event = next(
+            e for e in response.context['past_events']
+            if e.pk == self.past_recent.pk
+        )
+        self.assertEqual(event.derived_status, 'past')
+        self.assertEqual(event.derived_status_label, 'Past')
+
+    def test_section_headings_show_counts(self):
+        response = self.client.get('/studio/events/')
+        self.assertEqual(response.context['upcoming_count'], 4)
+        self.assertEqual(response.context['past_count'], 3)
+        self.assertContains(response, 'Upcoming (4)')
+        self.assertContains(response, 'Past (3)')
+
+    def test_upcoming_heading_above_past_heading(self):
+        response = self.client.get('/studio/events/')
+        body = response.content.decode()
+        self.assertLess(
+            body.index('event-section-heading-upcoming'),
+            body.index('event-section-heading-past'),
+        )
+
+    def test_status_filter_narrows_rows(self):
+        response = self.client.get('/studio/events/?status=draft')
+        upcoming = self._ctx(response, 'upcoming_events')
+        past = self._ctx(response, 'past_events')
+        self.assertEqual(upcoming + past, [self.draft.pk])
+
+    def test_search_narrows_rows(self):
+        response = self.client.get('/studio/events/?q=UpSoon')
+        all_pks = (
+            self._ctx(response, 'upcoming_events')
+            + self._ctx(response, 'past_events')
+        )
+        self.assertEqual(all_pks, [self.up_soon.pk])
+
+    def test_empty_section_hidden(self):
+        """status=draft yields only an upcoming row; past section hidden."""
+        response = self.client.get('/studio/events/?status=draft')
+        self.assertContains(response, 'data-testid="event-section-upcoming"')
+        self.assertNotContains(response, 'data-testid="event-section-past"')
+
+
+class StudioEventListEmptyStateTest(StaffUserMixin, TestCase):
+    """Empty-state behaviour for the grouped events list (#820)."""
+
+    def setUp(self):
+        self.client.login(**self.staff_credentials)
+
+    def test_no_events_renders_fresh_empty_state(self):
+        response = self.client.get('/studio/events/')
+        self.assertContains(response, 'data-testid="studio-empty-state-fresh"')
+
+    def test_filter_no_match_renders_filtered_empty_state(self):
+        Event.objects.create(
+            title='Real Event', slug='real',
+            start_datetime=timezone.now(),
+        )
+        response = self.client.get('/studio/events/?q=zzz-no-match')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, 'data-testid="studio-empty-state-filter"'
+        )
 
 
 class StudioEventCreateTest(StaffUserMixin, TestCase):

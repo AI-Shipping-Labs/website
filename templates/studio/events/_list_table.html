@@ -1,0 +1,68 @@
+{% load studio_filters %}
+{% comment %}
+  Issue #820: shared events table body for the Upcoming / Past sections.
+  ``events`` is a pre-sorted list whose rows each carry a single derived
+  status (``derived_status`` + ``derived_status_label``) so the Status
+  cell renders exactly one badge.
+{% endcomment %}
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
+      <tr>
+        <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Origin</th>
+        <th class="{% studio_list_class 'th' %}">Series</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' %}">Kind / Platform</th>
+        <th class="{% studio_list_class 'th' %}">Date</th>
+        <th class="{% studio_list_class 'th' %}">Capacity</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="{% studio_list_class 'tbody' %}">
+      {% for event in events %}
+      <tr class="{% studio_list_class 'row' %}">
+        <td class="px-6 py-4">
+          <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ event.title }}</a>
+        </td>
+        <td class="px-6 py-4" data-label="Origin">
+          {% if event.origin == 'github' %}
+          <div data-testid="origin-badge" data-origin="github">
+            <span class="inline-flex items-center rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-400">GitHub</span>
+          </div>
+          {% else %}
+          <div data-testid="origin-badge" data-origin="studio">
+            <span class="inline-flex items-center rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground">Studio</span>
+          </div>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm" data-label="Series">
+          {% if event.event_series %}
+          <a href="{% url 'studio_event_series_detail' series_id=event.event_series.pk %}"
+             class="text-accent hover:underline"
+             data-testid="event-series-link">{{ event.event_series.name }}</a>
+          {% else %}
+          <span class="text-xs text-muted-foreground">—</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4" data-label="Status">
+          <span data-testid="event-status-badge" data-status="{{ event.derived_status }}">{% studio_status_badge event.derived_status event.derived_status_label %}</span>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Kind / Platform">
+          <span class="text-foreground">{{ event.get_kind_display }}</span>
+          <p class="text-xs text-muted-foreground mt-1">{{ event.get_platform_display }}</p>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Capacity">{% if event.max_participants %}{{ event.registration_count }}/{{ event.max_participants }}{% else %}Unlimited{% endif %}</td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          {% url 'studio_event_edit' event_id=event.pk as event_edit_url %}
+          <div class="{% studio_list_class 'action_group' %}">
+            {% studio_list_action event_edit_url 'Edit' 'primary' %}
+            {% studio_list_action event.get_absolute_url 'View on site' 'secondary' True %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

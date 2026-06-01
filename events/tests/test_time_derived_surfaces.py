@@ -251,58 +251,42 @@ class StudioStatusLegacyNoteTest(TestCase):
         self.assertContains(response, 'is a legacy status')
 
 
-class StudioListTimeChipTest(TestCase):
-    """Studio events list shows derived Past / Upcoming chip."""
+class StudioListTimeGroupingTest(TestCase):
+    """Studio events list groups rows by a single time-derived status.
 
-    def test_stale_upcoming_shows_past_chip(self):
+    Issue #820 replaced the per-row stored-status + time chip with a
+    single derived status badge and Upcoming/Past sections. A stale
+    ``upcoming`` row reads Past; a legacy ``completed`` row with a
+    future end reads Upcoming.
+    """
+
+    def test_stale_upcoming_grouped_into_past(self):
         staff = User.objects.create_user(
             email='admin@test.com', password='x', is_staff=True,
         )
-        _stale_upcoming(slug='list-stale')
+        event = _stale_upcoming(slug='list-stale')
         client = Client()
         client.force_login(staff)
         response = client.get('/studio/events/')
-        self.assertContains(
-            response, 'data-time-state="past"',
-        )
+        past_pks = [e.pk for e in response.context['past_events']]
+        self.assertIn(event.pk, past_pks)
+        row = next(e for e in response.context['past_events'] if e.pk == event.pk)
+        self.assertEqual(row.derived_status_label, 'Past')
 
-    def test_legacy_completed_future_shows_upcoming_chip(self):
+    def test_legacy_completed_future_grouped_into_upcoming(self):
         staff = User.objects.create_user(
             email='admin2@test.com', password='x', is_staff=True,
         )
-        _legacy_completed_future(slug='list-legacy')
+        event = _legacy_completed_future(slug='list-legacy')
         client = Client()
         client.force_login(staff)
         response = client.get('/studio/events/')
-        self.assertContains(
-            response, 'data-time-state="upcoming"',
+        upcoming_pks = [e.pk for e in response.context['upcoming_events']]
+        self.assertIn(event.pk, upcoming_pks)
+        row = next(
+            e for e in response.context['upcoming_events'] if e.pk == event.pk
         )
-
-    def test_time_filter_past_returns_only_past(self):
-        staff = User.objects.create_user(
-            email='admin3@test.com', password='x', is_staff=True,
-        )
-        now = timezone.now()
-        Event.objects.create(
-            slug='past-row',
-            title='Past Row',
-            start_datetime=now - timedelta(hours=3),
-            end_datetime=now - timedelta(hours=1),
-            status='upcoming',
-        )
-        Event.objects.create(
-            slug='future-row',
-            title='Future Row',
-            start_datetime=now + timedelta(hours=2),
-            end_datetime=now + timedelta(hours=3),
-            status='upcoming',
-        )
-        client = Client()
-        client.force_login(staff)
-        response = client.get('/studio/events/?time=past')
-        body = response.content.decode()
-        self.assertIn('Past Row', body)
-        self.assertNotIn('Future Row', body)
+        self.assertEqual(row.derived_status_label, 'Upcoming')
 
 
 class CancelByTokenStaleEventTest(TestCase):

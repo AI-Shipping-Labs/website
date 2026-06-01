@@ -71,7 +71,7 @@ from api.views.redirects import (
     redirects_bulk_upsert,
     redirects_collection,
 )
-from api.views.ses_events import ses_events
+from api.views.ses_events_list import ses_events_dispatch
 from api.views.sprints import sprint_detail, sprints_collection
 from api.views.sync_sources import sync_source_trigger, sync_sources_collection
 from api.views.tier_reconcile import (
@@ -469,13 +469,15 @@ urlpatterns = [
         tier_reconcile_apply,
         name="api_tier_reconcile_apply",
     ),
-    # ---- SES bounce / complaint webhook (issue #453) ------------------
-    # SNS POSTs notifications here. Auth is the SNS signature, not a
-    # token (SNS doesn't carry one). The slashless form is canonical so
-    # the trailing-slash middleware doesn't 301 the POST.
+    # ---- SES events: webhook (POST) + aggregate list (GET) -------------
+    # SNS POSTs bounce/complaint notifications here (auth = SNS signature,
+    # not a token). Issue #829 adds a token-gated GET aggregate list on the
+    # same canonical path via ``ses_events_dispatch``: GET -> list view,
+    # any other method -> the unchanged webhook. The slashless form is
+    # canonical so the trailing-slash middleware doesn't 301 the SNS POST.
     path(
         "ses-events",
-        ses_events,
+        ses_events_dispatch,
         name="api_ses_events",
     ),
 ]

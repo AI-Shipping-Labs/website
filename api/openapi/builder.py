@@ -191,6 +191,15 @@ def _operation_from_method_spec(method_meta, default_summary, tag):
         # OpenAPI spec; default to a generic 200 if the view author
         # didn't supply anything more specific.
         operation["responses"] = {"200": {"description": "Success"}}
+
+    # Per-operation security override. Lets a single route mix
+    # auth schemes across methods (e.g. token-gated GET + SNS-signed
+    # POST on ``/api/ses-events``). ``[]`` clears security on the
+    # operation; ``None`` / absent inherits the view- or document-level
+    # default. Takes precedence over the view-level ``security`` kwarg
+    # applied by the caller.
+    if "security" in method_meta and method_meta["security"] is not None:
+        operation["security"] = method_meta["security"]
     return operation
 
 
@@ -308,11 +317,15 @@ def build_spec(urlpatterns, *, title="AI Shipping Labs Operator API", version="1
                 op_params = op.get("parameters", [])
                 op["parameters"] = list(path_params) + op_params
 
-            # Security: per-view override beats document default.
-            sec = view_spec.get("security")
-            if sec is not None:
-                # ``[]`` => no security required (SNS-signed webhook).
-                op["security"] = sec
+            # Security precedence: per-operation override (set inside
+            # ``_operation_from_method_spec``) beats the per-view override,
+            # which beats the document default. Only apply the view-level
+            # override when the operation did not declare its own.
+            if "security" not in op:
+                sec = view_spec.get("security")
+                if sec is not None:
+                    # ``[]`` => no security required (SNS-signed webhook).
+                    op["security"] = sec
             operations[method.lower()] = op
 
         spec.path(path=openapi_path, operations=operations)

@@ -272,13 +272,10 @@ class OnboardingResumeTest(TestCase):
         self.client.post(reverse('onboarding_identify'), {'self_id': 'none'})
         self.response = Response.objects.get(respondent=self.member)
 
-    def test_revisit_start_with_draft_redirects_to_fill(self):
+    def test_revisit_start_with_draft_redirects_to_questions(self):
         resp = self.client.get('/onboarding/')
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(
-            resp['Location'],
-            reverse('onboarding_fill', kwargs={'response_id': self.response.pk}),
-        )
+        self.assertEqual(resp['Location'], reverse('onboarding_questions'))
 
     def test_resume_prefills_saved_answers_no_second_response(self):
         # Save a draft answer.
@@ -383,15 +380,11 @@ class OnboardingChangePersonaTest(TestCase):
         idx = html.index(marker)
         self.assertIn('checked', html[idx:idx + 120])
 
-    def test_draft_without_change_param_still_redirects_to_fill(self):
+    def test_draft_without_change_param_still_redirects_to_questions(self):
         self._identify(str(self.persona_a.pk))
-        response = Response.objects.get(respondent=self.member)
         resp = self.client.get(reverse('onboarding_start'))
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(
-            resp['Location'],
-            reverse('onboarding_fill', kwargs={'response_id': response.pk}),
-        )
+        self.assertEqual(resp['Location'], reverse('onboarding_questions'))
 
     def test_reselect_repoints_draft_and_shows_new_persona_questions(self):
         self._identify(str(self.persona_a.pk))
@@ -505,3 +498,75 @@ class OnboardingNotReadyTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'data-testid="onboarding-not-ready"')
         self.assertFalse(Response.objects.filter(respondent=self.member).exists())
+
+
+@override_settings(ONBOARDING_AI_ENABLED='false')
+class OnboardingQuestionsIdFreeUrlTest(TestCase):
+    """#819: the member-facing fill page is the id-free ``/onboarding/questions``.
+
+    It resolves the requester's own draft server-side (no DB id in the URL)
+    and never exposes another member's response.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.member = User.objects.create_user(
+            email='idfree@test.com', password='pw',
+        )
+        cls.other = User.objects.create_user(
+            email='idfree-other@test.com', password='pw',
+        )
+
+    def setUp(self):
+        self.client.force_login(self.member)
+
+    def _start_draft(self):
+        self.client.post(reverse('onboarding_identify'), {'self_id': 'none'})
+        return Response.objects.get(respondent=self.member)
+
+    def test_questions_url_renders_own_draft_fill_page(self):
+        response = self._start_draft()
+        resp = self.client.get(reverse('onboarding_questions'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, 'accounts/onboarding_fill.html')
+        self.assertEqual(resp.context['response'].pk, response.pk)
+
+    def test_questions_url_with_no_draft_redirects_to_start(self):
+        resp = self.client.get(reverse('onboarding_questions'))
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp['Location'], reverse('onboarding_start'))
+
+    def test_questions_resolves_requesters_own_draft_not_anothers(self):
+        # Two members each with their own draft; the id-free URL must always
+        # resolve the requester's own response regardless of pk ordering.
+        own = self._start_draft()
+        self.client.force_login(self.other)
+        self.client.post(reverse('onboarding_identify'), {'self_id': 'none'})
+        other_response = Response.objects.get(respondent=self.other)
+        self.assertNotEqual(own.pk, other_response.pk)
+        resp = self.client.get(reverse('onboarding_questions'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context['response'].pk, other_response.pk)
+
+    def test_save_draft_redirects_to_id_free_url_and_keeps_answer(self):
+        response = self._start_draft()
+        text_rq = response.response_questions.filter(
+            question_type__in=('text', 'long_text'),
+        ).first()
+        resp = self.client.post(
+            reverse('onboarding_questions'),
+            {f'question_{text_rq.pk}': 'my saved answer'},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp['Location'], reverse('onboarding_questions'))
+        # The saved answer is pre-filled on the next GET.
+        follow = self.client.get(reverse('onboarding_questions'))
+        self.assertContains(follow, 'my saved answer')
+
+    def test_questions_url_after_submit_redirects_to_completion(self):
+        response = self._start_draft()
+        response.status = 'submitted'
+        response.save(update_fields=['status'])
+        resp = self.client.get(reverse('onboarding_questions'))
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp['Location'], reverse('onboarding_start'))

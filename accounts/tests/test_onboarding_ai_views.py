@@ -170,10 +170,7 @@ class ChatTurnTest(TestCase):
             )
         self.assertEqual(resp.status_code, 302)
         response = Response.objects.get(respondent=self.member)
-        self.assertEqual(
-            resp['Location'],
-            reverse('onboarding_fill', kwargs={'response_id': response.pk}),
-        )
+        self.assertEqual(resp['Location'], reverse('onboarding_questions'))
         # The draft response is preserved (not deleted) with questions.
         self.assertEqual(response.status, 'draft')
         self.assertTrue(response.response_questions.exists())

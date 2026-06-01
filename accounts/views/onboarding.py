@@ -69,7 +69,7 @@ def onboarding_start(request):
             response=existing,
         ).exists():
             return redirect('onboarding_chat')
-        return redirect('onboarding_fill', response_id=existing.pk)
+        return redirect('onboarding_questions')
 
     if existing is None:
         # No response yet: offer the conversational AI flow when available;
@@ -141,7 +141,7 @@ def onboarding_identify(request):
         # Re-pick from a draft: repoint the existing response to the newly
         # chosen questionnaire, preserving shared-spine answers by prompt.
         reroute_onboarding_response(existing, target)
-        return redirect('onboarding_fill', response_id=existing.pk)
+        return redirect('onboarding_questions')
 
     response, _created = Response.objects.get_or_create(
         questionnaire=target,
@@ -149,7 +149,7 @@ def onboarding_identify(request):
         defaults={'status': 'draft'},
     )
     build_response_questions(response)
-    return redirect('onboarding_fill', response_id=response.pk)
+    return redirect('onboarding_questions')
 
 
 def _get_member_onboarding_response_or_404(request, response_id):
@@ -184,16 +184,16 @@ def _read_only_rows(response):
     return rows
 
 
-@login_required
-def onboarding_fill(request, response_id):
-    """Member fill-in / save page for their own onboarding response.
+def _render_onboarding_fill(request, response):
+    """Render / handle the fill-in page for an already-resolved response.
 
-    Reuses the shared ``questionnaires`` renderer. GET pre-fills existing
-    answers; POST upserts answers (save draft). A submitted response is
-    read-only — editing after submit is not offered to members.
+    Shared by the id-free member-facing route (:func:`onboarding_fill_current`)
+    and the numeric back-compat route (:func:`onboarding_fill`). GET
+    pre-fills existing answers; POST upserts answers (save draft). A
+    submitted response is read-only — editing after submit is not offered
+    to members. The save-draft success redirect lands on the id-free
+    member-facing URL so the member never sees the DB id.
     """
-    response = _get_member_onboarding_response_or_404(request, response_id)
-
     if request.method == 'POST':
         if response.status == 'submitted':
             messages.info(
@@ -214,7 +214,7 @@ def onboarding_fill(request, response_id):
                 'error': 'Please fix the highlighted answers.',
             }, status=400)
         messages.success(request, 'Saved. You can come back to finish.')
-        return redirect('onboarding_fill', response_id=response.pk)
+        return redirect('onboarding_questions')
 
     if response.status == 'submitted':
         return redirect('onboarding_start')
@@ -225,6 +225,37 @@ def onboarding_fill(request, response_id):
         'form_rows': form_rows,
         'error': '',
     })
+
+
+@login_required
+def onboarding_fill_current(request, response_id=None):
+    """Id-free member-facing fill-in page (``/onboarding/questions``).
+
+    Resolves the *requester's own* onboarding ``Response`` server-side via
+    :func:`get_onboarding_response`, so there is no DB id in the URL the
+    member sees and no way to address another member's response. When the
+    member has no onboarding draft yet, send them to self-identification
+    rather than a 404 dead end. A ``response_id`` is accepted but ignored —
+    the response is always the requester's own.
+    """
+    response = get_onboarding_response(request.user)
+    if response is None:
+        return redirect('onboarding_start')
+    return _render_onboarding_fill(request, response)
+
+
+@login_required
+def onboarding_fill(request, response_id):
+    """Numeric back-compat fill-in route (``/onboarding/<id>``).
+
+    Member-facing links now use the id-free ``/onboarding/questions``
+    route; this remains as a ``respondent``-scoped back-compat endpoint so
+    bookmarked numeric URLs keep working. It is NOT a security boundary
+    relaxation: :func:`_get_member_onboarding_response_or_404` 404s any
+    response that is not the requester's own onboarding response.
+    """
+    response = _get_member_onboarding_response_or_404(request, response_id)
+    return _render_onboarding_fill(request, response)
 
 
 @login_required

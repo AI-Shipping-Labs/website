@@ -65,6 +65,7 @@ failure, just a no-op event we still log for audit.
 import hmac
 import json
 import logging
+import re
 import urllib.request
 from datetime import timezone as datetime_timezone
 
@@ -377,7 +378,18 @@ def _handle_bounce(payload, inner, message_id):
     ]
     addresses = [a for a in addresses if a]
 
-    if bounce_type == "Permanent":
+    # Issue #827: SES sometimes mislabels a hard 5xx SMTP rejection as
+    # ``bounceType=Transient``. When the per-recipient SMTP status /
+    # diagnostic indicates a permanent (class 5) failure, override the
+    # transient label and suppress immediately instead of soft-counting.
+    smtp_permanent_override = (
+        bounce_type == "Transient" and _is_permanent_smtp_failure(recipients)
+    )
+    override_status = (
+        _first_permanent_status(recipients) if smtp_permanent_override else ""
+    )
+
+    if bounce_type == "Permanent" or smtp_permanent_override:
         event_type = SesEvent.EVENT_TYPE_BOUNCE_PERMANENT
     elif bounce_type == "Transient":
         event_type = SesEvent.EVENT_TYPE_BOUNCE_TRANSIENT
@@ -431,7 +443,13 @@ def _handle_bounce(payload, inner, message_id):
             continue
         if matched_user is None:
             matched_user = user
-        if bounce_type == "Permanent":
+        if smtp_permanent_override:
+            mark_permanent_bounce(user, diagnostic=diagnostic)
+            actions.append(
+                f"SES mislabeled Transient->permanent (status={override_status}); "
+                f"{address}: unsubscribed and marked permanent bounce"
+            )
+        elif bounce_type == "Permanent":
             mark_permanent_bounce(user, diagnostic=diagnostic)
             actions.append(f"{address}: unsubscribed and marked permanent bounce")
         elif bounce_type == "Transient":
@@ -762,6 +780,84 @@ def _first_recipient_diagnostic(recipients):
         action = (recipient.get("action") or "").strip()
         if status or action:
             return f"status={status} action={action}".strip()
+    return ""
+
+
+# RFC 3463 enhanced status code with a permanent (class 5) leading digit,
+# e.g. "5.3.0", "5.1.1", "5.7.1". Leading whitespace tolerated.
+_PERMANENT_STATUS_RE = re.compile(r"^\s*5\.")
+# Standalone 5xx SMTP reply code embedded in a diagnosticCode string, e.g.
+# "smtp; 550 recipient denied", "554 ...". The word boundaries stop a
+# substring like "15500" or a 4-digit code from matching.
+_PERMANENT_SMTP_CODE_RE = re.compile(r"\b5\d\d\b")
+
+
+def _is_permanent_smtp_failure(recipients):
+    """Return ``True`` when the SMTP-level status / diagnostic of any
+    bounced recipient indicates a permanent (RFC 3463 class 5) failure.
+
+    SES sometimes mislabels a hard 5xx SMTP rejection as
+    ``bounceType=Transient`` (issue #827). The per-recipient ``status`` and
+    ``diagnosticCode`` carry the real SMTP outcome, so we inspect them to
+    override the SES label conservatively:
+
+    1. Permanent if ANY recipient ``status`` matches ``^\\s*5\\.`` (the RFC
+       3463 permanent class -- ``5.3.0``, ``5.1.1``, ``5.7.1``, ...).
+    2. Fallback ONLY when ``status`` is blank/absent on every recipient:
+       permanent if any recipient ``diagnosticCode`` contains a standalone
+       5xx SMTP reply code (``\\b5\\d\\d\\b`` -- ``550``, ``554``, ...).
+
+    Everything else (``4.x.x`` transient codes, blank status with no 5xx in
+    the diagnostic, missing data) returns ``False`` and stays soft.
+    """
+    any_status_present = False
+    for recipient in recipients:
+        if not isinstance(recipient, dict):
+            continue
+        status = (recipient.get("status") or "").strip()
+        if status:
+            any_status_present = True
+            if _PERMANENT_STATUS_RE.match(status):
+                return True
+
+    # Rule 1 found no permanent status. Only fall back to the diagnostic
+    # when no recipient carried a status at all -- a present non-5xx status
+    # (e.g. 4.2.2) is authoritative and must not be overridden by a stray
+    # number in the diagnostic text.
+    if any_status_present:
+        return False
+
+    for recipient in recipients:
+        if not isinstance(recipient, dict):
+            continue
+        diagnostic = (recipient.get("diagnosticCode") or "").strip()
+        if diagnostic and _PERMANENT_SMTP_CODE_RE.search(diagnostic):
+            return True
+    return False
+
+
+def _first_permanent_status(recipients):
+    """Return a short token identifying why the override fired, for the
+    ``action_taken`` marker (issue #827).
+
+    Prefers the first permanent RFC 3463 ``status`` (e.g. ``5.3.0``). When
+    the override fired only via the diagnostic fallback, returns the
+    matched 5xx SMTP reply code (e.g. ``550``). Empty string if neither is
+    found.
+    """
+    for recipient in recipients:
+        if not isinstance(recipient, dict):
+            continue
+        status = (recipient.get("status") or "").strip()
+        if status and _PERMANENT_STATUS_RE.match(status):
+            return status
+    for recipient in recipients:
+        if not isinstance(recipient, dict):
+            continue
+        diagnostic = (recipient.get("diagnosticCode") or "").strip()
+        match = _PERMANENT_SMTP_CODE_RE.search(diagnostic)
+        if match:
+            return match.group(0)
     return ""
 
 

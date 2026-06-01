@@ -15,6 +15,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from questionnaires.models import (
+    Answer,
     Persona,
     Questionnaire,
     Response,
@@ -326,6 +327,132 @@ class OnboardingCompletedConfirmationTest(TestCase):
         )
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(resp['Location'], reverse('onboarding_start'))
+
+
+@override_settings(ONBOARDING_AI_ENABLED='false')
+class OnboardingChangePersonaTest(TestCase):
+    """#822: a member with a DRAFT can return and re-pick a persona."""
+
+    WEEKLY_HOURS_PROMPT = (
+        'How many hours per week can you realistically commit, consistently?'
+    )
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.member = User.objects.create_user(
+            email='switcher@test.com', password='pw',
+        )
+        personas = list(
+            Persona.objects
+            .filter(is_active=True, default_questionnaire__isnull=False)
+            .order_by('order', 'name')
+        )
+        cls.persona_a = personas[0]
+        cls.persona_b = personas[1]
+        cls.generic = Questionnaire.objects.get(slug=GENERIC_ONBOARDING_SLUG)
+
+    def setUp(self):
+        self.client.force_login(self.member)
+
+    def _identify(self, value):
+        return self.client.post(
+            reverse('onboarding_identify'), {'self_id': value},
+        )
+
+    def _rq(self, response, prompt):
+        return response.response_questions.get(prompt=prompt)
+
+    def test_fill_page_has_change_description_link(self):
+        self._identify(str(self.persona_a.pk))
+        response = Response.objects.get(respondent=self.member)
+        resp = self.client.get(
+            reverse('onboarding_fill', kwargs={'response_id': response.pk}),
+        )
+        self.assertContains(resp, 'data-testid="onboarding-change-description"')
+        self.assertContains(resp, f"{reverse('onboarding_start')}?change=1")
+
+    def test_change_request_shows_picker_with_current_selection(self):
+        self._identify(str(self.persona_a.pk))
+        resp = self.client.get(reverse('onboarding_start') + '?change=1')
+        self.assertEqual(resp.status_code, 200)
+        # The picker is re-shown (not redirected straight to fill).
+        self.assertContains(resp, 'data-testid="onboarding-identify-form"')
+        # The current persona's radio is pre-checked.
+        html = resp.content.decode()
+        marker = f'value="{self.persona_a.pk}"'
+        idx = html.index(marker)
+        self.assertIn('checked', html[idx:idx + 120])
+
+    def test_draft_without_change_param_still_redirects_to_fill(self):
+        self._identify(str(self.persona_a.pk))
+        response = Response.objects.get(respondent=self.member)
+        resp = self.client.get(reverse('onboarding_start'))
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(
+            resp['Location'],
+            reverse('onboarding_fill', kwargs={'response_id': response.pk}),
+        )
+
+    def test_reselect_repoints_draft_and_shows_new_persona_questions(self):
+        self._identify(str(self.persona_a.pk))
+        # Re-pick persona B.
+        self._identify(str(self.persona_b.pk))
+        self.assertEqual(
+            Response.objects.filter(respondent=self.member).count(), 1,
+        )
+        response = Response.objects.get(respondent=self.member)
+        self.assertEqual(
+            response.questionnaire_id, self.persona_b.default_questionnaire_id,
+        )
+        prompts = {rq.prompt for rq in response.response_questions.all()}
+        for q in self.persona_b.default_questionnaire.questions.all():
+            self.assertIn(q.prompt, prompts)
+
+    def test_shared_answer_preserved_after_reselect(self):
+        self._identify(str(self.persona_a.pk))
+        response = Response.objects.get(respondent=self.member)
+        hours_rq = self._rq(response, self.WEEKLY_HOURS_PROMPT)
+        # Save the weekly-hours answer via the fill page.
+        self.client.post(
+            reverse('onboarding_fill', kwargs={'response_id': response.pk}),
+            {f'question_{hours_rq.pk}': '12'},
+        )
+        # Re-pick persona B, then confirm the answer is pre-filled.
+        self._identify(str(self.persona_b.pk))
+        response.refresh_from_db()
+        new_hours_rq = self._rq(response, self.WEEKLY_HOURS_PROMPT)
+        answer = Answer.objects.get(response=response, question=new_hours_rq)
+        self.assertEqual(answer.number_value, 12)
+
+    def test_switch_to_none_routes_to_generic_then_back_to_persona(self):
+        self._identify(str(self.persona_a.pk))
+        self._identify('none')
+        response = Response.objects.get(respondent=self.member)
+        self.assertEqual(response.questionnaire_id, self.generic.pk)
+        # Re-pick a specific persona again.
+        self._identify(str(self.persona_b.pk))
+        response.refresh_from_db()
+        self.assertEqual(
+            response.questionnaire_id, self.persona_b.default_questionnaire_id,
+        )
+
+    def test_submitted_response_cannot_change_persona(self):
+        # Submit against the generic questionnaire.
+        sub = Response.objects.create(
+            questionnaire=self.generic, respondent=self.member,
+            status='submitted',
+        )
+        # GET start with change param: still shows completion, not picker.
+        resp = self.client.get(reverse('onboarding_start') + '?change=1')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'data-testid="onboarding-complete-title"')
+        self.assertNotContains(resp, 'data-testid="onboarding-identify-form"')
+        # POST identify: does not repoint; redirects to completion.
+        resp = self._identify(str(self.persona_a.pk))
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp['Location'], reverse('onboarding_start'))
+        sub.refresh_from_db()
+        self.assertEqual(sub.questionnaire_id, self.generic.pk)
 
 
 @override_settings(ONBOARDING_AI_ENABLED='false')

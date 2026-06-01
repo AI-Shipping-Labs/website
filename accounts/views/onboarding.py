@@ -17,11 +17,12 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from questionnaires.models import OnboardingConversation, Response
+from questionnaires.models import OnboardingConversation, Persona, Response
 from questionnaires.onboarding import (
     ai_onboarding_available,
     get_generic_onboarding_questionnaire,
     get_onboarding_response,
+    reroute_onboarding_response,
     resolve_target_questionnaire,
     self_identification_options,
 )
@@ -41,6 +42,12 @@ def onboarding_start(request):
     Resumes the fill-in step when the member already has a draft
     onboarding response, and shows a completion confirmation when they
     have already submitted one. Otherwise renders the self-ID question.
+
+    A member with a DRAFT response may return here with ``?change=1`` to
+    re-open the self-ID picker and pick a different persona (#822); the
+    current selection is pre-indicated. A SUBMITTED response always shows
+    the completion confirmation — switching persona after submit stays a
+    staff action.
     """
     existing = get_onboarding_response(request.user)
 
@@ -52,20 +59,23 @@ def onboarding_start(request):
         })
 
     ai_available = ai_onboarding_available()
+    wants_change = request.GET.get('change') == '1'
 
-    if existing is not None:
-        # Draft in flight. If the member started the AI chat, resume it;
-        # otherwise resume the form fill-in. Never re-ask self-ID.
+    if existing is not None and not wants_change:
+        # Draft in flight, no explicit "change description" request: if the
+        # member started the AI chat, resume it; otherwise resume the form
+        # fill-in.
         if ai_available and OnboardingConversation.objects.filter(
             response=existing,
         ).exists():
             return redirect('onboarding_chat')
         return redirect('onboarding_fill', response_id=existing.pk)
 
-    # No response yet: offer the conversational AI flow when available;
-    # otherwise the form-first self-ID step (#802) unchanged.
-    if ai_available:
-        return redirect('onboarding_chat')
+    if existing is None:
+        # No response yet: offer the conversational AI flow when available;
+        # otherwise the form-first self-ID step (#802) unchanged.
+        if ai_available:
+            return redirect('onboarding_chat')
 
     options = self_identification_options()
     generic = get_generic_onboarding_questionnaire()
@@ -75,7 +85,28 @@ def onboarding_start(request):
     return render(request, 'accounts/onboarding_start.html', {
         'options': options,
         'onboarding_ready': onboarding_ready,
+        'current_selection': _current_self_id(existing),
+        'is_changing': existing is not None,
     })
+
+
+def _current_self_id(response):
+    """The self-ID value matching ``response``'s questionnaire, or ``''``.
+
+    Maps the draft's current onboarding questionnaire back to the self-ID
+    option value so the picker can pre-select it. A persona questionnaire
+    maps to that persona's pk; the generic fallback has no single value
+    (it serves both "none" and "more than one"), so it returns ``''`` and
+    no persona option is highlighted.
+    """
+    if response is None:
+        return ''
+    persona = (
+        Persona.objects
+        .filter(default_questionnaire=response.questionnaire, is_active=True)
+        .first()
+    )
+    return str(persona.pk) if persona is not None else ''
 
 
 @login_required
@@ -86,13 +117,15 @@ def onboarding_identify(request):
     Resolves the selection to a target onboarding questionnaire,
     ``get_or_create``s the member's response, materializes its question
     set, and redirects to the shared fill-in page.
+
+    A member with a DRAFT response may re-pick a different persona (#822):
+    the draft is re-routed to the new questionnaire, preserving answers to
+    shared common-spine questions (matched by prompt). A SUBMITTED response
+    is locked — switching persona after submit stays a staff action.
     """
-    # A member who already has a response never re-runs self-ID.
     existing = get_onboarding_response(request.user)
-    if existing is not None:
-        if existing.status == 'submitted':
-            return redirect('onboarding_start')
-        return redirect('onboarding_fill', response_id=existing.pk)
+    if existing is not None and existing.status == 'submitted':
+        return redirect('onboarding_start')
 
     selection = (request.POST.get('self_id') or '').strip()
     target = resolve_target_questionnaire(selection)
@@ -100,7 +133,15 @@ def onboarding_identify(request):
         return render(request, 'accounts/onboarding_start.html', {
             'options': self_identification_options(),
             'onboarding_ready': False,
+            'current_selection': _current_self_id(existing),
+            'is_changing': existing is not None,
         }, status=200)
+
+    if existing is not None:
+        # Re-pick from a draft: repoint the existing response to the newly
+        # chosen questionnaire, preserving shared-spine answers by prompt.
+        reroute_onboarding_response(existing, target)
+        return redirect('onboarding_fill', response_id=existing.pk)
 
     response, _created = Response.objects.get_or_create(
         questionnaire=target,

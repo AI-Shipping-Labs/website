@@ -19,6 +19,13 @@
           Your answers help us prepare the right plan for the next 6 to 8 weeks.
           You can save and come back any time before submitting.
         </p>
+        <p class="text-sm mt-3">
+          <a href="{% url 'onboarding_start' %}?change=1"
+             class="text-accent hover:underline"
+             data-testid="onboarding-change-description">
+            Not the right fit? Change your answer / pick a different description
+          </a>
+        </p>
       </header>
 
       {% if error %}

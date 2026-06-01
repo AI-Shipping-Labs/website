@@ -187,7 +187,7 @@ Access control logic: a user can access any content object where `user.tier.leve
 | GitHub content sync | `/api/webhooks/github` | Webhook receives push events; syncs markdown/YAML content from configured GitHub repos into articles, recordings, projects, etc. | System (webhook secret) | Shipped |
 | Admin sync dashboard | `/admin/sync/` | View configured content sources, sync history, trigger manual sync | Staff only | Shipped |
 | Zoom webhook | `/api/webhooks/zoom` | Receives Zoom events (for live event integration) | System | Shipped |
-| SES webhook | `/api/webhooks/ses` | Receives Amazon SES bounce/complaint notifications | System | Shipped |
+| SES webhook | `/api/ses-events` | Receives Amazon SES bounce/complaint notifications | System | Shipped |
 
 ### Other Pages
 

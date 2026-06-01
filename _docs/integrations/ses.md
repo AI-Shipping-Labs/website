@@ -254,7 +254,7 @@ Where to find it:
 
 - After creating the set, add an "Event destination" pointing at an
   SNS topic that fans out to the platform's
-  `/api/webhooks/ses-events` endpoint.
+  `/api/ses-events` endpoint.
 - Copy the configuration-set name (a free-form string, e.g.
   `platform-prod-deliveries`) and paste it into Studio.
 

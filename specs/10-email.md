@@ -80,7 +80,7 @@ EmailLog:
 - Use SES v2 `SendEmail` API
 - Configure SES domain identity for `aishippinglabs.com` (SPF, DKIM, DMARC)
 - Rate limit: SES has sending limits. Batch sends with 50ms delay between emails (adjust based on SES quota).
-- Handle bounces and complaints via SES SNS notifications → `POST /api/webhooks/ses`. On hard bounce or complaint: set `user.unsubscribed = true`.
+- Handle bounces and complaints via SES SNS notifications → `POST /api/ses-events`. On hard bounce or complaint: set `user.unsubscribed = true`.
 
 ## Lead Magnet Flow
 
@@ -111,6 +111,6 @@ Sent immediately (not via campaigns) using SES:
 - R-EML-4: Implement `GET /api/unsubscribe?token={jwt}` that sets `unsubscribed = true`. Token is a JWT containing `user_id`, does not expire.
 - R-EML-5: Implement campaign send job: query eligible users, send via SES with rate limiting, log each send, update campaign status.
 - R-EML-6: Admin endpoints: `POST /api/admin/emails` (create campaign), `POST /api/admin/emails/{id}/test` (send test to admin), `POST /api/admin/emails/{id}/send` (enqueue send job), `GET /api/admin/emails` (list campaigns with sent_count).
-- R-EML-7: Implement `POST /api/webhooks/ses` to handle bounce and complaint SNS notifications. On hard bounce or complaint, set `user.unsubscribed = true`.
+- R-EML-7: Implement `POST /api/ses-events` to handle bounce and complaint SNS notifications. On hard bounce or complaint, set `user.unsubscribed = true`.
 - R-EML-8: Implement transactional email sending as a service: `EmailService.send(user, template_name, context)`. Templates are stored as markdown files rendered with context variables.
 - R-EML-9: Configure SES domain identity for `aishippinglabs.com` with SPF, DKIM, DMARC records.

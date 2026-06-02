@@ -193,7 +193,13 @@ _USER_EXAMPLE = {
     "last_name": "Doe",
     "display_name": "Alice Doe",
     "tier": {"slug": "main", "level": 20},
-    "tier_override_active": False,
+    "tier_override_active": True,
+    "tier_override": {
+        "tier_slug": "main",
+        "level": 20,
+        "expires_at": "2036-05-06T00:00:00+00:00",
+        "granted_by": "ops@aishippinglabs.com",
+    },
     "unsubscribed": False,
     "soft_bounce_count": 0,
     "bounce_state": "none",
@@ -253,7 +259,7 @@ _USER_EXAMPLE = {
                     "example": {
                         "users": [
                             {k: v for k, v in _USER_EXAMPLE.items()
-                             if k != "tags"},
+                             if k not in ("tags", "tier_override")},
                         ],
                         "count": 1,
                         "limit": 50,

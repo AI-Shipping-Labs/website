@@ -5880,6 +5880,7 @@
                     {
                       "created_user": false,
                       "email": "c@x.com",
+                      "expires_at": "2036-05-06T00:00:00+00:00",
                       "status": "skipped_idempotent"
                     }
                   ],
@@ -5966,7 +5967,7 @@
                         "level": 20,
                         "slug": "main"
                       },
-                      "tier_override_active": false,
+                      "tier_override_active": true,
                       "unsubscribed": false
                     }
                   ]
@@ -6034,7 +6035,13 @@
                     "level": 20,
                     "slug": "main"
                   },
-                  "tier_override_active": false,
+                  "tier_override": {
+                    "expires_at": "2036-05-06T00:00:00+00:00",
+                    "granted_by": "ops@aishippinglabs.com",
+                    "level": 20,
+                    "tier_slug": "main"
+                  },
+                  "tier_override_active": true,
                   "unsubscribed": false
                 }
               }
@@ -6117,7 +6124,13 @@
                     "level": 20,
                     "slug": "main"
                   },
-                  "tier_override_active": false,
+                  "tier_override": {
+                    "expires_at": "2036-05-06T00:00:00+00:00",
+                    "granted_by": "ops@aishippinglabs.com",
+                    "level": 20,
+                    "tier_slug": "main"
+                  },
+                  "tier_override_active": true,
                   "unsubscribed": false
                 }
               }
@@ -6386,7 +6399,13 @@
                     "level": 20,
                     "slug": "main"
                   },
-                  "tier_override_active": false,
+                  "tier_override": {
+                    "expires_at": "2036-05-06T00:00:00+00:00",
+                    "granted_by": "ops@aishippinglabs.com",
+                    "level": 20,
+                    "tier_slug": "main"
+                  },
+                  "tier_override_active": true,
                   "unsubscribed": false
                 }
               }

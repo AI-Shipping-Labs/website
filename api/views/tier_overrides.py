@@ -148,6 +148,7 @@ def _is_valid_email(value):
                                 "email": "c@x.com",
                                 "status": "skipped_idempotent",
                                 "created_user": False,
+                                "expires_at": "2036-05-06T00:00:00+00:00",
                             },
                         ],
                     },
@@ -297,17 +298,25 @@ def _grant_batch(emails, tier, granted_by, actor_label):
         normalized = User.objects.normalize_email(raw.strip()).lower()
         existing_user = User.objects.filter(email__iexact=normalized).first()
 
-        if existing_user is not None and TierOverride.objects.filter(
-            user=existing_user,
-            override_tier=tier,
-            is_active=True,
-            expires_at__gt=now,
-        ).exists():
+        existing_override = (
+            TierOverride.objects.filter(
+                user=existing_user,
+                override_tier=tier,
+                is_active=True,
+                expires_at__gt=now,
+            ).first()
+            if existing_user is not None
+            else None
+        )
+        if existing_override is not None:
             # Identical active override already in place -> no new row.
+            # Surface the existing expiry so a re-grant attempt answers
+            # "until when?" without a second read.
             results[index] = {
                 "email": raw,
                 "status": "skipped_idempotent",
                 "created_user": False,
+                "expires_at": existing_override.expires_at.isoformat(),
             }
             continue
 

@@ -13,7 +13,7 @@ from django.db.models.query import QuerySet
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import Token
+from accounts.models import TierOverride, Token
 from email_app.models import EmailLog, SesEvent
 from payments.models import Tier
 
@@ -210,6 +210,129 @@ class UserDetailGetTest(_UserApiBase):
             **self._auth_headers(),
         )
         self.assertEqual(response.status_code, 405)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/users/<email>  -- tier_override summary object (issue #834)
+# ---------------------------------------------------------------------------
+
+
+class UserTierOverrideDetailTest(_UserApiBase):
+    def _make_override(self, user, *, expires_at, is_active=True, granted_by=None):
+        return TierOverride.objects.create(
+            user=user,
+            override_tier=self.main_tier,
+            expires_at=expires_at,
+            is_active=is_active,
+            granted_by=granted_by,
+        )
+
+    def test_active_override_surfaced_with_full_detail(self):
+        user = self._make_user(email="override@test.com")
+        expires = timezone.now() + timedelta(days=365 * 10)
+        self._make_override(user, expires_at=expires, granted_by=self.staff)
+        response = self.client.get(
+            f"/api/users/{user.email}",
+            **self._auth_headers(),
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIs(body["tier_override_active"], True)
+        self.assertEqual(
+            body["tier_override"],
+            {
+                "tier_slug": "main",
+                "level": 20,
+                "expires_at": expires.isoformat(),
+                "granted_by": "staff@test.com",
+            },
+        )
+
+    def test_no_active_override_yields_null(self):
+        user = self._make_user(email="noover@test.com")
+        response = self.client.get(
+            f"/api/users/{user.email}",
+            **self._auth_headers(),
+        )
+        body = response.json()
+        self.assertIsNone(body["tier_override"])
+        self.assertIs(body["tier_override_active"], False)
+
+    def test_expired_override_is_ignored(self):
+        user = self._make_user(email="expired@test.com")
+        self._make_override(
+            user,
+            expires_at=timezone.now() - timedelta(days=1),
+            granted_by=self.staff,
+        )
+        response = self.client.get(
+            f"/api/users/{user.email}",
+            **self._auth_headers(),
+        )
+        body = response.json()
+        self.assertIsNone(body["tier_override"])
+        self.assertIs(body["tier_override_active"], False)
+
+    def test_inactive_override_is_ignored(self):
+        user = self._make_user(email="revoked@test.com")
+        self._make_override(
+            user,
+            expires_at=timezone.now() + timedelta(days=365),
+            is_active=False,
+            granted_by=self.staff,
+        )
+        response = self.client.get(
+            f"/api/users/{user.email}",
+            **self._auth_headers(),
+        )
+        body = response.json()
+        self.assertIsNone(body["tier_override"])
+        self.assertIs(body["tier_override_active"], False)
+
+    def test_granted_by_null_when_granter_deleted(self):
+        user = self._make_user(email="nullgranter@test.com")
+        expires = timezone.now() + timedelta(days=365 * 10)
+        self._make_override(user, expires_at=expires, granted_by=None)
+        response = self.client.get(
+            f"/api/users/{user.email}",
+            **self._auth_headers(),
+        )
+        override = response.json()["tier_override"]
+        self.assertIsNone(override["granted_by"])
+        self.assertEqual(override["tier_slug"], "main")
+        self.assertEqual(override["level"], 20)
+        self.assertEqual(override["expires_at"], expires.isoformat())
+
+    def test_override_detail_is_full_only_absent_from_list_rows(self):
+        user = self._make_user(email="listover@test.com")
+        self._make_override(
+            user,
+            expires_at=timezone.now() + timedelta(days=365),
+            granted_by=self.staff,
+        )
+        response = self.client.get(
+            f"/api/users?q={user.email}",
+            **self._auth_headers(),
+        )
+        self.assertEqual(response.status_code, 200)
+        rows = response.json()["users"]
+        row = next(r for r in rows if r["email"] == user.email)
+        self.assertNotIn("tier_override", row)
+        self.assertIn("tier_override_active", row)
+        self.assertIs(row["tier_override_active"], True)
+
+    def test_full_payload_still_carries_boolean_for_plain_user(self):
+        user = self._make_user(email="plain@test.com", tier=self.main_tier)
+        response = self.client.get(
+            f"/api/users/{user.email}",
+            **self._auth_headers(),
+        )
+        body = response.json()
+        self.assertIs(body["tier_override_active"], False)
+        self.assertIsNone(body["tier_override"])
+        # Guard: the new object did not displace existing fields.
+        self.assertEqual(body["email"], "plain@test.com")
+        self.assertEqual(body["tier"], {"slug": "main", "level": 20})
 
 
 # ---------------------------------------------------------------------------

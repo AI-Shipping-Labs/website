@@ -136,7 +136,7 @@ class TierOverridesGrantTest(TestCase):
 
     def test_idempotent_regrant(self):
         member = User.objects.create_user(email="member@example.com", password=None)
-        TierOverride.objects.create(
+        existing = TierOverride.objects.create(
             user=member,
             original_tier=self.free,
             override_tier=self.main,
@@ -152,6 +152,10 @@ class TierOverridesGrantTest(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["results"][0]["status"], "skipped_idempotent")
+        # The skipped row reports the existing override's expiry (#834).
+        self.assertEqual(
+            body["results"][0]["expires_at"], existing.expires_at.isoformat()
+        )
         self.assertEqual(body["skipped"], 1)
         self.assertEqual(body["granted"], 0)
 
@@ -162,6 +166,15 @@ class TierOverridesGrantTest(TestCase):
         self.assertEqual(
             CommunityAuditLog.objects.filter(user=member).count(), audit_before
         )
+
+    def test_granted_row_has_no_expires_at_key(self):
+        """``expires_at`` is scoped to skipped rows; granted rows omit it (#834)."""
+        response = self._post({"emails": ["freshgrant@example.com"]})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["status"], "granted")
+        self.assertNotIn("expires_at", row)
 
     # ---- Scenario: staff auth is required (401 unauth + non-staff) -------
 

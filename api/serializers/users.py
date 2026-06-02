@@ -83,16 +83,25 @@ def serialize_user_state(user, *, compact=False):
         tier_payload = {"slug": "free", "level": 0}
 
     # Override resolution -- callers care about the BOOLEAN ("is there an
-    # active override?"). The override object itself is intentionally not
-    # exposed here (separate Studio surface owns the audit trail).
+    # active override?") and (full payload only) the override SUMMARY
+    # object. The model guarantees one active override per user, so the
+    # newest active non-expired row is THE override. We fetch that single
+    # row once and derive both ``tier_override_active`` and the
+    # ``tier_override`` object from it -- no second query, no drift.
     # ``content.access.get_active_override`` is the canonical helper but
     # lives in the ``content`` app; replicating the predicate here keeps
     # the API serializer free of that dependency.
-    tier_override_active = TierOverride.objects.filter(
-        user=user,
-        is_active=True,
-        expires_at__gt=timezone.now(),
-    ).exists()
+    active_override = (
+        TierOverride.objects.filter(
+            user=user,
+            is_active=True,
+            expires_at__gt=timezone.now(),
+        )
+        .select_related("override_tier", "granted_by")
+        .order_by("-created_at")
+        .first()
+    )
+    tier_override_active = active_override is not None
 
     payload = {
         "email": user.email,
@@ -116,7 +125,27 @@ def serialize_user_state(user, *, compact=False):
         payload["tags"] = list(user.tags or [])
         payload["email_preferences"] = dict(user.email_preferences or {})
         payload["import_metadata"] = dict(user.import_metadata or {})
+        payload["tier_override"] = _serialize_tier_override(active_override)
     return payload
+
+
+def _serialize_tier_override(override):
+    """Serialize the active ``TierOverride`` summary, or ``None``.
+
+    Surfaces only the operator-facing summary fields (``tier_slug``,
+    ``level``, ``expires_at``, ``granted_by``) -- the full audit trail
+    (``original_tier``, ``created_at``, revocations) stays in Studio.
+    ``granted_by`` is the granter's email string, or ``None`` when the
+    granting admin was deleted (``SET_NULL`` FK).
+    """
+    if override is None:
+        return None
+    return {
+        "tier_slug": override.override_tier.slug,
+        "level": override.override_tier.level,
+        "expires_at": _isoformat_or_none(override.expires_at),
+        "granted_by": override.granted_by.email if override.granted_by else None,
+    }
 
 
 def serialize_ses_event(event):

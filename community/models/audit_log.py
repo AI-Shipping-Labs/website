@@ -34,6 +34,12 @@ class CommunityAuditLog(models.Model):
         # through ``accounts.utils.bounce``; the audit row records the
         # attempt regardless of whether it actually changed state.
         ("api_mark_bounced", "API: mark bounced"),
+        # Operator-triggered 10-year ``main`` tier override grant via
+        # ``POST /api/tier-overrides`` (issue #833). The audit row's ``user``
+        # FK is the SUBJECT (the granted user); the actor (API token name)
+        # rides in ``details`` as ``actor_token=<label>`` alongside the tier
+        # slug. Idempotent skips do NOT write a row.
+        ("api_tier_override", "API: tier override grant"),
     ]
 
     user = models.ForeignKey(

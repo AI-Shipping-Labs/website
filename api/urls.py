@@ -74,6 +74,7 @@ from api.views.redirects import (
 from api.views.ses_events_list import ses_events_dispatch
 from api.views.sprints import sprint_detail, sprints_collection
 from api.views.sync_sources import sync_source_trigger, sync_sources_collection
+from api.views.tier_overrides import tier_overrides_grant
 from api.views.tier_reconcile import (
     tier_reconcile_apply,
     tier_reconcile_diagnostics,
@@ -236,6 +237,16 @@ urlpatterns = [
         "contacts/<path:email>/tags",
         contacts_set_tags,
         name="api_contacts_set_tags",
+    ),
+    # ---- Tier overrides (issue #833) ----------------------------------
+    # Staff-token grant of a 10-year ``main`` (or higher) TierOverride for
+    # non-paying members. Mirrors the Studio contact-import override but is
+    # an explicitly-named endpoint so the privileged action is discoverable
+    # and impossible to trigger by accident from the contacts surface.
+    path(
+        "tier-overrides",
+        tier_overrides_grant,
+        name="api_tier_overrides_grant",
     ),
     # ---- Sprints (issue #433) -----------------------------------------
     path(

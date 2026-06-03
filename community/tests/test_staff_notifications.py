@@ -13,7 +13,6 @@ exercise both the helper directly (unit-style) and the end-to-end path
 through the webhook handler.
 """
 
-from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -706,6 +705,23 @@ class CofounderWelcomeTemplateContextTest(TestCase):
         cls.basic_tier.price_eur_month = 20
         cls.basic_tier.save(update_fields=["price_eur_month"])
 
+    def _render_welcome(self, user, sprint_paragraph):
+        """Render the cofounder_welcome body for ``user`` with the given
+        sprint paragraph, returning the HTML body.
+        """
+        from email_app.services import EmailService
+
+        service = EmailService()
+        _, body_html, _ = service._render_template_with_footer(
+            "cofounder_welcome",
+            user,
+            {
+                "user_first_name": user.first_name,
+                "current_sprint_status_paragraph": sprint_paragraph,
+            },
+        )
+        return body_html
+
     def test_welcome_renders_first_name_when_present(self):
         from community.services import staff_notifications
 
@@ -732,32 +748,82 @@ class CofounderWelcomeTemplateContextTest(TestCase):
         ctx = welcome_call.args[2]
         self.assertEqual(ctx["user_first_name"], "Sam")
 
+    def test_welcome_renders_first_name_in_greeting(self):
+        """Scenario: greeting reads ``Hey Sam,`` when first_name present."""
+        user = User.objects.create_user(email="sam@test.com", first_name="Sam")
+        body = self._render_welcome(user, "")
+        self.assertIn("Hey Sam,", body)
+
     def test_welcome_falls_back_to_there_when_first_name_empty(self):
         """When first_name is empty the markdown template's ``|default:"there"``
         substitutes the placeholder. We render the template to confirm
-        the placeholder lands in the output body.
+        the placeholder lands in the output body, and both founders are
+        still named.
         """
-        from email_app.services import EmailService
-
         user = User.objects.create_user(email="noname@test.com", first_name="")
-        service = EmailService()
-        subject, body_html, _ = service._render_template_with_footer(
-            "cofounder_welcome",
-            user,
-            {
-                "user_first_name": user.first_name,
-                "current_sprint_status_paragraph": "We run sprints.",
-            },
-        )
+        body = self._render_welcome(user, "")
 
-        self.assertIn("Hey there,", body_html)
-        self.assertIn("We run sprints.", body_html)
+        self.assertIn("Hey there,", body)
+        # Both founders named even without a first name.
+        self.assertIn("Alexey", body)
+        self.assertIn("Valeriia", body)
 
-    def test_welcome_renders_active_sprint_when_one_exists(self):
+    def test_welcome_opening_and_signoff_name_both_founders(self):
+        """The opening and sign-off name both founders, spelled exactly,
+        and the solo-founder phrasing is gone.
+        """
+        user = User.objects.create_user(email="both@test.com", first_name="Sam")
+        body = self._render_welcome(user, "")
+
+        self.assertIn("Alexey", body)
+        self.assertIn("Valeriia", body)
+        # Solo opening / cc phrasing removed.
+        self.assertNotIn("I'm Valeriia, one of the co-founders", body)
+        self.assertNotIn("cc'd Alexey", body)
+        # Solo signature removed.
+        self.assertNotIn("Valeriia Kuka", body)
+
+    def test_welcome_links_onboarding_form_as_primary_cta(self):
+        """The onboarding-form CTA links ``/onboarding/`` and precedes the
+        short-call CTA; the body does not lead with the call.
+        """
+        user = User.objects.create_user(email="cta@test.com", first_name="Sam")
+        body = self._render_welcome(user, "")
+
+        self.assertIn("/onboarding/", body)
+        # The absolute onboarding URL ends in /onboarding/.
+        self.assertRegex(body, r"https?://[^\s\"'<]+/onboarding/")
+
+        form_idx = body.find("/onboarding/")
+        call_idx = body.find("short call")
+        self.assertNotEqual(form_idx, -1)
+        self.assertNotEqual(call_idx, -1)
+        # Form CTA appears before the call CTA.
+        self.assertLess(form_idx, call_idx)
+        # No longer leads with the call.
+        self.assertNotIn("Would you be open to a short call", body)
+
+    def test_welcome_retains_personalized_plan_framing(self):
+        """The personalized-plan framing survives the rework."""
+        user = User.objects.create_user(email="plan@test.com", first_name="Sam")
+        body = self._render_welcome(user, "")
+
+        self.assertIn("personalized plan", body)
+
+    def test_welcome_renders_running_sprint_paragraph(self):
+        """A currently-running sprint surfaces its name + start/end dates,
+        and the rendered welcome includes the sentence after the plan
+        lead-in.
+        """
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        start = timezone.localdate() - timedelta(days=3)
         Sprint.objects.create(
             name="Spring 2026",
             slug="spring-2026",
-            start_date=date(2026, 5, 1),
+            start_date=start,
             duration_weeks=4,
             status="active",
         )
@@ -767,13 +833,58 @@ class CofounderWelcomeTemplateContextTest(TestCase):
         )
 
         paragraph = _current_sprint_paragraph()
+        end = start + timedelta(weeks=4)
 
         self.assertIn("Spring 2026", paragraph)
-        self.assertIn("2026-05-01", paragraph)
-        # end_date = start + 4 weeks = 2026-05-29
-        self.assertIn("2026-05-29", paragraph)
+        self.assertIn(start.isoformat(), paragraph)
+        self.assertIn(end.isoformat(), paragraph)
 
-    def test_welcome_falls_back_when_no_active_sprint(self):
+        # Rendered welcome carries the running-sprint sentence after the
+        # plan lead-in.
+        user = User.objects.create_user(email="sprint@test.com", first_name="Sam")
+        body = self._render_welcome(user, paragraph)
+        lead_in_idx = body.find("community sprints")
+        sprint_idx = body.find("Spring 2026")
+        self.assertNotEqual(lead_in_idx, -1)
+        self.assertNotEqual(sprint_idx, -1)
+        self.assertLess(lead_in_idx, sprint_idx)
+
+    def test_welcome_omits_finished_sprint_with_past_end_date(self):
+        """A sprint marked active whose computed end_date is in the past
+        produces an empty paragraph — no ``started ... ends`` sentence
+        and no finished-sprint name in the rendered welcome.
+        """
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        # Started long ago; 2-week sprint ended well before today.
+        start = timezone.localdate() - timedelta(weeks=12)
+        Sprint.objects.create(
+            name="Winter 2025",
+            slug="winter-2025",
+            start_date=start,
+            duration_weeks=2,
+            status="active",
+        )
+
+        from community.services.staff_notifications import (
+            _current_sprint_paragraph,
+        )
+
+        paragraph = _current_sprint_paragraph()
+        self.assertEqual(paragraph, "")
+
+        user = User.objects.create_user(email="past@test.com", first_name="Sam")
+        body = self._render_welcome(user, paragraph)
+        self.assertNotIn("Winter 2025", body)
+        self.assertNotIn("currently running", body)
+
+    def test_welcome_returns_empty_string_when_no_active_sprint(self):
+        """No active sprint -> empty string (the old generic ``cohort
+        sprints / next one opens`` fallback is removed), and the rendered
+        sprint lead-in stands alone with no dangling fragment.
+        """
         from community.services.staff_notifications import (
             _current_sprint_paragraph,
         )
@@ -781,8 +892,19 @@ class CofounderWelcomeTemplateContextTest(TestCase):
         # No sprints with status='active' in this test.
         paragraph = _current_sprint_paragraph()
 
-        self.assertIn("cohort sprints", paragraph)
-        self.assertIn("next one opens", paragraph)
+        self.assertEqual(paragraph, "")
+        self.assertNotIn("cohort sprints", paragraph)
+        self.assertNotIn("next one opens", paragraph)
+
+        # The lead-in sentence reads cleanly with an empty paragraph.
+        user = User.objects.create_user(email="empty@test.com", first_name="Sam")
+        body = self._render_welcome(user, paragraph)
+        self.assertIn(
+            "be able to use that plan in our community sprints.",
+            body,
+        )
+        # No dangling running-sprint artefact.
+        self.assertNotIn("currently running", body)
 
 
 @tag('core')

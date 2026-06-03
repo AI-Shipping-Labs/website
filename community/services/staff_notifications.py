@@ -347,15 +347,31 @@ def _format_amount(tier, billing_period):
 def _current_sprint_paragraph():
     """Resolve the sprint-status sentence for the welcome email.
 
-    Returns the active sprint sentence when a sprint with
-    ``status='active'`` exists, otherwise the generic fallback. Imports
-    ``Sprint`` lazily because ``community.services`` is imported at app
-    startup by ``community/apps.py`` indirectly — keeping the model
-    import inside the function avoids tight app-loading coupling.
+    Returns the running-sprint sentence only when a sprint with
+    ``status='active'`` has a computed ``end_date``
+    (``start_date + duration_weeks``) that is today or in the future —
+    i.e. the sprint is genuinely live/upcoming. A sprint marked
+    ``active`` whose end date has already passed (a finished sprint
+    whose status was never flipped) must NOT leak a "started ... ends"
+    sentence into the welcome, so an empty string is returned instead.
+
+    When no qualifying live/upcoming sprint exists, returns an empty
+    string ``""`` — there is no generic fallback. An empty string
+    renders as nothing in the template, leaving the sprint lead-in
+    sentence to stand on its own.
+
+    Imports ``Sprint`` lazily because ``community.services`` is imported
+    at app startup by ``community/apps.py`` indirectly — keeping the
+    model import inside the function avoids tight app-loading coupling.
     """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
     try:
         from plans.models import Sprint
 
+        today = timezone.localdate()
         sprint = (
             Sprint.objects.filter(status="active")
             .order_by("-start_date")
@@ -363,22 +379,22 @@ def _current_sprint_paragraph():
         )
     except Exception:
         # Defensive: if the plans app or DB is unhealthy at the moment
-        # of the welcome send, fall back to the generic line rather
-        # than blocking the user-facing email.
+        # of the welcome send, return an empty string rather than
+        # blocking the user-facing email.
         logger.exception(
             "notify_paid_signup: failed to query active Sprint for welcome"
         )
-        sprint = None
+        return ""
 
     if sprint is None:
-        return (
-            "We run cohort sprints regularly — you'll be invited as "
-            "soon as the next one opens."
-        )
-
-    from datetime import timedelta
+        return ""
 
     end_date = sprint.start_date + timedelta(weeks=sprint.duration_weeks)
+    if end_date < today:
+        # The sprint is marked active but its real-world end date has
+        # already passed — do not surface a finished sprint.
+        return ""
+
     return (
         f"Sprint {sprint.name} is currently running — it started on "
         f"{sprint.start_date.isoformat()} and ends on "

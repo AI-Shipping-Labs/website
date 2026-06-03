@@ -3340,6 +3340,362 @@
         ]
       }
     },
+    "/api/onboarding/personas": {
+      "get": {
+        "description": "Lists ``Persona`` rows -- internal archetypes, never shown to members (staff-token only). ``default_questionnaire`` is the linked questionnaire ``slug`` or ``null``. Ordered by the model default (``order, name``).",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "description": "``true``/``false`` filter on ``is_active``.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "personas": [
+                    {
+                      "archetype": "The Engineer transitioning to AI",
+                      "default_questionnaire": "onboarding-engineer",
+                      "description": "Mid-career engineer pivoting into AI.",
+                      "is_active": true,
+                      "name": "Priya",
+                      "order": 0,
+                      "slug": "priya"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Persona list."
+          }
+        },
+        "summary": "List personas",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
+    "/api/onboarding/questionnaires": {
+      "get": {
+        "description": "Lists ``Questionnaire`` rows with nested ordered base ``Question`` rows and their ordered ``QuestionOption`` rows. Reads the BASE template -- this describes the live survey shape, not any member's snapshot. Questionnaires are newest-first; questions and options follow their model ordering. No pagination (the set is small and staff-authored).",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "purpose",
+            "required": false,
+            "schema": {
+              "description": "Exact match on ``purpose`` (one of ``onboarding`` / ``feedback`` / ``general``). Unknown value -> 422.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "description": "``true``/``false`` filter on ``is_active``.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "questionnaires": [
+                    {
+                      "description": "For engineers moving into AI.",
+                      "is_active": true,
+                      "purpose": "onboarding",
+                      "question_count": 2,
+                      "questions": [
+                        {
+                          "help_text": "",
+                          "is_required": true,
+                          "options": [],
+                          "order": 0,
+                          "prompt": "What is your current role?",
+                          "question_type": "text",
+                          "scale_max": null,
+                          "scale_min": null
+                        },
+                        {
+                          "help_text": "",
+                          "is_required": false,
+                          "options": [
+                            {
+                              "label": "LLM apps",
+                              "order": 0
+                            },
+                            {
+                              "label": "MLOps",
+                              "order": 1
+                            }
+                          ],
+                          "order": 1,
+                          "prompt": "Which areas interest you?",
+                          "question_type": "multiple_choice",
+                          "scale_max": null,
+                          "scale_min": null
+                        }
+                      ],
+                      "slug": "onboarding-engineer",
+                      "title": "Engineer onboarding"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Questionnaire list."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "allowed": [
+                      "onboarding",
+                      "feedback",
+                      "general"
+                    ],
+                    "field": "purpose",
+                    "value": "bogus"
+                  },
+                  "error": "Invalid purpose: 'bogus'"
+                }
+              }
+            },
+            "description": "Unknown ``purpose`` value."
+          }
+        },
+        "summary": "List questionnaires (survey shape)",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
+    "/api/onboarding/responses": {
+      "get": {
+        "description": "Lists onboarding responses (the shared response object per item) for batch plan generation. Defaults to ``status=submitted`` (only finished responses); pass ``status=draft`` or ``status=all`` to widen. ``since`` is an inclusive lower bound on ``submitted_at`` when filtering submitted, else on ``created_at``. ``persona`` filters by resolved persona ``slug`` (or the literal ``none`` for responses with no resolved persona). ``count`` is the TOTAL matching set BEFORE slicing.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "description": "``draft`` / ``submitted`` / ``all``. Default ``submitted``. Unknown value -> 422.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "description": "ISO-8601 datetime; inclusive lower bound on ``submitted_at`` (submitted) or ``created_at``.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "persona",
+            "required": false,
+            "schema": {
+              "description": "Persona ``slug`` to filter by resolved persona, or ``none`` for responses with no resolved persona. Unknown slug -> 422.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Default 50; clamped to 200.",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "description": "Default 0.",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "limit": 50,
+                  "offset": 0,
+                  "responses": [
+                    {
+                      "email": "alex@example.com",
+                      "persona": {
+                        "archetype": "The Engineer transitioning to AI",
+                        "name": "Priya",
+                        "slug": "priya"
+                      },
+                      "questionnaire_slug": "onboarding-engineer",
+                      "questions": [
+                        {
+                          "answer": "Backend engineer",
+                          "order": 0,
+                          "prompt": "What is your current role?",
+                          "question_type": "text"
+                        },
+                        {
+                          "answer": 3,
+                          "order": 1,
+                          "prompt": "On a scale of 1-5, how confident are you with ML?",
+                          "question_type": "scale"
+                        },
+                        {
+                          "answer": [
+                            "LLM apps",
+                            "MLOps"
+                          ],
+                          "order": 2,
+                          "prompt": "Which areas interest you?",
+                          "question_type": "multiple_choice"
+                        },
+                        {
+                          "answer": null,
+                          "order": 3,
+                          "prompt": "Anything else we should know?",
+                          "question_type": "long_text"
+                        }
+                      ],
+                      "status": "submitted",
+                      "submitted_at": "2026-05-19T08:30:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Onboarding responses page."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "allowed": [
+                      "draft",
+                      "submitted",
+                      "all"
+                    ],
+                    "field": "status",
+                    "value": "done"
+                  },
+                  "error": "Invalid status: 'done'"
+                }
+              }
+            },
+            "description": "Invalid ``status`` / ``persona`` / filters."
+          }
+        },
+        "summary": "List onboarding responses for plan generation",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
+    "/api/onboarding/responses/{email}": {
+      "get": {
+        "description": "Returns the member's single onboarding ``Response`` (draft OR submitted -- ``status`` / ``submitted_at`` tell which) as the shared response object: ``email``, ``questionnaire_slug``, ``status``, ``submitted_at``, resolved ``persona`` (or ``null``), and an ordered flat ``questions`` Q&A list read from the SNAPSHOT (``ResponseQuestion`` / ``Answer`` / ``ResponseQuestionOption``), never the base ``Question``. Email lookup is case-insensitive.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "email": "alex@example.com",
+                  "persona": {
+                    "archetype": "The Engineer transitioning to AI",
+                    "name": "Priya",
+                    "slug": "priya"
+                  },
+                  "questionnaire_slug": "onboarding-engineer",
+                  "questions": [
+                    {
+                      "answer": "Backend engineer",
+                      "order": 0,
+                      "prompt": "What is your current role?",
+                      "question_type": "text"
+                    },
+                    {
+                      "answer": 3,
+                      "order": 1,
+                      "prompt": "On a scale of 1-5, how confident are you with ML?",
+                      "question_type": "scale"
+                    },
+                    {
+                      "answer": [
+                        "LLM apps",
+                        "MLOps"
+                      ],
+                      "order": 2,
+                      "prompt": "Which areas interest you?",
+                      "question_type": "multiple_choice"
+                    },
+                    {
+                      "answer": null,
+                      "order": 3,
+                      "prompt": "Anything else we should know?",
+                      "question_type": "long_text"
+                    }
+                  ],
+                  "status": "submitted",
+                  "submitted_at": "2026-05-19T08:30:00+00:00"
+                }
+              }
+            },
+            "description": "The member's onboarding response."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "onboarding_response_not_found",
+                  "error": "No onboarding response"
+                }
+              }
+            },
+            "description": "Unknown email (``user_not_found``) or known user with no onboarding response (``onboarding_response_not_found``)."
+          }
+        },
+        "summary": "Get one member's onboarding response",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
     "/api/payments/tier-reconcile": {
       "post": {
         "description": "All body fields are optional. When ``emails`` is omitted the endpoint processes every user with a non-empty ``stripe_customer_id`` (capped at ``MAX_USERS_PER_REQUEST``).",

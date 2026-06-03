@@ -53,6 +53,12 @@ from api.views.interview_notes import (
     plan_interview_notes,
     user_interview_notes,
 )
+from api.views.onboarding import (
+    onboarding_personas,
+    onboarding_questionnaires,
+    onboarding_response_detail,
+    onboarding_responses_collection,
+)
 from api.views.plan_items import (
     deliverable_detail,
     next_step_detail,
@@ -479,6 +485,33 @@ urlpatterns = [
         "payments/tier-reconcile",
         tier_reconcile_apply,
         name="api_tier_reconcile_apply",
+    ),
+    # ---- Onboarding read API (issue #837) -----------------------------
+    # Staff-token read-only feed over the questionnaires app: survey shape
+    # (questionnaires/personas) + member responses for plan generation.
+    # Register the bulk ``responses`` collection literal BEFORE the
+    # per-email ``responses/<path:email>`` detail so the path converter
+    # (which matches an email's ``@``/``.``) does not swallow the literal,
+    # mirroring the enrollments collection-before-detail precedent above.
+    path(
+        "onboarding/questionnaires",
+        onboarding_questionnaires,
+        name="api_onboarding_questionnaires",
+    ),
+    path(
+        "onboarding/personas",
+        onboarding_personas,
+        name="api_onboarding_personas",
+    ),
+    path(
+        "onboarding/responses",
+        onboarding_responses_collection,
+        name="api_onboarding_responses_collection",
+    ),
+    path(
+        "onboarding/responses/<path:email>",
+        onboarding_response_detail,
+        name="api_onboarding_response_detail",
     ),
     # ---- SES events: webhook (POST) + aggregate list (GET) -------------
     # SNS POSTs bounce/complaint notifications here (auth = SNS signature,

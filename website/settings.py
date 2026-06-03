@@ -511,6 +511,10 @@ SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 SOCIALACCOUNT_LOGIN_ON_GET = True
+# Issue #845: route a first-ever OAuth login whose verified email is an
+# EmailAlias onto the canonical account instead of the deactivated secondary
+# or a duplicate. Override only pre_social_login; everything else is default.
+SOCIALACCOUNT_ADAPTER = 'accounts.adapters.SocialAccountAdapter'
 
 # OAuth provider configuration (credentials managed via Django admin > Social applications)
 SOCIALACCOUNT_PROVIDERS = {

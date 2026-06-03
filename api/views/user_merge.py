@@ -22,6 +22,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from accounts.models import EmailAlias
 from accounts.services.account_merge import (
     SelfMergeError,
     StaffMergeRefused,
@@ -222,6 +223,32 @@ def merge_users(request):
         )
     secondary = _find_user(merge_email)
     if secondary is None:
+        # Already merged (#845): after a merge the secondary's primary email is
+        # scrubbed, so the original ``merge_email`` no longer matches any User
+        # row -- it survives only as an EmailAlias of canonical. Re-running the
+        # same merge must stay a clean 200 no-op (the idempotency contract),
+        # not a 404, so detect the existing alias here.
+        merge_norm = normalize_email(merge_email)
+        already = EmailAlias.objects.filter(
+            user=canonical, email=merge_norm
+        ).exists()
+        if already:
+            return JsonResponse(
+                {
+                    "canonical_email": canonical.email,
+                    "merge_email": merge_email,
+                    "dry_run": dry_run,
+                    "already_merged": True,
+                    "moved": [],
+                    "reconciled": {},
+                    "tier_overrides": {"deactivated": [], "kept_active": None},
+                    "stripe": {},
+                    "conflicts": [],
+                    "alias_created": merge_norm,
+                    "secondary_deactivated": True,
+                },
+                status=200,
+            )
         return error_response(
             "User not found",
             "user_not_found",

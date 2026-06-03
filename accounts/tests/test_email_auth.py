@@ -477,10 +477,15 @@ class LoginAPITest(TestCase):
         """
         self.user.set_password("correct1234")
         self.user.save(update_fields=["password"])
+        # Issue #845: login now resolves the typed email through
+        # ``resolve_user_by_email`` (active-primary lookup, then an EmailAlias
+        # fallback only when no active primary matched). So an active-primary hit
+        # (success / wrong-password) still costs a single lookup, while an
+        # unknown email pays one extra alias lookup before failing identically.
         scenarios = [
             ({"email": "login@example.com", "password": "correct1234"}, 200, 9),
             ({"email": "login@example.com", "password": "wrongpass"}, 401, 1),
-            ({"email": "nobody@example.com", "password": "whatever"}, 401, 1),
+            ({"email": "nobody@example.com", "password": "whatever"}, 401, 2),
         ]
 
         for payload, expected_status, max_queries in scenarios:

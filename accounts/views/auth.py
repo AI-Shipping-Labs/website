@@ -24,6 +24,7 @@ from accounts.return_context import (
     sanitize_next_url,
     should_skip_logout_redirect,
 )
+from accounts.services.email_resolution import resolve_user_by_email
 from accounts.services.verification import (
     DEFAULT_UNVERIFIED_USER_TTL_DAYS,
     resolve_unverified_ttl_days,
@@ -527,19 +528,37 @@ def login_api(request):
                 {"error": "Email and password are required"}, status=400
             )
 
-        # Before issue #371, authenticate() fell through every configured
-        # backend. The plain email/password endpoint only needs ModelBackend;
-        # calling it directly preserves Django's password hash and dummy-hash
-        # protections while avoiding duplicate allauth backend work.
-        user = EMAIL_PASSWORD_BACKEND.authenticate(
-            request,
-            username=email,
-            password=password,
+        # Resolve the typed email to the CANONICAL active account BEFORE
+        # checking the password (#845). ``resolve_user_by_email`` is the single
+        # source of truth: an active primary login wins, else the owner of a
+        # matching EmailAlias (canonical), else None. This is why a merged-away
+        # (aliased) email signs into the surviving canonical account, and why a
+        # deactivated secondary is NEVER authenticated directly -- we only ever
+        # check the password against the resolved canonical user.
+        #
+        # We do NOT delegate to ModelBackend.authenticate: it keys on the typed
+        # email via get_by_natural_key and then drops inactive rows in
+        # user_can_authenticate, so an alias email would only ever find the dead
+        # secondary and fail. Resolving canonical-first is cleaner and never
+        # re-opens the inactive-user gate.
+        canonical = resolve_user_by_email(email)
+        password_ok = (
+            canonical is not None
+            and canonical.has_usable_password()
+            and canonical.check_password(password)
         )
-        if user is None:
+        if not password_ok:
+            # Constant-time guard: when no usable canonical password was
+            # checked, run a throwaway hash so the unknown-email / inactive /
+            # unusable-password branches take a comparable amount of time to a
+            # wrong-password branch (mirrors ModelBackend.set_password timing
+            # protection). No branch reveals the alias relationship.
+            if canonical is None or not canonical.has_usable_password():
+                User().set_password(password)
             outcome = "invalid_credentials"
             return JsonResponse({"error": INVALID_LOGIN_ERROR}, status=401)
 
+        user = canonical
         login(request, user, backend=EMAIL_PASSWORD_AUTH_BACKEND)
         outcome = "success"
         response_data = {
@@ -572,12 +591,13 @@ def password_reset_request_api(request):
     if not email:
         return JsonResponse({"error": "Email is required"}, status=400)
 
-    # Always return success to not reveal whether user exists
-    try:
-        user = User.objects.get(email__iexact=email)
+    # Always return success to not reveal whether user exists. Resolve the
+    # typed email to the CANONICAL account (#845): an alias email resolves to
+    # canonical and the reset is sent to canonical's PRIMARY verified email
+    # (EmailService.send targets user.email), never the typed alias address.
+    user = resolve_user_by_email(email)
+    if user is not None:
         _send_password_reset_email(user)
-    except User.DoesNotExist:
-        pass
 
     return JsonResponse(
         {

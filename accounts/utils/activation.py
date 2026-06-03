@@ -45,3 +45,21 @@ def mark_activated(user) -> bool:
     user.account_activated = True
     user.save(update_fields=["account_activated"])
     return True
+
+
+def mark_email_verified(user) -> bool:
+    """Flip ``email_verified`` to True on ``user`` if not already set.
+
+    This mirrors ``mark_activated`` for idempotent payment/OAuth hooks:
+    unsaved users are ignored, verified users are a no-op, and the only
+    database write is a focused ``email_verified`` update.
+    """
+    if user is None:
+        return False
+    if not getattr(user, "pk", None):
+        return False
+    if user.email_verified:
+        return False
+    user.email_verified = True
+    user.save(update_fields=["email_verified"])
+    return True

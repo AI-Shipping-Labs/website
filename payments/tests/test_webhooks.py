@@ -15,6 +15,7 @@ import json
 import time
 from datetime import datetime as _dt
 from datetime import timezone as _tz
+from decimal import Decimal
 from smtplib import SMTPException
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +23,9 @@ from django.core import mail
 from django.test import TestCase, override_settings, tag
 
 from accounts.models import User
+from accounts.utils.activation import mark_email_verified
+from content.models import Course
+from email_app.services.email_service import EmailService
 from payments.exceptions import WebhookPermanentError
 from payments.models import ConversionAttribution, Tier, WebhookEvent
 from payments.services import (
@@ -359,6 +363,132 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
 
         user.refresh_from_db()
         self.assertEqual(user.tier, basic_tier)
+
+    def test_mark_email_verified_is_idempotent(self):
+        """The payment verification helper only writes when it flips state."""
+        unverified = User.objects.create_user(
+            email="verify-helper@test.com",
+            email_verified=False,
+        )
+        self.assertTrue(mark_email_verified(unverified))
+        unverified.refresh_from_db()
+        self.assertTrue(unverified.email_verified)
+
+        verified = User.objects.create_user(
+            email="already-verified@test.com",
+            email_verified=True,
+        )
+        with patch.object(verified, "save", wraps=verified.save) as mock_save:
+            self.assertFalse(mark_email_verified(verified))
+        mock_save.assert_not_called()
+
+        unsaved = User(email="unsaved@test.com", email_verified=False)
+        self.assertFalse(mark_email_verified(unsaved))
+
+    def test_paid_checkout_auto_verifies_entitled_user(self):
+        """A successful paid tier checkout verifies the entitled account."""
+        user = User.objects.create_user(
+            email="payer@test.com",
+            email_verified=False,
+        )
+        basic_tier = Tier.objects.get(slug="basic")
+
+        session_data = {
+            "id": "cs_test_verify_paid",
+            "customer": "cus_verify_paid",
+            "customer_details": {"email": "payer@test.com"},
+            "subscription": "sub_verify_paid",
+            "client_reference_id": str(user.pk),
+            "metadata": {"tier_slug": "basic", "user_id": str(user.pk)},
+        }
+
+        handle_checkout_completed(session_data)
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier, basic_tier)
+        self.assertTrue(user.account_activated)
+        self.assertTrue(user.email_verified)
+
+    def test_paid_checkout_does_not_cross_verify_billing_email_account(self):
+        """Billing email is not used to verify a different account."""
+        real_account = User.objects.create_user(
+            email="stefanonoventa@gmail.com",
+            email_verified=False,
+        )
+        entitled_user = User.objects.create_user(
+            email="47-gentle.virtual@icloud.com",
+            email_verified=False,
+        )
+
+        session_data = {
+            "id": "cs_test_relay_verify",
+            "customer": "cus_relay_verify",
+            "customer_details": {"email": real_account.email},
+            "subscription": "sub_relay_verify",
+            "client_reference_id": str(entitled_user.pk),
+            "metadata": {"tier_slug": "main", "user_id": str(entitled_user.pk)},
+        }
+
+        handle_checkout_completed(session_data)
+
+        entitled_user.refresh_from_db()
+        real_account.refresh_from_db()
+        self.assertTrue(entitled_user.email_verified)
+        self.assertFalse(real_account.email_verified)
+
+    def test_paid_checkout_suppresses_verify_footer_for_welcome(self):
+        """The welcome email path sees the post-payment verified state."""
+        user = User.objects.create_user(
+            email="welcome-footer@test.com",
+            email_verified=False,
+        )
+
+        session_data = {
+            "id": "cs_test_welcome_footer",
+            "customer": "cus_welcome_footer",
+            "customer_details": {"email": user.email},
+            "subscription": "",
+            "client_reference_id": str(user.pk),
+            "metadata": {"tier_slug": "main", "user_id": str(user.pk)},
+        }
+
+        handle_checkout_completed(session_data)
+
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        self.assertFalse(
+            EmailService()._should_include_verify_footer(
+                user,
+                "cofounder_welcome",
+            ),
+        )
+
+    def test_course_purchase_does_not_auto_verify_email(self):
+        """One-off course purchases do not verify the account email."""
+        user = User.objects.create_user(
+            email="course-unverified@test.com",
+            email_verified=False,
+        )
+        course = Course.objects.create(
+            title="Resilient LLM Apps",
+            slug="resilient-llm-apps",
+            status="published",
+            individual_price_eur=Decimal("99.00"),
+        )
+
+        session_data = {
+            "id": "cs_test_course_no_verify",
+            "customer": "cus_course_no_verify",
+            "customer_details": {"email": user.email},
+            "subscription": "",
+            "client_reference_id": str(user.pk),
+            "metadata": {"course_id": str(course.pk), "user_id": str(user.pk)},
+        }
+
+        handle_checkout_completed(session_data)
+
+        user.refresh_from_db()
+        self.assertFalse(user.email_verified)
 
     def test_stores_stripe_customer_id(self):
         """stripe_customer_id is saved on the user after checkout."""

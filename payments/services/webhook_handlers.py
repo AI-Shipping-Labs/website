@@ -174,8 +174,9 @@ def handle_checkout_completed(session_data):
     # canonical paid activation signal — flip ``account_activated``
     # if it was not already True. ``mark_activated`` is idempotent so
     # the new-user branch that already set the flag is a no-op here.
-    from accounts.utils.activation import mark_activated
+    from accounts.utils.activation import mark_activated, mark_email_verified
     mark_activated(user)
+    mark_email_verified(user)
 
     # Determine billing period from the Stripe subscription's price ID.
     billing_period = ""

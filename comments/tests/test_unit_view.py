@@ -81,6 +81,41 @@ class CourseUnitDetailContentIdTest(TestCase):
         )
         self.assertContains(response, 'Already have an account? Sign in')
 
+    def test_secondary_signin_link_is_visually_demoted(self):
+        """Issue #793: the secondary "Already have an account? Sign in"
+        anchor must read as a muted secondary link (text-muted-foreground),
+        not as the primary accent action, while the primary "Sign up"
+        anchor keeps text-accent. Guards against a revert that restores
+        text-accent on the secondary link.
+        """
+        unit_path = '/courses/test-course/module-1/unit-1'
+        response = self.client.get(unit_path)
+        self.assertEqual(response.status_code, 200)
+
+        # Primary "Sign up" anchor still carries the accent treatment.
+        self.assertContains(
+            response,
+            f'<a href="/accounts/signup/?next={unit_path}" '
+            'class="text-accent hover:underline">Sign up</a>',
+            html=False,
+        )
+
+        # Secondary "Sign in" anchor is demoted: muted, with a clear
+        # hover affordance, and explicitly NOT the accent treatment.
+        self.assertContains(
+            response,
+            f'<a href="/accounts/login/?next={unit_path}" '
+            'class="text-muted-foreground hover:text-foreground hover:underline">'
+            'Already have an account? Sign in</a>',
+            html=False,
+        )
+        self.assertNotContains(
+            response,
+            f'<a href="/accounts/login/?next={unit_path}" '
+            'class="text-accent hover:underline">',
+            html=False,
+        )
+
     def test_authenticated_visitor_does_not_see_signup_cta(self):
         """Issue #792: signed-in visitor on a course unit page sees the
         textarea + Post Question composer, never the anonymous CTA.

@@ -126,6 +126,12 @@ def serialize_user_state(user, *, compact=False):
         payload["email_preferences"] = dict(user.email_preferences or {})
         payload["import_metadata"] = dict(user.import_metadata or {})
         payload["tier_override"] = _serialize_tier_override(active_override)
+        # Email aliases (issue #840a): the normalized alias emails routing to
+        # this account, so operators see Stripe-routing at a glance. Read-only
+        # addition mirroring how ``tier_override`` was added (#834).
+        payload["aliases"] = list(
+            user.email_aliases.order_by("email").values_list("email", flat=True)
+        )
     return payload
 
 

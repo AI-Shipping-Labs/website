@@ -15,6 +15,7 @@ call.
 
 from django.urls import path
 
+from api.views.aliases import user_aliases_add, user_aliases_remove
 from api.views.campaigns import campaign_detail, campaigns_collection
 from api.views.checkpoints import (
     checkpoint_detail,
@@ -434,6 +435,22 @@ urlpatterns = [
         "users/<path:email>/mark-bounced",
         user_mark_bounced,
         name="api_user_mark_bounced",
+    ),
+    # Email aliases (issue #840a). Staff-token add/remove of an alias that
+    # routes a billing/relay email to a canonical account so future Stripe
+    # webhooks resolve correctly. Register the DELETE (with the trailing
+    # ``<path:alias_email>`` segment, which carries ``@``/``.``) BEFORE the
+    # POST collection, and both BEFORE the ``users/<path:email>`` catch-all,
+    # mirroring the tag-remove-before-tag-add ordering above.
+    path(
+        "users/<path:email>/aliases/<path:alias_email>",
+        user_aliases_remove,
+        name="api_user_aliases_remove",
+    ),
+    path(
+        "users/<path:email>/aliases",
+        user_aliases_add,
+        name="api_user_aliases_add",
     ),
     path(
         "users",

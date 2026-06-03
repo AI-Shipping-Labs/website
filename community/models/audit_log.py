@@ -40,6 +40,13 @@ class CommunityAuditLog(models.Model):
         # rides in ``details`` as ``actor_token=<label>`` alongside the tier
         # slug. Idempotent skips do NOT write a row.
         ("api_tier_override", "API: tier override grant"),
+        # Operator-managed email aliases via the alias API (issue #840a).
+        # The audit row's ``user`` FK is the alias OWNER (the canonical
+        # account); the actor (API token name) rides in ``details`` as
+        # ``actor_token=<label>`` alongside the alias email. Idempotent and
+        # no-op attempts STILL write a row (the operator decision is logged).
+        ("email_alias_added", "API: email alias added"),
+        ("email_alias_removed", "API: email alias removed"),
     ]
 
     user = models.ForeignKey(

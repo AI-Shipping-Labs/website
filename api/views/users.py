@@ -205,6 +205,7 @@ _USER_EXAMPLE = {
     "bounce_state": "none",
     "email_verified": True,
     "tags": ["sprint:may-2026"],
+    "aliases": ["47-gentle.virtual@icloud.com"],
     "slack_member": True,
     "slack_user_id": "U01ABCDEF",
     "stripe_customer_id": "cus_xyz",

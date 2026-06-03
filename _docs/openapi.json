@@ -6306,6 +6306,9 @@
                   "limit": 50,
                   "users": [
                     {
+                      "aliases": [
+                        "47-gentle.virtual@icloud.com"
+                      ],
                       "bounce_state": "none",
                       "date_joined": "2026-04-15T12:00:00+00:00",
                       "display_name": "Alice Doe",
@@ -6371,6 +6374,9 @@
             "content": {
               "application/json": {
                 "example": {
+                  "aliases": [
+                    "47-gentle.virtual@icloud.com"
+                  ],
                   "bounce_state": "none",
                   "date_joined": "2026-04-15T12:00:00+00:00",
                   "display_name": "Alice Doe",
@@ -6460,6 +6466,9 @@
             "content": {
               "application/json": {
                 "example": {
+                  "aliases": [
+                    "47-gentle.virtual@icloud.com"
+                  ],
                   "bounce_state": "none",
                   "date_joined": "2026-04-15T12:00:00+00:00",
                   "display_name": "Alice Doe",
@@ -6520,6 +6529,152 @@
           }
         },
         "summary": "Update user state",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users/{email}/aliases": {
+      "post": {
+        "description": "Adds an ``EmailAlias`` routing ``alias_email`` -> the user identified by ``<email>``. Future Stripe webhooks whose billing email is the alias resolve to this canonical account instead of creating a duplicate. Idempotent: re-adding the same alias to the same owner returns 200, creates no duplicate row, and still writes an audit row. 409 ``alias_is_primary_email`` if the alias is already an existing primary ``User.email``; 409 ``alias_taken`` if it already routes to a DIFFERENT user; 422 on malformed email; 404 when ``<email>`` is unknown.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "alias_email": "47-gentle.virtual@icloud.com",
+                "note": "Apple Pay relay for stefano"
+              },
+              "schema": {
+                "properties": {
+                  "alias_email": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "alias_email"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "aliases": [
+                    "47-gentle.virtual@icloud.com"
+                  ],
+                  "email": "stefano@example.com"
+                }
+              }
+            },
+            "description": "Owner email + current alias list."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown owner email."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "alias_is_primary_email",
+                  "error": "Alias email is already a primary account email"
+                }
+              }
+            },
+            "description": "Alias collides with a primary email (``alias_is_primary_email``) or another user's alias (``alias_taken``)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_email",
+                  "details": {
+                    "field": "alias_email"
+                  },
+                  "error": "alias_email is not a valid email"
+                }
+              }
+            },
+            "description": "Malformed alias email."
+          }
+        },
+        "summary": "Add an email alias (routes future Stripe events)",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users/{email}/aliases/{alias_email}": {
+      "delete": {
+        "description": "Removes the ``EmailAlias`` routing ``<alias_email>`` to the user identified by ``<email>``. Idempotent: removing an alias that does not exist (or is not owned by this user) still returns 200 and writes an audit row. 404 when ``<email>`` is unknown.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "alias_email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "aliases": [],
+                  "email": "stefano@example.com"
+                }
+              }
+            },
+            "description": "Owner email + remaining alias list."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown owner email."
+          }
+        },
+        "summary": "Remove an email alias (idempotent)",
         "tags": [
           "Users"
         ]
@@ -6735,6 +6890,9 @@
             "content": {
               "application/json": {
                 "example": {
+                  "aliases": [
+                    "47-gentle.virtual@icloud.com"
+                  ],
                   "bounce_state": "none",
                   "date_joined": "2026-04-15T12:00:00+00:00",
                   "display_name": "Alice Doe",

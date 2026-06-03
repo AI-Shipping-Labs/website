@@ -27,6 +27,7 @@ import stripe
 from django.core.mail import BadHeaderError
 
 from accounts.models import User
+from accounts.services.email_resolution import resolve_user_by_email
 from accounts.utils.names import set_name_from_external
 from community.models import CommunityAuditLog
 from payments import services as _services
@@ -68,6 +69,23 @@ def handle_checkout_completed(session_data):
         user = User.objects.filter(pk=client_reference_id).first()
     if user is None and customer_email:
         user = User.objects.filter(email=customer_email).first()
+    if user is None and customer_email:
+        # Alias resolution (issue #840a): before creating a brand-new user,
+        # check whether ``customer_email`` is a known ``EmailAlias`` (e.g. an
+        # Apple Pay relay address) routing to a canonical account. If so,
+        # resolve to the alias owner so FUTURE relay payments land on the
+        # existing account instead of spawning a duplicate. Primary
+        # ``User.email`` always wins, so this only fires after the exact-email
+        # lookup above returned ``None``.
+        alias_user = resolve_user_by_email(customer_email)
+        if alias_user is not None:
+            user = alias_user
+            _services.logger.info(
+                "checkout.session.completed: routed email=%s to canonical "
+                "account user=%s via EmailAlias (no new user created)",
+                customer_email,
+                user.email,
+            )
     if user is None and customer_email:
         # Create a new user if one doesn't exist (spec says "or creates a new user")
         # Flag the creation so the analytics post_save handler can record
@@ -756,6 +774,21 @@ def handle_invoice_payment_failed(invoice_data):
         user = User.objects.filter(stripe_customer_id=customer_id).first()
     if user is None and customer_email:
         user = User.objects.filter(email=customer_email).first()
+    if user is None and customer_email:
+        # Alias fallback (issue #840a): a payment-failed for a relay email
+        # that is a known ``EmailAlias`` notifies the canonical (alias-owner)
+        # account rather than going nowhere. Primary email already won above,
+        # so this only fires when neither ``stripe_customer_id`` nor an exact
+        # primary email matched.
+        alias_user = resolve_user_by_email(customer_email)
+        if alias_user is not None:
+            user = alias_user
+            _services.logger.info(
+                "invoice.payment_failed: routed email=%s to canonical "
+                "account user=%s via EmailAlias",
+                customer_email,
+                user.email,
+            )
 
     if user is None:
         _services.logger.error(

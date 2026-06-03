@@ -1,3 +1,4 @@
+from .email_alias import *
 from .import_batch import *
 from .tier_override import *
 from .token import *

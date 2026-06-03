@@ -35,15 +35,24 @@ def normalize_email(email):
 def resolve_user_by_email(email):
     """Resolve ``email`` to a canonical ``User`` (primary wins, then alias).
 
-    Returns the matching ``User`` or ``None``. Primary login email always
-    takes precedence over an alias -- the alias query only runs when no
-    primary matches.
+    Returns the matching ``User`` or ``None``. An ACTIVE primary login email
+    always takes precedence over an alias -- the alias query only runs when no
+    active primary matches.
+
+    The ``is_active`` filter on the primary step matters for the account-merge
+    engine (#841): a merged-away account is DEACTIVATED but keeps its original
+    ``email`` on the row, while its address becomes an ``EmailAlias`` of the
+    surviving canonical account. Skipping inactive primaries here lets a future
+    Stripe / relay event for the merged email fall through to the alias and
+    resolve to canonical instead of the dead secondary row.
     """
     normalized = normalize_email(email)
     if not normalized:
         return None
 
-    primary = User.objects.filter(email__iexact=normalized).first()
+    primary = (
+        User.objects.filter(email__iexact=normalized, is_active=True).first()
+    )
     if primary is not None:
         return primary
 

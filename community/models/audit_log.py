@@ -47,6 +47,12 @@ class CommunityAuditLog(models.Model):
         # no-op attempts STILL write a row (the operator decision is logged).
         ("email_alias_added", "API: email alias added"),
         ("email_alias_removed", "API: email alias removed"),
+        # Account merge via ``POST /api/users/merge`` (issue #841). One row per
+        # real (non-dry-run) merge. The ``user`` FK is the SURVIVING canonical
+        # account; ``details`` is a JSON summary of moved rows / reconciled
+        # scalars / conflicts with ``actor_token=<label>``. Dry runs and the
+        # already-merged no-op write NO row.
+        ("merge_accounts", "API: account merge"),
     ]
 
     user = models.ForeignKey(

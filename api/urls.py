@@ -86,6 +86,7 @@ from api.views.tier_reconcile import (
     tier_reconcile_apply,
     tier_reconcile_diagnostics,
 )
+from api.views.user_merge import merge_users
 from api.views.users import (
     user_detail,
     user_email_log,
@@ -451,6 +452,15 @@ urlpatterns = [
         "users/<path:email>/aliases",
         user_aliases_add,
         name="api_user_aliases_add",
+    ),
+    # Account merge (issue #841). Register the literal ``users/merge`` BEFORE
+    # the ``users/<path:email>`` catch-all -- otherwise the path converter
+    # swallows ``merge`` as an email. Same ordering discipline as the
+    # mark-bounced / aliases routes above.
+    path(
+        "users/merge",
+        merge_users,
+        name="api_user_merge",
     ),
     path(
         "users",

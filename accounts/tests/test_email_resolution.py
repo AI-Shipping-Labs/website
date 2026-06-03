@@ -57,6 +57,29 @@ class ResolveUserByEmailTest(TestCase):
         # And B's alias still resolves to B (sanity).
         self.assertEqual(resolve_user_by_email("old-b@test.com"), user_b)
 
+    def test_inactive_primary_is_skipped_so_alias_wins(self):
+        # The account-merge engine (#841) DEACTIVATES the merged-away account but
+        # leaves its ``email`` on the row, recording the address as an alias of
+        # the surviving canonical. The resolver's ``is_active=True`` filter on the
+        # primary step is what lets a future event for that email fall through to
+        # the alias and resolve to canonical instead of the dead secondary row.
+        canonical = User.objects.create_user(email="canonical@test.com")
+        merged_away = User.objects.create_user(
+            email="merged@test.com", is_active=False
+        )
+        EmailAlias.objects.create(user=canonical, email="merged@test.com")
+
+        resolved = resolve_user_by_email("merged@test.com")
+        self.assertEqual(resolved, canonical)
+        # Sanity: the deactivated user is NOT what we resolved to.
+        self.assertNotEqual(resolved, merged_away)
+
+    def test_inactive_primary_with_no_alias_returns_none(self):
+        # A deactivated primary with no alias resolves to None, never the dead
+        # row -- the inactive primary is fully invisible to the resolver.
+        User.objects.create_user(email="ghost@test.com", is_active=False)
+        self.assertIsNone(resolve_user_by_email("ghost@test.com"))
+
     def test_normalize_email_lowercases_and_strips(self):
         self.assertEqual(normalize_email("  Foo@Bar.COM "), "foo@bar.com")
         self.assertEqual(normalize_email(""), "")

@@ -6357,6 +6357,138 @@
         ]
       }
     },
+    "/api/users/merge": {
+      "post": {
+        "description": "Consolidates the ``merge_email`` account into the ``canonical_email`` account: repoints every owned row, reconciles profile / entitlement fields by precedence (UNION tags, OR ``email_verified``, higher ``tier`` wins, surviving subscription dictates billing fields), records ``merge_email`` as an ``EmailAlias`` of canonical so future Stripe/relay events route correctly, and deactivates the secondary login. Runs in ONE transaction.\n\nIRREVERSIBLE: there is no automated un-merge. Always run ``dry_run: true`` first to review the plan; a dry run computes the full plan against the real DB and persists NOTHING.\n\nErrors: 400 ``self_merge`` (same normalized email); 404 ``user_not_found`` (unknown ``canonical_email``/``merge_email``, ``details.field`` says which); 409 ``subscription_conflict`` (both sides have a distinct live subscription -- refuses unless ``force: true``, never silently drops a paid sub); 409 ``staff_merge_refused`` (either side is staff -- requires ``force: true``); 422 ``unknown_field`` / ``validation_error`` (strict body).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "canonical_email": "stefanonoventa@gmail.com",
+                "dry_run": true,
+                "merge_email": "47-gentle.virtual@icloud.com"
+              },
+              "schema": {
+                "properties": {
+                  "canonical_email": {
+                    "type": "string"
+                  },
+                  "dry_run": {
+                    "type": "boolean"
+                  },
+                  "force": {
+                    "type": "boolean"
+                  },
+                  "merge_email": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "canonical_email",
+                  "merge_email"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "alias_created": "47-gentle.virtual@icloud.com",
+                  "already_merged": false,
+                  "canonical_email": "stefanonoventa@gmail.com",
+                  "conflicts": [],
+                  "dry_run": true,
+                  "merge_email": "47-gentle.virtual@icloud.com",
+                  "moved": [
+                    {
+                      "dropped": 1,
+                      "field": "user",
+                      "model": "events.EventRegistration",
+                      "moved": 1
+                    }
+                  ],
+                  "reconciled": {
+                    "email_verified": {
+                      "to": true
+                    }
+                  },
+                  "secondary_deactivated": false,
+                  "stripe": {},
+                  "tier_overrides": {
+                    "deactivated": [],
+                    "kept_active": null
+                  }
+                }
+              }
+            },
+            "description": "The merge plan (or already-merged no-op)."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "self_merge",
+                  "error": "Cannot merge an account into itself"
+                }
+              }
+            },
+            "description": "Self-merge (same normalized email)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "details": {
+                    "field": "merge_email"
+                  },
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown canonical or merge email."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "subscription_conflict",
+                  "details": {
+                    "canonical_subscription_id": "sub_A",
+                    "merge_subscription_id": "sub_B"
+                  },
+                  "error": "Both accounts have a live subscription"
+                }
+              }
+            },
+            "description": "Unresolved conflict: ``subscription_conflict`` (dual live subs) or ``staff_merge_refused``. Retry with ``force: true`` to proceed."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_field",
+                  "details": {
+                    "field": "foo"
+                  },
+                  "error": "Unknown field: foo"
+                }
+              }
+            },
+            "description": "Strict-body violation."
+          }
+        },
+        "summary": "Merge two accounts (irreversible; dry_run first)",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
     "/api/users/{email}": {
       "get": {
         "parameters": [

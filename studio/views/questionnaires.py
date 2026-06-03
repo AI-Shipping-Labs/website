@@ -14,9 +14,12 @@ Response views are read-only here -- staff view what was collected.
 Authoring / submitting member-facing responses is #802 / #803.
 """
 
+import json
+
 from django.contrib import messages
+from django.db import transaction
 from django.db.models import Count
-from django.http import HttpResponseNotAllowed
+from django.http import HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 
@@ -30,6 +33,56 @@ from questionnaires.models import (
     ResponseQuestionOption,
 )
 from studio.decorators import staff_required
+
+
+def _parse_reorder_payload(request):
+    """Parse + validate a reorder request body into ``(items, error_response)``.
+
+    ``items`` is a list of ``(pk, order)`` int tuples on success, ``None`` on
+    error (with a ready-to-return ``JsonResponse`` in the second slot). Mirrors
+    the ``module_reorder`` contract: 405 on non-POST, 400 on unparseable JSON,
+    400 on any malformed item (missing ``id``/``order``, non-int, negative
+    ``order``). No writes happen here; the caller validates parent scope and
+    applies updates inside a transaction.
+    """
+    if request.method != 'POST':
+        return None, JsonResponse({'error': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return None, JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    if not isinstance(data, list):
+        return None, JsonResponse(
+            {'error': 'Payload must be a list of {id, order} items.'},
+            status=400,
+        )
+
+    items = []
+    for entry in data:
+        if not isinstance(entry, dict) or 'id' not in entry or 'order' not in entry:
+            return None, JsonResponse(
+                {'error': 'Each item needs an id and an order.'}, status=400,
+            )
+        raw_id = entry['id']
+        raw_order = entry['order']
+        # Reject bools (a subclass of int) and non-ints outright.
+        if isinstance(raw_id, bool) or isinstance(raw_order, bool):
+            return None, JsonResponse(
+                {'error': 'id and order must be integers.'}, status=400,
+            )
+        if not isinstance(raw_id, int) or not isinstance(raw_order, int):
+            return None, JsonResponse(
+                {'error': 'id and order must be integers.'}, status=400,
+            )
+        if raw_order < 0:
+            return None, JsonResponse(
+                {'error': 'order must be zero or positive.'}, status=400,
+            )
+        items.append((raw_id, raw_order))
+
+    return items, None
 
 _VALID_PURPOSES = {value for value, _label in PURPOSE_CHOICES}
 _VALID_QUESTION_TYPES = {value for value, _label in QUESTION_TYPE_CHOICES}
@@ -449,6 +502,81 @@ def question_delete(request, questionnaire_id, question_id):
     question.delete()
     messages.success(request, 'Question deleted.')
     return redirect('studio_questionnaire_detail', questionnaire_id=questionnaire.pk)
+
+
+@staff_required
+def question_reorder(request, questionnaire_id):
+    """Reorder base questions within a questionnaire (JSON API endpoint).
+
+    Body: ``[{"id": <question_pk>, "order": <int>}, ...]``. Every submitted id
+    must be a ``Question`` of THIS questionnaire -- a cross-parent or unknown id
+    is rejected with 400 and zero writes. The updates run inside a single
+    ``transaction.atomic()`` so a bad payload never leaves a partial write.
+
+    Only base ``Question`` rows are touched; ``Response`` / ``ResponseQuestion``
+    snapshots are never written here (the update is scoped by parent), so a
+    member's historical response stays byte-identical across a reorder.
+    """
+    questionnaire = get_object_or_404(Questionnaire, pk=questionnaire_id)
+
+    items, error_response = _parse_reorder_payload(request)
+    if error_response is not None:
+        return error_response
+
+    submitted_ids = [pk for pk, _order in items]
+    valid_count = questionnaire.questions.filter(pk__in=submitted_ids).count()
+    if valid_count != len(set(submitted_ids)) or len(submitted_ids) != len(set(submitted_ids)):
+        return JsonResponse(
+            {'error': 'One or more ids are not questions of this questionnaire.'},
+            status=400,
+        )
+
+    with transaction.atomic():
+        for pk, order in items:
+            Question.objects.filter(
+                pk=pk, questionnaire=questionnaire,
+            ).update(order=order)
+
+    return JsonResponse({'status': 'ok'})
+
+
+@staff_required
+def question_option_reorder(request, questionnaire_id, question_id):
+    """Reorder the options of a choice question (JSON API endpoint).
+
+    Body: ``[{"id": <option_pk>, "order": <int>}, ...]``. The question is scoped
+    to its questionnaire (404 otherwise). Every submitted id must be a
+    ``QuestionOption`` of THIS question; a cross-parent / unknown id is rejected
+    with 400 and zero writes. Updates run inside a single ``transaction.atomic()``.
+
+    The wholesale options textarea author path in ``question_edit`` remains the
+    source of truth for add/remove/relabel -- this endpoint only mutates the
+    ``order`` field of existing rows.
+    """
+    questionnaire = get_object_or_404(Questionnaire, pk=questionnaire_id)
+    question = get_object_or_404(
+        Question, pk=question_id, questionnaire=questionnaire,
+    )
+
+    items, error_response = _parse_reorder_payload(request)
+    if error_response is not None:
+        return error_response
+
+    submitted_ids = [pk for pk, _order in items]
+    valid_count = question.options.filter(pk__in=submitted_ids).count()
+    if valid_count != len(set(submitted_ids)) or len(submitted_ids) != len(set(submitted_ids)):
+        return JsonResponse(
+            {'error': 'One or more ids are not options of this question.'},
+            status=400,
+        )
+
+    with transaction.atomic():
+        for pk, order in items:
+            QuestionOption.objects.filter(
+                pk=pk, question=question,
+            ).update(order=order)
+
+    return JsonResponse({'status': 'ok'})
 
 
 # ---------------------------------------------------------------------------

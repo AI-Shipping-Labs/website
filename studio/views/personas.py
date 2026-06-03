@@ -16,12 +16,15 @@ optional, so staff can tell the personas apart.
 """
 
 from django.contrib import messages
+from django.db import transaction
 from django.db.models import Count
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 
 from questionnaires.models import Persona, Questionnaire
 from studio.decorators import staff_required
+from studio.views.questionnaires import _parse_reorder_payload
 
 # Only onboarding-purpose questionnaires are offered in the
 # default-questionnaire dropdown. Imported value, not a hardcoded literal
@@ -294,3 +297,32 @@ def persona_edit(request, persona_id):
 
     messages.success(request, f'Persona "{persona.name}" updated.')
     return redirect('studio_persona_detail', persona_id=persona.pk)
+
+
+@staff_required
+def persona_reorder(request):
+    """Reorder personas (JSON API endpoint).
+
+    Body: ``[{"id": <persona_pk>, "order": <int>}, ...]``. Personas have no
+    parent, so each submitted id must simply exist as a ``Persona`` -- an
+    unknown id is rejected with 400 and zero writes. The updates run inside a
+    single ``transaction.atomic()`` so a bad payload never leaves a partial
+    write. Mirrors the question / option reorder contract.
+    """
+    items, error_response = _parse_reorder_payload(request)
+    if error_response is not None:
+        return error_response
+
+    submitted_ids = [pk for pk, _order in items]
+    valid_count = Persona.objects.filter(pk__in=submitted_ids).count()
+    if valid_count != len(set(submitted_ids)) or len(submitted_ids) != len(set(submitted_ids)):
+        return JsonResponse(
+            {'error': 'One or more ids are not valid personas.'},
+            status=400,
+        )
+
+    with transaction.atomic():
+        for pk, order in items:
+            Persona.objects.filter(pk=pk).update(order=order)
+
+    return JsonResponse({'status': 'ok'})

@@ -17,10 +17,14 @@
 </div>
 
 {% if personas %}
+{% csrf_token %}
 <div class="{% studio_list_class 'wrapper' %}">
-  <table class="w-full">
+  <table class="w-full"
+         data-personas-reorder
+         data-reorder-url="{% url 'studio_persona_reorder' %}">
     <thead class="bg-secondary">
       <tr>
+        <th class="w-10 px-3 py-3"><span class="sr-only">Drag to reorder</span></th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Persona</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Active</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Default questionnaire</th>
@@ -31,7 +35,17 @@
     </thead>
     <tbody class="divide-y divide-border">
       {% for persona in personas %}
-      <tr class="hover:bg-secondary/50 transition-colors" data-testid="persona-row">
+      <tr class="hover:bg-secondary/50 transition-colors"
+          draggable="true"
+          data-testid="persona-row"
+          data-persona-id="{{ persona.pk }}">
+        <td class="px-3 py-4 text-muted-foreground align-middle">
+          <span class="persona-drag-handle cursor-grab inline-flex items-center justify-center"
+                data-testid="persona-drag-handle"
+                title="Drag to reorder" aria-label="Drag to reorder">
+            <i data-lucide="grip-vertical" class="h-4 w-4"></i>
+          </span>
+        </td>
         <td class="px-6 py-4 text-sm text-foreground">
           <a href="{% url 'studio_persona_detail' persona_id=persona.pk %}" class="text-accent hover:underline" data-testid="persona-name">{{ persona.name }}</a>
           <div class="text-xs text-muted-foreground" data-testid="persona-archetype">{{ persona.archetype }}</div>
@@ -69,4 +83,74 @@
   {% url 'studio_persona_create' as personas_create_url %}
   {% studio_empty_state 'fresh' entity_label='persona' entity_label_plural='personas' create_url=personas_create_url %}
 {% endif %}
+
+<script>
+// Drag-to-reorder for personas (table rows). Dependency-free vanilla JS on the
+// native HTML5 Drag and Drop API (issue #836).
+(function () {
+  var container = document.querySelector('[data-personas-reorder] tbody');
+  if (!container) { return; }
+  var url = document.querySelector('[data-personas-reorder]').getAttribute('data-reorder-url');
+  var dragged = null;
+
+  function getCsrfToken() {
+    var input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (input) { return input.value; }
+    var cookie = document.cookie.split(';').find(function (c) {
+      return c.trim().startsWith('csrftoken=');
+    });
+    return cookie ? cookie.split('=')[1] : '';
+  }
+
+  container.addEventListener('dragstart', function (e) {
+    var row = e.target.closest('[data-persona-id]');
+    if (!row || !container.contains(row)) { return; }
+    dragged = row;
+    row.classList.add('opacity-50');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  container.addEventListener('dragend', function () {
+    if (dragged) { dragged.classList.remove('opacity-50'); }
+    dragged = null;
+  });
+
+  container.addEventListener('dragover', function (e) {
+    if (!dragged) { return; }
+    e.preventDefault();
+    var over = e.target.closest('[data-persona-id]');
+    if (!over || over === dragged || !container.contains(over)) { return; }
+    var rect = over.getBoundingClientRect();
+    var after = (e.clientY - rect.top) > (rect.height / 2);
+    if (after) {
+      over.parentNode.insertBefore(dragged, over.nextSibling);
+    } else {
+      over.parentNode.insertBefore(dragged, over);
+    }
+  });
+
+  container.addEventListener('drop', function (e) {
+    if (!dragged) { return; }
+    e.preventDefault();
+    var rows = Array.prototype.slice.call(
+      container.querySelectorAll('[data-persona-id]')
+    );
+    var payload = rows.map(function (row, index) {
+      return { id: parseInt(row.getAttribute('data-persona-id'), 10), order: index };
+    });
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCsrfToken(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    }).then(function (resp) {
+      if (!resp.ok) { window.location.reload(); }
+    }).catch(function () {
+      window.location.reload();
+    });
+  });
+})();
+</script>
 {% endblock %}

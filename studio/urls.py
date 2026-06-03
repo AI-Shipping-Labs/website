@@ -113,6 +113,7 @@ from studio.views.personas import (
     persona_detail,
     persona_edit,
     persona_list,
+    persona_reorder,
 )
 from studio.views.plans import (
     interview_note_create,
@@ -130,6 +131,8 @@ from studio.views.questionnaires import (
     question_create,
     question_delete,
     question_edit,
+    question_option_reorder,
+    question_reorder,
     questionnaire_create,
     questionnaire_detail,
     questionnaire_edit,
@@ -619,6 +622,10 @@ urlpatterns = [
     # sprints block: trailing slash on list/detail, none on edit.
     path('personas/', persona_list, name='studio_persona_list'),
     path('personas/new', persona_create, name='studio_persona_create'),
+    # Drag-to-reorder (issue #836). JSON POST of [{id, order}, ...]. Registered
+    # before the ``<int:persona_id>`` routes so ``reorder`` is not swallowed by
+    # the int converter.
+    path('personas/reorder', persona_reorder, name='studio_persona_reorder'),
     path(
         'personas/<int:persona_id>/',
         persona_detail,
@@ -699,6 +706,19 @@ urlpatterns = [
         'questionnaires/<int:questionnaire_id>/questions/new',
         question_create,
         name='studio_questionnaire_question_create',
+    ),
+    # Drag-to-reorder base questions (issue #836). JSON POST of
+    # [{id, order}, ...]. The literal ``reorder`` segment differs from the
+    # ``<int:question_id>`` routes below so no converter clash.
+    path(
+        'questionnaires/<int:questionnaire_id>/questions/reorder',
+        question_reorder,
+        name='studio_questionnaire_question_reorder',
+    ),
+    path(
+        'questionnaires/<int:questionnaire_id>/questions/<int:question_id>/options/reorder',
+        question_option_reorder,
+        name='studio_questionnaire_option_reorder',
     ),
     path(
         'questionnaires/<int:questionnaire_id>/questions/<int:question_id>/edit',

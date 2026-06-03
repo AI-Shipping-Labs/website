@@ -67,10 +67,14 @@
 </div>
 
 {% if questions %}
+{% csrf_token %}
 <div class="{% studio_list_class 'wrapper' %}">
-  <table class="w-full">
+  <table class="w-full"
+         data-questions-reorder
+         data-reorder-url="{% url 'studio_questionnaire_question_reorder' questionnaire_id=questionnaire.pk %}">
     <thead class="bg-secondary">
       <tr>
+        <th class="w-10 px-3 py-3"><span class="sr-only">Drag to reorder</span></th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Order</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Prompt</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
@@ -80,17 +84,40 @@
     </thead>
     <tbody class="divide-y divide-border">
       {% for question in questions %}
-      <tr class="hover:bg-secondary/50 transition-colors" data-testid="questionnaire-question-row">
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Order">{{ question.order }}</td>
+      <tr class="hover:bg-secondary/50 transition-colors"
+          draggable="true"
+          data-testid="questionnaire-question-row"
+          data-question-id="{{ question.pk }}">
+        <td class="px-3 py-4 text-muted-foreground align-middle">
+          <span class="questionnaire-question-drag-handle cursor-grab inline-flex items-center justify-center"
+                data-testid="questionnaire-question-drag-handle"
+                title="Drag to reorder" aria-label="Drag to reorder">
+            <i data-lucide="grip-vertical" class="h-4 w-4"></i>
+          </span>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Order" data-question-order-cell>{{ question.order }}</td>
         <td class="px-6 py-4 text-sm text-foreground" data-testid="questionnaire-question-prompt">
           {{ question.prompt }}
           {% if question.help_text %}
           <div class="text-xs text-muted-foreground mt-1">{{ question.help_text }}</div>
           {% endif %}
           {% if question.is_choice_type %}
-          <ul class="text-xs text-muted-foreground mt-1 list-disc list-inside" data-testid="questionnaire-question-options">
+          <ul class="text-xs text-muted-foreground mt-1 space-y-0.5"
+              data-testid="questionnaire-question-options"
+              data-options-reorder
+              data-reorder-url="{% url 'studio_questionnaire_option_reorder' questionnaire_id=questionnaire.pk question_id=question.pk %}">
             {% for option in question.options.all %}
-            <li data-testid="questionnaire-question-option">{{ option.label }}</li>
+            <li class="flex items-center gap-1.5"
+                draggable="true"
+                data-testid="questionnaire-question-option"
+                data-option-id="{{ option.pk }}">
+              <span class="questionnaire-option-drag-handle cursor-grab inline-flex items-center"
+                    data-testid="questionnaire-option-drag-handle"
+                    title="Drag to reorder" aria-label="Drag to reorder">
+                <i data-lucide="grip-vertical" class="h-3 w-3"></i>
+              </span>
+              <span>{{ option.label }}</span>
+            </li>
             {% endfor %}
           </ul>
           {% endif %}
@@ -122,4 +149,102 @@
   No questions yet. Add the first question to this questionnaire.
 </div>
 {% endif %}
+
+<script>
+// Drag-to-reorder for questions (table rows) and options (list items).
+// Dependency-free vanilla JS on the native HTML5 Drag and Drop API (issue #836).
+(function () {
+  function getCsrfToken() {
+    var input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (input) { return input.value; }
+    var cookie = document.cookie.split(';').find(function (c) {
+      return c.trim().startsWith('csrftoken=');
+    });
+    return cookie ? cookie.split('=')[1] : '';
+  }
+
+  // Wire a drag-reorder container. ``itemSelector`` picks the draggable rows;
+  // ``idAttr`` is the data attribute carrying each row's pk; ``orderCell`` (if
+  // given) is updated in-place so the visible order column stays accurate.
+  function wireReorder(container, itemSelector, idAttr, orderCell) {
+    var dragged = null;
+    // The reorder URL may live on the container itself (the <ul> case) or on a
+    // wrapping ancestor (the questions <table> wraps the <tbody> container).
+    var urlEl = container.hasAttribute('data-reorder-url')
+      ? container
+      : container.closest('[data-reorder-url]');
+    var reorderUrl = urlEl ? urlEl.getAttribute('data-reorder-url') : null;
+
+    container.addEventListener('dragstart', function (e) {
+      var item = e.target.closest(itemSelector);
+      if (!item || !container.contains(item)) { return; }
+      dragged = item;
+      item.classList.add('opacity-50');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    container.addEventListener('dragend', function () {
+      if (dragged) { dragged.classList.remove('opacity-50'); }
+      dragged = null;
+    });
+
+    container.addEventListener('dragover', function (e) {
+      if (!dragged) { return; }
+      e.preventDefault();
+      var over = e.target.closest(itemSelector);
+      if (!over || over === dragged || !container.contains(over)) { return; }
+      var rect = over.getBoundingClientRect();
+      var after = (e.clientY - rect.top) > (rect.height / 2);
+      if (after) {
+        over.parentNode.insertBefore(dragged, over.nextSibling);
+      } else {
+        over.parentNode.insertBefore(dragged, over);
+      }
+    });
+
+    container.addEventListener('drop', function (e) {
+      if (!dragged) { return; }
+      e.preventDefault();
+      persist();
+    });
+
+    function persist() {
+      var items = Array.prototype.slice.call(
+        container.querySelectorAll(itemSelector)
+      );
+      var payload = items.map(function (item, index) {
+        if (orderCell) {
+          var cell = item.querySelector(orderCell);
+          if (cell) { cell.textContent = index; }
+        }
+        return { id: parseInt(item.getAttribute(idAttr), 10), order: index };
+      });
+      fetch(reorderUrl, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': getCsrfToken(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      }).then(function (resp) {
+        if (!resp.ok) { window.location.reload(); }
+      }).catch(function () {
+        window.location.reload();
+      });
+    }
+  }
+
+  var questionTable = document.querySelector('[data-questions-reorder] tbody');
+  if (questionTable) {
+    wireReorder(
+      questionTable, '[data-question-id]', 'data-question-id',
+      '[data-question-order-cell]'
+    );
+  }
+
+  document.querySelectorAll('[data-options-reorder]').forEach(function (list) {
+    wireReorder(list, '[data-option-id]', 'data-option-id', null);
+  });
+})();
+</script>
 {% endblock %}

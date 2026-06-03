@@ -373,6 +373,80 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/2026-04-21-ws')
         self.assertContains(response, 'data-testid="workshop-video-locked"')
 
+    # Issue #844: the "Watch the recording" card must only render when a
+    # recording actually exists on the linked event. Existence-gating
+    # (does a recording exist?) is independent of access-gating (does the
+    # viewer's tier clear the recording level?).
+
+    def test_landing_video_card_renders_when_recording_available(self):
+        # Main user clears the recording gate (level 20) and the default
+        # fixture workshop has a linked event with a recording_url.
+        self.client.force_login(self.user_main)
+        response = self.client.get('/workshops/2026-04-21-ws')
+        self.assertContains(response, 'data-testid="workshop-video-link"')
+        self.assertContains(response, 'Watch the recording')
+
+    def test_landing_video_card_shows_full_video_copy_when_unlocked(self):
+        self.client.force_login(self.user_main)
+        response = self.client.get('/workshops/2026-04-21-ws')
+        self.assertContains(
+            response,
+            'Full workshop video with timestamps and downloadable materials.',
+        )
+
+    def test_landing_video_card_omitted_when_no_event(self):
+        # No linked event -> no recording -> card must be absent even for a
+        # user who would otherwise clear the recording gate.
+        ws = _make_workshop(
+            slug='no-rec-evt', title='No Recording Event',
+            with_event=False, landing=0, pages=0, recording=0,
+        )
+        self.client.force_login(self.user_main)
+        response = self.client.get(ws.get_absolute_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-testid="workshop-video-link"')
+        self.assertNotContains(response, 'Watch the recording')
+        self.assertNotContains(
+            response,
+            'Full workshop video with timestamps and downloadable materials.',
+        )
+
+    def test_landing_video_card_omitted_when_event_has_no_recording(self):
+        # Linked event but all recording URLs empty -> has_recording False.
+        ws = _make_workshop(
+            slug='evt-no-rec', title='Event No Recording',
+            with_event=True, recording_url='', landing=0, pages=0, recording=0,
+        )
+        self.client.force_login(self.user_main)
+        response = self.client.get(ws.get_absolute_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-testid="workshop-video-link"')
+
+    def test_landing_video_card_omitted_keeps_code_repo_link(self):
+        # Hiding the recording card must not drop the GitHub repo link.
+        ws = _make_workshop(
+            slug='no-rec-repo', title='No Recording But Repo',
+            with_event=False, landing=0, pages=0, recording=0,
+            code_repo_url='https://github.com/org/repo',
+        )
+        response = self.client.get(ws.get_absolute_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-testid="workshop-video-link"')
+        self.assertContains(response, 'data-testid="workshop-code-repo-link"')
+
+    def test_landing_video_card_renders_locked_when_gated_but_recording_exists(self):
+        # Existence-gating and access-gating are independent: a recording
+        # exists, so the card renders, but an anonymous visitor who clears
+        # the open landing/pages gates still fails the level-20 recording
+        # gate and sees the locked pill.
+        ws = _make_workshop(
+            slug='gated-rec', title='Gated Recording',
+            with_event=True, landing=0, pages=0, recording=20,
+        )
+        response = self.client.get(ws.get_absolute_url())
+        self.assertContains(response, 'data-testid="workshop-video-link"')
+        self.assertContains(response, 'data-testid="workshop-video-locked"')
+
     def test_landing_event_cross_link_hidden_when_event_exists(self):
         response = self.client.get('/workshops/2026-04-21-ws')
         self.assertNotContains(

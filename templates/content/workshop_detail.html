@@ -107,6 +107,14 @@
       <!-- Recording and repository actions follow the README and tutorial
            page list; individual tutorial pages are already linked above. -->
       <div class="mb-12 space-y-4" data-testid="workshop-actions">
+        {% comment %}
+          Issue #844: only render the "Watch the recording" card when a
+          recording actually exists on the linked event. `has_recording`
+          is true when any of recording_s3_url / recording_url /
+          recording_embed_url is set. Otherwise the card is omitted
+          entirely so we never promise a recording that does not exist.
+        {% endcomment %}
+        {% if event and event.has_recording %}
         <!-- Video card -->
         <a href="{% url 'workshop_video' workshop.url_key %}"
            class="group flex flex-col rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50"
@@ -131,6 +139,7 @@
           </span>
           {% endif %}
         </a>
+        {% endif %}
 
         {% if workshop.code_repo_url %}
         <a href="{{ workshop.code_repo_url }}" target="_blank" rel="noopener noreferrer"

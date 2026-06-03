@@ -344,6 +344,13 @@ double-rendering. See issue #347.
                 <span>Tier overrides</span>
               </a>
             </li>
+            <li>
+              <a href="{% url 'studio_user_merge' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/users/merge' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="git-merge" class="w-4 h-4"></i>
+                <span>Merge accounts</span>
+              </a>
+            </li>
             {% if request.user.is_superuser %}
             <li>
               <a href="{% url 'studio_user_create' %}"

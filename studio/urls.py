@@ -87,6 +87,11 @@ from studio.views.member_notes import (
     member_note_delete,
     member_note_edit,
 )
+from studio.views.merge import (
+    studio_user_merge,
+    studio_user_merge_confirm,
+    studio_user_merge_preview,
+)
 from studio.views.notifications import (
     article_announce_slack,
     article_notify,
@@ -529,6 +534,21 @@ urlpatterns = [
     # swallowed by the int converter.
     path('users/import/', user_import, name='studio_user_import'),
     path('users/import/confirm', user_import_confirm, name='studio_user_import_confirm'),
+
+    # Account merge UI (issue #842). Registered before the ``<int:user_id>/``
+    # route so the literal ``merge/`` prefix is not swallowed by the int
+    # converter (same precedent as ``users/import/`` above).
+    path('users/merge/', studio_user_merge, name='studio_user_merge'),
+    path(
+        'users/merge/preview',
+        studio_user_merge_preview,
+        name='studio_user_merge_preview',
+    ),
+    path(
+        'users/merge/confirm',
+        studio_user_merge_confirm,
+        name='studio_user_merge_confirm',
+    ),
 
     # User detail page + contact tags (issue #354). The literal ``new/``,
     # ``created/``, ``export``, and ``tier-override/`` prefixes are

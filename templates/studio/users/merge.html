@@ -1,0 +1,292 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Merge accounts{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8 max-w-3xl">
+  <h1 class="text-2xl font-semibold text-foreground">Merge accounts</h1>
+  <p class="text-muted-foreground mt-1">
+    Consolidate a duplicate (secondary) account into a surviving (canonical) one.
+    Every owned row is repointed, profile/entitlement fields reconcile by
+    precedence, the secondary email becomes an alias of the canonical account,
+    and the secondary login is deactivated. This is irreversible &mdash; always
+    review the dry-run preview before confirming.
+  </p>
+</div>
+
+{% if result %}
+{# ---------------------------------------------------------------- #}
+{# Success result of a REAL merge.                                  #}
+{# ---------------------------------------------------------------- #}
+<div class="bg-card border border-green-700/50 rounded-lg p-6 mb-8 max-w-3xl"
+     data-testid="merge-result">
+  {% if result.already_merged %}
+  <h2 class="text-lg font-semibold text-foreground mb-2" data-testid="merge-result-already-merged">
+    These accounts are already merged
+  </h2>
+  <p class="text-sm text-muted-foreground">
+    {{ result.merge_email }} is already an alias of {{ result.canonical_email }};
+    nothing changed.
+  </p>
+  {% else %}
+  <h2 class="text-lg font-semibold text-green-400 mb-2" data-testid="merge-result-headline">
+    {{ result.merge_email }} merged into {{ result.canonical_email }}.
+  </h2>
+  {% include "studio/users/_merge_plan.html" with plan=result %}
+  {% endif %}
+  {% if merged_canonical %}
+  <div class="mt-6">
+    <a href="{% url 'studio_user_detail' merged_canonical.pk %}"
+       class="inline-flex items-center bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+       data-testid="merge-result-canonical-link">
+      View {{ result.canonical_email }}
+    </a>
+  </div>
+  {% endif %}
+  <div class="mt-4">
+    <a href="{% url 'studio_user_merge' %}"
+       class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+       data-testid="merge-start-over">Merge another pair</a>
+  </div>
+</div>
+{% else %}
+
+{# ---------------------------------------------------------------- #}
+{# Search card: two email inputs + autocomplete pickers.            #}
+{# ---------------------------------------------------------------- #}
+<div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-3xl">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Choose accounts</h2>
+
+  {% if errors.confirm %}
+  <div class="mb-4 rounded-lg border border-amber-600/50 bg-amber-900/20 px-4 py-3 text-sm text-amber-300"
+       data-testid="merge-error-confirm">
+    {{ errors.confirm }}
+  </div>
+  {% endif %}
+  {% if errors.self_merge %}
+  <div class="mb-4 rounded-lg border border-red-600/50 bg-red-900/20 px-4 py-3 text-sm text-red-300"
+       data-testid="merge-error-self-merge">
+    {{ errors.self_merge }}
+  </div>
+  {% endif %}
+
+  <form method="post" action="{% url 'studio_user_merge_preview' %}" data-testid="merge-preview-form">
+    {% csrf_token %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div data-testid="merge-canonical-field">
+        <label for="merge-canonical-search" class="block text-sm font-medium text-foreground mb-1">
+          Canonical account (survives)
+        </label>
+        <input type="text"
+               id="merge-canonical-search"
+               name="canonical_email"
+               value="{{ canonical_email }}"
+               placeholder="Search by name or email..."
+               autocomplete="off"
+               data-search-url="/studio/api/users/search/"
+               data-result-list="merge-canonical-suggestions"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+               data-testid="merge-canonical-input">
+        <ul id="merge-canonical-suggestions"
+            class="hidden absolute z-20 mt-1 max-w-md bg-card border border-border rounded-lg shadow-lg overflow-hidden"
+            role="listbox"
+            data-testid="merge-canonical-suggestions"></ul>
+        {% if errors.canonical %}
+        <p class="mt-1 text-sm text-red-400" data-testid="merge-error-canonical">{{ errors.canonical }}</p>
+        {% endif %}
+      </div>
+
+      <div data-testid="merge-secondary-field">
+        <label for="merge-secondary-search" class="block text-sm font-medium text-foreground mb-1">
+          Secondary account (merged in &amp; deactivated)
+        </label>
+        <input type="text"
+               id="merge-secondary-search"
+               name="secondary_email"
+               value="{{ secondary_email }}"
+               placeholder="Search by name or email..."
+               autocomplete="off"
+               data-search-url="/studio/api/users/search/"
+               data-result-list="merge-secondary-suggestions"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+               data-testid="merge-secondary-input">
+        <ul id="merge-secondary-suggestions"
+            class="hidden absolute z-20 mt-1 max-w-md bg-card border border-border rounded-lg shadow-lg overflow-hidden"
+            role="listbox"
+            data-testid="merge-secondary-suggestions"></ul>
+        {% if errors.secondary %}
+        <p class="mt-1 text-sm text-red-400" data-testid="merge-error-secondary">{{ errors.secondary }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="mt-6">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+              data-testid="merge-preview-submit">
+        Preview merge
+      </button>
+    </div>
+  </form>
+</div>
+
+{# ---------------------------------------------------------------- #}
+{# Conflict warning (dual subscription / staff account).           #}
+{# ---------------------------------------------------------------- #}
+{% if conflict %}
+<div class="bg-card border border-red-600/60 rounded-lg p-6 mb-8 max-w-3xl"
+     data-testid="merge-conflict">
+  <h2 class="text-lg font-semibold text-red-400 mb-2 flex items-center gap-2">
+    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+    Conflict &mdash; force required
+  </h2>
+  {% if conflict.type == "subscription" %}
+  <p class="text-sm text-foreground mb-3" data-testid="merge-conflict-subscription">
+    Both accounts have a distinct live subscription. Merging would DROP the
+    secondary's paid subscription and keep only the canonical's.
+  </p>
+  <dl class="text-sm space-y-1 mb-4">
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Canonical subscription (kept)</dt>
+      <dd class="text-foreground font-mono" data-testid="merge-conflict-canonical-sub">{{ conflict.canonical_subscription_id }}</dd>
+    </div>
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Secondary subscription (dropped)</dt>
+      <dd class="text-foreground font-mono" data-testid="merge-conflict-secondary-sub">{{ conflict.merge_subscription_id }}</dd>
+    </div>
+  </dl>
+  {% else %}
+  <p class="text-sm text-foreground mb-4" data-testid="merge-conflict-staff">
+    One of these accounts is a staff / superuser account. Merging a staff
+    account is refused unless you explicitly force it.
+  </p>
+  {% endif %}
+
+  <form method="post" action="{% url 'studio_user_merge_confirm' %}"
+        data-testid="merge-confirm-form"
+        onsubmit="return confirm('This is irreversible. Merge {{ secondary_email|escapejs }} into {{ canonical_email|escapejs }}?');">
+    {% csrf_token %}
+    <input type="hidden" name="canonical_user_id" value="{{ canonical_user_id }}">
+    <input type="hidden" name="secondary_user_id" value="{{ secondary_user_id }}">
+    <input type="hidden" name="confirm_token" value="{{ confirm_token }}">
+    <input type="hidden" name="force" value="1">
+    <label class="flex items-start gap-2 text-sm text-foreground mb-4">
+      <input type="checkbox"
+             class="mt-0.5"
+             data-testid="merge-force-ack"
+             onchange="document.querySelector('[data-testid=merge-confirm-force-submit]').disabled = !this.checked;">
+      <span>
+        {% if conflict.type == "subscription" %}
+        I understand this drops the other account's live subscription. Proceed with force.
+        {% else %}
+        I understand this merges a staff account. Proceed with force.
+        {% endif %}
+      </span>
+    </label>
+    <button type="submit"
+            disabled
+            class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            data-testid="merge-confirm-force-submit">
+      Confirm merge (force)
+    </button>
+  </form>
+</div>
+{% endif %}
+
+{# ---------------------------------------------------------------- #}
+{# Preview plan + confirm (clean merge or already-merged).         #}
+{# ---------------------------------------------------------------- #}
+{% if plan %}
+<div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-3xl"
+     data-testid="merge-preview">
+  {% if already_merged %}
+  <h2 class="text-lg font-semibold text-foreground mb-2" data-testid="merge-preview-already-merged">
+    These accounts are already merged
+  </h2>
+  <p class="text-sm text-muted-foreground">
+    {{ plan.merge_email }} is already an alias of {{ plan.canonical_email }};
+    there is nothing to merge.
+  </p>
+  {% else %}
+  <h2 class="text-lg font-semibold text-foreground mb-1">Preview</h2>
+  <p class="text-sm text-muted-foreground mb-4">
+    Dry run &mdash; nothing has changed yet. Review the plan, then confirm to
+    merge {{ plan.merge_email }} into {{ plan.canonical_email }}.
+  </p>
+
+  {% include "studio/users/_merge_plan.html" with plan=plan %}
+
+  <form method="post" action="{% url 'studio_user_merge_confirm' %}"
+        class="mt-6 pt-6 border-t border-border"
+        data-testid="merge-confirm-form"
+        onsubmit="return confirm('This is irreversible. Merge {{ plan.merge_email|escapejs }} into {{ plan.canonical_email|escapejs }}?');">
+    {% csrf_token %}
+    <input type="hidden" name="canonical_user_id" value="{{ canonical_user_id }}">
+    <input type="hidden" name="secondary_user_id" value="{{ secondary_user_id }}">
+    <input type="hidden" name="confirm_token" value="{{ confirm_token }}">
+    <input type="hidden" name="force" value="0">
+    <button type="submit"
+            class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition-colors"
+            data-testid="merge-confirm-submit">
+      Confirm merge
+    </button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endif %}{# /not result #}
+
+{# Autocomplete: fill the email input directly on suggestion select. #}
+<script>
+(function() {
+  function wire(inputId, listId) {
+    var input = document.getElementById(inputId);
+    var list = document.getElementById(listId);
+    if (!input || !list) { return; }
+    var debounce;
+    function hide() { list.classList.add('hidden'); list.innerHTML = ''; }
+    function render(results) {
+      list.innerHTML = '';
+      if (!results || !results.length) { hide(); return; }
+      results.forEach(function(u) {
+        var li = document.createElement('li');
+        li.className = 'cursor-pointer px-4 py-2 hover:bg-secondary text-sm';
+        li.setAttribute('data-testid', inputId + '-suggestion');
+        var name = document.createElement('div');
+        name.className = 'text-foreground';
+        name.textContent = u.display_name || u.email;
+        var email = document.createElement('div');
+        email.className = 'text-xs text-muted-foreground font-mono';
+        email.textContent = u.email;
+        li.appendChild(name);
+        li.appendChild(email);
+        li.addEventListener('mousedown', function(e) {
+          e.preventDefault();
+          input.value = u.email;
+          hide();
+        });
+        list.appendChild(li);
+      });
+      list.classList.remove('hidden');
+    }
+    input.addEventListener('input', function() {
+      var q = input.value.trim();
+      if (debounce) { clearTimeout(debounce); }
+      if (q.length < 2) { hide(); return; }
+      debounce = setTimeout(function() {
+        fetch('/studio/api/users/search/?q=' + encodeURIComponent(q),
+              {credentials: 'same-origin'})
+          .then(function(r) { return r.ok ? r.json() : {results: []}; })
+          .then(function(d) { render(d.results || []); })
+          .catch(hide);
+      }, 200);
+    });
+    input.addEventListener('blur', function() { setTimeout(hide, 150); });
+  }
+  wire('merge-canonical-search', 'merge-canonical-suggestions');
+  wire('merge-secondary-search', 'merge-secondary-suggestions');
+})();
+</script>
+{% endblock %}

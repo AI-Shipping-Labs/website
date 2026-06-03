@@ -1,0 +1,125 @@
+{% comment %}
+Renders a MergePlan dict (``MergePlan.to_dict()``) -- shared by the preview and
+the post-merge result. Expects ``plan`` in context.
+{% endcomment %}
+<div class="space-y-5 text-sm" data-testid="merge-plan">
+
+  {# Per-table row moves. #}
+  <div data-testid="merge-plan-moved">
+    <h3 class="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Rows moved</h3>
+    {% if plan.moved %}
+    <table class="w-full">
+      <thead>
+        <tr class="text-left text-xs text-muted-foreground">
+          <th class="py-1 pr-4">Model</th>
+          <th class="py-1 pr-4">Field</th>
+          <th class="py-1 pr-4">Moved</th>
+          <th class="py-1 pr-4">Dropped</th>
+          <th class="py-1">Kept canonical</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for m in plan.moved %}
+        <tr data-testid="merge-plan-moved-row" data-model="{{ m.model }}">
+          <td class="py-1.5 pr-4 font-mono text-foreground">{{ m.model }}</td>
+          <td class="py-1.5 pr-4 text-muted-foreground">{{ m.field }}</td>
+          <td class="py-1.5 pr-4 text-foreground">{{ m.moved|default_if_none:"-" }}</td>
+          <td class="py-1.5 pr-4 text-foreground">{{ m.dropped|default_if_none:"-" }}</td>
+          <td class="py-1.5 text-foreground">{{ m.kept_canonical|default_if_none:"-" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted-foreground" data-testid="merge-plan-moved-empty">No owned rows to move.</p>
+    {% endif %}
+  </div>
+
+  {# Scalar reconciliation. #}
+  <div data-testid="merge-plan-reconciled">
+    <h3 class="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Profile / entitlement reconciliation</h3>
+    {% if plan.reconciled %}
+    <dl class="space-y-1">
+      {% for field, change in plan.reconciled.items %}
+      <div class="flex justify-between gap-4" data-testid="merge-plan-reconciled-row" data-field="{{ field }}">
+        <dt class="text-muted-foreground font-mono">{{ field }}</dt>
+        <dd class="text-foreground">{{ change }}</dd>
+      </div>
+      {% endfor %}
+    </dl>
+    {% else %}
+    <p class="text-muted-foreground">No scalar fields changed.</p>
+    {% endif %}
+  </div>
+
+  {# Tier-override changes. #}
+  <div data-testid="merge-plan-tier-overrides">
+    <h3 class="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Tier overrides</h3>
+    {% if plan.tier_overrides.deactivated %}
+    <p class="text-foreground mb-1">Deactivated:</p>
+    <ul class="list-disc list-inside text-muted-foreground">
+      {% for d in plan.tier_overrides.deactivated %}
+      <li data-testid="merge-plan-tier-deactivated">#{{ d.id }}{% if d.reason %} ({{ d.reason }}){% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if plan.tier_overrides.kept_active %}
+    <p class="text-foreground mt-1" data-testid="merge-plan-tier-kept">
+      Kept active: #{{ plan.tier_overrides.kept_active.id }}
+      ({{ plan.tier_overrides.kept_active.override_tier }})
+    </p>
+    {% endif %}
+    {% if not plan.tier_overrides.deactivated and not plan.tier_overrides.kept_active %}
+    <p class="text-muted-foreground">No tier-override changes.</p>
+    {% endif %}
+  </div>
+
+  {# Stripe reconciliation. #}
+  <div data-testid="merge-plan-stripe">
+    <h3 class="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Stripe</h3>
+    {% if plan.stripe %}
+    <dl class="space-y-1">
+      {% for key, value in plan.stripe.items %}
+      <div class="flex justify-between gap-4" data-testid="merge-plan-stripe-row">
+        <dt class="text-muted-foreground font-mono">{{ key }}</dt>
+        <dd class="text-foreground font-mono">{{ value }}</dd>
+      </div>
+      {% endfor %}
+    </dl>
+    {% else %}
+    <p class="text-muted-foreground">No Stripe changes.</p>
+    {% endif %}
+  </div>
+
+  {# Conflicts (e.g. dropped subscription under force). #}
+  {% if plan.conflicts %}
+  <div data-testid="merge-plan-conflicts">
+    <h3 class="text-xs font-medium uppercase tracking-wider text-red-400 mb-2">Conflicts</h3>
+    <ul class="list-disc list-inside text-red-300">
+      {% for c in plan.conflicts %}
+      <li data-testid="merge-plan-conflict-row">
+        {{ c.type }}{% if c.dropped_subscription_id %}: dropped {{ c.dropped_subscription_id }}, kept {{ c.kept_subscription_id }}{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# Alias + deactivation summary. #}
+  <div class="text-muted-foreground" data-testid="merge-plan-alias">
+    {% if plan.alias_created %}
+    <p data-testid="merge-plan-alias-created">
+      Alias to be created: <span class="font-mono text-foreground">{{ plan.alias_created }}</span>
+      &rarr; {{ plan.canonical_email }}
+    </p>
+    {% endif %}
+    <p data-testid="merge-plan-deactivate-notice">
+      {% if plan.secondary_deactivated %}
+      {{ plan.merge_email }} was deactivated and its email scrubbed.
+      {% else %}
+      {{ plan.merge_email }} will be deactivated and its email aliased onto
+      {{ plan.canonical_email }}.
+      {% endif %}
+    </p>
+  </div>
+</div>

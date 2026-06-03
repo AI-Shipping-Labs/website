@@ -46,6 +46,12 @@
     </button>
   </form>
   {% include "studio/includes/_admin_link.html" with obj=detail_user %}
+  <a href="{% url 'studio_user_merge' %}?canonical={{ detail_user.email|urlencode }}"
+     data-testid="user-detail-merge"
+     title="Merge another account into this one"
+     class="inline-flex items-center border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary transition-colors">
+    Merge accounts
+  </a>
 </div>
 
 <!-- Profile / contact context -->

@@ -174,8 +174,25 @@ def handle_checkout_completed(session_data):
     # canonical paid activation signal — flip ``account_activated``
     # if it was not already True. ``mark_activated`` is idempotent so
     # the new-user branch that already set the flag is a no-op here.
-    from accounts.utils.activation import mark_activated
+    from accounts.utils.activation import mark_activated, mark_email_verified
     mark_activated(user)
+
+    # Issue #839: a successful paid tier checkout proves the entitled
+    # account's email is real — Stripe sends receipts to it. Flip
+    # ``email_verified`` on this exact ``user`` row so payers skip the
+    # verify-email footer and reminders. ``mark_email_verified`` is
+    # idempotent (no-op when already verified) and uses its own focused
+    # single-field ``save(update_fields=["email_verified"])``, so it does
+    # not collide with the multi-field save above. This MUST run before
+    # ``notify_paid_signup`` below: the ``cofounder_welcome`` email reads
+    # ``user.email_verified`` live at send time, and flipping it first is
+    # what suppresses the verify footer in the same request.
+    #
+    # Verification is flipped ONLY on the entitled row the webhook
+    # resolved — it never looks up a different account from the Stripe
+    # billing email (the relay / cross-account case is issue #840, out
+    # of scope here).
+    mark_email_verified(user)
 
     # Determine billing period from the Stripe subscription's price ID.
     billing_period = ""

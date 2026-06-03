@@ -45,3 +45,35 @@ def mark_activated(user) -> bool:
     user.account_activated = True
     user.save(update_fields=["account_activated"])
     return True
+
+
+def mark_email_verified(user) -> bool:
+    """Flip ``email_verified`` to True on ``user`` if not already set.
+
+    Mirrors the OAuth verify pattern (``accounts/signals.py:18-20``) and
+    the idempotent + ``update_fields`` contract of :func:`mark_activated`.
+
+    Idempotent: a no-op when ``user.email_verified`` is already True.
+    Returns True iff the row was flipped by this call, so callers can
+    assert "no redundant save" by checking for a ``False`` return.
+
+    Skips users without a primary key — those are not yet persisted and
+    flipping the bit would be lost anyway. This keeps the helper safe to
+    call from code paths that touch un-saved ``User`` instances.
+
+    Issue #839: a successful paid Stripe checkout proves the entitled
+    account's email is real (Stripe sends receipts to it), so payers
+    skip the verify-email footer and reminders. This flips verification
+    ONLY on the entitled row the webhook already resolved — it does not
+    look up a different account from the Stripe billing email (the
+    cross-account relay case is issue #840).
+    """
+    if user is None:
+        return False
+    if not getattr(user, "pk", None):
+        return False
+    if user.email_verified:
+        return False
+    user.email_verified = True
+    user.save(update_fields=["email_verified"])
+    return True

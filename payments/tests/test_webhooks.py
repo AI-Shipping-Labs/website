@@ -476,6 +476,205 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         self.assertEqual(user.tier.slug, "free")
 
 
+@tag('core')
+class CheckoutAutoVerifyEmailTest(QuietSubscriptionLookupMixin, TestCase):
+    """Issue #839: a paid Stripe checkout auto-verifies the entitled email.
+
+    A successful tier checkout flips ``email_verified=True`` on the row
+    the entitlement is attached to, before the welcome email sends, so
+    payers skip the verify-email footer and reminders. Course purchases
+    and unrelated billing-relay accounts are NOT verified.
+    """
+
+    def _tier_session(self, user, *, tier_slug, email=None):
+        """Build a tier-checkout session for ``user`` (issue #839)."""
+        return {
+            "id": f"cs_verify_{tier_slug}",
+            "customer": f"cus_verify_{tier_slug}",
+            "customer_details": {"email": email or user.email},
+            "subscription": f"sub_verify_{tier_slug}",
+            "client_reference_id": str(user.pk),
+            "metadata": {"tier_slug": tier_slug, "user_id": str(user.pk)},
+        }
+
+    def test_unverified_payer_is_auto_verified(self):
+        """A paid tier checkout flips email_verified on the unverified payer."""
+        user = User.objects.create_user(
+            email="payer@test.com", email_verified=False,
+        )
+        basic_tier = Tier.objects.get(slug="basic")
+
+        handle_checkout_completed(self._tier_session(user, tier_slug="basic"))
+
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        # account_activated is already provided by the existing
+        # mark_activated call (issue #768) — assert, don't duplicate.
+        self.assertTrue(user.account_activated)
+        self.assertEqual(user.tier, basic_tier)
+
+    def test_already_verified_payer_is_a_noop(self):
+        """An already-verified payer stays verified with no redundant save."""
+        from accounts.utils.activation import mark_email_verified
+
+        user = User.objects.create_user(
+            email="verified@test.com", email_verified=True,
+        )
+
+        handle_checkout_completed(self._tier_session(user, tier_slug="basic"))
+
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        # The helper's no-op contract: a second call issues no save and
+        # returns its no-op signal (False).
+        self.assertFalse(mark_email_verified(user))
+
+    def test_welcome_email_omits_verify_footer_for_payer(self):
+        """The cofounder_welcome to a paid user carries no verify footer."""
+        from email_app.services import EmailService
+
+        user = User.objects.create_user(
+            email="mainpayer@test.com", email_verified=False,
+        )
+
+        # Main tier (level >= 10) triggers notify_paid_signup ->
+        # cofounder_welcome. Run the real handler so email_verified is
+        # flipped before any send happens.
+        with patch(
+            "email_app.services.email_service.EmailService._send_ses",
+            return_value="ses-msg-id",
+        ) as mock_send_ses:
+            handle_checkout_completed(
+                self._tier_session(user, tier_slug="main"),
+            )
+
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+
+        # The footer gate reads email_verified live; verified -> no footer.
+        self.assertFalse(
+            EmailService()._should_include_verify_footer(
+                user, "cofounder_welcome",
+            )
+        )
+
+        # The cofounder_welcome HTML actually sent via SES carries no
+        # verify-email CTA / link.
+        welcome_calls = [
+            call.args for call in mock_send_ses.call_args_list
+        ]
+        self.assertTrue(welcome_calls, "no email was sent via SES")
+        # The cofounder_welcome is sent to the payer's own address.
+        welcome_html = next(
+            (args[2] or "")
+            for args in welcome_calls
+            if args[0] == "mainpayer@test.com"
+        )
+        # Sanity: this is the welcome body, not an empty/other email.
+        self.assertIn("Welcome to the community", welcome_html)
+        # The verify-email CTA / link must be absent.
+        self.assertNotIn("/api/verify-email", welcome_html)
+        self.assertNotIn("verify your email", welcome_html.lower())
+
+    def test_billing_relay_does_not_cross_verify_real_account(self):
+        """Only the entitled row flips; an unrelated real account stays unverified.
+
+        Mirrors the prod relay case: the entitlement lands on the relay
+        customer account while the person's real account is separate.
+        The handler must NOT look up the real account by billing email.
+
+        The guard is exercised genuinely: the Stripe billing email in the
+        session payload is set to the REAL account's address (the worst
+        case), while ``client_reference_id`` resolves to the relay row.
+        If anyone added a "verify the account matching the Stripe billing
+        email" lookup, it would flip ``stefanonoventa@gmail.com`` and this
+        test would FAIL. Because the handler verifies only the resolved
+        ``user`` row, the real account stays unverified.
+        """
+        # The person's real account — stays unverified.
+        real_account = User.objects.create_user(
+            email="stefanonoventa@gmail.com", email_verified=False,
+        )
+        # The relay / customer account the checkout actually resolves to.
+        relay_account = User.objects.create_user(
+            email="47-gentle.virtual@icloud.com", email_verified=False,
+        )
+
+        # client_reference_id resolves to the relay account, but the Stripe
+        # billing email points at the REAL account. A billing-email lookup
+        # would (wrongly) verify the real account — this locks that out.
+        session_data = {
+            "id": "cs_relay",
+            "customer": "cus_relay",
+            "customer_details": {"email": real_account.email},
+            "subscription": "sub_relay",
+            "client_reference_id": str(relay_account.pk),
+            "metadata": {"tier_slug": "basic", "user_id": str(relay_account.pk)},
+        }
+
+        handle_checkout_completed(session_data)
+
+        relay_account.refresh_from_db()
+        real_account.refresh_from_db()
+        # The entitled (resolved) row is verified.
+        self.assertTrue(relay_account.email_verified)
+        # The real account matching the billing email is NOT cross-verified.
+        self.assertFalse(real_account.email_verified)
+
+    def test_verify_happens_before_notify_paid_signup(self):
+        """email_verified is flipped before notify_paid_signup runs."""
+        user = User.objects.create_user(
+            email="ordering@test.com", email_verified=False,
+        )
+
+        observed = {}
+
+        def _capture(*args, **kwargs):
+            # Read the verification state at the moment the notification
+            # fires — the helper must have already flipped it.
+            passed_user = kwargs.get("user")
+            passed_user.refresh_from_db()
+            observed["verified_at_notify"] = passed_user.email_verified
+
+        with patch(
+            "community.services.staff_notifications.notify_paid_signup",
+            side_effect=_capture,
+        ):
+            handle_checkout_completed(
+                self._tier_session(user, tier_slug="main"),
+            )
+
+        self.assertTrue(
+            observed.get("verified_at_notify"),
+            "email_verified must be True before notify_paid_signup fires",
+        )
+
+    def test_course_purchase_does_not_auto_verify(self):
+        """A course purchase grants access but does NOT flip email_verified."""
+        from content.models import Course
+
+        user = User.objects.create_user(
+            email="coursebuyer@test.com", email_verified=False,
+        )
+        course = Course.objects.create(
+            slug="auto-verify-course",
+            title="Auto Verify Course",
+        )
+
+        session_data = {
+            "id": "cs_course",
+            "customer": "cus_course",
+            "customer_details": {"email": user.email},
+            "client_reference_id": str(user.pk),
+            "metadata": {"course_id": str(course.pk), "user_id": str(user.pk)},
+        }
+
+        handle_checkout_completed(session_data)
+
+        user.refresh_from_db()
+        self.assertFalse(user.email_verified)
+
+
 def _resolver_subscription(
     subscription_id="sub_resolver",
     *,

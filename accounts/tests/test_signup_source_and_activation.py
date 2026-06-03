@@ -27,7 +27,7 @@ from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
 from accounts.models import User
-from accounts.utils.activation import mark_activated
+from accounts.utils.activation import mark_activated, mark_email_verified
 
 
 @tag('core')
@@ -64,6 +64,37 @@ class MarkActivatedHelperTest(TestCase):
 
     def test_safe_on_none(self):
         self.assertFalse(mark_activated(None))
+
+
+class MarkEmailVerifiedHelperTest(TestCase):
+    """Issue #839: ``mark_email_verified`` is idempotent, writes once."""
+
+    def test_flips_false_to_true(self):
+        user = User.objects.create_user(
+            email='v1@test.com',
+            email_verified=False,
+        )
+        self.assertTrue(mark_email_verified(user))
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+
+    def test_idempotent_no_op_when_already_verified(self):
+        user = User.objects.create_user(
+            email='v2@test.com',
+            email_verified=True,
+        )
+        with patch.object(User, 'save') as mock_save:
+            flipped = mark_email_verified(user)
+        self.assertFalse(flipped)
+        mock_save.assert_not_called()
+
+    def test_safe_on_unsaved_user(self):
+        user = User(email='v3@test.com')
+        self.assertIsNone(user.pk)
+        self.assertFalse(mark_email_verified(user))
+
+    def test_safe_on_none(self):
+        self.assertFalse(mark_email_verified(None))
 
 
 @tag('core')

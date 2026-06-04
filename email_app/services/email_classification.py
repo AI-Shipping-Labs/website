@@ -39,6 +39,11 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # Issue #703: paid-signup automation.
     "cofounder_welcome",
     "staff_signup_notification",
+    # Issue #847: tier-specific paid-signup welcomes. Transactional for
+    # the same reason as cofounder_welcome — the recipient just paid, so
+    # an unsubscribed paid user still receives their welcome.
+    "basic_welcome",
+    "premium_welcome",
     # Issue #680: post-event follow-up (recap + recording + notes).
     # Transactional because the recipient registered for this event;
     # an unsubscribed user still receives it, same policy as

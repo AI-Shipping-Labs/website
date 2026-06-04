@@ -167,6 +167,19 @@ PREVIEW_CONTEXTS = {
         'tier_name': 'Main',
         'update_payment_url': 'https://billing.stripe.com/update',
     },
+    # Issue #847: tier-specific paid-signup welcomes. The real send
+    # passes ``user_first_name`` and EmailService auto-injects
+    # ``site_url``; mirror both so the Studio preview resolves the
+    # greeting and the ``/onboarding/`` link instead of leaving them
+    # blank.
+    'basic_welcome': {
+        'user_first_name': 'Ada',
+        'site_url': 'https://aishippinglabs.com',
+    },
+    'premium_welcome': {
+        'user_first_name': 'Ada',
+        'site_url': 'https://aishippinglabs.com',
+    },
     'welcome_imported': {
         'user_name': 'Ada',
         'source_label': 'DataTalks Club',

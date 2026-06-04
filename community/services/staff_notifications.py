@@ -93,7 +93,7 @@ def notify_paid_signup(
 
     # (A) Co-founder welcome to the user. Independent try/except.
     try:
-        _send_cofounder_welcome(user, ctx, cc=staff_email or None)
+        _send_cofounder_welcome(user, tier, ctx, cc=staff_email or None)
     except Exception:
         # Broad catch by design: any failure inside EmailService /
         # template rendering / SES must not block the staff heads-up or
@@ -203,15 +203,51 @@ def _build_signup_context(
     }
 
 
-def _send_cofounder_welcome(user, ctx, *, cc):
-    """Send (A) — the co-founder welcome to the new paid user."""
+def _welcome_template_for_tier(tier):
+    """Pick the welcome template slug for the purchased tier.
+
+    Routes on ``tier.level`` so a future renamed slug still routes
+    correctly: level 10 -> Basic, level 20 -> Main, level 30 -> Premium.
+    The caller has already gated on ``tier.level >= LEVEL_BASIC``, so
+    levels other than 10/20/30 are not expected. For an unexpected paid
+    level we fall back to the Main ``cofounder_welcome`` template and log
+    a warning rather than silently dropping the welcome on a paid signup.
+    """
+    from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
+
+    level = getattr(tier, "level", None)
+    if level == LEVEL_BASIC:
+        return "basic_welcome"
+    if level == LEVEL_MAIN:
+        return "cofounder_welcome"
+    if level == LEVEL_PREMIUM:
+        return "premium_welcome"
+
+    logger.warning(
+        "notify_paid_signup: unexpected paid tier level %r (slug=%r) — "
+        "falling back to the Main cofounder_welcome template",
+        level,
+        getattr(tier, "slug", ""),
+    )
+    return "cofounder_welcome"
+
+
+def _send_cofounder_welcome(user, tier, ctx, *, cc):
+    """Send (A) — the welcome to the new paid user.
+
+    The template is selected by the purchased tier so each paid tier gets
+    exactly its own email (Basic / Main / Premium). The CC-to-staff
+    behaviour and the EmailLog write are unchanged — only the template
+    selection varies.
+    """
     from email_app.services import EmailService
 
+    template_slug = _welcome_template_for_tier(tier)
     welcome_ctx = {
         "user_first_name": ctx["first_name_raw"],
         "current_sprint_status_paragraph": _current_sprint_paragraph(),
     }
-    EmailService().send(user, "cofounder_welcome", welcome_ctx, cc=cc)
+    EmailService().send(user, template_slug, welcome_ctx, cc=cc)
 
 
 def _send_staff_signup_notification(staff_email, ctx):

@@ -509,11 +509,17 @@ class NotifyPaidSignupEndToEndTest(TestCase):
         # the success path.
         from email_app.models import EmailLog
 
-        cofounder_logs = EmailLog.objects.filter(
-            email_type="cofounder_welcome",
+        # Issue #847: a Basic (level 10) checkout routes to the
+        # basic_welcome template, not the Main cofounder_welcome.
+        welcome_logs = EmailLog.objects.filter(
+            email_type="basic_welcome",
         )
-        self.assertEqual(cofounder_logs.count(), 1)
-        self.assertEqual(cofounder_logs.first().user, user)
+        self.assertEqual(welcome_logs.count(), 1)
+        self.assertEqual(welcome_logs.first().user, user)
+        self.assertEqual(
+            EmailLog.objects.filter(email_type="cofounder_welcome").count(),
+            0,
+        )
 
         # The staff signup email is sent to a SimpleNamespace surrogate
         # (issue #703 grooming decision — no fake DB user). It does
@@ -688,10 +694,20 @@ class NotifyPaidSignupEndToEndTest(TestCase):
         # staff signup email is sent to a SimpleNamespace surrogate so
         # it never writes an EmailLog row — Slack call count above is
         # the authoritative signal that the helper only ran once.
+        # Issue #847: a Basic checkout routes to basic_welcome, and the
+        # replay must not produce a second welcome of ANY tier.
         from email_app.models import EmailLog
         self.assertEqual(
-            EmailLog.objects.filter(email_type="cofounder_welcome").count(),
+            EmailLog.objects.filter(email_type="basic_welcome").count(),
             1,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(
+                email_type__in=[
+                    "cofounder_welcome", "premium_welcome",
+                ],
+            ).count(),
+            0,
         )
 
 
@@ -905,6 +921,165 @@ class CofounderWelcomeTemplateContextTest(TestCase):
         )
         # No dangling running-sprint artefact.
         self.assertNotIn("currently running", body)
+
+
+@tag('core')
+class TierWelcomeRoutingTest(TestCase):
+    """Issue #847: the welcome template is chosen by the purchased tier.
+
+    Each paid tier gets exactly its own template, routed on
+    ``tier.level``: Basic (10) -> ``basic_welcome``, Main (20) ->
+    ``cofounder_welcome``, Premium (30) -> ``premium_welcome``. No
+    double-send: exactly one welcome of the matching slug, zero of the
+    other two.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.basic_tier = Tier.objects.get(slug="basic")
+        cls.main_tier = Tier.objects.get(slug="main")
+        cls.premium_tier = Tier.objects.get(slug="premium")
+
+    def _send_for(self, tier, email):
+        """Drive ``notify_paid_signup`` for ``tier`` with all staff/Slack
+        paths off, capturing the slug passed to ``EmailService.send`` for
+        the user-facing welcome (the first send call).
+        """
+        from community.services import staff_notifications
+
+        user = User.objects.create_user(email=email, first_name="Dana")
+        with patch(
+            "community.services.staff_notifications.get_config",
+            return_value="",
+        ), patch(
+            "email_app.services.email_service.EmailService.send"
+        ) as mock_send:
+            staff_notifications.notify_paid_signup(
+                user=user,
+                tier=tier,
+                previous_tier=None,
+                was_new_user=True,
+                stripe_customer_id="cus_route",
+                session_id="cs_route",
+                billing_period="monthly",
+            )
+        # First send is always the user-facing welcome.
+        welcome_call = mock_send.call_args_list[0]
+        return welcome_call.args[1], welcome_call.args[2]
+
+    def test_basic_routes_to_basic_welcome(self):
+        slug, _ = self._send_for(self.basic_tier, "basicroute@test.com")
+        self.assertEqual(slug, "basic_welcome")
+
+    def test_main_routes_to_cofounder_welcome(self):
+        slug, _ = self._send_for(self.main_tier, "mainroute@test.com")
+        self.assertEqual(slug, "cofounder_welcome")
+
+    def test_premium_routes_to_premium_welcome(self):
+        slug, _ = self._send_for(self.premium_tier, "premiumroute@test.com")
+        self.assertEqual(slug, "premium_welcome")
+
+    def test_unexpected_paid_level_falls_back_to_main_and_warns(self):
+        """A paid tier whose level is not 10/20/30 falls back to the Main
+        ``cofounder_welcome`` template and logs a warning — the welcome is
+        never silently dropped.
+        """
+        from types import SimpleNamespace
+
+        from community.services import staff_notifications
+
+        odd_tier = SimpleNamespace(slug="legacy-paid", name="Legacy", level=15)
+        user = User.objects.create_user(email="odd@test.com", first_name="Odd")
+
+        with patch(
+            "community.services.staff_notifications.get_config",
+            return_value="",
+        ), patch(
+            "email_app.services.email_service.EmailService.send"
+        ) as mock_send, patch(
+            "community.services.staff_notifications.logger"
+        ) as mock_logger:
+            staff_notifications.notify_paid_signup(
+                user=user,
+                tier=odd_tier,
+                previous_tier=None,
+                was_new_user=True,
+                stripe_customer_id="cus_odd",
+                session_id="cs_odd",
+                billing_period="monthly",
+            )
+
+        welcome_call = mock_send.call_args_list[0]
+        self.assertEqual(welcome_call.args[1], "cofounder_welcome")
+        # Exactly one welcome was sent — never dropped.
+        self.assertEqual(mock_send.call_count, 1)
+        mock_logger.warning.assert_called()
+
+
+@tag('core')
+class TierWelcomeRenderTest(TestCase):
+    """Issue #847: the rendered Basic/Premium bodies carry the right copy."""
+
+    def _render(self, template_slug, user):
+        from email_app.services import EmailService
+
+        service = EmailService()
+        _, body_html, _ = service._render_template_with_footer(
+            template_slug,
+            user,
+            {
+                "user_first_name": user.first_name,
+                "current_sprint_status_paragraph": "",
+            },
+        )
+        return body_html
+
+    def test_basic_body_mentions_writeups_newsletter_and_onboarding(self):
+        user = User.objects.create_user(email="b1@test.com", first_name="Sam")
+        body = self._render("basic_welcome", user)
+
+        self.assertIn("Hey Sam,", body)
+        self.assertIn("write-ups", body)
+        self.assertIn("newsletter", body)
+        # Onboarding CTA links the live form.
+        self.assertRegex(body, r"https?://[^\s\"'<]+/onboarding/")
+        # Call offer present.
+        self.assertIn("short call", body)
+        self.assertIn("Welcome aboard!", body)
+
+    def test_basic_body_states_slack_is_not_included_and_no_sprint(self):
+        """Basic must not promise Slack/community as a benefit and must
+        not carry sprint / personalized-plan language. It may say Slack is
+        NOT included.
+        """
+        user = User.objects.create_user(email="b2@test.com", first_name="Sam")
+        body = self._render("basic_welcome", user)
+
+        # It explicitly tells the member Slack is NOT part of Basic.
+        self.assertIn("does not include access to our community", body)
+        # No sprint / personalized-plan-in-sprint language leaked in.
+        self.assertNotIn("sprint", body.lower())
+        self.assertNotIn("personalized plan", body)
+
+    def test_basic_body_falls_back_to_there_without_first_name(self):
+        user = User.objects.create_user(email="b3@test.com", first_name="")
+        body = self._render("basic_welcome", user)
+        self.assertIn("Hey there,", body)
+
+    def test_premium_body_mentions_courses_honesty_and_onboarding(self):
+        user = User.objects.create_user(email="p1@test.com", first_name="Sam")
+        body = self._render("premium_welcome", user)
+
+        self.assertIn("Hey Sam,", body)
+        # Courses are part of Premium and honestly flagged as not-yet-live.
+        self.assertIn("courses", body.lower())
+        self.assertIn("aren't any on the platform yet", body)
+        # Asks what course the member wants.
+        self.assertIn("what would you most want a course on", body.lower())
+        # Onboarding CTA + call offer.
+        self.assertRegex(body, r"https?://[^\s\"'<]+/onboarding/")
+        self.assertIn("short call", body)
+        self.assertIn("Welcome aboard!", body)
 
 
 @tag('core')

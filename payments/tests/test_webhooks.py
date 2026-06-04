@@ -477,6 +477,120 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
 
 
 @tag('core')
+class TierWelcomeEmailRoutingTest(QuietSubscriptionLookupMixin, TestCase):
+    """Issue #847: each paid tier routes to its own welcome EmailLog.
+
+    Drives the real ``handle_checkout_completed`` -> ``notify_paid_signup``
+    -> ``EmailService`` path (SES short-circuited in test settings) and
+    asserts the EmailLog row written carries the tier-specific slug, with
+    zero rows for the other two tiers.
+    """
+
+    WELCOME_SLUGS = ("basic_welcome", "cofounder_welcome", "premium_welcome")
+
+    def _tier_session(self, user, *, tier_slug):
+        return {
+            "id": f"cs_847_{tier_slug}",
+            "customer": f"cus_847_{tier_slug}",
+            "customer_details": {"email": user.email},
+            "subscription": f"sub_847_{tier_slug}",
+            "client_reference_id": str(user.pk),
+            "metadata": {"tier_slug": tier_slug, "user_id": str(user.pk)},
+        }
+
+    def _run_and_assert(self, *, tier_slug, expected_slug, email):
+        from email_app.models import EmailLog
+
+        user = User.objects.create_user(email=email, first_name="Jess")
+        with patch(
+            "community.services.staff_notifications.get_config",
+            return_value="",
+        ):
+            handle_checkout_completed(
+                self._tier_session(user, tier_slug=tier_slug),
+            )
+
+        # Exactly one welcome of the expected slug for this user.
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=user, email_type=expected_slug,
+            ).count(),
+            1,
+        )
+        # Zero welcomes of the other two tier slugs.
+        for other in self.WELCOME_SLUGS:
+            if other == expected_slug:
+                continue
+            self.assertEqual(
+                EmailLog.objects.filter(
+                    user=user, email_type=other,
+                ).count(),
+                0,
+                f"unexpected {other} EmailLog for a {tier_slug} checkout",
+            )
+
+    def test_basic_checkout_logs_basic_welcome_only(self):
+        self._run_and_assert(
+            tier_slug="basic",
+            expected_slug="basic_welcome",
+            email="basic847@test.com",
+        )
+
+    def test_main_checkout_logs_cofounder_welcome_only(self):
+        self._run_and_assert(
+            tier_slug="main",
+            expected_slug="cofounder_welcome",
+            email="main847@test.com",
+        )
+
+    def test_premium_checkout_logs_premium_welcome_only(self):
+        self._run_and_assert(
+            tier_slug="premium",
+            expected_slug="premium_welcome",
+            email="premium847@test.com",
+        )
+
+    def test_unsubscribed_basic_buyer_still_gets_welcome(self):
+        """The welcome is transactional — an unsubscribed paid user still
+        receives their tier welcome.
+        """
+        from email_app.models import EmailLog
+
+        user = User.objects.create_user(
+            email="unsub847@test.com", first_name="Lee", unsubscribed=True,
+        )
+        with patch(
+            "community.services.staff_notifications.get_config",
+            return_value="",
+        ):
+            handle_checkout_completed(
+                self._tier_session(user, tier_slug="basic"),
+            )
+
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=user, email_type="basic_welcome",
+            ).count(),
+            1,
+        )
+
+    def test_free_checkout_sends_no_tier_welcome(self):
+        """A level-0 (free) tier checkout fires none of the paid welcomes."""
+        from email_app.models import EmailLog
+
+        user = User.objects.create_user(email="free847@test.com")
+        handle_checkout_completed(self._tier_session(user, tier_slug="free"))
+
+        for slug in self.WELCOME_SLUGS:
+            self.assertEqual(
+                EmailLog.objects.filter(
+                    user=user, email_type=slug,
+                ).count(),
+                0,
+            )
+
+
+@tag('core')
 class CheckoutAutoVerifyEmailTest(QuietSubscriptionLookupMixin, TestCase):
     """Issue #839: a paid Stripe checkout auto-verifies the entitled email.
 

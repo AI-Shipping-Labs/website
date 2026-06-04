@@ -11,6 +11,10 @@ AI Shipping Labs community platform — a Django-based website replacing the cur
 - Issues: GitHub Issues on [AI-Shipping-Labs/website](https://github.com/AI-Shipping-Labs/website/issues)
 - Agents: `.claude/agents/` (product-manager, software-engineer, tester, oncall-engineer)
 
+## Working Process
+
+Read [`_docs/PROCESS.md`](_docs/PROCESS.md) at the start of every session, before acting on any issue. It defines the development workflow, the agent roles (PM, software-engineer, tester, oncall-engineer), the issue lifecycle, and the orchestrator's responsibilities. Do not groom, implement, test, or ship without first reading it. This applies to local and cloud/scheduled runs alike.
+
 ## Repositories
 
 The Django app lives here. AWS infrastructure lives in a separate repo. Knowing the split prevents agents from searching for SES/RDS/Lambda config in this repo when it's not here.

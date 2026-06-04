@@ -504,6 +504,7 @@ class TestPlanningSection:
             "Users",
             "Imports",
             "Tier overrides",
+            "Merge accounts",
             "New user",
             "CRM",
         ]

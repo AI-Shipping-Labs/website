@@ -199,7 +199,7 @@
   <h2 class="text-lg font-semibold text-foreground mb-3">Recent signups</h2>
   {% if recent_signups %}
   <div class="bg-card border border-border rounded-lg overflow-x-auto">
-    <table class="w-full">
+    <table class="w-full" data-testid="signup-analytics-recent-table">
       <thead class="bg-secondary">
         <tr>
           <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</th>
@@ -233,6 +233,9 @@
         {% endfor %}
       </tbody>
     </table>
+    {% if show_pager %}
+    {% include 'studio/signup_analytics/_pager.html' %}
+    {% endif %}
   </div>
   {% else %}
   <div class="bg-card border border-border rounded-lg p-6 text-center" data-testid="signup-analytics-recent-empty">

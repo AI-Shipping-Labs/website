@@ -47,6 +47,24 @@ class StudioEventSeriesAccessTest(StaffMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'sticky-save-action')
 
+    def test_required_level_is_named_dropdown(self):
+        """The Required Level field is a named-tier dropdown, not a bare number box."""
+        response = self.client.get('/studio/event-series/new')
+        self.assertContains(response, '<option value="0"')
+        self.assertContains(response, 'Free (0)')
+        self.assertContains(response, 'Basic (10)')
+        self.assertContains(response, 'Main (20)')
+        self.assertContains(response, 'Premium (30)')
+        # No bare numeric input for the access level remains.
+        self.assertNotContains(response, 'type="number" name="required_level"')
+
+    def test_required_level_default_is_free(self):
+        """Free (level 0) is the selected default on a fresh series form."""
+        response = self.client.get('/studio/event-series/new')
+        self.assertContains(
+            response, '<option value="0" selected>Free (0)</option>', html=False,
+        )
+
 
 class StudioEventSeriesCreateTest(StaffMixin, TestCase):
     """``POST /studio/event-series/new`` creates a series + N events."""
@@ -119,6 +137,28 @@ class StudioEventSeriesCreateTest(StaffMixin, TestCase):
         self.assertEqual(EventSeries.objects.count(), 0)
         self.assertEqual(Event.objects.count(), 0)
         self.assertContains(response, 'error-occurrences')
+
+    def test_main_level_applied_to_all_generated_events(self):
+        """Selecting Main (20) gates every generated event at required_level 20."""
+        self._post_valid(required_level='20')
+        series = EventSeries.objects.get()
+        self.assertEqual(series.events.count(), 6)
+        for event in series.events.all():
+            self.assertEqual(event.required_level, 20)
+
+    def test_premium_level_applied_to_all_generated_events(self):
+        """Selecting Premium (30) gates every generated event at required_level 30."""
+        self._post_valid(required_level='30')
+        series = EventSeries.objects.get()
+        for event in series.events.all():
+            self.assertEqual(event.required_level, 30)
+
+    def test_default_level_is_free_on_generated_events(self):
+        """Omitting required_level leaves generated events open (level 0)."""
+        self._post_valid(required_level='0')
+        series = EventSeries.objects.get()
+        for event in series.events.all():
+            self.assertEqual(event.required_level, 0)
 
     def test_slug_collision_appends_suffix(self):
         Event.objects.create(

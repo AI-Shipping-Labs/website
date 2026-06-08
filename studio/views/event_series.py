@@ -33,7 +33,7 @@ from accounts.services.timezones import (
 )
 from events.models import Event, EventSeries
 from studio.decorators import staff_required
-from studio.views.events import _default_timezone_for
+from studio.views.events import _default_timezone_for, _should_autodetect_tz
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +238,13 @@ def event_series_create(request):
         'timezone_value': tz_value,
         'timezone_label': get_timezone_label(tz_value) or tz_value,
         'timezone_options': build_timezone_options(),
+        # Issue #855: with no saved preference and a fresh GET, default the
+        # picker to the browser zone instead of UTC. A re-rendered POST
+        # carries the admin's chosen value, so don't auto-detect then.
+        'tz_autodetect': (
+            _should_autodetect_tz(request.user)
+            and request.method != 'POST'
+        ),
     })
 
 
@@ -271,6 +278,13 @@ def event_series_detail(request, series_id):
         'timezone_value': tz_value,
         'timezone_label': get_timezone_label(tz_value) or tz_value,
         'timezone_options': build_timezone_options(),
+        # Issue #855: an existing series keeps its stored timezone. Only
+        # auto-detect the browser zone when the series has none and the
+        # admin has no saved preference.
+        'tz_autodetect': (
+            not series.timezone
+            and _should_autodetect_tz(request.user)
+        ),
     })
 
 
@@ -295,6 +309,10 @@ def event_series_add_occurrence(request, series_id):
             'timezone_value': tz_value,
             'timezone_label': get_timezone_label(tz_value) or tz_value,
             'timezone_options': build_timezone_options(),
+            'tz_autodetect': (
+                not series.timezone
+                and _should_autodetect_tz(request.user)
+            ),
         }, status=400)
 
     try:

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load tz %}
 
 {% block title %}{{ series.name }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}Series page for {{ series.name }} — listing every upcoming and past occurrence.{% endblock %}
@@ -31,7 +32,7 @@
                 {{ event.title }}
               </a>
               <p class="text-sm text-muted-foreground mt-1" data-testid="series-event-date">
-                {{ event.start_datetime|date:"l, M d, Y · H:i" }} {{ event.timezone }}
+                {% timezone event.timezone %}{{ event.start_datetime|date:"l, M d, Y · H:i" }}{% endtimezone %} {{ event.timezone }}
               </p>
               {# Issue #668: per-occurrence social-proof chip. View annotates #}
               {# _attendee_count so this renders in a single SQL pass. #}

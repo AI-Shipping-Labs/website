@@ -10,7 +10,7 @@ Covers:
 - Public events list shows series link when an event belongs to a series.
 """
 
-from datetime import time
+from datetime import UTC, datetime, time
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -176,6 +176,22 @@ class PublicEventSeriesViewTest(TestCase):
         self.client.force_login(staff)
         response = self.client.get(f'/events/groups/{self.series.slug}')
         self.assertContains(response, 'Series Session 2')
+
+    def test_event_time_localized_to_event_timezone(self):
+        """Issue #867: a 16:00-UTC event with Europe/Berlin must render as
+        18:00 (CEST, +02:00 in summer), not the raw 16:00 UTC clock time.
+        """
+        Event.objects.create(
+            title='Berlin Office Hours', slug='berlin-office-hours',
+            start_datetime=datetime(2026, 6, 15, 16, 0, tzinfo=UTC),
+            timezone='Europe/Berlin',
+            status='upcoming',
+            event_series=self.series, series_position=3, origin='studio',
+        )
+        response = self.client.get(f'/events/groups/{self.series.slug}')
+        self.assertContains(response, 'Monday, Jun 15, 2026 · 18:00 Europe/Berlin')
+        # The raw UTC clock time labeled Berlin must NOT appear.
+        self.assertNotContains(response, '16:00 Europe/Berlin')
 
     def test_event_detail_url_still_resolves_after_groups_route(self):
         """The ``/events/groups/<slug>`` route must not swallow event ids.

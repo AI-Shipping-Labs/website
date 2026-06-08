@@ -23,6 +23,7 @@ from events.models import (
     EventRegistration,
     EventSeries,
 )
+from events.models.event import HIDDEN_FROM_PUBLIC_STATUSES
 from events.services.calendar_feed import (
     build_subscribe_urls,
     feed_events_queryset,
@@ -76,7 +77,8 @@ def events_calendar(request, year=None, month=None):
     cal = cal_module.Calendar(firstweekday=0)
     month_days = cal.monthdayscalendar(year, month)
 
-    # Get events for this month (non-draft)
+    # Get events for this month. Issue #863: hide both draft and cancelled
+    # occurrences from the public calendar grid and mobile agenda.
     month_start = date(year, month, 1)
     if month == 12:
         month_end = date(year + 1, 1, 1)
@@ -86,7 +88,7 @@ def events_calendar(request, year=None, month=None):
     events = Event.objects.filter(
         start_datetime__date__gte=month_start,
         start_datetime__date__lt=month_end,
-    ).exclude(status='draft').order_by('start_datetime')
+    ).exclude(status__in=HIDDEN_FROM_PUBLIC_STATUSES).order_by('start_datetime')
 
     # Map events to days
     events_by_day = {}
@@ -188,8 +190,9 @@ def events_list(request):
     ).order_by('start_datetime')
 
     # For the "past" surface we show finished events with a recording
-    # (and honor the ``published`` flag). The default "all" view also
-    # includes cancelled events and does not require a recording.
+    # (and honor the ``published`` flag). The default "all" view does not
+    # require a recording. Issue #863: cancelled occurrences are hidden from
+    # every public listing, so neither bucket includes them.
     past_with_recording_qs = events.filter(past_filter).filter(
         published=True,
     ).exclude(
@@ -200,10 +203,13 @@ def events_list(request):
         recording_url__isnull=True,
     ).order_by('-start_datetime')
 
-    # ``past_all_qs`` = any event past its effective end, OR any
-    # cancelled event (which is treated as past regardless of time).
+    # ``past_all_qs`` = any non-cancelled event past its effective end.
+    # Issue #863: cancelled events no longer appear here (previously they were
+    # added back via ``Q(status='cancelled')``).
     past_all_qs = events.filter(
-        past_filter | Q(status='cancelled'),
+        past_filter,
+    ).exclude(
+        status='cancelled',
     ).order_by('-start_datetime')
 
     # Collect all tags from past-with-recording events for the tag filter UI
@@ -625,9 +631,9 @@ def event_series_public(request, slug):
     fetch can POST with a valid token, and surfaces per-occurrence
     registration state plus the standing series-registration flag.
 
-    Draft events are hidden from anonymous and non-staff visitors. Staff
-    see every member event so the page is useful for previewing a
-    series before publishing.
+    Draft and cancelled occurrences (issue #863) are hidden from anonymous
+    and non-staff visitors. Staff see every member event so the page is
+    useful for previewing a series and managing cancelled occurrences.
     """
     series = get_object_or_404(EventSeries, slug=slug)
     # Issue #668: annotate Count('registrations') so the attendee-count
@@ -640,7 +646,13 @@ def event_series_public(request, slug):
         ).order_by('series_position', 'start_datetime')
     )
     if not request.user.is_staff:
-        events = [e for e in events if e.status != 'draft']
+        # Issue #863: hide both draft and cancelled occurrences from
+        # anonymous / non-staff visitors. Staff keep the full list so they
+        # can manage cancelled occurrences.
+        events = [
+            e for e in events
+            if e.status not in HIDDEN_FROM_PUBLIC_STATUSES
+        ]
 
     user = request.user
 

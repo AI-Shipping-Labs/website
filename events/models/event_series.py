@@ -16,6 +16,7 @@ from django.utils.text import slugify
 
 from content.models.mixins import TimestampedModelMixin
 from content.utils.markdown import render_markdown
+from events.models.event import PUBLIC_EVENT_STATUSES
 
 EVENT_SERIES_CADENCE_CHOICES = [
     ('weekly', 'Weekly'),
@@ -112,4 +113,8 @@ class EventSeries(TimestampedModelMixin, models.Model):
 
     @property
     def published_event_count(self):
-        return self.events.exclude(status='draft').count()
+        # Issue #863: count only occurrences a public visitor can actually see
+        # (``upcoming`` / ``completed``). Excludes both ``draft`` and
+        # ``cancelled`` so cancelling an occurrence decrements the count and the
+        # number matches what the public series page lists.
+        return self.events.filter(status__in=PUBLIC_EVENT_STATUSES).count()

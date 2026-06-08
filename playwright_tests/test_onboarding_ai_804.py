@@ -18,6 +18,7 @@ review.
 """
 
 import os
+import re
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
@@ -405,8 +406,16 @@ class TestPersonaSignalStaffOnly:
             member_page = member_ctx.new_page()
             member_page.goto(f"{django_server}/", wait_until="domcontentloaded")
             dash_main = member_page.locator("main").inner_text()
+            # Match persona names as whole words only. A bare substring check
+            # false-positives on unrelated dashboard copy that legitimately
+            # contains these letters — e.g. the Request-a-call card (#870)
+            # renders "Book a 1:1 with Alexey or Valeria", where "Alexey"
+            # contains the substring "Alex". The leak we guard against is the
+            # inferred archetype name (e.g. "Alex") appearing as its own token.
             for name in PERSONA_NAMES:
-                assert name not in dash_main
+                assert not re.search(rf"\b{re.escape(name)}\b", dash_main), (
+                    f"persona name {name!r} leaked on member dashboard"
+                )
             # The raw internal signal value is never rendered member-facing.
             assert "persona_signal" not in dash_main.lower()
 

@@ -97,7 +97,13 @@
 {% endif %}
 
 <div class="bg-card border border-border rounded-lg p-6 max-w-3xl">
-  <h3 class="text-md font-semibold text-foreground mb-3">Add link</h3>
+  <div class="flex items-baseline gap-2 mb-3">
+    <h3 class="text-md font-semibold text-foreground">Add link</h3>
+    <a href="https://github.com/AI-Shipping-Labs/website/blob/main/_docs/utm_links.md"
+       target="_blank" rel="noopener noreferrer"
+       class="text-sm text-accent hover:underline"
+       data-testid="utm-fields-help-link">(?) UTM field guide</a>
+  </div>
   <form method="post" action="{% url 'studio_utm_link_create' campaign_id=campaign.pk %}">
     {% csrf_token %}
 

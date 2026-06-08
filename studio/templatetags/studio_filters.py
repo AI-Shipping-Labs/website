@@ -8,6 +8,7 @@ from content.access import (
     LEVEL_PREMIUM,
     LEVEL_REGISTERED,
 )
+from email_app import ses_explain
 from studio.utils import get_github_edit_url, is_synced
 from studio.worker_health import get_worker_status
 
@@ -454,6 +455,54 @@ def studio_sidebar_state(path):
         'tracking_active': tracking_active,
         'operations_active': operations_active,
     }
+
+
+# --- SES event explanation tags (issue #849) --------------------------------
+# Thin wrappers over ``email_app.ses_explain``. All copy lives in that module;
+# these tags only forward the relevant SesEvent field to it so the list/detail
+# templates can reach the explanations without the view passing extra context.
+
+
+@register.simple_tag
+def ses_severity(event):
+    """Return the severity tier (``high`` / ``medium`` / ``info``) for an event."""
+    return ses_explain.severity_for_event_type(getattr(event, 'event_type', ''))
+
+
+@register.simple_tag
+def ses_severity_label(event):
+    """Return the severity label (``Serious`` / ``Temporary`` / ``Informational``)."""
+    return ses_explain.severity_label(getattr(event, 'event_type', ''))
+
+
+@register.simple_tag
+def ses_severity_classes(event):
+    """Return the reused pill class string for the event's severity tier."""
+    return ses_explain.severity_classes(getattr(event, 'event_type', ''))
+
+
+@register.simple_tag
+def ses_severity_consequence(event):
+    """Return the one-line consequence sentence for the event's severity tier."""
+    return ses_explain.severity_consequence(getattr(event, 'event_type', ''))
+
+
+@register.simple_tag
+def ses_consequence_note(event):
+    """Return the longer detail-page consequence note (incl. the 3-strike rule)."""
+    return ses_explain.consequence_note(getattr(event, 'event_type', ''))
+
+
+@register.simple_tag
+def ses_term_explain(value):
+    """Return plain-English text for a bounce_type/subtype value (empty if unknown)."""
+    return ses_explain.explain_term(value)
+
+
+@register.simple_tag
+def ses_diagnostic_explain(diagnostic_code):
+    """Return the decoded ``[(code, explanation), ...]`` for a diagnostic string."""
+    return ses_explain.decode_diagnostic(diagnostic_code)
 
 
 @register.inclusion_tag('studio/includes/worker_status_inline.html')

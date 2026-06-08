@@ -168,9 +168,33 @@ class TestAdminWithoutTimezoneFallsBackToUtc:
     def test_no_tz_admin_sees_utc_default(self, django_server, browser):
         from django.db import connection
 
+        from playwright_tests.conftest import (
+            VIEWPORT,
+            create_session_for_user,
+        )
+
         _reset_event_state()
         _create_user("no-tz-admin-tz665@test.com", "")
-        ctx = _auth_context(browser, "no-tz-admin-tz665@test.com")
+        # Issue #855: with no saved preference the picker now auto-detects
+        # the browser zone. Pin the browser to UTC so this fallback case
+        # still resolves to UTC (the server fallback) rather than the CI
+        # host's local zone.
+        session_key = create_session_for_user("no-tz-admin-tz665@test.com")
+        ctx = browser.new_context(viewport=VIEWPORT, timezone_id="UTC")
+        ctx.add_cookies([
+            {
+                "name": "sessionid",
+                "value": session_key,
+                "domain": "127.0.0.1",
+                "path": "/",
+            },
+            {
+                "name": "csrftoken",
+                "value": "e2e-test-csrf-token-value",
+                "domain": "127.0.0.1",
+                "path": "/",
+            },
+        ])
         page = ctx.new_page()
 
         page.goto(

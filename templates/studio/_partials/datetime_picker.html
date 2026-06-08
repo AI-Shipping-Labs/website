@@ -30,6 +30,11 @@
     duration_label (str)  label override for the duration input
     tz_label_text  (str)  label override for the timezone select
     instance_id    (str)  unique suffix for input ids (default 'main')
+    tz_autodetect  (bool) when True (and the field is editable), pre-select the
+                          browser's IANA timezone client-side instead of the
+                          server fallback. Set by the view only when the admin
+                          has no saved preferred_timezone and there is no
+                          explicit event/series timezone (issue #855).
     error_date     (str)  error message for date
     error_time     (str)  error message for time
     error_duration (str)  error message for duration
@@ -105,6 +110,7 @@
             id="dtp-{{ id_suffix }}-tz"
             data-testid="dtp-{{ id_suffix }}-tz"
             {% if disabled %}disabled{% endif %}
+            {% if tz_autodetect and not disabled %}data-tz-autodetect="true"{% endif %}
             class="studio-select w-full sm:flex-1 bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if disabled %} opacity-60{% endif %}">
       {% for option in tz_options %}
       <option value="{{ option.value }}" data-offset-label="{{ option.label }}"{% if option.value == tz_value %} selected{% endif %}>{{ option.label }}</option>
@@ -117,6 +123,11 @@
           data-testid="dtp-{{ id_suffix }}-tz-label">{{ tz_label|default:tz_value|default:'UTC' }}</span>
   </div>
   {% if error_timezone %}<p class="text-xs text-red-400 mt-1" data-testid="{{ error_timezone_testid|default:'error-timezone' }}">{{ error_timezone }}</p>{% endif %}
+  {% if not disabled %}
+  <p class="text-xs text-muted-foreground mt-1" data-testid="dtp-{{ id_suffix }}-tz-settings-link">
+    <a href="/account/#display-preferences-section" class="text-accent hover:underline">Set your default timezone</a>
+  </p>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -139,14 +150,43 @@
     var tzLabel = document.querySelector(
       '[data-testid="dtp-{{ id_suffix }}-tz-label"]'
     );
+
+    function syncTzLabel() {
+      if (!tzSelect || !tzLabel) { return; }
+      var opt = tzSelect.options[tzSelect.selectedIndex];
+      var label = opt && opt.getAttribute('data-offset-label');
+      if (label) {
+        tzLabel.textContent = label;
+      }
+    }
+
     if (tzSelect && tzLabel) {
-      tzSelect.addEventListener('change', function() {
-        var opt = tzSelect.options[tzSelect.selectedIndex];
-        var label = opt && opt.getAttribute('data-offset-label');
-        if (label) {
-          tzLabel.textContent = label;
+      tzSelect.addEventListener('change', syncTzLabel);
+    }
+
+    // Issue #855: when the admin has no saved preferred timezone and there
+    // is no explicit event/series timezone, the server falls back to UTC.
+    // With JS enabled, pre-select the browser's detected zone instead so
+    // organizers default to their own timezone. Only runs when the view
+    // opted in via data-tz-autodetect and the detected zone is a valid
+    // option in the list. UTC stays selectable; this only changes the
+    // default selection.
+    if (tzSelect && tzSelect.getAttribute('data-tz-autodetect') === 'true') {
+      var detected = '';
+      try {
+        detected = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      } catch (e) {
+        detected = '';
+      }
+      if (detected) {
+        for (var i = 0; i < tzSelect.options.length; i++) {
+          if (tzSelect.options[i].value === detected) {
+            tzSelect.selectedIndex = i;
+            syncTzLabel();
+            break;
+          }
         }
-      });
+      }
     }
   });
 })();

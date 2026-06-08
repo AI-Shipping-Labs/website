@@ -550,10 +550,15 @@ class StudioEventEditTest(StaffUserMixin, TestCase):
         self.assertIn('value="1"', content)
 
     def test_edit_form_shows_datetime_summary(self):
-        """Edit form shows a resolved datetime summary line."""
+        """Edit form shows a resolved datetime summary line.
+
+        Issue #855: the resolved line is now explicit about its timezone,
+        so the label reads "Resolved (UTC):" instead of the old bare
+        "Resolved:".
+        """
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
         content = response.content.decode()
-        self.assertIn('Resolved:', content)
+        self.assertIn('Resolved (UTC):', content)
 
     def test_edit_event_post(self):
         """Edit an event using the new date/time/duration fields."""

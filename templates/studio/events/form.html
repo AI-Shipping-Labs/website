@@ -128,12 +128,28 @@
       <p class="text-xs text-muted-foreground mt-1">Enter the external join URL for this event (e.g. YouTube, Discord).</p>
     </div>
 
-    {% include "studio/_partials/datetime_picker.html" with instance_id="event" date_name="event_date" time_name="event_time" duration_name="duration_hours" tz_name="timezone" date_value=event_date time_value=event_time duration_value=duration_hours tz_value=timezone_value tz_label=timezone_label tz_options=timezone_options disabled=is_synced required=True error_date=errors.event_date error_time=errors.event_time error_timezone=errors.timezone %}
+    {% include "studio/_partials/datetime_picker.html" with instance_id="event" date_name="event_date" time_name="event_time" duration_name="duration_hours" tz_name="timezone" date_value=event_date time_value=event_time duration_value=duration_hours tz_value=timezone_value tz_label=timezone_label tz_options=timezone_options tz_autodetect=tz_autodetect disabled=is_synced required=True error_date=errors.event_date error_time=errors.event_time error_timezone=errors.timezone %}
 
     {% if event %}
-    <div id="datetime-summary" class="text-sm text-muted-foreground bg-secondary rounded-lg px-4 py-2">
-      Resolved: <span id="summary-start">{{ event.start_datetime|date:'d/m/Y H:i' }}</span>
-      to <span id="summary-end">{% if event.end_datetime %}{{ event.end_datetime|date:'d/m/Y H:i' }}{% endif %}</span>
+    {% comment %}
+      Issue #855: the resolved start/end times are computed from the stored
+      UTC instant. Label them explicitly with UTC, then also show the
+      equivalent in the event's selected timezone, so "16:00" is never
+      ambiguous about which zone it refers to.
+    {% endcomment %}
+    <div id="datetime-summary" class="text-sm text-muted-foreground bg-secondary rounded-lg px-4 py-2" data-testid="event-resolved-summary">
+      <div data-testid="event-resolved-utc">
+        Resolved (UTC):
+        <span id="summary-start">{{ resolved_start_utc }}</span>
+        to <span id="summary-end">{{ resolved_end_utc }}</span>
+      </div>
+      {% if resolved_tz_name and resolved_tz_name != 'UTC' %}
+      <div class="mt-1" data-testid="event-resolved-local">
+        <span data-testid="event-resolved-local-zone">{{ resolved_tz_name }}</span>:
+        <span id="summary-start-local">{{ resolved_start_local }}</span>
+        to <span id="summary-end-local">{{ resolved_end_local }}</span>
+      </div>
+      {% endif %}
     </div>
     {% endif %}
 

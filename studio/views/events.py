@@ -60,6 +60,21 @@ def _default_timezone_for(user):
     return settings.TIME_ZONE or 'UTC'
 
 
+def _should_autodetect_tz(user):
+    """Return True when the picker should fall back to the browser timezone.
+
+    Issue #855. When the admin has not saved a valid ``preferred_timezone``,
+    the server-rendered default is the bare ``settings.TIME_ZONE`` (UTC) — a
+    poor default for an organizer in another zone. In that case the shared
+    datetime picker auto-detects the browser timezone client-side. A saved
+    profile timezone (or any explicit event/series timezone the caller passes
+    instead) takes precedence and must not be overridden, so this returns
+    False whenever the user already has a valid preference.
+    """
+    candidate = getattr(user, 'preferred_timezone', '') or ''
+    return not (candidate and is_valid_timezone(candidate))
+
+
 def _parse_event_datetime(post_data, tz_name):
     """Parse separate date, time, and duration fields into start/end datetimes.
 
@@ -134,6 +149,25 @@ def _event_form_context(event, default_tz):
                 context['duration_hours'] = str(round(hours, 1))
         else:
             context['duration_hours'] = '1'
+
+        # Issue #855: the "Resolved" line on the edit form was unlabeled and
+        # rendered the stored UTC instant with no zone, so "16:00" looked
+        # ambiguous. Provide both the UTC values and the equivalent in the
+        # event's selected zone, each labeled, so there is no ambiguity.
+        context['resolved_tz_name'] = tz_name
+        context['resolved_start_utc'] = _render_in_tz(
+            event.start_datetime, 'UTC',
+        ).strftime('%d/%m/%Y %H:%M')
+        context['resolved_start_local'] = local_start.strftime(
+            '%d/%m/%Y %H:%M',
+        )
+        if event.end_datetime:
+            context['resolved_end_utc'] = _render_in_tz(
+                event.end_datetime, 'UTC',
+            ).strftime('%d/%m/%Y %H:%M')
+            context['resolved_end_local'] = _render_in_tz(
+                event.end_datetime, tz_name,
+            ).strftime('%d/%m/%Y %H:%M')
     return context
 
 
@@ -400,6 +434,13 @@ def event_create(request):
         'timezone_value': tz_value,
         'timezone_label': get_timezone_label(tz_value) or tz_value,
         'timezone_options': build_timezone_options(),
+        # Issue #855: on a fresh create with no user-chosen value, let the
+        # browser zone win over the bare UTC fallback. A re-rendered POST
+        # carries the admin's chosen value, so don't auto-detect then.
+        'tz_autodetect': (
+            _should_autodetect_tz(request.user)
+            and request.method != 'POST'
+        ),
     }
     return render(request, 'studio/events/form.html', context)
 

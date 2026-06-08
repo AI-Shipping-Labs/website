@@ -32,6 +32,9 @@ from accounts.services.timezones import (
     is_valid_timezone,
 )
 from events.models import Event, EventSeries
+from events.services.series_registration import (
+    enroll_series_registrants_in_event,
+)
 from studio.decorators import staff_required
 from studio.views.events import _default_timezone_for
 
@@ -212,7 +215,7 @@ def event_series_create(request):
                     event_slug = _generate_unique_slug(base_slug, used_slugs)
                     used_slugs.add(event_slug)
 
-                    Event.objects.create(
+                    occurrence = Event.objects.create(
                         title=f'{series.name} — Session {i}',
                         slug=event_slug,
                         description='',
@@ -228,6 +231,11 @@ def event_series_create(request):
                         series_position=i,
                         published=True,
                     )
+                    # Issue #857: shared auto-enroll hook. A freshly
+                    # created series has no registrants yet, so this is a
+                    # no-op here — wired for consistency with the other
+                    # occurrence-creation paths.
+                    enroll_series_registrants_in_event(occurrence)
             return redirect('studio_event_series_detail', series_id=series.pk)
 
     tz_value = form_values['timezone'] or default_tz
@@ -328,7 +336,7 @@ def event_series_add_occurrence(request, series_id):
     base_slug = f'{series.slug}-session-{next_pos}'
     event_slug = _generate_unique_slug(base_slug)
 
-    Event.objects.create(
+    new_event = Event.objects.create(
         title=f'{series.name} — Session {next_pos}',
         slug=event_slug,
         description='',
@@ -344,6 +352,10 @@ def event_series_add_occurrence(request, series_id):
         series_position=next_pos,
         published=True,
     )
+    # Issue #857: auto-enroll existing series registrants. Best-effort and
+    # idempotent; a draft occurrence enrolls nobody until it is published
+    # to ``upcoming`` (the helper gates on ``is_upcoming``).
+    enroll_series_registrants_in_event(new_event)
     return redirect('studio_event_series_detail', series_id=series.pk)
 
 

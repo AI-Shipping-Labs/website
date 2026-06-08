@@ -13,7 +13,11 @@ from django.views.decorators.http import require_http_methods, require_POST
 from accounts.services.timezones import is_valid_timezone
 from accounts.services.verification import resolve_unverified_ttl_days
 from content.access import LEVEL_OPEN, can_access
-from events.models import Event, EventRegistration
+from events.models import Event, EventRegistration, EventSeries
+from events.services.series_registration import (
+    enroll_user_in_series,
+    series_registration_summary,
+)
 from events.views.pages import _resolve_cancel_state
 
 logger = logging.getLogger(__name__)
@@ -433,6 +437,117 @@ def unregister_from_event(request, slug):
         'status': 'unregistered',
         'event_slug': event.slug,
     })
+
+
+@require_http_methods(['POST', 'DELETE'])
+def series_registration(request, series_slug):
+    """Register for / unregister from an entire event series (issue #857).
+
+    POST creates the standing ``SeriesRegistration`` flag and fans it out
+    into real per-event ``EventRegistration`` rows for every eligible
+    upcoming occurrence (future, non-draft, non-cancelled, accessible by
+    tier, not full, not already registered). One summary confirmation
+    email is sent rather than N per-event emails.
+
+    DELETE removes the standing flag AND unregisters the user from all
+    FUTURE occurrences of the series. PAST occurrences the user attended
+    are left intact so the dashboard history is preserved.
+
+    Series registration is authenticated-only — the anonymous email path
+    stays on the single-event route only.
+
+    Returns:
+        POST 201 with the fan-out summary on a fresh registration.
+        POST 200 with the current summary when already series-registered
+            (idempotent — no duplicate flag, no duplicate per-event rows).
+        DELETE 200 with the count of future occurrences dropped.
+        401 if anonymous (no row created).
+        404 if the series does not exist.
+    """
+    from events.models import SeriesRegistration
+
+    if not request.user.is_authenticated:
+        return JsonResponse(
+            {'error': 'Authentication required'},
+            status=401,
+        )
+
+    series = get_object_or_404(EventSeries, slug=series_slug)
+
+    if request.method == 'DELETE':
+        flag = SeriesRegistration.objects.filter(
+            series=series, user=request.user,
+        ).first()
+        if flag is None:
+            return JsonResponse(
+                {'error': 'Not registered for this series'},
+                status=404,
+            )
+        flag.delete()
+
+        # Drop only FUTURE occurrences; past attended occurrences stay.
+        future_event_ids = [
+            event.id
+            for event in series.events.exclude(
+                status__in=('draft', 'cancelled'),
+            )
+            if event.is_upcoming
+        ]
+        dropped = 0
+        if future_event_ids:
+            dropped, _ = EventRegistration.objects.filter(
+                user=request.user, event_id__in=future_event_ids,
+            ).delete()
+
+        return JsonResponse({
+            'status': 'unregistered',
+            'series_slug': series.slug,
+            'dropped': dropped,
+        })
+
+    # POST — register for the series.
+    existing = SeriesRegistration.objects.filter(
+        series=series, user=request.user,
+    ).first()
+    if existing is not None:
+        # Idempotent re-register: do not create a duplicate flag or new
+        # per-event rows, do not re-send the email. Return the current
+        # state so the caller lands on the same "you're registered" view.
+        return JsonResponse({
+            'status': 'already_registered',
+            'series_slug': series.slug,
+            'summary': series_registration_summary(request.user, series),
+        }, status=200)
+
+    SeriesRegistration.objects.create(series=series, user=request.user)
+    summary = enroll_user_in_series(request.user, series)
+    new_events = summary.pop('new_events', [])
+
+    # Issue #768: series registration is a real platform action.
+    from accounts.utils.activation import mark_activated
+    mark_activated(request.user)
+
+    # Send ONE summary confirmation email (non-blocking).
+    if new_events:
+        try:
+            from events.services.registration_email import (
+                send_series_registration_confirmation,
+            )
+            send_series_registration_confirmation(
+                request.user, series, new_events,
+            )
+        except Exception:
+            logger.exception(
+                'Failed to send series registration email for series '
+                '"%s" to user %s',
+                series.slug, request.user.email,
+            )
+
+    return JsonResponse({
+        'status': 'registered',
+        'series_slug': series.slug,
+        'summary': summary,
+    }, status=201)
 
 
 @csrf_exempt

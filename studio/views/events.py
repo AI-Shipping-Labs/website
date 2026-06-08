@@ -442,6 +442,14 @@ def event_edit(request, event_id):
             )
 
             event.save()
+            # Issue #857: publishing/editing a series occurrence into a
+            # registrable state auto-enrolls existing series registrants.
+            # Best-effort, idempotent, gated on ``is_upcoming``.
+            if event.event_series_id:
+                from events.services.series_registration import (
+                    enroll_series_registrants_in_event,
+                )
+                enroll_series_registrants_in_event(event)
         else:
             # Issue #670: snapshot the persisted start time BEFORE we
             # mutate the in-memory event. The Studio form re-parses
@@ -516,6 +524,14 @@ def event_edit(request, event_id):
             )
 
             event.save()
+
+            # Issue #857: publishing/editing a series occurrence into a
+            # registrable state auto-enrolls existing series registrants.
+            if event.event_series_id:
+                from events.services.series_registration import (
+                    enroll_series_registrants_in_event,
+                )
+                enroll_series_registrants_in_event(event)
 
             # Issue #670: detect a meaningful start-time change and
             # notify registered attendees. The trigger fires only when

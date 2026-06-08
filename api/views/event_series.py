@@ -40,6 +40,9 @@ from api.views.events import (
 )
 from events.models import Event, EventSeries
 from events.models.event_series import EVENT_SERIES_CADENCE_CHOICES
+from events.services.series_registration import (
+    enroll_series_registrants_in_event,
+)
 
 SERIES_DELETE_NOT_AVAILABLE_MESSAGE = (
     "Event series deletion is not available through the API. "
@@ -836,6 +839,10 @@ def event_series_occurrences_bulk(request, series_id):
                     return save_error
 
             occurrence_ids.append(event.pk)
+            # Issue #857: auto-enroll existing series registrants into the
+            # new occurrence. Best-effort, idempotent, and gated on
+            # ``is_upcoming`` (drafts enroll nobody until published).
+            enroll_series_registrants_in_event(event)
             # Mark this dedup key as seen so a transient duplicate in the
             # payload after a DB write is still treated correctly even
             # though the in-batch check above already covers it.

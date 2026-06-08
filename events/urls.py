@@ -3,6 +3,7 @@ from django.urls import path
 from events.views.api import (
     cancel_registration_action,
     register_for_event,
+    series_registration,
     unregister_from_event,
 )
 from events.views.pages import (
@@ -103,6 +104,16 @@ urlpatterns = [
         name='event_detail_no_slug',
     ),
     # API endpoints for registration
+    # Issue #857: series registration. Registered BEFORE the per-event
+    # ``api/events/<slug>/register`` route so the literal ``series``
+    # segment is never swallowed by the slug converter. POST registers
+    # for the whole series (fan-out); DELETE drops the standing flag and
+    # all future occurrences.
+    path(
+        'api/events/series/<slug:series_slug>/register',
+        series_registration,
+        name='event_series_register',
+    ),
     path(
         'api/events/<slug:slug>/register',
         register_for_event,

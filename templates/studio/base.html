@@ -557,6 +557,19 @@ double-rendering. See issue #347.
               </a>
             </li>
             {% endif %}
+            {% if request.user.is_staff %}
+            <li>
+              <a href="/api/docs"
+                 target="_blank"
+                 rel="noopener"
+                 data-testid="api-docs-nav-link"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                <i data-lucide="file-json" class="w-4 h-4"></i>
+                <span>API docs</span>
+                <i data-lucide="external-link" class="w-3 h-3 opacity-60"></i>
+              </a>
+            </li>
+            {% endif %}
           </ul>
         </div>
 

@@ -16,6 +16,7 @@ from studio.views.banner_regenerate import (
     studio_project_regenerate_banner,
     studio_workshop_regenerate_banner,
 )
+from studio.views.call_hosts import call_host_edit, call_host_list
 from studio.views.campaigns import (
     campaign_create,
     campaign_delete,
@@ -483,6 +484,10 @@ urlpatterns = [
         studio_download_regenerate_banner,
         name='studio_download_regenerate_banner',
     ),
+
+    # Call hosts (issue #870)
+    path('call-hosts/', call_host_list, name='studio_call_host_list'),
+    path('call-hosts/<int:host_id>/edit', call_host_edit, name='studio_call_host_edit'),
 
     # Projects
     path('projects/', project_list, name='studio_project_list'),

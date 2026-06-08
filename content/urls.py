@@ -45,6 +45,7 @@ from content.views.peer_review import (
     review_dashboard,
     review_form,
 )
+from content.views.request_call import request_a_call
 from content.views.tags import tags_detail, tags_index
 from content.views.workshops import (
     api_workshop_page_complete,
@@ -65,6 +66,7 @@ urlpatterns = [
     path('privacy', privacy, name='privacy'),
     path('impressum', impressum, name='impressum'),
     path('activities', activities, name='activities'),
+    path('request-a-call', request_a_call, name='request_a_call'),
     path('sprints', sprints_index, name='sprints_index'),
     path('faq', faq, name='faq'),
     path('blog', blog_list, name='blog_list'),

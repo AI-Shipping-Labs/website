@@ -331,6 +331,13 @@ double-rendering. See issue #347.
               </a>
             </li>
             <li>
+              <a href="{% url 'studio_call_host_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/call-hosts' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="phone" class="w-4 h-4"></i>
+                <span>Call hosts</span>
+              </a>
+            </li>
+            <li>
               <a href="{% url 'studio_import_batch_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/imports/' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="upload-cloud" class="w-4 h-4"></i>

@@ -29,6 +29,7 @@ def check_event_reminders():
     bell + email only to keep #announcements quiet).
     """
     from events.models import Event, EventRegistration
+    from notifications.models import EventReminderLog
     from notifications.services.notification_service import NotificationService
     from notifications.services.slack_announcements import post_slack_announcement
 
@@ -76,13 +77,26 @@ def check_event_reminders():
                 'Created %d 24h reminders for event %s', count, event.slug,
             )
 
-        # Post Slack reminder for 24h window
-        try:
-            post_slack_announcement('event', event)
-        except Exception:
-            logger.exception(
-                'Failed to post Slack reminder for event %s', event.slug,
-            )
+        # Post Slack reminder for 24h window, at most once per event.
+        # The 24h cron window (30 min wide) overlaps two consecutive
+        # 15-min ticks, so without a guard the channel announcement
+        # fires twice (issue #887). A per-event EventReminderLog row
+        # (user=None, interval='24h_slack') dedups it — mirroring the
+        # per-user reminder dedup above. Persist the guard BEFORE the
+        # post so a transient Slack failure can't trigger a duplicate
+        # on the next tick.
+        _, slack_guard_created = EventReminderLog.objects.get_or_create(
+            event=event,
+            user=None,
+            interval='24h_slack',
+        )
+        if slack_guard_created:
+            try:
+                post_slack_announcement('event', event)
+            except Exception:
+                logger.exception(
+                    'Failed to post Slack reminder for event %s', event.slug,
+                )
 
     # Events in 20-minute window.
     # Issue #713: drop the stored ``status='upcoming'`` clause; exclude

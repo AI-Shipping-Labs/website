@@ -13,9 +13,86 @@ from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from notifications.services.slack_announcements import (
     _build_slack_blocks,
+    _truncate_description,
+    markdown_to_mrkdwn,
     post_slack_announcement,
 )
 from voting.models import Poll
+
+
+class MarkdownToMrkdwnTest(TestCase):
+    """Issue #887: convert Markdown descriptions to Slack mrkdwn so links
+    and emphasis render instead of showing raw ``[text](url)``/``**bold**``.
+    """
+
+    def test_link_converted_to_mrkdwn_angle_form(self):
+        out = markdown_to_mrkdwn(
+            'See [previous workshop](https://example.com/w) for details.'
+        )
+        self.assertIn('<https://example.com/w|previous workshop>', out)
+        self.assertNotIn('[previous workshop]', out)
+        self.assertNotIn('](https://example.com/w)', out)
+
+    def test_multiple_links_all_converted(self):
+        out = markdown_to_mrkdwn(
+            '[a](https://x.com/a) and [b](https://y.com/b)'
+        )
+        self.assertEqual(out, '<https://x.com/a|a> and <https://y.com/b|b>')
+
+    def test_bold_double_asterisk_converted(self):
+        self.assertEqual(markdown_to_mrkdwn('**bold** word'), '*bold* word')
+
+    def test_bold_double_underscore_converted(self):
+        self.assertEqual(markdown_to_mrkdwn('__bold__ word'), '*bold* word')
+
+    def test_heading_marker_stripped(self):
+        self.assertEqual(markdown_to_mrkdwn('# Title here'), 'Title here')
+
+    def test_image_syntax_stripped(self):
+        out = markdown_to_mrkdwn('Look ![alt](https://cdn.example.com/a.png) here')
+        self.assertNotIn('![alt]', out)
+        self.assertNotIn('https://cdn.example.com/a.png', out)
+
+    def test_plain_text_unchanged(self):
+        text = 'Just a normal description with no markdown.'
+        self.assertEqual(markdown_to_mrkdwn(text), text)
+
+    def test_empty_input_returned_as_is(self):
+        self.assertEqual(markdown_to_mrkdwn(''), '')
+        self.assertIsNone(markdown_to_mrkdwn(None))
+
+    def test_inline_code_preserved(self):
+        # Single backticks are valid Slack mrkdwn — leave them alone.
+        out = markdown_to_mrkdwn('Run `make test` first')
+        self.assertIn('`make test`', out)
+
+
+class TruncateDescriptionTest(TestCase):
+    """Issue #887: truncate BEFORE converting so a converted ``<url|text>``
+    link is never sliced mid-token, and never cut inside ``[text](url)``."""
+
+    def test_short_text_converted_without_ellipsis(self):
+        out = _truncate_description('See [w](https://x.com/w).')
+        self.assertEqual(out, 'See <https://x.com/w|w>.')
+        self.assertNotIn('…', out)
+
+    def test_long_text_truncated_with_ellipsis(self):
+        out = _truncate_description('word ' * 100)
+        self.assertTrue(out.endswith('…'))
+        self.assertLessEqual(len(out.rstrip('…')), 200)
+
+    def test_truncation_does_not_split_a_markdown_link(self):
+        # Pad so the budget boundary lands in the middle of the link, then
+        # confirm the link is either fully kept (converted) or fully dropped
+        # — never left as a half-rendered fragment.
+        prefix = 'x ' * 95  # 190 chars, boundary falls inside the link
+        out = _truncate_description(
+            prefix + '[click here](https://example.com/landing-page)'
+        )
+        self.assertNotIn('[click here]', out)
+        self.assertNotIn('](https://', out)
+        # No dangling unmatched angle-link fragment.
+        self.assertEqual(out.count('<'), out.count('|'))
 
 
 class BuildSlackBlocksTest(TestCase):
@@ -55,14 +132,19 @@ class BuildSlackBlocksTest(TestCase):
         self.assertIn('/blog/test-button', button['url'])
 
     def test_truncates_long_description(self):
+        # Use spaces so the word-boundary backoff has somewhere to cut;
+        # the converted description ends with the … ellipsis (issue #887).
         article = Article.objects.create(
             title='Test', slug='test-truncate',
             date=date(2025, 1, 1),
-            description='x' * 300,
+            description='word ' * 60,
         )
         _, blocks = _build_slack_blocks('article', article)
         text = blocks[0]['text']['text']
-        self.assertIn('...', text)
+        self.assertIn('…', text)
+        # Truncated at/under the 200-char budget, plus the ellipsis.
+        description_part = text.split('\n\n', 1)[1]
+        self.assertLessEqual(len(description_part), 201)
 
     def test_build_slack_blocks_workshop_label(self):
         """text_fallback starts with 'New workshop:' and mrkdwn_text starts
@@ -134,6 +216,20 @@ class EventSlackBlocksTimeStripTest(TestCase):
         text = blocks[0]['text']['text']
         self.assertIn('11:00 CET', text)
         self.assertNotIn('10:00 CET', text)
+
+    def test_event_description_markdown_link_rendered_as_mrkdwn(self):
+        """Issue #887: a markdown link in the event description must render
+        as a Slack mrkdwn link, not raw ``[text](url)``."""
+        event = Event.objects.create(
+            title='Markdown Desc Event', slug='markdown-desc-event',
+            start_datetime=datetime(2026, 5, 21, 14, 0, 0, tzinfo=dt_tz.utc),
+            status='upcoming',
+            description='Watch the [previous workshop](https://example.com/w).',
+        )
+        _, blocks = _build_slack_blocks('event', event)
+        text = blocks[0]['text']['text']
+        self.assertIn('<https://example.com/w|previous workshop>', text)
+        self.assertNotIn('[previous workshop]', text)
 
     def test_event_winter_block_contains_tz_strip(self):
         """A winter event renders CET (standard time) as UTC+1."""

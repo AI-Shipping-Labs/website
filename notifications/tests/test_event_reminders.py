@@ -139,7 +139,13 @@ class CheckEventRemindersTest(TestCase):
         check_event_reminders()
 
         self.assertEqual(Notification.objects.count(), 1)
-        self.assertEqual(EventReminderLog.objects.count(), 1)
+        # One per-user 24h row; the 24h_slack guard row is per-event.
+        self.assertEqual(
+            EventReminderLog.objects.filter(interval='24h').count(), 1,
+        )
+        self.assertEqual(
+            EventReminderLog.objects.filter(interval='24h_slack').count(), 1,
+        )
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
@@ -171,6 +177,77 @@ class CheckEventRemindersTest(TestCase):
         check_event_reminders()
 
         mock_slack.assert_called_once_with('event', event)
+        # The per-event guard row was written so future ticks skip the post.
+        self.assertEqual(
+            EventReminderLog.objects.filter(
+                event=event, interval='24h_slack', user__isnull=True,
+            ).count(),
+            1,
+        )
+
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_24h_channel_post_fires_once_across_two_cron_ticks(
+        self, mock_slack, mock_ses,
+    ):
+        """Issue #887 regression: the 24h channel announcement window
+        (23h45m-24h15m) is 30 min wide, so an event ~24h out matches on
+        TWO consecutive 15-min cron ticks. The channel post must fire
+        exactly ONCE thanks to the per-event 24h_slack guard row.
+        """
+        start = datetime(2026, 6, 16, 12, 0, 0, tzinfo=dt_tz.utc)
+        event = Event.objects.create(
+            title='Two Tick Event', slug='event-two-tick',
+            start_datetime=start,
+            status='upcoming',
+        )
+        EventRegistration.objects.create(event=event, user=self.user)
+
+        # Tick 1: clock is 24h00m before start (well inside the window).
+        with freeze_time(start - timedelta(hours=24)):
+            check_event_reminders()
+        # Tick 2: 15 minutes later, clock is 23h45m before start — still
+        # inside the window (the overlap that caused the double-post bug).
+        with freeze_time(start - timedelta(hours=23, minutes=45)):
+            check_event_reminders()
+
+        # Exactly one channel announcement despite both ticks matching.
+        mock_slack.assert_called_once_with('event', event)
+        self.assertEqual(
+            EventReminderLog.objects.filter(
+                event=event, interval='24h_slack',
+            ).count(),
+            1,
+        )
+        # Per-user reminder still deduped to a single bell + log row.
+        self.assertEqual(Notification.objects.count(), 1)
+        self.assertEqual(
+            EventReminderLog.objects.filter(
+                event=event, interval='24h', user=self.user,
+            ).count(),
+            1,
+        )
+
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_24h_channel_post_skipped_when_guard_row_exists(
+        self, mock_slack, mock_ses,
+    ):
+        """A pre-existing 24h_slack guard row (e.g. from an earlier tick
+        in a prior process) suppresses the channel post entirely."""
+        start = datetime(2026, 6, 16, 12, 0, 0, tzinfo=dt_tz.utc)
+        event = Event.objects.create(
+            title='Pre-guarded Event', slug='event-pre-guarded',
+            start_datetime=start,
+            status='upcoming',
+        )
+        EventRegistration.objects.create(event=event, user=self.user)
+        EventReminderLog.objects.create(
+            event=event, user=None, interval='24h_slack',
+        )
+
+        with freeze_time(start - timedelta(hours=24)):
+            check_event_reminders()
+
+        mock_slack.assert_not_called()
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
@@ -349,7 +426,9 @@ class CheckEventRemindersTest(TestCase):
         check_event_reminders()
 
         self.assertEqual(Notification.objects.count(), 1)
-        self.assertEqual(EventReminderLog.objects.count(), 1)
+        self.assertEqual(
+            EventReminderLog.objects.filter(interval='24h').count(), 1,
+        )
         self.assertEqual(
             EmailLog.objects.filter(email_type='event_reminder').count(),
             1,
@@ -382,7 +461,9 @@ class CheckEventRemindersTest(TestCase):
 
         # Bell + dedup row persisted despite the SES failure.
         self.assertEqual(Notification.objects.count(), 1)
-        self.assertEqual(EventReminderLog.objects.count(), 1)
+        self.assertEqual(
+            EventReminderLog.objects.filter(interval='24h').count(), 1,
+        )
         # No EmailLog row — the send raised before reaching the log write.
         self.assertEqual(
             EmailLog.objects.filter(email_type='event_reminder').count(),
@@ -401,7 +482,9 @@ class CheckEventRemindersTest(TestCase):
         ):
             check_event_reminders()
         self.assertEqual(Notification.objects.count(), 1)
-        self.assertEqual(EventReminderLog.objects.count(), 1)
+        self.assertEqual(
+            EventReminderLog.objects.filter(interval='24h').count(), 1,
+        )
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')

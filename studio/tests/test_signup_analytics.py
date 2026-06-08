@@ -464,7 +464,7 @@ class SignupAnalyticsRecentTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
 
-    def test_recent_lists_up_to_twenty_in_window(self):
+    def test_recent_lists_up_to_page_size_in_window(self):
         now = timezone.now()
         for i in range(25):
             _make_attribution(
@@ -473,7 +473,9 @@ class SignupAnalyticsRecentTest(TestCase):
 
         response = self.client.get('/studio/signup-analytics/')
         rows = response.context['recent_signups']
-        self.assertEqual(len(rows), 20)
+        # 25 rows fit on one 50-row page, so all are shown (no pager).
+        self.assertEqual(len(rows), 25)
+        self.assertFalse(response.context['show_pager'])
 
     def test_recent_respects_range_filter(self):
         now = timezone.now()
@@ -513,6 +515,229 @@ class SignupAnalyticsRecentTest(TestCase):
 
         response = self.client.get(f'/studio/users/{user.id}/')
         self.assertEqual(response.status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# Recent signups pagination (issue #850)
+# ---------------------------------------------------------------------------
+
+class SignupAnalyticsPaginationTest(TestCase):
+    """Section 7 is a 50-row Paginator over the filtered, ordered set."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='pw', is_staff=True,
+        )
+        UserAttribution.objects.filter(user=cls.staff).delete()
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='pw')
+
+    def _seed(self, n, *, signup_path='email_password', created_offset_hours=1,
+              prefix='r'):
+        """Create ``n`` attributions inside the default 7d window.
+
+        Rows are ordered so that ``{prefix}0`` is the OLDEST and
+        ``{prefix}{n-1}`` is the NEWEST (created most recently), matching
+        the ``-created_at`` ordering of the view.
+        """
+        now = timezone.now()
+        users = []
+        for i in range(n):
+            # i=0 oldest, i=n-1 newest — stay within the 7d window.
+            created = now - timedelta(hours=created_offset_hours + (n - i))
+            user, _ = _make_attribution(
+                email=f'{prefix}{i}@t.com', signup_path=signup_path,
+                created_at=created,
+            )
+            users.append(user)
+        return users
+
+    def test_page_one_shows_fifty_of_fiftyone(self):
+        self._seed(51)
+        response = self.client.get('/studio/signup-analytics/')
+        self.assertEqual(len(response.context['recent_signups']), 50)
+        self.assertTrue(response.context['show_pager'])
+        self.assertEqual(response.context['paginator'].num_pages, 2)
+        self.assertEqual(response.context['page_start_index'], 1)
+        self.assertEqual(response.context['page_end_index'], 50)
+        self.assertEqual(response.context['filtered_total'], 51)
+
+    def test_page_two_shows_remainder(self):
+        self._seed(51)
+        response = self.client.get('/studio/signup-analytics/?page=2')
+        self.assertEqual(len(response.context['recent_signups']), 1)
+        self.assertEqual(response.context['page_start_index'], 51)
+        self.assertEqual(response.context['page_end_index'], 51)
+        self.assertEqual(response.context['page'].number, 2)
+
+    def test_page_two_is_the_next_fifty_by_created_at(self):
+        # 60 rows: newest 50 on page 1, oldest 10 on page 2.
+        self._seed(60)
+        page1 = self.client.get('/studio/signup-analytics/')
+        page2 = self.client.get('/studio/signup-analytics/?page=2')
+        page1_emails = {r.user.email for r in page1.context['recent_signups']}
+        page2_emails = {r.user.email for r in page2.context['recent_signups']}
+        self.assertEqual(len(page1_emails), 50)
+        self.assertEqual(len(page2_emails), 10)
+        self.assertEqual(page1_emails & page2_emails, set())
+        # Page 2 holds the oldest rows: r0..r9 (seeded oldest-first).
+        self.assertEqual(
+            page2_emails, {f'r{i}@t.com' for i in range(10)},
+        )
+
+    def test_pager_status_strings_rendered(self):
+        self._seed(60)
+        response = self.client.get('/studio/signup-analytics/')
+        self.assertContains(response, 'Showing 1-50 of 60')
+        self.assertContains(response, 'page 1 of 2')
+
+    def test_pager_namespaced_testids_present(self):
+        self._seed(60)
+        response = self.client.get('/studio/signup-analytics/')
+        self.assertContains(response, 'data-testid="signup-recent-pager"')
+        self.assertContains(response, 'data-testid="signup-recent-pager-next"')
+        # Must NOT borrow the other Studio pagers' testids.
+        self.assertNotContains(response, 'data-testid="ses-event-list-pager"')
+        self.assertNotContains(response, 'data-testid="user-list-pager"')
+
+    def test_pager_hidden_for_single_page(self):
+        self._seed(5)
+        response = self.client.get('/studio/signup-analytics/')
+        self.assertFalse(response.context['show_pager'])
+        self.assertNotContains(response, 'data-testid="signup-recent-pager"')
+        self.assertEqual(len(response.context['recent_signups']), 5)
+
+    def test_first_prev_disabled_on_page_one(self):
+        self._seed(60)
+        response = self.client.get('/studio/signup-analytics/')
+        self.assertIsNone(response.context['pager_first_url'])
+        self.assertIsNone(response.context['pager_prev_url'])
+        self.assertIsNotNone(response.context['pager_next_url'])
+        self.assertIsNotNone(response.context['pager_last_url'])
+
+    def test_next_last_disabled_on_last_page(self):
+        self._seed(60)
+        response = self.client.get('/studio/signup-analytics/?page=2')
+        self.assertIsNone(response.context['pager_next_url'])
+        self.assertIsNone(response.context['pager_last_url'])
+        self.assertIsNotNone(response.context['pager_first_url'])
+        self.assertIsNotNone(response.context['pager_prev_url'])
+
+    def test_range_filter_preserved_across_pages(self):
+        self._seed(60)
+        response = self.client.get('/studio/signup-analytics/?range=30d')
+        # Pager next URL must carry range=30d alongside page=2.
+        next_url = response.context['pager_next_url']
+        self.assertIn('range=30d', next_url)
+        self.assertIn('page=2', next_url)
+        # And following it keeps the 30d window selected. ``next_url`` is a
+        # querystring-only URL (mirrors how the pager partial appends it to
+        # the current path), so resolve it against the dashboard path.
+        page2 = self.client.get('/studio/signup-analytics/' + next_url)
+        self.assertEqual(page2.context['filters']['range_key'], '30d')
+
+    def test_signup_path_filter_preserved_across_pages(self):
+        self._seed(60, signup_path='google_oauth', prefix='g')
+        response = self.client.get(
+            '/studio/signup-analytics/?signup_path=google_oauth',
+        )
+        next_url = response.context['pager_next_url']
+        self.assertIn('signup_path=google_oauth', next_url)
+        self.assertIn('page=2', next_url)
+        page2 = self.client.get('/studio/signup-analytics/' + next_url)
+        self.assertEqual(
+            page2.context['filters']['signup_path'], 'google_oauth',
+        )
+        for r in page2.context['recent_signups']:
+            self.assertEqual(r.signup_path, 'google_oauth')
+
+    def test_custom_date_range_preserved_across_pages(self):
+        now = timezone.now()
+        start = (now - timedelta(days=10)).strftime('%Y-%m-%d')
+        end = now.strftime('%Y-%m-%d')
+        # Seed 60 rows inside the custom window (5 days ago).
+        for i in range(60):
+            _make_attribution(
+                email=f'c{i}@t.com',
+                created_at=now - timedelta(days=5, minutes=i),
+            )
+        url = (
+            f'/studio/signup-analytics/?range=custom&start={start}&end={end}'
+        )
+        response = self.client.get(url)
+        next_url = response.context['pager_next_url']
+        self.assertIn('range=custom', next_url)
+        self.assertIn(f'start={start}', next_url)
+        self.assertIn(f'end={end}', next_url)
+        self.assertIn('page=2', next_url)
+        page2 = self.client.get('/studio/signup-analytics/' + next_url)
+        self.assertEqual(page2.context['filters']['range_key'], 'custom')
+        self.assertEqual(page2.context['filters']['start_str'], start)
+        self.assertEqual(page2.context['filters']['end_str'], end)
+
+    def test_page_zero_clamps_to_one(self):
+        self._seed(60)
+        response = self.client.get('/studio/signup-analytics/?page=0')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['page'].number, 1)
+
+    def test_page_negative_clamps_to_one(self):
+        self._seed(60)
+        response = self.client.get('/studio/signup-analytics/?page=-1')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['page'].number, 1)
+
+    def test_page_non_integer_clamps_to_one(self):
+        self._seed(60)
+        response = self.client.get('/studio/signup-analytics/?page=abc')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['page'].number, 1)
+
+    def test_page_beyond_last_clamps_to_last(self):
+        self._seed(60)
+        response = self.client.get('/studio/signup-analytics/?page=9999')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['page'].number, 2)
+        self.assertEqual(response.context['paginator'].num_pages, 2)
+
+    def test_pagination_adds_at_most_two_section_seven_queries(self):
+        """Paginator adds exactly +1 net query (COUNT + slice) for Section 7.
+
+        Whole-page budget stays under 10 view-side queries even with paging.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        self._seed(60)
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get('/studio/signup-analytics/')
+            self.assertEqual(response.status_code, 200)
+        view_queries = [
+            q for q in ctx.captured_queries
+            if 'analytics_userattribution' in q['sql']
+            or 'integrations_utmcampaign' in q['sql']
+        ]
+        self.assertLess(
+            len(view_queries), 10,
+            msg=f'Expected <10 view queries, got {len(view_queries)}: '
+                + '\n---\n'.join(q['sql'] for q in view_queries),
+        )
+
+    def test_top_n_sections_not_paginated(self):
+        """Top-N aggregate sections stay capped at TOP_N, not paged."""
+        from studio.views.signup_analytics import TOP_N
+        now = timezone.now()
+        # 15 distinct UTM sources -> Top-N must still cap at TOP_N.
+        for i in range(15):
+            _make_attribution(
+                email=f'u{i}@t.com', first_source=f'src{i}',
+                created_at=now - timedelta(hours=2),
+            )
+        response = self.client.get('/studio/signup-analytics/')
+        self.assertLessEqual(
+            len(response.context['utm_source_rows']), TOP_N,
+        )
 
 
 # ---------------------------------------------------------------------------

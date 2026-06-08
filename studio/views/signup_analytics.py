@@ -18,6 +18,7 @@ not fail if #772 hasn't shipped.
 from datetime import datetime, time, timedelta
 from urllib.parse import urlencode
 
+from django.core.paginator import Paginator
 from django.db.models import Count, Exists, OuterRef, Q
 from django.shortcuts import render
 from django.utils import timezone
@@ -32,7 +33,10 @@ SIGNUP_PATH_LABELS = dict(SIGNUP_PATH_CHOICES)
 DEFAULT_RANGE = '7d'
 RANGE_CHOICES = ('24h', '7d', '30d', 'custom')
 TOP_N = 10
-RECENT_LIMIT = 20
+# Page size for the Recent signups list (Section 7). Matches
+# ``/studio/users/`` and ``/studio/ses-events/`` so the canonical pager
+# partial reads consistently across Studio.
+RECENT_PAGE_SIZE = 50
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +115,36 @@ def _querystring(filters):
     if not params:
         return ''
     return '?' + urlencode(params)
+
+
+def _pager_querystring(request, page_number):
+    """Build ``?...&page=N`` preserving every other request param.
+
+    Mirrors ``studio.views.ses_events._pager_querystring`` so the canonical
+    pager partial keeps the ``range`` / ``start`` / ``end`` / ``signup_path``
+    filters alive across page navigation. The leading ``?`` is included so the
+    template can drop the value straight into ``href``.
+    """
+    params = request.GET.copy()
+    params['page'] = str(page_number)
+    return '?' + params.urlencode()
+
+
+def _coerce_page_number(raw, num_pages):
+    """Clamp the ``?page=`` query param into ``[1, num_pages]``.
+
+    Mirrors ``studio.views.ses_events._coerce_page_number``: non-integer or
+    ``<1`` -> page 1, ``> num_pages`` -> last page. Never 404 or 500.
+    """
+    try:
+        page_num = int(raw)
+    except (TypeError, ValueError):
+        return 1
+    if page_num < 1:
+        return 1
+    if page_num > num_pages:
+        return num_pages
+    return page_num
 
 
 # ---------------------------------------------------------------------------
@@ -277,12 +311,32 @@ def signup_analytics_dashboard(request):
         row['campaign'] = bool(slug) and bool(row['has_campaign'])
     _annotate_share(campaign_rows, window_total)
 
-    # ---- Section 7: recent signups ---------------------------------------
-    recent = list(
-        base_window.select_related('user')
-        .order_by('-created_at')[:RECENT_LIMIT]
+    # ---- Section 7: recent signups (paginated) ---------------------------
+    # Paginate over the filtered, ordered queryset rather than slicing —
+    # ``Paginator`` adds exactly one COUNT(*) plus one page slice, keeping
+    # the page under the <10 query budget. The queryset is not materialized
+    # into a list before paging so the COUNT stays in SQL.
+    recent_qs = base_window.select_related('user').order_by('-created_at')
+    paginator = Paginator(recent_qs, RECENT_PAGE_SIZE)
+    page_number = _coerce_page_number(
+        request.GET.get('page'), paginator.num_pages or 1,
     )
+    page = paginator.page(page_number)
     recent_has_referrer = has_referrer_data
+
+    if page.has_previous():
+        first_url = _pager_querystring(request, 1)
+        prev_url = _pager_querystring(request, page.previous_page_number())
+    else:
+        first_url = None
+        prev_url = None
+    if page.has_next():
+        next_url = _pager_querystring(request, page.next_page_number())
+        last_url = _pager_querystring(request, paginator.num_pages)
+    else:
+        next_url = None
+        last_url = None
+    show_pager = paginator.num_pages > 1
 
     context = {
         'filters': filters,
@@ -296,8 +350,18 @@ def signup_analytics_dashboard(request):
         'has_referrer_data': has_referrer_data,
         'referrer_rows': referrer_rows,
         'campaign_rows': campaign_rows,
-        'recent_signups': recent,
+        'recent_signups': page.object_list,
         'recent_has_referrer': recent_has_referrer,
+        'page': page,
+        'paginator': paginator,
+        'show_pager': show_pager,
+        'pager_first_url': first_url,
+        'pager_prev_url': prev_url,
+        'pager_next_url': next_url,
+        'pager_last_url': last_url,
+        'page_start_index': page.start_index(),
+        'page_end_index': page.end_index(),
+        'filtered_total': paginator.count,
     }
     return render(request, 'studio/signup_analytics/dashboard.html', context)
 

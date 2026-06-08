@@ -18,9 +18,29 @@
         <code class="font-mono text-xs">/api/ses-events</code> wrote this row.
       </p>
     </div>
-    <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium {{ pill_class }}"
-          data-testid="ses-event-detail-pill"
-          data-event-type="{{ event.event_type }}">{{ event.get_event_type_display }}</span>
+    {% ses_severity event as detail_severity %}
+    {% ses_severity_label event as detail_severity_label %}
+    {% ses_severity_classes event as detail_severity_classes %}
+    {% ses_severity_consequence event as detail_severity_consequence %}
+    <div class="flex flex-col items-end gap-2">
+      <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium {{ pill_class }}"
+            data-testid="ses-event-detail-pill"
+            data-event-type="{{ event.event_type }}">{{ event.get_event_type_display }}</span>
+      {% comment %}
+        Severity badge: visible label (never colour alone) plus the one-line
+        consequence. The whole badge is focusable so the consequence is
+        reachable by keyboard via title + aria-label.
+      {% endcomment %}
+      <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium {{ detail_severity_classes }} focus:outline-none focus:ring-1 focus:ring-accent"
+            data-testid="ses-event-detail-severity"
+            data-severity="{{ detail_severity }}"
+            tabindex="0"
+            title="{{ detail_severity_consequence }}"
+            aria-label="Severity: {{ detail_severity_label }}. {{ detail_severity_consequence }}">
+        <span aria-hidden="true" class="inline-block w-2 h-2 rounded-full bg-current"></span>
+        <span>{{ detail_severity_label }} &mdash; {{ detail_severity_consequence }}</span>
+      </span>
+    </div>
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-6">
@@ -58,10 +78,18 @@
         <div>
           <p class="text-xs text-muted-foreground uppercase">Bounce type</p>
           <p class="text-foreground" data-testid="ses-event-detail-bounce-type">{{ event.bounce_type|default:'—' }}</p>
+          {% ses_term_explain event.bounce_type as detail_bt_explain %}
+          {% if detail_bt_explain %}
+          <p class="mt-1 text-xs text-muted-foreground" data-testid="ses-event-detail-bounce-type-explain">{{ detail_bt_explain }}</p>
+          {% endif %}
         </div>
         <div>
           <p class="text-xs text-muted-foreground uppercase">Bounce subtype</p>
           <p class="text-foreground" data-testid="ses-event-detail-bounce-subtype">{{ event.bounce_subtype|default:'—' }}</p>
+          {% ses_term_explain event.bounce_subtype as detail_bst_explain %}
+          {% if detail_bst_explain %}
+          <p class="mt-1 text-xs text-muted-foreground" data-testid="ses-event-detail-bounce-subtype-explain">{{ detail_bst_explain }}</p>
+          {% endif %}
         </div>
       </div>
 
@@ -70,9 +98,40 @@
         {% if event.diagnostic_code %}
           <pre class="text-xs text-foreground font-mono bg-secondary/40 rounded p-2 overflow-x-auto whitespace-pre-wrap"
                data-testid="ses-event-detail-diagnostic">{{ event.diagnostic_code }}</pre>
+          {% comment %}
+            Additive plain-English interpretation of recognised SMTP enhanced
+            status codes. The raw diagnostic above is always shown verbatim;
+            this block only appears when the decoder recognises a code.
+          {% endcomment %}
+          {% ses_diagnostic_explain event.diagnostic_code as diagnostic_pairs %}
+          {% if diagnostic_pairs %}
+          <div class="mt-2 text-xs" data-testid="ses-event-detail-diagnostic-explain">
+            <p class="text-muted-foreground uppercase mb-1">What this means</p>
+            <ul class="space-y-1">
+              {% for code, explanation in diagnostic_pairs %}
+              <li class="text-foreground">
+                <span class="font-mono text-muted-foreground">{{ code }}</span>
+                &mdash; {{ explanation }}
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
         {% else %}
           <p class="text-muted-foreground">&mdash;</p>
         {% endif %}
+      </div>
+
+      {% comment %}
+        Consequence note — explains the subscription impact of this event and
+        the 3-strike rule. The threshold number comes from the helper which
+        sources ``SOFT_BOUNCE_THRESHOLD``; the copy can't drift from the
+        webhook. Shown for every event so the lifecycle is always documented.
+      {% endcomment %}
+      <div class="p-4">
+        <p class="text-xs text-muted-foreground uppercase mb-1">What happens to the recipient</p>
+        {% ses_consequence_note event as detail_consequence_note %}
+        <p class="text-sm text-foreground" data-testid="ses-event-detail-consequence">{{ detail_consequence_note }}</p>
       </div>
 
       <div class="p-4">

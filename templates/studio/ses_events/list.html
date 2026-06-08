@@ -136,9 +136,32 @@
           <span title="{{ row.event.received_at|date:'Y-m-d H:i:s' }} UTC">{{ row.event.received_at|date:'Y-m-d H:i' }}</span>
         </td>
         <td class="px-6 py-3" data-label="Type">
-          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ row.pill_class }}"
-                data-testid="ses-event-type-pill"
-                data-event-type="{{ row.event.event_type }}">{{ row.event.get_event_type_display }}</span>
+          {% ses_severity row.event as row_severity %}
+          {% ses_severity_label row.event as row_severity_label %}
+          {% ses_severity_classes row.event as row_severity_classes %}
+          {% ses_severity_consequence row.event as row_severity_consequence %}
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ row.pill_class }}"
+                  data-testid="ses-event-type-pill"
+                  data-event-type="{{ row.event.event_type }}">{{ row.event.get_event_type_display }}</span>
+            {% comment %}
+              Severity indicator. Conveys severity by a visible text label
+              (the severity word) — never by colour alone — and carries the
+              consequence sentence via title + aria-label for hover and
+              keyboard-focus discovery. ``tabindex=0`` makes the dot+label
+              focusable without a mouse.
+            {% endcomment %}
+            <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium {{ row_severity_classes }} focus:outline-none focus:ring-1 focus:ring-accent"
+                  data-testid="ses-event-severity-{{ row.event.pk }}"
+                  data-severity="{{ row_severity }}"
+                  tabindex="0"
+                  role="img"
+                  title="{{ row_severity_label }} — {{ row_severity_consequence }}"
+                  aria-label="Severity: {{ row_severity_label }}. {{ row_severity_consequence }}">
+              <span aria-hidden="true" class="inline-block w-1.5 h-1.5 rounded-full bg-current"></span>
+              <span>{{ row_severity_label }}</span>
+            </span>
+          </div>
         </td>
         <td class="px-6 py-3 text-sm text-foreground" data-label="Recipient">
           {% if row.event.recipient_email %}
@@ -157,7 +180,26 @@
         </td>
         <td class="px-6 py-3 text-sm text-muted-foreground" data-label="Bounce type">
           {% if row.event.bounce_type or row.event.bounce_subtype %}
-            {{ row.event.bounce_type }}{% if row.event.bounce_type and row.event.bounce_subtype %} &middot; {% endif %}{{ row.event.bounce_subtype }}
+            {% ses_term_explain row.event.bounce_type as bt_explain %}
+            {% ses_term_explain row.event.bounce_subtype as bst_explain %}
+            <span class="inline-flex items-center gap-1">
+              <span>{{ row.event.bounce_type }}{% if row.event.bounce_type and row.event.bounce_subtype %} &middot; {% endif %}{{ row.event.bounce_subtype }}</span>
+              {% if bt_explain or bst_explain %}
+              {% comment %}
+                Info affordance: a real focusable <button> so the meaning is
+                reachable on hover AND keyboard focus. The explanation text is
+                in the DOM via title + aria-label (no JS, no hover-only reveal).
+                Rendered only when at least one term has a known explanation.
+              {% endcomment %}
+              <button type="button"
+                      class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-border text-[10px] leading-none text-muted-foreground hover:text-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-accent cursor-help"
+                      data-testid="ses-event-bounce-info-{{ row.event.pk }}"
+                      title="{% if bt_explain %}{{ bt_explain }}{% endif %}{% if bt_explain and bst_explain %} {% endif %}{% if bst_explain %}{{ bst_explain }}{% endif %}"
+                      aria-label="{% if bt_explain %}{{ bt_explain }}{% endif %}{% if bt_explain and bst_explain %} {% endif %}{% if bst_explain %}{{ bst_explain }}{% endif %}">
+                <span aria-hidden="true">?</span>
+              </button>
+              {% endif %}
+            </span>
           {% else %}
             <span>&mdash;</span>
           {% endif %}

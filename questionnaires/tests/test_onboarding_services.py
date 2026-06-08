@@ -12,11 +12,14 @@ from questionnaires.models import (
     Persona,
     Questionnaire,
     Response,
+    ResponseQuestion,
+    ResponseQuestionOption,
 )
 from questionnaires.onboarding import (
     GENERIC_ONBOARDING_SLUG,
     SELF_ID_MULTIPLE,
     SELF_ID_NONE,
+    flatten_response_answers,
     has_completed_onboarding,
     reroute_onboarding_response,
     resolve_target_questionnaire,
@@ -236,3 +239,78 @@ class RerouteOnboardingResponseTest(TestCase):
         reroute_onboarding_response(response, None)
         response.refresh_from_db()
         self.assertEqual(response.questionnaire_id, self.q_a.pk)
+
+
+class FlattenResponseAnswersTest(TestCase):
+    """The shared CRM/API answer-flattening helper (issue #871).
+
+    Asserts the per-type normalized value and the human-readable display
+    string the CRM template renders, including the unanswered case.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(email='flat@test.com', password='pw')
+        cls.questionnaire = Questionnaire.objects.get(
+            slug=GENERIC_ONBOARDING_SLUG,
+        )
+
+    def _make_response(self, status='submitted'):
+        return Response.objects.create(
+            questionnaire=self.questionnaire,
+            respondent=self.user,
+            status=status,
+        )
+
+    @staticmethod
+    def _add_q(response, *, qtype, prompt, order):
+        return ResponseQuestion.objects.create(
+            response=response, question_type=qtype, prompt=prompt, order=order,
+        )
+
+    def test_each_answer_type_normalizes_and_displays(self):
+        response = self._make_response()
+        rq_text = self._add_q(
+            response, qtype='long_text', prompt='Goals?', order=0,
+        )
+        Answer.objects.create(
+            response=response, question=rq_text, text_value='Switch careers',
+        )
+        rq_scale = self._add_q(
+            response, qtype='scale', prompt='Confidence?', order=1,
+        )
+        Answer.objects.create(
+            response=response, question=rq_scale, number_value=4,
+        )
+        rq_multi = self._add_q(
+            response, qtype='multiple_choice', prompt='Areas?', order=2,
+        )
+        opt1 = ResponseQuestionOption.objects.create(
+            response_question=rq_multi, label='RAG', order=0,
+        )
+        opt2 = ResponseQuestionOption.objects.create(
+            response_question=rq_multi, label='Agents', order=1,
+        )
+        ans_multi = Answer.objects.create(response=response, question=rq_multi)
+        ans_multi.selected_options.set([opt1, opt2])
+
+        rows = flatten_response_answers(response)
+        self.assertEqual([r['prompt'] for r in rows], ['Goals?', 'Confidence?', 'Areas?'])
+        self.assertEqual(rows[0]['value'], 'Switch careers')
+        self.assertEqual(rows[0]['display'], 'Switch careers')
+        self.assertEqual(rows[1]['value'], 4)
+        self.assertEqual(rows[1]['display'], '4')
+        self.assertEqual(rows[2]['value'], ['RAG', 'Agents'])
+        self.assertEqual(rows[2]['display'], 'RAG, Agents')
+        self.assertTrue(all(r['answered'] for r in rows))
+
+    def test_unanswered_question_is_present_and_marked_not_answered(self):
+        response = self._make_response(status='draft')
+        self._add_q(response, qtype='text', prompt='Anything else?', order=0)
+
+        rows = flatten_response_answers(response)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['prompt'], 'Anything else?')
+        self.assertIsNone(rows[0]['value'])
+        self.assertEqual(rows[0]['display'], '')
+        self.assertFalse(rows[0]['answered'])

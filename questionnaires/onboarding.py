@@ -27,6 +27,12 @@ from questionnaires.models import (
 from questionnaires.services import build_response_questions
 
 _CHOICE_TYPES = frozenset({'single_choice', 'multiple_choice'})
+# Answer types whose value lives in ``Answer.text_value``.
+_TEXT_TYPES = frozenset({'text', 'long_text'})
+# Answer types whose value lives in ``Answer.number_value``.
+_NUMBER_TYPES = frozenset({'scale', 'number'})
+_MULTIPLE_CHOICE = 'multiple_choice'
+_SINGLE_CHOICE = 'single_choice'
 
 # Slug of the persona-agnostic onboarding questionnaire seeded by #801.
 GENERIC_ONBOARDING_SLUG = 'onboarding-general'
@@ -291,3 +297,111 @@ def reroute_onboarding_response(response, target):
     build_response_questions(response)
     _restore_answers_by_prompt(response, snapshot)
     return response
+
+
+def normalize_answer(response_question, answer):
+    """Normalize one ``ResponseQuestion`` + its ``Answer`` row by type.
+
+    The single source of answer-type branching shared by the read-only
+    onboarding API (``api/serializers/onboarding.serialize_response``) and
+    the Studio CRM detail page (``flatten_response_answers``). Reads the
+    SNAPSHOT layer only (the ``answer`` is an ``Answer`` row or ``None``;
+    choice labels come from ``Answer.selected_options`` /
+    ``ResponseQuestionOption.label``, never the base ``QuestionOption``).
+
+    Returns, by question type:
+
+    - ``text`` / ``long_text`` -> the text string, or ``None`` when blank.
+    - ``scale`` / ``number``   -> the integer, or ``None`` when unanswered.
+    - ``single_choice``        -> one label string, or ``None`` when none.
+    - ``multiple_choice``      -> an ordered list of labels, ``[]`` when none.
+
+    An unanswered question (no ``Answer`` row) yields the type's empty value
+    so unanswered questions are still represented.
+    """
+    qtype = response_question.question_type
+
+    if qtype in _TEXT_TYPES:
+        if answer is None:
+            return None
+        return (answer.text_value or '').strip() or None
+
+    if qtype in _NUMBER_TYPES:
+        if answer is None:
+            return None
+        return answer.number_value
+
+    if qtype == _MULTIPLE_CHOICE:
+        if answer is None:
+            return []
+        return [opt.label for opt in answer.selected_options.all()]
+
+    if qtype == _SINGLE_CHOICE:
+        if answer is None:
+            return None
+        labels = [opt.label for opt in answer.selected_options.all()]
+        return labels[0] if labels else None
+
+    # Unknown type (defensive -- the model enum is closed): fall back to the
+    # raw stored text so a question is never silently dropped.
+    if answer is None:
+        return None
+    return (answer.text_value or '').strip() or None
+
+
+def _display_value(normalized):
+    """Render a normalized answer as a human-readable string.
+
+    Mirrors ``Answer.display_value`` (joins multi-choice labels with
+    ``', '``) but works off the already-normalized value so it shares the
+    single answer-type branch in :func:`normalize_answer`. Returns ``''``
+    for an empty/unanswered value so callers can render an explicit blank.
+    """
+    if normalized is None:
+        return ''
+    if isinstance(normalized, list):
+        return ', '.join(normalized)
+    if isinstance(normalized, bool):
+        # Defensive: booleans aren't a question type, but ``str(True)`` is
+        # never what we want to show.
+        return ''
+    return str(normalized)
+
+
+def flatten_response_answers(response):
+    """Return an ordered flat Q&A list for a member's onboarding response.
+
+    One item per ``ResponseQuestion`` (ordered by the model's
+    ``order, id``) as a dict with:
+
+    - ``prompt``: the snapshot question prompt.
+    - ``question_type``: the snapshot question type.
+    - ``order``: the snapshot order.
+    - ``value``: the normalized answer (string / int / list / ``None``).
+    - ``display``: the human-readable string for the CRM template.
+    - ``answered``: ``True`` when the member supplied an answer.
+
+    Reuses :func:`normalize_answer` so the CRM page and the read-only API
+    share one answer-type branch. Reads the SNAPSHOT rows only.
+    """
+    answers_by_question = {
+        answer.question_id: answer
+        for answer in (
+            response.answers.prefetch_related('selected_options').all()
+        )
+    }
+
+    rows = []
+    for rq in response.response_questions.all():
+        answer = answers_by_question.get(rq.pk)
+        value = normalize_answer(rq, answer)
+        display = _display_value(value)
+        rows.append({
+            'prompt': rq.prompt,
+            'question_type': rq.question_type,
+            'order': rq.order,
+            'value': value,
+            'display': display,
+            'answered': bool(display),
+        })
+    return rows

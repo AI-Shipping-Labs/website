@@ -11,6 +11,13 @@ from django.test import TestCase
 
 from crm.models import CRMRecord
 from plans.models import InterviewNote, Plan, Sprint
+from questionnaires.models import (
+    Answer,
+    Questionnaire,
+    Response,
+    ResponseQuestion,
+    ResponseQuestionOption,
+)
 
 User = get_user_model()
 
@@ -194,6 +201,141 @@ class CRMDetailViewTest(CRMViewsBase):
         response = self.client.get(f'/studio/crm/{record.pk}/')
         self.assertContains(response, 'data-testid="crm-detail-reactivate"')
         self.assertNotContains(response, 'data-testid="crm-detail-archive"')
+
+
+class CRMOnboardingSectionTest(CRMViewsBase):
+    """The Onboarding section on the CRM detail page (issue #871).
+
+    Renders the member's onboarding answers (reusing the shared
+    answer-flattening helper) above the Member notes section, with
+    submitted / draft / never-onboarded states.
+    """
+
+    @staticmethod
+    def _onboarding_questionnaire():
+        # The generic onboarding questionnaire is seeded by the
+        # questionnaires data migration; reuse it rather than re-creating
+        # (its slug is unique).
+        return Questionnaire.objects.get(slug='onboarding-general')
+
+    @staticmethod
+    def _add_question(response, *, qtype, prompt, order):
+        return ResponseQuestion.objects.create(
+            response=response,
+            question_type=qtype,
+            prompt=prompt,
+            order=order,
+        )
+
+    def test_submitted_response_renders_prompts_and_answers(self):
+        record = CRMRecord.objects.create(user=self.member)
+        q = self._onboarding_questionnaire()
+        response_obj = Response.objects.create(
+            questionnaire=q, respondent=self.member,
+            status='submitted',
+            submitted_at=datetime.datetime(2026, 5, 19, tzinfo=datetime.UTC),
+        )
+        rq_goal = self._add_question(
+            response_obj, qtype='long_text',
+            prompt='What are your goals?', order=0,
+        )
+        Answer.objects.create(
+            response=response_obj, question=rq_goal,
+            text_value='Build an AI portfolio and switch careers',
+        )
+        rq_scale = self._add_question(
+            response_obj, qtype='scale',
+            prompt='How confident are you with ML 1-5?', order=1,
+        )
+        Answer.objects.create(
+            response=response_obj, question=rq_scale, number_value=3,
+        )
+        rq_choice = self._add_question(
+            response_obj, qtype='multiple_choice',
+            prompt='Which areas interest you?', order=2,
+        )
+        opt_rag = ResponseQuestionOption.objects.create(
+            response_question=rq_choice, label='RAG', order=0,
+        )
+        opt_agents = ResponseQuestionOption.objects.create(
+            response_question=rq_choice, label='Agents', order=1,
+        )
+        ans_choice = Answer.objects.create(
+            response=response_obj, question=rq_choice,
+        )
+        ans_choice.selected_options.set([opt_rag, opt_agents])
+
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="crm-onboarding-section"')
+        self.assertContains(response, 'What are your goals?')
+        self.assertContains(
+            response, 'Build an AI portfolio and switch careers',
+        )
+        # Scale / number renders the human-readable value, not a raw id.
+        self.assertContains(response, 'How confident are you with ML 1-5?')
+        self.assertContains(response, '>\n          3\n')
+        # Multiple-choice renders joined labels via the shared display path.
+        self.assertContains(response, 'RAG, Agents')
+        # Submitted date indicator.
+        self.assertContains(response, 'data-testid="crm-onboarding-submitted"')
+        self.assertContains(response, '2026-05-19')
+        self.assertNotContains(response, 'data-testid="crm-onboarding-draft"')
+
+    def test_onboarding_section_appears_above_member_notes(self):
+        record = CRMRecord.objects.create(user=self.member)
+        q = self._onboarding_questionnaire()
+        Response.objects.create(
+            questionnaire=q, respondent=self.member, status='submitted',
+            submitted_at=datetime.datetime(2026, 5, 19, tzinfo=datetime.UTC),
+        )
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+        body = response.content.decode()
+        onboarding_pos = body.index('data-testid="crm-onboarding-section"')
+        notes_pos = body.index('data-testid="crm-notes-section"')
+        self.assertLess(onboarding_pos, notes_pos)
+
+    def test_draft_response_shows_partial_answers_and_draft_note(self):
+        record = CRMRecord.objects.create(user=self.member)
+        q = self._onboarding_questionnaire()
+        response_obj = Response.objects.create(
+            questionnaire=q, respondent=self.member, status='draft',
+        )
+        rq_answered = self._add_question(
+            response_obj, qtype='text', prompt='Your current role?', order=0,
+        )
+        Answer.objects.create(
+            response=response_obj, question=rq_answered,
+            text_value='Backend engineer',
+        )
+        # Second question left blank (no Answer row).
+        self._add_question(
+            response_obj, qtype='long_text',
+            prompt='Anything else to share?', order=1,
+        )
+
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+        self.assertContains(response, 'data-testid="crm-onboarding-draft"')
+        self.assertNotContains(
+            response, 'data-testid="crm-onboarding-submitted"',
+        )
+        self.assertContains(response, 'Your current role?')
+        self.assertContains(response, 'Backend engineer')
+        # The unanswered question still appears, marked as not answered.
+        self.assertContains(response, 'Anything else to share?')
+        self.assertContains(response, 'Not answered')
+
+    def test_no_onboarding_shows_empty_state_not_broken_section(self):
+        record = CRMRecord.objects.create(user=self.other)
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="crm-onboarding-section"')
+        self.assertContains(response, 'data-testid="crm-onboarding-empty"')
+        self.assertContains(response, "hasn")
+        # Other sections still render.
+        self.assertContains(response, 'data-testid="crm-snapshot-card"')
+        self.assertContains(response, 'data-testid="crm-plans-section"')
+        self.assertContains(response, 'data-testid="crm-notes-section"')
 
 
 class CRMEditViewTest(CRMViewsBase):

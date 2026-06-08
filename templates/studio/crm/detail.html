@@ -163,6 +163,48 @@
   {% endif %}
 </section>
 
+<!-- Onboarding answers (issue #871) -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-onboarding-section">
+  <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+    <h2 class="text-lg font-semibold text-foreground">Onboarding</h2>
+    {% if onboarding_response %}
+      {% if onboarding_submitted %}
+      <span class="text-xs text-muted-foreground" data-testid="crm-onboarding-submitted">
+        Submitted {{ onboarding_response.submitted_at|date:"Y-m-d" }}
+      </span>
+      {% else %}
+      <span class="inline-flex items-center rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-300 border border-amber-500/30"
+            data-testid="crm-onboarding-draft">
+        Started but not submitted yet
+      </span>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {% if onboarding_response %}
+    {% if onboarding_answers %}
+    <dl class="divide-y divide-border" data-testid="crm-onboarding-answers">
+      {% for item in onboarding_answers %}
+      <div class="py-3" data-testid="crm-onboarding-item">
+        <dt class="text-sm font-medium text-foreground" data-testid="crm-onboarding-prompt">{{ item.prompt }}</dt>
+        <dd class="text-sm text-muted-foreground mt-1 whitespace-pre-line" data-testid="crm-onboarding-answer">
+          {% if item.answered %}{{ item.display }}{% else %}<span class="italic text-muted-foreground/70">Not answered</span>{% endif %}
+        </dd>
+      </div>
+      {% endfor %}
+    </dl>
+    {% else %}
+    <p class="text-sm text-muted-foreground" data-testid="crm-onboarding-no-questions">
+      This member started the onboarding form but hasn&rsquo;t answered any questions yet.
+    </p>
+    {% endif %}
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="crm-onboarding-empty">
+    This member hasn&rsquo;t filled in the onboarding form yet.
+  </p>
+  {% endif %}
+</section>
+
 <!-- Member notes (reuse the existing partial) -->
 <section class="mb-8 max-w-4xl" data-testid="crm-notes-section">
   {% include "studio/users/_member_notes.html" %}

@@ -83,6 +83,40 @@ class EmailServiceSiteUrlOverrideTest(TestCase):
 
 
 @override_settings(SITE_BASE_URL='https://env.example.com')
+class WelcomeOnboardingCtaTest(TestCase):
+    """Free / community welcome emails link to onboarding (issue #871).
+
+    Mirrors the paid-tier welcomes (#838/#847) so every "you joined" email
+    points new members at the onboarding form.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            email='cta@example.com', password='secure1234',
+        )
+
+    def setUp(self):
+        clear_config_cache()
+
+    def tearDown(self):
+        clear_config_cache()
+
+    def test_welcome_links_to_onboarding(self):
+        _, body_html = EmailService()._render_template(
+            'welcome', self.user, {'tier_name': 'Free'},
+        )
+        self.assertIn('https://env.example.com/onboarding/', body_html)
+
+    def test_community_invite_links_to_onboarding(self):
+        _, body_html = EmailService()._render_template(
+            'community_invite', self.user,
+            {'slack_invite_url': 'https://slack.example.com/invite'},
+        )
+        self.assertIn('https://env.example.com/onboarding/', body_html)
+
+
+@override_settings(SITE_BASE_URL='https://env.example.com')
 class WelcomeImportedSiteUrlOverrideTest(TestCase):
     """``email_app.tasks.welcome_imported`` URL helpers must respect
     the override and preserve ``rstrip('/')``."""

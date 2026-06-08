@@ -18,15 +18,14 @@ B. Member responses -- ``serialize_response`` reads the SNAPSHOT layer
    ``Question`` after submit never changes the API output. We deliberately
    do NOT reuse ``Answer.display_value`` (it joins choice labels into one
    comma string, flattening the list the plan-generation feed needs).
+
+The answer-type branching itself lives once in
+``questionnaires.onboarding.normalize_answer`` so this API and the Studio
+CRM detail page (#871) share a single source of truth; this module only
+adds the structured-list JSON wrapping on top of it.
 """
 
-# Question types whose answer lives in ``Answer.text_value``.
-_TEXT_TYPES = frozenset({"text", "long_text"})
-# Question types whose answer lives in ``Answer.number_value``.
-_NUMBER_TYPES = frozenset({"scale", "number"})
-# Single-choice yields one label; multiple-choice yields a list of labels.
-_SINGLE_CHOICE = "single_choice"
-_MULTIPLE_CHOICE = "multiple_choice"
+from questionnaires.onboarding import normalize_answer as _normalize_answer
 
 
 def _isoformat_or_none(value):
@@ -95,55 +94,6 @@ def serialize_persona(persona):
 
 
 # ---- B. Member responses ---------------------------------------------------
-
-
-def _normalize_answer(response_question, answer):
-    """Normalize one ``ResponseQuestion`` + its ``Answer`` by type.
-
-    Reads the SNAPSHOT (``answer`` is an ``Answer`` row or ``None``;
-    selected labels come from ``Answer.selected_options`` /
-    ``ResponseQuestionOption.label``, never base ``QuestionOption``).
-
-    - ``text`` / ``long_text`` -> the text string, ``null`` when blank.
-    - ``scale`` / ``number``   -> the integer, ``null`` when not answered.
-    - ``single_choice``        -> one label string, ``null`` when none.
-    - ``multiple_choice``      -> ordered list of labels, ``[]`` when none.
-
-    A ``ResponseQuestion`` with no ``Answer`` row yields the type's empty
-    value (``null`` for text/number/single_choice, ``[]`` for
-    multiple_choice), so unanswered questions are always represented.
-    """
-    qtype = response_question.question_type
-
-    if qtype in _TEXT_TYPES:
-        if answer is None:
-            return None
-        text = (answer.text_value or "").strip()
-        return text or None
-
-    if qtype in _NUMBER_TYPES:
-        if answer is None:
-            return None
-        return answer.number_value
-
-    if qtype == _MULTIPLE_CHOICE:
-        if answer is None:
-            return []
-        # ``selected_options`` is ordered by ``ResponseQuestionOption``
-        # Meta.ordering (``order, id``).
-        return [opt.label for opt in answer.selected_options.all()]
-
-    if qtype == _SINGLE_CHOICE:
-        if answer is None:
-            return None
-        labels = [opt.label for opt in answer.selected_options.all()]
-        return labels[0] if labels else None
-
-    # Unknown type: fall back to the raw stored text so the feed never
-    # silently drops a question. (Defensive -- the model enum is closed.)
-    if answer is None:
-        return None
-    return (answer.text_value or "").strip() or None
 
 
 def serialize_response(response, *, persona):

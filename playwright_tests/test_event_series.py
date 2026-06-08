@@ -561,3 +561,82 @@ class TestScenario9ListingShowsSeriesLink:
         page.wait_for_url(re.compile(r".*/events/groups/listed-public-series"))
 
         ctx.close()
+
+
+# ---------------------------------------------------------------------------
+# Scenario 10: Cancelled occurrences are hidden from visitors but visible
+# to staff (issue #863)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestScenario10CancelledHiddenFromPublic:
+    def test_cancelled_hidden_for_visitor_visible_for_staff(
+        self, django_server, browser
+    ):
+        from django.db import connection
+        from django.utils import timezone
+
+        from events.models import Event, EventSeries
+
+        _reset_event_state()
+        _create_staff_user("staff-eg10@test.com")
+        series = EventSeries(
+            name="Cancellation Series",
+            slug="cancellation-series",
+            start_time=datetime(2026, 1, 1, 18, 0).time(),
+        )
+        series.save()
+        # 6 live (upcoming) occurrences + 3 cancelled — the live symptom from
+        # issue #863 (a series with 9 occurrences, 3 cancelled).
+        for i in range(1, 7):
+            Event(
+                title=f"Live Occurrence {i}",
+                slug=f"cancellation-series-live-{i}",
+                start_datetime=timezone.now() + timedelta(days=7 * i),
+                status="upcoming",
+                origin="studio",
+                event_series=series,
+                series_position=i,
+            ).save()
+        for i in range(1, 4):
+            Event(
+                title=f"Cancelled Occurrence {i}",
+                slug=f"cancellation-series-cancelled-{i}",
+                start_datetime=timezone.now() + timedelta(days=7 * (6 + i)),
+                status="cancelled",
+                origin="studio",
+                event_series=series,
+                series_position=6 + i,
+            ).save()
+        connection.close()
+
+        # Anonymous visitor: only the 6 live occurrences are listed, no
+        # cancelled occurrence and no "Cancelled" label.
+        anon = browser.new_context(viewport={"width": 1280, "height": 720})
+        anon_page = anon.new_page()
+        anon_page.goto(
+            f"{django_server}/events/groups/cancellation-series",
+            wait_until="domcontentloaded",
+        )
+        rows = anon_page.locator('[data-testid="series-event"]')
+        assert rows.count() == 6
+        body = anon_page.locator("body").inner_text()
+        assert "Cancelled Occurrence" not in body
+        assert "Cancelled" not in body
+        anon.close()
+
+        # Staff: all 9 occurrences (including the 3 cancelled) are visible so
+        # they can be managed.
+        staff_ctx = _auth_context(browser, "staff-eg10@test.com")
+        staff_page = staff_ctx.new_page()
+        staff_page.goto(
+            f"{django_server}/events/groups/cancellation-series",
+            wait_until="domcontentloaded",
+        )
+        staff_rows = staff_page.locator('[data-testid="series-event"]')
+        assert staff_rows.count() == 9
+        staff_body = staff_page.locator("body").inner_text()
+        assert "Cancelled Occurrence 1" in staff_body
+        staff_ctx.close()

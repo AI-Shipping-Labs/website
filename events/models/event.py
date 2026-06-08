@@ -20,6 +20,16 @@ EVENT_STATUS_CHOICES = [
     ('cancelled', 'Cancelled'),
 ]
 
+# Issue #863: statuses that are hidden from public visitors. ``draft`` is the
+# pre-publish state and ``cancelled`` occurrences should disappear entirely for
+# visitors (no "Cancelled" badge). Staff still see them so they can manage them.
+# This single set is the authoritative definition reused by the public events
+# list, calendar, public series page, and ``EventSeries.published_event_count``.
+HIDDEN_FROM_PUBLIC_STATUSES = {'draft', 'cancelled'}
+
+# The complementary set: statuses an occurrence can hold and still be public.
+PUBLIC_EVENT_STATUSES = {'upcoming', 'completed'}
+
 EVENT_PLATFORM_CHOICES = [
     ('zoom', 'Zoom'),
     ('custom', 'Custom URL'),

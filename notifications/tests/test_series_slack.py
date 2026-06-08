@@ -54,6 +54,18 @@ class BuildSeriesSlackBlocksTest(TestCase):
         self.assertIn('*New event series:*', section)
         self.assertIn('/events/groups/weekly-build-club', section)
 
+    def test_description_markdown_link_rendered_as_mrkdwn(self):
+        """Issue #887: a markdown link in the series description must render
+        as Slack mrkdwn, not raw ``[text](url)``."""
+        series = _make_series(
+            description='Catch up on the [kickoff](https://example.com/k).',
+        )
+        s1 = _make_session(series, 1, 3)
+        _, blocks = build_series_slack_blocks(series, [s1])
+        section = blocks[0]['text']['text']
+        self.assertIn('<https://example.com/k|kickoff>', section)
+        self.assertNotIn('[kickoff]', section)
+
     def test_lists_sessions_with_tz_strip(self):
         series = _make_series()
         s1 = _make_session(series, 1, 3)

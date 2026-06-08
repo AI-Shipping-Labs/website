@@ -6,6 +6,7 @@ when new content is published.
 """
 
 import logging
+import re
 
 import requests
 
@@ -14,6 +15,80 @@ from events.services.display_time import format_event_tz_strip
 from integrations.config import get_config, is_enabled, site_base_url
 
 logger = logging.getLogger(__name__)
+
+# [text](url) — capture the link text and the URL separately.
+_MD_LINK_RE = re.compile(r'\[([^\]]+)\]\((https?://[^)\s]+)\)')
+# **bold** or __bold__ (non-greedy, no nesting handling needed for descriptions).
+_MD_BOLD_RE = re.compile(r'(\*\*|__)(.+?)\1')
+# Inline `code` — Slack uses single backticks too, so keep the text.
+_MD_INLINE_CODE_RE = re.compile(r'`([^`]+)`')
+# Leftover markdown heading hashes at the start of a line.
+_MD_HEADING_RE = re.compile(r'^#{1,6}\s+', flags=re.MULTILINE)
+# Leftover image syntax ![alt](url) — drop entirely (handled before links).
+_MD_IMAGE_RE = re.compile(r'!\[[^\]]*\]\((https?://[^)\s]+)\)')
+
+
+def markdown_to_mrkdwn(text):
+    """Convert a small subset of Markdown to Slack ``mrkdwn``.
+
+    Slack ``mrkdwn`` is not Markdown: links are ``<url|text>`` (not
+    ``[text](url)``) and bold is ``*bold*`` (not ``**bold**``). Content
+    descriptions are authored in Markdown, so injecting them raw makes
+    links and emphasis render literally in #announcements (issue #887).
+
+    Handles the constructs that actually show up in descriptions:
+
+    - ``[text](url)`` → ``<url|text>``
+    - ``**bold**`` / ``__bold__`` → ``*bold*``
+    - ``![alt](url)`` images → stripped (Slack can't inline them here)
+    - leading ``#`` heading markers → stripped
+
+    Inline ``code`` is left as-is (single backticks are valid mrkdwn).
+    Returns the input unchanged when it is empty/falsy.
+    """
+    if not text:
+        return text
+
+    # Strip images before links so the link regex doesn't mangle them.
+    text = _MD_IMAGE_RE.sub('', text)
+    text = _MD_LINK_RE.sub(r'<\2|\1>', text)
+    text = _MD_BOLD_RE.sub(r'*\2*', text)
+    text = _MD_HEADING_RE.sub('', text)
+    return text
+
+
+def _truncate_description(text, limit=200):
+    """Truncate a description to ``limit`` chars without cutting a token.
+
+    Backs off to the last whitespace boundary before ``limit`` so a
+    Slack link (``<url|text>``) or word is never split mid-token, then
+    appends an ellipsis. Conversion to ``mrkdwn`` happens AFTER
+    truncation so the budget is measured against the source text and a
+    converted ``<url|text>`` link is never sliced in half.
+
+    Returns the converted ``mrkdwn`` string (possibly with a trailing
+    ``…``), or the input unchanged when it is empty or within budget.
+    """
+    if not text:
+        return text
+
+    if len(text) <= limit:
+        return markdown_to_mrkdwn(text)
+
+    truncated = text[:limit]
+    # Avoid cutting inside a markdown link: if we sliced after the
+    # opening '[' but before the closing ')', back up to before the '['.
+    last_open = truncated.rfind('[')
+    last_close = truncated.rfind(')')
+    if last_open > last_close:
+        truncated = truncated[:last_open]
+
+    # Back off to the last whitespace so we never split a word/URL.
+    last_space = truncated.rfind(' ')
+    if last_space > 0:
+        truncated = truncated[:last_space]
+
+    return markdown_to_mrkdwn(truncated.rstrip()) + '…'
 
 
 def _get_announcements_channel_id():
@@ -48,13 +123,12 @@ def _build_slack_blocks(content_type, content):
     type_label = type_labels.get(content_type, 'New content')
     title = content.title
 
-    # Build description
+    # Build description: truncate to budget, then convert markdown →
+    # Slack mrkdwn so links/bold render (issue #887).
     description = getattr(content, 'description', '')
     if not description:
         description = getattr(content, 'content_markdown', '')
-    description = (description or '')[:200]
-    if len(description) == 200:
-        description += '...'
+    description = _truncate_description(description or '')
 
     text_fallback = f'{type_label}: {title}'
 
@@ -133,9 +207,7 @@ def build_series_slack_blocks(series, sessions):
 
     mrkdwn_text = f'*New event series:* <{full_url}|{title}>'
 
-    description = (getattr(series, 'description', '') or '')[:200]
-    if len(description) == 200:
-        description += '...'
+    description = _truncate_description(getattr(series, 'description', '') or '')
     if description:
         mrkdwn_text += f'\n\n{description}'
 

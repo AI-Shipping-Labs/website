@@ -70,6 +70,10 @@ class EventReminderLog(models.Model):
       (event, user) — the per-user task uses ``get_or_create`` so a
       re-fired cron or a manual "Send follow-up now" press never
       double-sends.
+    - ``24h_slack``: per-event guard for the 24h channel Slack
+      announcement (issue #887). ``user`` is NULL — one row per event,
+      so the announcement posts at most once even though the 24h cron
+      window is wider than the 15-min tick interval.
     """
 
     event = models.ForeignKey(
@@ -81,12 +85,20 @@ class EventReminderLog(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='event_reminder_logs',
+        null=True,
+        blank=True,
+        help_text=(
+            'NULL for per-event guard rows (e.g. the "24h_slack" channel '
+            'announcement marker, issue #887). Set for per-user reminders.'
+        ),
     )
     interval = models.CharField(
-        max_length=10,
+        max_length=16,
         help_text=(
             'Reminder interval: "24h" or "20m" for pre-event reminders, '
-            '"followup" for the post-event recap email (issue #680).'
+            '"followup" for the post-event recap email (issue #680), '
+            '"24h_slack" for the per-event channel announcement guard '
+            '(issue #887).'
         ),
     )
     created_at = models.DateTimeField(auto_now_add=True)

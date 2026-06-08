@@ -10,6 +10,12 @@ _content-repo/
 .coverage
 htmlcov/
 playwright_tests/
-_docs/
+# Ignore docs, but keep the canonical OpenAPI spec: api/views/docs.py
+# serves _docs/openapi.json at runtime (/api/openapi.json). Excluding it
+# makes /api/docs 500 in prod (issue #862). _docs/* + negation re-includes
+# only that one file; using _docs/* (not _docs/) keeps the negation working
+# on legacy builders too, since a fully-excluded dir can't re-include a child.
+_docs/*
+!_docs/openapi.json
 specs/
 .claude/

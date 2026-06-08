@@ -185,6 +185,7 @@ class StudioSidebarStructureTest(TestCase):
         ('/studio/ses-events/', 'SES events'),
         ('/studio/redirects/', 'Redirects'),
         ('/studio/settings/', 'Settings'),
+        ('/api/docs', 'API docs'),
     ]
 
     SUPERUSER_ONLY_LINKS = [
@@ -230,6 +231,28 @@ class StudioSidebarStructureTest(TestCase):
     def test_api_tokens_testid_preserved_for_superuser(self):
         response = self._get_studio_dashboard(superuser=True)
         self.assertContains(response, 'data-testid="api-tokens-nav-link"')
+
+    def test_api_docs_link_opens_swagger_in_new_tab(self):
+        # Issue #862: the Operations shortcut to the Swagger UI must open
+        # in a new tab with rel=noopener (the Studio stays put), and be
+        # tagged with a stable test hook. We assert on the anchor's exact
+        # attribute set so a regression that drops target/rel fails here.
+        response = self._get_studio_dashboard()
+        body = response.content.decode()
+
+        link_idx = body.find('data-testid="api-docs-nav-link"')
+        self.assertGreater(link_idx, -1, 'API docs nav link must render for staff')
+
+        # Locate the enclosing <a ...> tag and assert its attribute set.
+        open_idx = body.rfind('<a ', 0, link_idx)
+        close_idx = body.find('>', link_idx)
+        self.assertGreater(open_idx, -1)
+        self.assertGreater(close_idx, link_idx)
+        anchor_tag = body[open_idx:close_idx]
+
+        self.assertIn('href="/api/docs"', anchor_tag)
+        self.assertIn('target="_blank"', anchor_tag)
+        self.assertIn('rel="noopener"', anchor_tag)
 
     # ------------------------------------------------------------------
     # Renamed labels — make sure the OLD labels are gone

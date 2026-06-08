@@ -475,3 +475,92 @@ class GenerateOpenapiCommandTest(TestCase):
         # whole job).
         self.assertIn("---", err.getvalue())
         self.assertIn("+++", err.getvalue())
+
+
+def _dockerignore_excludes(patterns, target):
+    """Replicate Docker's ``.dockerignore`` last-match-wins semantics.
+
+    Returns ``True`` if ``target`` (a forward-slash repo-relative path)
+    would be excluded from the build context. ``patterns`` is the list
+    of raw lines from ``.dockerignore`` (comments/blanks already
+    stripped). A leading ``!`` negates (re-includes); the last matching
+    pattern decides, matching Docker's documented behaviour.
+    """
+    import fnmatch
+
+    excluded = False
+    for raw in patterns:
+        pattern = raw
+        negate = pattern.startswith("!")
+        if negate:
+            pattern = pattern[1:]
+        pattern = pattern.rstrip("/")
+        if not pattern:
+            continue
+        # A directory pattern (``_docs``) matches the dir and everything
+        # under it; a glob (``_docs/*``) matches direct children. Test
+        # both the full path and each parent prefix so ``_docs`` matches
+        # ``_docs/openapi.json``.
+        parts = target.split("/")
+        candidates = ["/".join(parts[: i + 1]) for i in range(len(parts))]
+        if any(fnmatch.fnmatch(c, pattern) for c in candidates):
+            excluded = not negate
+    return excluded
+
+
+class DockerContextShipsOpenApiSpecTest(TestCase):
+    """Regression guard for issue #862.
+
+    ``.dockerignore`` ignores ``_docs/`` so the rest of the docs folder
+    stays out of the image, but it MUST re-include ``_docs/openapi.json``
+    -- ``api.views.docs.openapi_json`` serves that file at runtime and
+    500s when it's absent (which is exactly what broke ``/api/docs`` in
+    production). This test fails if anyone removes the negation or the
+    file itself.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.conf import settings
+
+        cls.repo_root = Path(settings.BASE_DIR)
+        cls.dockerignore = cls.repo_root / ".dockerignore"
+
+    def _patterns(self):
+        lines = self.dockerignore.read_text(encoding="utf-8").splitlines()
+        return [
+            ln.strip()
+            for ln in lines
+            if ln.strip() and not ln.strip().startswith("#")
+        ]
+
+    def test_dockerignore_exists(self):
+        self.assertTrue(
+            self.dockerignore.exists(),
+            ".dockerignore is missing from the repo root.",
+        )
+
+    def test_spec_file_is_committed(self):
+        spec = self.repo_root / "_docs" / "openapi.json"
+        self.assertTrue(
+            spec.exists(),
+            "_docs/openapi.json is missing -- run "
+            "'python manage.py generate_openapi'.",
+        )
+
+    def test_rest_of_docs_dir_is_still_ignored(self):
+        # Confirms we kept the folder out of the image (the whole point
+        # of the original ignore rule) rather than shipping all of _docs.
+        self.assertTrue(
+            _dockerignore_excludes(self._patterns(), "_docs/PROCESS.md"),
+            "_docs/ should remain excluded from the Docker build context "
+            "(only openapi.json is re-included).",
+        )
+
+    def test_openapi_spec_is_re_included_in_build_context(self):
+        self.assertFalse(
+            _dockerignore_excludes(self._patterns(), "_docs/openapi.json"),
+            "_docs/openapi.json must be re-included in .dockerignore "
+            "(via '!_docs/openapi.json') so /api/openapi.json works in "
+            "the production image. See issue #862.",
+        )

@@ -20,7 +20,13 @@ jobs:
     runs-on: ubuntu-latest
     # Safety net for #269: a test failure can leave a django-q scheduler thread
     # alive, causing the job to hang for ~1h40m. Bound the blast radius.
-    timeout-minutes: 30
+    # Bumped 30 -> 45 (#888): the suite now runs ~1760s (~29.3m) of pure
+    # test time, and runner-to-runner variance pushes the total job
+    # wall-clock past the old 30m cap, cancelling a green run and skipping
+    # deploy (run 27158919559 reported "Ran 9908 tests ... OK" then was
+    # cancelled at 30m0s). 45m keeps the hang blast radius well under the
+    # ~1h40m worst case while giving the healthy suite headroom.
+    timeout-minutes: 45
 
     steps:
       - name: Start CI timing profile

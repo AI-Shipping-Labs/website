@@ -1,0 +1,82 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Edit Call Host{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_call_host_list' %}" class="hover:text-foreground">Call Hosts</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">{{ host.name }}</span>
+  </div>
+  <h1 class="text-2xl font-semibold text-foreground">Edit Call Host</h1>
+</div>
+
+{% url 'studio_call_host_list' as host_cancel_url %}
+<form method="post" class="space-y-6 max-w-3xl">
+  {% csrf_token %}
+
+  <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Name</label>
+      <input type="text" name="name" value="{{ host.name }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
+      <input type="text" name="slug" value="{{ host.slug }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Role label</label>
+      <input type="text" name="role_label" value="{{ host.role_label }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Photo URL</label>
+      <input type="text" name="photo_url" value="{{ host.photo_url }}"
+             placeholder="Leave blank to use the default photo"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Booking URL</label>
+      <input type="url" name="booking_url" value="{{ host.booking_url }}"
+             placeholder="https://calendly.com/... or https://calendar.app.google/..."
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="grid grid-cols-3 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Capacity</label>
+        <input type="number" name="capacity" min="0" value="{{ host.capacity }}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Current load</label>
+        <input type="number" name="current_load" min="0" value="{{ host.current_load }}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Order</label>
+        <input type="number" name="order" min="0" value="{{ host.order }}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+    </div>
+
+    <div>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" name="is_active" {% if host.is_active %}checked{% endif %}
+               class="rounded border-border text-accent focus:ring-accent">
+        <span class="text-sm text-foreground">Active (show on Request a call page)</span>
+      </label>
+    </div>
+  </div>
+
+  {% include "studio/includes/forms/action_row.html" with submit_label="Save Changes" cancel_url=host_cancel_url %}
+</form>
+{% endblock %}

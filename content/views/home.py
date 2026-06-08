@@ -280,6 +280,22 @@ def _dashboard(request):
     # --- Quick actions ---
     quick_actions = _get_quick_actions(user_level)
 
+    # --- Onboarding completion (issue #802 / #870) ---
+    # Show the dashboard prompt banner until the member has a submitted
+    # onboarding response. Completion is derived (no model field).
+    onboarding_complete = has_completed_onboarding(user)
+
+    # --- Request a call (issue #870) ---
+    # Surface the request-a-call entry point only once onboarding is
+    # complete — the page itself gates on the same condition.
+    if onboarding_complete:
+        quick_actions = quick_actions + [{
+            'title': 'Request a call',
+            'description': 'Book a 1:1 with Alexey or Valeria',
+            'url': '/request-a-call',
+            'icon': 'phone',
+        }]
+
     # --- Slack community ---
     # Slack join link is based on user.tier.level (NOT overridden level)
     # because Slack access requires a paid subscription.
@@ -301,9 +317,7 @@ def _dashboard(request):
     )
 
     # --- Onboarding prompt (issue #802) ---
-    # Show the dashboard prompt banner until the member has a submitted
-    # onboarding response. Completion is derived (no model field).
-    show_onboarding_prompt = not has_completed_onboarding(user)
+    show_onboarding_prompt = not onboarding_complete
 
     context = {
         'tier_name': tier_name,

@@ -68,10 +68,12 @@ from studio.views.enrollments import (
 )
 from studio.views.event_series import (
     event_series_add_occurrence,
+    event_series_announce_slack,
     event_series_create,
     event_series_delete,
     event_series_detail,
     event_series_list,
+    event_series_notify,
 )
 from studio.views.events import (
     event_create,
@@ -342,6 +344,16 @@ urlpatterns = [
         'event-series/<int:series_id>/add-occurrence',
         event_series_add_occurrence,
         name='studio_event_series_add_occurrence',
+    ),
+    path(
+        'event-series/<int:series_id>/notify',
+        event_series_notify,
+        name='studio_event_series_notify',
+    ),
+    path(
+        'event-series/<int:series_id>/announce-slack',
+        event_series_announce_slack,
+        name='studio_event_series_announce_slack',
     ),
     path(
         'event-series/<int:series_id>/delete',

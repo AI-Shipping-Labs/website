@@ -22,7 +22,9 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone as dj_timezone
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
@@ -34,6 +36,12 @@ from accounts.services.timezones import (
 from events.models import Event, EventSeries
 from events.services.series_registration import (
     enroll_series_registrants_in_event,
+)
+from notifications.models import Notification
+from notifications.services import NotificationService
+from notifications.services.notification_service import series_notification_title
+from notifications.services.slack_announcements import (
+    post_series_slack_announcement,
 )
 from studio.decorators import staff_required
 from studio.views.events import _default_timezone_for
@@ -357,6 +365,80 @@ def event_series_add_occurrence(request, series_id):
     # to ``upcoming`` (the helper gates on ``is_upcoming``).
     enroll_series_registrants_in_event(new_event)
     return redirect('studio_event_series_detail', series_id=series.pk)
+
+
+def _series_was_recently_notified(series):
+    """Return True if this series was notified within the last 24 hours.
+
+    Mirrors ``studio.views.notifications._was_recently_notified`` but keyed
+    on the series notification title + public URL (issue #868).
+    """
+    title = series_notification_title(series)
+    url = series.get_absolute_url()
+    cutoff = dj_timezone.now() - timedelta(hours=24)
+    return Notification.objects.filter(
+        title=title,
+        url=url,
+        created_at__gte=cutoff,
+    ).exists()
+
+
+@staff_required
+@require_POST
+def event_series_notify(request, series_id):
+    """Notify eligible subscribers about the whole series.
+
+    Creates one notification per eligible user deep-linking to the public
+    series page. Returns ``{"notified": N}``; 409 when the series was
+    already notified within the last 24 hours (issue #868).
+    """
+    series = get_object_or_404(EventSeries, pk=series_id)
+
+    if _series_was_recently_notified(series):
+        return JsonResponse(
+            {'error': 'Already notified in the last 24 hours'},
+            status=409,
+        )
+
+    result = NotificationService.notify_series(series)
+    return JsonResponse({'notified': result.get('notified', 0)})
+
+
+@staff_required
+@require_POST
+def event_series_announce_slack(request, series_id):
+    """Post a single Slack announcement for the whole series (issue #868).
+
+    Returns ``{"posted": true}`` on success. When the series has no
+    upcoming sessions, or Slack is not configured / the post failed,
+    returns a structured ``{"error": ...}`` with status 500.
+    """
+    series = get_object_or_404(EventSeries, pk=series_id)
+
+    from notifications.services.slack_announcements import (
+        _series_upcoming_sessions,
+    )
+
+    if not _series_upcoming_sessions(series):
+        return JsonResponse(
+            {'error': 'No upcoming sessions to announce.'},
+            status=500,
+        )
+
+    try:
+        posted = post_series_slack_announcement(series)
+    except Exception as exc:
+        logger.exception(
+            'Failed to post series Slack announcement for %s', series_id,
+        )
+        return JsonResponse({'error': str(exc)}, status=500)
+
+    if posted:
+        return JsonResponse({'posted': True})
+    return JsonResponse(
+        {'error': 'Slack not configured or post failed'},
+        status=500,
+    )
 
 
 @staff_required

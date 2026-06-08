@@ -107,6 +107,15 @@ def _get_eligible_users(required_level):
     )
 
 
+def series_notification_title(series):
+    """Return the notification title for an event-series announcement.
+
+    Issue #868. Shared by :meth:`NotificationService.notify_series` and
+    the Studio 24h-dedup check so both agree on the title key.
+    """
+    return f'New event series: {series.name}'
+
+
 def _get_body(content):
     """Extract a short description from a content object."""
     description = getattr(content, 'description', '')
@@ -295,6 +304,60 @@ class NotificationService:
             )
 
         return result
+
+    @staticmethod
+    def notify_series(series):
+        """Create one in-app notification per eligible user for a series.
+
+        Issue #868. Unlike :meth:`notify`, this creates ONE notification
+        per eligible user deep-linking to the public series page
+        (``/events/groups/<slug>``), not N per-occurrence notifications.
+
+        Audience = users whose tier level clears the LOWEST
+        ``required_level`` among the series' upcoming sessions, so anyone
+        who can attend at least one session is notified. A series with no
+        upcoming sessions notifies nobody (returns ``{"notified": 0}``).
+
+        Args:
+            series: ``EventSeries`` instance.
+
+        Returns:
+            ``{"notified": int}``.
+        """
+        from notifications.services.slack_announcements import (
+            _series_upcoming_sessions,
+        )
+
+        sessions = _series_upcoming_sessions(series)
+        if not sessions:
+            return {"notified": 0}
+
+        lowest_level = min(
+            getattr(event, 'required_level', 0) or 0 for event in sessions
+        )
+
+        title = series_notification_title(series)
+        body = _get_body(series)
+        url = series.get_absolute_url()
+
+        eligible_users = _get_eligible_users(lowest_level)
+        notifications = [
+            Notification(
+                user=user,
+                title=title,
+                body=body,
+                url=url,
+                notification_type='new_content',
+            )
+            for user in eligible_users
+        ]
+        if notifications:
+            Notification.objects.bulk_create(notifications)
+            logger.info(
+                'Created %d series notifications for %s',
+                len(notifications), series.slug,
+            )
+        return {"notified": len(notifications)}
 
     @staticmethod
     def create_event_reminder(event, user, interval, title, body):

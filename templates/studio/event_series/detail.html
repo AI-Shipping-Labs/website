@@ -30,6 +30,20 @@
         <i data-lucide="external-link" class="mr-2 h-4 w-4"></i>
         <span>View public series page</span>
       </a>
+      <button type="button"
+              id="series-notify-btn"
+              onclick="notifySeriesSubscribers()"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+              data-testid="event-series-notify">
+        Notify subscribers
+      </button>
+      <button type="button"
+              id="series-slack-btn"
+              onclick="postSeriesToSlack()"
+              class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              data-testid="event-series-announce-slack">
+        Post to Slack
+      </button>
       <button type="submit"
               form="event-series-metadata-form"
               class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
@@ -55,6 +69,9 @@
   {{ add_error }}
 </div>
 {% endif %}
+
+<div id="series-notify-status" class="mb-4 rounded-md border px-4 py-2 text-sm" style="display:none;" data-testid="series-notify-status"></div>
+<div id="series-slack-status" class="mb-4 rounded-md border px-4 py-2 text-sm" style="display:none;" data-testid="series-slack-status"></div>
 
 <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
 
@@ -152,5 +169,81 @@
     </div>
   </aside>
 </div>
+
+<script>
+function _seriesCsrf() {
+  var el = document.querySelector('[name=csrfmiddlewaretoken]');
+  return el ? el.value : '';
+}
+
+function notifySeriesSubscribers() {
+  var btn = document.getElementById('series-notify-btn');
+  var status = document.getElementById('series-notify-status');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  status.style.display = 'none';
+
+  fetch('{% url "studio_event_series_notify" series_id=series.pk %}', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': _seriesCsrf() },
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, status: r.status, data: d}; }); })
+  .then(function(res) {
+    status.style.display = 'block';
+    if (res.ok) {
+      status.textContent = 'Notified ' + res.data.notified + ' subscribers';
+      status.className = 'mb-4 rounded-md border border-green-500/40 bg-green-500/10 px-4 py-2 text-sm text-green-400';
+    } else if (res.status === 409) {
+      status.textContent = 'Already notified in the last 24 hours — sending again would duplicate notifications';
+      status.className = 'mb-4 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-4 py-2 text-sm text-yellow-400';
+    } else {
+      status.textContent = 'Error: ' + (res.data.error || 'Unknown error');
+      status.className = 'mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Notify subscribers';
+  })
+  .catch(function(err) {
+    status.style.display = 'block';
+    status.textContent = 'Network error: ' + err.message;
+    status.className = 'mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300';
+    btn.disabled = false;
+    btn.textContent = 'Notify subscribers';
+  });
+}
+
+function postSeriesToSlack() {
+  var btn = document.getElementById('series-slack-btn');
+  var status = document.getElementById('series-slack-status');
+  btn.disabled = true;
+  btn.textContent = 'Posting...';
+  status.style.display = 'none';
+
+  fetch('{% url "studio_event_series_announce_slack" series_id=series.pk %}', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': _seriesCsrf() },
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+  .then(function(res) {
+    status.style.display = 'block';
+    if (res.ok) {
+      status.textContent = 'Slack announcement posted successfully';
+      status.className = 'mb-4 rounded-md border border-green-500/40 bg-green-500/10 px-4 py-2 text-sm text-green-400';
+    } else {
+      status.textContent = 'Error: ' + (res.data.error || 'Unknown error');
+      status.className = 'mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Post to Slack';
+  })
+  .catch(function(err) {
+    status.style.display = 'block';
+    status.textContent = 'Network error: ' + err.message;
+    status.className = 'mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300';
+    btn.disabled = false;
+    btn.textContent = 'Post to Slack';
+  });
+}
+</script>
 
 {% endblock %}

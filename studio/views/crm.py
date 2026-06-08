@@ -24,6 +24,10 @@ from crm.models import (
 )
 from plans.models import InterviewNote, Plan
 from questionnaires.models import Persona
+from questionnaires.onboarding import (
+    flatten_response_answers,
+    get_onboarding_response,
+)
 from studio.decorators import staff_required
 
 User = get_user_model()
@@ -201,6 +205,20 @@ def _record_detail_context(record):
         .order_by('-sprint__start_date', '-created_at')
     )
 
+    # Onboarding answers (issue #871). Reuse the shared answer-flattening
+    # helper that backs the read-only ``/api/onboarding/responses/<email>``
+    # API so the CRM page and the API never diverge on answer-type handling.
+    onboarding_response = get_onboarding_response(record.user)
+    onboarding_answers = (
+        flatten_response_answers(onboarding_response)
+        if onboarding_response is not None
+        else []
+    )
+    onboarding_submitted = (
+        onboarding_response is not None
+        and onboarding_response.status == 'submitted'
+    )
+
     return {
         'record': record,
         'detail_user': record.user,
@@ -208,6 +226,9 @@ def _record_detail_context(record):
         'tier_slug': tier_info['slug'],
         'tier_source': tier_info['source'],
         'member_plans': member_plans,
+        'onboarding_response': onboarding_response,
+        'onboarding_answers': onboarding_answers,
+        'onboarding_submitted': onboarding_submitted,
         'internal_notes': note_queryset.internal(),
         'external_notes': note_queryset.external(),
         # ``current_plan`` is consumed by the reused

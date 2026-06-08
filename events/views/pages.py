@@ -612,6 +612,7 @@ def event_detail_no_slug_redirect(request, event_id):
     return redirect(event.get_absolute_url(), permanent=True)
 
 
+@ensure_csrf_cookie
 def event_series_public(request, slug):
     """Public series index page.
 
@@ -619,6 +620,10 @@ def event_series_public(request, slug):
     series' metadata and every published member event. Anonymous visitors
     see the page; per-event tier gating happens on the individual event
     detail / registration as today.
+
+    Issue #857: sets the ``csrftoken`` cookie so the inline series-register
+    fetch can POST with a valid token, and surfaces per-occurrence
+    registration state plus the standing series-registration flag.
 
     Draft events are hidden from anonymous and non-staff visitors. Staff
     see every member event so the page is useful for previewing a
@@ -629,15 +634,77 @@ def event_series_public(request, slug):
     # chip on every card resolves from the SELECT, not from N follow-up
     # `COUNT(*)` queries. The template reads `event.attendee_count`,
     # which prefers the annotation when set.
-    events = series.events.annotate(
-        _attendee_count=Count('registrations'),
-    ).order_by('series_position', 'start_datetime')
+    events = list(
+        series.events.annotate(
+            _attendee_count=Count('registrations'),
+        ).order_by('series_position', 'start_datetime')
+    )
     if not request.user.is_staff:
-        events = events.exclude(status='draft')
+        events = [e for e in events if e.status != 'draft']
+
+    user = request.user
+
+    # Issue #857: per-occurrence registration state and the standing
+    # series-registration flag drive the register UI on this page.
+    is_series_registered = False
+    registered_event_ids = set()
+    if user.is_authenticated:
+        from events.models import SeriesRegistration
+        is_series_registered = SeriesRegistration.objects.filter(
+            series=series, user=user,
+        ).exists()
+        registered_event_ids = set(
+            EventRegistration.objects.filter(
+                user=user, event__in=events,
+            ).values_list('event_id', flat=True)
+        )
+
+    # Annotate each occurrence with the state the template renders:
+    # ``registered`` / ``register`` / ``full`` / ``past`` / ``no_access``.
+    for event in events:
+        if event.is_past:
+            event.user_reg_state = 'past'
+        elif user.is_authenticated and event.id in registered_event_ids:
+            event.user_reg_state = 'registered'
+        elif user.is_authenticated and not can_access(user, event):
+            event.user_reg_state = 'no_access'
+        elif event.is_full:
+            event.user_reg_state = 'full'
+        else:
+            event.user_reg_state = 'register'
+
+    # ``upcoming_registrable`` is what the "Register for all upcoming
+    # sessions" button actually enrolls into — future, non-cancelled,
+    # non-draft, accessible, not-already-registered occurrences. We use it
+    # to decide whether the primary button is meaningful at all.
+    has_upcoming_to_register = any(
+        e.user_reg_state == 'register' for e in events
+    )
+
+    # Issue #857: surface partial-tier context on GET by counting
+    # tier-locked upcoming occurrences for authenticated users so the
+    # page can show the upgrade nudge alongside the register button.
+    upcoming_count = sum(
+        1 for e in events
+        if not e.is_past and e.status not in ('draft', 'cancelled')
+    )
+    tier_locked_count = sum(
+        1 for e in events if e.user_reg_state == 'no_access'
+    )
+    has_tier_locked = tier_locked_count > 0
 
     return render(request, 'events/event_series.html', {
         'series': series,
         'events': events,
+        'is_series_registered': is_series_registered,
+        'has_upcoming_to_register': has_upcoming_to_register,
+        'upcoming_count': upcoming_count,
+        'tier_locked_count': tier_locked_count,
+        'has_tier_locked': has_tier_locked,
+        'series_register_url': f'/api/events/series/{series.slug}/register',
+        # Login redirect target for anonymous visitors clicking register.
+        'login_next': series.get_absolute_url(),
+        'pricing_url': '/pricing',
     })
 
 

@@ -60,11 +60,7 @@
       </div>
 
       <div class="grid grid-cols-3 gap-4">
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1" for="required-level-input">Required level</label>
-          <input id="required-level-input" type="number" name="required_level" value="{{ form_values.required_level }}"
-                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-        </div>
+        {% include "studio/includes/forms/required_level.html" with selected=form_values.required_level disabled=False %}
         <div>
           <label class="block text-sm font-medium text-foreground mb-1" for="kind-input">Kind</label>
           <select id="kind-input" name="kind" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">

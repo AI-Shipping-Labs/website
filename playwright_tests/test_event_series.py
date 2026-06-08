@@ -457,6 +457,95 @@ class TestScenario7ValidationGuard:
 
 
 # ---------------------------------------------------------------------------
+# Scenario 10 (issue #856): Required Level is a named-tier dropdown
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestScenario10RequiredLevelDropdown:
+    def test_named_dropdown_and_main_gating(self, django_server, browser):
+        from events.models import EventSeries
+
+        _reset_event_state()
+        _create_staff_user("staff-eg10@test.com")
+        ctx = _auth_context(browser, "staff-eg10@test.com")
+        page = ctx.new_page()
+
+        page.goto(
+            f"{django_server}/studio/event-series/new",
+            wait_until="domcontentloaded",
+        )
+
+        # The access field is a <select>, not a bare number input.
+        level = page.locator('select[name="required_level"]')
+        assert level.count() == 1
+        assert page.locator('input[type="number"][name="required_level"]').count() == 0
+
+        # Options read as tier names, not opaque integers.
+        option_texts = level.locator("option").all_inner_texts()
+        assert option_texts == ["Free (0)", "Basic (10)", "Main (20)", "Premium (30)"]
+
+        # Gate the whole series to Main (20).
+        start = _next_weekday(2)  # Wednesday
+        page.fill('input[name="name"]', "Main-Gated Series")
+        page.fill('input[name="start_date"]', start.strftime("%d/%m/%Y"))
+        page.fill('input[name="start_time"]', "18:00")
+        page.fill('input[name="duration_hours"]', "1")
+        page.fill('input[name="occurrences"]', "3")
+        page.select_option('select[name="timezone"]', "Europe/Berlin")
+        page.select_option('select[name="required_level"]', "20")
+        page.locator('[data-testid="sticky-save-action"]').click()
+        page.wait_for_url(re.compile(r".*/studio/event-series/\d+/$"))
+
+        series = EventSeries.objects.get(slug="main-gated-series")
+        events = list(series.events.all())
+        assert len(events) == 3
+        assert all(ev.required_level == 20 for ev in events)
+
+        # The generated event's editor shows Main selected.
+        target = events[0]
+        page.goto(
+            f"{django_server}/studio/events/{target.pk}/edit",
+            wait_until="domcontentloaded",
+        )
+        editor_level = page.locator('select[name="required_level"]')
+        assert editor_level.input_value() == "20"
+
+        ctx.close()
+
+    def test_default_selection_is_free(self, django_server, browser):
+        from events.models import EventSeries
+
+        _reset_event_state()
+        _create_staff_user("staff-eg10b@test.com")
+        ctx = _auth_context(browser, "staff-eg10b@test.com")
+        page = ctx.new_page()
+
+        page.goto(
+            f"{django_server}/studio/event-series/new",
+            wait_until="domcontentloaded",
+        )
+        # Default selection is Free (0) before any change.
+        assert page.locator('select[name="required_level"]').input_value() == "0"
+
+        # Submit without touching Required Level -> open events.
+        start = _next_weekday(2)
+        page.fill('input[name="name"]', "Default Free Series")
+        page.fill('input[name="start_date"]', start.strftime("%d/%m/%Y"))
+        page.fill('input[name="start_time"]', "18:00")
+        page.fill('input[name="duration_hours"]', "1")
+        page.fill('input[name="occurrences"]', "2")
+        page.select_option('select[name="timezone"]', "Europe/Berlin")
+        page.locator('[data-testid="sticky-save-action"]').click()
+        page.wait_for_url(re.compile(r".*/studio/event-series/\d+/$"))
+
+        series = EventSeries.objects.get(slug="default-free-series")
+        assert all(ev.required_level == 0 for ev in series.events.all())
+
+        ctx.close()
+
+
+# ---------------------------------------------------------------------------
 # Scenario 8: Public visitor browses a series page
 # ---------------------------------------------------------------------------
 

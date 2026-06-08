@@ -164,6 +164,21 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
         # Heading appears.
         self.assertContains(response, 'Meeting schedule')
 
+    def test_meeting_time_localized_to_event_timezone(self):
+        """Issue #867: meeting times must render in the event's own timezone.
+
+        Fixture events are stored at 18:00 UTC with ``Europe/Berlin``; in May
+        that is CEST (+02:00), so the schedule must show 20:00, not the raw
+        18:00 UTC clock time labeled Berlin.
+        """
+        url = reverse(
+            'sprint_detail',
+            kwargs={'sprint_slug': self.linked_sprint.slug},
+        )
+        response = self.client.get(url)
+        self.assertContains(response, '20:00 Europe/Berlin')
+        self.assertNotContains(response, '18:00 Europe/Berlin')
+
     def test_section_hidden_when_sprint_has_no_event_series(self):
         url = reverse(
             'sprint_detail',

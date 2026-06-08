@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
+{% load tz %}
 
 {% block title %}{{ sprint.name }} | {{ site_name }}{% endblock %}
 
@@ -50,10 +51,10 @@
                data-testid="sprint-meeting-schedule-link">
               <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span class="text-sm font-medium" data-testid="sprint-meeting-schedule-date">
-                  {{ ev.start_datetime|date:"D, M j, Y" }}
+                  {% timezone ev.timezone %}{{ ev.start_datetime|date:"D, M j, Y" }}{% endtimezone %}
                 </span>
                 <span class="text-sm" data-testid="sprint-meeting-schedule-time">
-                  {{ ev.start_datetime|date:"H:i" }} {{ ev.timezone }}
+                  {% timezone ev.timezone %}{{ ev.start_datetime|date:"H:i" }}{% endtimezone %} {{ ev.timezone }}
                 </span>
                 {% if ev.location %}
                 <span class="text-xs text-muted-foreground" data-testid="sprint-meeting-schedule-location">

@@ -10,7 +10,12 @@
   <header class="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
     <div class="min-w-0">
       <h1 class="text-2xl font-semibold text-foreground">Edit link</h1>
-      <p class="text-sm text-muted-foreground mt-1">Campaign: <code class="font-mono">{{ campaign.slug }}</code></p>
+      <p class="text-sm text-muted-foreground mt-1">Campaign: <code class="font-mono">{{ campaign.slug }}</code>
+        <a href="https://github.com/AI-Shipping-Labs/website/blob/main/_docs/utm_links.md"
+           target="_blank" rel="noopener noreferrer"
+           class="ml-1 text-accent hover:underline"
+           data-testid="utm-fields-help-link">(?) UTM field guide</a>
+      </p>
     </div>
     <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
       {% if link %}

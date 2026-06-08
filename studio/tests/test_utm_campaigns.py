@@ -351,6 +351,50 @@ class UtmLinkEditAndArchiveTest(TestCase):
         self.assertTrue(self.link.is_archived)
 
 
+class UtmFieldGuideHelpLinkTest(TestCase):
+    """The (?) help link points to the GitHub UTM field guide doc on both forms."""
+
+    DOC_URL = (
+        'https://github.com/AI-Shipping-Labs/website/blob/main/_docs/utm_links.md'
+    )
+
+    def setUp(self):
+        self.client = Client()
+        _staff_login(self.client)
+        self.campaign = UtmCampaign.objects.create(
+            name='C', slug='cc',
+            default_utm_source='newsletter', default_utm_medium='email',
+        )
+        self.link = UtmCampaignLink.objects.create(
+            campaign=self.campaign, utm_content='ai_hero_list',
+            destination='/x',
+        )
+
+    def test_add_link_form_shows_help_link_to_doc(self):
+        response = self.client.get(f'/studio/utm-campaigns/{self.campaign.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'<a href="{self.DOC_URL}" target="_blank" rel="noopener noreferrer" '
+            f'class="text-sm text-accent hover:underline" '
+            f'data-testid="utm-fields-help-link">(?) UTM field guide</a>',
+            html=True,
+        )
+
+    def test_edit_link_form_shows_help_link_to_doc(self):
+        response = self.client.get(
+            f'/studio/utm-campaigns/{self.campaign.pk}/links/{self.link.pk}/edit'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'<a href="{self.DOC_URL}" target="_blank" rel="noopener noreferrer" '
+            f'class="ml-1 text-accent hover:underline" '
+            f'data-testid="utm-fields-help-link">(?) UTM field guide</a>',
+            html=True,
+        )
+
+
 @override_settings(SITE_BASE_URL='https://aishippinglabs.com')
 class UtmCampaignImporterTest(TestCase):
     def setUp(self):

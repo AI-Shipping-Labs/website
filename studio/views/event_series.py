@@ -44,7 +44,11 @@ from notifications.services.slack_announcements import (
     post_series_slack_announcement,
 )
 from studio.decorators import staff_required
-from studio.views.events import _default_timezone_for, _should_autodetect_tz
+from studio.views.events import (
+    _default_timezone_for,
+    _should_autodetect_tz,
+    annotate_derived_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -281,9 +285,14 @@ def event_series_detail(request, series_id):
         series.save()
         return redirect('studio_event_series_detail', series_id=series.pk)
 
-    events = series.events.all().order_by(
+    events = list(series.events.all().order_by(
         'series_position', 'start_datetime',
-    )
+    ))
+    # Issue #893: annotate each occurrence with the same derived status the
+    # events list uses so the detail table can render the shared badge.
+    now = dj_timezone.now()
+    for event in events:
+        annotate_derived_status(event, now=now)
     # Issue #665: the add-occurrence form inherits the series' TZ; show
     # it in the picker so the admin sees the active zone next to the
     # date input.
@@ -316,7 +325,10 @@ def event_series_add_occurrence(request, series_id):
         start_date = _parse_date_str(start_date_str)
     except (ValueError, AttributeError):
         # Re-render the detail page with a flash-style error.
-        events = series.events.all().order_by('series_position', 'start_datetime')
+        events = list(series.events.all().order_by('series_position', 'start_datetime'))
+        now = dj_timezone.now()
+        for event in events:
+            annotate_derived_status(event, now=now)
         tz_value = series.timezone or _default_timezone_for(request.user)
         return render(request, 'studio/event_series/detail.html', {
             'series': series,

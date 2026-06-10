@@ -35,6 +35,39 @@ logger = logging.getLogger(__name__)
 _VALID_EXTERNAL_HOSTS = {value for value, _ in EXTERNAL_HOST_CHOICES}
 
 
+def annotate_derived_status(event, now=None):
+    """Set ``derived_status`` / ``derived_status_label`` on a single Event.
+
+    Single-sourced derivation (#893) shared by the events-list view and
+    the event-series detail view so both render the same
+    ``{% studio_status_badge %}``.
+
+    Single-status precedence (#820): draft / cancelled win over the
+    time-based label; otherwise the label is purely time-derived, so a
+    legacy ``completed`` row with a future end reads Upcoming.
+    """
+    if now is None:
+        now = djtimezone.now()
+    effective_end = event.end_datetime or (
+        event.start_datetime + timedelta(hours=1)
+    )
+    is_future = now < effective_end
+
+    if event.status == 'draft':
+        event.derived_status = 'draft'
+        event.derived_status_label = 'Draft'
+    elif event.status == 'cancelled':
+        event.derived_status = 'cancelled'
+        event.derived_status_label = 'Cancelled'
+    elif is_future:
+        event.derived_status = 'upcoming'
+        event.derived_status_label = 'Upcoming'
+    else:
+        event.derived_status = 'past'
+        event.derived_status_label = 'Past'
+    return event
+
+
 def _coerce_external_host(raw):
     """Issue #579. POSTs from the Studio dropdown are constrained, but
     a tampered or stale form post could land here with an arbitrary
@@ -268,21 +301,7 @@ def event_list(request):
         )
         is_future = now < effective_end
 
-        # Single-status precedence (#820): draft / cancelled win over the
-        # time-based label; otherwise the label is purely time-derived,
-        # so a legacy ``completed`` row with a future end reads Upcoming.
-        if event.status == 'draft':
-            event.derived_status = 'draft'
-            event.derived_status_label = 'Draft'
-        elif event.status == 'cancelled':
-            event.derived_status = 'cancelled'
-            event.derived_status_label = 'Cancelled'
-        elif is_future:
-            event.derived_status = 'upcoming'
-            event.derived_status_label = 'Upcoming'
-        else:
-            event.derived_status = 'past'
-            event.derived_status_label = 'Past'
+        annotate_derived_status(event, now=now)
 
         # Grouping: cancelled always sits in Past (consistent with
         # ``is_past``); everything else groups by the time comparison so

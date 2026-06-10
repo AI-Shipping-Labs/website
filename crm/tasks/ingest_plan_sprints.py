@@ -5,8 +5,12 @@ replies) verbatim, incrementally appends new replies to threads already
 captured on earlier runs, and links each thread to the authoring member
 and (when resolvable) their active-sprint plan.
 
-Phase 1 is pure capture + matching + read-only surfacing: it does NOT
-parse meaning or mutate any plan progress (that is Phase 2, issue #890).
+After capture/append, Phase 2 (issue #890) parses the threads touched this
+run that are matched to a member + active-sprint plan and auto-applies the
+parsed progress to their plan items (reversibly). The LLM parse step is
+gated on ``llm.is_enabled()``: when the LLM is disabled the run still
+succeeds as a pure Phase-1 capture run, and a per-thread LLM failure is
+logged without failing the run.
 
 The task is safe to run when Slack is disabled or the channel id is
 unset — it logs and returns without creating any rows.
@@ -23,6 +27,7 @@ from django.utils import timezone
 from community.services.slack import SlackAPIError, SlackCommunityService
 from community.slack_config import get_slack_plan_sprints_channel_id
 from crm.models import SlackChannelIngest, SlackMessage, SlackThread
+from crm.tasks.apply_plan_sprint_progress import apply_progress_for_threads
 from integrations.config import is_enabled
 from plans.models import Plan
 
@@ -167,7 +172,7 @@ def _upsert_thread(service, run, channel_id, root_message):
         update_fields.append("permalink")
     thread.save(update_fields=update_fields)
 
-    return new_replies, created, (member is not None)
+    return new_replies, created, (member is not None), thread
 
 
 def ingest_plan_sprints():
@@ -212,6 +217,9 @@ def ingest_plan_sprints():
     replies_added = 0
     members_matched = 0
     latest_ts = oldest
+    # Threads created or grown this run, deduped by pk — the candidates for
+    # the Phase 2 parse + auto-apply step below.
+    touched_threads = {}
 
     try:
         for message in messages:
@@ -221,7 +229,7 @@ def ingest_plan_sprints():
             if not _is_member_message(message):
                 continue
             with transaction.atomic():
-                new_replies, created, matched = _upsert_thread(
+                new_replies, created, matched, thread = _upsert_thread(
                     service, run, channel_id, message,
                 )
             replies_added += new_replies if not created else 0
@@ -229,6 +237,8 @@ def ingest_plan_sprints():
                 threads_persisted += 1
                 if matched:
                     members_matched += 1
+            if created or new_replies:
+                touched_threads[thread.pk] = thread
     except SlackAPIError as exc:
         run.status = 'error'
         run.error = str(exc)
@@ -241,6 +251,18 @@ def ingest_plan_sprints():
         run.save()
         logger.exception("plan-sprints ingest failed mid-run")
         return run
+
+    # Phase 2 (issue #890): parse + auto-apply progress for the threads
+    # touched this run. Gated on llm.is_enabled() inside the helper; when
+    # the LLM is off this is a no-op and the run stays a pure capture run.
+    # A per-thread LLM failure is logged and does not fail the run.
+    if touched_threads:
+        candidates = [
+            t for t in touched_threads.values()
+            if t.member_id is not None and t.plan_id is not None
+        ]
+        if candidates:
+            apply_progress_for_threads(candidates, ingest=run)
 
     run.messages_seen = messages_seen
     run.threads_persisted = threads_persisted

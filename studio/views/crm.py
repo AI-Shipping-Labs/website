@@ -15,15 +15,19 @@ from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from accounts.models import TierOverride
 from crm.models import (
     STATUS_CHOICES,
+    AppliedProgressChange,
     CRMRecord,
+    IngestedProgressEvent,
     SlackChannelIngest,
 )
 from crm.services.slack_updates import threads_for_member, unmatched_threads
+from crm.tasks.apply_plan_sprint_progress import reverse_change, reverse_event
 from plans.models import InterviewNote, Plan
 from questionnaires.models import Persona
 from questionnaires.onboarding import (
@@ -297,6 +301,53 @@ def crm_slack_ingest_review(request):
         'unmatched_threads': unmatched_threads(),
         'recent_runs': SlackChannelIngest.objects.all()[:10],
     })
+
+
+def _safe_back(request):
+    """Redirect target after an undo: the referring page, else CRM list.
+
+    Only a same-host referer is honoured so the redirect cannot be aimed
+    off-site by a crafted Referer header.
+    """
+    referer = request.META.get('HTTP_REFERER', '')
+    if referer and url_has_allowed_host_and_scheme(
+        referer,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(referer)
+    return redirect('studio_crm_list')
+
+
+@staff_required
+@require_POST
+def crm_slack_progress_undo(request, event_id):
+    """Undo a whole auto-applied progress event (issue #890, Phase 2).
+
+    Restores every recorded change's plan item to its ``previous_done_at``
+    and deletes the event. Items the event never recorded — including manual
+    completions — are untouched.
+    """
+    event = get_object_or_404(IngestedProgressEvent, pk=event_id)
+    reverse_event(event)
+    messages.success(
+        request, 'Reverted all auto-applied changes from this Slack update.',
+    )
+    return _safe_back(request)
+
+
+@staff_required
+@require_POST
+def crm_slack_progress_change_undo(request, change_id):
+    """Undo a single auto-applied change (issue #890, Phase 2).
+
+    Restores only that change's plan item and deletes the change row,
+    leaving the rest of the event's changes applied and the event in place.
+    """
+    change = get_object_or_404(AppliedProgressChange, pk=change_id)
+    reverse_change(change)
+    messages.success(request, 'Reverted the auto-applied change.')
+    return _safe_back(request)
 
 
 @staff_required

@@ -51,6 +51,7 @@ from studio.views.crm import (
     crm_edit,
     crm_list,
     crm_reactivate,
+    crm_slack_ingest_review,
     crm_track,
 )
 from studio.views.dashboard import dashboard
@@ -642,6 +643,11 @@ urlpatterns = [
         name='studio_crm_track',
     ),
     path('crm/', crm_list, name='studio_crm_list'),
+    path(
+        'crm/slack-ingest',
+        crm_slack_ingest_review,
+        name='studio_crm_slack_ingest',
+    ),
     path('crm/<int:crm_id>/', crm_detail, name='studio_crm_detail'),
     path('crm/<int:crm_id>/edit', crm_edit, name='studio_crm_edit'),
     path(

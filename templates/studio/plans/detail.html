@@ -187,6 +187,9 @@ verbatim so there is exactly one comments UI across the site.
   {% include "comments/_qa_section.html" with content_id=plan.comment_content_id user_authenticated=user.is_authenticated section_heading="Plan comments" composer_placeholder="Comment on this plan..." composer_button_label="Post comment" composer_signin_prompt="to comment on this plan" %}
 </section>
 
+<!-- Slack updates from #plan-sprints linked to this plan (issue #889) -->
+{% include 'studio/crm/_slack_updates.html' %}
+
 {% include "studio/users/_member_notes.html" %}
 {% endblock %}
 

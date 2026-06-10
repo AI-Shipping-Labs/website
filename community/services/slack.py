@@ -95,6 +95,111 @@ class SlackCommunityService(CommunityService):
 
         return data
 
+    def fetch_conversation_history(self, channel_id, oldest=None, limit=200):
+        """Fetch all top-level messages in a channel, following pagination.
+
+        Wraps ``conversations.history`` (issue #889 inbound ingest). The
+        bot must be a member of ``channel_id`` and the token needs
+        ``channels:history`` (public) / ``groups:history`` (private).
+
+        Args:
+            channel_id: The Slack channel ID to read.
+            oldest: Optional Slack ts; only messages at or after this ts
+                are returned (inclusive=False — Slack excludes the
+                boundary message, which is what we want since ``oldest``
+                is the last run's ``latest_ts``).
+            limit: Page size (Slack caps at 1000; 200 is the default).
+
+        Returns:
+            list[dict]: Every top-level message across all pages, in the
+            order Slack returns them (newest-first within each page).
+
+        Raises:
+            SlackAPIError: If any API call fails.
+        """
+        messages = []
+        cursor = None
+        while True:
+            params = {"channel": channel_id, "limit": limit}
+            if oldest:
+                params["oldest"] = oldest
+            if cursor:
+                params["cursor"] = cursor
+            data = self._api_call("conversations.history", **params)
+            messages.extend(data.get("messages", []) or [])
+            cursor = (data.get("response_metadata", {}) or {}).get("next_cursor", "")
+            if not cursor:
+                break
+        return messages
+
+    def fetch_conversation_replies(self, channel_id, thread_ts, limit=200):
+        """Fetch every message in a thread (root + all replies), paginated.
+
+        Wraps ``conversations.replies`` (issue #889). The first message
+        Slack returns is the thread root; the rest are replies in
+        chronological order.
+
+        Args:
+            channel_id: The Slack channel ID.
+            thread_ts: The thread root ts.
+            limit: Page size.
+
+        Returns:
+            list[dict]: Root message followed by every reply, across all
+            pages.
+
+        Raises:
+            SlackAPIError: If any API call fails.
+        """
+        messages = []
+        cursor = None
+        while True:
+            params = {"channel": channel_id, "ts": thread_ts, "limit": limit}
+            if cursor:
+                params["cursor"] = cursor
+            data = self._api_call("conversations.replies", **params)
+            messages.extend(data.get("messages", []) or [])
+            cursor = (data.get("response_metadata", {}) or {}).get("next_cursor", "")
+            if not cursor:
+                break
+        return messages
+
+    def lookup_user_display_name(self, slack_user_id):
+        """Best-effort resolve a Slack user's display name via ``users.info``.
+
+        Returns an empty string (never raises) on any failure so the
+        ingest path can degrade gracefully — a blank display name is
+        acceptable per the issue #889 spec.
+        """
+        if not slack_user_id:
+            return ""
+        try:
+            data = self._api_call("users.info", user=slack_user_id)
+        except SlackAPIError:
+            return ""
+        user = data.get("user", {}) or {}
+        profile = user.get("profile", {}) or {}
+        return (
+            profile.get("display_name")
+            or user.get("real_name")
+            or profile.get("real_name")
+            or ""
+        )
+
+    def get_message_permalink(self, channel_id, message_ts):
+        """Best-effort Slack permalink for a message via ``chat.getPermalink``.
+
+        Returns an empty string (never raises) on failure — a blank
+        permalink is acceptable per the issue #889 spec.
+        """
+        try:
+            data = self._api_call(
+                "chat.getPermalink", channel=channel_id, message_ts=message_ts,
+            )
+        except SlackAPIError:
+            return ""
+        return data.get("permalink", "") or ""
+
     def lookup_user_by_email(self, email):
         """Look up a Slack user by email address.
 

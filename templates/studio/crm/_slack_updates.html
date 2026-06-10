@@ -1,0 +1,65 @@
+{% comment %}
+Read-only "Slack updates from #plan-sprints" panel (issue #889, Phase 1).
+
+Staff-only. Expects ``slack_threads`` — an iterable of SlackThread rows
+(newest-first) with ``messages`` prefetched. Used on the CRM record
+detail and the plan detail pages. No member-facing template includes
+this partial.
+{% endcomment %}
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl"
+         data-testid="crm-slack-updates-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Slack updates from #plan-sprints</h2>
+  {% if slack_threads %}
+  <ul class="divide-y divide-border" data-testid="crm-slack-updates-list">
+    {% for thread in slack_threads %}
+    <li class="py-3" data-testid="crm-slack-thread">
+      <details>
+        <summary class="cursor-pointer flex flex-wrap items-center justify-between gap-2">
+          <span class="min-w-0">
+            <span class="text-xs text-muted-foreground" data-testid="crm-slack-thread-date">
+              {{ thread.posted_at|date:"Y-m-d H:i" }}
+            </span>
+            <span class="text-sm text-foreground ml-2" data-testid="crm-slack-thread-snippet">
+              {{ thread.root_message.text|truncatechars:120|default:"(no text)" }}
+            </span>
+          </span>
+          <span class="flex items-center gap-3 shrink-0">
+            <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                  data-testid="crm-slack-thread-reply-count">
+              {{ thread.reply_count }} {% if thread.reply_count == 1 %}reply{% else %}replies{% endif %}
+            </span>
+            {% if thread.permalink %}
+            <a href="{{ thread.permalink }}" target="_blank" rel="noopener"
+               data-testid="crm-slack-thread-permalink"
+               class="text-xs text-accent hover:underline">Open in Slack</a>
+            {% endif %}
+          </span>
+        </summary>
+        <ol class="mt-3 space-y-3 border-l border-border pl-4" data-testid="crm-slack-thread-messages">
+          {% for message in thread.messages.all %}
+          <li data-testid="crm-slack-message">
+            <div class="flex items-baseline gap-2">
+              <span class="text-sm font-medium text-foreground" data-testid="crm-slack-message-author">
+                {{ message.author_display|default:message.slack_user_id|default:"Unknown" }}
+              </span>
+              <span class="text-xs text-muted-foreground" data-testid="crm-slack-message-time">
+                {{ message.posted_at|date:"Y-m-d H:i" }}
+              </span>
+              {% if message.is_root %}
+              <span class="text-xs text-muted-foreground/70">(root)</span>
+              {% endif %}
+            </div>
+            <p class="text-sm text-muted-foreground whitespace-pre-line mt-1" data-testid="crm-slack-message-text">{{ message.text }}</p>
+          </li>
+          {% endfor %}
+        </ol>
+      </details>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="crm-slack-updates-empty">
+    No Slack updates captured from #plan-sprints yet.
+  </p>
+  {% endif %}
+</section>

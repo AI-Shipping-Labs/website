@@ -147,6 +147,10 @@ Why no PRs: the team's review pipeline is the agent flow (PM groom → SWE → t
 - Agents post issue comments via `gh`, not the orchestrator. Launch the relevant agent (PM for acceptance, tester for verdicts) and let it write the comment
 - After push, always run oncall-engineer agent to monitor CI — do not just check manually or wait on CI as the orchestrator's main task
 
+### Engineering Conventions
+
+- Configurable settings go through the IntegrationSetting framework, never raw `os.environ` / `settings.X`. Read values with `get_config(key, default)` / `is_enabled(key)` from `integrations/config.py` (resolves DB override set in Studio settings -> env -> default) and register every key in `integrations/settings_registry.py` so it appears as a Studio-editable field with the Source badge. This keeps every setting changeable with no redeploy. Canonical example: the `#plan-sprints` channel keys in `integrations/settings_registry.py` read via `get_slack_plan_sprints_channel_id()` in `community/slack_config.py`.
+
 ### How to Pick Issues
 
 1. `gh issue list --repo AI-Shipping-Labs/website --state open --limit 50 --json number,title,labels --jq 'sort_by(.number) | .[] | "#\(.number) \(.title) [\(.labels | map(.name) | join(", "))]"'`

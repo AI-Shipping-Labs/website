@@ -101,4 +101,13 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: purge-unverified-users (daily at 08:00 UTC)'))
 
+        # Daily ingest of the #plan-sprints Slack channel (issue #889).
+        # Runs at 05:00 UTC, clear of the 03:00-04:00 import/event jobs.
+        schedule(
+            'crm.tasks.ingest_plan_sprints.ingest_plan_sprints',
+            cron='0 5 * * *',
+            name='ingest-plan-sprints',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: ingest-plan-sprints (daily at 05:00 UTC)'))
+
         self.stdout.write(self.style.SUCCESS('All default schedules registered.'))

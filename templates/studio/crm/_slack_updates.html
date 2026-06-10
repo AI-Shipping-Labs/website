@@ -35,6 +35,51 @@ this partial.
             {% endif %}
           </span>
         </summary>
+        {% for event in thread.progress_events.all %}
+        <div class="mt-3 rounded-md border border-accent/40 bg-accent/5 p-3"
+             data-testid="crm-slack-autoapply">
+          <p class="text-xs font-semibold uppercase tracking-wide text-accent mb-2">
+            Auto-applied from this thread
+          </p>
+          {% if event.summary %}
+          <p class="text-sm text-foreground whitespace-pre-line" data-testid="crm-slack-autoapply-summary">{{ event.summary }}</p>
+          {% endif %}
+          {% if event.blockers %}
+          <div class="mt-2">
+            <p class="text-xs font-medium text-muted-foreground">Blockers</p>
+            <ul class="list-disc list-inside text-sm text-foreground" data-testid="crm-slack-autoapply-blockers">
+              {% for blocker in event.blockers %}
+              <li>{{ blocker }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+          {% if event.changes.all %}
+          <ul class="mt-3 space-y-1" data-testid="crm-slack-autoapply-changes">
+            {% for change in event.changes.all %}
+            <li class="flex items-center justify-between gap-3" data-testid="crm-slack-autoapply-change">
+              <span class="text-sm text-foreground min-w-0 truncate">
+                <span class="text-xs text-muted-foreground">{{ change.get_item_kind_display }}:</span>
+                {{ change.item_description|truncatechars:80 }}
+              </span>
+              <form method="post" action="{% url 'studio_crm_slack_progress_change_undo' change.pk %}" class="shrink-0">
+                {% csrf_token %}
+                <button type="submit"
+                        data-testid="crm-slack-autoapply-change-undo"
+                        class="text-xs text-destructive hover:underline">Undo</button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          <form method="post" action="{% url 'studio_crm_slack_progress_undo' event.pk %}" class="mt-3">
+            {% csrf_token %}
+            <button type="submit"
+                    data-testid="crm-slack-autoapply-undo-all"
+                    class="text-xs font-medium text-destructive hover:underline">Undo all auto-applied changes</button>
+          </form>
+        </div>
+        {% endfor %}
         <ol class="mt-3 space-y-3 border-l border-border pl-4" data-testid="crm-slack-thread-messages">
           {% for message in thread.messages.all %}
           <li data-testid="crm-slack-message">

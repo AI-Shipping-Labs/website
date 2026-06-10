@@ -52,6 +52,8 @@ from studio.views.crm import (
     crm_list,
     crm_reactivate,
     crm_slack_ingest_review,
+    crm_slack_progress_change_undo,
+    crm_slack_progress_undo,
     crm_track,
 )
 from studio.views.dashboard import dashboard
@@ -647,6 +649,16 @@ urlpatterns = [
         'crm/slack-ingest',
         crm_slack_ingest_review,
         name='studio_crm_slack_ingest',
+    ),
+    path(
+        'crm/slack-progress/<int:event_id>/undo',
+        crm_slack_progress_undo,
+        name='studio_crm_slack_progress_undo',
+    ),
+    path(
+        'crm/slack-progress/change/<int:change_id>/undo',
+        crm_slack_progress_change_undo,
+        name='studio_crm_slack_progress_change_undo',
     ),
     path('crm/<int:crm_id>/', crm_detail, name='studio_crm_detail'),
     path('crm/<int:crm_id>/edit', crm_edit, name='studio_crm_edit'),

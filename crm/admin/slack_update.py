@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from crm.models import SlackChannelIngest, SlackMessage, SlackThread
+from crm.models import (
+    AppliedProgressChange,
+    IngestedProgressEvent,
+    SlackChannelIngest,
+    SlackMessage,
+    SlackThread,
+)
 
 
 @admin.register(SlackChannelIngest)
@@ -38,3 +44,19 @@ class SlackMessageAdmin(admin.ModelAdmin):
     list_filter = ('is_root',)
     search_fields = ('ts', 'slack_user_id', 'author_display', 'text')
     raw_id_fields = ('thread', 'first_seen_ingest')
+
+
+@admin.register(IngestedProgressEvent)
+class IngestedProgressEventAdmin(admin.ModelAdmin):
+    list_display = (
+        'thread', 'plan', 'applied_at', 'source_message_ts', 'model_name',
+    )
+    search_fields = ('thread__thread_ts', 'summary')
+    raw_id_fields = ('thread', 'plan', 'ingest')
+
+
+@admin.register(AppliedProgressChange)
+class AppliedProgressChangeAdmin(admin.ModelAdmin):
+    list_display = ('event', 'item_kind', 'previous_done_at', 'applied_at')
+    list_filter = ('item_kind',)
+    raw_id_fields = ('event', 'checkpoint', 'deliverable', 'next_step')

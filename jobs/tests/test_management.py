@@ -156,6 +156,7 @@ class SetupSchedulesCommandTest(TestCase):
             'import-stripe-daily',
             'remind-unverified-users',
             'purge-unverified-users',
+            'ingest-plan-sprints',
         }
         self.assertEqual(names, expected)
 

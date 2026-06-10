@@ -30,6 +30,14 @@ TEAM_REQUESTS_CHANNEL_KEYS = {
     SLACK_ENV_TEST: "SLACK_TEST_TEAM_REQUESTS_CHANNEL_ID",
 }
 
+# Channel members post their sprint updates to; read daily by the
+# `#plan-sprints` ingest job (issue #889).
+PLAN_SPRINTS_CHANNEL_KEYS = {
+    SLACK_ENV_PRODUCTION: "SLACK_PLAN_SPRINTS_CHANNEL_ID",
+    SLACK_ENV_DEVELOPMENT: "SLACK_DEV_PLAN_SPRINTS_CHANNEL_ID",
+    SLACK_ENV_TEST: "SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID",
+}
+
 
 def get_slack_environment():
     """Return the configured Slack environment, defaulting safely to development."""
@@ -67,6 +75,19 @@ def get_slack_team_requests_channel_id():
     caller falls back to email + in-app notifications.
     """
     key = TEAM_REQUESTS_CHANNEL_KEYS[get_slack_environment()]
+    return str(get_config(key, "")).strip()
+
+
+def get_slack_plan_sprints_channel_id():
+    """Return the `#plan-sprints` channel for the active Slack environment.
+
+    The `#plan-sprints` channel is where members post their sprint
+    updates; the daily ingest job (issue #889) reads it via
+    ``conversations.history`` / ``conversations.replies``. Returns an
+    empty string when no channel is configured for the active
+    environment, in which case the ingest job no-ops cleanly.
+    """
+    key = PLAN_SPRINTS_CHANNEL_KEYS[get_slack_environment()]
     return str(get_config(key, "")).strip()
 
 

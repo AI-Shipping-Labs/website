@@ -4,6 +4,7 @@ from community.slack_config import (
     get_slack_announcements_channel_id,
     get_slack_community_channel_ids,
     get_slack_environment,
+    get_slack_plan_sprints_channel_id,
     slack_api_enabled,
 )
 from integrations.config import clear_config_cache
@@ -57,6 +58,29 @@ class SlackConfigTest(SimpleTestCase):
     @override_settings(SLACK_ENVIRONMENT="staging")
     def test_unknown_environment_falls_back_to_development(self):
         self.assertEqual(get_slack_environment(), "development")
+
+    @override_settings(
+        SLACK_ENVIRONMENT="production",
+        SLACK_PLAN_SPRINTS_CHANNEL_ID="CPROD_PS",
+        SLACK_DEV_PLAN_SPRINTS_CHANNEL_ID="CDEV_PS",
+    )
+    def test_plan_sprints_channel_uses_environment(self):
+        self.assertEqual(get_slack_plan_sprints_channel_id(), "CPROD_PS")
+
+    @override_settings(
+        SLACK_ENVIRONMENT="test",
+        SLACK_PLAN_SPRINTS_CHANNEL_ID="CPROD_PS",
+        SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID="CTEST_PS",
+    )
+    def test_plan_sprints_channel_test_env(self):
+        self.assertEqual(get_slack_plan_sprints_channel_id(), "CTEST_PS")
+
+    @override_settings(
+        SLACK_ENVIRONMENT="development",
+        SLACK_DEV_PLAN_SPRINTS_CHANNEL_ID="",
+    )
+    def test_plan_sprints_channel_blank_when_unset(self):
+        self.assertEqual(get_slack_plan_sprints_channel_id(), "")
 
     @override_settings(SLACK_ENABLED=False, SLACK_BOT_TOKEN="xoxb-test")
     def test_slack_api_enabled_requires_kill_switch(self):

@@ -21,7 +21,9 @@ from accounts.models import TierOverride
 from crm.models import (
     STATUS_CHOICES,
     CRMRecord,
+    SlackChannelIngest,
 )
+from crm.services.slack_updates import threads_for_member, unmatched_threads
 from plans.models import InterviewNote, Plan
 from questionnaires.models import Persona
 from questionnaires.onboarding import (
@@ -246,6 +248,8 @@ def _record_detail_context(record):
         'persona_choices': list(
             Persona.objects.filter(is_active=True).order_by('order', 'name')
         ),
+        # Read-only #plan-sprints Slack ingest (issue #889). Staff-only.
+        'slack_threads': threads_for_member(record.user),
     }
 
 
@@ -279,6 +283,20 @@ def crm_edit(request, crm_id):
     record.save()
     messages.success(request, 'CRM record updated.')
     return redirect('studio_crm_detail', crm_id=record.pk)
+
+
+@staff_required
+def crm_slack_ingest_review(request):
+    """Staff-only review surface for `#plan-sprints` ingest (issue #889).
+
+    Lists unmatched threads (root author not matched to a member) so
+    updates from people we could not auto-match are not lost, plus the
+    most recent ingest runs so staff can confirm the daily job ran.
+    """
+    return render(request, 'studio/crm/slack_ingest.html', {
+        'unmatched_threads': unmatched_threads(),
+        'recent_runs': SlackChannelIngest.objects.all()[:10],
+    })
 
 
 @staff_required

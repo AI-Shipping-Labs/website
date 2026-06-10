@@ -53,6 +53,14 @@ uv run python manage.py migrate
 uv run python manage.py test --parallel
 ```
 
+### Configurable Settings Go Through the IntegrationSetting Framework
+
+Every new configurable setting must go through the IntegrationSetting framework so it is editable from Studio settings with no redeploy. Do not read raw `os.environ` or `settings.X` for runtime-configurable values.
+
+- Read values with `get_config(key, default)` / `is_enabled(key)` from `integrations/config.py`. These resolve in order: DB override (set in Studio settings) -> environment variable -> default.
+- Register every key in `integrations/settings_registry.py` (with a `description` and `docs_url`) so it appears as an editable field in Studio settings with the Source badge (DB override / env / default).
+- Canonical example: the `#plan-sprints` channel — keys registered in `integrations/settings_registry.py` (`slack` group) and read via `get_slack_plan_sprints_channel_id()` in `community/slack_config.py`, which calls `get_config(...)`. Environment variables remain an optional fallback, never the primary source.
+
 ### File Editing on Windows
 
 When using Edit or MultiEdit tools on Windows, use backslashes (`\`) in file paths.

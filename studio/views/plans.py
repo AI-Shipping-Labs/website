@@ -31,6 +31,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from crm.services.slack_updates import threads_for_plan
 from notifications.services.notification_service import NotificationService
 from plans.models import (
     InterviewNote,
@@ -274,6 +275,8 @@ def plan_detail(request, plan_id):
         'next_steps': next_steps,
         'internal_notes': internal_notes,
         'external_notes': external_notes,
+        # Read-only #plan-sprints Slack ingest linked to this plan (#889).
+        'slack_threads': threads_for_plan(plan),
     })
 
 

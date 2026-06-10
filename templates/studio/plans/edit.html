@@ -12,5 +12,85 @@
     &larr; Back to plan
   </a>
 </div>
+
+{% comment %}
+  Advisory AI next-sprint draft panel (issue #891, Phase 3). Staff-only,
+  rendered ONLY in the Studio editor shell (never the member-facing editor)
+  and ONLY when a draft exists. The draft is a SUGGESTION held aside from
+  the live plan — staff copy what they want into the fields below and save
+  through the normal editor API. Nothing here writes into the plan.
+{% endcomment %}
+{% if request.user.is_staff and next_sprint_draft %}
+<section data-testid="next-sprint-draft-panel"
+         class="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg p-6 mb-6">
+  <div class="flex items-start justify-between gap-3 mb-3">
+    <div>
+      <h2 class="text-lg font-semibold text-amber-900 dark:text-amber-200">
+        AI draft for the next sprint
+      </h2>
+      <p class="text-xs text-amber-800/80 dark:text-amber-200/70 mt-1">
+        Suggestion only — review and copy what you want into the plan fields
+        below. Nothing here has been applied to the plan.
+      </p>
+    </div>
+    <form method="post" action="{% url 'studio_plan_draft_next_sprint_dismiss' plan_id=plan.pk %}" class="inline shrink-0">
+      {% csrf_token %}
+      <button type="submit"
+              class="bg-white dark:bg-amber-900/40 text-amber-900 dark:text-amber-100 border border-amber-300 dark:border-amber-700 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors"
+              data-testid="next-sprint-draft-dismiss">
+        Dismiss draft
+      </button>
+    </form>
+  </div>
+
+  <dl class="space-y-3 text-sm">
+    <div data-field="goal">
+      <dt class="text-xs uppercase text-amber-800/70 dark:text-amber-200/60">Proposed goal</dt>
+      <dd class="text-amber-950 dark:text-amber-50 mt-1 whitespace-pre-line">{{ next_sprint_draft.goal|default:"-" }}</dd>
+    </div>
+    <div data-field="summary_current_situation">
+      <dt class="text-xs uppercase text-amber-800/70 dark:text-amber-200/60">Current situation</dt>
+      <dd class="text-amber-950 dark:text-amber-50 mt-1 whitespace-pre-line">{{ next_sprint_draft.summary_current_situation|default:"-" }}</dd>
+    </div>
+    <div data-field="summary_goal">
+      <dt class="text-xs uppercase text-amber-800/70 dark:text-amber-200/60">Goal narrative</dt>
+      <dd class="text-amber-950 dark:text-amber-50 mt-1 whitespace-pre-line">{{ next_sprint_draft.summary_goal|default:"-" }}</dd>
+    </div>
+    <div data-field="summary_main_gap">
+      <dt class="text-xs uppercase text-amber-800/70 dark:text-amber-200/60">Main gap</dt>
+      <dd class="text-amber-950 dark:text-amber-50 mt-1 whitespace-pre-line">{{ next_sprint_draft.summary_main_gap|default:"-" }}</dd>
+    </div>
+    <div data-field="summary_weekly_hours">
+      <dt class="text-xs uppercase text-amber-800/70 dark:text-amber-200/60">Weekly hours</dt>
+      <dd class="text-amber-950 dark:text-amber-50 mt-1 whitespace-pre-line">{{ next_sprint_draft.summary_weekly_hours|default:"-" }}</dd>
+    </div>
+  </dl>
+
+  {% if next_sprint_draft.suggested_next_steps %}
+  <div class="mt-4" data-testid="next-sprint-draft-next-steps">
+    <p class="text-xs uppercase text-amber-800/70 dark:text-amber-200/60">Suggested next steps</p>
+    <ul class="list-disc list-inside mt-1 space-y-1 text-amber-950 dark:text-amber-50">
+      {% for step in next_sprint_draft.suggested_next_steps %}
+      <li>{{ step }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if next_sprint_draft.rationale %}
+  <div class="mt-4" data-testid="next-sprint-draft-rationale">
+    <p class="text-xs uppercase text-amber-800/70 dark:text-amber-200/60">Why this draft</p>
+    <p class="text-amber-950 dark:text-amber-50 mt-1 whitespace-pre-line">{{ next_sprint_draft.rationale }}</p>
+  </div>
+  {% endif %}
+
+  <p class="mt-4 text-xs text-amber-800/70 dark:text-amber-200/60" data-testid="next-sprint-draft-provenance">
+    Drafted from {{ next_sprint_draft.update_count }} recent #plan-sprints update{{ next_sprint_draft.update_count|pluralize }}
+    {% if next_sprint_draft.model_name %}· model {{ next_sprint_draft.model_name }}{% endif %}
+    · {{ next_sprint_draft.generated_at|date:"Y-m-d" }}
+  </p>
+</section>
+{% endif %}
+
 {% include "studio/plans/_editor_body.html" %}
 {% endblock %}

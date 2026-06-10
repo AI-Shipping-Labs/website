@@ -70,6 +70,7 @@ from api.views.plan_items import (
 )
 from api.views.plans import (
     plan_detail,
+    plan_draft_next_sprint,
     sprint_plans_bulk_import,
     sprint_plans_collection,
 )
@@ -323,6 +324,13 @@ urlpatterns = [
         "plans/<int:plan_id>",
         plan_detail,
         name="api_plan_detail",
+    ),
+    # Carry-over + AI next-sprint draft (issue #891, Phase 3). Staff-only;
+    # same shared service as the Studio "Draft next sprint plan" button.
+    path(
+        "plans/<int:plan_id>/draft-next-sprint",
+        plan_draft_next_sprint,
+        name="api_plan_draft_next_sprint",
     ),
     # ---- Weeks (issue #433) -------------------------------------------
     path(

@@ -35,12 +35,14 @@ from crm.services.slack_updates import threads_for_plan
 from notifications.services.notification_service import NotificationService
 from plans.models import (
     InterviewNote,
+    NextSprintPlanDraft,
     Plan,
     Sprint,
 )
 from plans.services import (
     carry_over_unfinished_tasks,
     create_plan_for_enrollment,
+    draft_next_sprint_plan,
     find_carry_over_source_plan,
 )
 from studio.decorators import staff_required
@@ -435,3 +437,81 @@ def plan_carry_over(request, plan_id):
             f'for {plan.member.email} (already up to date).',
         )
     return redirect('studio_plan_detail', plan_id=plan.pk)
+
+
+@staff_required
+@require_POST
+def plan_draft_next_sprint(request, plan_id):
+    """Staff trigger: carry-over + AI draft of the next-sprint plan (#891).
+
+    Runs the single shared ``draft_next_sprint_plan`` service path (also
+    behind the plans API). Carry-over always runs first; the AI draft only
+    runs when the LLM service is on, lands in a ``NextSprintPlanDraft`` row
+    held ASIDE from the plan (never auto-written into the plan's fields),
+    and is reviewable in the editor.
+
+    Degrades gracefully: LLM off => carry-over only, no draft row; LLM
+    failure => carry-over stands, no partial draft row. Redirects to the
+    editor so staff can review the draft panel and copy what they want.
+    """
+    plan = get_object_or_404(
+        Plan.objects
+        .select_related('member', 'sprint')
+        .prefetch_related(
+            'weeks__checkpoints',
+            'deliverables',
+            'next_steps',
+        ),
+        pk=plan_id,
+    )
+
+    outcome = draft_next_sprint_plan(destination_plan=plan, actor=request.user)
+
+    carried = outcome['carried_over']
+    source_plan = outcome['source_plan']
+    carry_phrase = (
+        f'Carried over {carried} task{"" if carried == 1 else "s"}'
+        if carried
+        else (
+            'No new tasks to carry over (already up to date)'
+            if source_plan is not None
+            else 'No previous plan to carry over from'
+        )
+    )
+
+    if not outcome['llm_enabled']:
+        messages.info(
+            request,
+            f'{carry_phrase}. AI draft was skipped because AI is off — '
+            'configure an LLM provider in Settings > AI to draft a plan.',
+        )
+    elif outcome['draft_error']:
+        messages.error(
+            request,
+            f'{carry_phrase}. The AI draft failed — the LLM request errored. '
+            'Carry-over succeeded; try the draft again.',
+        )
+    else:
+        updates = outcome['update_count']
+        messages.success(
+            request,
+            f'{carry_phrase} and drafted a next-sprint plan from {updates} '
+            f'recent #plan-sprints update{"" if updates == 1 else "s"} — '
+            'review and copy it into the plan below.',
+        )
+
+    return redirect('studio_plan_edit', plan_id=plan.pk)
+
+
+@staff_required
+@require_POST
+def plan_draft_next_sprint_dismiss(request, plan_id):
+    """Delete the current AI next-sprint draft and return to the editor (#891).
+
+    The draft is advisory; once staff have copied what they want they
+    dismiss it. Idempotent — a no-op when no draft exists.
+    """
+    plan = get_object_or_404(Plan, pk=plan_id)
+    NextSprintPlanDraft.objects.filter(plan=plan).delete()
+    messages.info(request, 'Dismissed the AI next-sprint draft.')
+    return redirect('studio_plan_edit', plan_id=plan.pk)

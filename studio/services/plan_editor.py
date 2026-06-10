@@ -221,4 +221,39 @@ def build_plan_editor_context(plan, *, viewer, token_name):
         'api_base': '/api/',
         'weeks_count': weeks_count,
         'checkpoints_count': checkpoints_count,
+        # The advisory AI next-sprint draft (issue #891), kept DISTINCT
+        # from ``plan_json`` so it never blends into the live plan data.
+        # ``None`` when no draft exists -> the editor panel does not render.
+        'next_sprint_draft': _serialize_next_sprint_draft(plan),
+    }
+
+
+def _serialize_next_sprint_draft(plan):
+    """Return the current ``NextSprintPlanDraft`` as a context dict, or None.
+
+    Staff-only advisory data (issue #891). Held separate from the plan's
+    live fields — staff review and copy it in by hand; Phase 3 never
+    auto-writes it into the plan. Returns ``None`` when no draft exists so
+    the editor panel is omitted entirely.
+    """
+    # Inline import: ``plans.models`` imports ``content.access`` which
+    # pulls a chain that can re-enter studio at module load; deferring the
+    # import to call time keeps this serializer importable in isolation.
+    from plans.models import NextSprintPlanDraft
+
+    draft = NextSprintPlanDraft.objects.filter(plan=plan).first()
+    if draft is None:
+        return None
+    result = draft.result_json or {}
+    return {
+        'summary_current_situation': result.get('summary_current_situation', ''),
+        'summary_goal': result.get('summary_goal', ''),
+        'summary_main_gap': result.get('summary_main_gap', ''),
+        'summary_weekly_hours': result.get('summary_weekly_hours', ''),
+        'goal': result.get('goal', ''),
+        'suggested_next_steps': list(result.get('suggested_next_steps') or []),
+        'rationale': result.get('rationale', ''),
+        'update_count': draft.update_count,
+        'model_name': draft.model_name,
+        'generated_at': draft.generated_at,
     }

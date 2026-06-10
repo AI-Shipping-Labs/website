@@ -13,7 +13,7 @@ Tests cover all 12 BDD scenarios from the issue:
 - Visitor views a completed event and finds the recording
 - Visitor views a completed event that has no recording yet
 - Draft events are not visible to the public
-- Visitor spots a cancelled event in the past events section
+- Cancelled events are hidden from the public past events section (#863)
 
 Usage:
     uv run pytest playwright_tests/test_events_calendar.py -v
@@ -783,19 +783,20 @@ class TestScenario11DraftEventsNotVisible:
         # Then: Returns a 404
         assert response.status == 404
 # ---------------------------------------------------------------
-# Scenario 12: Visitor spots a cancelled event in the past events
-#               section
+# Scenario 12: Cancelled events are hidden from the public past
+#               events section (issue #863)
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
-class TestScenario12CancelledEventInPastSection:
-    """Visitor spots a cancelled event in the past events section."""
+class TestScenario12CancelledEventHiddenFromPast:
+    """Cancelled events do not appear on the public events list (#863)."""
 
-    def test_cancelled_event_shows_in_past_with_cancelled_badge(
+    def test_cancelled_event_absent_from_past_section(
         self, django_server
     , page):
-        """Given an anonymous visitor. A cancelled event exists. It appears
-        in the Past section of /events with a visible 'Cancelled' badge."""
+        """Given an anonymous visitor. A cancelled event dated in the past
+        exists. It is hidden from the Past section of /events — issue #863
+        removed cancelled occurrences from every public surface."""
         _clear_events()
         _ensure_tiers()
 
@@ -814,12 +815,5 @@ class TestScenario12CancelledEventInPastSection:
         )
         page.content()
 
-        # Then: "Cancelled AI Meetup" appears in the Past section
-        past_section = page.locator(
-            "h2:has-text('Past')"
-        ).locator("..")
-        past_text = past_section.inner_text()
-        assert "Cancelled AI Meetup" in past_text
-
-        # With a visible "Cancelled" badge
-        assert "Cancelled" in past_text
+        # Then: the cancelled event does not appear anywhere on the page
+        assert "Cancelled AI Meetup" not in page.locator("body").inner_text()

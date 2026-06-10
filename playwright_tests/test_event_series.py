@@ -650,6 +650,100 @@ class TestScenario9ListingShowsSeriesLink:
 
 
 # ---------------------------------------------------------------------------
+# Scenario 11 (issue #893): Staff sees a derived status badge per occurrence
+# on the series detail page
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestScenario11StatusBadgePerOccurrence:
+    def test_draft_vs_upcoming_badge_and_flip(self, django_server, browser):
+        from django.db import connection
+        from django.utils import timezone
+
+        from events.models import Event, EventSeries
+
+        _reset_event_state()
+        _create_staff_user("staff-eg11@test.com")
+        series = EventSeries(
+            name="Status Badge Series",
+            slug="status-badge-series",
+            start_time=datetime(2026, 1, 1, 18, 0).time(),
+        )
+        series.save()
+        draft = Event(
+            title="Draft Occurrence",
+            slug="status-badge-draft",
+            start_datetime=timezone.now() + timedelta(days=7),
+            status="draft",
+            origin="studio",
+            timezone="UTC",
+            event_series=series,
+            series_position=1,
+        )
+        draft.save()
+        upcoming = Event(
+            title="Upcoming Occurrence",
+            slug="status-badge-upcoming",
+            start_datetime=timezone.now() + timedelta(days=14),
+            status="upcoming",
+            origin="studio",
+            timezone="UTC",
+            event_series=series,
+            series_position=2,
+        )
+        upcoming.save()
+        connection.close()
+
+        ctx = _auth_context(browser, "staff-eg11@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/event-series/{series.pk}/",
+            wait_until="domcontentloaded",
+        )
+
+        # The draft occurrence's row carries a Draft badge.
+        draft_badge = page.locator(
+            f'tr:has(a[href="/studio/events/{draft.pk}/edit"]) '
+            '[data-testid="event-status-badge"]'
+        ).first
+        assert draft_badge.get_attribute("data-status") == "draft"
+        assert "Draft" in draft_badge.inner_text()
+
+        # The upcoming occurrence's row carries an Upcoming badge.
+        upcoming_badge = page.locator(
+            f'tr:has(a[href="/studio/events/{upcoming.pk}/edit"]) '
+            '[data-testid="event-status-badge"]'
+        ).first
+        assert upcoming_badge.get_attribute("data-status") == "upcoming"
+        assert "Upcoming" in upcoming_badge.inner_text()
+
+        # Flip the draft occurrence to published (upcoming) via its editor.
+        page.goto(
+            f"{django_server}/studio/events/{draft.pk}/edit",
+            wait_until="domcontentloaded",
+        )
+        page.select_option('select[name="status"]', "upcoming")
+        page.locator("button:has-text('Save Changes')").first.click()
+        page.wait_for_url(re.compile(rf".*/studio/events/{draft.pk}/edit$"))
+
+        # Back on the series page, that row no longer reads Draft.
+        page.goto(
+            f"{django_server}/studio/event-series/{series.pk}/",
+            wait_until="domcontentloaded",
+        )
+        flipped_badge = page.locator(
+            f'tr:has(a[href="/studio/events/{draft.pk}/edit"]) '
+            '[data-testid="event-status-badge"]'
+        ).first
+        assert flipped_badge.get_attribute("data-status") != "draft"
+        assert "Draft" not in flipped_badge.inner_text()
+
+        ctx.close()
+
+
+# ---------------------------------------------------------------------------
 # Scenario 10: Cancelled occurrences are hidden from visitors but visible
 # to staff (issue #863)
 # ---------------------------------------------------------------------------

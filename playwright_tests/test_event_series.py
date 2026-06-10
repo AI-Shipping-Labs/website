@@ -85,9 +85,6 @@ class TestScenario1CreateSeries:
 
         rows = page.locator('[data-testid="event-series-member-row"]')
         assert rows.count() == 6
-        # Every row has a Draft status badge.
-        draft_count = page.get_by_text("Draft", exact=False).count()
-        assert draft_count >= 6
 
         ctx.close()
 

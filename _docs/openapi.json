@@ -4125,6 +4125,56 @@
         ]
       }
     },
+    "/api/plans/{plan_id}/draft-next-sprint": {
+      "post": {
+        "description": "Staff-only. Runs the same shared service as the Studio \"Draft next sprint plan\" button: carry-over of unfinished tasks always runs first; an LLM draft of the next-sprint narrative is produced and stored aside ONLY when the LLM service is enabled. The draft is never written into the plan's live fields. With the LLM off this is a 200 with ``draft: null`` (NOT an error) and carry-over still ran.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "carried_over": 3,
+                  "draft": {
+                    "goal": "Ship a working RAG prototype",
+                    "rationale": "...",
+                    "suggested_next_steps": [
+                      "..."
+                    ],
+                    "summary_current_situation": "...",
+                    "summary_goal": "...",
+                    "summary_main_gap": "...",
+                    "summary_weekly_hours": "~6 hours/week"
+                  },
+                  "llm_enabled": true,
+                  "source_plan_id": 12
+                }
+              }
+            },
+            "description": "Carry-over (and optionally a draft) ran."
+          },
+          "403": {
+            "description": "Non-staff bearer."
+          },
+          "404": {
+            "description": "Plan not found."
+          }
+        },
+        "summary": "Draft next-sprint plan",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
     "/api/plans/{plan_id}/interview-notes": {
       "get": {
         "description": "Visibility goes through ``visible_interview_notes_for``: a non-staff bearer asking with ``?visibility=internal`` gets 403 ``forbidden_internal_note``.",

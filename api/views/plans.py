@@ -45,6 +45,7 @@ from plans.models import (
     Sprint,
     Week,
 )
+from plans.services import draft_next_sprint_plan
 
 
 def _coerce_datetime(value):
@@ -1466,3 +1467,94 @@ def _apply_top_level_fields(plan, data):
         plan.save(update_fields=list(set(update_fields)) + ["updated_at"])
 
     return None, fire_plan_shared
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Plans",
+    summary="Draft a member's next-sprint plan (carry-over + AI draft)",
+    methods={
+        "POST": {
+            "summary": "Draft next-sprint plan",
+            "description": (
+                "Staff-only. Runs the same shared service as the Studio "
+                "\"Draft next sprint plan\" button: carry-over of unfinished "
+                "tasks always runs first; an LLM draft of the next-sprint "
+                "narrative is produced and stored aside ONLY when the LLM "
+                "service is enabled. The draft is never written into the "
+                "plan's live fields. With the LLM off this is a 200 with "
+                "``draft: null`` (NOT an error) and carry-over still ran."
+            ),
+            "responses": {
+                200: {
+                    "description": "Carry-over (and optionally a draft) ran.",
+                    "example": {
+                        "carried_over": 3,
+                        "llm_enabled": True,
+                        "source_plan_id": 12,
+                        "draft": {
+                            "summary_current_situation": "...",
+                            "summary_goal": "...",
+                            "summary_main_gap": "...",
+                            "summary_weekly_hours": "~6 hours/week",
+                            "goal": "Ship a working RAG prototype",
+                            "suggested_next_steps": ["..."],
+                            "rationale": "...",
+                        },
+                    },
+                },
+                403: {"description": "Non-staff bearer."},
+                404: {"description": "Plan not found."},
+            },
+        },
+    },
+)
+def plan_draft_next_sprint(request, plan_id):
+    """``POST /api/plans/<id>/draft-next-sprint`` (issue #891, Phase 3).
+
+    Staff-only. Single shared code path with the Studio view via
+    :func:`plans.services.draft_next_sprint_plan`. Returns
+    ``{carried_over, draft, llm_enabled, source_plan_id}``. The disabled-LLM
+    case is a 200 with ``draft: null`` — only a missing plan or a non-staff
+    bearer is a 4xx.
+    """
+    if not bearer_is_admin(request.user):
+        return error_response(
+            "Drafting a next-sprint plan is staff-only",
+            "forbidden_other_user_plan",
+            status=403,
+        )
+
+    plan = (
+        Plan.objects
+        .select_related("member", "sprint")
+        .prefetch_related(
+            "weeks__checkpoints",
+            "deliverables",
+            "next_steps",
+        )
+        .filter(pk=plan_id)
+        .first()
+    )
+    if plan is None:
+        return error_response(
+            "Plan not found",
+            "unknown_plan",
+            status=404,
+        )
+
+    outcome = draft_next_sprint_plan(destination_plan=plan, actor=request.user)
+    draft_result = outcome["draft_result"]
+    source_plan = outcome["source_plan"]
+
+    return JsonResponse(
+        {
+            "carried_over": outcome["carried_over"],
+            "llm_enabled": outcome["llm_enabled"],
+            "source_plan_id": source_plan.pk if source_plan is not None else None,
+            "draft": draft_result.model_dump() if draft_result is not None else None,
+        },
+        status=200,
+    )

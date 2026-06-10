@@ -27,6 +27,14 @@
           Carry over unfinished tasks
         </button>
       </form>
+      <form method="post" action="{% url 'studio_plan_draft_next_sprint' plan_id=plan.pk %}" class="inline">
+        {% csrf_token %}
+        <button type="submit"
+                class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+                data-testid="studio-plan-draft-next-sprint">
+          Draft next sprint plan
+        </button>
+      </form>
       <a href="{% url 'studio_plan_edit' plan_id=plan.pk %}"
          class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
         Edit plan

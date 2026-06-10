@@ -782,3 +782,72 @@ class InterviewNote(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return f'{self.get_kind_display()} note for {self.member}'
+
+
+class NextSprintPlanDraft(TimestampedModelMixin, models.Model):
+    """Staff-only AI draft for a plan's NEXT sprint (issue #891, Phase 3).
+
+    Holds the validated structured output of
+    :func:`plans.services.next_sprint_draft.draft_next_sprint` ASIDE from
+    the plan's live fields — it is advisory text staff review and copy in
+    by hand. Phase 3 never auto-writes a draft into a plan. At most one
+    current draft per destination plan (``OneToOne``); regenerating
+    overwrites the single row via ``update_or_create`` keyed on ``plan``.
+
+    ``source_plan`` records the carry-over / recent-updates source for
+    audit and uses ``SET_NULL`` so the draft survives source deletion.
+    ``update_count`` is how many recent ``#plan-sprints`` messages informed
+    the draft (provenance). ``model_name`` records the resolved LLM model,
+    mirroring :class:`SprintFeedbackSummary`. ``generated_by`` is
+    ``SET_NULL`` because the audit row survives deletion of the staff
+    account that triggered it.
+
+    This data is STAFF-ONLY — no member-facing template renders it.
+    """
+
+    plan = models.OneToOneField(
+        'plans.Plan',
+        on_delete=models.CASCADE,
+        related_name='next_sprint_draft',
+    )
+    result_json = models.JSONField(
+        default=dict,
+        help_text=(
+            'The validated NextSprintDraftResult as a dict '
+            '(summary_* fields, goal, suggested_next_steps, rationale).'
+        ),
+    )
+    source_plan = models.ForeignKey(
+        'plans.Plan',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+        help_text='The carry-over / recent-updates source plan, for audit.',
+    )
+    update_count = models.IntegerField(
+        default=0,
+        help_text=(
+            'How many recent #plan-sprints messages informed the draft.'
+        ),
+    )
+    model_name = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        help_text='Resolved LLM model used, for provenance.',
+    )
+    generated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    generated_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ['-generated_at']
+
+    def __str__(self):
+        return f'Next-sprint draft for {self.plan}'

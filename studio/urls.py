@@ -133,6 +133,8 @@ from studio.views.plans import (
     plan_carry_over,
     plan_create,
     plan_detail,
+    plan_draft_next_sprint,
+    plan_draft_next_sprint_dismiss,
     plan_edit,
     plan_list,
     plan_share,
@@ -837,6 +839,19 @@ urlpatterns = [
         'plans/<int:plan_id>/carry-over/',
         plan_carry_over,
         name='studio_plan_carry_over',
+    ),
+    # Carry-over + AI next-sprint draft (issue #891, Phase 3). POST-only;
+    # staff-only. Runs the shared draft_next_sprint_plan service and
+    # redirects to the editor where the advisory draft panel renders.
+    path(
+        'plans/<int:plan_id>/draft-next-sprint/',
+        plan_draft_next_sprint,
+        name='studio_plan_draft_next_sprint',
+    ),
+    path(
+        'plans/<int:plan_id>/draft-next-sprint/dismiss/',
+        plan_draft_next_sprint_dismiss,
+        name='studio_plan_draft_next_sprint_dismiss',
     ),
     path(
         'plans/<int:plan_id>/notes/new',

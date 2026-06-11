@@ -2706,3 +2706,85 @@ class WorkshopSyncTitleDateHeuristicTest(_WorkshopSyncFixtureBase):
         event.refresh_from_db()
         self.assertEqual(event.origin, 'studio')
         self.assertFalse(event.source_repo)
+
+
+class WorkshopSyncDoesNotResurrectMergedDuplicateTest(_WorkshopSyncFixtureBase):
+    """Issue #881 §3: a post-merge re-sync must not resurrect the duplicate.
+
+    Reproduces the May-19-style pre-fix state — a ``origin='github',
+    kind='workshop'`` duplicate event minted with ``slug == workshop.slug`` and
+    the workshop pointing at it, alongside the canonical Studio event for the
+    same session — then merges the pair and re-syncs. After the merge the
+    workshop links to the canonical event and the duplicate is retired; the
+    re-sync (with #879/#880 in place) must leave exactly one published event
+    (the canonical) and keep the workshop linked to it.
+    """
+
+    def _write_recording_workshop(self):
+        self._write_workshop_yaml(
+            folder='2026/2026-04-21-demo',
+            slug='demo',
+            title='Demo Workshop',
+            extra_yaml=(
+                'recording:\n'
+                '  url: https://www.youtube.com/watch?v=linked\n'
+                '  embed_url: https://www.youtube.com/embed/linked\n'
+                '  required_level: 20\n'
+            ),
+        )
+        self._write_page('2026/2026-04-21-demo', '01-overview.md',
+                         title='Overview')
+
+    def test_resync_after_merge_leaves_one_event_and_keeps_link(self):
+        from events.services.event_merge import merge_duplicate_events
+
+        # Canonical Studio event for the same session.
+        canonical = Event.objects.create(
+            slug='take-home-live', title='Demo Workshop',
+            start_datetime=datetime(2026, 4, 21, 15, 0, tzinfo=dt_timezone.utc),
+            origin='studio', source_repo='', status='upcoming', published=True,
+        )
+        # The pre-#879/#880 github duplicate minted with slug == workshop.slug.
+        duplicate = Event.objects.create(
+            slug='demo', title='Demo Workshop',
+            start_datetime=datetime(2026, 4, 21, 0, 0, tzinfo=dt_timezone.utc),
+            origin='github', source_repo=self.source.repo_name,
+            kind='workshop', status='completed', published=True,
+            source_path='2026/2026-04-21-demo/workshop.yaml',
+            content_id=uuid.uuid4(),
+        )
+        self._write_recording_workshop()
+        # Sync once: the slug-match step links the workshop to the duplicate.
+        sync_repo(self.source, self.repo)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.event_id, duplicate.pk)
+
+        # Merge the pair into the canonical Studio event.
+        merge_duplicate_events(
+            canonical, duplicate, actor_label='test', dry_run=False)
+        workshop.refresh_from_db()
+        self.assertEqual(workshop.event_id, canonical.pk)
+        duplicate.refresh_from_db()
+        self.assertEqual(duplicate.status, 'cancelled')
+
+        # Re-sync: must NOT resurrect the retired duplicate and must keep the
+        # workshop linked to the canonical event.
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}')
+
+        workshop.refresh_from_db()
+        self.assertEqual(
+            workshop.event_id, canonical.pk,
+            'Re-sync must keep the workshop linked to the canonical event.')
+
+        duplicate.refresh_from_db()
+        self.assertEqual(duplicate.status, 'cancelled')
+        self.assertFalse(duplicate.published)
+
+        # Exactly one published event for this session — the canonical.
+        published = list(Event.objects.filter(
+            start_datetime__date=datetime(2026, 4, 21).date(),
+            published=True,
+        ).values_list('pk', flat=True))
+        self.assertEqual(published, [canonical.pk])

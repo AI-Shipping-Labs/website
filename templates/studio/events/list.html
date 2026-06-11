@@ -10,6 +10,12 @@
     <p class="text-muted-foreground mt-1 hidden md:block">Manage event lifecycle, platform, and capacity.</p>
   </div>
   <div class="flex items-center gap-2">
+    <a href="{% url 'studio_event_duplicates' %}"
+       class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+       data-testid="event-duplicates-button">
+      <i data-lucide="copy" class="h-4 w-4"></i>
+      <span>Duplicates</span>
+    </a>
     <a href="{% url 'studio_event_new' %}"
        class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
        data-testid="event-new-button">

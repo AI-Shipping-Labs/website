@@ -71,6 +71,11 @@ from studio.views.enrollments import (
     enrollment_list,
     enrollment_unenroll,
 )
+from studio.views.event_duplicates import (
+    event_duplicates_confirm,
+    event_duplicates_list,
+    event_duplicates_preview,
+)
 from studio.views.event_series import (
     event_series_add_occurrence,
     event_series_announce_slack,
@@ -323,6 +328,23 @@ urlpatterns = [
     # ``<int:event_id>`` routes so the slug is not swallowed (issue #574).
     path('events/', event_list, name='studio_event_list'),
     path('events/new', event_create, name='studio_event_new'),
+    # Duplicate-event merge tool (issue #881). Literal segments, registered
+    # before the ``<int:event_id>`` routes (non-int so never swallowed).
+    path(
+        'events/duplicates/',
+        event_duplicates_list,
+        name='studio_event_duplicates',
+    ),
+    path(
+        'events/duplicates/preview',
+        event_duplicates_preview,
+        name='studio_event_duplicates_preview',
+    ),
+    path(
+        'events/duplicates/confirm',
+        event_duplicates_confirm,
+        name='studio_event_duplicates_confirm',
+    ),
     path('events/<int:event_id>/edit', event_edit, name='studio_event_edit'),
     path('events/<int:event_id>/create-zoom', event_create_zoom, name='studio_event_create_zoom'),
     path(

@@ -2426,6 +2426,77 @@
         ]
       }
     },
+    "/api/integrations/slack/plan-sprints/ingest": {
+      "post": {
+        "description": "Kicks off the same capture + parse + auto-apply path the daily schedule runs. With no body it uses the forward watermark (or the 7-day first-run default). Pass ``since`` (``YYYY-MM-DD``, UTC midnight) to retroactively read OLDER history. ``dry_run=true`` runs the full path then rolls it back so nothing is persisted. The work runs on the background worker; the response carries the task id. The ingest is idempotent, so a duplicate trigger never double-applies progress.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "dry_run": true,
+                "since": "2026-01-01"
+              },
+              "schema": {
+                "properties": {
+                  "dry_run": {
+                    "description": "Run and roll back without persisting.",
+                    "type": "boolean"
+                  },
+                  "since": {
+                    "description": "YYYY-MM-DD; read history from this date.",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "channel_id": "C0123ABC",
+                  "dry_run": true,
+                  "since": "2026-01-01",
+                  "status": "queued",
+                  "task_id": "a1b2c3d4e5f6"
+                }
+              }
+            },
+            "description": "Ingest enqueued on the worker."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_since",
+                  "error": "since must be YYYY-MM-DD, got 'nope'"
+                }
+              }
+            },
+            "description": "Invalid body or ``since`` value. Codes: ``invalid_type``, ``invalid_since``, ``invalid_dry_run``."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "ingest_unavailable",
+                  "error": "Slack ingestion is not configured"
+                }
+              }
+            },
+            "description": "Ingestion is not available: Slack is disabled or the #plan-sprints channel is not configured."
+          }
+        },
+        "summary": "Enqueue a #plan-sprints ingest run",
+        "tags": [
+          "Plan-sprints ingest"
+        ]
+      }
+    },
     "/api/interview-notes": {
       "post": {
         "description": "Non-staff bearers cannot create a note with ``visibility=internal``. The plan_id is optional; when supplied it must reference a plan the bearer can see.",

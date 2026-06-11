@@ -28,15 +28,27 @@ from community.services.slack import SlackAPIError, SlackCommunityService
 from community.slack_config import get_slack_plan_sprints_channel_id
 from crm.models import SlackChannelIngest, SlackMessage, SlackThread
 from crm.tasks.apply_plan_sprint_progress import apply_progress_for_threads
-from integrations.config import is_enabled
+from integrations.config import get_config, is_enabled
 from plans.models import Plan
 
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
-# How far back to read on the very first run (no prior successful ingest).
+# Default days to read back on the very first run (no prior successful
+# ingest). Overridable via the ``PLAN_SPRINTS_FIRST_RUN_LOOKBACK_DAYS``
+# IntegrationSetting (Studio-editable, no redeploy).
 FIRST_RUN_LOOKBACK_DAYS = 7
+
+
+def _first_run_lookback_days():
+    """Resolve the first-run lookback window (Studio-overridable, default 7)."""
+    raw = get_config('PLAN_SPRINTS_FIRST_RUN_LOOKBACK_DAYS', FIRST_RUN_LOOKBACK_DAYS)
+    try:
+        days = int(raw)
+    except (TypeError, ValueError):
+        return FIRST_RUN_LOOKBACK_DAYS
+    return days if days > 0 else FIRST_RUN_LOOKBACK_DAYS
 
 
 def _ts_to_datetime(ts):
@@ -175,10 +187,56 @@ def _upsert_thread(service, run, channel_id, root_message):
     return new_replies, created, (member is not None), thread
 
 
-def ingest_plan_sprints():
-    """Daily `#plan-sprints` ingest entry point (registered in setup_schedules).
+def _date_to_ts(since):
+    """Convert a ``datetime.date``/``datetime`` to a Slack ``oldest`` ts string.
 
-    No-ops cleanly (logs, returns, creates no rows) when Slack is
+    A bare ``date`` is interpreted as midnight UTC of that day.
+    """
+    if isinstance(since, datetime):
+        dt = since if since.tzinfo else since.replace(tzinfo=dt_timezone.utc)
+    else:
+        dt = datetime(since.year, since.month, since.day, tzinfo=dt_timezone.utc)
+    return f"{dt.timestamp():.6f}"
+
+
+def _resolve_oldest(channel_id, *, oldest_ts=None, since=None):
+    """Resolve the effective ``oldest`` Slack ts for this run.
+
+    Precedence: an explicit ``oldest_ts`` (string) wins, then a ``since``
+    date/datetime, then the forward watermark of the last successful run,
+    and finally the :data:`FIRST_RUN_LOOKBACK_DAYS` default when nothing
+    has run before. Returning the same default behaviour keeps the daily
+    task unchanged when called with no arguments.
+    """
+    if oldest_ts:
+        return str(oldest_ts)
+    if since is not None:
+        return _date_to_ts(since)
+    watermark = _last_successful_latest_ts(channel_id)
+    if watermark:
+        return watermark
+    lookback = timezone.now() - timezone.timedelta(days=_first_run_lookback_days())
+    return f"{lookback.timestamp():.6f}"
+
+
+def ingest_plan_sprints(*, oldest_ts=None, since=None, dry_run=False):
+    """`#plan-sprints` ingest entry point (registered in setup_schedules).
+
+    Called with no arguments by the daily schedule: reads from the forward
+    watermark (or the :data:`FIRST_RUN_LOOKBACK_DAYS` default on a first
+    run). A retroactive backfill (issue #904) passes an explicit
+    ``oldest_ts`` (a Slack ts string) or ``since`` (a ``date``/``datetime``)
+    to read older history; both override the watermark/default.
+
+    ``dry_run=True`` runs the full capture + parse + apply path inside a
+    transaction that is rolled back at the end, so nothing is persisted —
+    the returned :class:`SlackChannelIngest` carries the counts of what a
+    real run WOULD have written. The run is idempotent regardless: the
+    ``IngestedProgressEvent`` / ``AppliedProgressChange`` watermarks make a
+    committed re-run over the same window a no-op for already-applied
+    progress.
+
+    No-ops cleanly (logs, returns None, creates no rows) when Slack is
     disabled or the channel id is unset.
     """
     if not is_enabled('SLACK_ENABLED'):
@@ -191,11 +249,26 @@ def ingest_plan_sprints():
 
     service = SlackCommunityService()
 
-    oldest = _last_successful_latest_ts(channel_id)
-    if not oldest:
-        lookback = timezone.now() - timezone.timedelta(days=FIRST_RUN_LOOKBACK_DAYS)
-        oldest = f"{lookback.timestamp():.6f}"
+    oldest = _resolve_oldest(channel_id, oldest_ts=oldest_ts, since=since)
 
+    if dry_run:
+        with transaction.atomic():
+            run = _run_ingest(service, channel_id, oldest, dry_run=True)
+            # Roll back every row written this run; the in-memory ``run``
+            # object keeps its counts so the caller can report them.
+            transaction.set_rollback(True)
+        return run
+
+    return _run_ingest(service, channel_id, oldest, dry_run=False)
+
+
+def _run_ingest(service, channel_id, oldest, *, dry_run):
+    """Capture + parse + apply over the ``oldest..now`` window. Returns the run.
+
+    Shared by the live daily task and the dry-run backfill. The ``dry_run``
+    flag is only carried onto the returned run for reporting — the caller
+    wraps the dry-run call in a transaction it rolls back.
+    """
     run = SlackChannelIngest.objects.create(
         channel_id=channel_id,
         oldest_ts=oldest,
@@ -273,7 +346,8 @@ def ingest_plan_sprints():
     run.finished_at = timezone.now()
     run.save()
     logger.info(
-        "plan-sprints ingest complete: %s seen, %s new threads, %s new replies, %s matched",
+        "plan-sprints ingest complete%s: %s seen, %s new threads, %s new replies, %s matched",
+        " (dry-run, rolled back)" if dry_run else "",
         messages_seen, threads_persisted, replies_added, members_matched,
     )
     return run

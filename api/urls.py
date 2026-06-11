@@ -68,6 +68,7 @@ from api.views.plan_items import (
     plan_resources,
     resource_detail,
 )
+from api.views.plan_sprints_ingest import plan_sprints_ingest
 from api.views.plans import (
     plan_detail,
     plan_draft_next_sprint,
@@ -205,6 +206,15 @@ urlpatterns = [
         "integrations/settings",
         integration_settings,
         name="api_integration_settings",
+    ),
+    # ---- Plan-sprints ingest / backfill trigger (issue #904) ----------
+    # Staff-token POST that enqueues the same capture + parse + auto-apply
+    # path the daily schedule runs, with an optional ``since`` for a
+    # retroactive backfill and ``dry_run`` for a no-write preview.
+    path(
+        "integrations/slack/plan-sprints/ingest",
+        plan_sprints_ingest,
+        name="api_plan_sprints_ingest",
     ),
     # ---- Content sync sources (issue #634) ----------------------------
     path(

@@ -174,6 +174,20 @@ class AppendQueryParamTest(TestCase):
     def test_returns_empty_when_url_empty(self):
         self.assertEqual(append_query_param('', 'start', 60), '')
 
+    def test_start_param_carries_no_autoplay(self):
+        """Issue #899: the legacy iframe cue must only add ``start=N``.
+
+        ``allow="autoplay"`` on the iframe permits playback but does not
+        force it; ``start=N`` cues without auto-playing. Guard that the
+        helper used to build ``recording_embed_url_with_start`` never
+        injects an autoplay-triggering query param.
+        """
+        url = append_query_param('https://player.vimeo.com/video/123', 'start', 960)
+        self.assertIn('start=960', url)
+        self.assertNotIn('autoplay', url)
+        self.assertNotIn('autoStart', url)
+        self.assertNotIn('autostart', url)
+
 
 # --- normalize_timestamps tests ---------------------------------------
 
@@ -385,6 +399,18 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
         # Look for the start: 960 line inside the playerVars object.
         self.assertContains(response, 'start: 960')
 
+    def test_youtube_player_does_not_autoplay_on_load(self):
+        # Issue #899: the YT player is created with start=960 (cued) but
+        # must not request autoplay nor call playVideo() on load — it
+        # arrives parked at the offset and paused.
+        self.client.force_login(self.user_main)
+        response = self.client.get('/workshops/2026-04-21-vl/video?t=16:00')
+        html = response.content.decode()
+        self.assertIn('start: 960', html)
+        # No autoplay playerVar and no programmatic play on load.
+        self.assertNotIn('autoplay', html)
+        self.assertNotIn('playVideo()', html)
+
     def test_malformed_t_does_not_break_page(self):
         self.client.force_login(self.user_main)
         response = self.client.get('/workshops/2026-04-21-vl/video?t=not-a-time')
@@ -515,9 +541,109 @@ class WorkshopVideoFallbackEmbedStartTest(TierSetupMixin, TestCase):
             response, 'https://drive.example.com/embed/xyz?start=960',
         )
 
+    def test_fallback_iframe_url_requests_no_autoplay(self):
+        # Issue #899: the legacy iframe is cued via start=N but must never
+        # request autoplay through the constructed URL. The allow=autoplay
+        # attribute permits playback but does not force it.
+        self.client.force_login(self.user_main)
+        response = self.client.get('/workshops/2026-04-21-fb/video?t=16:00')
+        html = response.content.decode()
+        # The constructed src carries start= but no autoplay param.
+        self.assertIn('embed/xyz?start=960', html)
+        self.assertNotIn('autoplay=1', html)
+        self.assertNotIn('autoStart=1', html)
+
     def test_fallback_iframe_unchanged_without_t(self):
         self.client.force_login(self.user_main)
         response = self.client.get('/workshops/2026-04-21-fb/video')
         self.assertContains(
             response, 'src="https://drive.example.com/embed/xyz"',
         )
+
+
+class WorkshopVideoSelfHostedCueTest(TierSetupMixin, TestCase):
+    """Self-hosted <video> is cued to ?t= on load but never auto-plays.
+
+    Issue #899: the live paused/currentTime state is asserted via
+    Playwright (DOM media API). These view tests lock in the rendered
+    markup contract the JS depends on: the cue script is present with
+    the right offset when ?t= is supplied, absent otherwise, and the
+    <video> element never carries the autoplay attribute.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.event = _make_event(
+            slug='sh-event',
+            recording_url='https://cdn.example.com/recordings/ws.mp4',
+            timestamps=[
+                {'time': '0:00', 'title': 'Welcome'},
+                {'time': '16:00', 'title': 'Setup'},
+            ],
+        )
+        cls.workshop = _make_workshop(slug='sh', event=cls.event)
+        cls.user_main = User.objects.create_user(
+            email='main@x.com', password='pw', tier=cls.main_tier,
+        )
+
+    def test_self_hosted_video_element_renders(self):
+        self.client.force_login(self.user_main)
+        response = self.client.get('/workshops/2026-04-21-sh/video')
+        self.assertContains(response, 'id="video-player-self-hosted"')
+
+    def test_self_hosted_video_has_no_autoplay_attribute(self):
+        # The <video> tag must remain controls/preload only — never
+        # autoplay — regardless of whether ?t= is supplied.
+        self.client.force_login(self.user_main)
+        for url in (
+            '/workshops/2026-04-21-sh/video',
+            '/workshops/2026-04-21-sh/video?t=16:00',
+        ):
+            response = self.client.get(url)
+            html = response.content.decode()
+            # Isolate the <video ...> opening tag and assert no autoplay.
+            start = html.index('<video')
+            tag = html[start:html.index('>', start) + 1]
+            self.assertNotIn('autoplay', tag, msg=f'autoplay on {url}')
+
+    def test_cue_script_sets_currenttime_without_play_when_t_present(self):
+        # ?t=16:00 -> 960s. The initial-load cue script must set
+        # currentTime to 960 and must NOT call video.play() — that
+        # would auto-play. (The chapter-click handler still plays, but
+        # that handler is keyed on .video-timestamp clicks, not load.)
+        self.client.force_login(self.user_main)
+        response = self.client.get('/workshops/2026-04-21-sh/video?t=16:00')
+        html = response.content.decode()
+        self.assertIn('var startSeconds = 960;', html)
+        self.assertIn('video.currentTime = startSeconds;', html)
+        # The load-time cue block (between the cue marker and the click
+        # handlers) must not auto-play. The chapter-click handler's
+        # video.play() lives in a separate <script> and is allowed. We
+        # strip JS line comments first so explanatory prose mentioning
+        # play() doesn't trip the assertion — only an actual invocation
+        # (`video.play();`) counts.
+        cue_block_start = html.index('var startSeconds = 960;')
+        cue_block_end = html.index('Timestamp click handlers')
+        cue_block = html[cue_block_start:cue_block_end]
+        code_only = '\n'.join(
+            line.split('//', 1)[0] for line in cue_block.splitlines()
+        )
+        self.assertNotIn('.play(', code_only)
+
+    def test_no_cue_script_without_t_param(self):
+        # Without ?t= the load-time cue script is not emitted at all, so
+        # the player parks at 0 (paused) with no JS touching currentTime.
+        self.client.force_login(self.user_main)
+        response = self.client.get('/workshops/2026-04-21-sh/video')
+        html = response.content.decode()
+        self.assertNotIn('var startSeconds', html)
+
+    def test_chapter_click_handler_still_seeks_and_plays(self):
+        # Boundary guard: the explicit chapter-click handler keeps its
+        # seek-AND-play behavior (this issue only governs initial load).
+        self.client.force_login(self.user_main)
+        response = self.client.get('/workshops/2026-04-21-sh/video')
+        html = response.content.decode()
+        self.assertIn("source === 'self_hosted'", html)
+        self.assertIn('video.play();', html)

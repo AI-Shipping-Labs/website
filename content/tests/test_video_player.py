@@ -127,6 +127,17 @@ class EmbedURLTest(TestCase):
         url = get_loom_embed_url('abc123', time_seconds=None)
         self.assertEqual(url, 'https://www.loom.com/embed/abc123')
 
+    def test_loom_embed_url_with_time_has_no_autoplay(self):
+        """Issue #899: cueing Loom to an offset must NOT request autoplay.
+
+        Loom only auto-plays when ``autoplay=1`` is present; ``t=`` alone
+        cues the player and leaves it paused. Lock that in so a future
+        change can't sneak an autoplay param onto the deep-linked embed.
+        """
+        url = get_loom_embed_url('abc123', time_seconds=960)
+        self.assertIn('t=960', url)
+        self.assertNotIn('autoplay', url)
+
 
 # --- Timestamp Formatting Tests ---
 

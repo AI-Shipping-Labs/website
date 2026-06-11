@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
+{% load teaser_tags %}
 
 {% block title %}Dashboard | AI Shipping Labs{% endblock %}
 
@@ -283,15 +284,15 @@
             <a href="/blog" class="shrink-0 text-sm text-accent hover:underline">View all</a>
           </div>
           {% if recent_content %}
-          <div class="space-y-3">
+          <div class="space-y-3" data-testid="dashboard-recent-content">
             {% for item in recent_content %}
-            <a href="{{ item.url }}" class="flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50">
+            <a href="{{ item.url }}" class="flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50" data-testid="recent-content-card">
               <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
                 <i data-lucide="{{ item.icon }}" class="h-5 w-5 text-muted-foreground"></i>
               </div>
               <div class="flex-1 min-w-0">
                 <p class="font-medium text-foreground truncate">{{ item.title }}</p>
-                <p class="text-sm text-muted-foreground truncate">{{ item.description|truncatechars:80 }}</p>
+                <p class="text-sm text-muted-foreground truncate">{{ item.description|strip_markdown|truncatechars:80 }}</p>
               </div>
               <span class="hidden sm:block shrink-0 text-xs text-muted-foreground">{{ item.date|date:"M j" }}</span>
             </a>

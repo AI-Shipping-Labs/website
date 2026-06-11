@@ -17,6 +17,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.views.decorators.http import require_POST
 
 from content.models import Article, Course, Download, Project, Workshop
+from events.models import Event
 from integrations.services.banner_generator import is_enabled
 from integrations.services.banner_generator.dispatch import enqueue_force
 from studio.decorators import staff_required
@@ -87,3 +88,12 @@ def studio_workshop_regenerate_banner(request, workshop_id):
     workshop = get_object_or_404(Workshop, pk=workshop_id)
     _trigger(request, 'workshop', workshop)
     return redirect('studio_workshop_edit', workshop_id=workshop.pk)
+
+
+@staff_required
+@require_POST
+def studio_event_regenerate_banner(request, event_id):
+    """Force-enqueue a banner render for a Studio event (issue #895)."""
+    event = get_object_or_404(Event, pk=event_id)
+    _trigger(request, 'event', event)
+    return redirect('studio_event_edit', event_id=event.pk)

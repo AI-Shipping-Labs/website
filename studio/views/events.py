@@ -25,8 +25,13 @@ from events.models import Event, EventFeedback, EventRegistration
 from events.models.event import EXTERNAL_HOST_CHOICES
 from events.tasks.notify_reschedule import enqueue_reschedule_notice
 from events.tasks.send_post_event_followup import enqueue_post_event_followup
+from integrations.services.banner_generator import (
+    is_enabled as banner_generator_is_enabled,
+)
+from integrations.services.banner_generator.dispatch import enqueue_if_missing
 from integrations.services.zoom import create_meeting
 from studio.decorators import staff_required
+from studio.services.banner_status import get_last_banner_task
 from studio.utils import get_github_edit_url, is_synced
 from studio.views.form_helpers import parse_comma_separated_tags
 
@@ -436,6 +441,10 @@ def event_create(request):
             if platform == 'custom':
                 event.zoom_join_url = custom_url
             event.save()
+            # Issue #895: enqueue an auto-banner render for the new event
+            # (fire-and-forget; no-ops when banner-generator is disabled or
+            # a cover image is supplied).
+            enqueue_if_missing('event', event.pk)
             return redirect('studio_event_edit', event_id=event.pk)
 
     # Determine TZ value used for the shared picker partial.
@@ -599,6 +608,12 @@ def event_edit(request, event_id):
             # future, and the delta is >= 60s. End-only edits and
             # past-event edits stay silent.
             _maybe_notify_reschedule(request, event, old_start)
+
+            # Issue #895: a title change drifts the auto-banner title hash,
+            # so re-enqueue the render. ``enqueue_if_missing`` short-circuits
+            # when the hash is unchanged (re-save without a title edit) or a
+            # cover image is set, and no-ops when banner-generator is disabled.
+            enqueue_if_missing('event', event.pk)
         return redirect('studio_event_edit', event_id=event.pk)
 
     context = _event_form_context(event, default_tz)
@@ -658,6 +673,18 @@ def event_edit(request, event_id):
     context['feedback_avg'] = feedback_avg
     context['feedback_comment_count'] = (
         feedback_entries.exclude(comment='').count()
+    )
+
+    # Issue #895: auto-banner regenerate panel (parity with articles/etc).
+    # Only meaningful on the edit flow, where ``event`` exists.
+    banner_enabled = banner_generator_is_enabled()
+    context['banner_url'] = event.auto_banner_url
+    context['banner_regenerate_url'] = reverse(
+        'studio_event_regenerate_banner', kwargs={'event_id': event.pk},
+    )
+    context['banner_generator_enabled'] = banner_enabled
+    context['banner_last_task'] = (
+        get_last_banner_task('event', event.pk) if banner_enabled else None
     )
     return render(request, 'studio/events/form.html', context)
 

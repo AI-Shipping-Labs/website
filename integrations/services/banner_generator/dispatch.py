@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # this module can be imported during AppConfig wiring before content
 # models are ready.
 SUPPORTED_CONTENT_TYPES = (
-    'article', 'course', 'project', 'download', 'workshop',
+    'article', 'course', 'project', 'download', 'workshop', 'event',
 )
 
 RENDER_TASK_PATH = (
@@ -40,6 +40,7 @@ def _get_model(content_type):
     readiness — same pattern as the github_sync dispatchers.
     """
     from content.models import Article, Course, Download, Project, Workshop
+    from events.models import Event
 
     mapping = {
         'article': Article,
@@ -47,6 +48,7 @@ def _get_model(content_type):
         'project': Project,
         'download': Download,
         'workshop': Workshop,
+        'event': Event,
     }
     return mapping.get(content_type)
 

@@ -1,0 +1,18 @@
+{% load studio_filters %}
+{% comment %}
+Shared <datalist> options for utm_source / utm_medium preset suggestions
+(issue #874). Backing an <input type="text"> with a <datalist> gives a
+combobox: the user can pick a preset or type any custom value, and whatever
+is typed is submitted verbatim. Preset values come from a single source of
+truth (integrations/models/utm_campaign.py) via the utm_*_presets simple tags.
+Include once per page; reference with list="utm-source-presets" /
+list="utm-medium-presets".
+{% endcomment %}
+<datalist id="utm-source-presets">
+  {% utm_source_presets as source_presets %}
+  {% for preset in source_presets %}<option value="{{ preset }}"></option>{% endfor %}
+</datalist>
+<datalist id="utm-medium-presets">
+  {% utm_medium_presets as medium_presets %}
+  {% for preset in medium_presets %}<option value="{{ preset }}"></option>{% endfor %}
+</datalist>

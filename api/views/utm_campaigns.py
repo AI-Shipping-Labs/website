@@ -32,28 +32,17 @@ from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from integrations.models import UtmCampaign, UtmCampaignLink
-from integrations.models.utm_campaign import UTM_SLUG_VALIDATOR
+from integrations.models.utm_campaign import (
+    UTM_MEDIUM_PRESETS,
+    UTM_SLUG_VALIDATOR,
+    UTM_SOURCE_PRESETS,
+)
 
 # Preset guidance for utm_source / utm_medium. These are NOT enforced — any
 # custom string is accepted on create/update — but they are surfaced in the
-# OpenAPI examples so callers know the house-standard values. Defined here so
-# this module has a single source of truth until #873/#874 land a shared
-# constant both can import.
-UTM_SOURCE_PRESETS = [
-    "newsletter",
-    "slack",
-    "linkedin",
-    "twitter",
-    "youtube",
-    "website",
-]
-UTM_MEDIUM_PRESETS = [
-    "email",
-    "social",
-    "referral",
-    "cpc",
-    "organic",
-]
+# OpenAPI examples so callers know the house-standard values. The lists live in
+# integrations/models/utm_campaign.py so the token API and the Studio forms
+# (studio/views/utm_campaigns.py) share one source of truth (issue #874).
 
 CAMPAIGN_WRITABLE_FIELDS = {
     "name",

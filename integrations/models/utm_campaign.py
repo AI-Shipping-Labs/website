@@ -13,6 +13,29 @@ UTM_SLUG_VALIDATOR = RegexValidator(
     message='Use lowercase letters, digits, and underscores only.',
 )
 
+# House-standard preset values for utm_source / utm_medium (issue #874,
+# convention from #873). Single source of truth shared by the Studio forms
+# (studio/views/utm_campaigns.py) and the token API (api/views/utm_campaigns.py).
+# These are suggestions only — any custom value is accepted and persisted
+# verbatim. They are NOT enforced anywhere.
+UTM_SOURCE_PRESETS = [
+    'youtube',
+    'docs',
+    'github',
+    'linkedin',
+    'twitter',
+    'newsletter',
+]
+UTM_MEDIUM_PRESETS = [
+    'social',
+    'referral',
+    'email',
+    'cpc',
+    'display',
+    'organic',
+    'community',
+]
+
 
 class UtmCampaign(models.Model):
     """A logical UTM campaign grouping one or more tracked links."""
@@ -170,4 +193,10 @@ class UtmCampaignLink(models.Model):
             UTM_SLUG_VALIDATOR(self.utm_content)
 
 
-__all__ = ['UtmCampaign', 'UtmCampaignLink', 'UTM_SLUG_VALIDATOR']
+__all__ = [
+    'UtmCampaign',
+    'UtmCampaignLink',
+    'UTM_SLUG_VALIDATOR',
+    'UTM_SOURCE_PRESETS',
+    'UTM_MEDIUM_PRESETS',
+]

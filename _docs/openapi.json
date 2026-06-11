@@ -7592,7 +7592,7 @@
         ]
       },
       "post": {
-        "description": "Creates a campaign. ``slug`` must match ``^[a-z0-9_]+$`` and be unique. ``default_utm_source`` / ``default_utm_medium`` accept any value; presets (source: newsletter, slack, linkedin, twitter, youtube, website; medium: email, social, referral, cpc, organic) are guidance only.",
+        "description": "Creates a campaign. ``slug`` must match ``^[a-z0-9_]+$`` and be unique. ``default_utm_source`` / ``default_utm_medium`` accept any value; presets (source: youtube, docs, github, linkedin, twitter, newsletter; medium: social, referral, email, cpc, display, organic, community) are guidance only.",
         "requestBody": {
           "content": {
             "application/json": {

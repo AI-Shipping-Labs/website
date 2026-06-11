@@ -1,4 +1,4 @@
-"""Staff-token trigger for a `#plan-sprints` ingest / backfill (issue #904).
+"""Staff-token trigger + read API for `#plan-sprints` ingest (issues #904, #925).
 
 ``POST /api/integrations/slack/plan-sprints/ingest`` kicks off the same
 capture + parse + auto-apply path the daily schedule runs, but lets an
@@ -13,6 +13,15 @@ background worker and the endpoint returns ``202`` with the task id. The
 ingest is idempotent (the ``IngestedProgressEvent`` /
 ``AppliedProgressChange`` watermarks make re-runs safe), so a duplicate
 trigger never double-applies progress.
+
+``GET`` on the same route (issue #925) makes the ingest API-observable so
+an operator can verify a backfill worked + read its counts WITHOUT a Studio
+login. It returns the most recent N ``SlackChannelIngest`` runs newest-first,
+each with its status, started/finished timestamps, the Slack ts window
+pulled, and the run's count fields (messages seen, threads persisted,
+replies added, members matched). Read-only: it never echoes Slack message
+text — it surfaces only the per-run tallies + metadata the
+``SlackChannelIngest`` model already stores.
 """
 
 from datetime import date, datetime
@@ -25,10 +34,68 @@ from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from community.slack_config import get_slack_plan_sprints_channel_id
+from crm.models.slack_update import SlackChannelIngest
 from integrations.config import is_enabled
 from jobs.tasks import async_task
 
 INGEST_TASK_PATH = "crm.tasks.ingest_plan_sprints.ingest_plan_sprints"
+
+# GET list defaults. ``LIMIT_DEFAULT`` is the page size when ``limit`` is
+# absent; ``LIMIT_MAX`` clamps oversized requests (same clamp rationale as
+# ``api/views/worker.py``: the cap is a DB-scan implementation detail, not a
+# contract the caller is violating).
+LIMIT_DEFAULT = 10
+LIMIT_MAX = 100
+
+
+def _serialize_ingest_run(run):
+    """Serialize one ``SlackChannelIngest`` row for the GET list.
+
+    Exposes only per-run tallies + metadata the model already stores —
+    never any Slack message text. Field names mirror the model exactly so
+    the JSON is the source of truth an operator can switch on.
+    """
+    return {
+        "id": run.id,
+        "channel_id": run.channel_id,
+        "status": run.status,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+        "oldest_ts": run.oldest_ts,
+        "latest_ts": run.latest_ts,
+        "messages_seen": run.messages_seen,
+        "threads_persisted": run.threads_persisted,
+        "replies_added": run.replies_added,
+        "members_matched": run.members_matched,
+        "error": run.error,
+    }
+
+
+def _parse_limit(raw):
+    """Parse the ``limit`` query param, returning ``(value, error_response)``.
+
+    Absent/empty -> the default. Non-integer or ``< 1`` -> a 422
+    ``validation_error``. Values above ``LIMIT_MAX`` are clamped silently.
+    """
+    if raw is None or raw == "":
+        return LIMIT_DEFAULT, None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None, error_response(
+            f"Invalid integer: {raw!r}",
+            "validation_error",
+            status=422,
+            details={"field": "limit", "value": raw},
+        )
+    if value < 1:
+        return None, error_response(
+            "limit must be a positive integer",
+            "validation_error",
+            status=422,
+            details={"field": "limit", "value": raw},
+        )
+    return min(value, LIMIT_MAX), None
 
 
 def _parse_since(value):
@@ -55,13 +122,71 @@ def _parse_since(value):
     return parsed, None
 
 
+_INGEST_RUN_EXAMPLE = {
+    "id": 42,
+    "channel_id": "C0123ABC",
+    "status": "success",
+    "started_at": "2026-06-11T04:00:00+00:00",
+    "finished_at": "2026-06-11T04:00:12+00:00",
+    "oldest_ts": "1748390400.000100",
+    "latest_ts": "1749600000.000200",
+    "messages_seen": 137,
+    "threads_persisted": 24,
+    "replies_added": 9,
+    "members_matched": 21,
+    "error": "",
+}
+
+_GET_LIST_OPENAPI = {
+    "summary": "List recent #plan-sprints ingest runs with counts",
+    "description": (
+        "Newest-first list of ``SlackChannelIngest`` runs so an operator "
+        "can verify a backfill worked and read its tallies WITHOUT a Studio "
+        "login. Each run carries its ``status`` (running/success/error), "
+        "``started_at`` / ``finished_at``, the Slack ts window pulled "
+        "(``oldest_ts`` / ``latest_ts``), and the count fields: "
+        "``messages_seen``, ``threads_persisted``, ``replies_added``, "
+        "``members_matched`` (plus ``error`` text for failed runs). "
+        "Read-only — it never echoes Slack message content, only the "
+        "per-run counts/metadata the model already stores. Token-gated "
+        "(staff tokens only)."
+    ),
+    "query": {
+        "limit": {
+            "type": "integer",
+            "required": False,
+            "description": "Page size. Default 10; clamped to 100.",
+        },
+    },
+    "responses": {
+        200: {
+            "description": "Recent ingest runs, newest first.",
+            "example": {
+                "runs": [_INGEST_RUN_EXAMPLE],
+                "count": 1,
+                "limit": 10,
+            },
+        },
+        422: {
+            "description": "Invalid ``limit`` value.",
+            "example": {
+                "error": "Invalid integer: 'abc'",
+                "code": "validation_error",
+                "details": {"field": "limit", "value": "abc"},
+            },
+        },
+    },
+}
+
+
 @token_required
 @csrf_exempt
-@require_methods("POST")
+@require_methods("GET", "POST")
 @openapi_spec(
     tag="Plan-sprints ingest",
-    summary="Trigger a #plan-sprints Slack ingest / retroactive backfill",
+    summary="Trigger (POST) or list (GET) #plan-sprints Slack ingest runs",
     methods={
+        "GET": _GET_LIST_OPENAPI,
         "POST": {
             "summary": "Enqueue a #plan-sprints ingest run",
             "description": (
@@ -124,7 +249,32 @@ def _parse_since(value):
     },
 )
 def plan_sprints_ingest(request):
-    """POST ``/api/integrations/slack/plan-sprints/ingest``."""
+    """GET (list runs) / POST (trigger) ``.../slack/plan-sprints/ingest``."""
+    if request.method == "GET":
+        return _list_ingest_runs(request)
+    return _trigger_ingest(request)
+
+
+def _list_ingest_runs(request):
+    """GET — return the most recent ingest runs newest-first with counts."""
+    limit, err = _parse_limit(request.GET.get("limit"))
+    if err is not None:
+        return err
+
+    runs = SlackChannelIngest.objects.order_by("-started_at")[:limit]
+    serialized = [_serialize_ingest_run(run) for run in runs]
+    return JsonResponse(
+        {
+            "runs": serialized,
+            "count": len(serialized),
+            "limit": limit,
+        },
+        status=200,
+    )
+
+
+def _trigger_ingest(request):
+    """POST — enqueue an ingest / backfill run on the worker."""
     if request.body:
         data, parse_error = parse_json_body(request)
         if parse_error is not None:

@@ -2415,6 +2415,68 @@
       }
     },
     "/api/integrations/slack/plan-sprints/ingest": {
+      "get": {
+        "description": "Newest-first list of ``SlackChannelIngest`` runs so an operator can verify a backfill worked and read its tallies WITHOUT a Studio login. Each run carries its ``status`` (running/success/error), ``started_at`` / ``finished_at``, the Slack ts window pulled (``oldest_ts`` / ``latest_ts``), and the count fields: ``messages_seen``, ``threads_persisted``, ``replies_added``, ``members_matched`` (plus ``error`` text for failed runs). Read-only \u2014 it never echoes Slack message content, only the per-run counts/metadata the model already stores. Token-gated (staff tokens only).",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Page size. Default 10; clamped to 100.",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "limit": 10,
+                  "runs": [
+                    {
+                      "channel_id": "C0123ABC",
+                      "error": "",
+                      "finished_at": "2026-06-11T04:00:12+00:00",
+                      "id": 42,
+                      "latest_ts": "1749600000.000200",
+                      "members_matched": 21,
+                      "messages_seen": 137,
+                      "oldest_ts": "1748390400.000100",
+                      "replies_added": 9,
+                      "started_at": "2026-06-11T04:00:00+00:00",
+                      "status": "success",
+                      "threads_persisted": 24
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Recent ingest runs, newest first."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "field": "limit",
+                    "value": "abc"
+                  },
+                  "error": "Invalid integer: 'abc'"
+                }
+              }
+            },
+            "description": "Invalid ``limit`` value."
+          }
+        },
+        "summary": "List recent #plan-sprints ingest runs with counts",
+        "tags": [
+          "Plan-sprints ingest"
+        ]
+      },
       "post": {
         "description": "Kicks off the same capture + parse + auto-apply path the daily schedule runs. With no body it uses the forward watermark (or the 7-day first-run default). Pass ``since`` (``YYYY-MM-DD``, UTC midnight) to retroactively read OLDER history. ``dry_run=true`` runs the full path then rolls it back so nothing is persisted. The work runs on the background worker; the response carries the task id. The ingest is idempotent, so a duplicate trigger never double-applies progress.",
         "requestBody": {

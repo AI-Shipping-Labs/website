@@ -35,7 +35,7 @@ class ActiveOverridesListTestBase(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='pw', is_staff=True,
         )
-        cls.url = reverse('studio_tier_override')
+        cls.url = reverse('studio_tier_overrides_list')
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')

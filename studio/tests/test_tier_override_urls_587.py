@@ -149,52 +149,6 @@ class TierOverrideIssue587Test(TestCase):
         self.assertNotContains(response, 'name="email"')
         self.assertNotContains(response, 'User Email (exact match)')
 
-    def test_legacy_global_urls_redirect_to_new_locations(self):
-        user = self._user('bookmark@test.com')
-
-        response = self.client.get('/studio/users/tier-override/')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/studio/tier_overrides/')
-
-        response = self.client.get(
-            '/studio/users/tier-override/',
-            {'email': user.email},
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'],
-            f'/studio/users/{user.pk}/tier_override/',
-        )
-
-        response = self.client.get(
-            '/studio/users/tier-override/',
-            {'email': 'ghost@nowhere.com'},
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/studio/tier_overrides/')
-
-    def test_legacy_user_action_urls_redirect_preserving_post_methods(self):
-        user = self._user('legacy@test.com')
-
-        for action in ('create', 'revoke'):
-            get_response = self.client.get(
-                f'/studio/users/{user.pk}/tier-override/{action}'
-            )
-            self.assertEqual(get_response.status_code, 301)
-            self.assertEqual(
-                get_response['Location'],
-                f'/studio/users/{user.pk}/tier_override/{action}',
-            )
-
-            post_response = self.client.post(
-                f'/studio/users/{user.pk}/tier-override/{action}'
-            )
-            self.assertEqual(post_response.status_code, 308)
-            self.assertEqual(
-                post_response['Location'],
-                f'/studio/users/{user.pk}/tier_override/{action}',
-            )
-
     def test_user_detail_links_active_override_block_to_per_user_page(self):
         user = self._user('existing@test.com', tier=self.free)
         self._override(user, self.premium)

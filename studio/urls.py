@@ -1,5 +1,4 @@
 from django.urls import path
-from django.views.generic import RedirectView
 
 from studio.views.announcement import announcement_banner_edit
 from studio.views.api_tokens import (
@@ -199,10 +198,6 @@ from studio.views.sync import (
 )
 from studio.views.tags import tag_delete, tag_rename
 from studio.views.tier_overrides import (
-    legacy_tier_override_create_redirect,
-    legacy_tier_override_page_redirect,
-    legacy_tier_override_revoke_redirect,
-    legacy_user_tier_override_action_redirect,
     studio_user_search,
     tier_override_page,
     user_tier_override_page,
@@ -401,38 +396,6 @@ urlpatterns = [
         name='studio_event_series_delete',
     ),
 
-    # Backward-compat 301 redirects from the old ``/studio/event-groups/``
-    # URLs to the new ``/studio/event-series/`` URLs (issue #575). External
-    # Studio bookmarks keep working through the rename. These five
-    # patterns mirror the new routes above one-to-one.
-    path(
-        'event-groups/',
-        RedirectView.as_view(url='/studio/event-series/', permanent=True),
-    ),
-    path(
-        'event-groups/new',
-        RedirectView.as_view(url='/studio/event-series/new', permanent=True),
-    ),
-    path(
-        'event-groups/<int:series_id>/',
-        RedirectView.as_view(
-            url='/studio/event-series/%(series_id)s/', permanent=True,
-        ),
-    ),
-    path(
-        'event-groups/<int:series_id>/add-occurrence',
-        RedirectView.as_view(
-            url='/studio/event-series/%(series_id)s/add-occurrence',
-            permanent=True,
-        ),
-    ),
-    path(
-        'event-groups/<int:series_id>/delete',
-        RedirectView.as_view(
-            url='/studio/event-series/%(series_id)s/delete', permanent=True,
-        ),
-    ),
-
     # Workshops (issue #297)
     # ``resync/`` is registered before ``<int:workshop_id>/`` so the
     # literal string isn't swallowed by the int converter.
@@ -551,23 +514,7 @@ urlpatterns = [
 
     # Tier Overrides
     path('tier_overrides/', tier_override_page, name='studio_tier_overrides_list'),
-    path('tier_overrides/', tier_override_page, name='studio_tier_override'),
     path('api/users/search/', studio_user_search, name='studio_user_search'),
-    path(
-        'users/tier-override/',
-        legacy_tier_override_page_redirect,
-        name='studio_legacy_tier_override',
-    ),
-    path(
-        'users/tier-override/create',
-        legacy_tier_override_create_redirect,
-        name='studio_tier_override_create',
-    ),
-    path(
-        'users/tier-override/revoke',
-        legacy_tier_override_revoke_redirect,
-        name='studio_tier_override_revoke',
-    ),
 
     # Users list + CSV export (issue #271)
     path('users/', user_list, name='studio_user_list'),
@@ -607,8 +554,8 @@ urlpatterns = [
     ),
 
     # User detail page + contact tags (issue #354). The literal ``new/``,
-    # ``created/``, ``export``, and ``tier-override/`` prefixes are
-    # registered above so the ``<int:user_id>`` route does not swallow them.
+    # ``created/``, and ``export`` prefixes are registered above so the
+    # ``<int:user_id>`` route does not swallow them.
     path('users/<int:user_id>/', user_detail, name='studio_user_detail'),
     path(
         'users/<int:user_id>/sync-from-stripe/',
@@ -659,18 +606,6 @@ urlpatterns = [
         'users/<int:user_id>/tier_override/revoke',
         user_tier_override_revoke,
         name='studio_user_tier_override_revoke',
-    ),
-    path(
-        'users/<int:user_id>/tier-override/create',
-        legacy_user_tier_override_action_redirect,
-        {'action': 'create'},
-        name='studio_legacy_user_tier_override_create',
-    ),
-    path(
-        'users/<int:user_id>/tier-override/revoke',
-        legacy_user_tier_override_action_redirect,
-        {'action': 'revoke'},
-        name='studio_legacy_user_tier_override_revoke',
     ),
 
     # CRM (issue #560). The ``Track in CRM`` CTA on the user profile is

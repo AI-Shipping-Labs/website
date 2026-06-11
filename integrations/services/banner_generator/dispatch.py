@@ -16,18 +16,27 @@ import hashlib
 import logging
 
 from integrations.services.banner_generator import is_enabled
+from integrations.services.banner_generator.content_models import (
+    SUPPORTED_CONTENT_TYPES,
+    model_for,
+)
 from jobs.tasks.helpers import async_task
 from jobs.tasks.names import build_task_name
 
 logger = logging.getLogger(__name__)
 
-# Content type slug -> ``content.models`` class lookup. Lazy import so
-# this module can be imported during AppConfig wiring before content
-# models are ready.
-SUPPORTED_CONTENT_TYPES = (
-    'article', 'course', 'project', 'download', 'workshop', 'event',
-    'event_series',
-)
+# ``SUPPORTED_CONTENT_TYPES`` and ``model_for`` come from the canonical
+# ``content_models`` leaf module (one source of truth for the
+# content_type -> model mapping). Re-exported here so existing call sites
+# that read ``dispatch.SUPPORTED_CONTENT_TYPES`` keep working.
+__all__ = [
+    'SUPPORTED_CONTENT_TYPES',
+    'TITLE_ATTR_BY_CONTENT_TYPE',
+    'title_value',
+    'title_hash',
+    'enqueue_if_missing',
+    'enqueue_force',
+]
 
 # Content types whose "title" lives on a differently-named field. The
 # banner pipeline hashes the title to detect drift; ``EventSeries`` stores
@@ -39,27 +48,6 @@ TITLE_ATTR_BY_CONTENT_TYPE = {
 RENDER_TASK_PATH = (
     'integrations.services.banner_generator.tasks.render_banner_for_content'
 )
-
-
-def _get_model(content_type):
-    """Resolve a content_type slug to its model class.
-
-    Deferred import keeps ``integrations`` decoupled from content app
-    readiness — same pattern as the github_sync dispatchers.
-    """
-    from content.models import Article, Course, Download, Project, Workshop
-    from events.models import Event, EventSeries
-
-    mapping = {
-        'article': Article,
-        'course': Course,
-        'project': Project,
-        'download': Download,
-        'workshop': Workshop,
-        'event': Event,
-        'event_series': EventSeries,
-    }
-    return mapping.get(content_type)
 
 
 def title_value(content_type, record):
@@ -106,7 +94,7 @@ def enqueue_if_missing(content_type, content_pk):
     if not is_enabled():
         return None
 
-    model = _get_model(content_type)
+    model = model_for(content_type)
     if model is None:
         logger.warning(
             'banner_generator.enqueue_if_missing: unknown content_type=%r',
@@ -156,7 +144,7 @@ def enqueue_force(content_type, content_pk):
     if not is_enabled():
         return None
 
-    model = _get_model(content_type)
+    model = model_for(content_type)
     if model is None:
         logger.warning(
             'banner_generator.enqueue_force: unknown content_type=%r',

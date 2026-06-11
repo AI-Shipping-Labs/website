@@ -25,7 +25,13 @@ from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
 
-LAMBDA_REQUEST_TIMEOUT_SECONDS = 30
+# Default HTTP timeout (seconds) for the render call. Resolved at call
+# time via ``get_config('BANNER_GENERATOR_TIMEOUT_SECONDS', ...)`` so an
+# operator can raise it from Studio without a redeploy. The default is
+# deliberately high (90s) to comfortably cover a container-Lambda cold
+# start — a warm render returns in ~1.4s, so the higher ceiling costs
+# nothing on the happy path (issue #900).
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 90
 DEFAULT_TEMPLATE = 'asl-content-card'
 DEFAULT_SIZE = 'og'
 DEFAULT_FORMAT = 'jpeg'
@@ -41,13 +47,38 @@ class BannerGeneratorError(Exception):
     or the request payload — see the constructor.
     """
 
-    def __init__(self, message, *, status_code=None):
+    def __init__(self, message, *, status_code=None, is_timeout=False):
         # Coerce to str up front so callers passing tuples / dicts can't
         # smuggle a token into ``args``. The status code is helpful for
         # callers that want to branch on 4xx vs 5xx but is otherwise an
-        # opaque integer.
+        # opaque integer. ``is_timeout`` is set only when the underlying
+        # failure was a ``requests.Timeout`` (cold-start symptom) so the
+        # render task can retry exactly that class and nothing else
+        # (issue #900).
         self.status_code = status_code
+        self.is_timeout = is_timeout
         super().__init__(str(message))
+
+
+def _resolve_timeout_seconds():
+    """Return the configured render HTTP timeout (seconds) as a positive int.
+
+    Reads ``BANNER_GENERATOR_TIMEOUT_SECONDS`` via :func:`get_config` so a
+    DB override (set in Studio) wins over env / default. The value may
+    arrive as a string (env / DB overrides are stored as text), so we
+    coerce defensively and fall back to ``DEFAULT_REQUEST_TIMEOUT_SECONDS``
+    when it is unparseable or non-positive.
+    """
+    raw = get_config(
+        'BANNER_GENERATOR_TIMEOUT_SECONDS', DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    )
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_REQUEST_TIMEOUT_SECONDS
+    if value <= 0:
+        return DEFAULT_REQUEST_TIMEOUT_SECONDS
+    return value
 
 
 def is_enabled():
@@ -71,7 +102,7 @@ def render_to_s3(
     data,
     s3_key,
     content_type=DEFAULT_CONTENT_TYPE,
-    timeout=LAMBDA_REQUEST_TIMEOUT_SECONDS,
+    timeout=None,
 ):
     """POST a render request to the Lambda and return the parsed JSON response.
 
@@ -82,7 +113,10 @@ def render_to_s3(
         data: Dict of template field values (kind, title, kicker, etc.).
         s3_key: Object key under ``AWS_S3_CONTENT_BUCKET`` to upload to.
         content_type: Content-Type to set on the S3 PUT (default JPEG).
-        timeout: HTTP timeout in seconds.
+        timeout: HTTP timeout in seconds. When ``None`` (the default), it
+            resolves from ``get_config('BANNER_GENERATOR_TIMEOUT_SECONDS',
+            90)`` at call time so a Studio override applies without a
+            restart. Callers may still pass an explicit value to override.
 
     Returns:
         dict: Parsed JSON body of the Lambda response on success.
@@ -105,6 +139,9 @@ def render_to_s3(
         raise BannerGeneratorError(
             'banner-generator: AWS_S3_CONTENT_BUCKET is not configured',
         )
+
+    if timeout is None:
+        timeout = _resolve_timeout_seconds()
 
     payload = {
         'template': template,
@@ -131,9 +168,13 @@ def render_to_s3(
         # ``str(exc)`` from requests typically contains the URL but not
         # any request body or headers, so the token cannot leak through
         # the chained __cause__. Wrap it as a flat string so callers
-        # logging ``str(err)`` see a stable message.
+        # logging ``str(err)`` see a stable message. Flag timeouts
+        # (``requests.Timeout`` covers ConnectTimeout/ReadTimeout) so the
+        # render task can retry exactly the cold-start class and nothing
+        # else (issue #900).
         raise BannerGeneratorError(
             f'banner-generator request failed: {type(exc).__name__}',
+            is_timeout=isinstance(exc, requests.Timeout),
         ) from None
 
     if response.status_code < 200 or response.status_code >= 300:

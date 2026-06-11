@@ -121,8 +121,62 @@ class RenderToS3RequestShapeTest(_BannerGeneratorCacheCleanupMixin, TestCase):
             'Bearer sekrit-token-xyz',
         )
         self.assertEqual(kwargs['headers']['Content-Type'], 'application/json')
-        # Timeout
-        self.assertEqual(kwargs['timeout'], 30)
+        # Timeout resolves from get_config; default is 90s (issue #900).
+        self.assertEqual(kwargs['timeout'], 90)
+
+
+class RenderToS3TimeoutConfigTest(_BannerGeneratorCacheCleanupMixin, TestCase):
+    """The render timeout resolves from BANNER_GENERATOR_TIMEOUT_SECONDS."""
+
+    def setUp(self):
+        super().setUp()
+        _configure_banner_generator()
+
+    def _render(self, mock_post):
+        mock_post.return_value = MagicMock(
+            status_code=200, json=lambda: {'ok': True},
+        )
+        render_to_s3(
+            template='asl-content-card', size='og', fmt='jpeg',
+            data={'title': 'x'}, s3_key='banners/article/1.jpg',
+        )
+        return mock_post.call_args.kwargs['timeout']
+
+    @patch(PATCH_TARGET)
+    def test_default_timeout_is_90(self, mock_post):
+        self.assertEqual(self._render(mock_post), 90)
+
+    @patch(PATCH_TARGET)
+    def test_db_override_changes_timeout(self, mock_post):
+        _set_setting('BANNER_GENERATOR_TIMEOUT_SECONDS', '120')
+        clear_config_cache()
+        self.assertEqual(self._render(mock_post), 120)
+
+    @patch(PATCH_TARGET)
+    def test_non_integer_override_falls_back_to_default(self, mock_post):
+        _set_setting('BANNER_GENERATOR_TIMEOUT_SECONDS', 'not-a-number')
+        clear_config_cache()
+        self.assertEqual(self._render(mock_post), 90)
+
+    @patch(PATCH_TARGET)
+    def test_non_positive_override_falls_back_to_default(self, mock_post):
+        _set_setting('BANNER_GENERATOR_TIMEOUT_SECONDS', '0')
+        clear_config_cache()
+        self.assertEqual(self._render(mock_post), 90)
+
+    @patch(PATCH_TARGET)
+    def test_explicit_timeout_arg_overrides_config(self, mock_post):
+        _set_setting('BANNER_GENERATOR_TIMEOUT_SECONDS', '120')
+        clear_config_cache()
+        mock_post.return_value = MagicMock(
+            status_code=200, json=lambda: {'ok': True},
+        )
+        render_to_s3(
+            template='asl-content-card', size='og', fmt='jpeg',
+            data={'title': 'x'}, s3_key='banners/article/1.jpg',
+            timeout=5,
+        )
+        self.assertEqual(mock_post.call_args.kwargs['timeout'], 5)
 
 
 class RenderToS3ErrorTest(_BannerGeneratorCacheCleanupMixin, TestCase):

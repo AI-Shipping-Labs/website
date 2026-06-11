@@ -28,6 +28,7 @@ import shutil
 import uuid
 from datetime import datetime
 from datetime import timezone as dt_timezone
+from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -2139,3 +2140,112 @@ class WorkshopSyncMaterialsTest(_WorkshopSyncFixtureBase):
             f'{sync_log.errors}',
         )
         self.assertFalse(Workshop.objects.filter(slug='demo').exists())
+
+
+class WorkshopSyncBannerBackfillTest(_WorkshopSyncFixtureBase):
+    """Issue #900: the banner enqueue runs on every sync, not only on change.
+
+    The enqueue helper is patched out so we assert purely on the gating:
+    a previously-synced cover-less workshop with an empty ``auto_banner_url``
+    must get a render enqueued again on a no-op re-sync (the helper's own
+    short-circuit only holds once the render actually persisted a URL).
+    """
+
+    DISPATCH_PATCH = (
+        'integrations.services.banner_generator.dispatch.async_task'
+    )
+
+    def setUp(self):
+        super().setUp()
+        from integrations.config import clear_config_cache
+        from integrations.models import IntegrationSetting
+        for key, value in (
+            ('BANNER_GENERATOR_FUNCTION_URL', 'https://lambda.example.com/'),
+            ('BANNER_GENERATOR_AUTH_TOKEN', 'token-abc'),
+            ('AWS_S3_CONTENT_BUCKET', 'content-bucket'),
+            ('CONTENT_CDN_BASE', 'https://cdn.example.com'),
+        ):
+            IntegrationSetting.objects.update_or_create(
+                key=key,
+                defaults={
+                    'value': value, 'is_secret': False,
+                    'group': 'banner_generator', 'description': '',
+                },
+            )
+        clear_config_cache()
+        self.addCleanup(clear_config_cache)
+
+    def _write_demo_workshop(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder)
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+    def _workshop_enqueue_calls(self, mock_async, workshop_pk):
+        return [
+            call for call in mock_async.call_args_list
+            if len(call.args) >= 3
+            and call.args[1] == 'workshop'
+            and call.args[2] == workshop_pk
+        ]
+
+    @patch(DISPATCH_PATCH)
+    def test_cover_less_workshop_re_enqueues_on_noop_resync(self, mock_async):
+        self._write_demo_workshop()
+        sync_repo(self.source, self.repo)
+        workshop = Workshop.objects.get(slug='demo')
+        # First render was "lost": auto_banner_url stays empty (the worker
+        # never ran in the test). Simulate that state explicitly.
+        self.assertEqual(workshop.auto_banner_url, '')
+        mock_async.reset_mock()
+
+        # Second sync with no content change.
+        sync_repo(self.source, self.repo)
+
+        calls = self._workshop_enqueue_calls(mock_async, workshop.pk)
+        self.assertEqual(
+            len(calls), 1,
+            'A cover-less workshop with empty auto_banner_url must be '
+            're-enqueued on a no-op re-sync (issue #900 backfill).',
+        )
+
+    @patch(DISPATCH_PATCH)
+    def test_workshop_with_cover_image_is_not_enqueued(self, mock_async):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml='cover_image: https://cdn.example.com/cover.png\n',
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+        sync_repo(self.source, self.repo)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertTrue(workshop.cover_image_url)
+        calls = self._workshop_enqueue_calls(mock_async, workshop.pk)
+        self.assertEqual(
+            len(calls), 0,
+            'A workshop with a cover image must not get a banner render '
+            '(the cover-wins short-circuit holds).',
+        )
+
+    @patch(DISPATCH_PATCH)
+    def test_workshop_with_matching_banner_hash_not_re_enqueued(
+        self, mock_async,
+    ):
+        from integrations.services.banner_generator.dispatch import title_hash
+        self._write_demo_workshop()
+        sync_repo(self.source, self.repo)
+        workshop = Workshop.objects.get(slug='demo')
+        # Simulate a successful prior render: banner URL + matching hash.
+        Workshop.objects.filter(pk=workshop.pk).update(
+            auto_banner_url='https://cdn.example.com/banners/workshop/x.jpg',
+            auto_banner_title_hash=title_hash(workshop.title),
+        )
+        mock_async.reset_mock()
+
+        sync_repo(self.source, self.repo)
+
+        calls = self._workshop_enqueue_calls(mock_async, workshop.pk)
+        self.assertEqual(
+            len(calls), 0,
+            'A workshop with a populated banner + matching title hash must '
+            'not be re-rendered on a no-op re-sync.',
+        )

@@ -133,10 +133,6 @@ Access control logic: a user can access any content object where `user.tier.leve
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
 | Pricing page | `/pricing` | Dedicated page with all 4 tiers in a grid (including Free), monthly/annual toggle, Stripe payment links for paid tiers | Everyone | Shipped |
-| Checkout session | `/api/checkout/create` | Creates a Stripe Checkout session for a given tier and billing period | Authenticated users | Shipped |
-| Upgrade subscription | `/api/subscription/upgrade` | Redirects to Stripe Checkout for a higher tier | Paid members | Shipped |
-| Downgrade subscription | `/api/subscription/downgrade` | Schedules tier change at end of billing period | Paid members | Shipped |
-| Cancel subscription | `/api/subscription/cancel` | Schedules cancellation at end of billing period | Paid members | Shipped |
 | Stripe webhook | `/api/webhooks/payments` | Receives Stripe events (checkout.session.completed, invoice.paid, customer.subscription.updated/deleted) to update user tiers | System | Shipped |
 
 ### Voting

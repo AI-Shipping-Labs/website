@@ -12,9 +12,8 @@ re-export shim so every existing import path keeps working:
 - ``signatures`` — webhook signature verification and event idempotency.
 - ``community_hooks`` — community invite / remove / reactivate enqueue.
 - ``conversion_attribution`` — UTM snapshot at conversion time.
-- ``subscriptions`` — subscription queries and deprecated mutators.
+- ``subscriptions`` — subscription query helpers.
 - ``webhook_handlers`` — Stripe event handlers (the public ``handle_*``).
-- ``checkout_deprecated`` — hard-deprecated Checkout Session creation.
 
 ``stripe``, ``send_mail``, ``get_config``, ``logger``, and
 ``WebhookPermanentError`` are imported here so tests can keep patching
@@ -38,7 +37,6 @@ logger = logging.getLogger(__name__)
 # replace the attribute here, and implementation modules read it back
 # via ``from payments import services as _services`` for the patches
 # to take effect at call time.
-from .checkout_deprecated import create_checkout_session  # noqa: E402
 from .community_hooks import (  # noqa: E402
     _community_invite,
     _community_reactivate,
@@ -63,9 +61,6 @@ from .subscriptions import (  # noqa: E402
     _get_subscription_period_end,
     _get_subscription_price_id,
     _tier_from_subscription,
-    cancel_subscription,
-    downgrade_subscription,
-    upgrade_subscription,
 )
 from .tier_resolution import (  # noqa: E402
     resolve_subscription_tier,
@@ -97,9 +92,4 @@ __all__ = [
     # Tier resolver (3-step: metadata -> price-id map -> amount + interval)
     "resolve_subscription_tier",
     "tier_by_amount_interval",
-    # Deprecated direct mutators (raise RuntimeError)
-    "create_checkout_session",
-    "upgrade_subscription",
-    "downgrade_subscription",
-    "cancel_subscription",
 ]

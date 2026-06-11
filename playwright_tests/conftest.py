@@ -17,8 +17,9 @@ policy.
 
 Local-server port: when no remote ``PLAYWRIGHT_BASE_URL`` is configured the
 in-process ``runserver`` binds a port resolved once per session by
-``_resolved_local_port()``. If ``PLAYWRIGHT_DJANGO_PORT`` is set and non-empty
-that exact port is used; otherwise the OS assigns a free ephemeral port
+``_resolved_local_port()``. If ``PLAYWRIGHT_DJANGO_PORT`` is set to a valid
+positive port that exact port is used; otherwise (unset, empty, ``0``,
+negative, out of range, or non-integer) the OS assigns a free ephemeral port
 (``_pick_free_port()``). The same resolved port is used by ``runserver``, the
 startup probe, and the base URL the browser navigates to — they are equal by
 construction. This lets several worktrees run Playwright concurrently without
@@ -67,18 +68,40 @@ def _pick_free_port():
         return probe.getsockname()[1]
 
 
+def _parse_port_override(raw):
+    """Parse ``PLAYWRIGHT_DJANGO_PORT`` into a valid explicit port or ``None``.
+
+    Returns the port only when ``raw`` is a positive integer (1-65535). Treats
+    empty / whitespace-only, non-positive (``0`` or negative), out-of-range, and
+    non-integer ("garbage") values as "not set" by returning ``None``, so the
+    caller falls back to ``_pick_free_port()``. This guards against ``=0`` being
+    bound literally as port 0, which makes ``runserver`` listen on an OS-picked
+    port that the probe never finds — every test then errors with "Django dev
+    server did not start in time" (issue #911).
+    """
+    try:
+        port = int((raw or "").strip())
+    except (TypeError, ValueError):
+        return None
+    if 0 < port <= 65535:
+        return port
+    return None
+
+
 def _resolved_local_port():
     """Return the in-process Django server port, resolved once per session.
 
-    Uses ``PLAYWRIGHT_DJANGO_PORT`` verbatim when set and non-empty (preserves
-    pinned/CI usage and lets a developer force a known port), otherwise asks
-    the OS for a free ephemeral port. The value is memoized so ``runserver``,
-    the startup probe, and the browser base URL all use the identical port.
+    Uses ``PLAYWRIGHT_DJANGO_PORT`` verbatim when it is a valid positive port
+    (preserves pinned/CI usage and lets a developer force a known port).
+    Otherwise — unset, empty, ``0``, negative, out of range, or non-integer —
+    asks the OS for a free ephemeral port. The value is memoized so
+    ``runserver``, the startup probe, and the browser base URL all use the
+    identical port.
     """
     global _LOCAL_PORT
     if _LOCAL_PORT is None:
-        override = os.environ.get("PLAYWRIGHT_DJANGO_PORT", "").strip()
-        _LOCAL_PORT = int(override) if override else _pick_free_port()
+        override = _parse_port_override(os.environ.get("PLAYWRIGHT_DJANGO_PORT"))
+        _LOCAL_PORT = override if override is not None else _pick_free_port()
     return _LOCAL_PORT
 
 

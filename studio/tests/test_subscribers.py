@@ -48,11 +48,13 @@ class StudioUserListTest(TestCase):
             email='main@test.com',
             password='testpass',
             tier=cls.main_tier,
+            subscription_id='sub_MAIN',
         )
         cls.premium_user = User.objects.create_user(
             email='premium@test.com',
             password='testpass',
             tier=cls.premium_tier,
+            subscription_id='sub_PREMIUM',
         )
         cls.override_user = User.objects.create_user(
             email='override@test.com',
@@ -97,13 +99,12 @@ class StudioUserListTest(TestCase):
             ],
         )
 
-    def test_filter_paid_uses_effective_tier(self):
+    def test_filter_paid_uses_active_subscription(self):
+        # Paid = active Stripe subscription only. The premium override user
+        # (no subscription_id) is comped and must NOT appear.
         response = self.client.get('/studio/users/?filter=paid')
         emails = [row['email'] for row in response.context['user_rows']]
-        self.assertEqual(
-            emails,
-            ['override@test.com', 'premium@test.com', 'main@test.com'],
-        )
+        self.assertEqual(emails, ['premium@test.com', 'main@test.com'])
 
     def test_filter_main_plus_uses_effective_tier(self):
         response = self.client.get('/studio/users/?filter=main_plus')
@@ -134,9 +135,10 @@ class StudioUserListTest(TestCase):
         self.assertEqual(response.context['active_filter'], 'all')
 
     def test_search_filters_within_chip(self):
-        response = self.client.get('/studio/users/?filter=paid&q=override')
+        # Search narrows within the active Paid chip; main@ is a paying user.
+        response = self.client.get('/studio/users/?filter=paid&q=main')
         emails = [row['email'] for row in response.context['user_rows']]
-        self.assertEqual(emails, ['override@test.com'])
+        self.assertEqual(emails, ['main@test.com'])
 
     def test_search_value_preserved_in_form(self):
         response = self.client.get('/studio/users/?filter=paid&q=override')
@@ -201,7 +203,12 @@ class StudioUserListTest(TestCase):
     def test_counts_in_context(self):
         response = self.client.get('/studio/users/')
         self.assertEqual(response.context['total_users'], 6)
-        self.assertEqual(response.context['paid_count'], 3)
+        # Paid = active Stripe subscription only (main + premium subs);
+        # the comped premium override user is excluded.
+        self.assertEqual(response.context['paid_count'], 2)
+        self.assertEqual(response.context['total_paying'], 2)
+        # main_plus_count / premium_count keep override-inclusive access
+        # semantics, so the comped override user still counts here.
         self.assertEqual(response.context['main_plus_count'], 3)
         self.assertEqual(response.context['premium_count'], 2)
         self.assertEqual(response.context['subscriber_count'], 4)
@@ -267,9 +274,10 @@ class StudioUserListSlackFilterTest(TestCase):
         self.assertEqual(by_email['unchecked@test.com']['slack'], 'Never checked')
 
     def test_filter_combines_with_tier_filter(self):
-        # Make member also paid.
+        # Make member also paid (active Stripe subscription on a paid tier).
         main_tier = Tier.objects.get(slug='main')
         StudioUserListSlackFilterTest.member.tier = main_tier
+        StudioUserListSlackFilterTest.member.subscription_id = 'sub_member'
         StudioUserListSlackFilterTest.member.save()
 
         response = self.client.get('/studio/users/?filter=paid&slack=yes')
@@ -278,6 +286,7 @@ class StudioUserListSlackFilterTest(TestCase):
 
         # Reset.
         StudioUserListSlackFilterTest.member.tier = None
+        StudioUserListSlackFilterTest.member.subscription_id = ''
         StudioUserListSlackFilterTest.member.save()
 
 
@@ -316,6 +325,7 @@ class StudioUserExportTest(TestCase):
             email='main@test.com',
             password='testpass',
             tier=cls.main_tier,
+            subscription_id='sub_MAIN',
         )
         cls.override_user = User.objects.create_user(
             email='override@test.com',
@@ -401,9 +411,11 @@ class StudioUserExportTest(TestCase):
         )
 
     def test_export_filter_paid(self):
+        # Paid export = active Stripe subscription only. The comped override
+        # user (no subscription_id) is excluded.
         response = self.client.get('/studio/users/export?filter=paid')
         emails = {row['email'] for row in _parse_csv(response)}
-        self.assertEqual(emails, {'main@test.com', 'override@test.com'})
+        self.assertEqual(emails, {'main@test.com'})
 
     def test_export_filter_subscribers_uses_user_preference(self):
         response = self.client.get('/studio/users/export?filter=subscribers')

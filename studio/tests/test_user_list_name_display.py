@@ -116,11 +116,14 @@ class UserListHeaderRowTest(TestCase):
     def _header_cells(self):
         response = self.client.get('/studio/users/')
         html = response.content.decode()
-        # Scope to thead so a stray ``<th>`` somewhere else can't satisfy
-        # the assertion.
-        thead_match = re.search(r'<thead[^>]*>(.*?)</thead>', html, re.DOTALL)
+        # Scope to the user TABLE's thead (``bg-secondary``) so neither a
+        # stray ``<th>`` elsewhere nor the membership-breakdown table's plain
+        # ``<thead>`` (issue #923) can satisfy the assertion.
+        thead_match = re.search(
+            r'<thead class="bg-secondary"[^>]*>(.*?)</thead>', html, re.DOTALL,
+        )
         self.assertIsNotNone(
-            thead_match, 'No <thead> in rendered users list.',
+            thead_match, 'No user-table <thead> in rendered users list.',
         )
         thead_html = thead_match.group(1)
         return re.findall(
@@ -815,11 +818,11 @@ class UserListFilteredCountMatchesRowCountTest(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         cls.main = Tier.objects.get(slug='main')
-        # 4 paid users, 3 free.
+        # 4 paid users (active Stripe subscription), 3 free.
         for idx in range(4):
             User.objects.create_user(
                 email=f'paid-{idx}@example.com', password='testpass',
-                tier=cls.main,
+                tier=cls.main, subscription_id=f'sub_{idx}',
             )
         for idx in range(3):
             User.objects.create_user(
@@ -833,14 +836,11 @@ class UserListFilteredCountMatchesRowCountTest(TestCase):
         response = self.client.get('/studio/users/?filter=paid')
         # Paid stat in the context is 4.
         self.assertEqual(response.context['paid_count'], 4)
-        # Rendered rows are 4.
+        # Rendered user rows are 4. ``user-row-N`` is unique to the user
+        # table, so count it across the whole page (the issue #923
+        # membership-breakdown table has no such rows).
         html = response.content.decode()
-        tbody_match = re.search(
-            r'<tbody[^>]*>(.*?)</tbody>', html, re.DOTALL,
-        )
-        self.assertIsNotNone(tbody_match)
-        tbody = tbody_match.group(1)
         row_count = len(re.findall(
-            r'<tr[^>]*data-testid="user-row-\d+"', tbody,
+            r'<tr[^>]*data-testid="user-row-\d+"', html,
         ))
         self.assertEqual(row_count, 4)

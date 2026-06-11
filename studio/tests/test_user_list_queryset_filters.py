@@ -38,12 +38,14 @@ class StudioUserListQuerySetFiltersTest(TestCase):
             email='basic@test.com',
             password='pw',
             tier=cls.basic,
+            subscription_id='sub_BASIC',
             tags=['early-adopter-2026'],
         )
         cls.main_user = User.objects.create_user(
             email='main@test.com',
             password='pw',
             tier=cls.main,
+            subscription_id='sub_MAIN',
             first_name='Ada',
             stripe_customer_id='cus_MAIN123',
             slack_user_id='U01MAIN123',
@@ -52,6 +54,7 @@ class StudioUserListQuerySetFiltersTest(TestCase):
             email='premium@test.com',
             password='pw',
             tier=cls.premium,
+            subscription_id='sub_PREMIUM',
         )
         cls.override_user = User.objects.create_user(
             email='trial@test.com',
@@ -105,7 +108,9 @@ class StudioUserListQuerySetFiltersTest(TestCase):
         self.assertEqual(trial_row['tier_name'], 'Main')
         self.assertEqual(trial_row['tier_source'], 'override')
 
-        self.assertEqual(response.context['paid_count'], 4)
+        # Paid = active Stripe subscription only (basic + main + premium subs).
+        # The comped main override user is excluded from paid.
+        self.assertEqual(response.context['paid_count'], 3)
         self.assertEqual(response.context['main_plus_count'], 3)
         self.assertEqual(response.context['premium_count'], 1)
 

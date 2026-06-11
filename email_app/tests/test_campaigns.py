@@ -497,8 +497,11 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
     """Test the top-level send_campaign fan-out task.
 
     send_campaign queries recipients, transitions the campaign to
-    'sending', and enqueues one send_campaign_batch per chunk. It does
-    not send any emails itself.
+    'sending', and schedules one send_campaign_batch per chunk as a
+    one-off (Schedule.ONCE) future-dated Schedule row staggered by
+    CAMPAIGN_BATCH_INTERVAL_SECONDS (issue #922). It does not send any
+    emails itself, and the Schedule rows are inert in tests (the
+    django-q scheduler daemon is not running), so no email goes out.
     """
 
     def setUp(self):
@@ -524,16 +527,29 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
             status='draft',
         )
 
-    @patch('jobs.tasks.helpers.q_async_task')
-    def test_send_campaign_enqueues_one_batch_per_chunk(self, mock_q):
-        """send_campaign chunks recipients and enqueues one batch task each."""
+    def _batch_schedules(self):
+        """Return the send_campaign_batch Schedule rows ordered by next_run."""
+        from django_q.models import Schedule
+        return list(
+            Schedule.objects.filter(
+                func='email_app.tasks.send_campaign.send_campaign_batch',
+            ).order_by('next_run')
+        )
+
+    @staticmethod
+    def _kwargs(sched):
+        """Decode a Schedule's kwargs (stored as a Python-literal string)."""
+        import ast
+        return ast.literal_eval(sched.kwargs)
+
+    def test_send_campaign_schedules_one_batch_per_chunk(self):
+        """send_campaign chunks recipients and schedules one batch each."""
         # Add more recipients so chunking happens at batch_size=3.
         for i in range(5):
             User.objects.create_user(
                 email=f'extra{i}@test.com', tier=self.free_tier,
                 email_verified=True, unsubscribed=False,
             )
-        mock_q.return_value = 'task-id'
 
         from email_app.tasks.send_campaign import send_campaign
         result = send_campaign(self.campaign.pk, batch_size=3)
@@ -542,29 +558,139 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
         self.assertEqual(result['total'], 7)
         self.assertEqual(result['batch_count'], 3)
         self.assertEqual(result['status'], 'sending')
-        self.assertEqual(mock_q.call_count, 3)
 
-        # Verify each call was for send_campaign_batch with this campaign
-        for call in mock_q.call_args_list:
-            args, kwargs = call
-            self.assertEqual(
-                args[0], 'email_app.tasks.send_campaign.send_campaign_batch',
-            )
+        schedules = self._batch_schedules()
+        self.assertEqual(len(schedules), 3)
+
+        # Every schedule is a one-off (ONCE) repeating exactly once.
+        from django_q.models import Schedule
+        for sched in schedules:
+            kwargs = self._kwargs(sched)
+            self.assertEqual(sched.schedule_type, Schedule.ONCE)
+            self.assertEqual(sched.repeats, 1)
             self.assertEqual(kwargs['campaign_id'], self.campaign.pk)
             self.assertIn('user_ids', kwargs)
             self.assertLessEqual(len(kwargs['user_ids']), 3)
 
-        # Across all chunks, every eligible user appears exactly once
+        # Across all chunks, every eligible user appears exactly once.
         all_chunked_ids = []
-        for call in mock_q.call_args_list:
-            all_chunked_ids.extend(call.kwargs['user_ids'])
+        for sched in schedules:
+            all_chunked_ids.extend(self._kwargs(sched)['user_ids'])
         self.assertEqual(len(all_chunked_ids), 7)
         self.assertEqual(len(set(all_chunked_ids)), 7)
 
-    @patch('jobs.tasks.helpers.q_async_task')
-    def test_send_campaign_transitions_to_sending(self, mock_q):
+    def test_send_campaign_staggers_batches_by_interval(self):
+        """Batch i is scheduled at now + i * interval; batch 0 immediate."""
+        for i in range(5):
+            User.objects.create_user(
+                email=f'extra{i}@test.com', tier=self.free_tier,
+                email_verified=True, unsubscribed=False,
+            )
+
+        before = timezone.now()
+        from email_app.tasks.send_campaign import send_campaign
+        # Default interval is 60s; force 4 batches at batch_size=2.
+        send_campaign(self.campaign.pk, batch_size=2)
+        after = timezone.now()
+
+        schedules = self._batch_schedules()
+        # 7 eligible users, batch_size=2 => 4 batches.
+        self.assertEqual(len(schedules), 4)
+
+        # Batch 0 (earliest next_run) fires immediately: next_run is at
+        # ~now, i.e. within the window the fan-out ran.
+        first_run = schedules[0].next_run
+        self.assertGreaterEqual(first_run, before)
+        self.assertLessEqual(first_run, after)
+
+        # Each subsequent batch is offset by index * 60s from batch 0.
+        base = schedules[0].next_run
+        for index, sched in enumerate(schedules):
+            offset = (sched.next_run - base).total_seconds()
+            # Allow a small slack for the per-row creation wall-clock drift.
+            self.assertAlmostEqual(offset, index * 60, delta=2)
+
+    def test_send_campaign_interval_read_from_config(self):
+        """The stagger reads CAMPAIGN_BATCH_INTERVAL_SECONDS from config."""
+        for i in range(5):
+            User.objects.create_user(
+                email=f'extra{i}@test.com', tier=self.free_tier,
+                email_verified=True, unsubscribed=False,
+            )
+
+        from email_app.tasks.send_campaign import send_campaign
+        # override_settings flows through get_config (it checks Django
+        # settings before env/default), so this exercises the config read.
+        with override_settings(CAMPAIGN_BATCH_INTERVAL_SECONDS=120):
+            send_campaign(self.campaign.pk, batch_size=2)
+
+        schedules = self._batch_schedules()
+        self.assertEqual(len(schedules), 4)
+
+        base = schedules[0].next_run
+        for index, sched in enumerate(schedules):
+            offset = (sched.next_run - base).total_seconds()
+            self.assertAlmostEqual(offset, index * 120, delta=2)
+
+    def test_send_campaign_zero_interval_schedules_all_immediately(self):
+        """Interval 0 means no stagger: every batch is scheduled at ~now."""
+        for i in range(5):
+            User.objects.create_user(
+                email=f'extra{i}@test.com', tier=self.free_tier,
+                email_verified=True, unsubscribed=False,
+            )
+
+        before = timezone.now()
+        from email_app.tasks.send_campaign import send_campaign
+        with override_settings(CAMPAIGN_BATCH_INTERVAL_SECONDS=0):
+            send_campaign(self.campaign.pk, batch_size=2)
+        after = timezone.now()
+
+        schedules = self._batch_schedules()
+        self.assertEqual(len(schedules), 4)
+        # All next_run values fall within the fan-out window (no future
+        # offset), so nothing is deferred.
+        for sched in schedules:
+            self.assertGreaterEqual(sched.next_run, before)
+            self.assertLessEqual(sched.next_run, after)
+
+    def test_send_campaign_unparseable_interval_falls_back_to_default(self):
+        """A non-numeric config value falls back to the 60s default."""
+        for i in range(5):
+            User.objects.create_user(
+                email=f'extra{i}@test.com', tier=self.free_tier,
+                email_verified=True, unsubscribed=False,
+            )
+
+        from email_app.tasks.send_campaign import send_campaign
+        with override_settings(CAMPAIGN_BATCH_INTERVAL_SECONDS='not-a-number'):
+            send_campaign(self.campaign.pk, batch_size=2)
+
+        schedules = self._batch_schedules()
+        self.assertEqual(len(schedules), 4)
+        base = schedules[0].next_run
+        for index, sched in enumerate(schedules):
+            offset = (sched.next_run - base).total_seconds()
+            self.assertAlmostEqual(offset, index * 60, delta=2)
+
+    def test_send_campaign_batch_schedule_name_is_descriptive(self):
+        """Scheduled batches carry a descriptive name (relates to #920)."""
+        from email_app.tasks.send_campaign import send_campaign
+        send_campaign(self.campaign.pk, batch_size=1)
+
+        schedules = self._batch_schedules()
+        # 2 eligible users, batch_size=1 => 2 batches.
+        self.assertEqual(len(schedules), 2)
+        for sched in schedules:
+            self.assertIn('Send campaign batch', sched.name)
+            self.assertIn('campaign fan-out', sched.name)
+            # The fired Task carries the same name via q_options.task_name.
+            self.assertEqual(
+                self._kwargs(sched)['q_options']['task_name'], sched.name,
+            )
+
+    def test_send_campaign_transitions_to_sending(self):
         """Fan-out transitions campaign from draft -> sending."""
-        mock_q.return_value = 'task-id'
         self.assertEqual(self.campaign.status, 'draft')
 
         from email_app.tasks.send_campaign import send_campaign
@@ -575,30 +701,23 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
         # sent_at is not set yet — only set when last batch finishes
         self.assertIsNone(self.campaign.sent_at)
 
-    @patch('jobs.tasks.helpers.q_async_task')
-    def test_send_campaign_excludes_ineligible_recipients_from_chunks(
-        self, mock_q,
-    ):
+    def test_send_campaign_excludes_ineligible_recipients_from_chunks(self):
         """Unsubscribed/unverified users are excluded from chunked user_ids."""
-        mock_q.return_value = 'task-id'
-
         from email_app.tasks.send_campaign import send_campaign
         send_campaign(self.campaign.pk)
 
-        # Collect every user_id passed to a batch task.
+        # Collect every user_id scheduled across batches.
         chunked = []
-        for call in mock_q.call_args_list:
-            chunked.extend(call.kwargs['user_ids'])
+        for sched in self._batch_schedules():
+            chunked.extend(self._kwargs(sched)['user_ids'])
 
         self.assertIn(self.user1.pk, chunked)
         self.assertIn(self.user2.pk, chunked)
         # Unsubscribed user MUST NOT be chunked.
         self.assertNotIn(self.user3.pk, chunked)
 
-    @patch('jobs.tasks.helpers.q_async_task')
-    def test_send_campaign_no_recipients_marks_sent(self, mock_q):
+    def test_send_campaign_no_recipients_marks_sent(self):
         """A campaign with zero eligible recipients goes straight to sent."""
-        mock_q.return_value = 'task-id'
         # Campaign targets Premium only — no Premium users exist.
         empty_campaign = EmailCampaign.objects.create(
             subject='Premium Only',
@@ -617,8 +736,8 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
         empty_campaign.refresh_from_db()
         self.assertEqual(empty_campaign.status, 'sent')
         self.assertIsNotNone(empty_campaign.sent_at)
-        # No batch tasks enqueued
-        mock_q.assert_not_called()
+        # No batch tasks scheduled.
+        self.assertEqual(self._batch_schedules(), [])
 
     def test_send_campaign_not_found_raises_error(self):
         """Sending a non-existent campaign raises ValueError."""
@@ -639,12 +758,8 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
             send_campaign(self.campaign.pk)
         self.assertIn("status 'sent'", str(ctx.exception))
 
-    @patch('jobs.tasks.helpers.q_async_task')
-    def test_send_campaign_uses_settings_batch_size(self, mock_q):
+    def test_send_campaign_uses_settings_batch_size(self):
         """When batch_size is omitted, fan-out uses settings.EMAIL_BATCH_SIZE."""
-        mock_q.return_value = 'task-id'
-
-        from django.test.utils import override_settings
         with override_settings(EMAIL_BATCH_SIZE=1):
             from email_app.tasks.send_campaign import send_campaign
             result = send_campaign(self.campaign.pk)
@@ -889,8 +1004,7 @@ class SendCampaignEndToEndTest(TierSetupMixin, TestCase):
     """End-to-end: fan-out + batch execution with chunking."""
 
     @patch('email_app.tasks.send_campaign.EmailService')
-    @patch('jobs.tasks.helpers.q_async_task')
-    def test_full_pipeline_chunks_and_completes(self, mock_q, MockService):
+    def test_full_pipeline_chunks_and_completes(self, MockService):
         """7 recipients with batch_size=3 produce 3 chunks; running each
         chunk results in all 7 receiving the campaign and status=sent."""
         mock_service = MockService.return_value
@@ -909,25 +1023,26 @@ class SendCampaignEndToEndTest(TierSetupMixin, TestCase):
             status='draft',
         )
 
-        # Capture chunks the fan-out would have queued.
-        chunks_to_run = []
-
-        def capture(func, *args, **kwargs):
-            if func == 'email_app.tasks.send_campaign.send_campaign_batch':
-                chunks_to_run.append(kwargs)
-            return 'task-id'
-
-        mock_q.side_effect = capture
-
         from email_app.tasks.send_campaign import (
             send_campaign,
             send_campaign_batch,
         )
         send_campaign(campaign.pk, batch_size=3)
 
+        # The fan-out scheduled one one-off batch per chunk; read them
+        # back from the Schedule rows the scheduler would fire.
+        import ast
+
+        from django_q.models import Schedule
+        chunks_to_run = [
+            ast.literal_eval(sched.kwargs)
+            for sched in Schedule.objects.filter(
+                func='email_app.tasks.send_campaign.send_campaign_batch',
+            ).order_by('next_run')
+        ]
         self.assertEqual(len(chunks_to_run), 3)
 
-        # Now execute each captured chunk synchronously.
+        # Now execute each scheduled chunk synchronously.
         for chunk_kwargs in chunks_to_run:
             send_campaign_batch(
                 chunk_kwargs['campaign_id'],
@@ -1384,31 +1499,32 @@ class CampaignEligibilityCriteriaTest(TierSetupMixin, TestCase):
             status='draft',
         )
 
-        # Drive the fan-out + batches inline by capturing what
-        # send_campaign would have enqueued, then executing each
-        # batch synchronously.
-        with patch('jobs.tasks.helpers.q_async_task') as mock_q:
-            captured = []
+        # Drive the fan-out + batches inline: run send_campaign (which
+        # schedules one one-off batch per chunk), read the chunks back
+        # from the Schedule rows the scheduler would fire, then execute
+        # each batch synchronously.
+        import ast
 
-            def capture(func, *args, **kwargs):
-                if func == 'email_app.tasks.send_campaign.send_campaign_batch':
-                    captured.append(kwargs)
-                return 'task-id'
+        from django_q.models import Schedule
 
-            mock_q.side_effect = capture
+        from email_app.tasks.send_campaign import (
+            send_campaign,
+            send_campaign_batch,
+        )
+        send_campaign(campaign.pk)
 
-            from email_app.tasks.send_campaign import (
-                send_campaign,
-                send_campaign_batch,
+        captured = [
+            ast.literal_eval(sched.kwargs)
+            for sched in Schedule.objects.filter(
+                func='email_app.tasks.send_campaign.send_campaign_batch',
+            ).order_by('next_run')
+        ]
+        for chunk in captured:
+            send_campaign_batch(
+                chunk['campaign_id'],
+                user_ids=chunk['user_ids'],
+                send_delay=0,
             )
-            send_campaign(campaign.pk)
-
-            for chunk in captured:
-                send_campaign_batch(
-                    chunk['campaign_id'],
-                    user_ids=chunk['user_ids'],
-                    send_delay=0,
-                )
 
         campaign.refresh_from_db()
         self.assertEqual(campaign.sent_count, 3)

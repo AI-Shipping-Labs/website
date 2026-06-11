@@ -106,6 +106,18 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/ses.md#ses_webhook_shared_secret',
             },
+            {
+                'key': 'CAMPAIGN_BATCH_INTERVAL_SECONDS',
+                'is_secret': False,
+                'optional': True,
+                'description': (
+                    'Seconds to stagger campaign send batches apart so the '
+                    'fan-out does not burst past the SES send-rate limit '
+                    '(issue #922). Batch i is scheduled at now + i * this '
+                    'value; the first batch fires immediately. Default 60. '
+                    'Set to 0 to send all batches at once (no stagger).'
+                ),
+            },
         ],
     },
     {

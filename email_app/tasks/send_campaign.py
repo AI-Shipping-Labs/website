@@ -21,6 +21,7 @@ Usage:
 
 import logging
 import time
+from datetime import timedelta
 
 import markdown as md
 from django.conf import settings
@@ -32,6 +33,7 @@ from django.utils import timezone
 from email_app.models import EmailCampaign, EmailLog
 from email_app.services.email_classification import EMAIL_KIND_PROMOTIONAL
 from email_app.services.email_service import EmailService, EmailServiceError
+from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +43,36 @@ DEFAULT_SEND_DELAY = 0.05  # 50ms
 # Default chunk size if EMAIL_BATCH_SIZE is not configured in settings.
 DEFAULT_BATCH_SIZE = 200
 
+# Default spacing between fan-out batches in seconds. Batches are
+# scheduled at now + index * interval so they do not all fire at once
+# and burst past the SES send-rate limit (issue #922). Tunable in
+# Studio settings via CAMPAIGN_BATCH_INTERVAL_SECONDS.
+DEFAULT_BATCH_INTERVAL_SECONDS = 60
+
 
 def _get_batch_size():
     """Return the configured EMAIL_BATCH_SIZE, falling back to default."""
     return int(getattr(settings, 'EMAIL_BATCH_SIZE', DEFAULT_BATCH_SIZE))
+
+
+def _get_batch_interval_seconds():
+    """Return the configured stagger between fan-out batches in seconds.
+
+    Resolves CAMPAIGN_BATCH_INTERVAL_SECONDS through ``get_config`` (DB
+    override -> env -> Django settings -> default), so an operator can
+    tune the SES burst protection from Studio without a redeploy. The
+    value arrives as a string from env / DB overrides, so we coerce
+    defensively. A negative value is clamped to 0 (all batches fire
+    immediately); 0 is a valid value meaning "no stagger".
+    """
+    raw = get_config(
+        'CAMPAIGN_BATCH_INTERVAL_SECONDS', DEFAULT_BATCH_INTERVAL_SECONDS,
+    )
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_BATCH_INTERVAL_SECONDS
+    return max(value, 0)
 
 
 def _chunk(items, size):
@@ -126,25 +154,47 @@ def send_campaign(campaign_id, batch_size=None):
 
     chunks = list(_chunk(user_ids, batch_size))
     # Imported lazily: jobs.tasks pulls in django-q, which has heavy
-    # side-effects at import time, and tests patch async_task by path.
-    from jobs.tasks import async_task, build_task_name
+    # side-effects at import time, and tests patch by path.
+    from django_q.models import Schedule
 
-    for index, chunk_user_ids in enumerate(chunks, start=1):
-        async_task(
-            'email_app.tasks.send_campaign.send_campaign_batch',
-            campaign_id=campaign_id,
-            user_ids=chunk_user_ids,
-            task_name=build_task_name(
-                'Send campaign batch',
-                f'#{campaign_id} {campaign.subject} batch {index}/{len(chunks)}',
-                'campaign fan-out',
-            ),
+    from jobs.tasks import build_task_name
+
+    # Stagger the batches so they do not all fire at once and burst past
+    # the SES send-rate limit (issue #922). Batch i is scheduled to run
+    # at now + i * interval; the first batch (i=0) runs immediately. Each
+    # batch is a one-off (Schedule.ONCE) future-dated Schedule row, which
+    # shows up as a pending future task in Studio. We mirror
+    # jobs.tasks.helpers.schedule() / queue_imported_welcome_emails() by
+    # injecting q_options.task_name so each fired Task lands a descriptive
+    # name (relates to #920) instead of a Django-Q random codename.
+    interval = _get_batch_interval_seconds()
+    now = timezone.now()
+
+    for index, chunk_user_ids in enumerate(chunks):
+        task_name = build_task_name(
+            'Send campaign batch',
+            f'#{campaign_id} {campaign.subject} '
+            f'batch {index + 1}/{len(chunks)}',
+            'campaign fan-out',
+        )
+        Schedule.objects.create(
+            name=task_name,
+            func='email_app.tasks.send_campaign.send_campaign_batch',
+            schedule_type=Schedule.ONCE,
+            repeats=1,
+            next_run=now + timedelta(seconds=index * interval),
+            kwargs={
+                'campaign_id': campaign_id,
+                'user_ids': chunk_user_ids,
+                'q_options': {'task_name': task_name},
+            },
         )
 
     logger.info(
         "Campaign %s ('%s') fanned out: %d recipients across %d batches "
-        "(batch_size=%d)",
+        "(batch_size=%d, interval=%ds)",
         campaign_id, campaign.subject, total, len(chunks), batch_size,
+        interval,
     )
 
     return {

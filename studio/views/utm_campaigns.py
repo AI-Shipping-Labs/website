@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from integrations.models import UtmCampaign, UtmCampaignLink
+from integrations.models.utm_campaign import UTM_MEDIUM_PRESETS, UTM_SOURCE_PRESETS
 from studio.decorators import staff_required
 
 SLUG_RE = re.compile(r'^[a-z0-9_]+$')
@@ -104,6 +105,8 @@ def utm_campaign_detail(request, campaign_id):
         'campaign': campaign,
         'links': links,
         'archived_links': archived_links,
+        'utm_source_presets': UTM_SOURCE_PRESETS,
+        'utm_medium_presets': UTM_MEDIUM_PRESETS,
     })
 
 
@@ -282,18 +285,24 @@ def utm_link_edit(request, campaign_id, link_id):
             messages.error(request, 'utm_content and destination are required.')
             return render(request, 'studio/utm_campaigns/link_form.html', {
                 'campaign': campaign, 'link': link, 'form_data': form_data,
+                'utm_source_presets': UTM_SOURCE_PRESETS,
+                'utm_medium_presets': UTM_MEDIUM_PRESETS,
             })
 
         if not _validate_slug(utm_content):
             messages.error(request, 'utm_content must contain only lowercase letters, digits, and underscores.')
             return render(request, 'studio/utm_campaigns/link_form.html', {
                 'campaign': campaign, 'link': link, 'form_data': form_data,
+                'utm_source_presets': UTM_SOURCE_PRESETS,
+                'utm_medium_presets': UTM_MEDIUM_PRESETS,
             })
 
         if utm_content != link.utm_content and campaign.links.filter(utm_content=utm_content).exists():
             messages.error(request, f'A link with utm_content "{utm_content}" already exists for this campaign.')
             return render(request, 'studio/utm_campaigns/link_form.html', {
                 'campaign': campaign, 'link': link, 'form_data': form_data,
+                'utm_source_presets': UTM_SOURCE_PRESETS,
+                'utm_medium_presets': UTM_MEDIUM_PRESETS,
             })
 
         link.utm_content = utm_content
@@ -317,6 +326,8 @@ def utm_link_edit(request, campaign_id, link_id):
             'utm_source': link.utm_source,
             'utm_medium': link.utm_medium,
         },
+        'utm_source_presets': UTM_SOURCE_PRESETS,
+        'utm_medium_presets': UTM_MEDIUM_PRESETS,
     })
 
 

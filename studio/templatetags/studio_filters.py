@@ -9,6 +9,7 @@ from content.access import (
     LEVEL_REGISTERED,
 )
 from email_app import ses_explain
+from integrations.models.utm_campaign import UTM_MEDIUM_PRESETS, UTM_SOURCE_PRESETS
 from studio.utils import get_github_edit_url, is_synced
 from studio.worker_health import get_worker_status
 
@@ -150,6 +151,20 @@ def studio_list_class(part='wrapper', align='left'):
 def studio_action_class(kind='secondary'):
     """Return shared class names for Studio row actions."""
     return f"{ACTION_BASE_CLASS} {ACTION_KIND_CLASSES.get(kind, ACTION_KIND_CLASSES['secondary'])}"
+
+
+@register.simple_tag
+def utm_source_presets():
+    """House-standard utm_source presets (issue #874). Single source of truth
+    in integrations/models/utm_campaign.py; suggestions only, not enforced."""
+    return UTM_SOURCE_PRESETS
+
+
+@register.simple_tag
+def utm_medium_presets():
+    """House-standard utm_medium presets (issue #874). Single source of truth
+    in integrations/models/utm_campaign.py; suggestions only, not enforced."""
+    return UTM_MEDIUM_PRESETS
 
 
 @register.inclusion_tag('studio/includes/empty_state.html')

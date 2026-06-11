@@ -473,3 +473,198 @@ class TestScenario10SidebarEntry:
         # Email campaigns link still resolves
         page.goto(f"{django_server}/studio/campaigns/", wait_until="domcontentloaded")
         assert "/studio/campaigns/" in page.url
+
+
+# ---------------------------------------------------------------
+# Issue #874: preset source/medium dropdowns + Clone button
+# ---------------------------------------------------------------
+
+def _make_campaign(slug="clone_camp", source="newsletter", medium="email"):
+    from integrations.models import UtmCampaign
+    c = UtmCampaign.objects.create(
+        name=slug, slug=slug,
+        default_utm_source=source, default_utm_medium=medium,
+    )
+    connection.close()
+    return c
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestUtmPresetSource874:
+    def test_pick_preset_source_and_medium_from_dropdown(self, django_server, browser):
+        _clear_utm()
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+        c = _make_campaign(slug="preset_pick")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/studio/utm-campaigns/{c.pk}/", wait_until="domcontentloaded")
+
+        # The override inputs are datalist-backed comboboxes.
+        source_input = page.locator('#utm-add-link-form input[name="utm_source"]')
+        medium_input = page.locator('#utm-add-link-form input[name="utm_medium"]')
+        assert source_input.get_attribute("list") == "utm-source-presets"
+        assert medium_input.get_attribute("list") == "utm-medium-presets"
+
+        # github is one of the seeded source presets.
+        source_options = page.locator('#utm-source-presets option')
+        source_values = source_options.evaluate_all(
+            "els => els.map(e => e.value)"
+        )
+        assert "github" in source_values
+        assert "referral" in page.locator('#utm-medium-presets option').evaluate_all(
+            "els => els.map(e => e.value)"
+        )
+
+        source_input.fill("github")
+        medium_input.fill("referral")
+        page.fill('#utm-add-link-form input[name="utm_content"]', "homepage")
+        page.fill('#utm-add-link-form input[name="destination"]', "/")
+        page.click('button:has-text("Add link")')
+        page.wait_for_load_state("domcontentloaded")
+
+        url_box = page.locator('code[data-utm-url]').first
+        text = url_box.inner_text()
+        assert "utm_source=github" in text
+        assert "utm_medium=referral" in text
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestUtmCustomMedium874:
+    def test_custom_medium_saves_and_round_trips_on_edit(self, django_server, browser):
+        _clear_utm()
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+        c = _make_campaign(slug="custom_medium")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/studio/utm-campaigns/{c.pk}/", wait_until="domcontentloaded")
+
+        # Type a custom value not in the preset list.
+        page.fill('#utm-add-link-form input[name="utm_medium"]', "partner_blast")
+        page.fill('#utm-add-link-form input[name="utm_content"]', "custom_tag")
+        page.fill('#utm-add-link-form input[name="destination"]', "/")
+        page.click('button:has-text("Add link")')
+        page.wait_for_load_state("domcontentloaded")
+
+        url_box = page.locator('code[data-utm-url]').first
+        assert "utm_medium=partner_blast" in url_box.inner_text()
+
+        # Open for edit: custom value is shown.
+        from integrations.models import UtmCampaignLink
+        link = UtmCampaignLink.objects.get(campaign=c, utm_content="custom_tag")
+        connection.close()
+        page.goto(
+            f"{django_server}/studio/utm-campaigns/{c.pk}/links/{link.pk}/edit",
+            wait_until="domcontentloaded",
+        )
+        assert page.locator('input[name="utm_medium"]').input_value() == "partner_blast"
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestUtmCloneLink874:
+    def test_clone_prefills_form_and_creates_distinct_link(self, django_server, browser):
+        _clear_utm()
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+        c = _make_campaign(slug="clone_flow")
+
+        from integrations.models import UtmCampaignLink
+        UtmCampaignLink.objects.create(
+            campaign=c, utm_content="homepage", destination="/",
+            label="Home", utm_term="spring",
+            utm_source="github", utm_medium="referral",
+        )
+        connection.close()
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/studio/utm-campaigns/{c.pk}/", wait_until="domcontentloaded")
+
+        page.locator('.utm-clone-btn').first.click()
+
+        # Add-link form is prefilled from the row's values.
+        assert page.locator('#utm-add-link-form input[name="destination"]').input_value() == "/"
+        assert page.locator('#utm-add-link-form input[name="label"]').input_value() == "Home"
+        assert page.locator('#utm-add-link-form input[name="utm_term"]').input_value() == "spring"
+        assert page.locator('#utm-add-link-form input[name="utm_source"]').input_value() == "github"
+        assert page.locator('#utm-add-link-form input[name="utm_medium"]').input_value() == "referral"
+        # utm_content prefilled with a _copy suffix so an immediate save would
+        # still be editable; the user changes it.
+        assert page.locator('#utm-add-link-form input[name="utm_content"]').input_value() == "homepage_copy"
+
+        # Change to a new channel and save.
+        page.fill('#utm-add-link-form input[name="utm_content"]', "homepage_yt")
+        page.fill('#utm-add-link-form input[name="utm_source"]', "youtube")
+        page.fill('#utm-add-link-form input[name="utm_medium"]', "social")
+        page.click('button:has-text("Add link")')
+        page.wait_for_load_state("domcontentloaded")
+
+        body = page.content()
+        assert "homepage_yt" in body
+
+        from integrations.models import UtmCampaignLink as L
+        new_link = L.objects.get(campaign=c, utm_content="homepage_yt")
+        assert new_link.utm_source == "youtube"
+        assert new_link.utm_medium == "social"
+        # Original is unchanged.
+        original = L.objects.get(campaign=c, utm_content="homepage")
+        assert original.utm_source == "github"
+        assert original.utm_medium == "referral"
+        connection.close()
+
+    def test_clone_then_submit_unchanged_surfaces_duplicate_guard(self, django_server, browser):
+        _clear_utm()
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+        c = _make_campaign(slug="clone_dup")
+
+        from integrations.models import UtmCampaignLink
+        UtmCampaignLink.objects.create(
+            campaign=c, utm_content="homepage", destination="/",
+        )
+        connection.close()
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/studio/utm-campaigns/{c.pk}/", wait_until="domcontentloaded")
+
+        page.locator('.utm-clone-btn').first.click()
+        # Force a collision: strip the _copy suffix back to the original tag.
+        page.fill('#utm-add-link-form input[name="utm_content"]', "homepage")
+        page.click('button:has-text("Add link")')
+        page.wait_for_load_state("domcontentloaded")
+
+        assert "already exists for this campaign" in page.content()
+        from integrations.models import UtmCampaignLink as L
+        assert L.objects.filter(campaign=c, utm_content="homepage").count() == 1
+        connection.close()
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestUtmBlankOverrideDefault874:
+    def test_blank_override_uses_campaign_default(self, django_server, browser):
+        _clear_utm()
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+        c = _make_campaign(slug="blank_default", source="newsletter", medium="email")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/studio/utm-campaigns/{c.pk}/", wait_until="domcontentloaded")
+
+        # Leave both overrides blank.
+        page.fill('#utm-add-link-form input[name="utm_content"]', "launch")
+        page.fill('#utm-add-link-form input[name="destination"]', "/pricing")
+        page.click('button:has-text("Add link")')
+        page.wait_for_load_state("domcontentloaded")
+
+        text = page.locator('code[data-utm-url]').first.inner_text()
+        assert "utm_source=newsletter" in text
+        assert "utm_medium=email" in text

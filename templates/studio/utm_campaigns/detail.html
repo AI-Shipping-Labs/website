@@ -78,6 +78,13 @@
         </td>
         <td class="px-6 py-4 align-top space-x-2 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <a href="{% url 'studio_utm_link_edit' campaign_id=campaign.pk link_id=link.pk %}" class="text-sm text-accent hover:underline">Edit</a>
+          <button type="button" class="utm-clone-btn text-sm text-accent hover:underline"
+                  data-utm-content="{{ link.utm_content }}"
+                  data-label-value="{{ link.label }}"
+                  data-destination="{{ link.destination }}"
+                  data-utm-term="{{ link.utm_term }}"
+                  data-utm-source="{{ link.utm_source }}"
+                  data-utm-medium="{{ link.utm_medium }}">Clone</button>
           <form method="post" action="{% url 'studio_utm_link_archive' campaign_id=campaign.pk link_id=link.pk %}" class="inline"
                 onsubmit="return confirm('Archive this link?');">
             {% csrf_token %}
@@ -96,7 +103,7 @@
 </div>
 {% endif %}
 
-<div class="bg-card border border-border rounded-lg p-6 max-w-3xl">
+<div id="add-link-section" class="bg-card border border-border rounded-lg p-6 max-w-3xl">
   <div class="flex items-baseline gap-2 mb-3">
     <h3 class="text-md font-semibold text-foreground">Add link</h3>
     <a href="https://github.com/AI-Shipping-Labs/website/blob/main/_docs/utm_links.md"
@@ -104,7 +111,7 @@
        class="text-sm text-accent hover:underline"
        data-testid="utm-fields-help-link">(?) UTM field guide</a>
   </div>
-  <form method="post" action="{% url 'studio_utm_link_create' campaign_id=campaign.pk %}">
+  <form id="utm-add-link-form" method="post" action="{% url 'studio_utm_link_create' campaign_id=campaign.pk %}">
     {% csrf_token %}
 
     <div class="grid grid-cols-2 gap-4 mb-4">
@@ -140,16 +147,22 @@
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Override <code>utm_source</code></label>
         <input type="text" name="utm_source"
+               list="utm-source-presets" autocomplete="off"
                placeholder="{{ campaign.default_utm_source }}"
                class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <p class="text-xs text-muted-foreground mt-1">Pick a preset or type a custom value. Blank = campaign default.</p>
       </div>
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Override <code>utm_medium</code></label>
         <input type="text" name="utm_medium"
+               list="utm-medium-presets" autocomplete="off"
                placeholder="{{ campaign.default_utm_medium }}"
                class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <p class="text-xs text-muted-foreground mt-1">Pick a preset or type a custom value. Blank = campaign default.</p>
       </div>
     </div>
+
+    {% include "studio/utm_campaigns/_preset_datalists.html" %}
 
     <button type="submit"
             class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
@@ -205,6 +218,38 @@
         try { document.execCommand('copy'); } catch (e) {}
         document.body.removeChild(ta);
         done();
+      }
+    });
+  });
+
+  // Clone: prefill the Add-link form with a row's values so the user can
+  // tweak a few fields and save a new link (issue #874). utm_content is
+  // suffixed with `_copy` and focused/selected so an immediate save does not
+  // collide; the user is expected to change it. No server round-trip.
+  var addForm = document.getElementById('utm-add-link-form');
+  function setVal(name, value) {
+    if (!addForm) { return; }
+    var field = addForm.querySelector('[name="' + name + '"]');
+    if (field) { field.value = value || ''; }
+  }
+  document.querySelectorAll('.utm-clone-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var content = btn.getAttribute('data-utm-content') || '';
+      setVal('utm_content', content ? content + '_copy' : '');
+      setVal('label', btn.getAttribute('data-label-value'));
+      setVal('destination', btn.getAttribute('data-destination'));
+      setVal('utm_term', btn.getAttribute('data-utm-term'));
+      setVal('utm_source', btn.getAttribute('data-utm-source'));
+      setVal('utm_medium', btn.getAttribute('data-utm-medium'));
+
+      var section = document.getElementById('add-link-section');
+      if (section && section.scrollIntoView) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      var contentField = addForm && addForm.querySelector('[name="utm_content"]');
+      if (contentField) {
+        contentField.focus();
+        if (contentField.select) { contentField.select(); }
       }
     });
   });

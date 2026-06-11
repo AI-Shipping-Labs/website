@@ -59,16 +59,22 @@
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Override <code>utm_source</code></label>
         <input type="text" name="utm_source" value="{{ form_data.utm_source }}"
+               list="utm-source-presets" autocomplete="off"
                placeholder="{{ campaign.default_utm_source }}"
                class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <p class="text-xs text-muted-foreground mt-1">Pick a preset or type a custom value. Blank = campaign default.</p>
       </div>
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Override <code>utm_medium</code></label>
         <input type="text" name="utm_medium" value="{{ form_data.utm_medium }}"
+               list="utm-medium-presets" autocomplete="off"
                placeholder="{{ campaign.default_utm_medium }}"
                class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <p class="text-xs text-muted-foreground mt-1">Pick a preset or type a custom value. Blank = campaign default.</p>
       </div>
     </div>
+
+    {% include "studio/utm_campaigns/_preset_datalists.html" %}
 
     <div class="flex items-center space-x-4">
       <button type="submit"

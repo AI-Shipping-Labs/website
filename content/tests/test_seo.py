@@ -449,6 +449,71 @@ class OgTagsTest(TestCase):
         self.assertNotIn('"Article"', result)
 
 
+class OgImageAutoBannerFallbackTest(TestCase):
+    """Issue #895: ``_get_image_url`` falls back to ``auto_banner_url``.
+
+    The operator-supplied ``cover_image_url`` always wins; the
+    platform-generated ``auto_banner_url`` is the OG/Twitter image only
+    when no cover is set; the site default OG image is the final fallback.
+    """
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _render(self, event):
+        template = Template('{% load seo_tags %}{% og_tags event %}')
+        request = self.factory.get('/')
+        context = Context({'event': event, 'request': request})
+        return template.render(context)
+
+    def test_auto_banner_used_when_no_cover(self):
+        event = Event.objects.create(
+            title='Banner Event', slug='banner-event',
+            start_datetime=timezone.now(), status='upcoming',
+            cover_image_url='',
+            auto_banner_url='https://cdn.example.com/banners/event/1.jpg',
+        )
+        result = self._render(event)
+        self.assertIn(
+            '<meta property="og:image" content="'
+            'https://cdn.example.com/banners/event/1.jpg">',
+            result,
+        )
+        # Twitter image mirrors the same URL with the large-image card.
+        self.assertIn(
+            '<meta name="twitter:image" content="'
+            'https://cdn.example.com/banners/event/1.jpg">',
+            result,
+        )
+        self.assertIn('summary_large_image', result)
+
+    def test_cover_image_wins_over_auto_banner(self):
+        event = Event.objects.create(
+            title='Cover Event', slug='cover-event',
+            start_datetime=timezone.now(), status='upcoming',
+            cover_image_url='https://cdn.example.com/manual/cover.png',
+            auto_banner_url='https://cdn.example.com/banners/event/2.jpg',
+        )
+        result = self._render(event)
+        self.assertIn(
+            '<meta property="og:image" content="'
+            'https://cdn.example.com/manual/cover.png">',
+            result,
+        )
+        self.assertNotIn('banners/event/2.jpg', result)
+
+    def test_default_og_image_when_neither_set(self):
+        event = Event.objects.create(
+            title='Plain Event', slug='plain-event',
+            start_datetime=timezone.now(), status='upcoming',
+            cover_image_url='', auto_banner_url='',
+        )
+        result = self._render(event)
+        self.assertIn('/static/ai-shipping-labs.jpg', result)
+        # No empty og:image value.
+        self.assertNotIn('property="og:image" content="">', result)
+
+
 class EventPreviewDescriptionTest(TestCase):
     """Issue #817: event link previews lead with the multi-timezone strip."""
 

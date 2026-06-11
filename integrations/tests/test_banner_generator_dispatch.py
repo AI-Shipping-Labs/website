@@ -14,6 +14,7 @@ from django.test import TestCase
 
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import Article, Course, Download, Project, Workshop
+from events.models import Event
 from integrations.models import IntegrationSetting
 from integrations.services.banner_generator import BannerGeneratorError
 from integrations.services.banner_generator.dispatch import (
@@ -128,6 +129,24 @@ def _make_course(**overrides):
     return Course.objects.create(**defaults)
 
 
+def _make_event(**overrides):
+    defaults = {
+        'slug': 'shipping-agents-in-production',
+        'title': 'Shipping Agents in Production',
+        'description': 'A live session on deploying agents.',
+        'start_datetime': dt.datetime(2026, 5, 28, 16, 0, tzinfo=dt.timezone.utc),
+        'end_datetime': dt.datetime(2026, 5, 28, 17, 0, tzinfo=dt.timezone.utc),
+        'timezone': 'Europe/Berlin',
+        'location': 'Zoom',
+        'tags': ['agents', 'production'],
+        'required_level': LEVEL_MAIN,
+        'status': 'upcoming',
+        'origin': 'studio',
+    }
+    defaults.update(overrides)
+    return Event.objects.create(**defaults)
+
+
 def _make_workshop(**overrides):
     defaults = {
         'slug': 'reliable-agents',
@@ -226,6 +245,47 @@ class EnqueueIfMissingTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         result = enqueue_if_missing('article', 99999)
         self.assertIsNone(result)
         mock_async.assert_not_called()
+
+    @patch(DISPATCH_PATCH)
+    def test_event_enqueues_when_no_cover_no_banner(self, mock_async):
+        event = _make_event()
+        mock_async.return_value = 'event-task'
+        result = enqueue_if_missing('event', event.pk)
+        self.assertEqual(result, 'event-task')
+        args = mock_async.call_args[0]
+        self.assertEqual(args[1], 'event')
+        self.assertEqual(args[2], event.pk)
+
+    @patch(DISPATCH_PATCH)
+    def test_event_skips_when_cover_image_set(self, mock_async):
+        event = _make_event(
+            cover_image_url='https://cdn.example.com/event-cover.png',
+        )
+        self.assertIsNone(enqueue_if_missing('event', event.pk))
+        mock_async.assert_not_called()
+
+    @patch(DISPATCH_PATCH)
+    def test_event_skips_when_title_hash_matches(self, mock_async):
+        event = _make_event()
+        Event.objects.filter(pk=event.pk).update(
+            auto_banner_url='https://cdn.example.com/banners/event/x.jpg',
+            auto_banner_title_hash=title_hash(event.title),
+        )
+        self.assertIsNone(enqueue_if_missing('event', event.pk))
+        mock_async.assert_not_called()
+
+    @patch(DISPATCH_PATCH)
+    def test_event_enqueues_when_title_hash_drifts(self, mock_async):
+        event = _make_event()
+        Event.objects.filter(pk=event.pk).update(
+            auto_banner_url='https://cdn.example.com/banners/event/x.jpg',
+            auto_banner_title_hash=title_hash('OLD EVENT TITLE'),
+        )
+        mock_async.return_value = 'event-redraw'
+        self.assertEqual(
+            enqueue_if_missing('event', event.pk), 'event-redraw',
+        )
+        mock_async.assert_called_once()
 
 
 class EnqueueForceTest(_BannerGeneratorCacheCleanupMixin, TestCase):
@@ -531,6 +591,74 @@ class BuildPayloadTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         self.assertEqual(payload['meta_secondary'], 'agents / rag / tools')
         self.assertEqual(payload['footer'], 'AI Shipping Labs Workshops')
 
+    def test_event_payload_all_nine_slots(self):
+        event = _make_event(
+            title='Shipping Agents in Production',
+            tags=['workshop', 'agents'],
+            required_level=LEVEL_MAIN,
+        )
+        payload = build_payload('event', event)
+        self.assertEqual(payload['brand'], 'AI Shipping Labs')
+        self.assertEqual(payload['kind'], 'Live Session')
+        # First tag, title-cased.
+        self.assertEqual(payload['kicker'], 'Workshop')
+        self.assertEqual(payload['title'], 'Shipping Agents in Production')
+        self.assertEqual(
+            payload['subtitle'], 'A live session on deploying agents.',
+        )
+        self.assertEqual(payload['meta_primary'], 'May 28, 2026')
+        # 16:00 UTC == 18:00 CEST in late May; location is Zoom.
+        self.assertEqual(payload['meta_secondary'], '18:00 CEST / Zoom')
+        self.assertEqual(payload['tag_one'], 'Main')
+        self.assertEqual(payload['footer'], 'aishippinglabs.com/events')
+        # All nine documented slots present.
+        self.assertEqual(
+            set(payload),
+            {
+                'brand', 'kind', 'kicker', 'title', 'subtitle',
+                'meta_primary', 'meta_secondary', 'tag_one', 'footer',
+            },
+        )
+
+    def test_event_payload_tier_label_free_for_open(self):
+        event = _make_event(required_level=LEVEL_OPEN)
+        self.assertEqual(build_payload('event', event)['tag_one'], 'Free')
+
+    def test_event_payload_tier_label_basic(self):
+        event = _make_event(required_level=LEVEL_BASIC)
+        self.assertEqual(build_payload('event', event)['tag_one'], 'Basic')
+
+    def test_event_payload_tier_label_premium(self):
+        event = _make_event(required_level=LEVEL_PREMIUM)
+        self.assertEqual(build_payload('event', event)['tag_one'], 'Premium')
+
+    def test_event_payload_external_host_used_as_tag_one(self):
+        event = _make_event(external_host='Maven', required_level=LEVEL_MAIN)
+        self.assertEqual(build_payload('event', event)['tag_one'], 'Maven')
+
+    def test_event_payload_kicker_falls_back_when_no_tags(self):
+        event = _make_event(tags=[])
+        self.assertEqual(build_payload('event', event)['kicker'], 'Live event')
+
+    def test_event_payload_meta_secondary_platform_when_no_location(self):
+        event = _make_event(location='', platform='zoom')
+        # No location -> platform label (Zoom). Time half still present.
+        self.assertTrue(build_payload('event', event)['meta_secondary'].endswith('/ Zoom'))
+
+    def test_event_payload_no_raise_on_edge_cases(self):
+        """Empty tags, empty description, null end, missing location."""
+        event = _make_event(
+            tags=[],
+            description='',
+            end_datetime=None,
+            location='',
+        )
+        payload = build_payload('event', event)
+        self.assertEqual(payload['subtitle'], '')
+        self.assertEqual(payload['kicker'], 'Live event')
+        # Did not raise; meta_secondary still resolves a platform fallback.
+        self.assertIn('Zoom', payload['meta_secondary'])
+
     def test_subtitle_truncated_at_140_chars(self):
         long_desc = 'word ' * 100  # 500 chars
         article = _make_article(description=long_desc)
@@ -640,6 +768,7 @@ class RenderBannerForContentTest(_BannerGeneratorCacheCleanupMixin, TestCase):
             ('project', _make_project),
             ('download', _make_download),
             ('workshop', _make_workshop),
+            ('event', _make_event),
         ):
             with self.subTest(content_type=content_type):
                 record = factory()
@@ -651,6 +780,30 @@ class RenderBannerForContentTest(_BannerGeneratorCacheCleanupMixin, TestCase):
                     rf'{record.pk}-[0-9a-f]{{32}}\.jpg$',
                 )
                 self.assertTrue(record.auto_banner_title_hash)
+
+    @patch(DELETE_PATCH)
+    @patch(CLIENT_PATCH)
+    def test_event_renders_with_event_stage_template(
+        self, mock_render, mock_delete,
+    ):
+        mock_render.return_value = {'ok': True}
+        event = _make_event()
+        render_banner_for_content('event', event.pk)
+        self.assertEqual(
+            mock_render.call_args.kwargs['template'], 'asl-event-stage',
+        )
+
+    @patch(DELETE_PATCH)
+    @patch(CLIENT_PATCH)
+    def test_non_event_keeps_content_card_template(
+        self, mock_render, mock_delete,
+    ):
+        mock_render.return_value = {'ok': True}
+        article = _make_article()
+        render_banner_for_content('article', article.pk)
+        self.assertEqual(
+            mock_render.call_args.kwargs['template'], 'asl-content-card',
+        )
 
     @patch(DELETE_PATCH)
     @patch(CLIENT_PATCH)

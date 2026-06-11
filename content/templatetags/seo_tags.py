@@ -415,8 +415,15 @@ def _get_og_type(obj):
 
 
 def _get_image_url(obj):
-    """Get the best image URL for a content object."""
-    for attr in ('cover_image_url',):
+    """Get the best image URL for a content object.
+
+    Operator-supplied ``cover_image_url`` always wins; the
+    platform-generated ``auto_banner_url`` (issue #895) is the fallback
+    used as the OG/Twitter preview image when no cover is set. Events,
+    workshops, articles, courses, projects, and downloads all store an
+    ``auto_banner_url`` once the banner-generator pipeline has run.
+    """
+    for attr in ('cover_image_url', 'auto_banner_url'):
         url = getattr(obj, attr, '')
         if url:
             return url

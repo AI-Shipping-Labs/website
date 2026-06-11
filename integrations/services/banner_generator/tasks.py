@@ -41,6 +41,23 @@ SUBTITLE_MAX_CHARS = 140
 MAX_TAGS_IN_META = 3
 META_TAG_JOINER = ' / '
 
+# Per-content-type Lambda template override. Most content types share the
+# default ``asl-content-card`` template; events use the dedicated
+# ``asl-event-stage`` template which carries two extra slots (``brand`` and
+# ``tag_one``). Any type not listed here falls back to ``DEFAULT_TEMPLATE``.
+TEMPLATE_BY_CONTENT_TYPE = {
+    'event': 'asl-event-stage',
+}
+
+
+def template_for(content_type):
+    """Return the Lambda template id for ``content_type``.
+
+    Events render with ``asl-event-stage``; everything else keeps the
+    shared ``asl-content-card`` default.
+    """
+    return TEMPLATE_BY_CONTENT_TYPE.get(content_type, DEFAULT_TEMPLATE)
+
 
 # --------------------------------------------------------------------------
 # Field helpers
@@ -182,6 +199,71 @@ def _download_meta_primary(download):
     return _DOWNLOAD_FILE_TYPE_LABELS.get(file_type, 'File')
 
 
+def _event_tag_one(event):
+    """Return the Event ``tag_one`` slot value.
+
+    External-host events surface the partner host name (e.g. ``Maven``)
+    since the partner controls access. Community-hosted events surface
+    the tier label for ``required_level`` (Free / Basic / Main / Premium).
+    """
+    from content.access import LEVEL_OPEN, LEVEL_TO_TIER_NAME
+
+    if getattr(event, 'is_external', False):
+        host = (getattr(event, 'external_host', '') or '').strip()
+        if host:
+            return host
+    level = getattr(event, 'required_level', LEVEL_OPEN)
+    if level is None:
+        level = LEVEL_OPEN
+    return LEVEL_TO_TIER_NAME.get(level, 'Free')
+
+
+def _event_meta_primary(event):
+    """Return the formatted event date, or '' when ``start_datetime`` is null.
+
+    Studio always sets ``start_datetime``, but the render task must not
+    raise if it is somehow missing, so we guard the call.
+    """
+    start = getattr(event, 'start_datetime', None)
+    if start is None:
+        return ''
+    return event.short_date()
+
+
+def _event_meta_secondary(event):
+    """Return ``'<HH:MM TZ> / <location-or-platform>'`` for the event.
+
+    Mirrors the generator example ``'18:00 CEST / Zoom'``. The right
+    half (location/platform) is omitted (no trailing slash) when there
+    is nothing to show. Falls back to the platform label when no
+    ``location`` is set. Never raises on a null ``start_datetime``.
+    """
+    from zoneinfo import ZoneInfo
+
+    from events.services.display_time import resolve_event_display_timezone
+
+    time_part = ''
+    start = getattr(event, 'start_datetime', None)
+    if start is not None:
+        tz_name = (getattr(event, 'timezone', '') or '').strip()
+        try:
+            tz = ZoneInfo(tz_name) if tz_name else None
+        except Exception:  # noqa: BLE001 — unknown IANA name; fall back
+            tz = None
+        if tz is None:
+            tz = ZoneInfo(resolve_event_display_timezone())
+        local = start.astimezone(tz)
+        time_part = local.strftime('%H:%M %Z')
+
+    location = (getattr(event, 'location', '') or '').strip()
+    if not location:
+        platform = (getattr(event, 'platform', '') or '').strip().lower()
+        location = 'Zoom' if platform == 'zoom' else 'Online'
+
+    parts = [p for p in (time_part, location) if p]
+    return ' / '.join(parts)
+
+
 def build_payload(content_type, record):
     """Return the Lambda ``data`` payload for a content record.
 
@@ -262,6 +344,22 @@ def build_payload(content_type, record):
             'meta_primary': 'Live online',
             'meta_secondary': meta_secondary,
             'footer': 'AI Shipping Labs Workshops',
+        }
+
+    if content_type == 'event':
+        kicker = 'Live event'
+        if tags and isinstance(tags[0], str) and tags[0].strip():
+            kicker = tags[0].strip().title()
+        return {
+            'brand': 'AI Shipping Labs',
+            'kind': 'Live Session',
+            'kicker': kicker,
+            'title': title,
+            'subtitle': subtitle,
+            'meta_primary': _event_meta_primary(record),
+            'meta_secondary': _event_meta_secondary(record),
+            'tag_one': _event_tag_one(record),
+            'footer': 'aishippinglabs.com/events',
         }
 
     raise ValueError(f'unsupported content_type: {content_type!r}')
@@ -389,6 +487,7 @@ def _resolve_model(content_type):
     the dispatcher module (which depends on ``jobs.tasks.helpers``).
     """
     from content.models import Article, Course, Download, Project, Workshop
+    from events.models import Event
 
     return {
         'article': Article,
@@ -396,6 +495,7 @@ def _resolve_model(content_type):
         'project': Project,
         'download': Download,
         'workshop': Workshop,
+        'event': Event,
     }.get(content_type)
 
 
@@ -436,7 +536,7 @@ def render_banner_for_content(content_type, content_pk):
 
     try:
         render_to_s3(
-            template=DEFAULT_TEMPLATE,
+            template=template_for(content_type),
             size=DEFAULT_SIZE,
             fmt=DEFAULT_FORMAT,
             data=payload,

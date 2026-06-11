@@ -242,6 +242,21 @@ class Event(
         max_length=500, blank=True, default='',
         help_text='Cover image URL from content repo.',
     )
+    auto_banner_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text=(
+            "Platform-generated OG banner URL (banner-generator Lambda, "
+            "issue #895). Overwritten by the auto-banner pipeline; templates "
+            "should prefer ``cover_image_url`` and fall back to this."
+        ),
+    )
+    auto_banner_title_hash = models.CharField(
+        max_length=64, blank=True, default='',
+        help_text=(
+            "sha256 hex digest of the title used to render the current "
+            "``auto_banner_url``. Used to detect title drift between syncs."
+        ),
+    )
     ics_sequence = models.PositiveIntegerField(
         default=0,
         help_text='Sequence number for .ics calendar invite updates.',

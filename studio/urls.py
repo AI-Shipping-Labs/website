@@ -13,6 +13,7 @@ from studio.views.banner_regenerate import (
     studio_article_regenerate_banner,
     studio_course_regenerate_banner,
     studio_download_regenerate_banner,
+    studio_event_regenerate_banner,
     studio_project_regenerate_banner,
     studio_workshop_regenerate_banner,
 )
@@ -334,6 +335,11 @@ urlpatterns = [
         'events/<int:event_id>/send-followup',
         event_send_followup,
         name='studio_event_send_followup',
+    ),
+    path(
+        'events/<int:event_id>/regenerate-banner',
+        studio_event_regenerate_banner,
+        name='studio_event_regenerate_banner',
     ),
 
     # Event series (issue #564, renamed from event-groups in #575). The

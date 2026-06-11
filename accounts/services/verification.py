@@ -6,7 +6,7 @@ Issue #513: both ``accounts.views.auth`` (email+password signup) and
 issue #452. Both paths must use the same TTL resolution rules so the
 purge window is consistent regardless of how the user landed on the
 site. This module is the single source of truth — never re-implement
-``_resolve_unverified_ttl_days`` in a view.
+``resolve_unverified_ttl_days`` in a view.
 """
 
 from integrations.config import get_config

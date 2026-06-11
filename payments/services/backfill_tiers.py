@@ -22,19 +22,9 @@ from payments.services.import_stripe import (
 )
 from payments.services.stripe_client import _subscription_period_end, _subscription_price_id
 
-# Backwards-compatible re-exports. Tests historically patched
-# ``payments.services.backfill_tiers._resolve_subscription_tier`` /
-# ``_tier_by_amount_interval``; keeping these names bound on the module
-# preserves those patch points after the resolver moved to
-# ``payments.services.tier_resolution``.
-_resolve_subscription_tier = _tier_resolution.resolve_subscription_tier
-_tier_by_amount_interval = _tier_resolution.tier_by_amount_interval
-
 __all__ = [
     "ChangeRecord",
     "backfill_user_from_stripe",
-    "_resolve_subscription_tier",
-    "_tier_by_amount_interval",
 ]
 
 
@@ -130,7 +120,7 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=
         )
 
     price_id = _subscription_price_id(subscription)
-    tier = _resolve_subscription_tier(subscription, price_id, price_to_tier)
+    tier = _tier_resolution.resolve_subscription_tier(subscription, price_id, price_to_tier)
     subscription_id = _get(subscription, "id", "") or ""
     period_end = _subscription_period_end(subscription)
 

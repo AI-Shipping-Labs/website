@@ -5,14 +5,8 @@ from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 from django.contrib.auth import get_user_model
 from django.db.models import Q
-from django.http import (
-    Http404,
-    HttpResponsePermanentRedirect,
-    HttpResponseRedirect,
-    JsonResponse,
-)
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
-from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import TierOverride
@@ -31,20 +25,6 @@ DURATION_CHOICES = [
     ('6 months', relativedelta(months=6)),
     ('12 months', relativedelta(months=12)),
 ]
-
-
-class HttpResponsePermanentPreserveMethodRedirect(HttpResponseRedirect):
-    status_code = 308
-
-
-def _preserve_method_redirect(url):
-    return HttpResponsePermanentPreserveMethodRedirect(url)
-
-
-def _legacy_redirect(request, url):
-    if request.method == 'POST':
-        return _preserve_method_redirect(url)
-    return HttpResponsePermanentRedirect(url)
 
 
 def _active_overrides_queryset():
@@ -240,50 +220,3 @@ def studio_user_search(request):
             row['has_plan_in_sprint'] = user.pk in plan_user_ids
         results.append(row)
     return JsonResponse({'results': results})
-
-
-@staff_required
-def legacy_tier_override_page_redirect(request):
-    email = request.GET.get('email', '').strip()
-    if email:
-        user = User.objects.filter(email=email).only('pk').first()
-        if user is not None:
-            return HttpResponsePermanentRedirect(
-                reverse('studio_user_tier_override_page', args=[user.pk])
-            )
-    return HttpResponsePermanentRedirect(reverse('studio_tier_overrides_list'))
-
-
-@staff_required
-def legacy_tier_override_create_redirect(request):
-    email = (request.POST.get('email') or request.GET.get('email') or '').strip()
-    user = User.objects.filter(email=email).only('pk').first()
-    if user is not None:
-        return _legacy_redirect(
-            request,
-            reverse('studio_user_tier_override_create', args=[user.pk]),
-        )
-    return _legacy_redirect(request, reverse('studio_tier_overrides_list'))
-
-
-@staff_required
-def legacy_tier_override_revoke_redirect(request):
-    override_id = (
-        request.POST.get('override_id') or request.GET.get('override_id') or ''
-    ).strip()
-    if override_id:
-        override = TierOverride.objects.filter(pk=override_id).only('user_id').first()
-        if override is not None:
-            return _legacy_redirect(
-                request,
-                reverse('studio_user_tier_override_revoke', args=[override.user_id]),
-            )
-    return _legacy_redirect(request, reverse('studio_tier_overrides_list'))
-
-
-@staff_required
-def legacy_user_tier_override_action_redirect(request, user_id, action):
-    return _legacy_redirect(
-        request,
-        reverse(f'studio_user_tier_override_{action}', args=[user_id]),
-    )

@@ -1132,35 +1132,6 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
         )
         self.client.login(email="studioadmin@example.com", password="testpass")
 
-    def test_56_search_user_by_email(self):
-        """#56: Old email search redirects to the user's override page."""
-        target = self._make_user(email="target56@example.com")
-
-        response = self.client.get(
-            "/studio/users/tier-override/",
-            {"email": "target56@example.com"},
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response["Location"],
-            f"/studio/users/{target.pk}/tier_override/",
-        )
-
-        response = self.client.get(response["Location"])
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.context["detail_user"].email, "target56@example.com"
-        )
-
-    def test_57_search_nonexistent_email(self):
-        """#57: Unknown legacy email redirects to the global search shell."""
-        response = self.client.get(
-            "/studio/users/tier-override/",
-            {"email": "nonexistent@example.com"},
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response["Location"], "/studio/tier_overrides/")
-
     def test_58_active_override_details_shown(self):
         """#58: Admin sees active override details."""
         target = self._make_user(email="target58@example.com")
@@ -1281,7 +1252,7 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
         )
         self.client.login(email="regular@example.com", password="testpass")
 
-        response = self.client.get("/studio/users/tier-override/")
+        response = self.client.get("/studio/tier_overrides/")
         self.assertEqual(response.status_code, 403)
 
     def test_65_premium_user_shows_already_highest(self):

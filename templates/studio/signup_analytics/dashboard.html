@@ -183,8 +183,9 @@
         <tr class="hover:bg-secondary/50 transition-colors">
           <td class="px-4 py-3 text-sm text-foreground">
             {% if row.campaign %}
-              <a href="/studio/utm-analytics/campaign/{{ row.slug }}/?range={{ filters.range_key }}"
-                 class="text-accent hover:underline" data-testid="campaign-drill-link">{{ row.label }}</a>
+              <a href="{% url 'studio_utm_campaign_analytics' campaign_slug=row.slug %}?range={{ filters.range_key }}"
+                 class="text-accent hover:underline" data-testid="campaign-drill-link"
+                 title="Opens UTM campaign analytics for {{ row.label }}">{{ row.label }}</a>
             {% else %}
               {{ row.label }}
             {% endif %}

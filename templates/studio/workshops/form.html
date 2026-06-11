@@ -81,6 +81,20 @@
         <dd class="text-foreground mt-1 prose prose-sm prose-invert max-w-none">{{ workshop.description_html|safe }}</dd>
       </div>
       {% endif %}
+      {% comment %}
+        Issue #879: show the Studio event this workshop is linked to (the
+        OneToOne FK). Read-only — the link is set by event_id/event_slug in
+        workshop.yaml, not editable here.
+      {% endcomment %}
+      {% if workshop.event_id %}
+      <div class="md:col-span-2" data-testid="workshop-linked-event">
+        <dt class="text-muted-foreground">Linked event</dt>
+        <dd class="text-foreground mt-1">
+          <a href="{{ workshop.event.get_absolute_url }}" class="text-accent hover:underline">{{ workshop.event.title }}</a>
+          <a href="{{ workshop.event.get_studio_edit_url }}" class="text-muted-foreground hover:text-foreground hover:underline ml-2">(edit in Studio)</a>
+        </dd>
+      </div>
+      {% endif %}
     </dl>
   </div>
 

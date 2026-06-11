@@ -455,9 +455,17 @@ def _sync_single_workshop(
             # under different prefixes.
             recording_for_event = dict(recording)
             recording_for_event['url'] = recording_url
+            # Issue #879: optional explicit reference to an existing Studio
+            # event. ``event_id`` (the Event pk) is primary; ``event_slug``
+            # is a friendlier fallback resolved only when ``event_id`` is
+            # absent. Threaded into the resolver so an author can bind a
+            # GitHub workshop to the Studio event for the same session
+            # instead of minting a duplicate.
             _link_or_create_workshop_event(
                 workshop, data, recording_for_event, recording_required_level,
                 workshop_date, source, rel_path, yaml_rel_path, commit_sha, stats,
+                event_id=data.get('event_id'),
+                event_slug=data.get('event_slug'),
             )
         else:
             _cleanup_generated_empty_workshop_event(
@@ -497,17 +505,74 @@ def _sync_single_workshop(
         )
 
 
+# Content fields built by ``_build_synced_event_content_defaults`` that
+# describe the GitHub SOURCE of a row rather than its displayable content.
+# Issue #879: when LINKING a workshop to a pre-existing event (especially a
+# Studio-origin one) these must NOT be applied — writing ``origin='github'``
+# / ``source_repo`` onto an ``origin='studio'`` event would both flip its
+# ownership and trip the ``Event.save()`` invariant. We strip them so the
+# link-to-existing path updates displayable content only.
+_EVENT_SOURCE_OWNERSHIP_FIELDS = (
+    'origin',
+    'source_repo',
+    'source_path',
+    'source_commit',
+    'content_id',
+)
+
+
+def _resolve_explicit_workshop_event(event_id, event_slug):
+    """Resolve an explicit ``event_id`` / ``event_slug`` reference.
+
+    Issue #879. Returns ``(reference_present, event)``:
+
+    - ``(False, None)`` when neither key is set — caller falls through to the
+      legacy slug-match-then-create path.
+    - ``(True, <Event>)`` when the reference resolves to an existing event.
+    - ``(True, None)`` when a reference WAS given but does not resolve — the
+      caller must record an error and skip, never create a fallback duplicate.
+
+    ``event_id`` takes precedence; ``event_slug`` is consulted only when
+    ``event_id`` is absent.
+    """
+    from events.models import Event
+
+    if event_id not in (None, ''):
+        return True, Event.objects.filter(pk=event_id).first()
+    if event_slug not in (None, ''):
+        slug = str(event_slug).strip()
+        if slug:
+            return True, Event.objects.filter(slug=slug).first()
+    return False, None
+
+
 def _link_or_create_workshop_event(
     workshop, data, recording, recording_required_level, workshop_date,
     source, rel_path, yaml_rel_path, commit_sha, stats,
+    event_id=None, event_slug=None,
 ):
     """Attach a matching ``Event`` to ``workshop``, creating one if missing.
 
-    Idempotency: if an Event already exists with ``slug == workshop.slug``
-    we link to it and update *content* fields only (recording metadata,
-    title, description, tags, etc.). Operational fields — ``start_datetime``,
-    ``end_datetime``, ``status``, ``zoom_*`` — are intentionally left
-    alone. Running the sync a second time never creates a second Event.
+    Issue #879 — explicit link model. When ``workshop.yaml`` declares an
+    ``event_id`` (the Studio Event pk) or ``event_slug``, this resolves that
+    exact event and links to it, updating *content* fields only. A bad
+    reference (set but unresolvable) is reported into ``stats['errors']`` and
+    the workshop is skipped this run — we never silently mint a duplicate to
+    cover an author's typo. With no reference, the legacy slug-match-then-create
+    path below runs unchanged (the no-reference heuristic is #880's job).
+
+    Idempotency: if an Event already exists (resolved explicitly OR via the
+    legacy ``slug == workshop.slug`` lookup) we link to it and update *content*
+    fields only (recording metadata, title, description, tags, etc.).
+    Operational fields — ``start_datetime``, ``end_datetime``, ``status``,
+    ``zoom_*`` — are intentionally left alone. Running the sync a second time
+    never creates a second Event.
+
+    Origin invariant (issue #564/#879): when the resolved event is
+    ``origin='studio'`` the link must keep it ``origin='studio'``,
+    ``source_repo=''``. The WORKSHOP carries the GitHub source metadata, not
+    the event, so the source-ownership content fields are stripped from the
+    defaults on the link-to-existing branch.
 
     The Event carries its own ``content_id`` separate from the Workshop's
     (they're different models). We mint a stable UUIDv5 keyed by
@@ -540,24 +605,69 @@ def _link_or_create_workshop_event(
         kind='workshop',
     )
 
-    # Look up by slug first — that's the idempotent key per the spec.
-    existing_event = Event.objects.filter(slug=workshop.slug).first()
-    if existing_event is None:
-        start_dt = dt.datetime.combine(
-            workshop_date, dt.time.min, tzinfo=dt.timezone.utc,
+    # Issue #879: an explicit reference short-circuits the slug lookup.
+    reference_present, explicit_event = _resolve_explicit_workshop_event(
+        event_id, event_slug,
+    )
+    if reference_present and explicit_event is None:
+        # A reference WAS given but didn't resolve. Record the error and
+        # skip — falling through to slug-match/create would re-introduce the
+        # duplicate this link model exists to prevent. The author must fix
+        # the reference.
+        ref = (
+            f'event_id {event_id}' if event_id not in (None, '')
+            else f'event_slug {event_slug!r}'
         )
-        create_kwargs = {
-            'slug': workshop.slug,
-            'start_datetime': start_dt,
-            'status': 'completed',
-            'published': True,
+        stats['errors'].append({
+            'file': yaml_rel_path,
+            'error': (
+                f'workshop {workshop.slug}: {ref} not found — not linking, '
+                f'not creating a duplicate. Fix the reference in workshop.yaml.'
+            ),
+        })
+        return
+
+    if reference_present:
+        # Explicit link to a pre-existing event. Update displayable content
+        # only — never the source-ownership fields (which would flip a
+        # Studio event's origin and trip Event.save()'s invariant).
+        existing_event = explicit_event
+        create_kwargs = None
+    else:
+        # Legacy path (no reference): match by slug, create on miss. This is
+        # the behaviour #880 will refine for the no-reference case.
+        existing_event = Event.objects.filter(slug=workshop.slug).first()
+        if existing_event is None:
+            start_dt = dt.datetime.combine(
+                workshop_date, dt.time.min, tzinfo=dt.timezone.utc,
+            )
+            create_kwargs = {
+                'slug': workshop.slug,
+                'start_datetime': start_dt,
+                'status': 'completed',
+                'published': True,
+            }
+        else:
+            create_kwargs = None
+
+    # When linking to a pre-existing STUDIO event, drop the source-ownership
+    # fields so it keeps ``origin='studio'``/``source_repo=''`` — writing
+    # ``origin='github'`` would both flip its ownership and trip
+    # ``Event.save()``'s invariant. For a github-origin existing row (a
+    # workshop event this sync minted on a previous run) the fields are
+    # re-applied so ``source_commit``/``content_id`` stay current on re-sync.
+    if existing_event is not None and existing_event.origin == 'studio':
+        defaults = {
+            key: value
+            for key, value in content_defaults.items()
+            if key not in _EVENT_SOURCE_OWNERSHIP_FIELDS
         }
     else:
-        create_kwargs = None
+        defaults = content_defaults
 
     result = _upsert_synced_event_content(
         lookup=lambda: existing_event,
-        defaults=content_defaults,
+        defaults=defaults,
         stats=stats,
         create_kwargs=create_kwargs,
         detail_slug=workshop.slug,

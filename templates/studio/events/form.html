@@ -73,6 +73,19 @@
     {% include "studio/includes/forms/textarea.html" with label="Description (Markdown)" name="description" rows=6 value=form_values.description disabled=False monospace=True %}
     {% endif %}
 
+    {% comment %}
+      Issue #879: surface the GitHub workshop linked to this event (the
+      OneToOne reverse accessor). Read-only — editing the link happens by
+      author-controlled frontmatter in workshop.yaml, not here.
+    {% endcomment %}
+    {% if event.workshop %}
+    <div data-testid="event-linked-workshop" class="rounded-lg border border-border bg-secondary px-4 py-3 text-sm">
+      <span class="text-muted-foreground">Linked workshop:</span>
+      <a href="{{ event.workshop.get_absolute_url }}" class="text-accent hover:underline ml-1">{{ event.workshop.title }}</a>
+      <a href="{{ event.workshop.get_studio_edit_url }}" class="text-muted-foreground hover:text-foreground hover:underline ml-2">(edit in Studio)</a>
+    </div>
+    {% endif %}
+
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Status</label>

@@ -218,7 +218,6 @@ def event_series_create(request):
                     slug=slug,
                     description=description,
                     cadence='weekly',
-                    cadence_weeks=1,
                     day_of_week=start_date.weekday(),
                     start_time=start_time,
                     timezone=timezone_value,

@@ -103,7 +103,7 @@ class AutodetectMarkerTest(_AdminMixin, TestCase):
     def test_existing_series_add_occurrence_never_autodetects(self):
         series = EventSeries.objects.create(
             name='Series With TZ', slug='series-with-tz-855',
-            cadence='weekly', cadence_weeks=1, day_of_week=1,
+            cadence='weekly', day_of_week=1,
             start_time=datetime(2000, 1, 1, 14, 30).time(),
             timezone='America/New_York',
         )

@@ -70,7 +70,6 @@ _EVENT_SERIES_EXAMPLE = {
     "slug": "weekly-office-hours",
     "description": "Open Q&A every Tuesday.",
     "cadence": "weekly",
-    "cadence_weeks": 1,
     "day_of_week": 1,
     "start_time": "17:00:00",
     "timezone": "Europe/Berlin",
@@ -86,7 +85,6 @@ SERIES_WRITABLE_FIELDS = {
     "slug",
     "description",
     "cadence",
-    "cadence_weeks",
     "day_of_week",
     "start_time",
     "timezone",
@@ -106,7 +104,6 @@ def serialize_event_series(series):
         "slug": series.slug,
         "description": series.description,
         "cadence": series.cadence,
-        "cadence_weeks": series.cadence_weeks,
         "day_of_week": series.day_of_week,
         "start_time": (
             series.start_time.isoformat() if series.start_time else None
@@ -204,16 +201,6 @@ def _collect_series_values(data, *, existing=None):
             errors["cadence"] = "Unknown choice."
         else:
             values["cadence"] = cadence
-
-    if "cadence_weeks" in data:
-        try:
-            cadence_weeks = int(data["cadence_weeks"])
-        except (TypeError, ValueError):
-            cadence_weeks = None
-        if cadence_weeks is None or cadence_weeks < 1:
-            errors["cadence_weeks"] = "Must be a positive integer."
-        else:
-            values["cadence_weeks"] = cadence_weeks
 
     if "day_of_week" in data:
         try:
@@ -346,7 +333,6 @@ def _save_series_or_error(series):
                         "type": "string",
                         "enum": _VALID_CADENCES_ENUM,
                     },
-                    "cadence_weeks": {"type": "integer", "minimum": 1},
                     "day_of_week": {
                         "type": "integer",
                         "minimum": 0,
@@ -428,7 +414,6 @@ def event_series_collection(request):
 
     series = EventSeries(
         cadence="weekly",
-        cadence_weeks=1,
         timezone="Europe/Berlin",
         is_active=True,
     )
@@ -484,7 +469,6 @@ def event_series_collection(request):
                         "type": "string",
                         "enum": _VALID_CADENCES_ENUM,
                     },
-                    "cadence_weeks": {"type": "integer", "minimum": 1},
                     "day_of_week": {
                         "type": "integer",
                         "minimum": 0,

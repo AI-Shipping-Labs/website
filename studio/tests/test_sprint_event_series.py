@@ -23,7 +23,6 @@ def _make_event_series(name='Wednesday office hours', slug='weekly-oh'):
         name=name,
         slug=slug,
         cadence='weekly',
-        cadence_weeks=1,
         day_of_week=2,
         start_time=datetime.time(18, 0),
         timezone='Europe/Berlin',

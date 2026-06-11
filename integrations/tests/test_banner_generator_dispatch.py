@@ -169,7 +169,6 @@ def _make_event_series(**overrides):
         'slug': 'ai-agents-office-hours',
         'description': 'Weekly office hours for shipping AI agents.',
         'cadence': 'weekly',
-        'cadence_weeks': 1,
         'day_of_week': 2,  # Wednesday
         'start_time': dt.time(18, 0),
         'timezone': 'Europe/Berlin',

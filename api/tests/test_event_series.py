@@ -54,7 +54,6 @@ class EventSeriesApiTestBase(TestCase):
             slug="ai-eval-sprint",
             description="Weekly live sessions",
             cadence="weekly",
-            cadence_weeks=1,
             day_of_week=2,
             start_time=time(18, 0),
             timezone="Europe/Berlin",
@@ -64,7 +63,6 @@ class EventSeriesApiTestBase(TestCase):
             slug="archived-series",
             description="Old",
             cadence="weekly",
-            cadence_weeks=1,
             day_of_week=2,
             start_time=time(18, 0),
             timezone="Europe/Berlin",
@@ -97,7 +95,6 @@ class EventSeriesApiTestBase(TestCase):
             name="Other Series",
             slug="other-series",
             cadence="weekly",
-            cadence_weeks=1,
             day_of_week=3,
             start_time=time(17, 0),
             timezone="Europe/Berlin",
@@ -190,7 +187,6 @@ class EventSeriesListTest(EventSeriesApiTestBase):
                 "slug",
                 "description",
                 "cadence",
-                "cadence_weeks",
                 "day_of_week",
                 "start_time",
                 "timezone",
@@ -245,7 +241,6 @@ class EventSeriesCreateTest(EventSeriesApiTestBase):
         self.assertEqual(body["timezone"], "UTC")
         self.assertTrue(body["is_active"])
         self.assertEqual(body["cadence"], "weekly")
-        self.assertEqual(body["cadence_weeks"], 1)
         self.assertEqual(EventSeries.objects.count(), before + 1)
 
     def test_create_series_duplicate_slug(self):
@@ -273,12 +268,11 @@ class EventSeriesCreateTest(EventSeriesApiTestBase):
                 "day_of_week": 99,
                 "start_time": "bad",
                 "cadence": "monthly",
-                "cadence_weeks": 0,
             },
         )
         self.assertEqual(response.status_code, 422)
         details = response.json()["details"]
-        for field in ("name", "day_of_week", "start_time", "cadence", "cadence_weeks"):
+        for field in ("name", "day_of_week", "start_time", "cadence"):
             self.assertIn(field, details)
 
 

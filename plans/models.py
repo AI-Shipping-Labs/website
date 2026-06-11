@@ -448,25 +448,6 @@ class Plan(TimestampedModelMixin, models.Model):
     focus_supporting = models.JSONField(default=list, blank=True)
     accountability = models.TextField(blank=True, default='')
 
-    # Free-text persona label (e.g. "Sam — The Technical Professional
-    # Moving to AI"). Not modeled as an enum yet; if we later need a
-    # canonical persona table, that's a separate migration.
-    assigned_persona = models.CharField(
-        max_length=120, blank=True, default='',
-    )
-
-    # Optional structured persona (issue #801). Additive and backward
-    # compatible: the free-text ``assigned_persona`` above stays the
-    # source of truth until a later issue migrates existing values.
-    # ``SET_NULL`` so deleting a Persona never deletes a Plan.
-    assigned_persona_ref = models.ForeignKey(
-        'questionnaires.Persona',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='plans',
-    )
-
     # When the plan was actually sent to the member.
     shared_at = models.DateTimeField(null=True, blank=True)
 

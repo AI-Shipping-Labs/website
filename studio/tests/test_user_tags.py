@@ -41,10 +41,12 @@ class StudioUserListTagFilterTest(TestCase):
         cls.carol = User.objects.create_user(
             email='carol@test.com', password='testpass',
         )
-        # A paid user with the early-adopter tag (used by combined-filter test).
+        # A paid user (active Stripe subscription) with the early-adopter tag
+        # (used by combined-filter test).
         cls.dan = User.objects.create_user(
             email='dan@test.com', password='testpass',
-            tier=cls.main_tier, tags=['early-adopter'],
+            tier=cls.main_tier, subscription_id='sub_DAN',
+            tags=['early-adopter'],
         )
 
     def setUp(self):
@@ -112,7 +114,8 @@ class StudioUserListTagFilterTest(TestCase):
             'cohort-a',
         ]
         self.alice.tier = self.main_tier
-        self.alice.save(update_fields=['tags', 'tier'])
+        self.alice.subscription_id = 'sub_ALICE'
+        self.alice.save(update_fields=['tags', 'tier', 'subscription_id'])
 
         response = self.client.get('/studio/users/?filter=paid&q=alice')
         row = response.context['user_rows'][0]

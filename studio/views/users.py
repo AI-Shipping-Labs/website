@@ -222,6 +222,25 @@ def _active_override_subquery(now):
     )
 
 
+def _active_subscription_q():
+    """Q expression matching users with an active Stripe subscription.
+
+    "Active Stripe subscription" on the model is the proxy ``subscription_id
+    != '' AND base tier.level > 0``. The webhook
+    (``payments/services/webhook_handlers.py``) clears ``subscription_id`` and
+    reverts ``tier`` to free on ``customer.subscription.deleted`` and sets both
+    on checkout / ``subscription.updated``, so a non-empty ``subscription_id``
+    paired with a paid base tier is the authoritative "actively paying" signal.
+    The base-tier clause guards the ``has_stale_subscription`` case (a stale
+    ``subscription_id`` left on a user whose tier reverted to Free).
+
+    ``base_tier_level`` is annotated by ``_annotated_user_queryset()``; this
+    helper relies on that annotation and is used by BOTH the stat counts and
+    the Paid filter chip so the card and the filtered rows always agree.
+    """
+    return ~Q(subscription_id='') & Q(base_tier_level__gt=0)
+
+
 def _annotated_user_queryset():
     """Base queryset for the Studio user list/export with effective tier data."""
     active_override = _active_override_subquery(timezone.now())
@@ -306,7 +325,7 @@ def _apply_user_listing_filters(
     if active_filter == FILTER_SUBSCRIBERS:
         qs = qs.filter(unsubscribed=False)
     elif active_filter == FILTER_PAID:
-        qs = qs.filter(effective_tier_level__gt=0)
+        qs = qs.filter(_active_subscription_q())
     elif active_filter == FILTER_MAIN_PLUS:
         qs = qs.filter(effective_tier_level__gte=20)
     elif active_filter == FILTER_PREMIUM:
@@ -347,16 +366,60 @@ def _filtered_user_queryset(
 
 
 def _user_listing_counts():
-    """Return aggregate counts for the Studio user filter chips."""
+    """Return aggregate counts for the Studio user stats + filter chips.
+
+    The Paid block is a tier x source decomposition (issue #923). Each cell is
+    a distinct-user count:
+
+    - ``paid_{basic,main,premium}`` — users with an active Stripe subscription
+      (``_active_subscription_q``), grouped by their base ``tier.level``
+      (basic=10, main=20, premium=30). NOT ``effective_tier_level``, which
+      folds in overrides and is the root cause of the old inflated count.
+    - ``override_{basic,main,premium}`` — users with an active, non-expired
+      ``TierOverride``, grouped by ``active_override_level``, EXCLUDING anyone
+      with an active subscription (a user with BOTH counts under Paid only,
+      never under Override — no double counting).
+    - ``total_paying`` = sum of the three Paid cells = all active-subscription
+      users; ``total_comped`` = sum of the three Override cells.
+
+    ``main_plus_count`` / ``premium_count`` keep override-inclusive ACCESS
+    semantics (unchanged) and drive the Main+ / Premium filter chips.
+    """
+    paid = _active_subscription_q()
+    # Override-only: an active override AND no active subscription.
+    override_only = Q(active_override_level__isnull=False) & ~paid
+
     counts = _annotated_user_queryset().aggregate(
         total_users=Count('pk'),
-        paid_count=Count('pk', filter=Q(effective_tier_level__gt=0)),
+        paid_basic=Count('pk', filter=paid & Q(base_tier_level=10)),
+        paid_main=Count('pk', filter=paid & Q(base_tier_level=20)),
+        paid_premium=Count('pk', filter=paid & Q(base_tier_level=30)),
+        override_basic=Count(
+            'pk', filter=override_only & Q(active_override_level=10),
+        ),
+        override_main=Count(
+            'pk', filter=override_only & Q(active_override_level=20),
+        ),
+        override_premium=Count(
+            'pk', filter=override_only & Q(active_override_level=30),
+        ),
         main_plus_count=Count('pk', filter=Q(effective_tier_level__gte=20)),
         premium_count=Count('pk', filter=Q(effective_tier_level__gte=30)),
         subscriber_count=Count('pk', filter=Q(unsubscribed=False)),
         slack_member_count=Count('pk', filter=Q(slack_member=True)),
     )
-    return {key: value or 0 for key, value in counts.items()}
+    counts = {key: value or 0 for key, value in counts.items()}
+    counts['total_paying'] = (
+        counts['paid_basic'] + counts['paid_main'] + counts['paid_premium']
+    )
+    counts['total_comped'] = (
+        counts['override_basic']
+        + counts['override_main']
+        + counts['override_premium']
+    )
+    # Backwards-compatible alias: the Paid chip count equals Total paying.
+    counts['paid_count'] = counts['total_paying']
+    return counts
 
 
 def _row_tooltip(user, slack_status):
@@ -587,6 +650,14 @@ def user_list(request):
         'known_tags': list_all_tags(),
         'total_users': counts['total_users'],
         'paid_count': counts['paid_count'],
+        'paid_basic': counts['paid_basic'],
+        'paid_main': counts['paid_main'],
+        'paid_premium': counts['paid_premium'],
+        'override_basic': counts['override_basic'],
+        'override_main': counts['override_main'],
+        'override_premium': counts['override_premium'],
+        'total_paying': counts['total_paying'],
+        'total_comped': counts['total_comped'],
         'main_plus_count': counts['main_plus_count'],
         'premium_count': counts['premium_count'],
         'subscriber_count': counts['subscriber_count'],

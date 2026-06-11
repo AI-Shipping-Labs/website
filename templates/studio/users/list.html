@@ -29,27 +29,62 @@
     <p class="text-xl font-semibold text-foreground">{{ total_users }}</p>
   </div>
   <div class="bg-card border border-border rounded-lg p-4">
-    <p class="text-sm text-muted-foreground">Paid</p>
-    <p class="text-xl font-semibold text-blue-400">{{ paid_count }}</p>
-  </div>
-  <div class="bg-card border border-border rounded-lg p-4">
-    <p class="text-sm text-muted-foreground">Main+</p>
-    <p class="text-xl font-semibold text-foreground">{{ main_plus_count }}</p>
-  </div>
-  <div class="bg-card border border-border rounded-lg p-4">
-    <p class="text-sm text-muted-foreground">Premium</p>
-    <p class="text-xl font-semibold text-purple-400">{{ premium_count }}</p>
-  </div>
-</div>
-
-<div class="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
-  <div class="bg-card border border-border rounded-lg p-4">
     <p class="text-sm text-muted-foreground">Subscribers</p>
     <p class="text-xl font-semibold text-green-400">{{ subscriber_count }}</p>
   </div>
   <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-sm text-muted-foreground">Main+ access</p>
+    <p class="text-xl font-semibold text-foreground">{{ main_plus_count }}</p>
+    <p class="text-xs text-muted-foreground mt-1">incl. overrides</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
     <p class="text-sm text-muted-foreground">In Slack</p>
     <p class="text-xl font-semibold text-purple-400">{{ slack_member_count }}</p>
+  </div>
+</div>
+
+{% comment %}
+  Membership breakdown (issue #923): tier x source decomposition. "Paid"
+  rows are users with an active Stripe subscription grouped by their base
+  subscription tier; "Override" rows are comped users with an active tier
+  override (excluding anyone who also has a subscription). Totals: Total
+  paying = sum of the three Paid cells (= all active-subscription users);
+  Total comped = sum of the three Override cells. "Paid" here means an
+  active Stripe subscription only — overrides are never counted as paid.
+{% endcomment %}
+<div class="bg-card border border-border rounded-lg p-4 mb-6" data-testid="membership-breakdown">
+  <div class="flex items-center justify-between mb-3">
+    <p class="text-sm font-medium text-foreground">Membership breakdown</p>
+    <p class="text-xs text-muted-foreground">Active Stripe subscription vs. override grant</p>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-muted-foreground">
+          <th class="text-left font-normal py-1 pr-4"></th>
+          <th class="text-right font-normal py-1 px-3">Basic</th>
+          <th class="text-right font-normal py-1 px-3">Main</th>
+          <th class="text-right font-normal py-1 px-3">Premium</th>
+          <th class="text-right font-medium py-1 pl-3">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="border-t border-border">
+          <td class="text-left text-muted-foreground py-2 pr-4">Paid (Stripe)</td>
+          <td class="text-right py-2 px-3 text-foreground" data-testid="paid-basic">{{ paid_basic }}</td>
+          <td class="text-right py-2 px-3 text-foreground" data-testid="paid-main">{{ paid_main }}</td>
+          <td class="text-right py-2 px-3 text-foreground" data-testid="paid-premium">{{ paid_premium }}</td>
+          <td class="text-right py-2 pl-3 font-semibold text-blue-400" data-testid="total-paying">{{ total_paying }}</td>
+        </tr>
+        <tr class="border-t border-border">
+          <td class="text-left text-muted-foreground py-2 pr-4">Override (comped)</td>
+          <td class="text-right py-2 px-3 text-foreground" data-testid="override-basic">{{ override_basic }}</td>
+          <td class="text-right py-2 px-3 text-foreground" data-testid="override-main">{{ override_main }}</td>
+          <td class="text-right py-2 px-3 text-foreground" data-testid="override-premium">{{ override_premium }}</td>
+          <td class="text-right py-2 pl-3 font-semibold text-amber-400" data-testid="total-comped">{{ total_comped }}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </div>
 

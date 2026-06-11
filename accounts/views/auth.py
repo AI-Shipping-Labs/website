@@ -25,21 +25,8 @@ from accounts.return_context import (
     should_skip_logout_redirect,
 )
 from accounts.services.email_resolution import resolve_user_by_email
-from accounts.services.verification import (
-    DEFAULT_UNVERIFIED_USER_TTL_DAYS,
-    resolve_unverified_ttl_days,
-)
+from accounts.services.verification import resolve_unverified_ttl_days
 from integrations.config import site_base_url
-
-# Re-export the helper under the historical private name so existing
-# callers (and tests that patch ``accounts.views.auth._resolve_unverified_ttl_days``)
-# keep working. New code should call
-# ``accounts.services.verification.resolve_unverified_ttl_days`` directly.
-_resolve_unverified_ttl_days = resolve_unverified_ttl_days
-
-# ``DEFAULT_UNVERIFIED_USER_TTL_DAYS`` is re-exported here for backwards
-# compat with anything that reads it from this module.
-__all__ = ["DEFAULT_UNVERIFIED_USER_TTL_DAYS"]
 
 logger = logging.getLogger(__name__)
 
@@ -48,16 +35,6 @@ JWT_ALGORITHM = "HS256"
 EMAIL_PASSWORD_AUTH_BACKEND = "django.contrib.auth.backends.ModelBackend"
 EMAIL_PASSWORD_BACKEND = ModelBackend()
 INVALID_LOGIN_ERROR = "Invalid email or password"
-
-
-# Issue #652: the canonical implementation now lives in
-# ``accounts.oauth_context.get_oauth_provider_context`` so course, workshop
-# and pricing views can populate the same flags for the inline register card
-# without importing from a sibling view module. The private alias is kept so
-# tests that patch ``accounts.views.auth._oauth_provider_context`` keep
-# working.
-def _oauth_provider_context():
-    return get_oauth_provider_context()
 
 
 def _log_login_timing(outcome, started_at):
@@ -88,7 +65,7 @@ def login_view(request):
     if request.user.is_authenticated:
         return redirect(next_url)
 
-    context = _oauth_provider_context()
+    context = get_oauth_provider_context()
     context["next_url"] = next_url if next_url != "/" else ""
     return render(request, "accounts/login.html", context)
 
@@ -99,7 +76,7 @@ def register_view(request):
     next_url = get_next_url(request, default="/")
     if request.user.is_authenticated:
         return redirect(next_url)
-    context = _oauth_provider_context()
+    context = get_oauth_provider_context()
     context["next_url"] = next_url if next_url != "/" else ""
     return render(request, "accounts/register.html", context)
 

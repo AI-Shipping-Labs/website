@@ -815,7 +815,7 @@ class SubscribeVerificationExpiresTest(TestCase):
 
 
 class SubscribeSharedTtlHelperTest(TestCase):
-    """Issue #513: ``_resolve_unverified_ttl_days`` lives in
+    """Issue #513: ``resolve_unverified_ttl_days`` lives in
     ``accounts.services.verification`` and is imported by both
     ``accounts.views.auth`` and ``email_app.views.newsletter``.
     """
@@ -824,16 +824,6 @@ class SubscribeSharedTtlHelperTest(TestCase):
         from accounts.services.verification import resolve_unverified_ttl_days
 
         self.assertGreater(resolve_unverified_ttl_days(), 0)
-
-    def test_auth_view_reuses_shared_helper(self):
-        """The auth view's local name resolves to the shared helper."""
-        from accounts.services.verification import resolve_unverified_ttl_days
-        from accounts.views import auth as auth_view
-
-        self.assertIs(
-            auth_view._resolve_unverified_ttl_days,
-            resolve_unverified_ttl_days,
-        )
 
     def test_newsletter_view_imports_shared_helper(self):
         """The newsletter view module imports the shared helper, not a

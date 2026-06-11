@@ -79,8 +79,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from accounts.utils.bounce import (
-    MAX_BOUNCE_DIAGNOSTIC_LEN,
-    SOFT_BOUNCE_THRESHOLD,
     mark_permanent_bounce,
     record_soft_bounce,
 )
@@ -93,14 +91,7 @@ logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
-# ``SOFT_BOUNCE_THRESHOLD`` and ``MAX_BOUNCE_DIAGNOSTIC_LEN`` are imported
-# from ``accounts.utils.bounce`` -- the shared helper module owns the
-# structured-bounce side-effects (issue #784). They are referenced here
-# to keep the module's public surface backward-compatible for any caller
-# that imported them from this file before the refactor.
 __all__ = [
-    "MAX_BOUNCE_DIAGNOSTIC_LEN",
-    "SOFT_BOUNCE_THRESHOLD",
     "ses_events",
 ]
 

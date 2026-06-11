@@ -82,6 +82,50 @@
 </script>
 {% endif %}
 
+{% if source_type == "self_hosted" and start_seconds %}
+<script>
+  // Issue #899: Initial-load cue for self-hosted recordings.
+  //
+  // When the page is opened with a `?t=` deep link (the "Watch this
+  // section" bar), the <video> must be POSITIONED at the offset but
+  // remain PAUSED — the user presses play and resumes from that moment.
+  // We set currentTime once metadata is available and deliberately do
+  // NOT call video.play(). This is distinct from the .video-timestamp
+  // chapter-click handler below, which intentionally seeks AND plays.
+  (function() {
+    var startSeconds = {{ start_seconds|stringformat:"d" }};
+    var video = document.getElementById('video-player-self-hosted');
+    if (!video) return;
+    var cued = false;
+    function cueToStart() {
+      if (cued) return;
+      // Guard against clobbering the playhead after the user has already
+      // moved it (e.g. clicked a chapter) — only cue while still at 0.
+      if (video.currentTime >= 0.01) {
+        cued = true;
+        return;
+      }
+      video.currentTime = startSeconds;
+      // The seek "took" only if the source is actually seekable to the
+      // offset (S3/CloudFront serve byte ranges, so it is in production).
+      // Mark done once we've moved off 0 so later events don't re-seek.
+      if (video.currentTime >= 0.01) {
+        cued = true;
+      }
+    }
+    // Try as soon as metadata is known, and again as the media becomes
+    // playable — some sources aren't seekable until enough has buffered.
+    // We deliberately do NOT call video.play(): the player stays paused
+    // and the user presses play to resume from the cued offset.
+    if (video.readyState >= 1) {
+      cueToStart();
+    }
+    video.addEventListener('loadedmetadata', cueToStart);
+    video.addEventListener('canplay', cueToStart);
+  })();
+</script>
+{% endif %}
+
 <script>
   // Timestamp click handlers
   document.querySelectorAll('.video-timestamp').forEach(function(btn) {

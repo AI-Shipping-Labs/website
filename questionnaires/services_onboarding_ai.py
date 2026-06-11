@@ -184,6 +184,14 @@ def finalize_conversation(conversation, turn_result):
     conversation.save(update_fields=['persona_signal', 'updated_at'])
 
     response.mark_submitted()
+    # Notify staff exactly like the #802 form path (issue #882). Imported
+    # here (not at module top) to avoid a questionnaires -> crm -> plans
+    # import cycle at app-load time; the notifier is best-effort and never
+    # breaks the submission.
+    from crm.services.onboarding_notify import (  # noqa: PLC0415
+        notify_staff_onboarding_submitted,
+    )
+    notify_staff_onboarding_submitted(response.respondent)
     return response
 
 

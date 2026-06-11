@@ -17,6 +17,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from crm.services.onboarding_notify import notify_staff_onboarding_submitted
 from questionnaires.models import OnboardingConversation, Persona, Response
 from questionnaires.onboarding import (
     ai_onboarding_available,
@@ -291,6 +292,7 @@ def onboarding_submit(request, response_id):
         }, status=400)
 
     response.mark_submitted()
+    notify_staff_onboarding_submitted(request.user)
     messages.success(
         request,
         "Thanks — we'll use this to prepare your plan.",

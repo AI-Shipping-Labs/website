@@ -124,7 +124,6 @@ def persona_list(request):
         Persona.objects
         .select_related('default_questionnaire')
         .annotate(
-            plan_count=Count('plans', distinct=True),
             crm_count=Count('crm_records', distinct=True),
         )
         .order_by('order', 'name')

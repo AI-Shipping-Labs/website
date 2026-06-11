@@ -28,7 +28,6 @@
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Persona</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Active</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Default questionnaire</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Plans</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">CRM records</th>
         <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
       </tr>
@@ -64,7 +63,6 @@
           <span class="text-muted-foreground">—</span>
           {% endif %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ persona.plan_count }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ persona.crm_count }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">

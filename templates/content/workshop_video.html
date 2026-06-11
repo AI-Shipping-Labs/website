@@ -2,9 +2,10 @@
 {% load access_tags %}
 {% load seo_tags %}
 {% load video_tags %}
+{% load teaser_tags %}
 
 {% block title %}{{ workshop.title }} — Recording | AI Shipping Labs{% endblock %}
-{% block meta_description %}Workshop recording: {{ workshop.description|truncatechars:140 }}{% endblock %}
+{% block meta_description %}Workshop recording: {{ workshop.description|strip_markdown|truncatechars:140 }}{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ site_url }}/workshops/{{ workshop.url_key }}/video">{% endblock %}
 {% block og_tags %}{% og_tags workshop %}{% endblock %}
 {% block structured_data %}{% structured_data workshop %}{% endblock %}

@@ -820,3 +820,229 @@ class TestScenario10CancelledHiddenFromPublic:
         staff_body = staff_page.locator("body").inner_text()
         assert "Cancelled Occurrence 1" in staff_body
         staff_ctx.close()
+
+
+# ---------------------------------------------------------------------------
+# Issue #854 Part A: irregular schedules — per-occurrence date + time + title
+# ---------------------------------------------------------------------------
+
+
+def _seed_office_hours_series():
+    """Create an 'Office Hours' series with 3 empty-description sessions."""
+    from django.db import connection
+    from django.utils import timezone
+
+    from events.models import Event, EventSeries
+
+    series = EventSeries(
+        name="Office Hours",
+        slug="office-hours",
+        start_time=datetime(2026, 1, 1, 18, 0).time(),
+        timezone="UTC",
+        description="",
+    )
+    series.save()
+    for i in range(1, 4):
+        Event(
+            title=f"Office Hours — Session {i}",
+            slug=f"office-hours-session-{i}",
+            description="",
+            start_datetime=timezone.now() + timedelta(days=7 * i),
+            origin="studio",
+            timezone="UTC",
+            event_series=series,
+            series_position=i,
+        ).save()
+    pk = series.pk
+    connection.close()
+    return pk
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestScenario854IrregularSchedule:
+    def test_add_occurrence_with_custom_time_and_weekday(
+        self, django_server, browser
+    ):
+        from events.models import EventSeries
+
+        _reset_event_state()
+        _create_staff_user("staff-eg854a@test.com")
+        series_pk = _seed_office_hours_series()
+
+        ctx = _auth_context(browser, "staff-eg854a@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/event-series/{series_pk}/",
+            wait_until="domcontentloaded",
+        )
+
+        # First irregular occurrence: two weeks out, 20:00.
+        d1 = date.today() + timedelta(days=14)
+        page.fill('input[name="start_date"]', d1.strftime("%d/%m/%Y"))
+        page.fill('[data-testid="dtp-add-time"]', "20:00")
+        page.select_option('[data-testid="dtp-add-tz"]', "UTC")
+        page.locator('[data-testid="add-occurrence-submit"]').click()
+        page.wait_for_url(re.compile(rf".*/studio/event-series/{series_pk}/$"))
+
+        series = EventSeries.objects.get(pk=series_pk)
+        occ1 = series.events.order_by("-series_position").first()
+        assert occ1.series_position == 4
+        # 20:00, not the series default 18:00.
+        assert occ1.start_datetime.hour == 20
+
+        # Second irregular occurrence on a different day/time: 09:30.
+        d2 = date.today() + timedelta(days=20)
+        page.fill('input[name="start_date"]', d2.strftime("%d/%m/%Y"))
+        page.fill('[data-testid="dtp-add-time"]', "09:30")
+        page.select_option('[data-testid="dtp-add-tz"]', "UTC")
+        page.locator('[data-testid="add-occurrence-submit"]').click()
+        page.wait_for_url(re.compile(rf".*/studio/event-series/{series_pk}/$"))
+
+        series = EventSeries.objects.get(pk=series_pk)
+        occ2 = series.events.order_by("-series_position").first()
+        assert occ2.series_position == 5
+        assert occ2.start_datetime.hour == 9
+        assert occ2.start_datetime.minute == 30
+
+        # Both irregular occurrences are listed (5 total rows now).
+        rows = page.locator('[data-testid="event-series-member-row"]')
+        assert rows.count() == 5
+
+        ctx.close()
+
+    def test_custom_title_drives_slug(self, django_server, browser):
+        from events.models import EventSeries
+
+        _reset_event_state()
+        _create_staff_user("staff-eg854b@test.com")
+        series_pk = _seed_office_hours_series()
+
+        ctx = _auth_context(browser, "staff-eg854b@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/event-series/{series_pk}/",
+            wait_until="domcontentloaded",
+        )
+
+        d1 = date.today() + timedelta(days=14)
+        page.fill('[data-testid="add-occurrence-title"]', "Special Guest AMA")
+        page.fill('input[name="start_date"]', d1.strftime("%d/%m/%Y"))
+        page.select_option('[data-testid="dtp-add-tz"]', "UTC")
+        page.locator('[data-testid="add-occurrence-submit"]').click()
+        page.wait_for_url(re.compile(rf".*/studio/event-series/{series_pk}/$"))
+
+        # The new row shows the custom title, not "— Session N".
+        assert page.get_by_text("Special Guest AMA").first.is_visible()
+
+        series = EventSeries.objects.get(pk=series_pk)
+        new_event = series.events.order_by("-series_position").first()
+        assert new_event.title == "Special Guest AMA"
+        assert new_event.slug == "special-guest-ama"
+
+        ctx.close()
+
+
+# ---------------------------------------------------------------------------
+# Issue #854 Part B: opt-in parent->child propagation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestScenario854Propagation:
+    def test_propagate_description_to_children(self, django_server, browser):
+        from events.models import EventSeries
+
+        _reset_event_state()
+        _create_staff_user("staff-eg854c@test.com")
+        series_pk = _seed_office_hours_series()
+
+        ctx = _auth_context(browser, "staff-eg854c@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/event-series/{series_pk}/",
+            wait_until="domcontentloaded",
+        )
+
+        page.fill('textarea[name="description"]', "Bring your questions.")
+        page.check('[data-testid="event-series-propagate"]')
+        page.locator('[data-testid="event-series-metadata-save"]').click()
+        page.wait_for_url(re.compile(rf".*/studio/event-series/{series_pk}/$"))
+
+        # Success message reports the count.
+        msg = page.locator('[data-testid="messages-region"]')
+        assert "Updated 3 events" in msg.inner_text()
+
+        series = EventSeries.objects.get(pk=series_pk)
+        for child in series.events.all():
+            assert child.description == "Bring your questions."
+
+        ctx.close()
+
+    def test_no_propagate_preserves_manual_child_edits(
+        self, django_server, browser
+    ):
+        from django.db import connection
+
+        from events.models import Event, EventSeries
+
+        _reset_event_state()
+        _create_staff_user("staff-eg854d@test.com")
+        series_pk = _seed_office_hours_series()
+        # Hand-edit one child's description.
+        child = Event.objects.filter(
+            event_series_id=series_pk, series_position=1,
+        ).first()
+        child_pk = child.pk
+        child.description = "Custom note"
+        child.save()
+        connection.close()
+
+        ctx = _auth_context(browser, "staff-eg854d@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/event-series/{series_pk}/",
+            wait_until="domcontentloaded",
+        )
+
+        page.fill('textarea[name="description"]', "New series blurb.")
+        # Leave the propagate checkbox UNCHECKED.
+        page.locator('[data-testid="event-series-metadata-save"]').click()
+        page.wait_for_url(re.compile(rf".*/studio/event-series/{series_pk}/$"))
+
+        series = EventSeries.objects.get(pk=series_pk)
+        assert series.description == "New series blurb."
+        # The hand-edited child survived.
+        child = Event.objects.get(pk=child_pk)
+        assert child.description == "Custom note"
+
+        ctx.close()
+
+    def test_propagate_slug_rename_to_children(self, django_server, browser):
+        from events.models import EventSeries
+
+        _reset_event_state()
+        _create_staff_user("staff-eg854e@test.com")
+        series_pk = _seed_office_hours_series()
+
+        ctx = _auth_context(browser, "staff-eg854e@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/event-series/{series_pk}/",
+            wait_until="domcontentloaded",
+        )
+
+        page.fill('input[name="slug"]', "founder-office-hours")
+        page.check('[data-testid="event-series-propagate"]')
+        page.locator('[data-testid="event-series-metadata-save"]').click()
+        page.wait_for_url(re.compile(rf".*/studio/event-series/{series_pk}/$"))
+
+        msg = page.locator('[data-testid="messages-region"]')
+        assert "Updated 3 events" in msg.inner_text()
+
+        series = EventSeries.objects.get(pk=series_pk)
+        for child in series.events.all():
+            assert child.slug.startswith("founder-office-hours-session-")
+
+        ctx.close()

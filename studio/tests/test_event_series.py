@@ -251,6 +251,191 @@ class StudioEventSeriesAddOccurrenceTest(StaffMixin, TestCase):
         self.assertEqual(new_event.origin, 'studio')
         self.assertEqual(new_event.event_series_id, self.series.pk)
 
+    def test_add_occurrence_blank_time_defaults_to_series_start_time(self):
+        # Series start_time is 18:00 in UTC (no series tz -> 'UTC').
+        start = (date.today() + timedelta(days=30)).strftime('%d/%m/%Y')
+        self.client.post(
+            f'/studio/event-series/{self.series.pk}/add-occurrence',
+            {'start_date': start, 'duration_hours': '1', 'timezone': 'UTC'},
+        )
+        new_event = self.series.events.order_by('-series_position').first()
+        self.assertEqual(new_event.start_datetime.hour, 18)
+        self.assertEqual(new_event.start_datetime.minute, 0)
+
+    def test_add_occurrence_custom_time_stored_as_utc(self):
+        # 20:00 in UTC must persist as 20:00 UTC, not the series 18:00.
+        start = (date.today() + timedelta(days=30)).strftime('%d/%m/%Y')
+        self.client.post(
+            f'/studio/event-series/{self.series.pk}/add-occurrence',
+            {
+                'start_date': start,
+                'start_time': '20:00',
+                'duration_hours': '1',
+                'timezone': 'UTC',
+            },
+        )
+        new_event = self.series.events.order_by('-series_position').first()
+        self.assertEqual(new_event.start_datetime.hour, 20)
+        self.assertEqual(new_event.start_datetime.minute, 0)
+
+    def test_add_occurrence_custom_time_localized_in_chosen_tz(self):
+        # 20:00 Europe/Berlin (UTC+2 in summer) localizes to 18:00 UTC.
+        start = '15/07/2026'  # mid-summer, CEST = UTC+2
+        self.client.post(
+            f'/studio/event-series/{self.series.pk}/add-occurrence',
+            {
+                'start_date': start,
+                'start_time': '20:00',
+                'duration_hours': '1',
+                'timezone': 'Europe/Berlin',
+            },
+        )
+        new_event = self.series.events.order_by('-series_position').first()
+        self.assertEqual(new_event.start_datetime.hour, 18)
+
+    def test_add_occurrence_custom_title_drives_title_and_slug(self):
+        start = (date.today() + timedelta(days=30)).strftime('%d/%m/%Y')
+        self.client.post(
+            f'/studio/event-series/{self.series.pk}/add-occurrence',
+            {
+                'start_date': start,
+                'title': 'Special Guest AMA',
+                'duration_hours': '1',
+                'timezone': 'UTC',
+            },
+        )
+        new_event = self.series.events.order_by('-series_position').first()
+        self.assertEqual(new_event.title, 'Special Guest AMA')
+        self.assertEqual(new_event.slug, 'special-guest-ama')
+
+    def test_add_occurrence_blank_title_falls_back_to_default(self):
+        start = (date.today() + timedelta(days=30)).strftime('%d/%m/%Y')
+        self.client.post(
+            f'/studio/event-series/{self.series.pk}/add-occurrence',
+            {'start_date': start, 'duration_hours': '1', 'timezone': 'UTC'},
+        )
+        new_event = self.series.events.order_by('-series_position').first()
+        self.assertEqual(new_event.title, f'{self.series.name} — Session 4')
+        self.assertEqual(new_event.slug, 'add-series-session-4')
+
+    def test_add_occurrence_invalid_time_creates_no_row(self):
+        start = (date.today() + timedelta(days=30)).strftime('%d/%m/%Y')
+        response = self.client.post(
+            f'/studio/event-series/{self.series.pk}/add-occurrence',
+            {'start_date': start, 'start_time': 'not-a-time'},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'Start time must be', status_code=400)
+        # No partial row written.
+        self.assertEqual(self.series.events.count(), 3)
+
+
+class StudioEventSeriesPropagateTest(StaffMixin, TestCase):
+    """Issue #854 Part B: opt-in parent->child slug + description propagation."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.series = EventSeries.objects.create(
+            name='Office Hours', slug='office-hours', start_time=time(18, 0),
+            description='Original series description.',
+        )
+        for i in range(1, 4):
+            Event.objects.create(
+                title=f'Office Hours — Session {i}',
+                slug=f'office-hours-session-{i}',
+                description='',
+                start_datetime=timezone.now() + timedelta(days=7 * i),
+                event_series=cls.series, series_position=i, origin='studio',
+            )
+
+    def test_unchecked_does_not_touch_children(self):
+        child = self.series.events.get(series_position=1)
+        child.description = 'Custom note'
+        child.save()
+        original_slug = child.slug
+
+        self.client.post(
+            f'/studio/event-series/{self.series.pk}/',
+            {
+                'name': 'Office Hours',
+                'slug': 'office-hours',
+                'description': 'Updated series description.',
+                # propagate intentionally absent (unchecked)
+            },
+        )
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.description, 'Updated series description.')
+        child.refresh_from_db()
+        self.assertEqual(child.description, 'Custom note')
+        self.assertEqual(child.slug, original_slug)
+
+    def test_checked_propagates_description_and_renders_html(self):
+        self.client.post(
+            f'/studio/event-series/{self.series.pk}/',
+            {
+                'name': 'Office Hours',
+                'slug': 'office-hours',
+                'description': 'Bring your questions.',
+                'propagate': 'on',
+            },
+        )
+        for child in self.series.events.all():
+            self.assertEqual(child.description, 'Bring your questions.')
+            self.assertIn('Bring your questions.', child.description_html)
+
+    def test_checked_regenerates_child_slugs_from_new_series_slug(self):
+        self.client.post(
+            f'/studio/event-series/{self.series.pk}/',
+            {
+                'name': 'Office Hours',
+                'slug': 'founder-office-hours',
+                'description': 'Original series description.',
+                'propagate': 'on',
+            },
+        )
+        for i in range(1, 4):
+            child = self.series.events.get(series_position=i)
+            self.assertEqual(child.slug, f'founder-office-hours-session-{i}')
+
+    def test_propagate_success_message_reports_count(self):
+        response = self.client.post(
+            f'/studio/event-series/{self.series.pk}/',
+            {
+                'name': 'Office Hours',
+                'slug': 'office-hours',
+                'description': 'Bring your questions.',
+                'propagate': 'on',
+            },
+            follow=True,
+        )
+        self.assertContains(response, 'Updated 3 events')
+
+    def test_propagation_rolls_back_on_external_slug_collision(self):
+        # An unrelated standalone event already owns the slug a propagated
+        # child would take. Propagation must fail atomically.
+        Event.objects.create(
+            title='Unrelated', slug='founder-office-hours-session-1',
+            start_datetime=timezone.now(), origin='studio',
+        )
+        response = self.client.post(
+            f'/studio/event-series/{self.series.pk}/',
+            {
+                'name': 'Office Hours',
+                'slug': 'founder-office-hours',
+                'description': 'Original series description.',
+                'propagate': 'on',
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        # Series slug unchanged.
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.slug, 'office-hours')
+        # No child slug changed.
+        for i in range(1, 4):
+            child = self.series.events.get(series_position=i)
+            self.assertEqual(child.slug, f'office-hours-session-{i}')
+
 
 class StudioEventSeriesDeleteTest(StaffMixin, TestCase):
     """Deleting the series preserves the events and unlinks them."""

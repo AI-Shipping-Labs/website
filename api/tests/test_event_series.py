@@ -419,6 +419,39 @@ class EventSeriesBulkOccurrencesTest(EventSeriesApiTestBase):
             before + 3,
         )
 
+    def test_bulk_irregular_dates_create_three_positioned_occurrences(self):
+        # Issue #854 Part C regression: an arbitrary irregular batch (no
+        # fixed weekly cadence — different gaps and weekdays) produces three
+        # occurrences at the next sequential positions n, n+1, n+2. Existing
+        # max position is 2, so the new ones are 3, 4, 5.
+        d1 = self.start + timedelta(days=40)  # arbitrary
+        d2 = self.start + timedelta(days=43)  # 3-day gap, different weekday
+        d3 = self.start + timedelta(days=58)  # 15-day gap
+        response = self._post(
+            f"/api/event-series/{self.series.pk}/occurrences/bulk",
+            {
+                "occurrences": [
+                    {"start_datetime": d1.isoformat()},
+                    {"start_datetime": d2.isoformat()},
+                    {"start_datetime": d3.isoformat()},
+                ],
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["created"], 3)
+        created = list(
+            Event.objects.filter(id__in=body["occurrence_ids"])
+            .order_by("series_position"),
+        )
+        self.assertEqual(
+            [e.series_position for e in created], [3, 4, 5],
+        )
+        # The irregular start datetimes survive unchanged (sorted by position).
+        self.assertEqual(
+            [e.start_datetime for e in created], [d1, d2, d3],
+        )
+
     def test_bulk_atomic_rollback_on_per_row_error(self):
         before = Event.objects.filter(event_series=self.series).count()
         good_start = self.start + timedelta(days=60)

@@ -14,6 +14,13 @@ Source-of-truth contract:
   on the Studio path (#670); cancellation emails are a future issue. A
   ``notify=true`` query flag can be wired up later without breaking the
   current contract.
+- Issue #854: irregular schedules are fully supported here — the
+  bulk-occurrences endpoint accepts an arbitrary list of
+  ``start_datetime`` values with no fixed cadence and per-row
+  ``title``/``slug`` overrides. Parent->child slug/description
+  propagation (the "Propagate the changes to the events" checkbox) is a
+  Studio-only convenience in v1 and is intentionally NOT exposed via the
+  API; PATCH a series here only mutates the ``EventSeries`` row.
 """
 
 import json as _json

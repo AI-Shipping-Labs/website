@@ -100,6 +100,18 @@
         <textarea id="meta-description" name="description" rows="4"
                   class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono">{{ series.description }}</textarea>
       </div>
+      {# Issue #854 Part B: opt-in parent->child propagation. Default unchecked. #}
+      <div class="flex items-start gap-2 pt-1">
+        <input id="meta-propagate" type="checkbox" name="propagate"
+               class="mt-0.5 h-4 w-4 rounded border-border bg-secondary text-accent focus:ring-accent"
+               data-testid="event-series-propagate">
+        <label for="meta-propagate" class="text-xs text-foreground">
+          Propagate the changes to the events
+          <span class="block text-muted-foreground" data-testid="event-series-propagate-help">
+            Overwrites slug and description on every event in this series.
+          </span>
+        </label>
+      </div>
     </form>
 
     <div class="bg-card border border-border rounded-lg p-4 flex items-start gap-3" data-testid="event-series-delete-panel">
@@ -160,8 +172,15 @@
           data-testid="add-occurrence-form">
       {% csrf_token %}
       <h2 class="text-sm font-medium text-foreground">Add another occurrence</h2>
-      <p class="text-xs text-muted-foreground">Creates one more event in this series with the next available position. Inherits the series start time ({{ series.start_time|time:"H:i" }}).</p>
-      {% include "studio/_partials/datetime_picker.html" with instance_id="add" date_name="start_date" duration_name="duration_hours" tz_name="timezone" date_value="" duration_value="1" tz_value=timezone_value tz_label=timezone_label tz_options=timezone_options show_time=False date_label="Start date" %}
+      <p class="text-xs text-muted-foreground">Creates one more event in this series with the next available position. The time defaults to the series start time ({{ series.start_time|time:"H:i" }}) but you can set a different date and time per occurrence — useful for irregular schedules.</p>
+      <div>
+        <label class="block text-xs font-medium text-foreground mb-1" for="add-title">Title (optional)</label>
+        <input id="add-title" type="text" name="title" value="" placeholder="{{ series.name }} — Session N"
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+               data-testid="add-occurrence-title">
+        <p class="text-xs text-muted-foreground mt-1">Leave blank to auto-name this occurrence. A custom title also drives the event slug.</p>
+      </div>
+      {% include "studio/_partials/datetime_picker.html" with instance_id="add" date_name="start_date" time_name="start_time" duration_name="duration_hours" tz_name="timezone" date_value="" time_value=series.start_time|time:"H:i" duration_value="1" tz_value=timezone_value tz_label=timezone_label tz_options=timezone_options show_time=True date_label="Start date" %}
       <div class="mt-3">
         <button type="submit"
                 class="inline-flex items-center justify-center rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"

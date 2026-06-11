@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.contrib import messages
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -281,26 +281,160 @@ def event_series_create(request):
     })
 
 
+def _propagate_series_to_children(series):
+    """Push the series slug + description down to every child event.
+
+    Issue #854 Part B. Called only when the staff member ticks the
+    "Propagate the changes to the events" checkbox — it is the explicit
+    "I accept overwrites" signal. With the box UNCHECKED this is never
+    called, so manual per-event slug/description edits survive.
+
+    When checked, EVERY linked child is overwritten regardless of whether
+    its slug/description was hand-edited:
+
+    - description: set to the series ``description``; ``Event.save()``
+      re-renders ``description_html``.
+    - slug: regenerated from the new series slug, preserving the
+      occurrence's ``series_position``. Base is
+      ``"{series.slug}-session-{series_position}"`` (or
+      ``"{series.slug}-session"`` when ``series_position`` is null),
+      de-duplicated via ``_dedup_sibling_slug`` against this series' own
+      children only. A collision with an UNRELATED event (one not linked
+      to this series) is NOT dodged — it surfaces as an ``IntegrityError``
+      at ``save()`` and rolls the whole save back (the caller wraps this
+      in ``transaction.atomic``).
+
+    De-dup rule: sibling occurrences within the same series get a numeric
+    suffix to stay unique relative to each other (the canonical
+    ``-session-{n}`` scheme already keeps them distinct, but a null
+    ``series_position`` collapses several children onto the same base).
+    A generated slug that collides with an UNRELATED event (one not
+    linked to this series) is treated as a hard failure: ``save()`` hits
+    the unique constraint and raises ``IntegrityError``, which the caller
+    catches to roll the whole propagation back. We do NOT silently mutate
+    an organizer's chosen slug to dodge an external collision — staff see
+    the error and pick a different series slug.
+
+    Returns the count of child events updated.
+    """
+    children = list(
+        series.events.all().order_by('series_position', 'start_datetime'),
+    )
+    child_ids = {child.pk for child in children}
+    used = set()
+    for child in children:
+        if child.series_position:
+            base_slug = f'{series.slug}-session-{child.series_position}'
+        else:
+            base_slug = f'{series.slug}-session'
+        # De-dup only against this series' own children (siblings re-slugged
+        # in the same pass). A collision with an event OUTSIDE the series is
+        # intentionally NOT dodged — it surfaces as an IntegrityError on
+        # save() and rolls the propagation back.
+        new_slug = _dedup_sibling_slug(base_slug, used, child_ids)
+        used.add(new_slug)
+        child.slug = new_slug
+        child.description = series.description
+        child.save()
+    return len(children)
+
+
+def _dedup_sibling_slug(base, used, sibling_ids):
+    """Disambiguate a child slug against its siblings only.
+
+    Issue #854 Part B: numeric suffixes resolve collisions among the
+    series' own children (and against the children's about-to-be-replaced
+    old slugs). Collisions with events outside ``sibling_ids`` are left
+    alone so they raise at ``save()`` for an atomic rollback.
+    """
+    candidate = base
+    suffix = 2
+    while (
+        candidate in used
+        or Event.objects.filter(slug=candidate)
+        .filter(pk__in=sibling_ids)
+        .exists()
+    ):
+        candidate = f'{base}-{suffix}'
+        suffix += 1
+    return candidate
+
+
 @staff_required
 def event_series_detail(request, series_id):
-    """Detail page: lists every member event with edit/delete links."""
+    """Detail page: lists every member event with edit/delete links.
+
+    Issue #854 Part B: the metadata POST can opt in to propagating the
+    series slug + description down to every child event via the
+    "Propagate the changes to the events" checkbox. Default UNCHECKED:
+    only the ``EventSeries`` row is updated and manual child edits
+    survive. CHECKED is an explicit "I accept overwrites" signal — every
+    linked child's slug and description is regenerated regardless of any
+    hand-edits. The series save + child propagation run in a single
+    ``transaction.atomic`` so a slug collision rolls the whole thing back.
+    """
     series = get_object_or_404(EventSeries, pk=series_id)
 
     if request.method == 'POST':
         # Inline edit of series metadata only — schedule fields stay
         # immutable on the series (per-event edits handle drift).
-        series.name = request.POST.get('name', series.name).strip() or series.name
-        new_slug = request.POST.get('slug', series.slug).strip()
-        if new_slug and new_slug != series.slug:
-            if not EventSeries.objects.filter(slug=new_slug).exclude(pk=series.pk).exists():
-                series.slug = new_slug
-        series.description = request.POST.get('description', series.description)
-        series.save()
+        propagate = request.POST.get('propagate') == 'on'
+        try:
+            with transaction.atomic():
+                series.name = (
+                    request.POST.get('name', series.name).strip()
+                    or series.name
+                )
+                new_slug = request.POST.get('slug', series.slug).strip()
+                if new_slug and new_slug != series.slug:
+                    collision = (
+                        EventSeries.objects.filter(slug=new_slug)
+                        .exclude(pk=series.pk).exists()
+                    )
+                    if not collision:
+                        series.slug = new_slug
+                series.description = request.POST.get(
+                    'description', series.description,
+                )
+                series.save()
+                if propagate:
+                    updated = _propagate_series_to_children(series)
+        except IntegrityError:
+            # A child slug collision rolled the whole save back. Re-render
+            # the detail page with an error; the series slug is unchanged.
+            series.refresh_from_db()
+            events = list(series.events.all().order_by(
+                'series_position', 'start_datetime',
+            ))
+            now = dj_timezone.now()
+            for event in events:
+                annotate_derived_status(event, now=now)
+            tz_value = series.timezone or _default_timezone_for(request.user)
+            return render(request, 'studio/event_series/detail.html', {
+                'series': series,
+                'events': events,
+                'add_error': (
+                    'Could not propagate: a generated event slug collided '
+                    'with an existing event. No changes were saved.'
+                ),
+                'timezone_value': tz_value,
+                'timezone_label': get_timezone_label(tz_value) or tz_value,
+                'timezone_options': build_timezone_options(),
+                'tz_autodetect': (
+                    not series.timezone
+                    and _should_autodetect_tz(request.user)
+                ),
+            }, status=400)
         # Issue #896: re-enqueue the auto-banner render when the name drifts.
         # ``enqueue_if_missing`` hashes ``series.name`` and short-circuits
         # when the hash is unchanged, so editing only the description does
         # NOT waste a render.
         enqueue_if_missing('event_series', series.pk)
+        if propagate:
+            messages.success(
+                request,
+                f'Updated {updated} event{"" if updated == 1 else "s"}.',
+            )
         return redirect('studio_event_series_detail', series_id=series.pk)
 
     events = list(series.events.all().order_by(
@@ -343,35 +477,74 @@ def event_series_detail(request, series_id):
     })
 
 
+def _render_add_occurrence_error(request, series, add_error):
+    """Re-render the detail page with a flash-style add error and 400.
+
+    Issue #854 Part A: a partial occurrence is never written — the view
+    falls through here before creating any ``Event`` row.
+    """
+    events = list(
+        series.events.all().order_by('series_position', 'start_datetime'),
+    )
+    now = dj_timezone.now()
+    for event in events:
+        annotate_derived_status(event, now=now)
+    tz_value = series.timezone or _default_timezone_for(request.user)
+    return render(request, 'studio/event_series/detail.html', {
+        'series': series,
+        'events': events,
+        'add_error': add_error,
+        'timezone_value': tz_value,
+        'timezone_label': get_timezone_label(tz_value) or tz_value,
+        'timezone_options': build_timezone_options(),
+        'tz_autodetect': (
+            not series.timezone
+            and _should_autodetect_tz(request.user)
+        ),
+    }, status=400)
+
+
 @staff_required
 @require_POST
 def event_series_add_occurrence(request, series_id):
-    """Append one more event to the series with the next series_position."""
+    """Append one more event to the series with the next series_position.
+
+    Issue #854 Part A: the add form accepts an explicit per-occurrence
+    start time (HH:MM, 24h) and an optional title, so an organizer can
+    schedule an irregular series — each occurrence can land on a
+    different weekday and time of day. The time defaults to the series
+    ``start_time`` but can be overridden per occurrence; a blank title
+    falls back to ``"{series.name} — Session {n}"`` and a provided title
+    drives the slug.
+    """
     series = get_object_or_404(EventSeries, pk=series_id)
     start_date_str = request.POST.get('start_date', '').strip()
+    start_time_str = request.POST.get('start_time', '').strip()
     duration_str = request.POST.get('duration_hours', '').strip() or '1'
+    title_input = request.POST.get('title', '').strip()
 
     try:
         start_date = _parse_date_str(start_date_str)
     except (ValueError, AttributeError):
-        # Re-render the detail page with a flash-style error.
-        events = list(series.events.all().order_by('series_position', 'start_datetime'))
-        now = dj_timezone.now()
-        for event in events:
-            annotate_derived_status(event, now=now)
-        tz_value = series.timezone or _default_timezone_for(request.user)
-        return render(request, 'studio/event_series/detail.html', {
-            'series': series,
-            'events': events,
-            'add_error': 'Start date is required (dd/mm/yyyy).',
-            'timezone_value': tz_value,
-            'timezone_label': get_timezone_label(tz_value) or tz_value,
-            'timezone_options': build_timezone_options(),
-            'tz_autodetect': (
-                not series.timezone
-                and _should_autodetect_tz(request.user)
-            ),
-        }, status=400)
+        return _render_add_occurrence_error(
+            request, series, 'Start date is required (dd/mm/yyyy).',
+        )
+
+    # Issue #854 Part A: per-occurrence start time. Default to the series
+    # start_time when left blank; reject a malformed HH:MM with no row
+    # written.
+    if start_time_str:
+        try:
+            hour, minute = start_time_str.split(':')
+            start_time = datetime(
+                2000, 1, 1, int(hour), int(minute),
+            ).time()
+        except (ValueError, AttributeError):
+            return _render_add_occurrence_error(
+                request, series, 'Start time must be HH:MM (24h).',
+            )
+    else:
+        start_time = series.start_time
 
     try:
         duration_hours = float(duration_str)
@@ -387,7 +560,7 @@ def event_series_add_occurrence(request, series_id):
     )
     next_pos = (max_pos or 0) + 1
 
-    # Issue #665: combine the picked date with the series' start_time in
+    # Issue #665: combine the picked date with the chosen start time in
     # the chosen TZ (defaults to the series' TZ; admin can override per
     # occurrence) and convert to UTC for storage. A tampered TZ value
     # falls back to the series TZ.
@@ -397,15 +570,23 @@ def event_series_add_occurrence(request, series_id):
         else (series.timezone or 'UTC')
     )
     event_start = _localize_to_utc(
-        start_date, series.start_time, occurrence_tz,
+        start_date, start_time, occurrence_tz,
     )
     event_end = event_start + timedelta(hours=duration_hours)
 
-    base_slug = f'{series.slug}-session-{next_pos}'
+    # Issue #854 Part A: an explicit title drives the slug; a blank title
+    # falls back to the default "{series.name} — Session {n}" and the
+    # default slug base.
+    if title_input:
+        event_title = title_input
+        base_slug = slugify(title_input) or f'{series.slug}-session-{next_pos}'
+    else:
+        event_title = f'{series.name} — Session {next_pos}'
+        base_slug = f'{series.slug}-session-{next_pos}'
     event_slug = _generate_unique_slug(base_slug)
 
     new_event = Event.objects.create(
-        title=f'{series.name} — Session {next_pos}',
+        title=event_title,
         slug=event_slug,
         description='',
         kind='standard',

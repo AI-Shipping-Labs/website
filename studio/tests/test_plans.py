@@ -5,7 +5,14 @@ import datetime
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from crm.models import CRMRecord
 from plans.models import InterviewNote, Plan, Sprint, Week
+from questionnaires.models import (
+    Answer,
+    Questionnaire,
+    Response,
+    ResponseQuestion,
+)
 
 User = get_user_model()
 
@@ -62,6 +69,106 @@ class PlanAccessControlTest(TestCase):
         ]:
             response = self.client.get(url)
             self.assertEqual(response.status_code, 403, msg=f'{url} -> {response.status_code}')
+
+
+class PlanCreateMemberProfilePanelTest(TestCase):
+    """The read-only "Member profile" side panel on plan-create (#883).
+
+    The panel appears only when the form is pre-filled for a specific
+    member via ``?user=<pk>``; it surfaces onboarding answers, CRM
+    persona/summary/next-steps, and recent internal notes, and never
+    leaks external notes or mutates anything.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='pw', is_staff=True,
+        )
+        cls.alice = User.objects.create_user(
+            email='alice@test.com', password='pw',
+            first_name='Alice', last_name='A',
+        )
+        cls.bob = User.objects.create_user(
+            email='bob@test.com', password='pw',
+        )
+        cls.sprint = Sprint.objects.create(
+            name='Spring', slug='spring-883',
+            start_date=datetime.date(2026, 5, 1),
+        )
+        # Alice: onboarding + CRM + internal note.
+        q = Questionnaire.objects.get(slug='onboarding-general')
+        resp = Response.objects.create(
+            questionnaire=q, respondent=cls.alice, status='submitted',
+        )
+        rq = ResponseQuestion.objects.create(
+            response=resp, question_type='long_text',
+            prompt='What are your goals?', order=0,
+        )
+        Answer.objects.create(
+            response=resp, question=rq,
+            text_value='Switch into AI engineering',
+        )
+        CRMRecord.objects.create(
+            user=cls.alice, persona='Sam — Technical Professional',
+            summary='Strong engineer', next_steps='Ship a RAG project',
+        )
+        InterviewNote.objects.create(
+            member=cls.alice, visibility='internal',
+            body='Motivated on the call',
+        )
+        InterviewNote.objects.create(
+            member=cls.alice, visibility='external',
+            body='Shareable external note',
+        )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='pw')
+
+    def test_panel_shows_onboarding_persona_and_next_steps(self):
+        response = self.client.get(f'/studio/plans/new?user={self.alice.pk}')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="member-profile-panel"')
+        self.assertContains(response, 'What are your goals?')
+        self.assertContains(response, 'Switch into AI engineering')
+        self.assertContains(response, 'Sam — Technical Professional')
+        self.assertContains(response, 'Ship a RAG project')
+        self.assertContains(response, 'Motivated on the call')
+        # The copy affordance is present when there is something to copy.
+        self.assertContains(response, 'data-testid="member-profile-copy"')
+
+    def test_panel_does_not_leak_external_notes(self):
+        response = self.client.get(f'/studio/plans/new?user={self.alice.pk}')
+        self.assertNotContains(response, 'Shareable external note')
+
+    def test_no_panel_without_user_param(self):
+        response = self.client.get('/studio/plans/new')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-testid="member-profile-panel"')
+
+    def test_panel_empty_states_for_member_without_onboarding_or_crm(self):
+        response = self.client.get(f'/studio/plans/new?user={self.bob.pk}')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="member-profile-panel"')
+        self.assertContains(
+            response, 'data-testid="member-profile-onboarding-empty"',
+        )
+        self.assertContains(
+            response, 'data-testid="member-profile-crm-empty"',
+        )
+        self.assertContains(
+            response, 'data-testid="member-profile-notes-empty"',
+        )
+
+    def test_create_flow_still_works_with_panel(self):
+        response = self.client.post('/studio/plans/new', {
+            'member': str(self.alice.pk),
+            'sprint': str(self.sprint.pk),
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            Plan.objects.filter(member=self.alice, sprint=self.sprint).exists(),
+        )
 
 
 class PlanListFilterTest(TestCase):

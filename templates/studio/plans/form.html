@@ -25,7 +25,8 @@
 </div>
 {% endif %}
 
-<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+<div class="flex flex-col lg:flex-row gap-6 lg:items-start">
+<div class="bg-card border border-border rounded-lg p-6 w-full max-w-2xl">
   {# ``form_action_url`` lets callers post to either ``studio_plan_create`` #}
   {# or a sprint-scoped route (``studio_sprint_add_member``) without #}
   {# branching the <form action> attribute itself. Default keeps the #}
@@ -91,6 +92,41 @@
   </form>
 </div>
 
+{# Read-only "Member profile" side panel (issue #883). Only rendered when #}
+{# the form is pre-filled for a specific member (``?user=<pk>``). #}
+{% if member_profile %}
+{% include "studio/plans/_member_profile_panel.html" %}
+{% endif %}
+</div>
+
 {% if sprint %}{% url 'studio_sprint_detail' sprint_id=sprint.pk as plan_cancel_url %}{% else %}{% url 'studio_plan_list' as plan_cancel_url %}{% endif %}
 {% include "studio/includes/sticky_action_bar.html" with form_id="plan-edit-form" title="Plan changes" subtitle="Save remains available while you review the form." can_save=True primary_label=primary_label cancel_url=plan_cancel_url %}
+
+{% if member_profile.copy_text %}
+<script>
+  // Copy-to-clipboard for the "Copy profile" button (issue #883). Mirrors
+  // the SES-event copy hook; kept inline since there's no shared studio JS
+  // bundle. Copies the hidden textarea's profile text so staff can paste it
+  // into an LLM prompt or the plan body.
+  (function () {
+    var btn = document.querySelector('[data-testid="member-profile-copy"]');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var target = document.getElementById(btn.getAttribute('data-copy-target'));
+      if (!target) return;
+      var text = target.value;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text);
+      } else {
+        target.removeAttribute('aria-hidden');
+        target.select();
+        try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+      }
+      var original = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(function () { btn.textContent = original; }, 1200);
+    });
+  })();
+</script>
+{% endif %}
 {% endblock %}

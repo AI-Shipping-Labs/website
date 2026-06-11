@@ -31,6 +31,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from crm.services.member_profile import build_member_profile_context
 from crm.services.slack_updates import threads_for_plan
 from notifications.services.notification_service import NotificationService
 from plans.models import (
@@ -169,10 +170,20 @@ def plan_create(request):
         # ids silently fall through to an empty form -- never raise.
         prefill_member = ''
         prefill_sprint = ''
+        member_profile = None
         raw_user = (request.GET.get('user') or '').strip()
         raw_sprint = (request.GET.get('sprint') or '').strip()
-        if raw_user.isdigit() and User.objects.filter(pk=int(raw_user)).exists():
-            prefill_member = raw_user
+        if raw_user.isdigit():
+            member = User.objects.filter(pk=int(raw_user)).first()
+            if member is not None:
+                prefill_member = raw_user
+                # Read-only "Member profile" side panel (issue #883): when
+                # the form is pre-filled for a specific member, assemble
+                # their onboarding answers + CRM persona/summary/next-steps
+                # + recent internal notes so staff start from what the
+                # member told us instead of a blank form. Reuses the #871
+                # answer-flattening helper; never mutates anything.
+                member_profile = build_member_profile_context(member)
         if raw_sprint.isdigit() and Sprint.objects.filter(pk=int(raw_sprint)).exists():
             prefill_sprint = raw_sprint
         return render(request, 'studio/plans/form.html', {
@@ -186,6 +197,7 @@ def plan_create(request):
             'user_search_url': user_search_url,
             'picker_extra_query': _picker_extra_query_for(prefill_sprint),
             'prefill_member_display': _picker_prefill_display(prefill_member),
+            'member_profile': member_profile,
             'error': '',
             'primary_label': 'Create plan',
         })

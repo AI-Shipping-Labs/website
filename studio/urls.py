@@ -79,6 +79,7 @@ from studio.views.event_series import (
     event_series_detail,
     event_series_list,
     event_series_notify,
+    event_series_regenerate_banner,
 )
 from studio.views.events import (
     event_create,
@@ -366,6 +367,11 @@ urlpatterns = [
         'event-series/<int:series_id>/announce-slack',
         event_series_announce_slack,
         name='studio_event_series_announce_slack',
+    ),
+    path(
+        'event-series/<int:series_id>/regenerate-banner',
+        event_series_regenerate_banner,
+        name='studio_event_series_regenerate_banner',
     ),
     path(
         'event-series/<int:series_id>/delete',

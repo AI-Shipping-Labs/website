@@ -14,7 +14,7 @@ from django.test import TestCase
 
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import Article, Course, Download, Project, Workshop
-from events.models import Event
+from events.models import Event, EventSeries
 from integrations.models import IntegrationSetting
 from integrations.services.banner_generator import BannerGeneratorError
 from integrations.services.banner_generator.dispatch import (
@@ -29,6 +29,7 @@ from integrations.services.banner_generator.tasks import (
     delete_generated_banner_object,
     render_banner_for_content,
     s3_key_for,
+    template_for,
 )
 
 DISPATCH_PATCH = (
@@ -162,6 +163,21 @@ def _make_workshop(**overrides):
     return Workshop.objects.create(**defaults)
 
 
+def _make_event_series(**overrides):
+    defaults = {
+        'name': 'AI Agents Office Hours',
+        'slug': 'ai-agents-office-hours',
+        'description': 'Weekly office hours for shipping AI agents.',
+        'cadence': 'weekly',
+        'cadence_weeks': 1,
+        'day_of_week': 2,  # Wednesday
+        'start_time': dt.time(18, 0),
+        'timezone': 'Europe/Berlin',
+    }
+    defaults.update(overrides)
+    return EventSeries.objects.create(**defaults)
+
+
 # --------------------------------------------------------------------------
 # enqueue_if_missing
 # --------------------------------------------------------------------------
@@ -286,6 +302,61 @@ class EnqueueIfMissingTest(_BannerGeneratorCacheCleanupMixin, TestCase):
             enqueue_if_missing('event', event.pk), 'event-redraw',
         )
         mock_async.assert_called_once()
+
+    # --- event_series (issue #896): hash keyed on ``name``, not ``title`` ---
+
+    @patch(DISPATCH_PATCH)
+    def test_series_enqueues_when_no_banner(self, mock_async):
+        series = _make_event_series()
+        mock_async.return_value = 'series-task'
+        result = enqueue_if_missing('event_series', series.pk)
+        self.assertEqual(result, 'series-task')
+        args = mock_async.call_args[0]
+        self.assertEqual(args[1], 'event_series')
+        self.assertEqual(args[2], series.pk)
+
+    @patch(DISPATCH_PATCH)
+    def test_series_skips_when_name_hash_matches(self, mock_async):
+        series = _make_event_series()
+        EventSeries.objects.filter(pk=series.pk).update(
+            auto_banner_url='https://cdn.example.com/banners/event_series/x.jpg',
+            auto_banner_title_hash=title_hash(series.name),
+        )
+        self.assertIsNone(enqueue_if_missing('event_series', series.pk))
+        mock_async.assert_not_called()
+
+    @patch(DISPATCH_PATCH)
+    def test_series_enqueues_when_name_hash_drifts(self, mock_async):
+        series = _make_event_series()
+        EventSeries.objects.filter(pk=series.pk).update(
+            auto_banner_url='https://cdn.example.com/banners/event_series/x.jpg',
+            auto_banner_title_hash=title_hash('Old Series Name'),
+        )
+        mock_async.return_value = 'series-redraw'
+        self.assertEqual(
+            enqueue_if_missing('event_series', series.pk), 'series-redraw',
+        )
+        mock_async.assert_called_once()
+
+    @patch(DISPATCH_PATCH)
+    def test_series_description_only_edit_does_not_re_enqueue(self, mock_async):
+        """A description-only edit keeps the name hash, so no re-render.
+
+        The hash short-circuit is keyed on ``name``; editing the
+        description leaves the hash matching and ``enqueue_if_missing``
+        returns ``None``.
+        """
+        series = _make_event_series()
+        EventSeries.objects.filter(pk=series.pk).update(
+            auto_banner_url='https://cdn.example.com/banners/event_series/x.jpg',
+            auto_banner_title_hash=title_hash(series.name),
+        )
+        # Re-load so the persisted hash survives the description-only save.
+        series.refresh_from_db()
+        series.description = 'A completely rewritten description body.'
+        series.save()
+        self.assertIsNone(enqueue_if_missing('event_series', series.pk))
+        mock_async.assert_not_called()
 
 
 class EnqueueForceTest(_BannerGeneratorCacheCleanupMixin, TestCase):
@@ -659,6 +730,62 @@ class BuildPayloadTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         # Did not raise; meta_secondary still resolves a platform fallback.
         self.assertIn('Zoom', payload['meta_secondary'])
 
+    # --- event_series payload (issue #896) ---
+
+    def test_series_payload_seven_base_slots(self):
+        series = _make_event_series(
+            name='AI Agents Office Hours',
+            description='Weekly office hours for shipping AI agents.',
+            day_of_week=2,  # Wednesday
+            start_time=dt.time(18, 0),
+            timezone='Europe/Berlin',
+        )
+        payload = build_payload('event_series', series)
+        self.assertEqual(payload['kind'], 'Event Series')
+        self.assertEqual(payload['kicker'], 'Weekly series')
+        self.assertEqual(payload['title'], 'AI Agents Office Hours')
+        self.assertEqual(
+            payload['subtitle'],
+            'Weekly office hours for shipping AI agents.',
+        )
+        self.assertEqual(
+            payload['meta_primary'], 'Wednesdays · 18:00 Europe/Berlin',
+        )
+        self.assertEqual(payload['meta_secondary'], '')
+        self.assertEqual(payload['footer'], 'aishippinglabs.com/events')
+        # Exactly the seven base OG-card slots (no brand/tag_one).
+        self.assertEqual(
+            set(payload),
+            {
+                'kind', 'kicker', 'title', 'subtitle',
+                'meta_primary', 'meta_secondary', 'footer',
+            },
+        )
+
+    def test_series_payload_title_uses_name_field(self):
+        series = _make_event_series(name='Friday Demos')
+        self.assertEqual(build_payload('event_series', series)['title'], 'Friday Demos')
+
+    def test_series_payload_meta_primary_reflects_day(self):
+        series = _make_event_series(
+            day_of_week=4,  # Friday
+            start_time=dt.time(9, 30),
+            timezone='America/New_York',
+        )
+        self.assertEqual(
+            build_payload('event_series', series)['meta_primary'],
+            'Fridays · 09:30 America/New_York',
+        )
+
+    def test_series_payload_subtitle_truncated_and_stripped(self):
+        series = _make_event_series(
+            description='**Bold** intro. ' + ('word ' * 100),
+        )
+        payload = build_payload('event_series', series)
+        self.assertLessEqual(len(payload['subtitle']), 141)
+        self.assertNotIn('**', payload['subtitle'])
+        self.assertIn('Bold', payload['subtitle'])
+
     def test_subtitle_truncated_at_140_chars(self):
         long_desc = 'word ' * 100  # 500 chars
         article = _make_article(description=long_desc)
@@ -682,6 +809,19 @@ class BuildPayloadTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         article = _make_article(tags=['a', 'b', 'c', 'd', 'e'])
         payload = build_payload('article', article)
         self.assertEqual(payload['meta_secondary'].count(' / '), 2)
+
+
+class TemplateForTest(TestCase):
+    """Per-content-type Lambda template selection (issues #895 / #896)."""
+
+    def test_event_series_uses_event_series_template(self):
+        self.assertEqual(template_for('event_series'), 'asl-event-series')
+
+    def test_event_uses_event_stage_template(self):
+        self.assertEqual(template_for('event'), 'asl-event-stage')
+
+    def test_default_content_type_uses_content_card(self):
+        self.assertEqual(template_for('article'), 'asl-content-card')
 
 
 # --------------------------------------------------------------------------
@@ -803,6 +943,33 @@ class RenderBannerForContentTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         render_banner_for_content('article', article.pk)
         self.assertEqual(
             mock_render.call_args.kwargs['template'], 'asl-content-card',
+        )
+
+    @patch(DELETE_PATCH)
+    @patch(CLIENT_PATCH)
+    def test_series_renders_with_event_series_template(
+        self, mock_render, mock_delete,
+    ):
+        mock_render.return_value = {'ok': True}
+        series = _make_event_series()
+        render_banner_for_content('event_series', series.pk)
+        self.assertEqual(
+            mock_render.call_args.kwargs['template'], 'asl-event-series',
+        )
+
+    @patch(DELETE_PATCH)
+    @patch(CLIENT_PATCH)
+    def test_series_persists_url_and_name_hash(self, mock_render, mock_delete):
+        mock_render.return_value = {'ok': True}
+        series = _make_event_series(name='Persist Series')
+        render_banner_for_content('event_series', series.pk)
+        series.refresh_from_db()
+        self.assertRegex(
+            series.auto_banner_url,
+            r'^https://cdn\.example\.com/banners/event_series/',
+        )
+        self.assertEqual(
+            series.auto_banner_title_hash, title_hash('Persist Series'),
         )
 
     @patch(DELETE_PATCH)

@@ -26,7 +26,15 @@ logger = logging.getLogger(__name__)
 # models are ready.
 SUPPORTED_CONTENT_TYPES = (
     'article', 'course', 'project', 'download', 'workshop', 'event',
+    'event_series',
 )
+
+# Content types whose "title" lives on a differently-named field. The
+# banner pipeline hashes the title to detect drift; ``EventSeries`` stores
+# its title-equivalent in ``name``. Anything not listed here uses ``title``.
+TITLE_ATTR_BY_CONTENT_TYPE = {
+    'event_series': 'name',
+}
 
 RENDER_TASK_PATH = (
     'integrations.services.banner_generator.tasks.render_banner_for_content'
@@ -40,7 +48,7 @@ def _get_model(content_type):
     readiness — same pattern as the github_sync dispatchers.
     """
     from content.models import Article, Course, Download, Project, Workshop
-    from events.models import Event
+    from events.models import Event, EventSeries
 
     mapping = {
         'article': Article,
@@ -49,8 +57,21 @@ def _get_model(content_type):
         'download': Download,
         'workshop': Workshop,
         'event': Event,
+        'event_series': EventSeries,
     }
     return mapping.get(content_type)
+
+
+def title_value(content_type, record):
+    """Return the title-equivalent string for ``record``.
+
+    Most content types expose ``title``; ``EventSeries`` exposes ``name``.
+    Resolves the per-type attribute name from
+    :data:`TITLE_ATTR_BY_CONTENT_TYPE` so the hashing/short-circuit logic
+    stays a single accessor rather than scattered ``getattr`` fallbacks.
+    """
+    attr = TITLE_ATTR_BY_CONTENT_TYPE.get(content_type, 'title')
+    return getattr(record, attr, '') or ''
 
 
 def title_hash(title):
@@ -105,7 +126,7 @@ def enqueue_if_missing(content_type, content_pk):
     if getattr(record, 'cover_image_url', '') or '':
         return None
 
-    current_hash = title_hash(getattr(record, 'title', '') or '')
+    current_hash = title_hash(title_value(content_type, record))
     existing_url = getattr(record, 'auto_banner_url', '') or ''
     existing_hash = getattr(record, 'auto_banner_title_hash', '') or ''
     if existing_url and existing_hash == current_hash:

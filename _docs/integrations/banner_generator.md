@@ -10,7 +10,16 @@ The banner-generator is a separate Lambda (source at
 small templated JSON payload. The platform calls it from the content
 sync pipeline (auto-banner on create / title-change) and from the
 Studio "Regenerate banner" buttons on the article / course / project /
-download / workshop edit pages.
+download / workshop / event / event-series edit pages.
+
+Most content types render with the default `asl-content-card` template.
+Two surfaces use dedicated templates, selected per content type in
+`integrations/services/banner_generator/tasks.TEMPLATE_BY_CONTENT_TYPE`:
+single events use `asl-event-stage` (issue #895) and event series use
+`asl-event-series` (issue #896). The event-series template shares the
+same seven base OG-card field names (`kind` / `kicker` / `title` /
+`subtitle` / `meta_primary` / `meta_secondary` / `footer`) as the
+default card; only the template id differs.
 
 The Lambda writes the rendered JPEG straight into the existing content
 CDN bucket (`AWS_S3_CONTENT_BUCKET`). Each render uses a new cache-busting

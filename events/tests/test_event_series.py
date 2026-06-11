@@ -204,6 +204,60 @@ class PublicEventSeriesViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class PublicEventSeriesBannerTest(TestCase):
+    """Issue #896: the public series page surfaces ``auto_banner_url``."""
+
+    BANNER = 'https://cdn.example.com/banners/event_series/7-abc.jpg'
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.with_banner = EventSeries.objects.create(
+            name='Banner Series', slug='banner-series',
+            start_time=time(18, 0),
+            auto_banner_url=cls.BANNER,
+        )
+        cls.no_banner = EventSeries.objects.create(
+            name='Plain Series', slug='plain-series',
+            start_time=time(18, 0),
+        )
+
+    def test_header_banner_image_rendered_when_set(self):
+        response = self.client.get(f'/events/groups/{self.with_banner.slug}')
+        self.assertContains(response, 'data-testid="series-banner"')
+        self.assertContains(response, self.BANNER)
+
+    def test_no_header_banner_box_when_unset(self):
+        response = self.client.get(f'/events/groups/{self.no_banner.slug}')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-testid="series-banner"')
+
+    def test_og_image_uses_banner_when_set(self):
+        response = self.client.get(f'/events/groups/{self.with_banner.slug}')
+        self.assertContains(
+            response,
+            f'<meta property="og:image" content="{self.BANNER}">',
+            html=False,
+        )
+        self.assertContains(
+            response,
+            f'<meta name="twitter:image" content="{self.BANNER}">',
+            html=False,
+        )
+
+    def test_og_title_reflects_series_name(self):
+        response = self.client.get(f'/events/groups/{self.with_banner.slug}')
+        self.assertContains(
+            response,
+            '<meta property="og:title" content="Banner Series">',
+            html=False,
+        )
+
+    def test_og_image_falls_back_to_site_default_when_unset(self):
+        response = self.client.get(f'/events/groups/{self.no_banner.slug}')
+        self.assertContains(response, 'ai-shipping-labs.jpg')
+        self.assertNotContains(response, '/banners/event_series/')
+
+
 class PublicEventsListSeriesLinkTest(TestCase):
     """Public events listing surfaces a series link for series-linked events."""
 

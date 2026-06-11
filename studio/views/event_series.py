@@ -21,9 +21,11 @@ import logging
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from django.contrib import messages
 from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone as dj_timezone
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
@@ -37,6 +39,13 @@ from events.models import Event, EventSeries
 from events.services.series_registration import (
     enroll_series_registrants_in_event,
 )
+from integrations.services.banner_generator import (
+    is_enabled as banner_generator_is_enabled,
+)
+from integrations.services.banner_generator.dispatch import (
+    enqueue_force,
+    enqueue_if_missing,
+)
 from notifications.models import Notification
 from notifications.services import NotificationService
 from notifications.services.notification_service import series_notification_title
@@ -44,6 +53,7 @@ from notifications.services.slack_announcements import (
     post_series_slack_announcement,
 )
 from studio.decorators import staff_required
+from studio.services.banner_status import get_last_banner_task
 from studio.views.events import (
     _default_timezone_for,
     _should_autodetect_tz,
@@ -248,6 +258,9 @@ def event_series_create(request):
                     # no-op here — wired for consistency with the other
                     # occurrence-creation paths.
                     enroll_series_registrants_in_event(occurrence)
+            # Issue #896: enqueue an auto-banner render for the new series
+            # (fire-and-forget; no-ops when banner-generator is disabled).
+            enqueue_if_missing('event_series', series.pk)
             return redirect('studio_event_series_detail', series_id=series.pk)
 
     tz_value = form_values['timezone'] or default_tz
@@ -283,6 +296,11 @@ def event_series_detail(request, series_id):
                 series.slug = new_slug
         series.description = request.POST.get('description', series.description)
         series.save()
+        # Issue #896: re-enqueue the auto-banner render when the name drifts.
+        # ``enqueue_if_missing`` hashes ``series.name`` and short-circuits
+        # when the hash is unchanged, so editing only the description does
+        # NOT waste a render.
+        enqueue_if_missing('event_series', series.pk)
         return redirect('studio_event_series_detail', series_id=series.pk)
 
     events = list(series.events.all().order_by(
@@ -297,6 +315,8 @@ def event_series_detail(request, series_id):
     # it in the picker so the admin sees the active zone next to the
     # date input.
     tz_value = series.timezone or _default_timezone_for(request.user)
+    # Issue #896: auto-banner regenerate panel (parity with events/articles).
+    banner_enabled = banner_generator_is_enabled()
     return render(request, 'studio/event_series/detail.html', {
         'series': series,
         'events': events,
@@ -309,6 +329,16 @@ def event_series_detail(request, series_id):
         'tz_autodetect': (
             not series.timezone
             and _should_autodetect_tz(request.user)
+        ),
+        # Issue #896: auto-banner panel context.
+        'banner_url': series.auto_banner_url,
+        'banner_regenerate_url': reverse(
+            'studio_event_series_regenerate_banner', kwargs={'series_id': series.pk},
+        ),
+        'banner_generator_enabled': banner_enabled,
+        'banner_last_task': (
+            get_last_banner_task('event_series', series.pk)
+            if banner_enabled else None
         ),
     })
 
@@ -469,6 +499,33 @@ def event_series_announce_slack(request, series_id):
         {'error': 'Slack not configured or post failed'},
         status=500,
     )
+
+
+@staff_required
+@require_POST
+def event_series_regenerate_banner(request, series_id):
+    """Force-enqueue an auto-banner render for a series (issue #896).
+
+    Mirrors the content/event "Regenerate banner" UX: ``enqueue_force``
+    bypasses the name-hash short-circuit (the operator clicked on
+    purpose), flashes the result, and redirects back to the series
+    detail. No-ops with a warning when banner-generator is disabled.
+    """
+    series = get_object_or_404(EventSeries, pk=series_id)
+    if not banner_generator_is_enabled():
+        messages.warning(
+            request,
+            'Banner generator is not configured. Add the function URL and '
+            'bearer token under Studio > Settings > Content Tools first.',
+        )
+    else:
+        enqueue_force('event_series', series.pk)
+        messages.success(
+            request,
+            'Banner regeneration queued. Refresh in a few seconds to see '
+            'the new image.',
+        )
+    return redirect('studio_event_series_detail', series_id=series.pk)
 
 
 @staff_required

@@ -106,19 +106,38 @@ Where to find it:
 
 Prereqs:
 - A Slack app installed to your workspace.
-- Bot token scopes that match what the platform calls. At minimum:
-  `chat:write`, `chat:write.public`, `channels:read`, `channels:history`,
-  `users:read`, `users:read.email`, `reactions:read`, `groups:read`.
-  Missing scopes manifest as `missing_scope` errors at the Slack API.
+- Bot token scopes that match what the platform calls. Required:
+  - `chat:write` — post announcements and staff heads-up messages.
+  - `chat:write.public` — post to public channels without an explicit invite.
+  - `channels:read` — list and resolve public channel IDs.
+  - `channels:history` — read message history in PUBLIC channels. REQUIRED
+    for the `#plan-sprints` ingestion (issues #889/#890/#891), which calls
+    `conversations.history` and `conversations.replies`.
+  - `groups:read` — list and resolve PRIVATE channel IDs.
+  - `groups:history` — read message history in PRIVATE channels. REQUIRED
+    instead of `channels:history` IF `#plan-sprints` is a private channel.
+  - `users:read` — resolve Slack user IDs to members.
+  - `users:read.email` — match Slack users to platform accounts by email.
+  - `reactions:read` — capture community reaction signals.
+
+  Missing scopes manifest as `missing_scope` errors at the Slack API. In
+  particular, the currently-granted set (`users:read`, `users:read.email`,
+  `channels:read`, `chat:write`) is MISSING `channels:history` /
+  `groups:history`, so the daily `#plan-sprints` ingest cannot read
+  messages until that scope is added.
 - The bot user must be invited to every channel listed in
   `SLACK_*_COMMUNITY_CHANNEL_IDS` and `SLACK_*_ANNOUNCEMENTS_CHANNEL_ID`,
-  or `chat.postMessage` returns `not_in_channel`.
+  or `chat.postMessage` returns `not_in_channel`. The bot must likewise be
+  invited to `#plan-sprints` (see `SLACK_PLAN_SPRINTS_CHANNEL_ID` below) or
+  the history reads return `not_in_channel`.
 
 Rotation: Safe to rotate, but requires a re-install in some cases.
 
 1. In the Slack app config, click "OAuth & Permissions" > "Reinstall to
    Workspace" if you've changed scopes; otherwise click "Rotate Token"
-   under the bot token row. Slack shows the new `xoxb-...` once.
+   under the bot token row. Slack shows the new `xoxb-...` once. After any
+   scope change a reinstall is mandatory; if the reinstall issues a new
+   token, the `SLACK_BOT_TOKEN` update in the next step is also required.
 2. Update this setting via Studio (Integration settings > Slack >
    `SLACK_BOT_TOKEN`) or via `POST /api/integrations/settings`.
 3. Window of impact: until the new value is saved, all bot API calls
@@ -265,6 +284,77 @@ Rotation: Same as `SLACK_ANNOUNCEMENTS_CHANNEL_ID`.
 
 Test vs live: This key is the test counterpart to
 `SLACK_ANNOUNCEMENTS_CHANNEL_ID`.
+
+## SLACK_PLAN_SPRINTS_CHANNEL_ID
+
+Purpose: Production channel ID of `#plan-sprints` — the channel where
+members post their sprint progress updates. Read by
+`community/slack_config.py:get_slack_plan_sprints_channel_id` and consumed
+by the daily ingest `crm/tasks/ingest_plan_sprints.py` (issues
+#889/#890/#891). The ingest calls `conversations.history` to enumerate
+threads and `conversations.replies` to pull each thread's replies, then
+matches authors to members and auto-applies parsed progress to their
+active-sprint plan. Used only when `SLACK_ENVIRONMENT=production`.
+
+Without it (blank): The ingest logs "no #plan-sprints channel configured"
+and returns without creating any rows. No sprint updates are captured;
+everything else on the platform is unaffected.
+
+Where to find it: Right click `#plan-sprints` in Slack > "View channel
+details" > copy the ID at the bottom (looks like `C01ABC234`).
+
+Prereqs:
+- `SLACK_ENABLED` must be true and `SLACK_BOT_TOKEN` set.
+- The bot token must hold `channels:history` (public channel) or
+  `groups:history` + `groups:read` (private channel). Without it the
+  history calls fail with `missing_scope`.
+- The bot must be a member of `#plan-sprints`. Invite it from inside the
+  channel with `/invite @<bot-name>` — otherwise the history reads return
+  `not_in_channel`.
+
+Rotation: Permanent for the channel. Replace the value when you cut over
+to a new `#plan-sprints` channel.
+
+Test vs live: This key is the live (production) channel. Use
+`SLACK_DEV_PLAN_SPRINTS_CHANNEL_ID` for development and
+`SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID` for test.
+
+## SLACK_DEV_PLAN_SPRINTS_CHANNEL_ID
+
+Purpose: Development-only `#plan-sprints` channel ID. Same shape and
+consumers as `SLACK_PLAN_SPRINTS_CHANNEL_ID`. Used only when
+`SLACK_ENVIRONMENT=development`.
+
+Without it (in development mode): The ingest no-ops on the development
+workspace. Production is unaffected because it uses a different key.
+
+Where to find it: Same as `SLACK_PLAN_SPRINTS_CHANNEL_ID`, but on the
+development workspace.
+
+Prereqs: Same as `SLACK_PLAN_SPRINTS_CHANNEL_ID`.
+
+Rotation: Same as `SLACK_PLAN_SPRINTS_CHANNEL_ID`.
+
+Test vs live: This key is the development counterpart to
+`SLACK_PLAN_SPRINTS_CHANNEL_ID`.
+
+## SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID
+
+Purpose: Test-only `#plan-sprints` channel ID. Same shape and consumers
+as `SLACK_PLAN_SPRINTS_CHANNEL_ID`. Used only when `SLACK_ENVIRONMENT=test`.
+
+Without it (in test mode): Tests that exercise the `#plan-sprints` ingest
+have no channel to read — the run sees empty results.
+
+Where to find it: Same as `SLACK_PLAN_SPRINTS_CHANNEL_ID`, but on the test
+workspace / channel.
+
+Prereqs: Same as `SLACK_PLAN_SPRINTS_CHANNEL_ID`.
+
+Rotation: Same as `SLACK_PLAN_SPRINTS_CHANNEL_ID`.
+
+Test vs live: This key is the test counterpart to
+`SLACK_PLAN_SPRINTS_CHANNEL_ID`.
 
 ## SLACK_INVITE_URL
 

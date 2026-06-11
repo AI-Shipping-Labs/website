@@ -262,6 +262,166 @@ def ingest_plan_sprints(*, oldest_ts=None, since=None, dry_run=False):
     return _run_ingest(service, channel_id, oldest, dry_run=False)
 
 
+def _reread_thread_replies(service, run, thread):
+    """Re-fetch a known thread's replies and append genuinely-new rows.
+
+    Idempotent on ``(thread, ts)``: only messages not already persisted are
+    written. Recomputes ``reply_count`` and bumps ``last_seen_ingest``.
+    Returns the number of NEW reply :class:`SlackMessage` rows added.
+    """
+    try:
+        thread_messages = service.fetch_conversation_replies(
+            thread.channel_id, thread.thread_ts,
+        )
+    except SlackAPIError:
+        logger.warning(
+            "Failed to re-read replies for thread %s in %s",
+            thread.thread_ts, thread.channel_id,
+        )
+        return 0
+
+    existing_ts = set(thread.messages.values_list("ts", flat=True))
+    new_replies = 0
+    display_cache = {}
+    for msg in thread_messages:
+        if not _is_member_message(msg):
+            continue
+        msg_ts = msg["ts"]
+        if msg_ts in existing_ts:
+            continue
+        msg_user = msg.get("user", "")
+        if msg_user not in display_cache:
+            display_cache[msg_user] = service.lookup_user_display_name(msg_user)
+        SlackMessage.objects.create(
+            thread=thread,
+            ts=msg_ts,
+            slack_user_id=msg_user,
+            author_display=display_cache[msg_user],
+            text=msg.get("text", "") or "",
+            posted_at=_ts_to_datetime(msg_ts),
+            is_root=(msg_ts == thread.thread_ts),
+            first_seen_ingest=run,
+        )
+        existing_ts.add(msg_ts)
+        if msg_ts != thread.thread_ts:
+            new_replies += 1
+
+    thread.last_seen_ingest = run
+    thread.reply_count = max(thread.messages.count() - 1, 0)
+    thread.save(update_fields=["last_seen_ingest", "reply_count"])
+    return new_replies
+
+
+def reparse_plan_sprints(*, since, dry_run=False):
+    """Force a replies re-read + Phase 2 re-parse of EXISTING watermarked threads.
+
+    The daily task rides a forward watermark, so it never revisits threads it
+    has already captured. This operator path iterates every persisted
+    :class:`SlackThread` in the channel whose root was posted at/after
+    ``since`` (a ``date``/``datetime``), re-reads ``conversations.replies`` for
+    each, appends any genuinely-new reply rows (idempotent on ``(thread, ts)``),
+    recomputes ``reply_count``, and re-runs the Phase 2 parse + auto-apply for
+    those threads. The ``source_message_ts`` watermark in ``apply_thread_progress``
+    keeps the parse a no-op when no new reply changes the latest ts.
+
+    ``dry_run=True`` runs the full path inside a transaction that is rolled
+    back, so nothing is persisted; the returned :class:`SlackChannelIngest`
+    carries the counts of what a real run WOULD have written.
+
+    No-ops cleanly (logs, returns None) when Slack is disabled or the channel
+    id is unset.
+    """
+    if not is_enabled('SLACK_ENABLED'):
+        logger.info("plan-sprints reparse skipped: SLACK_ENABLED is off")
+        return None
+    channel_id = get_slack_plan_sprints_channel_id()
+    if not channel_id:
+        logger.info("plan-sprints reparse skipped: no #plan-sprints channel configured")
+        return None
+
+    service = SlackCommunityService()
+    since_ts = _date_to_ts(since)
+
+    if dry_run:
+        with transaction.atomic():
+            run = _run_reparse(service, channel_id, since_ts, dry_run=True)
+            transaction.set_rollback(True)
+        return run
+
+    return _run_reparse(service, channel_id, since_ts, dry_run=False)
+
+
+def _run_reparse(service, channel_id, since_ts, *, dry_run):
+    """Re-read replies + re-parse existing threads since ``since_ts``. Returns the run."""
+    run = SlackChannelIngest.objects.create(
+        channel_id=channel_id,
+        oldest_ts=since_ts,
+        status='running',
+    )
+
+    since_dt = _ts_to_datetime(since_ts)
+    threads = list(
+        SlackThread.objects
+        .filter(channel_id=channel_id, posted_at__gte=since_dt)
+        .order_by('posted_at')
+    )
+
+    threads_seen = 0
+    replies_added = 0
+    members_matched = 0
+    latest_ts = since_ts
+    touched_threads = {}
+
+    try:
+        for thread in threads:
+            threads_seen += 1
+            if thread.member_id is not None:
+                members_matched += 1
+            with transaction.atomic():
+                new_replies = _reread_thread_replies(service, run, thread)
+            replies_added += new_replies
+            if thread.thread_ts > latest_ts:
+                latest_ts = thread.thread_ts
+            # Always a re-parse candidate: the watermark guard in
+            # apply_thread_progress makes it a no-op when nothing changed.
+            touched_threads[thread.pk] = thread
+    except SlackAPIError as exc:
+        run.status = 'error'
+        run.error = str(exc)
+        run.finished_at = timezone.now()
+        run.messages_seen = threads_seen
+        run.threads_persisted = 0
+        run.replies_added = replies_added
+        run.members_matched = members_matched
+        run.latest_ts = latest_ts
+        run.save()
+        logger.exception("plan-sprints reparse failed mid-run")
+        return run
+
+    if touched_threads:
+        candidates = [
+            t for t in touched_threads.values()
+            if t.member_id is not None and t.plan_id is not None
+        ]
+        if candidates:
+            apply_progress_for_threads(candidates, ingest=run)
+
+    run.messages_seen = threads_seen
+    run.threads_persisted = 0
+    run.replies_added = replies_added
+    run.members_matched = members_matched
+    run.latest_ts = latest_ts
+    run.status = 'success'
+    run.finished_at = timezone.now()
+    run.save()
+    logger.info(
+        "plan-sprints reparse complete%s: %s threads re-read, %s replies added, %s matched",
+        " (dry-run, rolled back)" if dry_run else "",
+        threads_seen, replies_added, members_matched,
+    )
+    return run
+
+
 def _run_ingest(service, channel_id, oldest, *, dry_run):
     """Capture + parse + apply over the ``oldest..now`` window. Returns the run.
 
@@ -305,7 +465,11 @@ def _run_ingest(service, channel_id, oldest, *, dry_run):
                 new_replies, created, matched, thread = _upsert_thread(
                     service, run, channel_id, message,
                 )
-            replies_added += new_replies if not created else 0
+            # ``new_replies`` already excludes the root on first capture
+            # (``_upsert_thread`` only counts non-root messages for a created
+            # thread). Count it for both first-capture and incremental runs so
+            # ``replies_added`` reflects every reply row written this run.
+            replies_added += new_replies
             if created:
                 threads_persisted += 1
                 if matched:

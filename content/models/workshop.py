@@ -277,6 +277,18 @@ class Workshop(
             'workshopinstructor__position',
         ).first()
 
+    @property
+    def display_image_url(self):
+        """Return the best thumbnail/preview URL for listings and cards.
+
+        Operator-supplied ``cover_image_url`` always wins; the
+        platform-generated ``auto_banner_url`` (banner-generator, issue
+        #788/#900) is the fallback so a cover-less workshop still shows a
+        real banner once the render pipeline has run. Returns ``''`` when
+        neither is set, so templates fall back to the decorative icon.
+        """
+        return self.cover_image_url or self.auto_banner_url
+
     def user_can_access_landing(self, user):
         """Return True when ``user`` may view the workshop landing."""
         return _can_access_level(user, self.landing_required_level)

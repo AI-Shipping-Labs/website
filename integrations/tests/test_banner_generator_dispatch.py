@@ -912,3 +912,103 @@ class RenderBannerForContentTest(_BannerGeneratorCacheCleanupMixin, TestCase):
     def test_no_op_when_record_missing(self, mock_render):
         render_banner_for_content('article', 99999)
         mock_render.assert_not_called()
+
+
+# --------------------------------------------------------------------------
+# Cold-start timeout retry (issue #900)
+# --------------------------------------------------------------------------
+
+
+# Patch at the requests.post boundary (not render_to_s3) so the real
+# client builds the BannerGeneratorError with the right is_timeout flag —
+# that is the branch the task's retry logic depends on.
+POST_PATCH = 'integrations.services.banner_generator.requests.post'
+
+
+def _ok_response():
+    from unittest.mock import MagicMock
+    return MagicMock(status_code=200, json=lambda: {'ok': True})
+
+
+def _http_500_response():
+    from unittest.mock import MagicMock
+    return MagicMock(status_code=500, json=lambda: {})
+
+
+def _ok_false_response():
+    from unittest.mock import MagicMock
+    return MagicMock(
+        status_code=200, json=lambda: {'ok': False, 'error': 'bad template'},
+    )
+
+
+class RenderBannerColdStartRetryTest(
+    _BannerGeneratorCacheCleanupMixin, TestCase,
+):
+    """A single cold-start timeout is retried once; nothing else is."""
+
+    def setUp(self):
+        super().setUp()
+        _configure_banner_generator()
+
+    @patch(DELETE_PATCH)
+    @patch(POST_PATCH)
+    def test_timeout_then_success_retries_and_persists(
+        self, mock_post, mock_delete,
+    ):
+        import requests
+        mock_post.side_effect = [requests.Timeout('cold'), _ok_response()]
+        workshop = _make_workshop(title='Vector Search SQLite')
+        result = render_banner_for_content('workshop', workshop.pk)
+        self.assertEqual(mock_post.call_count, 2)
+        workshop.refresh_from_db()
+        self.assertRegex(
+            workshop.auto_banner_url,
+            rf'^https://cdn\.example\.com/banners/workshop/'
+            rf'{workshop.pk}-[0-9a-f]{{32}}\.jpg$',
+        )
+        self.assertEqual(result, workshop.auto_banner_url)
+        self.assertIsNotNone(result)
+
+    @patch(DELETE_PATCH)
+    @patch(POST_PATCH)
+    def test_http_500_is_not_retried(self, mock_post, mock_delete):
+        mock_post.return_value = _http_500_response()
+        workshop = _make_workshop()
+        result = render_banner_for_content('workshop', workshop.pk)
+        self.assertEqual(mock_post.call_count, 1)
+        self.assertIsNone(result)
+        workshop.refresh_from_db()
+        self.assertEqual(workshop.auto_banner_url, '')
+
+    @patch(DELETE_PATCH)
+    @patch(POST_PATCH)
+    def test_ok_false_is_not_retried(self, mock_post, mock_delete):
+        mock_post.return_value = _ok_false_response()
+        workshop = _make_workshop()
+        result = render_banner_for_content('workshop', workshop.pk)
+        self.assertEqual(mock_post.call_count, 1)
+        self.assertIsNone(result)
+
+    @patch(DELETE_PATCH)
+    @patch(POST_PATCH)
+    def test_timeout_then_timeout_returns_none_after_two_attempts(
+        self, mock_post, mock_delete,
+    ):
+        import requests
+        mock_post.side_effect = [
+            requests.Timeout('cold'), requests.Timeout('still cold'),
+        ]
+        workshop = _make_workshop()
+        with self.assertLogs(
+            'integrations.services.banner_generator.tasks',
+            level='WARNING',
+        ) as log_cm:
+            result = render_banner_for_content('workshop', workshop.pk)
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertIsNone(result)
+        workshop.refresh_from_db()
+        self.assertEqual(workshop.auto_banner_url, '')
+        joined = '\n'.join(log_cm.output)
+        self.assertIn('retrying once', joined)
+        self.assertIn('failed after retry', joined)

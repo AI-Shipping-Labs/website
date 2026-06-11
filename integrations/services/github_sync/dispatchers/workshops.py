@@ -432,11 +432,14 @@ def _sync_single_workshop(
                 workshop.description_html, rel_path, stats['errors'],
             )
 
-            # Issue #788: enqueue auto-banner render. The dispatcher
-            # short-circuits when cover_image_url is set or when the
-            # title hash matches, so re-syncs without title changes are
-            # cheap.
-            _enqueue_banner_if_missing('workshop', workshop.pk)
+        # Issue #788/#900: enqueue auto-banner render on EVERY sync, not
+        # only when the row changed. ``_enqueue_banner_if_missing`` itself
+        # short-circuits when cover_image_url is set or when the title hash
+        # already matches, so re-syncs are cheap — but a previously-synced
+        # cover-less workshop whose first render was lost (e.g. a cold
+        # Lambda timeout) gets backfilled on the next no-op sync instead of
+        # being skipped forever.
+        _enqueue_banner_if_missing('workshop', workshop.pk)
 
         # Resolve instructors: list and attach M2M (post-save).
         resolved_instructors = _resolve_instructors_for_yaml(

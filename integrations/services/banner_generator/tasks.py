@@ -534,7 +534,7 @@ def render_banner_for_content(content_type, content_pk):
     payload = build_payload(content_type, record)
     s3_key = s3_key_for(content_type, content_pk)
 
-    try:
+    def _render():
         render_to_s3(
             template=template_for(content_type),
             size=DEFAULT_SIZE,
@@ -542,12 +542,34 @@ def render_banner_for_content(content_type, content_pk):
             data=payload,
             s3_key=s3_key,
         )
+
+    try:
+        _render()
     except BannerGeneratorError as exc:
+        # Retry exactly once, and only on a timeout-class failure. A
+        # container-Lambda cold start exceeds the HTTP timeout on the
+        # first call; that attempt warms the Lambda, so the retry returns
+        # in ~1.5s (issue #900). Non-timeout failures (HTTP 4xx/5xx,
+        # ``ok=False``) are NOT cold-start symptoms — never retry those.
+        if not getattr(exc, 'is_timeout', False):
+            logger.warning(
+                'render_banner_for_content: %s pk=%s failed: %s',
+                content_type, content_pk, exc,
+            )
+            return None
         logger.warning(
-            'render_banner_for_content: %s pk=%s failed: %s',
+            'render_banner_for_content: %s pk=%s timed out; retrying once '
+            '(cold-start warm-up): %s',
             content_type, content_pk, exc,
         )
-        return None
+        try:
+            _render()
+        except BannerGeneratorError as retry_exc:
+            logger.warning(
+                'render_banner_for_content: %s pk=%s failed after retry: %s',
+                content_type, content_pk, retry_exc,
+            )
+            return None
 
     previous_banner_url = getattr(record, 'auto_banner_url', '') or ''
     banner_url = cdn_url_for_key(s3_key)

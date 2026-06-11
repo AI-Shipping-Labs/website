@@ -310,13 +310,13 @@ def _sync_single_course(
             commit_sha, stats, known_images, course_ignore_patterns,
         )
 
-        # Issue #788: enqueue auto-banner render only on create/update.
-        # ``upsert_synced_object`` flips ``changed`` to True for both
-        # creates and identity/defaults diffs; the dispatcher itself
+        # Issue #788/#900: enqueue auto-banner render on EVERY sync, not
+        # only on create/update. ``_enqueue_banner_if_missing`` itself
         # short-circuits when cover_image_url is set or the title hash
-        # hasn't drifted.
-        if result.changed:
-            _enqueue_banner_if_missing('course', course.pk)
+        # hasn't drifted, so re-syncs stay cheap — but a previously-synced
+        # cover-less course whose first render was lost (e.g. a cold Lambda
+        # timeout) gets backfilled on the next no-op sync.
+        _enqueue_banner_if_missing('course', course.pk)
 
     except Exception as e:
         try:

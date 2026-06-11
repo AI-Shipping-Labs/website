@@ -12,7 +12,16 @@ from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
 from content.access import LEVEL_BASIC
-from content.models import Article, Course, Module, Project, TagRule, Tutorial, Unit
+from content.models import (
+    Article,
+    Course,
+    Module,
+    Project,
+    TagRule,
+    Tutorial,
+    Unit,
+    Workshop,
+)
 from events.models import Event
 
 
@@ -512,6 +521,78 @@ class OgImageAutoBannerFallbackTest(TestCase):
         self.assertIn('/static/ai-shipping-labs.jpg', result)
         # No empty og:image value.
         self.assertNotIn('property="og:image" content="">', result)
+
+
+class WorkshopOgImageAutoBannerFallbackTest(TestCase):
+    """Issue #900: cover-less workshops use their generated auto-banner.
+
+    The named regression is workshops, so assert the fallback explicitly
+    for the Workshop content type in addition to the shared Event coverage.
+    """
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _make_workshop(self, **overrides):
+        defaults = {
+            'slug': 'vector-search-sqlite',
+            'title': 'Vector Search in SQLite',
+            'date': date(2026, 4, 13),
+            'description': 'A hands-on workshop.',
+            'cover_image_url': '',
+            'auto_banner_url': '',
+        }
+        defaults.update(overrides)
+        return Workshop.objects.create(**defaults)
+
+    def _render(self, workshop):
+        template = Template('{% load seo_tags %}{% og_tags workshop %}')
+        request = self.factory.get('/')
+        context = Context({'workshop': workshop, 'request': request})
+        return template.render(context)
+
+    def test_cover_less_workshop_uses_auto_banner(self):
+        workshop = self._make_workshop(
+            auto_banner_url='https://cdn.aishippinglabs.com/banners/workshop/9.jpg',
+        )
+        result = self._render(workshop)
+        self.assertIn(
+            '<meta property="og:image" content="'
+            'https://cdn.aishippinglabs.com/banners/workshop/9.jpg">',
+            result,
+        )
+        self.assertIn(
+            '<meta name="twitter:image" content="'
+            'https://cdn.aishippinglabs.com/banners/workshop/9.jpg">',
+            result,
+        )
+
+    def test_cover_less_workshop_without_banner_uses_site_default(self):
+        workshop = self._make_workshop()
+        result = self._render(workshop)
+        self.assertIn('/static/ai-shipping-labs.jpg', result)
+        self.assertNotIn('property="og:image" content="">', result)
+
+    def test_display_image_url_prefers_cover_then_banner(self):
+        cover = self._make_workshop(
+            slug='cover-ws',
+            cover_image_url='https://cdn.example.com/manual/cover.png',
+            auto_banner_url='https://cdn.example.com/banners/workshop/1.jpg',
+        )
+        self.assertEqual(
+            cover.display_image_url,
+            'https://cdn.example.com/manual/cover.png',
+        )
+        banner_only = self._make_workshop(
+            slug='banner-ws',
+            auto_banner_url='https://cdn.example.com/banners/workshop/2.jpg',
+        )
+        self.assertEqual(
+            banner_only.display_image_url,
+            'https://cdn.example.com/banners/workshop/2.jpg',
+        )
+        neither = self._make_workshop(slug='plain-ws')
+        self.assertEqual(neither.display_image_url, '')
 
 
 class EventPreviewDescriptionTest(TestCase):

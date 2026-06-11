@@ -281,6 +281,21 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/banner_generator.md#banner_generator_auth_token',
             },
+            {
+                'key': 'BANNER_GENERATOR_TIMEOUT_SECONDS',
+                'is_secret': False,
+                'optional': True,
+                'default': '90',
+                'description': (
+                    'HTTP timeout in seconds for the render call to the '
+                    'banner-generator Lambda. Should comfortably cover a '
+                    'container-Lambda cold start; warm renders finish in '
+                    '~1.4s, so a high ceiling costs nothing on the happy '
+                    'path. Default 90. A non-integer or non-positive '
+                    'override falls back to 90.'
+                ),
+                'docs_url': '_docs/integrations/banner_generator.md#banner_generator_timeout_seconds',
+            },
         ],
     },
     {

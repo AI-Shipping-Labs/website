@@ -89,6 +89,34 @@ fail with a logged WARNING and the sync continues. No content is lost.
 Test vs live: Use different tokens in sandbox vs production so a leaked
 sandbox token cannot be used to render against the production bucket.
 
+## BANNER_GENERATOR_TIMEOUT_SECONDS
+
+Purpose: HTTP timeout in seconds for the render POST to the Lambda
+Function URL. The banner-generator runs as a container Lambda; a cold
+start (first invocation after the container is reaped) can take well
+over 30 seconds before the render itself runs. A warm render returns in
+~1.4 seconds. This timeout must comfortably cover a cold start so the
+first render after the Lambda goes cold does not time out and silently
+lose the banner.
+
+Without it: Falls back to the built-in default of 90 seconds. A
+non-integer or non-positive override (e.g. an accidental empty string or
+`abc`) also falls back to 90 rather than raising.
+
+Where to find it: This is a platform-side tuning knob, not a value from
+an external service. Raise it from Studio (e.g. to 120) if you observe
+cold-start timeouts in the logs; the render task already retries once on
+a timeout (the first attempt warms the Lambda), so most cold starts
+recover even at the default.
+
+Prereqs: None.
+
+Rotation: N/A. Edit in Studio and save; the new value applies on the
+next render with no redeploy.
+
+Test vs live: The default is fine in all environments. Override only if
+a specific environment's Lambda is consistently slow to warm.
+
 ## Notes
 
 - Banner generation runs as a fire-and-forget `async_task` on

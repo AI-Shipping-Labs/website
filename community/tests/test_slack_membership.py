@@ -16,14 +16,21 @@ import requests
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from accounts.models import User
+from accounts.models import TierOverride, User
 from community.models import CommunityAuditLog
 from community.services.slack import SlackAPIError, SlackCommunityService
 from community.tasks import slack_membership as task_module
 from community.tasks.slack_membership import (
     SLACK_MEMBERSHIP_CHUNK_SIZE,
+    SLACK_MEMBERSHIP_SLEEP_SECONDS,
     refresh_slack_membership,
 )
+from payments.models import Tier
+
+
+def _tier(level):
+    """Fetch one of the migration-seeded tier rows by level."""
+    return Tier.objects.get(level=level)
 
 
 @override_settings(SLACK_ENABLED=True, SLACK_BOT_TOKEN='xoxb-test')
@@ -111,8 +118,10 @@ class RefreshSlackMembershipTaskTest(TestCase):
     """Tests for the periodic refresh_slack_membership task."""
 
     def _make_user(self, email, **extra):
-        # Force-set slack_member directly (bypass the default save() so
-        # we can simulate the "first check has never happened" state).
+        # Default new users to Main tier so they fall inside the
+        # Main+ candidate scope (issue #918); these tests exercise
+        # outcome/audit/chain behavior, not the tier filter itself.
+        extra.setdefault('tier', _tier(20))
         return User.objects.create_user(email=email, **extra)
 
     @patch('community.tasks.slack_membership.get_community_service')
@@ -236,12 +245,13 @@ class RefreshSlackMembershipTaskTest(TestCase):
 
         refresh_slack_membership()
 
-        # Sleep called exactly twice (between the three calls), each
-        # at >= 1.5s so we stay under Slack's 50 RPM Tier 4 limit.
+        # Sleep called exactly twice (between the three calls), each at
+        # >= 3.0s so we stay under Slack's Tier 2 (~20 RPM) limit for
+        # users.lookupByEmail (issue #918).
         self.assertEqual(mock_sleep.call_count, 2)
         for call in mock_sleep.call_args_list:
             (slept_for,) = call.args
-            self.assertGreaterEqual(slept_for, 1.5)
+            self.assertGreaterEqual(slept_for, 3.0)
 
     @patch('community.tasks.slack_membership.get_community_service')
     def test_audit_log_written_on_state_transition_only(self, mock_get_service):
@@ -380,13 +390,23 @@ class RefreshSlackMembershipChunkChainTest(TestCase):
     FOLLOWUP_PATH = 'community.tasks.slack_membership.refresh_slack_membership'
 
     def _make_user(self, email):
-        return User.objects.create_user(email=email)
+        # Main tier so the user is inside the Main+ candidate scope.
+        return User.objects.create_user(email=email, tier=_tier(20))
 
-    def test_default_chunk_size_is_120(self):
-        # Lock the design decision (issue #715) into the test suite so
-        # future changes are deliberate. The constant is sized against
-        # the 300s Q_CLUSTER timeout and 1.5s per-call pacing.
-        self.assertEqual(SLACK_MEMBERSHIP_CHUNK_SIZE, 120)
+    def test_chunk_size_fits_under_worker_timeout(self):
+        # Lock the design decision (issues #715, #918) into the suite so
+        # future changes are deliberate. The constant is sized against the
+        # 300s Q_CLUSTER timeout at the Tier-2-safe pacing: a full chunk's
+        # pacing budget must leave generous headroom below the timeout.
+        Q_CLUSTER_TIMEOUT = 300
+        pacing_budget = SLACK_MEMBERSHIP_CHUNK_SIZE * SLACK_MEMBERSHIP_SLEEP_SECONDS
+        self.assertLess(
+            pacing_budget,
+            Q_CLUSTER_TIMEOUT,
+            'chunk_size x gap must stay under the 300s Q_CLUSTER timeout',
+        )
+        # Headroom check: target a typical run well under ~120s of pacing.
+        self.assertLessEqual(pacing_budget, 120)
 
     @patch('community.tasks.slack_membership.async_task')
     @patch('community.tasks.slack_membership.get_community_service')
@@ -489,3 +509,325 @@ class RefreshSlackMembershipChunkChainTest(TestCase):
         mock_async_task.assert_not_called()
         self.assertEqual(result['total_checked'], 0)
         self.assertFalse(result['enqueued_followup'])
+
+
+class RefreshSlackMembershipMainPlusScopeTest(TestCase):
+    """Candidate scope: only Main+ (incl active overrides) is checked (#918)."""
+
+    def _user(self, email, level=None, **extra):
+        if level is not None:
+            extra['tier'] = _tier(level)
+        return User.objects.create_user(email=email, **extra)
+
+    def _override(self, user, override_level, *, active=True, expired=False):
+        expires = timezone.now() + timezone.timedelta(days=7)
+        if expired:
+            expires = timezone.now() - timezone.timedelta(days=1)
+        return TierOverride.objects.create(
+            user=user,
+            override_tier=_tier(override_level),
+            expires_at=expires,
+            is_active=active,
+        )
+
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_only_main_and_above_are_checked(self, mock_get_service):
+        free = self._user('free@test.com', level=0)
+        basic = self._user('basic@test.com', level=10)
+        main = self._user('main@test.com', level=20)
+        premium = self._user('premium@test.com', level=30)
+
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('not_member', None)
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(sleep_seconds=0)
+
+        checked = {
+            c.args[0] for c in svc.check_workspace_membership.call_args_list
+        }
+        self.assertEqual(checked, {main.email, premium.email})
+        self.assertNotIn(free.email, checked)
+        self.assertNotIn(basic.email, checked)
+        self.assertEqual(result['total_checked'], 2)
+
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_basic_user_without_override_is_excluded(self, mock_get_service):
+        self._user('basic@test.com', level=10)
+
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('not_member', None)
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(sleep_seconds=0)
+
+        svc.check_workspace_membership.assert_not_called()
+        self.assertEqual(result['total_checked'], 0)
+
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_free_user_with_active_main_override_is_included(self, mock_get_service):
+        trial = self._user('trial@test.com', level=0)
+        self._override(trial, override_level=20)
+        plain = self._user('plain@test.com', level=0)
+
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('member', 'U_TRIAL')
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(sleep_seconds=0)
+
+        checked = {
+            c.args[0] for c in svc.check_workspace_membership.call_args_list
+        }
+        self.assertEqual(checked, {trial.email})
+        self.assertNotIn(plain.email, checked)
+        trial.refresh_from_db()
+        self.assertTrue(trial.slack_member)
+        self.assertEqual(result['total_checked'], 1)
+
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_expired_override_does_not_include_free_user(self, mock_get_service):
+        user = self._user('expired@test.com', level=0)
+        self._override(user, override_level=20, expired=True)
+
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('not_member', None)
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(sleep_seconds=0)
+
+        svc.check_workspace_membership.assert_not_called()
+        self.assertEqual(result['total_checked'], 0)
+
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_inactive_override_does_not_include_free_user(self, mock_get_service):
+        user = self._user('inactive@test.com', level=0)
+        self._override(user, override_level=20, active=False)
+
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('not_member', None)
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(sleep_seconds=0)
+
+        svc.check_workspace_membership.assert_not_called()
+        self.assertEqual(result['total_checked'], 0)
+
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_basic_override_does_not_include_free_user(self, mock_get_service):
+        # An active override that only reaches Basic (level 10) must NOT
+        # qualify — the predicate keys off override_tier.level >= 20.
+        user = self._user('basicoverride@test.com', level=0)
+        self._override(user, override_level=10)
+
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('not_member', None)
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(sleep_seconds=0)
+
+        svc.check_workspace_membership.assert_not_called()
+        self.assertEqual(result['total_checked'], 0)
+
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_user_with_two_active_overrides_checked_once(self, mock_get_service):
+        # Data anomaly: two active Main override rows on the same user.
+        # The override join would duplicate the row; .distinct() collapses
+        # it so the user is checked exactly once per run.
+        user = self._user('dup@test.com', level=0)
+        self._override(user, override_level=20)
+        self._override(user, override_level=20)
+
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('member', 'U_DUP')
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(sleep_seconds=0)
+
+        self.assertEqual(svc.check_workspace_membership.call_count, 1)
+        self.assertEqual(
+            svc.check_workspace_membership.call_args.args[0], user.email,
+        )
+        self.assertEqual(result['total_checked'], 1)
+
+    @patch('community.tasks.slack_membership.async_task')
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_chain_decision_counts_only_main_plus(
+        self, mock_get_service, mock_async_task,
+    ):
+        # Two Main users + many Free users. With batch_size=1 a Main user
+        # remains after the chunk, so the chain must continue; the Free
+        # users must never affect the more_remaining decision.
+        self._user('main1@test.com', level=20)
+        self._user('main2@test.com', level=20)
+        for i in range(5):
+            self._user(f'free{i}@test.com', level=0)
+
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('member', 'U1')
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(batch_size=1, sleep_seconds=0)
+
+        self.assertEqual(result['total_checked'], 1)
+        self.assertEqual(mock_async_task.call_count, 1)
+        self.assertTrue(result['enqueued_followup'])
+
+    @patch('community.tasks.slack_membership.async_task')
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_no_chain_when_only_free_users_remain(
+        self, mock_get_service, mock_async_task,
+    ):
+        # One Main user (resolved this run) and many Free users left
+        # behind. The Free users are out of scope, so no backlog remains
+        # and no follow-up is enqueued.
+        self._user('main@test.com', level=20)
+        for i in range(5):
+            self._user(f'free{i}@test.com', level=0)
+
+        svc = MagicMock()
+        svc.check_workspace_membership.return_value = ('member', 'U1')
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(batch_size=10, sleep_seconds=0)
+
+        self.assertEqual(result['total_checked'], 1)
+        mock_async_task.assert_not_called()
+        self.assertFalse(result['enqueued_followup'])
+
+
+class RefreshSlackMembershipResolvesNotAllUnknownTest(TestCase):
+    """The task resolves real membership instead of all-unknown (#918)."""
+
+    def _main_user(self, email):
+        return User.objects.create_user(email=email, tier=_tier(20))
+
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_mixed_outcomes_resolve_members_and_not_members(self, mock_get_service):
+        u1 = self._main_user('a-m1@test.com')
+        u2 = self._main_user('b-nm@test.com')
+        u3 = self._main_user('c-m2@test.com')
+
+        svc = MagicMock()
+        svc.check_workspace_membership.side_effect = [
+            ('member', 'U1'),
+            ('not_member', None),
+            ('member', 'U2'),
+        ]
+        mock_get_service.return_value = svc
+
+        result = refresh_slack_membership(sleep_seconds=0)
+
+        self.assertEqual(result['members'], 2)
+        self.assertEqual(result['not_members'], 1)
+        self.assertEqual(result['unknown'], 0)
+        self.assertGreater(result['members'] + result['not_members'], 0)
+
+        for u in (u1, u2, u3):
+            u.refresh_from_db()
+            self.assertIsNotNone(u.slack_checked_at)
+        self.assertTrue(u1.slack_member)
+        self.assertFalse(u2.slack_member)
+        self.assertTrue(u3.slack_member)
+
+
+@override_settings(SLACK_ENABLED=True, SLACK_BOT_TOKEN='xoxb-test')
+class RateLimitRetryTest(TestCase):
+    """A ratelimited response triggers one bounded retry, not an instant
+    unknown — so a single throttle does not cascade across the batch (#918)."""
+
+    def setUp(self):
+        self.service = SlackCommunityService(
+            bot_token='xoxb-test', channel_ids=['C001'],
+        )
+
+    def _resp(self, status, payload=None, retry_after=None):
+        r = MagicMock()
+        r.status_code = status
+        r.json.return_value = payload or {}
+        r.headers = {'Retry-After': str(retry_after)} if retry_after else {}
+        return r
+
+    @patch('community.services.slack.time.sleep')
+    @patch('community.services.slack.requests.post')
+    def test_ratelimited_body_retries_once_then_succeeds(self, mock_post, mock_sleep):
+        # First call: ok=False ratelimited with Retry-After. Second: member.
+        mock_post.side_effect = [
+            self._resp(200, {'ok': False, 'error': 'ratelimited'}, retry_after=1),
+            self._resp(200, {'ok': True, 'user': {'id': 'U777'}}),
+        ]
+
+        result = self.service.check_workspace_membership('a@example.com')
+
+        self.assertEqual(result, ('member', 'U777'))
+        self.assertEqual(mock_post.call_count, 2)
+        mock_sleep.assert_called_once()
+        (waited,) = mock_sleep.call_args.args
+        self.assertEqual(waited, 1.0)
+
+    @patch('community.services.slack.time.sleep')
+    @patch('community.services.slack.requests.post')
+    def test_http_429_retries_once_then_succeeds(self, mock_post, mock_sleep):
+        mock_post.side_effect = [
+            self._resp(429, retry_after=2),
+            self._resp(200, {'ok': False, 'error': 'users_not_found'}),
+        ]
+
+        result = self.service.check_workspace_membership('a@example.com')
+
+        self.assertEqual(result, ('not_member', None))
+        self.assertEqual(mock_post.call_count, 2)
+        mock_sleep.assert_called_once()
+
+    @patch('community.services.slack.time.sleep')
+    @patch('community.services.slack.requests.post')
+    def test_persistent_ratelimit_falls_back_to_unknown_after_one_retry(
+        self, mock_post, mock_sleep,
+    ):
+        # Throttled on both the first call and the single retry: only then
+        # do we surface unknown (bounded retry, no infinite loop).
+        mock_post.side_effect = [
+            self._resp(200, {'ok': False, 'error': 'ratelimited'}, retry_after=1),
+            self._resp(200, {'ok': False, 'error': 'ratelimited'}, retry_after=1),
+        ]
+
+        result = self.service.check_workspace_membership('a@example.com')
+
+        self.assertEqual(result, ('unknown', None))
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertEqual(mock_sleep.call_count, 1)
+
+    @patch(
+        'community.services.slack.SlackCommunityService'
+        '.lookup_user_profile_by_email',
+        return_value=None,
+    )
+    @patch('community.services.slack.time.sleep')
+    @patch('community.services.slack.requests.post')
+    def test_one_throttle_does_not_poison_rest_of_batch(
+        self, mock_post, mock_sleep, mock_profile,
+    ):
+        # Task-level: first user is throttled once then resolves; the
+        # remaining users still resolve to concrete outcomes rather than
+        # every subsequent call cascading to unknown. The name-backfill
+        # profile lookup is stubbed out so it doesn't consume the mocked
+        # membership responses below.
+        for email in ('m1@test.com', 'm2@test.com', 'm3@test.com'):
+            User.objects.create_user(email=email, tier=_tier(20))
+
+        # Order is NULLs-first then by email; emails sort m1 < m2 < m3.
+        mock_post.side_effect = [
+            # m1: ratelimited, then member on retry.
+            self._resp(200, {'ok': False, 'error': 'ratelimited'}, retry_after=1),
+            self._resp(200, {'ok': True, 'user': {'id': 'U1'}}),
+            # m2: not_member.
+            self._resp(200, {'ok': False, 'error': 'users_not_found'}),
+            # m3: member.
+            self._resp(200, {'ok': True, 'user': {'id': 'U3'}}),
+        ]
+
+        result = refresh_slack_membership(sleep_seconds=0)
+
+        self.assertEqual(result['members'], 2)
+        self.assertEqual(result['not_members'], 1)
+        self.assertEqual(result['unknown'], 0)

@@ -17,6 +17,7 @@ conversations.invite and conversations.kick.
 
 import json
 import logging
+import time
 
 import requests
 from django.core.mail import send_mail
@@ -29,6 +30,14 @@ from integrations.config import get_config, is_enabled
 logger = logging.getLogger(__name__)
 
 SLACK_API_BASE = "https://slack.com/api/"
+
+# Cap on how long a single bounded ``ratelimited`` retry will wait,
+# regardless of the ``Retry-After`` Slack advertises, so one throttled
+# call can't stall a whole chunk past the worker timeout (issue #918).
+SLACK_RETRY_AFTER_MAX_SECONDS = 30
+# Fallback wait when Slack returns ``ratelimited`` without a usable
+# ``Retry-After`` header.
+SLACK_RETRY_AFTER_DEFAULT_SECONDS = 5
 
 
 class SlackAPIError(Exception):
@@ -57,6 +66,14 @@ class SlackCommunityService(CommunityService):
     def _api_call(self, method, **kwargs):
         """Make a Slack Web API call.
 
+        On a ``ratelimited`` response (HTTP 429 or ``ok=False`` with
+        ``error=ratelimited``) this honors Slack's ``Retry-After`` header
+        and retries ONCE before giving up (issue #918). A single bounded
+        retry is enough to absorb a transient throttle so it does not
+        cascade ``unknown`` across the rest of a membership-refresh chunk;
+        the wait is capped at ``SLACK_RETRY_AFTER_MAX_SECONDS`` so a
+        misbehaving header can't stall a chunk past the worker timeout.
+
         Args:
             method: Slack API method name (e.g. 'conversations.invite').
             **kwargs: Parameters for the API call.
@@ -76,24 +93,63 @@ class SlackCommunityService(CommunityService):
             "Content-Type": "application/json; charset=utf-8",
         }
 
-        response = requests.post(url, json=kwargs, headers=headers, timeout=10)
-
-        if response.status_code != 200:
-            raise SlackAPIError(
-                f"Slack API HTTP error: {response.status_code}",
-                method=method,
+        # One bounded retry on rate-limit. ``attempt == 0`` is the first
+        # try; on a ratelimited response we sleep Retry-After and loop
+        # once more (``attempt == 1``), then surface the error.
+        for attempt in range(2):
+            response = requests.post(
+                url, json=kwargs, headers=headers, timeout=10,
             )
 
-        data = response.json()
-        if not data.get("ok"):
-            error = data.get("error", "unknown_error")
-            raise SlackAPIError(
-                f"Slack API error: {error}",
-                method=method,
-                error_code=error,
-            )
+            if response.status_code == 429:
+                if attempt == 0:
+                    self._sleep_retry_after(method, response)
+                    continue
+                raise SlackAPIError(
+                    f"Slack API rate limited (HTTP 429): {method}",
+                    method=method,
+                    error_code="ratelimited",
+                )
 
-        return data
+            if response.status_code != 200:
+                raise SlackAPIError(
+                    f"Slack API HTTP error: {response.status_code}",
+                    method=method,
+                )
+
+            data = response.json()
+            if not data.get("ok"):
+                error = data.get("error", "unknown_error")
+                if error == "ratelimited" and attempt == 0:
+                    self._sleep_retry_after(method, response)
+                    continue
+                raise SlackAPIError(
+                    f"Slack API error: {error}",
+                    method=method,
+                    error_code=error,
+                )
+
+            return data
+
+    @staticmethod
+    def _sleep_retry_after(method, response):
+        """Sleep for the response's ``Retry-After`` (bounded) before retry.
+
+        Falls back to ``SLACK_RETRY_AFTER_DEFAULT_SECONDS`` when the
+        header is missing or unparseable, and caps the wait at
+        ``SLACK_RETRY_AFTER_MAX_SECONDS`` (issue #918).
+        """
+        raw = (response.headers or {}).get("Retry-After")
+        try:
+            wait = float(raw)
+        except (TypeError, ValueError):
+            wait = SLACK_RETRY_AFTER_DEFAULT_SECONDS
+        wait = max(0, min(wait, SLACK_RETRY_AFTER_MAX_SECONDS))
+        logger.warning(
+            "Slack rate limited on %s; retrying once after %ss", method, wait,
+        )
+        if wait:
+            time.sleep(wait)
 
     def fetch_conversation_history(self, channel_id, oldest=None, limit=200):
         """Fetch all top-level messages in a channel, following pagination.

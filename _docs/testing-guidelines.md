@@ -865,11 +865,61 @@ feature, the marker travels with the deletion. The marker IS the registry.
 
 ### Local concurrency caveat
 
-The Playwright server fixture in `playwright_tests/conftest.py` binds port
-`8765`. Running `make test-playwright` (or `make test-playwright-core`) from
-two worktrees concurrently produces port-collision failures. Run one suite
-at a time locally; CI runs each job in an isolated runner so this is only a
-local-development concern.
+This caveat is resolved as of #885. See "Running Playwright in isolation /
+parallel across worktrees" below: the server fixture now picks a free
+OS-assigned port per session, so concurrent runs from separate worktrees no
+longer collide. The old "run one suite at a time locally" constraint no
+longer applies.
+
+## Running Playwright in isolation / parallel across worktrees
+
+The Playwright server fixture in `playwright_tests/conftest.py` used to bind a
+single hardcoded port (`8765`) for the in-process `runserver` thread. Both the
+server bind and the URL the browser navigated to were derived from that one
+constant, so two `pytest playwright_tests/` runs from different git worktrees
+fought over the same port: the second run's `runserver` failed to bind `8765`
+(address already in use) and the whole suite died. This forced all local E2E
+runs to serialize.
+
+As of #885 the local-server port is resolved once per pytest session:
+
+- If `PLAYWRIGHT_DJANGO_PORT` is set and non-empty, that exact port is used.
+- Otherwise the OS assigns a free ephemeral port (bind `127.0.0.1:0`, read the
+  kernel-assigned port via `getsockname()`, close the probe socket, reuse it).
+
+The resolved port is the value `runserver` binds, the value the startup probe
+hits, and the value baked into the base URL the browser navigates to — they are
+equal by construction, so the bound port can never drift from the navigated
+port.
+
+Git worktrees already isolate the code checkout and the SQLite test database
+(each worktree's Playwright run uses its own `test_playwright_db.sqlite3`). With
+the dynamic port, the last shared resource is gone: multiple agents in separate
+worktrees can now run `make test-playwright` / `make test-playwright-core`
+SIMULTANEOUSLY without interfering. Each agent verifies its own work
+independently — there is no need to serialize on the port.
+
+```bash
+make test-playwright          # full active suite
+make test-playwright-core     # deploy-critical core subset
+```
+
+Run those from each worktree concurrently as needed; no port flags required.
+
+### `PLAYWRIGHT_DJANGO_PORT` override
+
+Set `PLAYWRIGHT_DJANGO_PORT` only when you want to pin a known port (e.g. for
+debugging against a fixed URL, or attaching external tooling). When unset, the
+OS-assigned free port is used — this is the normal path and what makes parallel
+worktree runs safe. The remote/CI path is unaffected: when `PLAYWRIGHT_BASE_URL`
+points at a remote host (e.g. `https://dev.aishippinglabs.com`) no local server
+starts and no port is allocated at all.
+
+### Supersedes the old constraint
+
+This SUPERSEDES the previous rule "don't run two Playwright suites at once from
+different worktrees." With per-session OS-assigned ports, concurrent
+worktree runs are supported and expected.
 
 ## Live LLM-judge tests (`make test-judge`)
 

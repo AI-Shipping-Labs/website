@@ -13,9 +13,9 @@ Nine scenarios from the groomed issue spec:
 8. Timeline section reads cleanly without filler copy.
 9. Teammate viewing a shared plan has no edit affordances.
 
-These tests live in the ``playwright_tests/`` directory and must NOT be
-run concurrently from another worktree -- the dev server uses a fixed
-port (8765) and only one process can bind it at a time.
+These tests live in the ``playwright_tests/`` directory. The dev-server
+fixture now binds an OS-assigned free port per session (#885), so these
+can run concurrently with another worktree's Playwright suite.
 """
 
 import datetime

@@ -10,7 +10,8 @@ Three flows are exercised end-to-end:
 3. Studio plan detail (staff surface) renders the participant
    notes read-only and reuses the shared comments partial.
 
-The Django dev server is reused on port 8765 via ``django_server``;
+The Django dev server is reused via ``django_server`` on a port
+resolved once per session (OS-assigned free port by default, #885);
 each test creates its own users, sprint, plan, and week so we do
 not depend on ordering.
 """

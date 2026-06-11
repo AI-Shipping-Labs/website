@@ -70,6 +70,9 @@ coverage:
 	uv run coverage report --fail-under=85
 
 # Run the full active Playwright end-to-end suite.
+# The local-server fixture picks a free OS-assigned port per session (#885),
+# so concurrent runs from separate worktrees no longer collide on a fixed
+# port. Set PLAYWRIGHT_DJANGO_PORT only to pin a known port.
 test-playwright:
 	uv run pytest -m "not legacy_checkout and not visual_regression" playwright_tests/ -v
 

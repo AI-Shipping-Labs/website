@@ -12,8 +12,11 @@ Covers the eight scenarios from the spec:
 - Per-user remove is separate from delete-everywhere.
 
 Usage:
-    PLAYWRIGHT_DJANGO_PORT=8789 \
-      uv run pytest playwright_tests/test_studio_tag_management.py -v
+    uv run pytest playwright_tests/test_studio_tag_management.py -v
+
+The fixture now picks a free OS-assigned port per session, so concurrent
+runs from separate worktrees no longer collide. Set
+``PLAYWRIGHT_DJANGO_PORT`` only if you need to pin a known port.
 """
 
 import os

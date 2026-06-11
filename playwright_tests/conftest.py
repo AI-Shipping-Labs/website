@@ -14,9 +14,20 @@ must tag themselves ``local_only``. See
 ``.github/workflows/scheduled-playwright-dev.yml`` and
 ``_docs/testing-guidelines.md`` ("Marker taxonomy") for the dev-suite
 policy.
+
+Local-server port: when no remote ``PLAYWRIGHT_BASE_URL`` is configured the
+in-process ``runserver`` binds a port resolved once per session by
+``_resolved_local_port()``. If ``PLAYWRIGHT_DJANGO_PORT`` is set and non-empty
+that exact port is used; otherwise the OS assigns a free ephemeral port
+(``_pick_free_port()``). The same resolved port is used by ``runserver``, the
+startup probe, and the base URL the browser navigates to — they are equal by
+construction. This lets several worktrees run Playwright concurrently without
+colliding on a single fixed port. See ``_docs/testing-guidelines.md``
+("Running Playwright in isolation / parallel across worktrees").
 """
 
 import os
+import socket
 import threading
 import time
 from pathlib import Path
@@ -31,19 +42,59 @@ from website.test_database_guard import assert_playwright_database_is_safe
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 DJANGO_HOST = "127.0.0.1"
-DJANGO_PORT = int(os.environ.get("PLAYWRIGHT_DJANGO_PORT", "8765"))
-DJANGO_BASE_URL = f"http://{DJANGO_HOST}:{DJANGO_PORT}"
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "0.0.0.0", "::1"}
+
+# Cached, session-scoped local-server port. Resolved lazily on the
+# local-server path only (never allocated when running against a remote
+# ``PLAYWRIGHT_BASE_URL``). ``runserver``, the startup probe, and the yielded
+# base URL all read this same value so they are guaranteed identical.
+_LOCAL_PORT = None
+
+
+def _pick_free_port():
+    """Ask the OS for a free TCP port on ``DJANGO_HOST``.
+
+    Binds a socket to port 0, reads the kernel-assigned port from
+    ``getsockname()``, closes the socket, and returns the port. There is a
+    small TOCTOU window between closing this probe socket and ``runserver``
+    binding the same port, but two concurrent worktrees landing on the same
+    ephemeral port in that window is vanishingly unlikely — far safer than a
+    deterministic worktree-path hash, which can collide outright.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind((DJANGO_HOST, 0))
+        return probe.getsockname()[1]
+
+
+def _resolved_local_port():
+    """Return the in-process Django server port, resolved once per session.
+
+    Uses ``PLAYWRIGHT_DJANGO_PORT`` verbatim when set and non-empty (preserves
+    pinned/CI usage and lets a developer force a known port), otherwise asks
+    the OS for a free ephemeral port. The value is memoized so ``runserver``,
+    the startup probe, and the browser base URL all use the identical port.
+    """
+    global _LOCAL_PORT
+    if _LOCAL_PORT is None:
+        override = os.environ.get("PLAYWRIGHT_DJANGO_PORT", "").strip()
+        _LOCAL_PORT = int(override) if override else _pick_free_port()
+    return _LOCAL_PORT
+
+
+def _local_base_url():
+    """Return the in-process Django dev server URL for the resolved port."""
+    return f"http://{DJANGO_HOST}:{_resolved_local_port()}"
 
 
 def _resolved_base_url():
     """Return the effective Playwright base URL.
 
     If ``PLAYWRIGHT_BASE_URL`` is set, use it verbatim. Otherwise fall back to
-    the in-process Django dev server URL (``http://127.0.0.1:8765``).
+    the in-process Django dev server URL on the session-resolved local port
+    (``http://127.0.0.1:<dynamic-port>``).
     """
-    return os.environ.get("PLAYWRIGHT_BASE_URL", "").strip() or DJANGO_BASE_URL
+    return os.environ.get("PLAYWRIGHT_BASE_URL", "").strip() or _local_base_url()
 
 
 def _base_url_is_local(url):
@@ -142,12 +193,13 @@ def _start_django_server():
     # Run migrations first (uses in-memory or file-based sqlite)
     call_command("migrate", "--run-syncdb", verbosity=0)
 
-    # Start the server in a daemon thread
+    # Start the server in a daemon thread on the session-resolved port.
+    port = _resolved_local_port()
     original_argv = sys.argv
     sys.argv = [
         "manage.py",
         "runserver",
-        f"{DJANGO_HOST}:{DJANGO_PORT}",
+        f"{DJANGO_HOST}:{port}",
         "--noreload",
         "--insecure",
     ]
@@ -163,9 +215,10 @@ def _start_django_server():
     import urllib.error
     import urllib.request
 
+    base_url = _local_base_url()
     for _ in range(30):
         try:
-            urllib.request.urlopen(f"{DJANGO_BASE_URL}/", timeout=2)
+            urllib.request.urlopen(f"{base_url}/", timeout=2)
             return thread
         except (urllib.error.URLError, ConnectionError, OSError):
             # Intentional: server-startup probe, not a test wait. There is
@@ -181,8 +234,10 @@ def django_server(request):
 
     When ``PLAYWRIGHT_BASE_URL`` is unset (or points at a local host) this
     starts the in-process Django dev server using pytest-django's test
-    database and yields ``http://127.0.0.1:8765``. When ``PLAYWRIGHT_BASE_URL``
-    points at a remote host (dev / prod), no local server is started and the
+    database and yields ``http://127.0.0.1:<port>``, where the port is resolved
+    once per session (``PLAYWRIGHT_DJANGO_PORT`` if set, else an OS-assigned
+    free port). When ``PLAYWRIGHT_BASE_URL`` points at a remote host
+    (dev / prod), no local server is started, no port is allocated, and the
     configured URL is yielded as-is — local-only and ``django_db`` tests have
     already been skipped by ``pytest_collection_modifyitems``.
     """
@@ -199,7 +254,7 @@ def django_server(request):
     django_db_blocker = request.getfixturevalue("django_db_blocker")
     with django_db_blocker.unblock():
         _start_django_server()
-        yield DJANGO_BASE_URL
+        yield _local_base_url()
 
 
 # ---------------------------------------------------------------------------

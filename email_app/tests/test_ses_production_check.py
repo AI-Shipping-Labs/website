@@ -147,8 +147,8 @@ class SesProductionCheckSilencedTest(SimpleTestCase):
     during E2E runs, and ``pytest-django`` defaults ``DEBUG=False``.
     Without ``SILENCED_SYSTEM_CHECKS = ['email_app.E001']``, the
     ``runserver --noreload`` thread would raise ``SystemCheckError`` at
-    startup, never bind port 8765, and break every Playwright test at
-    fixture setup. If somebody removes the silence in the future, the
+    startup, never bind its server port, and break every Playwright test
+    at fixture setup. If somebody removes the silence in the future, the
     test below pinpoints the breakage as a one-line config issue
     instead of a 678-test cascade.
     """

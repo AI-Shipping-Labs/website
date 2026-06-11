@@ -5,8 +5,9 @@ follow-up to #655).
 Sibling to ``test_studio_workshop_notify.py``: that file owns the bell
 channel from #647; this file owns the email channel from #655. The five
 scenarios below honour the original spec promise in #655 that the
-SWE shipped as 22 Django tests at the time (citing port-8765 contention)
-rather than as browser-driven Playwright coverage.
+SWE shipped as 22 Django tests at the time (citing the then-current
+single-fixed-port-8765 contention, since resolved in #885) rather than
+as browser-driven Playwright coverage.
 
 Scenarios
 ---------

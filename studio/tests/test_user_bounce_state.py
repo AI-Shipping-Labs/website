@@ -190,8 +190,12 @@ class StudioUserDetailBounceCardTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Bounce status")
-        # The label "Soft bounce" appears; "Permanent" does not turn up
-        # anywhere on the page either (no stale state badge).
+        # The label "Soft bounce" appears; no stale "permanent" state badge
+        # turns up. Assert on the badge's ``data-bounce-state`` attribute
+        # rather than the bare word "Permanent" so the State help tooltip
+        # (issue #924), which legitimately mentions "Permanent ... bounces",
+        # does not trip a substring match.
         self.assertContains(response, "Soft bounce")
-        self.assertNotContains(response, "Permanent bounce")
+        self.assertContains(response, 'data-bounce-state="soft"')
+        self.assertNotContains(response, 'data-bounce-state="permanent"')
         self.assertContains(response, "421 4.4.5 Server busy")

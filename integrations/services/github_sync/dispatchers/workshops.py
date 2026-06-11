@@ -521,6 +521,79 @@ _EVENT_SOURCE_OWNERSHIP_FIELDS = (
 )
 
 
+def _normalize_title_for_match(title):
+    """Normalize an event/workshop title for the dedup heuristic (issue #880).
+
+    Lowercase, collapse internal whitespace to single spaces, and strip
+    surrounding whitespace and punctuation. Deliberately conservative — it
+    only smooths over case and spacing differences ("  Take-Home  Assignment
+    Live " vs "take-home assignment live"), not semantic ones, so the
+    title+date key stays a low-false-positive match.
+    """
+    if not title or not isinstance(title, str):
+        return ''
+    normalized = title.strip().lower()
+    # Collapse any run of whitespace to a single space.
+    normalized = re.sub(r'\s+', ' ', normalized)
+    # Strip surrounding punctuation (but keep internal punctuation such as the
+    # hyphen in "take-home" so distinct titles stay distinct).
+    normalized = normalized.strip('.,;:!?-–—"\'')
+    return normalized.strip()
+
+
+def _resolve_heuristic_workshop_event(workshop, workshop_date):
+    """Conservative title+date dedup match (issue #880).
+
+    Runs only when there is no explicit reference (#879) and no slug match.
+    Returns ``(matched_count, event)``:
+
+    - ``(0, None)`` when nothing matches — caller falls through to the
+      logged auto-create fallback (unchanged behaviour for genuinely new
+      workshops).
+    - ``(1, <Event>)`` when EXACTLY ONE existing event matches on the same
+      calendar day AND normalized title — caller links to it, content fields
+      only, never minting a duplicate.
+    - ``(n, None)`` with ``n > 1`` when the heuristic is ambiguous — caller
+      refuses to guess, records an error, and creates nothing.
+
+    Match key:
+    - Date: ``event.start_datetime`` date (in UTC) equals the workshop's
+      calendar ``date``. The GitHub create path mints 00:00 UTC and Studio
+      events carry real times, so we compare on DATE, not datetime.
+    - Title: normalized equality of ``event.title`` and ``workshop.title``.
+
+    Only events the link can safely attach to are considered. A pre-existing
+    ``origin='github', kind='workshop'`` row for this same workshop is handled
+    by the idempotent slug/content_id path, not here, so we restrict the
+    candidate set to ``origin='studio'`` events.
+    """
+    import datetime as dt
+
+    from django.db.models.functions import TruncDate
+    from events.models import Event
+
+    target_title = _normalize_title_for_match(workshop.title)
+    if not target_title:
+        return 0, None
+
+    # Narrow to same-calendar-day studio candidates in the DB, then apply the
+    # normalized-title equality in Python (normalization isn't expressible as a
+    # portable ORM filter). Truncate in UTC explicitly so the calendar-day
+    # comparison matches the 00:00 UTC the GitHub create path mints, regardless
+    # of the active connection timezone.
+    same_day = Event.objects.filter(origin='studio').annotate(
+        start_date=TruncDate('start_datetime', tzinfo=dt.timezone.utc),
+    ).filter(start_date=workshop_date)
+
+    matches = [
+        event for event in same_day
+        if _normalize_title_for_match(event.title) == target_title
+    ]
+    if len(matches) == 1:
+        return 1, matches[0]
+    return len(matches), None
+
+
 def _resolve_explicit_workshop_event(event_id, event_slug):
     """Resolve an explicit ``event_id`` / ``event_slug`` reference.
 
@@ -634,21 +707,57 @@ def _link_or_create_workshop_event(
         existing_event = explicit_event
         create_kwargs = None
     else:
-        # Legacy path (no reference): match by slug, create on miss. This is
-        # the behaviour #880 will refine for the no-reference case.
+        # No-reference resolution order (issue #880): slug match -> title+date
+        # heuristic -> create as a last resort.
         existing_event = Event.objects.filter(slug=workshop.slug).first()
-        if existing_event is None:
-            start_dt = dt.datetime.combine(
-                workshop_date, dt.time.min, tzinfo=dt.timezone.utc,
-            )
-            create_kwargs = {
-                'slug': workshop.slug,
-                'start_datetime': start_dt,
-                'status': 'completed',
-                'published': True,
-            }
-        else:
+        if existing_event is not None:
+            # Step 2: slug match (existing behaviour, regression-safe).
             create_kwargs = None
+        else:
+            # Step 3: conservative title+date dedup heuristic. Link only when
+            # EXACTLY ONE existing studio event matches; refuse to guess when
+            # more than one does; fall through to create on zero matches.
+            matched_count, heuristic_event = _resolve_heuristic_workshop_event(
+                workshop, workshop_date,
+            )
+            if matched_count > 1:
+                # Ambiguous: do NOT guess. Record an error asking the author
+                # for an explicit event_id and create nothing — a wrong link
+                # or a duplicate are both worse than refusing.
+                stats['errors'].append({
+                    'file': yaml_rel_path,
+                    'error': (
+                        f'workshop {workshop.slug}: {matched_count} existing '
+                        f'events match title {workshop.title!r} on '
+                        f'{workshop_date.isoformat()} — refusing to guess. '
+                        f'Set an explicit event_id in workshop.yaml to link '
+                        f'the right one.'
+                    ),
+                })
+                return
+            if heuristic_event is not None:
+                # Exactly one match: link to it, content fields only.
+                existing_event = heuristic_event
+                create_kwargs = None
+            else:
+                # Step 4: no match on any step — auto-create the fallback
+                # github-origin workshop event and log it so the operator can
+                # promote/link it later (no-match policy, issue #865).
+                start_dt = dt.datetime.combine(
+                    workshop_date, dt.time.min, tzinfo=dt.timezone.utc,
+                )
+                create_kwargs = {
+                    'slug': workshop.slug,
+                    'start_datetime': start_dt,
+                    'status': 'completed',
+                    'published': True,
+                }
+                logger.warning(
+                    'Workshop %s: no Studio event matched (title %r on %s) — '
+                    'auto-creating a github-origin workshop event. Link it to '
+                    'a Studio event with an explicit event_id to dedup.',
+                    workshop.slug, workshop.title, workshop_date.isoformat(),
+                )
 
     # When linking to a pre-existing STUDIO event, drop the source-ownership
     # fields so it keeps ``origin='studio'``/``source_repo=''`` — writing

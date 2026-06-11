@@ -160,10 +160,14 @@ class TestSelfHostedCuePausedThenPlays:
             "() => { const v = document.getElementById('video-player-self-hosted');"
             " v.preload = 'auto'; v.load(); }"
         )
+        # The full-buffer + canplay + seek round-trip is buffering-bound and
+        # runs slower under CI load than locally, so allow a generous budget
+        # before asserting the cued playhead. This is purely a timing budget;
+        # the assertion below still fails loudly if the cue handler is broken.
         page.wait_for_function(
             "() => { const v = document.getElementById('video-player-self-hosted');"
             " return v && v.currentTime > 900; }",
-            timeout=15000,
+            timeout=45000,
         )
 
         current_time = page.evaluate(

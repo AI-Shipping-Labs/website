@@ -47,12 +47,12 @@ class RepoFileClaimingCharacterizationTest(TestCase):
         classified = _classify_repo_files(str(repo.path))
 
         self.assertEqual(
-            [path.replace('\\', '/') for path in classified['article_files']],
+            [path.replace('\\', '/') for path in classified.article_files],
             ['blog/real-article.md'],
         )
-        self.assertEqual(len(classified['course_dirs']), 1)
+        self.assertEqual(len(classified.course_dirs), 1)
         self.assertTrue(
-            classified['course_dirs'][0].replace('\\', '/').endswith(
+            classified.course_dirs[0].replace('\\', '/').endswith(
                 'courses/python',
             ),
         )

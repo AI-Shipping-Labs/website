@@ -64,19 +64,6 @@ class RepoClassification:
     download_files: list
     interview_files: list
 
-    def as_dict(self):
-        return {
-            'course_dirs': self.course_dirs,
-            'workshop_dirs': self.workshop_dirs,
-            'article_files': self.article_files,
-            'project_files': self.project_files,
-            'event_files': self.event_files,
-            'instructor_files': self.instructor_files,
-            'curated_link_files': self.curated_link_files,
-            'download_files': self.download_files,
-            'interview_files': self.interview_files,
-        }
-
 
 def _is_head_unchanged_skip(log):
     """Return True for skip logs written by the HEAD-unchanged fast path."""
@@ -404,8 +391,8 @@ def _release_lock_and_enqueue_follow_up(source):
 def _classify_repo_files(repo_dir, classify_errors=None):
     """First-pass walk: classify every file in the repo for dispatch.
 
-    Returns a dict with per-type lists of repo-relative paths plus a list
-    of claimed course/workshop directories (relative to ``repo_dir``).
+    Returns a :class:`RepoClassification` with per-type lists of
+    repo-relative paths plus the claimed course/workshop directories.
 
     The walker prunes course and workshop subtrees: any file under a path
     that contains a ``course.yaml`` or ``workshop.yaml`` ancestor is
@@ -415,7 +402,7 @@ def _classify_repo_files(repo_dir, classify_errors=None):
     otherwise get double-claimed as an Article.
 
     Returns:
-        dict with keys:
+        RepoClassification with attributes:
           ``course_dirs`` — list of absolute paths to course root dirs
               (each contains a ``course.yaml``).
           ``workshop_dirs`` — list of absolute paths to workshop root
@@ -437,11 +424,11 @@ def _classify_repo_files(repo_dir, classify_errors=None):
               the interview-question convention (lowercase kebab-case,
               not README) AND having no special frontmatter.
     """
-    return RepoFileClassifier(repo_dir, classify_errors).classify().as_dict()
+    return RepoFileClassifier(repo_dir, classify_errors).classify()
 
 
 class RepoFileClassifier:
-    """Two-pass repo classifier that preserves the legacy dict boundary."""
+    """Two-pass repo classifier returning a :class:`RepoClassification`."""
 
     def __init__(self, repo_dir, classify_errors=None):
         self.repo_dir = repo_dir
@@ -650,7 +637,7 @@ def _build_cross_workshop_lookup(workshop_dirs, repo_dir, errors=None):
 
     Args:
         workshop_dirs: Absolute paths from
-            ``_classify_repo_files()['workshop_dirs']``.
+            ``_classify_repo_files().workshop_dirs``.
         repo_dir: Absolute path to the cloned repo (used to compute
             relative paths for error messages).
         errors: Optional list to append per-workshop build-time errors to.
@@ -813,7 +800,7 @@ def _sync_repo(source, repo_dir, commit_sha, sync_log, known_images=None):
     # can resolve `../<folder>/...` and full-GitHub-URL references to
     # native `/workshops/<slug>` URLs across the whole sync run.
     cross_workshop_lookup = _build_cross_workshop_lookup(
-        classified['workshop_dirs'], repo_dir, errors=stats['errors'],
+        classified.workshop_dirs, repo_dir, errors=stats['errors'],
     )
     workshops_repo_name = _resolve_workshops_repo_name(source)
 
@@ -822,41 +809,41 @@ def _sync_repo(source, repo_dir, commit_sha, sync_log, known_images=None):
     # course/workshop/article from the repo would leave the matching
     # rows ``status='published'`` forever.
     _dispatch_courses(
-        source, repo_dir, classified['course_dirs'],
+        source, repo_dir, classified.course_dirs,
         commit_sha, stats, known_images=known_images,
     )
     _dispatch_workshops(
-        source, repo_dir, classified['workshop_dirs'],
+        source, repo_dir, classified.workshop_dirs,
         commit_sha, stats, known_images=known_images,
         cross_workshop_lookup=cross_workshop_lookup,
         workshops_repo_name=workshops_repo_name,
     )
     _dispatch_articles(
-        source, repo_dir, classified['article_files'],
+        source, repo_dir, classified.article_files,
         commit_sha, stats, known_images=known_images,
     )
     _dispatch_projects(
-        source, repo_dir, classified['project_files'],
+        source, repo_dir, classified.project_files,
         commit_sha, stats, known_images=known_images,
     )
     _dispatch_events(
-        source, repo_dir, classified['event_files'],
+        source, repo_dir, classified.event_files,
         commit_sha, stats, known_images=known_images,
     )
     _dispatch_instructors(
-        source, repo_dir, classified['instructor_files'],
+        source, repo_dir, classified.instructor_files,
         commit_sha, stats,
     )
     _dispatch_curated_links(
-        source, repo_dir, classified['curated_link_files'],
+        source, repo_dir, classified.curated_link_files,
         commit_sha, stats,
     )
     _dispatch_downloads(
-        source, repo_dir, classified['download_files'],
+        source, repo_dir, classified.download_files,
         commit_sha, stats, known_images=known_images,
     )
     _dispatch_interview_questions(
-        source, repo_dir, classified['interview_files'],
+        source, repo_dir, classified.interview_files,
         commit_sha, stats, known_images=known_images,
     )
 

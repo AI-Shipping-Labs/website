@@ -792,7 +792,6 @@ def _build_workshop_page_lookup(
 def _resolve_workshop_landing_copy(
     workshop_dir, data, rel_path, page_lookup, workshop_slug, repo_name,
     sync_errors, cross_workshop_lookup=None, workshops_repo_name=None,
-    source_workshop_folder=None,
 ):
     """Resolve the markdown body for a workshop's landing description.
 
@@ -934,7 +933,6 @@ def _resolve_workshop_landing_copy(
             body,
             cross_workshop_lookup=cross_workshop_lookup,
             workshops_repo_name=workshops_repo_name,
-            source_workshop_folder=source_workshop_folder,
             source_path=landing_source_path,
             sync_errors=sync_errors,
         )

@@ -614,7 +614,6 @@ class RewriteCrossWorkshopMdLinksTest(SimpleTestCase):
     doesn't 404.
     """
 
-    source_folder = '2026-05-05-lambda-agent-deployment'
     source_path = (
         '2026/2026-05-05-lambda-agent-deployment/01-overview.md'
     )
@@ -624,7 +623,6 @@ class RewriteCrossWorkshopMdLinksTest(SimpleTestCase):
             'cross_workshop_lookup', CROSS_WORKSHOP_LOOKUP,
         )
         kwargs.setdefault('workshops_repo_name', WORKSHOPS_REPO)
-        kwargs.setdefault('source_workshop_folder', self.source_folder)
         kwargs.setdefault('source_path', self.source_path)
         return rewrite_cross_workshop_md_links(body, **kwargs)
 

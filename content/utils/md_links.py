@@ -416,7 +416,6 @@ def rewrite_cross_workshop_md_links(
     body,
     cross_workshop_lookup,
     workshops_repo_name,
-    source_workshop_folder=None,
     source_path=None,
     sync_errors=None,
 ):
@@ -458,10 +457,6 @@ def rewrite_cross_workshop_md_links(
         workshops_repo_name: Full workshops repo (e.g.
             ``"AI-Shipping-Labs/workshops"``). Used to recognise GitHub URLs
             into the configured workshops repo. Must be non-empty.
-        source_workshop_folder: On-disk folder name of the workshop owning
-            this body (used so a relative link like ``../<own-folder>/...``
-            doesn't bounce to itself in odd ways — currently only used for
-            error messages, but kept for symmetry with the page lookup).
         source_path: Repo-relative path of the file being rewritten, used
             only for log/warning messages.
         sync_errors: Optional list to append warning records to. Each record
@@ -473,8 +468,6 @@ def rewrite_cross_workshop_md_links(
         possible. Unrecognised shapes and unresolved targets are left
         byte-for-byte untouched.
     """
-    del source_workshop_folder  # currently unused, kept for API symmetry
-
     if not body:
         return body
 

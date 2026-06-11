@@ -357,15 +357,11 @@ def _sync_single_workshop(
         # Issue #526: also pass through the cross-workshop rewriter so
         # ``[Previous workshop](../<sibling-folder>/)`` in README.md
         # resolves on the workshop landing page too.
-        source_workshop_folder = os.path.basename(
-            workshop_dir.rstrip(os.sep),
-        )
         landing_description = _resolve_workshop_landing_copy(
             workshop_dir, data, rel_path, page_lookup, slug,
             source.repo_name, stats['errors'],
             cross_workshop_lookup=cross_workshop_lookup,
             workshops_repo_name=workshops_repo_name,
-            source_workshop_folder=source_workshop_folder,
         )
 
         workshop_defaults = {
@@ -483,7 +479,6 @@ def _sync_single_workshop(
             page_lookup=page_lookup,
             cross_workshop_lookup=cross_workshop_lookup,
             workshops_repo_name=workshops_repo_name,
-            source_workshop_folder=source_workshop_folder,
             workshop_url_key=workshop_url_key,
         )
 
@@ -879,7 +874,7 @@ def _sync_workshop_pages(
     workshop, workshop_dir, repo_dir, repo_name, commit_sha, stats,
     known_images=None, page_lookup=None,
     cross_workshop_lookup=None, workshops_repo_name=None,
-    source_workshop_folder=None, workshop_url_key=None,
+    workshop_url_key=None,
 ):
     """Sync ``*.md`` pages under a workshop folder into ``WorkshopPage`` rows.
 
@@ -1029,7 +1024,6 @@ def _sync_workshop_pages(
                     body,
                     cross_workshop_lookup=cross_workshop_lookup,
                     workshops_repo_name=workshops_repo_name,
-                    source_workshop_folder=source_workshop_folder,
                     source_path=rel_path,
                     sync_errors=stats.get('errors'),
                 )

@@ -30,8 +30,11 @@ from integrations.services.banner_generator import (
     BannerGeneratorError,
     render_to_s3,
 )
-from integrations.services.banner_generator.dispatch import (
+from integrations.services.banner_generator.content_models import (
     SUPPORTED_CONTENT_TYPES,
+    model_for,
+)
+from integrations.services.banner_generator.dispatch import (
     title_hash,
     title_value,
 )
@@ -540,26 +543,6 @@ def delete_generated_banner_object(content_type, url):
 # --------------------------------------------------------------------------
 
 
-def _resolve_model(content_type):
-    """Map a content_type slug to its model class (deferred import).
-
-    Duplicates the table in ``dispatch`` so the worker doesn't pull in
-    the dispatcher module (which depends on ``jobs.tasks.helpers``).
-    """
-    from content.models import Article, Course, Download, Project, Workshop
-    from events.models import Event, EventSeries
-
-    return {
-        'article': Article,
-        'course': Course,
-        'project': Project,
-        'download': Download,
-        'workshop': Workshop,
-        'event': Event,
-        'event_series': EventSeries,
-    }.get(content_type)
-
-
 def render_banner_for_content(content_type, content_pk):
     """Worker task: render and persist a banner for one content record.
 
@@ -576,7 +559,7 @@ def render_banner_for_content(content_type, content_pk):
         )
         return None
 
-    model = _resolve_model(content_type)
+    model = model_for(content_type)
     if model is None:
         logger.warning(
             'render_banner_for_content: unknown content_type=%r',

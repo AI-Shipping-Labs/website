@@ -22,5 +22,3 @@ Recommendations, Internal Action Items, Sources) are documented in
 the data model and Studio admin scaffold; #433 adds API endpoints; #434
 adds the drag-and-drop editor.
 """
-
-default_app_config = 'plans.apps.PlansConfig'

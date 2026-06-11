@@ -469,7 +469,6 @@ class StudioSlackTeamIdSettingsSaveTest(TestCase):
             'SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID': '',
             'SLACK_TEST_COMMUNITY_CHANNEL_IDS': '',
             'SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID': '',
-            'SLACK_ANNOUNCEMENTS_CHANNEL_NAME': '',
             'SLACK_INVITE_URL': '',
             'SLACK_TEAM_ID': 'T01NEWTEAM',
         }

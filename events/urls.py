@@ -50,11 +50,6 @@ urlpatterns = [
         event_series_public,
         name='event_series_public',
     ),
-    path(
-        'events/groups/<slug:slug>/',
-        event_series_public,
-        name='event_series_public_trailing',
-    ),
     # Issue #673: slug-keyed sibling routes for join, .ics download, and
     # cancel-registration intentionally stay on ``events/<slug>/<verb>``.
     # They are not user-bookmarkable surfaces (URLs minted server-side

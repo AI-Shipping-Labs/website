@@ -538,10 +538,10 @@ class IntegrationSettingsGetApiTest(TestCase):
     def test_get_marks_django_settings_with_source_django_settings(self):
         # Use a registry key NOT normally on django.conf.settings, so
         # override_settings injecting it cleanly demonstrates the
-        # django_settings branch. SLACK_ANNOUNCEMENTS_CHANNEL_NAME has
+        # django_settings branch. SLACK_PLAN_SPRINTS_CHANNEL_ID has
         # no entry in website/settings.py and no registry default —
         # override_settings is the only source.
-        settings_key = "SLACK_ANNOUNCEMENTS_CHANNEL_NAME"
+        settings_key = "SLACK_PLAN_SPRINTS_CHANNEL_ID"
         # Defensive: clear env for this key so it doesn't shadow the
         # settings layer in dev environments where it might be set.
         with patch.dict(os.environ, {}, clear=False):

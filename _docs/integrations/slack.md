@@ -266,29 +266,6 @@ Rotation: Same as `SLACK_ANNOUNCEMENTS_CHANNEL_ID`.
 Test vs live: This key is the test counterpart to
 `SLACK_ANNOUNCEMENTS_CHANNEL_ID`.
 
-## SLACK_ANNOUNCEMENTS_CHANNEL_NAME
-
-Purpose: Human-readable display name of the announcements channel
-(e.g. `#announcements`). Used in UI copy only — for example, "New
-events go to #announcements" on internal Studio screens. Has no effect
-on routing; routing is driven entirely by the `*_CHANNEL_ID` keys.
-
-Without it: UI copy that interpolates the channel name renders an
-empty string. Posting still works because routing uses the channel ID,
-not the name.
-
-Where to find it: It is whatever you call the channel in Slack —
-include the leading `#`. There is no Slack API or dashboard step.
-
-Prereqs: None. Cosmetic only.
-
-Rotation: Update whenever you rename the announcements channel in
-Slack. There is no automation that picks the new name up.
-
-Test vs live: n/a. One name, used in copy across environments. If the
-test workspace uses a different channel name, you can override per
-environment via the usual `IntegrationSetting` per-env precedence.
-
 ## SLACK_INVITE_URL
 
 Purpose: Public Slack workspace invite URL (the `https://join.slack.com/t/...`

@@ -233,7 +233,6 @@ Keys to set in Studio:
 | `SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID` | non-secret | Development-only announcement channel ID. If empty in development, announcement posting is skipped. |
 | `SLACK_TEST_COMMUNITY_CHANNEL_IDS` | non-secret | Test-only community channel IDs, only for explicitly opted-in integration tests. |
 | `SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID` | non-secret | Test-only announcement channel ID, expected to be `C0AHN84QNP3` for #integration-tests. |
-| `SLACK_ANNOUNCEMENTS_CHANNEL_NAME` | non-secret | Display name (e.g. `#announcements`). |
 | `SLACK_INVITE_URL` | non-secret | Public Slack invite link shown to new members. |
 
 Bot scopes (Slack app > OAuth & Permissions > Bot Token Scopes): minimum `chat:write`, `channels:read`. Add more as features need them.

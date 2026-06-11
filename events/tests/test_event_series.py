@@ -203,6 +203,20 @@ class PublicEventSeriesViewTest(TestCase):
         response = self.client.get(self.published_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
 
+    def test_trailing_slash_301s_to_canonical_no_slash_form(self):
+        """Issue #909: ``/events/groups/<slug>/`` (trailing slash) is
+        normalised by the site-wide ``RemoveTrailingSlashMiddleware``
+        with a 301 to the no-slash form *before* URL routing runs —
+        ``events`` is not in ``SKIP_PREFIXES``. This locks in that
+        behaviour so the canonical no-slash route is the only reachable
+        one (the dedicated trailing-slash url pattern was dead code).
+        """
+        response = self.client.get(f'/events/groups/{self.series.slug}/')
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(
+            response['Location'], f'/events/groups/{self.series.slug}'
+        )
+
 
 class PublicEventSeriesBannerTest(TestCase):
     """Issue #896: the public series page surfaces ``auto_banner_url``."""

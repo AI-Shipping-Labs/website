@@ -97,6 +97,12 @@ from api.views.users import (
     user_tags_remove,
     users_collection,
 )
+from api.views.utm_campaigns import (
+    utm_campaign_detail,
+    utm_campaign_link_detail,
+    utm_campaign_links_collection,
+    utm_campaigns_collection,
+)
 from api.views.weeks import plan_weeks_collection, week_detail
 from api.views.worker import (
     worker_task_detail,
@@ -228,6 +234,32 @@ urlpatterns = [
         "redirects/<int:redirect_id>",
         redirect_detail,
         name="api_redirect_detail",
+    ),
+    # ---- UTM campaigns + tracked links (issue #875) -------------------
+    # Token-authenticated CRUD over UtmCampaign / UtmCampaignLink. No DELETE
+    # route is registered (archive via PATCH is_archived=true), so a DELETE
+    # request falls through to the require_methods 405. Register the
+    # ``<id>/links`` sub-routes (more segments) BEFORE the bare ``<id>``
+    # detail so the precedence is explicit.
+    path(
+        "utm-campaigns",
+        utm_campaigns_collection,
+        name="api_utm_campaigns_collection",
+    ),
+    path(
+        "utm-campaigns/<int:campaign_id>/links",
+        utm_campaign_links_collection,
+        name="api_utm_campaign_links_collection",
+    ),
+    path(
+        "utm-campaigns/<int:campaign_id>/links/<int:link_id>",
+        utm_campaign_link_detail,
+        name="api_utm_campaign_link_detail",
+    ),
+    path(
+        "utm-campaigns/<int:campaign_id>",
+        utm_campaign_detail,
+        name="api_utm_campaign_detail",
     ),
     # ---- Contacts (issue #431) ----------------------------------------
     path(

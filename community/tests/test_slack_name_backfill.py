@@ -18,6 +18,13 @@ from django.test import TestCase, override_settings
 from accounts.models import User
 from community.services.slack import SlackCommunityService
 from community.tasks.slack_membership import refresh_slack_membership
+from payments.models import Tier
+
+
+def _main_user(email, **extra):
+    """Create a Main-tier user so it falls inside the #918 candidate scope."""
+    extra.setdefault('tier', Tier.objects.get(level=20))
+    return User.objects.create_user(email=email, **extra)
 
 
 @override_settings(SLACK_ENABLED=True, SLACK_BOT_TOKEN='xoxb-test')
@@ -94,7 +101,7 @@ class RefreshSlackMembershipNameBackfillTest(TestCase):
 
     @patch('community.tasks.slack_membership.get_community_service')
     def test_member_outcome_backfills_first_and_last_name(self, mock_get_service):
-        user = User.objects.create_user(email='backfill@test.com')
+        user = _main_user('backfill@test.com')
         self.assertEqual(user.first_name, '')
         self.assertEqual(user.last_name, '')
 
@@ -119,7 +126,7 @@ class RefreshSlackMembershipNameBackfillTest(TestCase):
 
     @patch('community.tasks.slack_membership.get_community_service')
     def test_real_name_fallback_when_profile_first_last_blank(self, mock_get_service):
-        user = User.objects.create_user(email='rnfallback@test.com')
+        user = _main_user('rnfallback@test.com')
 
         svc = MagicMock()
         svc.check_workspace_membership.return_value = ('member', 'U_RN')
@@ -139,7 +146,7 @@ class RefreshSlackMembershipNameBackfillTest(TestCase):
 
     @patch('community.tasks.slack_membership.get_community_service')
     def test_single_token_real_name_fills_first_only(self, mock_get_service):
-        user = User.objects.create_user(email='single@test.com')
+        user = _main_user('single@test.com')
 
         svc = MagicMock()
         svc.check_workspace_membership.return_value = ('member', 'U_S')
@@ -159,11 +166,7 @@ class RefreshSlackMembershipNameBackfillTest(TestCase):
 
     @patch('community.tasks.slack_membership.get_community_service')
     def test_does_not_overwrite_existing_name(self, mock_get_service):
-        user = User.objects.create_user(
-            email='kept@test.com',
-            first_name='Custom',
-            last_name='Edit',
-        )
+        user = _main_user('kept@test.com', first_name='Custom', last_name='Edit')
 
         svc = MagicMock()
         svc.check_workspace_membership.return_value = ('member', 'U_K')
@@ -186,7 +189,7 @@ class RefreshSlackMembershipNameBackfillTest(TestCase):
         self, mock_get_service,
     ):
         """A profile lookup exception must not undo the membership write."""
-        user = User.objects.create_user(email='boom@test.com')
+        user = _main_user('boom@test.com')
 
         svc = MagicMock()
         svc.check_workspace_membership.return_value = ('member', 'U_X')
@@ -207,7 +210,7 @@ class RefreshSlackMembershipNameBackfillTest(TestCase):
     def test_not_member_outcome_does_not_call_profile_lookup(
         self, mock_get_service,
     ):
-        User.objects.create_user(email='not@test.com')
+        _main_user('not@test.com')
 
         svc = MagicMock()
         svc.check_workspace_membership.return_value = ('not_member', None)

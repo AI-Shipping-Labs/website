@@ -10,19 +10,40 @@ Issue #358: ``slack_user_id`` is a poor proxy for "is in the workspace"
 ``slack_member`` boolean. Used by the dashboard CTA and campaign
 targeting.
 
+Issue #918 — Main+ scoping and Tier-2 pacing
+--------------------------------------------
+Only Main-tier-and-above members (and users with an active
+``TierOverride`` to Main+) can be in the Slack workspace at all — Slack
+access is a Main+ benefit. The candidate queryset is therefore scoped
+to "effective level >= LEVEL_MAIN" using the same canonical predicate as
+``email_app.models.email_campaign`` (``tier.level >= LEVEL_MAIN`` OR an
+active, non-expired override whose ``override_tier.level >= LEVEL_MAIN``).
+This drops the per-run set from "every account" (mostly Free) to the
+handful of real Main+ members, which is the direct fix for the 300s
+``Q_CLUSTER['timeout']`` failures: prior runs checked a full 120-user
+chunk of Free accounts that can never be in Slack, returning
+``unknown=120``.
+
 Issue #715 — chunked chain pattern
 ----------------------------------
 The task processes at most ``SLACK_MEMBERSHIP_CHUNK_SIZE`` users per
-run. Sizing math: the global ``Q_CLUSTER['timeout']`` is 300s and each
-call costs ~1.5s of pacing + up to 10s of HTTP timeout; 120 users x
-1.5s = 180s, leaving ~120s of headroom for slow calls. Prior behaviour
-(1000 users in one task) repeatedly tripped the 300s timeout on prod.
+run. Sizing math (issue #918): ``users.lookupByEmail`` is a Slack
+Tier 2 method (~20 requests/minute → a 3s minimum gap between calls).
+The global ``Q_CLUSTER['timeout']`` is 300s; at a conservative 3s gap
+plus up to 10s of HTTP timeout per call, a chunk of 30 users costs
+~30 x 3s = 90s of pacing base, leaving ample headroom under 300s even
+when individual calls hit their HTTP timeout (target: a typical run
+finishes well under ~120s). With Main+ scoping the realistic candidate
+count per run is small (tens, not thousands), so this comfortably
+drains the backlog. Prior behaviour (1000 users in one task, then a
+120-Free-account chunk paced at a too-fast 1.5s) repeatedly tripped the
+300s timeout on prod.
 
 When more users still match the predicate after a chunk completes, we
 enqueue a follow-up ``async_task`` pointing at this same function so
-the backlog drains in chains of ~3-4 min runs instead of one giant
-25-min run. The 30-min cron in ``setup_schedules.py`` is unchanged —
-it just kicks off the first link of each chain.
+the backlog drains in chains instead of one giant run. The cron in
+``setup_schedules.py`` is unchanged — it just kicks off the first link
+of each chain.
 
 All-unknown guard: if every user in the chunk came back ``unknown``
 (Slack integration unconfigured or in a hard outage), we do NOT
@@ -34,12 +55,14 @@ import json
 import logging
 import time
 
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import User
 from accounts.utils.names import set_name_from_external
 from community.models import CommunityAuditLog
 from community.services import get_community_service
+from content.access import LEVEL_MAIN
 from jobs.tasks import async_task, build_task_name
 
 logger = logging.getLogger(__name__)
@@ -49,20 +72,29 @@ logger = logging.getLogger(__name__)
 SLACK_MEMBERSHIP_REFRESH_DAYS = 7
 
 # Per-chunk cap. Each scheduled run processes up to this many users and
-# enqueues a follow-up ``async_task`` if more remain. Sized to fit
-# comfortably inside the 300s ``Q_CLUSTER['timeout']`` ceiling: 120
-# users x 1.5s pacing = 180s base, leaving ~120s headroom even when
-# individual calls hit their 10s HTTP timeout. See issue #715.
-SLACK_MEMBERSHIP_CHUNK_SIZE = 120
+# enqueues a follow-up ``async_task`` if more remain. Sized (issue #918)
+# to fit comfortably inside the 300s ``Q_CLUSTER['timeout']`` ceiling at
+# the corrected Tier-2 pacing: 30 users x 3.0s pacing = 90s base,
+# leaving >200s headroom even when individual calls hit their 10s HTTP
+# timeout. With Main+ scoping the realistic candidate count per run is
+# small (tens), so this drains the backlog without ever approaching the
+# timeout. See issues #715 and #918.
+SLACK_MEMBERSHIP_CHUNK_SIZE = 30
 
 # Absolute per-run hard ceiling. Retained for callers that explicitly
 # request a larger ``batch_size`` (e.g. one-off backfills); the periodic
 # scheduled run uses ``SLACK_MEMBERSHIP_CHUNK_SIZE`` instead.
 SLACK_MEMBERSHIP_BATCH_SIZE = 1000
 
-# Sleep between API calls to stay under Slack's Tier 4 rate limit.
-# 50 RPM = 1.2s minimum gap; 1.5s gives headroom.
-SLACK_MEMBERSHIP_SLEEP_SECONDS = 1.5
+# Sleep between API calls to stay under Slack's rate limit.
+# ``users.lookupByEmail`` is a Slack Tier 2 method (~20 requests/minute),
+# so the minimum safe gap is 60/20 = 3.0s. We use exactly that. The
+# previous 1.5s value (~40 RPM) was sized against a wrong "Tier 4 /
+# 50 RPM" assumption and caused Slack to ``ratelimited`` most of the
+# batch, producing the all-unknown result (issue #918). A single
+# bounded retry honoring ``Retry-After`` in ``check_workspace_membership``
+# absorbs any transient throttle on top of this pacing.
+SLACK_MEMBERSHIP_SLEEP_SECONDS = 3.0
 
 # Tag name mirrored on User.tags when issue #354 ships the tags primitive.
 SLACK_MEMBER_TAG = "slack-member"
@@ -144,10 +176,17 @@ def refresh_slack_membership(
       ``slack_checked_at=now()``.
     - ``("unknown", None)``: leave fields alone — retry next cycle.
 
-    Self-throttles to stay under Slack's Tier 4 rate limit. If the
+    Self-throttles to stay under Slack's Tier 2 rate limit for
+    ``users.lookupByEmail`` (~20 RPM → 3s gap; issue #918). If the
     integration is unconfigured (no token), ``check_workspace_membership``
     returns ``unknown`` for everyone and this function becomes a safe
     no-op.
+
+    Candidate scope (issue #918): only users whose effective level is
+    Main (``LEVEL_MAIN``) or above are ever checked — either their real
+    ``tier.level >= LEVEL_MAIN`` or they hold an active, non-expired
+    ``TierOverride`` to Main+. Slack access is a Main+ benefit, so
+    Free/Basic accounts are never queried.
 
     Chain pattern (issue #715): if the chunk completes with at least
     one definite outcome (``member`` or ``not_member``) AND more users
@@ -169,13 +208,17 @@ def refresh_slack_membership(
 
     service = get_community_service()
     cutoff = timezone.now() - timezone.timedelta(days=refresh_days)
+    main_plus = main_plus_q()
 
     # NULLs first so brand-new users are picked up before stale ones.
+    # Scope to Main+ effective level (issue #918): a Free/Basic account
+    # can never be in the Slack workspace, so checking it is wasteful and
+    # was the direct cause of the 300s timeout. ``.distinct()`` collapses
+    # the duplicate rows the override join can produce.
     users = list(
-        User.objects.filter(
-            models_q_null_or_old(cutoff)
-        )
-        .order_by('slack_checked_at')[:batch_size]
+        User.objects.filter(main_plus & models_q_null_or_old(cutoff))
+        .order_by('slack_checked_at')
+        .distinct()[:batch_size]
     )
 
     members = 0
@@ -251,9 +294,11 @@ def refresh_slack_membership(
     enqueued_followup = False
     made_progress = total_checked > 0 and unknown < total_checked
     if made_progress:
+        # Count only Main+ users (issue #918) so the chain decision is
+        # computed against the same population as the chunk selection.
         more_remaining = User.objects.filter(
-            models_q_null_or_old(cutoff)
-        ).exists()
+            main_plus & models_q_null_or_old(cutoff)
+        ).distinct().exists()
         if more_remaining:
             async_task(
                 'community.tasks.slack_membership.refresh_slack_membership',
@@ -282,8 +327,26 @@ def models_q_null_or_old(cutoff):
 
     Extracted so tests can introspect / re-use the predicate.
     """
-    from django.db.models import Q
     return Q(slack_checked_at__isnull=True) | Q(slack_checked_at__lt=cutoff)
+
+
+def main_plus_q():
+    """Q object: effective level >= ``LEVEL_MAIN`` (issue #918).
+
+    Matches users who are Main tier or above either by their real
+    ``tier`` row OR by an active, non-expired ``TierOverride`` to Main+.
+    This is the same canonical predicate used in
+    ``email_app.models.email_campaign`` and mirrors
+    ``content.access.get_user_level``'s override resolution. Querysets
+    using this MUST ``.distinct()`` because the override join can
+    duplicate rows.
+    """
+    now = timezone.now()
+    return Q(tier__level__gte=LEVEL_MAIN) | Q(
+        tier_overrides__is_active=True,
+        tier_overrides__expires_at__gt=now,
+        tier_overrides__override_tier__level__gte=LEVEL_MAIN,
+    )
 
 
 def _backfill_name_from_slack(service, user):

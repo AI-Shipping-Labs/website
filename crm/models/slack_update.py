@@ -38,7 +38,7 @@ class SlackChannelIngest(models.Model):
     latest_ts = models.CharField(max_length=64, blank=True, default='')
     messages_seen = models.IntegerField(default=0)
     threads_persisted = models.IntegerField(default=0)
-    # NEW replies appended to already-known threads this run.
+    # Reply rows written this run, root excluded (first-capture + incremental).
     replies_added = models.IntegerField(default=0)
     members_matched = models.IntegerField(default=0)
     status = models.CharField(

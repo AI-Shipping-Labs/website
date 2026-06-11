@@ -236,6 +236,61 @@ class IngestIncrementalTests(TestCase):
 
 
 @override_settings(**SLACK_ON)
+class IngestFirstCaptureRepliesCountTests(TestCase):
+    """Regression for issue #927: first-capture replies must be counted.
+
+    Before the fix, ``replies_added`` discarded ``new_replies`` for any thread
+    created this run, so a first/backfill run always reported 0 even with many
+    replies persisted.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.member = User.objects.create_user(
+            email='fc@example.com', password='x', slack_user_id='U_A',
+        )
+
+    def test_first_capture_counts_replies_not_root(self):
+        root = _msg('1700000400.000000', 'U_A', 'Root')
+        r1 = _msg('1700000401.000000', 'U_B', 'Reply 1', thread_ts='1700000400.000000')
+        r2 = _msg('1700000402.000000', 'U_C', 'Reply 2', thread_ts='1700000400.000000')
+        service = FakeSlackService(
+            history=[root],
+            replies={'1700000400.000000': [root, r1, r2]},
+        )
+        run = _run_with(service)
+
+        thread = SlackThread.objects.get(thread_ts='1700000400.000000')
+        self.assertEqual(thread.messages.count(), 3)
+        self.assertEqual(thread.reply_count, 2)
+        # The bug: this used to be 0 on a first-capture run.
+        self.assertEqual(run.replies_added, 2)
+        self.assertEqual(run.threads_persisted, 1)
+
+    def test_multi_thread_first_run_sums_all_replies(self):
+        a = _msg('1700000500.000000', 'U_A', 'A root')
+        a1 = _msg('1700000501.000000', 'U_B', 'A r1', thread_ts='1700000500.000000')
+        a2 = _msg('1700000502.000000', 'U_C', 'A r2', thread_ts='1700000500.000000')
+        b = _msg('1700000510.000000', 'U_A', 'B root')  # 0 replies
+        c = _msg('1700000520.000000', 'U_A', 'C root')
+        c1 = _msg('1700000521.000000', 'U_B', 'C r1', thread_ts='1700000520.000000')
+        c2 = _msg('1700000522.000000', 'U_C', 'C r2', thread_ts='1700000520.000000')
+        c3 = _msg('1700000523.000000', 'U_D', 'C r3', thread_ts='1700000520.000000')
+        service = FakeSlackService(
+            history=[a, b, c],
+            replies={
+                '1700000500.000000': [a, a1, a2],
+                '1700000510.000000': [b],
+                '1700000520.000000': [c, c1, c2, c3],
+            },
+        )
+        run = _run_with(service)
+
+        self.assertEqual(run.threads_persisted, 3)
+        self.assertEqual(run.replies_added, 5)
+
+
+@override_settings(**SLACK_ON)
 class IngestPaginationTests(TestCase):
     def test_history_pages_are_all_ingested(self):
         # Two top-level messages that the real service would have returned

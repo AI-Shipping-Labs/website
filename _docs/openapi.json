@@ -7529,6 +7529,638 @@
         ]
       }
     },
+    "/api/utm-campaigns": {
+      "get": {
+        "description": "Returns ``UtmCampaign`` rows ordered by ``-created_at``. Optional filters narrow the result.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "is_archived",
+            "required": false,
+            "schema": {
+              "description": "Filter on is_archived (boolean string).",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "description": "Case-insensitive substring match on name.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaigns": [
+                    {
+                      "created_at": "2026-05-01T12:00:00+00:00",
+                      "default_utm_medium": "email",
+                      "default_utm_source": "newsletter",
+                      "id": 1,
+                      "is_archived": false,
+                      "name": "May 2026 newsletter",
+                      "notes": "Weekly sprint roundup.",
+                      "slug": "may_2026_newsletter",
+                      "updated_at": "2026-05-01T12:00:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of campaigns."
+          },
+          "401": {
+            "description": "Missing or invalid token."
+          },
+          "422": {
+            "description": "Invalid filter value."
+          }
+        },
+        "summary": "List UTM campaigns",
+        "tags": [
+          "UTM"
+        ]
+      },
+      "post": {
+        "description": "Creates a campaign. ``slug`` must match ``^[a-z0-9_]+$`` and be unique. ``default_utm_source`` / ``default_utm_medium`` accept any value; presets (source: newsletter, slack, linkedin, twitter, youtube, website; medium: email, social, referral, cpc, organic) are guidance only.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "default_utm_medium": "email",
+                "default_utm_source": "newsletter",
+                "name": "May 2026 newsletter",
+                "slug": "may_2026_newsletter"
+              },
+              "schema": {
+                "properties": {
+                  "default_utm_medium": {
+                    "example": "email",
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "default_utm_source": {
+                    "example": "newsletter",
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "notes": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9_]+$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "slug",
+                  "default_utm_source",
+                  "default_utm_medium"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-05-01T12:00:00+00:00",
+                  "default_utm_medium": "email",
+                  "default_utm_source": "newsletter",
+                  "id": 1,
+                  "is_archived": false,
+                  "name": "May 2026 newsletter",
+                  "notes": "Weekly sprint roundup.",
+                  "slug": "may_2026_newsletter",
+                  "updated_at": "2026-05-01T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Campaign created."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "422": {
+            "description": "Validation error (missing field, invalid or duplicate slug)."
+          }
+        },
+        "summary": "Create a UTM campaign",
+        "tags": [
+          "UTM"
+        ]
+      }
+    },
+    "/api/utm-campaigns/{campaign_id}": {
+      "get": {
+        "description": "Returns the campaign plus a ``links`` array. By default only active links are included; pass ``?include_archived=true`` to also include archived links.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "description": "Include archived links in the response.",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-05-01T12:00:00+00:00",
+                  "default_utm_medium": "email",
+                  "default_utm_source": "newsletter",
+                  "id": 1,
+                  "is_archived": false,
+                  "links": [
+                    {
+                      "campaign": 1,
+                      "created_at": "2026-05-01T12:05:00+00:00",
+                      "destination": "/events/demo-day",
+                      "effective_medium": "email",
+                      "effective_source": "newsletter",
+                      "id": 1,
+                      "is_archived": false,
+                      "label": "Hero call-to-action",
+                      "updated_at": "2026-05-01T12:05:00+00:00",
+                      "url": "https://aishippinglabs.com/events/demo-day?utm_source=newsletter&utm_medium=email&utm_campaign=may_2026_newsletter&utm_content=hero_cta",
+                      "utm_content": "hero_cta",
+                      "utm_medium": "",
+                      "utm_source": "",
+                      "utm_term": ""
+                    }
+                  ],
+                  "name": "May 2026 newsletter",
+                  "notes": "Weekly sprint roundup.",
+                  "slug": "may_2026_newsletter",
+                  "updated_at": "2026-05-01T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Campaign detail with links."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_campaign",
+                  "error": "Campaign not found"
+                }
+              }
+            },
+            "description": "Campaign not found."
+          }
+        },
+        "summary": "Retrieve a campaign with its links",
+        "tags": [
+          "UTM"
+        ]
+      },
+      "patch": {
+        "description": "Partial update of ``name``, ``default_utm_source``, ``default_utm_medium``, ``notes``, and ``is_archived``. ``slug`` is locked once the campaign has links \u2014 attempting to change it on a campaign with links returns 422. Use ``is_archived=true`` to archive (no DELETE route).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "is_archived": true
+              },
+              "schema": {
+                "properties": {
+                  "default_utm_medium": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "default_utm_source": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "is_archived": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "notes": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9_]+$",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-05-01T12:00:00+00:00",
+                  "default_utm_medium": "email",
+                  "default_utm_source": "newsletter",
+                  "id": 1,
+                  "is_archived": false,
+                  "name": "May 2026 newsletter",
+                  "notes": "Weekly sprint roundup.",
+                  "slug": "may_2026_newsletter",
+                  "updated_at": "2026-05-01T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Campaign updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "description": "Campaign not found."
+          },
+          "422": {
+            "description": "Validation error (bad slug, duplicate slug, or slug change on a campaign with links)."
+          }
+        },
+        "summary": "Update a campaign",
+        "tags": [
+          "UTM"
+        ]
+      }
+    },
+    "/api/utm-campaigns/{campaign_id}/links": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "is_archived",
+            "required": false,
+            "schema": {
+              "description": "Filter on is_archived (boolean string).",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "links": [
+                    {
+                      "campaign": 1,
+                      "created_at": "2026-05-01T12:05:00+00:00",
+                      "destination": "/events/demo-day",
+                      "effective_medium": "email",
+                      "effective_source": "newsletter",
+                      "id": 1,
+                      "is_archived": false,
+                      "label": "Hero call-to-action",
+                      "updated_at": "2026-05-01T12:05:00+00:00",
+                      "url": "https://aishippinglabs.com/events/demo-day?utm_source=newsletter&utm_medium=email&utm_campaign=may_2026_newsletter&utm_content=hero_cta",
+                      "utm_content": "hero_cta",
+                      "utm_medium": "",
+                      "utm_source": "",
+                      "utm_term": ""
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of links."
+          },
+          "404": {
+            "description": "Campaign not found."
+          }
+        },
+        "summary": "List links for a campaign",
+        "tags": [
+          "UTM"
+        ]
+      },
+      "post": {
+        "description": "Creates a link under the campaign. ``utm_content`` must match ``^[a-z0-9_]+$`` and be unique within the campaign. ``utm_source`` / ``utm_medium`` override the campaign defaults when non-empty and accept any value.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "destination": "/events/demo-day",
+                "label": "Hero call-to-action",
+                "utm_content": "hero_cta"
+              },
+              "schema": {
+                "properties": {
+                  "destination": {
+                    "maxLength": 1000,
+                    "type": "string"
+                  },
+                  "label": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "utm_content": {
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9_]+$",
+                    "type": "string"
+                  },
+                  "utm_medium": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "utm_source": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "utm_term": {
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "utm_content",
+                  "destination"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign": 1,
+                  "created_at": "2026-05-01T12:05:00+00:00",
+                  "destination": "/events/demo-day",
+                  "effective_medium": "email",
+                  "effective_source": "newsletter",
+                  "id": 1,
+                  "is_archived": false,
+                  "label": "Hero call-to-action",
+                  "updated_at": "2026-05-01T12:05:00+00:00",
+                  "url": "https://aishippinglabs.com/events/demo-day?utm_source=newsletter&utm_medium=email&utm_campaign=may_2026_newsletter&utm_content=hero_cta",
+                  "utm_content": "hero_cta",
+                  "utm_medium": "",
+                  "utm_source": "",
+                  "utm_term": ""
+                }
+              }
+            },
+            "description": "Link created."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "description": "Campaign not found."
+          },
+          "422": {
+            "description": "Validation error (missing field, invalid or duplicate utm_content)."
+          }
+        },
+        "summary": "Create a tracked link",
+        "tags": [
+          "UTM"
+        ]
+      }
+    },
+    "/api/utm-campaigns/{campaign_id}/links/{link_id}": {
+      "get": {
+        "description": "Returns the link including the generated tracked ``url`` from ``build_url()`` plus ``effective_source`` / ``effective_medium``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign": 1,
+                  "created_at": "2026-05-01T12:05:00+00:00",
+                  "destination": "/events/demo-day",
+                  "effective_medium": "email",
+                  "effective_source": "newsletter",
+                  "id": 1,
+                  "is_archived": false,
+                  "label": "Hero call-to-action",
+                  "updated_at": "2026-05-01T12:05:00+00:00",
+                  "url": "https://aishippinglabs.com/events/demo-day?utm_source=newsletter&utm_medium=email&utm_campaign=may_2026_newsletter&utm_content=hero_cta",
+                  "utm_content": "hero_cta",
+                  "utm_medium": "",
+                  "utm_source": "",
+                  "utm_term": ""
+                }
+              }
+            },
+            "description": "Link detail."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_link",
+                  "error": "Link not found"
+                }
+              }
+            },
+            "description": "Campaign or link not found."
+          }
+        },
+        "summary": "Retrieve a link",
+        "tags": [
+          "UTM"
+        ]
+      },
+      "patch": {
+        "description": "Partial update of ``utm_content``, ``destination``, ``label``, ``utm_term``, ``utm_source``, ``utm_medium``, and ``is_archived``. Archive a link with ``is_archived=true`` (no DELETE route).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "is_archived": true
+              },
+              "schema": {
+                "properties": {
+                  "destination": {
+                    "maxLength": 1000,
+                    "type": "string"
+                  },
+                  "is_archived": {
+                    "type": "boolean"
+                  },
+                  "label": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "utm_content": {
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9_]+$",
+                    "type": "string"
+                  },
+                  "utm_medium": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "utm_source": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "utm_term": {
+                    "maxLength": 100,
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign": 1,
+                  "created_at": "2026-05-01T12:05:00+00:00",
+                  "destination": "/events/demo-day",
+                  "effective_medium": "email",
+                  "effective_source": "newsletter",
+                  "id": 1,
+                  "is_archived": false,
+                  "label": "Hero call-to-action",
+                  "updated_at": "2026-05-01T12:05:00+00:00",
+                  "url": "https://aishippinglabs.com/events/demo-day?utm_source=newsletter&utm_medium=email&utm_campaign=may_2026_newsletter&utm_content=hero_cta",
+                  "utm_content": "hero_cta",
+                  "utm_medium": "",
+                  "utm_source": "",
+                  "utm_term": ""
+                }
+              }
+            },
+            "description": "Link updated."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "404": {
+            "description": "Campaign or link not found."
+          },
+          "422": {
+            "description": "Validation error (invalid or duplicate utm_content)."
+          }
+        },
+        "summary": "Update a link",
+        "tags": [
+          "UTM"
+        ]
+      }
+    },
     "/api/weeks/{week_id}": {
       "delete": {
         "parameters": [

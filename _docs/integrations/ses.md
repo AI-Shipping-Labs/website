@@ -348,3 +348,28 @@ Test vs live: Set this in production. Leave blank in local dev. CI
 and Playwright tests do not need it set — the test suite mocks the
 webhook directly and does not depend on the secret being either
 present or absent.
+
+## CAMPAIGN_BATCH_INTERVAL_SECONDS
+
+Purpose: Staggers campaign send batches apart so the fan-out does not
+burst past the SES send-rate limit (issue #922). The campaign sender
+splits recipients into batches and schedules batch `i` at
+`now + i * CAMPAIGN_BATCH_INTERVAL_SECONDS` via `Schedule.ONCE`. The
+first batch fires immediately; each subsequent batch is delayed by one
+more interval, spreading the load across time instead of hitting SES
+all at once.
+
+Default: 60 seconds. Set to `0` to send every batch at once (no
+stagger) — only safe when the campaign size stays comfortably under
+the SES per-second send quota.
+
+Where to find it: Studio-only setting (Email (SES) group). This is
+operator intent tuned against the account's SES send-rate limit, not
+a value read from any AWS dashboard.
+
+Prereqs: None beyond a working SES integration. Higher values trade
+slower overall delivery for a gentler send rate.
+
+Test vs live: Tests and local dev can leave it at the default. Tune
+it in production if SES throttling (rate-exceeded) errors appear in
+campaign sends.

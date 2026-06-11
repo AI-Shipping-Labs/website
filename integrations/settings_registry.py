@@ -114,9 +114,10 @@ INTEGRATION_GROUPS = [
                     'Seconds to stagger campaign send batches apart so the '
                     'fan-out does not burst past the SES send-rate limit '
                     '(issue #922). Batch i is scheduled at now + i * this '
-                    'value; the first batch fires immediately. Default 60. '
+                    'interval; the first batch fires immediately. Default 60. '
                     'Set to 0 to send all batches at once (no stagger).'
                 ),
+                'docs_url': '_docs/integrations/ses.md#campaign_batch_interval_seconds',
             },
         ],
     },

@@ -31,13 +31,16 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: cleanup-webhook-logs (daily at 3 AM)'))
 
-        # Event reminders every 15 minutes
+        # Event reminders once per hour at minute 0 (issue #919; cadence
+        # reduced from every 15 min — hourly is enough for the reminder
+        # windows). update_or_create on the schedule name means an existing
+        # row's cron is updated in place on the next setup_schedules run.
         schedule(
             'notifications.services.event_reminders.check_event_reminders',
-            cron='*/15 * * * *',
+            cron='0 * * * *',
             name='event-reminders',
         )
-        self.stdout.write(self.style.SUCCESS('Registered: event-reminders (every 15 min)'))
+        self.stdout.write(self.style.SUCCESS('Registered: event-reminders (hourly at minute 0)'))
 
         # Flip finished events from upcoming to completed daily at 04:00 UTC
         # (issue #573; cadence reduced from every 5 min to daily in #713 now
@@ -57,13 +60,19 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: expire-tier-overrides (every 15 min)'))
 
-        # Refresh Slack workspace membership every 30 minutes (issue #358)
+        # Refresh Slack workspace membership once per day at 06:00 UTC
+        # (issue #358 introduced it; issue #919 reduced cadence from every
+        # 30 min to daily — once per day is enough). 06:00 UTC is a
+        # low-traffic hour clear of the 03:00-05:00 import/ingest jobs and
+        # the 07:00-08:00 unverified-user sweep. update_or_create on the
+        # schedule name updates an existing row's cron in place on the next
+        # setup_schedules run.
         schedule(
             'community.tasks.slack_membership.refresh_slack_membership',
-            cron='*/30 * * * *',
+            cron='0 6 * * *',
             name='slack-membership-refresh',
         )
-        self.stdout.write(self.style.SUCCESS('Registered: slack-membership-refresh (every 30 min)'))
+        self.stdout.write(self.style.SUCCESS('Registered: slack-membership-refresh (daily at 06:00 UTC)'))
 
         # Daily system imports for external user sources (issue #318)
         schedule(

@@ -44,11 +44,19 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(schedule.cron, '0 3 * * *')
 
     def test_creates_event_reminders_schedule(self):
-        """Command creates event-reminders schedule."""
-        call_command('setup_schedules', stdout=StringIO())
+        """Command registers event-reminders at hourly cadence (issue #919).
+
+        Cadence was reduced from ``*/15 * * * *`` to ``0 * * * *`` —
+        hourly at minute 0 is enough for the reminder windows.
+        """
+        out = StringIO()
+        call_command('setup_schedules', stdout=out)
         schedule = Schedule.objects.get(name='event-reminders')
         self.assertEqual(schedule.func, 'notifications.services.event_reminders.check_event_reminders')
-        self.assertEqual(schedule.cron, '*/15 * * * *')
+        self.assertEqual(schedule.cron, '0 * * * *')
+        self.assertEqual(schedule.schedule_type, Schedule.CRON)
+        self.assertIn('event-reminders (hourly at minute 0)', out.getvalue())
+        self.assertNotIn('event-reminders (every 15 min)', out.getvalue())
 
     def test_creates_complete_finished_events_schedule(self):
         """Command registers complete-finished-events at daily cadence.
@@ -82,14 +90,24 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(schedule.cron, '*/15 * * * *')
 
     def test_creates_slack_membership_refresh_schedule(self):
-        """Command creates slack-membership-refresh schedule (issue #358)."""
-        call_command('setup_schedules', stdout=StringIO())
+        """Command registers slack-membership-refresh at daily cadence.
+
+        Issue #358 introduced the schedule; issue #919 reduced its cadence
+        from ``*/30 * * * *`` to ``0 6 * * *`` (daily at 06:00 UTC) — once
+        per day is enough, and 06:00 UTC is clear of the other scheduled
+        jobs.
+        """
+        out = StringIO()
+        call_command('setup_schedules', stdout=out)
         schedule = Schedule.objects.get(name='slack-membership-refresh')
         self.assertEqual(
             schedule.func,
             'community.tasks.slack_membership.refresh_slack_membership',
         )
-        self.assertEqual(schedule.cron, '*/30 * * * *')
+        self.assertEqual(schedule.cron, '0 6 * * *')
+        self.assertEqual(schedule.schedule_type, Schedule.CRON)
+        self.assertIn('slack-membership-refresh (daily at 06:00 UTC)', out.getvalue())
+        self.assertNotIn('every 30 min', out.getvalue())
 
     def test_creates_remind_unverified_users_schedule(self):
         """Command creates remind-unverified-users schedule (issue #452).
@@ -140,6 +158,44 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(Schedule.objects.filter(name='import-stripe-daily').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='remind-unverified-users').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='purge-unverified-users').count(), 1)
+
+    def test_updates_stale_cadence_on_existing_rows(self):
+        """Re-running setup_schedules updates an existing row's cron in place.
+
+        Issue #919: the operator's running cluster already has the old
+        cadences. setup_schedules must UPDATE the existing Schedule rows
+        (not just create-if-missing) so the new cadence takes effect on
+        the next run. We simulate the pre-#919 rows by registering the old
+        cron, then re-run and assert the cron is rewritten on the same row.
+        """
+        # Pre-seed the existing rows with the old (pre-#919) cadences.
+        Schedule.objects.create(
+            name='event-reminders',
+            func='notifications.services.event_reminders.check_event_reminders',
+            schedule_type=Schedule.CRON,
+            cron='*/15 * * * *',
+        )
+        Schedule.objects.create(
+            name='slack-membership-refresh',
+            func='community.tasks.slack_membership.refresh_slack_membership',
+            schedule_type=Schedule.CRON,
+            cron='*/30 * * * *',
+        )
+        event_id = Schedule.objects.get(name='event-reminders').id
+        slack_id = Schedule.objects.get(name='slack-membership-refresh').id
+
+        call_command('setup_schedules', stdout=StringIO())
+
+        # Same rows (no duplicates), with the new cadences.
+        self.assertEqual(Schedule.objects.filter(name='event-reminders').count(), 1)
+        self.assertEqual(Schedule.objects.filter(name='slack-membership-refresh').count(), 1)
+
+        event = Schedule.objects.get(name='event-reminders')
+        slack = Schedule.objects.get(name='slack-membership-refresh')
+        self.assertEqual(event.id, event_id)
+        self.assertEqual(slack.id, slack_id)
+        self.assertEqual(event.cron, '0 * * * *')
+        self.assertEqual(slack.cron, '0 6 * * *')
 
     def test_no_unexpected_schedules_created(self):
         """Command does not create any schedules outside the expected set."""

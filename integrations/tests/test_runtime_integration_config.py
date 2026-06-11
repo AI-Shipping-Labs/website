@@ -78,22 +78,6 @@ class StripeRuntimeConfigTest(TierSetupMixin, RuntimeConfigTestCase):
             "whsec_db",
         )
 
-    @override_settings(STRIPE_CUSTOMER_PORTAL_URL="https://settings.example.test/portal")
-    def test_deprecated_checkout_uses_db_portal_url(self):
-        set_integration(
-            "STRIPE_CUSTOMER_PORTAL_URL",
-            "https://billing.example.com",
-            "stripe",
-        )
-
-        response = self.client.post(
-            "/api/checkout/create",
-            content_type="application/json",
-        )
-
-        self.assertEqual(response.status_code, 410)
-        self.assertEqual(response.json()["portal_url"], "https://billing.example.com")
-
 
 class YouTubeRuntimeConfigTest(RuntimeConfigTestCase):
     @override_settings(

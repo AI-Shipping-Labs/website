@@ -1,11 +1,9 @@
 """Current Stripe product-model tests.
 
-Pricing uses Payment Links, paid members use Customer Portal, and
-legacy mutation APIs (``/api/checkout/create``, subscription upgrade /
-downgrade / cancel, course purchase) return 410 unconditionally.
+Pricing uses Payment Links, paid members use Customer Portal, and the
+legacy course-purchase API returns 410 unconditionally.
 """
 
-import json
 from urllib.parse import parse_qs, urlparse
 
 from django.conf import settings
@@ -36,49 +34,6 @@ class DeprecatedCheckoutEndpointsTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         self.client.login(email="flagoff@test.com", password="testpass123")
-
-    def test_membership_checkout_endpoints_return_410(self):
-        endpoints = [
-            (
-                "create",
-                "/api/checkout/create",
-                {"tier_slug": "basic", "billing_period": "monthly"},
-            ),
-            (
-                "upgrade",
-                "/api/subscription/upgrade",
-                {"tier_slug": "main", "billing_period": "monthly"},
-            ),
-            (
-                "downgrade",
-                "/api/subscription/downgrade",
-                {"tier_slug": "basic", "billing_period": "monthly"},
-            ),
-            ("cancel", "/api/subscription/cancel", {}),
-        ]
-        for label, url, payload in endpoints:
-            with self.subTest(endpoint=label):
-                response = self.client.post(
-                    url,
-                    data=json.dumps(payload),
-                    content_type="application/json",
-                )
-                self.assertEqual(response.status_code, 410)
-                data = response.json()
-                self.assertIn("deprecated", data["error"])
-                self.assertIn("portal_url", data)
-
-    def test_membership_checkout_endpoint_still_requires_authentication(self):
-        self.client.logout()
-
-        response = self.client.post(
-            "/api/checkout/create",
-            data=json.dumps({"tier_slug": "basic", "billing_period": "monthly"}),
-            content_type="application/json",
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response.url)
 
     def test_course_purchase_endpoint_returns_410(self):
         response = self.client.post(

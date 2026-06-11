@@ -1,8 +1,7 @@
-"""Subscription queries and the hard-deprecated direct-mutation helpers.
+"""Subscription query helpers.
 
 The active product model routes all subscription edits through the
-Stripe Customer Portal. The ``upgrade_/downgrade_/cancel_subscription``
-helpers here remain only to fail loudly for stale internal callers.
+Stripe Customer Portal, so this module only contains read helpers.
 
 The query helpers (``_tier_from_subscription``,
 ``_get_subscription_period_end``, ``_get_subscription_price_id``) call
@@ -61,24 +60,3 @@ def _get_subscription_price_id(subscription_id):
             "Failed to get price id for subscription %s", subscription_id,
         )
     return ""
-
-
-def upgrade_subscription(user, new_tier_slug, billing_period):
-    """Deprecated direct subscription mutation."""
-    raise RuntimeError(
-        "Direct subscription upgrades are deprecated; use Stripe Customer Portal."
-    )
-
-
-def downgrade_subscription(user, new_tier_slug, billing_period):
-    """Deprecated direct subscription mutation."""
-    raise RuntimeError(
-        "Direct subscription downgrades are deprecated; use Stripe Customer Portal."
-    )
-
-
-def cancel_subscription(user):
-    """Deprecated direct subscription mutation."""
-    raise RuntimeError(
-        "Direct subscription cancellation is deprecated; use Stripe Customer Portal."
-    )

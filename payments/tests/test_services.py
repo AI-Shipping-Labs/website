@@ -4,7 +4,6 @@ Tests cover:
 - _tier_for_price_id helper
 - verify_webhook_signature
 - webhook fulfillment helpers
-- hard-deprecated local checkout/subscription mutation helpers
 """
 
 from datetime import datetime, timezone
@@ -25,11 +24,7 @@ from payments.services import (
     _subscription_price_id,
     _tier_for_price_id,
     _tier_from_subscription,
-    cancel_subscription,
-    create_checkout_session,
-    downgrade_subscription,
     handle_checkout_completed,
-    upgrade_subscription,
 )
 
 
@@ -316,43 +311,6 @@ class SubscriptionPriceIdLowLevelTest(TestCase):
             _subscription_price_id(subscription),
             "price_object_payload",
         )
-
-
-@tag('core')
-class DeprecatedLocalStripeMutationServicesTest(TestCase):
-    """Obsolete local Stripe mutation helpers fail before calling Stripe."""
-
-    def setUp(self):
-        self.user = User.objects.create_user(email="deprecated-services@test.com")
-
-    @patch("payments.services._get_stripe_client")
-    def test_create_checkout_session_is_hard_deprecated(self, mock_get_client):
-        with self.assertRaisesMessage(RuntimeError, "Payment Links"):
-            create_checkout_session(
-                self.user,
-                "basic",
-                "monthly",
-                "https://example.test/success",
-                "https://example.test/cancel",
-            )
-        mock_get_client.assert_not_called()
-
-    @patch("payments.services._get_stripe_client")
-    def test_direct_subscription_mutations_are_hard_deprecated(
-        self, mock_get_client,
-    ):
-        deprecated_calls = [
-            lambda: upgrade_subscription(self.user, "main", "monthly"),
-            lambda: downgrade_subscription(self.user, "basic", "monthly"),
-            lambda: cancel_subscription(self.user),
-        ]
-
-        for call in deprecated_calls:
-            with self.subTest(call=call):
-                with self.assertRaisesMessage(RuntimeError, "Customer Portal"):
-                    call()
-
-        mock_get_client.assert_not_called()
 
 
 @tag('core')

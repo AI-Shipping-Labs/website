@@ -471,6 +471,60 @@ class SignupAnalyticsCampaignsTest(TestCase):
             response, 'href="/studio/utm-analytics/campaign/spring_launch/?range=7d"',
         )
 
+    def test_matched_link_carries_tooltip_title(self):
+        now = timezone.now()
+        UtmCampaign.objects.create(
+            name='Spring Launch', slug='spring_launch',
+            default_utm_source='newsletter', default_utm_medium='email',
+        )
+        _make_attribution(
+            email='tip@t.com', first_campaign='spring_launch',
+            created_at=now - timedelta(days=1),
+        )
+        response = self.client.get('/studio/signup-analytics/')
+        # The matched link carries a title attribute clarifying it opens UTM
+        # campaign analytics for that campaign.
+        self.assertContains(
+            response,
+            'title="Opens UTM campaign analytics for spring_launch"',
+        )
+
+    def test_matched_link_preserves_active_range(self):
+        now = timezone.now()
+        UtmCampaign.objects.create(
+            name='Spring Launch', slug='spring_launch',
+            default_utm_source='newsletter', default_utm_medium='email',
+        )
+        _make_attribution(
+            email='r30@t.com', first_campaign='spring_launch',
+            created_at=now - timedelta(days=10),
+        )
+        response = self.client.get('/studio/signup-analytics/?range=30d')
+        self.assertContains(
+            response, 'href="/studio/utm-analytics/campaign/spring_launch/?range=30d"',
+        )
+
+    def test_external_email_campaign_code_stays_plain_text(self):
+        now = timezone.now()
+        # External Mailchimp/Substack-style code that can never match a
+        # UtmCampaign slug (hyphens + digits + uppercase rejected by slug
+        # validation). It must render as plain text with no anchor.
+        code = '934616d2a5-email_campaign_2026_05_18_12_38'
+        for i in range(3):
+            _make_attribution(
+                email=f'ext{i}@t.com', first_campaign=code,
+                created_at=now - timedelta(days=1),
+            )
+        response = self.client.get('/studio/signup-analytics/')
+        self.assertContains(response, code)
+        self.assertNotContains(
+            response, f'href="/studio/utm-analytics/campaign/{code}/',
+        )
+        # No matched drill link at all for this row.
+        rows = response.context['campaign_rows']
+        self.assertEqual(rows[0]['slug'], code)
+        self.assertFalse(rows[0]['campaign'])
+
     def test_blank_campaign_renders_as_no_campaign(self):
         now = timezone.now()
         _make_attribution(

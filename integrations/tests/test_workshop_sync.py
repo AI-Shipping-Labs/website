@@ -2462,3 +2462,247 @@ class WorkshopSyncExplicitEventLinkTest(_WorkshopSyncFixtureBase):
         event.refresh_from_db()
         self.assertEqual(event.origin, 'studio')
         self.assertFalse(event.source_repo)
+
+
+class WorkshopSyncTitleDateHeuristicTest(_WorkshopSyncFixtureBase):
+    """Issue #880: title+date dedup heuristic for the no-reference case.
+
+    Resolution order is explicit reference -> slug match -> single title+date
+    heuristic match -> create. The heuristic links a GitHub workshop to an
+    existing Studio event when EXACTLY ONE event matches on the same calendar
+    day AND normalized title, even without an explicit ``event_id`` — so a
+    forgotten link still does not mint a duplicate. Ambiguous matches refuse to
+    guess; zero matches fall through to the logged auto-create.
+
+    The fixture workshop is ``Demo Workshop`` dated ``2026-04-21`` (slug
+    ``demo``) with a recording, so a matching event must share that title and
+    day but a DIFFERENT slug (a same-slug event is covered by the slug-match
+    path, not the heuristic).
+    """
+
+    def _make_studio_event(self, *, slug, title='Demo Workshop',
+                           start_datetime=None):
+        return Event.objects.create(
+            slug=slug,
+            title=title,
+            start_datetime=start_datetime or datetime(
+                2026, 4, 21, 15, 0, tzinfo=dt_timezone.utc,
+            ),
+            status='upcoming',
+            timezone='America/New_York',
+            platform='zoom',
+            zoom_meeting_id='111-222-333',
+            zoom_join_url='https://zoom.us/j/111222333',
+            published=True,
+        )
+
+    def _write_recording_workshop(self, *, slug='demo', title='Demo Workshop',
+                                  extra_link_yaml=''):
+        self._write_workshop_yaml(
+            folder='2026/2026-04-21-demo',
+            slug=slug,
+            title=title,
+            extra_yaml=(
+                extra_link_yaml +
+                'recording:\n'
+                '  url: https://www.youtube.com/watch?v=linked\n'
+                '  embed_url: https://www.youtube.com/embed/linked\n'
+                '  required_level: 20\n'
+            ),
+        )
+        self._write_page('2026/2026-04-21-demo', '01-overview.md',
+                         title='Overview')
+
+    def test_single_title_date_match_links_without_creating(self):
+        """Forgotten link still does not duplicate (title+date match)."""
+        event = self._make_studio_event(slug='take-home-live')
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop()  # no event_id
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}',
+        )
+
+        # No second event minted; the workshop-slug event is NOT created.
+        self.assertEqual(Event.objects.count(), events_before)
+        self.assertEqual(
+            Event.objects.filter(slug='demo').count(), 0,
+            'The heuristic must link the existing event, not mint a '
+            'workshop-slug duplicate.',
+        )
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.event_id, event.pk)
+
+        event.refresh_from_db()
+        # Operational fields and origin untouched.
+        self.assertEqual(
+            event.start_datetime,
+            datetime(2026, 4, 21, 15, 0, tzinfo=dt_timezone.utc),
+        )
+        self.assertEqual(event.status, 'upcoming')
+        self.assertEqual(event.zoom_meeting_id, '111-222-333')
+        self.assertEqual(event.origin, 'studio')
+        self.assertFalse(event.source_repo)
+        # Content fields carried over from the workshop.
+        self.assertEqual(
+            event.recording_url, 'https://www.youtube.com/watch?v=linked',
+        )
+
+    def test_case_and_whitespace_differences_still_match(self):
+        """Normalized titles match across case/whitespace differences."""
+        event = self._make_studio_event(
+            slug='take-home-live', title='  Demo   Workshop ',
+        )
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop(title='demo workshop')
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}',
+        )
+
+        self.assertEqual(Event.objects.count(), events_before)
+        self.assertEqual(Event.objects.filter(slug='demo').count(), 0)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.event_id, event.pk)
+
+    def test_ambiguous_match_refuses_to_guess(self):
+        """Two same-day same-title events -> no link, no create, an error."""
+        self._make_studio_event(slug='office-hours-a', title='Demo Workshop')
+        self._make_studio_event(slug='office-hours-b', title='Demo Workshop')
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop()  # no event_id
+        sync_log = sync_repo(self.source, self.repo)
+
+        # No link, no duplicate created.
+        self.assertEqual(Event.objects.count(), events_before)
+        self.assertEqual(Event.objects.filter(slug='demo').count(), 0)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertIsNone(workshop.event_id)
+
+        # A clear error tells the author to set an explicit event_id.
+        self.assertTrue(
+            any(
+                'event_id' in (err.get('error') or '')
+                and 'demo' in (err.get('error') or '')
+                for err in sync_log.errors
+            ),
+            f'Expected an ambiguity error, got: {sync_log.errors}',
+        )
+
+    def test_different_calendar_day_does_not_match(self):
+        """A same-title event on a different day must not link."""
+        other_day = self._make_studio_event(
+            slug='take-home-live',
+            start_datetime=datetime(2026, 4, 22, 15, 0, tzinfo=dt_timezone.utc),
+        )
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop()  # no event_id, workshop dated 04-21
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}',
+        )
+
+        # No wrong link; the fallback create mints exactly one new event.
+        created = Event.objects.get(slug='demo')
+        self.assertEqual(created.kind, 'workshop')
+        self.assertEqual(created.origin, 'github')
+        self.assertEqual(Event.objects.count(), events_before + 1)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.event_id, created.pk)
+        # The off-day event stays unlinked and untouched.
+        other_day.refresh_from_db()
+        self.assertEqual(other_day.origin, 'studio')
+        self.assertEqual(other_day.recording_url, '')
+
+    def test_zero_match_creates_logged_github_fallback(self):
+        """No-match policy: auto-create one github-origin workshop event."""
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop()  # no matching studio event at all
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}',
+        )
+
+        self.assertEqual(Event.objects.count(), events_before + 1)
+        event = Event.objects.get(slug='demo')
+        self.assertEqual(event.kind, 'workshop')
+        self.assertEqual(event.origin, 'github')
+        self.assertEqual(event.source_repo, self.source.repo_name)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.event_id, event.pk)
+
+    def test_explicit_reference_takes_priority_over_heuristic(self):
+        """An explicit event_id wins even if another event would match."""
+        target = self._make_studio_event(slug='target-event', title='Target')
+        # A decoy that the title+date heuristic WOULD have matched.
+        decoy = self._make_studio_event(
+            slug='heuristic-decoy', title='Demo Workshop',
+        )
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop(
+            extra_link_yaml=f'event_id: {target.pk}\n',
+        )
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}',
+        )
+
+        self.assertEqual(Event.objects.count(), events_before)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(
+            workshop.event_id, target.pk,
+            'Explicit event_id must win over the title+date heuristic.',
+        )
+        # The decoy is neither linked nor overwritten.
+        decoy.refresh_from_db()
+        self.assertNotEqual(workshop.event_id, decoy.pk)
+        self.assertEqual(decoy.recording_url, '')
+
+    def test_slug_match_still_wins_over_heuristic(self):
+        """Regression: a slug-equal event links via the slug step, not the
+        heuristic — even when a different-slug title+date event also exists."""
+        slug_event = self._make_studio_event(slug='demo', title='Other Title')
+        # A competing title+date heuristic candidate on a different slug.
+        self._make_studio_event(slug='heuristic-candidate', title='Demo Workshop')
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop()  # no event_id
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}',
+        )
+
+        self.assertEqual(Event.objects.count(), events_before)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(
+            workshop.event_id, slug_event.pk,
+            'The slug-match step must take priority over the heuristic.',
+        )
+
+    def test_resync_after_heuristic_link_is_idempotent(self):
+        """A heuristic link survives a second sync without duplicating."""
+        event = self._make_studio_event(slug='take-home-live')
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop()  # no event_id
+        sync_repo(self.source, self.repo)
+        self.assertEqual(Event.objects.count(), events_before)
+
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}',
+        )
+        self.assertEqual(Event.objects.count(), events_before)
+        self.assertEqual(Event.objects.filter(slug='demo').count(), 0)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.event_id, event.pk)
+        event.refresh_from_db()
+        self.assertEqual(event.origin, 'studio')
+        self.assertFalse(event.source_repo)

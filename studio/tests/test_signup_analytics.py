@@ -263,6 +263,55 @@ class SignupAnalyticsHeadlineCardsTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Layout: headline strip is independent of the filter (#851)
+# ---------------------------------------------------------------------------
+
+class SignupAnalyticsHeadlineLayoutTest(TestCase):
+    """#851 — cards render before the filter, with a clarifying caption."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='pw', is_staff=True,
+        )
+        UserAttribution.objects.filter(user=cls.staff).delete()
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='pw')
+
+    def test_headlines_render_before_filter_form_in_dom(self):
+        response = self.client.get('/studio/signup-analytics/')
+        body = response.content.decode()
+        headlines_pos = body.index('data-testid="signup-analytics-headlines"')
+        filters_pos = body.index('data-testid="signup-analytics-filters"')
+        self.assertLess(
+            headlines_pos, filters_pos,
+            'Headline cards must render before the filter form (#851).',
+        )
+
+    def test_headline_fixed_note_explains_cards_ignore_date_range(self):
+        response = self.client.get('/studio/signup-analytics/')
+        self.assertContains(response, 'data-testid="headline-fixed-note"')
+        # Caption must state cards ignore the Date range but honor Signup path.
+        self.assertContains(response, 'ignore the Date range')
+        self.assertContains(response, 'Signup path')
+
+    def test_filter_scope_note_says_it_applies_to_sections_below(self):
+        response = self.client.get('/studio/signup-analytics/')
+        self.assertContains(response, 'data-testid="filter-scope-note"')
+        self.assertContains(response, 'Filter the sections below')
+
+    def test_existing_testid_hooks_remain_present(self):
+        response = self.client.get('/studio/signup-analytics/')
+        for testid in (
+            'signup-analytics-filters',
+            'signup-analytics-headlines',
+            'signup-analytics-recent-empty',
+        ):
+            self.assertContains(response, f'data-testid="{testid}"')
+
+
+# ---------------------------------------------------------------------------
 # Section 3 — breakdown by signup_path
 # ---------------------------------------------------------------------------
 

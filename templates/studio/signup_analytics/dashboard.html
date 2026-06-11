@@ -8,7 +8,30 @@
   <p class="text-muted-foreground mt-1">Where new signups are coming from, by source, referrer, and campaign.</p>
 </div>
 
-{# ---- Filters ---- #}
+{# ---- Headline cards (always rolling 24h / 7d / 30d) ---- #}
+<div class="mb-2">
+  <p class="text-xs text-muted-foreground" data-testid="headline-fixed-note">
+    Fixed rolling windows — these cards always show the last 24h / 7d / 30d and
+    ignore the Date range filter below. They do reflect the selected Signup path.
+  </p>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8" data-testid="signup-analytics-headlines">
+  {% for card in headline_cards %}
+  <div class="bg-card border border-border rounded-lg p-4">
+    <div class="text-xs font-medium text-muted-foreground uppercase tracking-wider">{{ card.label }}</div>
+    <div class="text-3xl font-semibold text-foreground mt-2">{{ card.count }}</div>
+    <div class="text-xs mt-2
+      {% if card.delta.sign == '+' %}text-green-500
+      {% elif card.delta.sign == '-' %}text-red-500
+      {% else %}text-muted-foreground{% endif %}">
+      {% if card.delta.sign == '=' %}={% else %}{{ card.delta.sign }}{{ card.delta.diff }}{% endif %} vs prior {{ card.window_label }}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{# ---- Filters (apply to the sections below) ---- #}
+<p class="text-xs font-medium text-muted-foreground mb-1" data-testid="filter-scope-note">Filter the sections below</p>
 <form method="get" class="bg-card border border-border rounded-lg p-4 mb-6" data-testid="signup-analytics-filters">
   <div class="flex flex-wrap items-end gap-3">
     <div>
@@ -47,22 +70,6 @@
     <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">Apply</button>
   </div>
 </form>
-
-{# ---- Headline cards (always rolling 24h / 7d / 30d) ---- #}
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6" data-testid="signup-analytics-headlines">
-  {% for card in headline_cards %}
-  <div class="bg-card border border-border rounded-lg p-4">
-    <div class="text-xs font-medium text-muted-foreground uppercase tracking-wider">{{ card.label }}</div>
-    <div class="text-3xl font-semibold text-foreground mt-2">{{ card.count }}</div>
-    <div class="text-xs mt-2
-      {% if card.delta.sign == '+' %}text-green-500
-      {% elif card.delta.sign == '-' %}text-red-500
-      {% else %}text-muted-foreground{% endif %}">
-      {% if card.delta.sign == '=' %}={% else %}{{ card.delta.sign }}{{ card.delta.diff }}{% endif %} vs prior {{ card.window_label }}
-    </div>
-  </div>
-  {% endfor %}
-</div>
 
 {# ---- Section 3: breakdown by signup_path ---- #}
 <div class="mb-8">

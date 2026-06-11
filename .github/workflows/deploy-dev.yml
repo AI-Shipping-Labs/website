@@ -281,7 +281,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::387546586013:role/website-deploy
           aws-region: ${{ env.AWS_REGION }}

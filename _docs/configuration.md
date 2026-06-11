@@ -234,12 +234,39 @@ Keys to set in Studio:
 | `SLACK_TEST_COMMUNITY_CHANNEL_IDS` | non-secret | Test-only community channel IDs, only for explicitly opted-in integration tests. |
 | `SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID` | non-secret | Test-only announcement channel ID, expected to be `C0AHN84QNP3` for #integration-tests. |
 | `SLACK_INVITE_URL` | non-secret | Public Slack invite link shown to new members. |
+| `SLACK_PLAN_SPRINTS_CHANNEL_ID` | non-secret | Production channel ID of `#plan-sprints`. The daily ingest (`crm/tasks/ingest_plan_sprints.py`, issues #889/#890/#891) reads member sprint updates from here. Leave blank to disable ingestion. |
+| `SLACK_DEV_PLAN_SPRINTS_CHANNEL_ID` | non-secret | Development-only `#plan-sprints` channel ID. Used only when `SLACK_ENVIRONMENT=development`. |
+| `SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID` | non-secret | Test-only `#plan-sprints` channel ID. Used only when `SLACK_ENVIRONMENT=test`. |
 
-Bot scopes (Slack app > OAuth & Permissions > Bot Token Scopes): minimum `chat:write`, `channels:read`. Add more as features need them.
+### Bot Token Scopes
+
+Set these under Slack app > OAuth & Permissions > Bot Token Scopes:
+
+| Scope | Required for |
+|-------|--------------|
+| `chat:write` | Posting announcements and staff heads-up messages. |
+| `chat:write.public` | Posting to public channels the bot has not been explicitly invited to. |
+| `channels:read` | Listing and resolving public channel IDs. |
+| `channels:history` | Reading message history in PUBLIC channels — REQUIRED for the `#plan-sprints` ingestion (issues #889/#890/#891), which calls `conversations.history` and `conversations.replies`. |
+| `groups:read` | Listing and resolving PRIVATE channel IDs. |
+| `groups:history` | Reading message history in PRIVATE channels — REQUIRED instead of `channels:history` IF `#plan-sprints` is a private channel. |
+| `users:read` | Resolving Slack user IDs to members. |
+| `users:read.email` | Matching Slack users to platform accounts by email. |
+| `reactions:read` | Capturing community reaction signals. |
+
+Missing scopes manifest as `missing_scope` errors at the Slack API. After adding or changing scopes you must click "Reinstall to Workspace" (OAuth & Permissions) — and if Slack issues a new `xoxb-...` token, update `SLACK_BOT_TOKEN` in Studio > Settings > Slack (or the environment) so the bot keeps authenticating.
+
+### #plan-sprints ingestion prerequisites
+
+The daily `#plan-sprints` ingest will not read any messages unless all three of these are in place:
+
+1. The bot has `channels:history` (public `#plan-sprints`) or `groups:history` + `groups:read` (private `#plan-sprints`). Without it `conversations.history` / `conversations.replies` fail with `missing_scope`.
+2. The bot is a member of the channel. Invite it with `/invite @<bot-name>` from inside `#plan-sprints` — otherwise the history calls return `not_in_channel`.
+3. The channel ID is configured for the active environment: `SLACK_PLAN_SPRINTS_CHANNEL_ID` (production), `SLACK_DEV_PLAN_SPRINTS_CHANNEL_ID` (development), or `SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID` (test). These are the `slack`-group keys in `integrations/settings_registry.py`, resolved by `get_slack_plan_sprints_channel_id()` in `community/slack_config.py`. When the key is blank the ingest logs "no #plan-sprints channel configured" and no-ops.
 
 Foot-gun: this is the Slack BOT app, separate from the Slack OAuth LOGIN app in section 3.3. Two Slack apps, two sets of credentials. Also keep production, development, and test bot channels separate; `SLACK_ENVIRONMENT=development` and `SLACK_ENVIRONMENT=test` intentionally ignore the production channel IDs.
 
-Test: in Studio, trigger an announcement (e.g. publish an article and use the "Announce on Slack" action) and confirm the bot posted to the configured channel.
+Test: in Studio, trigger an announcement (e.g. publish an article and use the "Announce on Slack" action) and confirm the bot posted to the configured channel. For the ingest, invite the bot to `#plan-sprints`, set the channel ID, then run `uv run python manage.py shell -c "from crm.tasks.ingest_plan_sprints import ingest_plan_sprints; print(ingest_plan_sprints())"` and confirm the run completes with `status='success'` and a non-zero `messages_seen` rather than a `missing_scope` / `not_in_channel` error.
 
 ## 7. GitHub App (content sync)
 

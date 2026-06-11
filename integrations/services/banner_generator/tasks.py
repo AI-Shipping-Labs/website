@@ -33,6 +33,7 @@ from integrations.services.banner_generator import (
 from integrations.services.banner_generator.dispatch import (
     SUPPORTED_CONTENT_TYPES,
     title_hash,
+    title_value,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,19 +43,23 @@ MAX_TAGS_IN_META = 3
 META_TAG_JOINER = ' / '
 
 # Per-content-type Lambda template override. Most content types share the
-# default ``asl-content-card`` template; events use the dedicated
-# ``asl-event-stage`` template which carries two extra slots (``brand`` and
-# ``tag_one``). Any type not listed here falls back to ``DEFAULT_TEMPLATE``.
+# default ``asl-content-card`` template; single events use the dedicated
+# ``asl-event-stage`` template (two extra slots ``brand`` / ``tag_one``), and
+# event series use ``asl-event-series`` (#896) — which shares the seven base
+# OG-card field names with ``asl-event-stage`` but renders a multi-occurrence
+# design. Any type not listed here falls back to ``DEFAULT_TEMPLATE``.
 TEMPLATE_BY_CONTENT_TYPE = {
     'event': 'asl-event-stage',
+    'event_series': 'asl-event-series',
 }
 
 
 def template_for(content_type):
     """Return the Lambda template id for ``content_type``.
 
-    Events render with ``asl-event-stage``; everything else keeps the
-    shared ``asl-content-card`` default.
+    Single events render with ``asl-event-stage``, event series with
+    ``asl-event-series``; everything else keeps the shared
+    ``asl-content-card`` default.
     """
     return TEMPLATE_BY_CONTENT_TYPE.get(content_type, DEFAULT_TEMPLATE)
 
@@ -264,6 +269,43 @@ def _event_meta_secondary(event):
     return ' / '.join(parts)
 
 
+def _series_kicker(series):
+    """Return the EventSeries ``kicker`` slot, e.g. ``"Weekly series"``.
+
+    Built from the cadence display label so the card reads naturally. Falls
+    back to a bare ``"Series"`` when the cadence label is somehow empty.
+    """
+    cadence = (series.get_cadence_display() or '').strip()
+    return f'{cadence} series' if cadence else 'Series'
+
+
+def _series_meta_primary(series):
+    """Return the EventSeries ``meta_primary`` slot: day + time + timezone.
+
+    Example: ``"Wednesdays · 18:00 Europe/Berlin"``. The day is pluralised
+    (it describes a recurring cadence, not one date). Each part is guarded
+    so a series missing a field still renders the available parts without
+    raising.
+    """
+    parts = []
+
+    day_label = (series.get_day_of_week_display() or '').strip()
+    if day_label:
+        parts.append(f'{day_label}s')
+
+    time_tz = []
+    start_time = getattr(series, 'start_time', None)
+    if start_time is not None:
+        time_tz.append(start_time.strftime('%H:%M'))
+    tz_name = (getattr(series, 'timezone', '') or '').strip()
+    if tz_name:
+        time_tz.append(tz_name)
+    if time_tz:
+        parts.append(' '.join(time_tz))
+
+    return ' · '.join(parts)
+
+
 def build_payload(content_type, record):
     """Return the Lambda ``data`` payload for a content record.
 
@@ -359,6 +401,24 @@ def build_payload(content_type, record):
             'meta_primary': _event_meta_primary(record),
             'meta_secondary': _event_meta_secondary(record),
             'tag_one': _event_tag_one(record),
+            'footer': 'aishippinglabs.com/events',
+        }
+
+    if content_type == 'event_series':
+        # EventSeries stores its title-equivalent in ``name`` (no ``title``
+        # field). The ``asl-event-series`` template (#896/#897) shares the
+        # same seven base OG-card field names as ``asl-content-card``.
+        name = (getattr(record, 'name', '') or '').strip()
+        return {
+            'kind': 'Event Series',
+            'kicker': _series_kicker(record),
+            'title': name,
+            'subtitle': subtitle,
+            'meta_primary': _series_meta_primary(record),
+            # Series have no tags field; the count of occurrences would be
+            # unstable (changes when staff add/cancel), so the secondary
+            # slot is intentionally empty.
+            'meta_secondary': '',
             'footer': 'aishippinglabs.com/events',
         }
 
@@ -487,7 +547,7 @@ def _resolve_model(content_type):
     the dispatcher module (which depends on ``jobs.tasks.helpers``).
     """
     from content.models import Article, Course, Download, Project, Workshop
-    from events.models import Event
+    from events.models import Event, EventSeries
 
     return {
         'article': Article,
@@ -496,6 +556,7 @@ def _resolve_model(content_type):
         'download': Download,
         'workshop': Workshop,
         'event': Event,
+        'event_series': EventSeries,
     }.get(content_type)
 
 
@@ -589,7 +650,7 @@ def render_banner_for_content(content_type, content_pk):
     # the gate-ordering invariant). This is also the safer pattern when
     # the dispatcher's own save() raced with the worker — ``update()``
     # is a single atomic UPDATE.
-    new_hash = title_hash(getattr(record, 'title', '') or '')
+    new_hash = title_hash(title_value(content_type, record))
     model.objects.filter(pk=content_pk).update(
         auto_banner_url=banner_url,
         auto_banner_title_hash=new_hash,

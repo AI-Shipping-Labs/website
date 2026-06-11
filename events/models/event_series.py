@@ -82,6 +82,23 @@ class EventSeries(TimestampedModelMixin, models.Model):
             'listings; existing occurrences keep their own per-event status.'
         ),
     )
+    auto_banner_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text=(
+            "Platform-generated OG banner URL (banner-generator Lambda, "
+            "issue #788). Templates should prefer an operator cover and fall "
+            "back to this. Series have no operator cover today, so this is "
+            "the only banner image."
+        ),
+    )
+    auto_banner_title_hash = models.CharField(
+        max_length=64, blank=True, default='',
+        help_text=(
+            "sha256 hex digest of the series ``name`` used to render the "
+            "current ``auto_banner_url``. Used to detect name drift between "
+            "renders."
+        ),
+    )
 
     class Meta:
         ordering = ['-created_at']

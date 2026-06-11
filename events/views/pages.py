@@ -393,9 +393,22 @@ def event_detail(request, event_id, slug):
     if slug != event.slug:
         return redirect(event.get_absolute_url(), permanent=True)
 
-    # Draft events should not be publicly visible
+    # Draft events should not be publicly visible.
     if event.status == 'draft' and not request.user.is_staff:
-        from django.http import Http404
+        raise Http404
+
+    # Issue #881: a retired duplicate event (cancelled AND unpublished by the
+    # merge tool) 404s for visitors so the stale duplicate detail page
+    # disappears, not just its listing entry. A legitimately cancelled event
+    # that is still published keeps its detail page (the "X people attended"
+    # social-proof surface, issue #863), so we gate on the retire signature
+    # (cancelled + unpublished) rather than cancelled alone. Staff keep access
+    # so they can manage retired rows.
+    if (
+        event.status == 'cancelled'
+        and not event.published
+        and not request.user.is_staff
+    ):
         raise Http404
 
     user = request.user

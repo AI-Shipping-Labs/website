@@ -53,6 +53,14 @@ class CommunityAuditLog(models.Model):
         # scalars / conflicts with ``actor_token=<label>``. Dry runs and the
         # already-merged no-op write NO row.
         ("merge_accounts", "API: account merge"),
+        # Duplicate-event merge via the Studio tool / ``merge_duplicate_events``
+        # command (issue #881). One row per real (non-dry-run) merge. There is no
+        # natural user SUBJECT for an event merge, so the ``user`` FK records the
+        # ACTOR (the staff operator who ran the merge); ``details`` is a JSON
+        # summary with the canonical / retired event ids, the registration count
+        # moved, and the fields filled, plus ``actor_token=<label>``. Dry runs and
+        # the already-merged no-op write NO row.
+        ("merge_events", "Studio: duplicate event merge"),
     ]
 
     user = models.ForeignKey(

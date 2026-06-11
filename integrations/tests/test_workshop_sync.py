@@ -2249,3 +2249,216 @@ class WorkshopSyncBannerBackfillTest(_WorkshopSyncFixtureBase):
             'A workshop with a populated banner + matching title hash must '
             'not be re-rendered on a no-op re-sync.',
         )
+
+
+class WorkshopSyncExplicitEventLinkTest(_WorkshopSyncFixtureBase):
+    """Issue #879: explicit ``event_id`` / ``event_slug`` link model.
+
+    A GitHub workshop can declare which existing Studio event it belongs to.
+    The reference binds the workshop to that exact event, updates content
+    fields only, and never mints a duplicate or flips the event's origin.
+    """
+
+    def _make_studio_event(self, *, slug, title='Take-Home Assignment Live'):
+        """A Studio-authored event (origin='studio', source_repo='')."""
+        return Event.objects.create(
+            slug=slug,
+            title=title,
+            start_datetime=datetime(2026, 4, 21, 15, 0, tzinfo=dt_timezone.utc),
+            status='upcoming',
+            timezone='America/New_York',
+            platform='zoom',
+            zoom_meeting_id='111-222-333',
+            zoom_join_url='https://zoom.us/j/111222333',
+            published=True,
+        )
+
+    def _write_recording_workshop(self, *, folder='2026/2026-04-21-demo',
+                                   slug='demo', extra_link_yaml=''):
+        self._write_workshop_yaml(
+            folder=folder,
+            slug=slug,
+            title='Demo Workshop',
+            extra_yaml=(
+                extra_link_yaml +
+                'recording:\n'
+                '  url: https://www.youtube.com/watch?v=linked\n'
+                '  embed_url: https://www.youtube.com/embed/linked\n'
+                '  required_level: 20\n'
+                '  timestamps:\n'
+                '    - { time: "00:00", title: "Intro" }\n'
+            ),
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+    def test_links_to_existing_studio_event_by_id(self):
+        event = self._make_studio_event(slug='take-home-live')
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop(
+            extra_link_yaml=f'event_id: {event.pk}\n',
+        )
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}',
+        )
+
+        # No new event minted.
+        self.assertEqual(Event.objects.count(), events_before)
+        self.assertEqual(
+            Event.objects.filter(slug='demo').count(), 0,
+            'A workshop-slug event must NOT be created when an explicit '
+            'event_id resolves.',
+        )
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.event_id, event.pk)
+
+        event.refresh_from_db()
+        # Operational fields untouched.
+        self.assertEqual(
+            event.start_datetime,
+            datetime(2026, 4, 21, 15, 0, tzinfo=dt_timezone.utc),
+        )
+        self.assertEqual(event.status, 'upcoming')
+        self.assertEqual(event.zoom_meeting_id, '111-222-333')
+        self.assertEqual(event.zoom_join_url, 'https://zoom.us/j/111222333')
+        # Origin invariant preserved — no flip.
+        self.assertEqual(event.origin, 'studio')
+        self.assertFalse(event.source_repo)
+        # Content fields DID carry over.
+        self.assertEqual(event.title, 'Demo Workshop')
+        self.assertEqual(
+            event.recording_url, 'https://www.youtube.com/watch?v=linked',
+        )
+        self.assertEqual(len(event.timestamps), 1)
+
+    def test_links_to_existing_studio_event_by_slug(self):
+        event = self._make_studio_event(slug='take-home-live')
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop(
+            extra_link_yaml='event_slug: take-home-live\n',
+        )
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}',
+        )
+
+        self.assertEqual(Event.objects.count(), events_before)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.event_id, event.pk)
+
+        event.refresh_from_db()
+        self.assertEqual(event.origin, 'studio')
+        self.assertFalse(event.source_repo)
+        self.assertEqual(
+            event.recording_url, 'https://www.youtube.com/watch?v=linked',
+        )
+
+    def test_event_id_takes_precedence_over_event_slug(self):
+        target = self._make_studio_event(slug='target-event', title='Target')
+        decoy = self._make_studio_event(slug='decoy-event', title='Decoy')
+
+        self._write_recording_workshop(
+            extra_link_yaml=(
+                f'event_id: {target.pk}\n'
+                'event_slug: decoy-event\n'
+            ),
+        )
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}',
+        )
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(
+            workshop.event_id, target.pk,
+            'event_id must win over a conflicting event_slug.',
+        )
+        decoy.refresh_from_db()
+        self.assertNotEqual(decoy.title, 'Demo Workshop')
+        self.assertEqual(decoy.recording_url, '')
+
+    def test_unresolved_event_id_records_error_and_creates_no_event(self):
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop(
+            extra_link_yaml='event_id: 99999\n',
+        )
+        sync_log = sync_repo(self.source, self.repo)
+
+        # No duplicate, no fallback create.
+        self.assertEqual(Event.objects.count(), events_before)
+        self.assertEqual(Event.objects.filter(slug='demo').count(), 0)
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertIsNone(workshop.event_id)
+
+        # A clear error is surfaced.
+        self.assertTrue(
+            any(
+                '99999' in (err.get('error') or '')
+                and 'demo' in (err.get('error') or '')
+                for err in sync_log.errors
+            ),
+            f'Expected a bad-reference error, got: {sync_log.errors}',
+        )
+
+    def test_unresolved_event_slug_records_error_and_creates_no_event(self):
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop(
+            extra_link_yaml='event_slug: does-not-exist\n',
+        )
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(Event.objects.count(), events_before)
+        self.assertEqual(Event.objects.filter(slug='demo').count(), 0)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertIsNone(workshop.event_id)
+        self.assertTrue(
+            any(
+                'does-not-exist' in (err.get('error') or '')
+                for err in sync_log.errors
+            ),
+            f'Expected a bad-reference error, got: {sync_log.errors}',
+        )
+
+    def test_no_reference_keeps_legacy_create_behaviour(self):
+        """Regression guard: no event_id/event_slug -> legacy create path."""
+        self._write_recording_workshop()  # no link keys
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}',
+        )
+
+        # The legacy path mints a workshop-slug event.
+        event = Event.objects.get(slug='demo')
+        self.assertEqual(event.kind, 'workshop')
+        self.assertEqual(event.origin, 'github')
+        self.assertEqual(event.source_repo, self.source.repo_name)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.event_id, event.pk)
+
+    def test_resync_with_event_id_is_idempotent(self):
+        event = self._make_studio_event(slug='take-home-live')
+        events_before = Event.objects.count()
+
+        self._write_recording_workshop(
+            extra_link_yaml=f'event_id: {event.pk}\n',
+        )
+        sync_repo(self.source, self.repo)
+        self.assertEqual(Event.objects.count(), events_before)
+
+        # Second sync — still exactly one event, link unchanged, origin kept.
+        sync_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            sync_log.errors, [], f'Unexpected errors: {sync_log.errors}',
+        )
+        self.assertEqual(Event.objects.count(), events_before)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.event_id, event.pk)
+        event.refresh_from_db()
+        self.assertEqual(event.origin, 'studio')
+        self.assertFalse(event.source_repo)

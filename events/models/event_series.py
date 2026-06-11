@@ -53,13 +53,6 @@ class EventSeries(TimestampedModelMixin, models.Model):
         default='weekly',
         help_text='Cadence label. v1 supports weekly only.',
     )
-    cadence_weeks = models.PositiveIntegerField(
-        default=1,
-        help_text=(
-            'Reserved for the "every N weeks" stretch goal. v1 always '
-            'stores 1 and the generator uses 7 days between occurrences.'
-        ),
-    )
     day_of_week = models.IntegerField(
         choices=DAY_OF_WEEK_CHOICES,
         default=2,

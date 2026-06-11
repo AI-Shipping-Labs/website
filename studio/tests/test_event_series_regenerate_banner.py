@@ -74,7 +74,6 @@ def _make_series(**overrides):
         'slug': 'ai-agents-office-hours',
         'description': 'Weekly office hours.',
         'cadence': 'weekly',
-        'cadence_weeks': 1,
         'day_of_week': 2,
         'start_time': dt.time(18, 0),
         'timezone': 'Europe/Berlin',

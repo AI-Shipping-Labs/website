@@ -162,7 +162,6 @@ class TestExistingSeriesKeepsItsTimezone:
             name="Berlin Series",
             slug="berlin-series-855",
             cadence="weekly",
-            cadence_weeks=1,
             day_of_week=1,
             start_time=datetime(2000, 1, 1, 14, 30).time(),
             timezone="Europe/Berlin",

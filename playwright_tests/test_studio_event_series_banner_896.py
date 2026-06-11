@@ -94,7 +94,6 @@ def _make_series(slug, name, **overrides):
         name=name,
         description="Weekly office hours for shipping AI agents.",
         cadence="weekly",
-        cadence_weeks=1,
         day_of_week=2,
         start_time=time(18, 0),
         timezone="Europe/Berlin",

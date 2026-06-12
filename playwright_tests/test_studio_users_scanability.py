@@ -61,10 +61,15 @@ def _seed_scanability_user():
     user.slack_member = True
     user.slack_user_id = "U01SCAN999"
     user.stripe_customer_id = "cus_SCANABILITY"
+    # Issue #930: ``filter=paid`` requires an active Stripe subscription
+    # (non-empty ``subscription_id`` + paid base tier), not just a paid
+    # tier, so this premium user must carry a subscription id to appear
+    # under the Paid chip used by the scanability scenario.
+    user.subscription_id = "sub_SCANABILITY"
     user.slack_checked_at = timezone.now()
     user.save(update_fields=[
         "tags", "slack_member", "slack_user_id",
-        "stripe_customer_id", "slack_checked_at",
+        "stripe_customer_id", "subscription_id", "slack_checked_at",
     ])
     user_pk = user.pk
     connection.close()

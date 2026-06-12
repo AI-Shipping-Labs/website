@@ -78,6 +78,7 @@ INTEGRATION_GROUPS = [
             {'key': 'AWS_SES_REGION', 'is_secret': False, 'description': 'AWS region for SES (e.g. eu-west-1). Must match the verified domain region.', 'docs_url': '_docs/integrations/ses.md#aws_ses_region'},
             {'key': 'SES_TRANSACTIONAL_FROM_EMAIL', 'is_secret': False, 'description': 'Sender address for required account and service email. Must be verified in SES.', 'docs_url': '_docs/integrations/ses.md#ses_transactional_from_email'},
             {'key': 'SES_PROMOTIONAL_FROM_EMAIL', 'is_secret': False, 'description': 'Sender address for campaigns, newsletters, and marketing email. Must be verified in SES.', 'docs_url': '_docs/integrations/ses.md#ses_promotional_from_email'},
+            {'key': 'SES_WELCOME_FROM_EMAIL', 'is_secret': False, 'description': 'Sender address for welcome emails (welcome, paid-signup, imported-user welcomes). Must be verified in SES.', 'docs_url': '_docs/integrations/ses.md#ses_welcome_from_email'},
             {
                 'key': 'SES_CONFIGURATION_SET_NAME',
                 'is_secret': False,

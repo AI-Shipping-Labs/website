@@ -29,7 +29,7 @@ from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
     EmailClassificationError,
     classify_email_type,
-    get_sender_for_kind,
+    get_sender_for_email_type,
 )
 from integrations.config import get_config, site_base_url
 
@@ -178,7 +178,7 @@ class EmailService:
             user.email,
             subject,
             full_html,
-            email_kind=email_kind,
+            email_type=template_name,
             unsubscribe_url=unsubscribe_url,
             cc=cc,
         )
@@ -427,7 +427,7 @@ class EmailService:
         subject,
         html_body,
         *,
-        email_kind="transactional",
+        email_type=None,
         unsubscribe_url=None,
         cc=None,
     ):
@@ -437,6 +437,11 @@ class EmailService:
             to_email: Recipient email address.
             subject: Email subject line.
             html_body: Full HTML email body.
+            email_type: The email template name (e.g. 'welcome',
+                'password_reset'). Used to resolve the From address via
+                ``get_sender_for_email_type`` so welcome types pick up the
+                dedicated welcome sender while every other type resolves by
+                its kind exactly as before (issue #937).
             unsubscribe_url: Optional one-click unsubscribe URL for
                 campaign-style mail.
             cc: Optional CC recipient(s) (string or list). Empty values
@@ -480,7 +485,7 @@ class EmailService:
                 print("", flush=True)
             return "ses-disabled-noop"
 
-        from_email = get_sender_for_kind(email_kind)
+        from_email = get_sender_for_email_type(email_type)
         content = {
             "Simple": {
                 "Subject": {

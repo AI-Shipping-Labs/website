@@ -218,6 +218,35 @@ Rotation: Same flow as `SES_TRANSACTIONAL_FROM_EMAIL`.
 
 Test vs live: n/a beyond per-environment override.
 
+## SES_WELCOME_FROM_EMAIL
+
+Purpose: Dedicated sender address for welcome emails — the five welcome
+types `welcome`, `cofounder_welcome`, `basic_welcome`, `premium_welcome`,
+and `welcome_imported`. Selected by
+`email_app/services/email_classification.py` via the per-type override in
+`get_sender_for_email_type` (issue #937). Default:
+`welcome@aishippinglabs.com`.
+
+Welcome emails stay classified `transactional` — only the From address is
+overridden. Their delivery semantics are unchanged: an unsubscribed paid
+user still receives their welcome, and welcome mail carries no unsubscribe
+footer / `List-Unsubscribe` header. The dedicated sender just gives new
+members a friendlier, recognisable From line distinct from `noreply@`.
+
+Without it: Falls back to the legacy `SES_FROM_EMAIL` if set, then the
+Django settings default (`welcome@aishippinglabs.com`). If that address is
+unverified, welcome sends fail in the same way as other senders — but
+account flows that use the transactional sender continue to work.
+
+Where to find it: Same as `SES_TRANSACTIONAL_FROM_EMAIL` — the SES
+"Verified identities" page in the active region. Domain-level verification
+already covers any address at `@<verified-domain>`, so no per-address
+verification is needed when the domain is verified.
+
+Rotation: Same flow as `SES_TRANSACTIONAL_FROM_EMAIL`.
+
+Test vs live: n/a beyond per-environment override.
+
 ## SES_CONFIGURATION_SET_NAME
 
 Purpose: SES configuration-set name applied to every outbound email

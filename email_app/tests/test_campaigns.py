@@ -17,7 +17,6 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from email_app.models import EmailCampaign, EmailLog
-from email_app.services.email_classification import EMAIL_KIND_PROMOTIONAL
 from email_app.tests.test_email_service import assert_no_internal_footer_text
 from jobs.tasks import build_task_name
 from tests.fixtures import TierSetupMixin
@@ -851,7 +850,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         sent_emails = {c[0][0] for c in mock_service._send_ses.call_args_list}
         self.assertEqual(sent_emails, {'user1@test.com', 'user2@test.com'})
         for call in mock_service._send_ses.call_args_list:
-            self.assertEqual(call.kwargs['email_kind'], EMAIL_KIND_PROMOTIONAL)
+            self.assertEqual(call.kwargs['email_type'], 'campaign')
             self.assertEqual(
                 call.kwargs['unsubscribe_url'],
                 'http://example.com/unsub',
@@ -1151,8 +1150,8 @@ class CampaignAdminTest(TierSetupMixin, TestCase):
         self.assertIn('<p>Test content.</p>', html)
         self.assertIn('http://example.com/unsub', html)
         self.assertEqual(
-            mock_service._send_ses.call_args.kwargs['email_kind'],
-            EMAIL_KIND_PROMOTIONAL,
+            mock_service._send_ses.call_args.kwargs['email_type'],
+            'campaign',
         )
         self.assertEqual(
             mock_service._send_ses.call_args.kwargs['unsubscribe_url'],

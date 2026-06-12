@@ -31,7 +31,6 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 from email_app.models import EmailCampaign, EmailLog
-from email_app.services.email_classification import EMAIL_KIND_PROMOTIONAL
 from email_app.services.email_service import EmailService, EmailServiceError
 from integrations.config import get_config
 
@@ -286,7 +285,7 @@ def send_campaign_batch(campaign_id, user_ids, send_delay=None):
                 user.email,
                 campaign.subject,
                 full_html,
-                email_kind=EMAIL_KIND_PROMOTIONAL,
+                email_type='campaign',
                 unsubscribe_url=unsubscribe_url,
             )
 

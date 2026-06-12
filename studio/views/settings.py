@@ -58,7 +58,7 @@ SETTINGS_SECTIONS = [
         'id': 'content',
         'label': 'Content',
         'description': 'Content sync, video, and live-session service credentials.',
-        'group_names': {'github', 'youtube', 'zoom'},
+        'group_names': {'github', 'youtube', 'zoom', 'calendly'},
     },
     {
         'id': 'content_tools',

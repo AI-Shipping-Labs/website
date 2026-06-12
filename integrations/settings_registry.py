@@ -164,6 +164,74 @@ INTEGRATION_GROUPS = [
         ],
     },
     {
+        'name': 'calendly',
+        'label': 'Calendly',
+        'keys': [
+            {
+                'key': 'CALENDLY_ACCESS_TOKEN',
+                'is_secret': True,
+                'optional': True,
+                'description': (
+                    'Calendly host access token (personal access token or '
+                    'an OAuth access token) used to read scheduled events '
+                    'and create the webhook subscription. Get a personal '
+                    'token from Calendly > Integrations > API & Webhooks. '
+                    'Without it the platform cannot register the booked-call '
+                    'webhook or fetch event details.'
+                ),
+                'docs_url': '_docs/integrations/calendly.md#calendly_access_token',
+            },
+            {
+                'key': 'CALENDLY_WEBHOOK_SIGNING_KEY',
+                'is_secret': True,
+                'optional': True,
+                'description': (
+                    'Signing key Calendly returns when the webhook '
+                    'subscription is created. Verifies that '
+                    'invitee.created / invitee.canceled callbacks really '
+                    'came from Calendly. When blank, webhook calls are '
+                    'rejected in production but allowed locally for replay.'
+                ),
+                'docs_url': '_docs/integrations/calendly.md#calendly_webhook_signing_key',
+            },
+            {
+                'key': 'CALENDLY_OAUTH_CLIENT_ID',
+                'is_secret': True,
+                'optional': True,
+                'description': (
+                    'Calendly OAuth app client ID. Used for the optional '
+                    'authorize-Calendly flow that mints a host access '
+                    'token without pasting a personal token. Get it from '
+                    'Calendly > Integrations > OAuth applications.'
+                ),
+                'docs_url': '_docs/integrations/calendly.md#calendly_oauth_client_id',
+            },
+            {
+                'key': 'CALENDLY_OAUTH_CLIENT_SECRET',
+                'is_secret': True,
+                'optional': True,
+                'description': (
+                    'Calendly OAuth app client secret paired with the '
+                    'client ID above. Required only for the authorize flow.'
+                ),
+                'docs_url': '_docs/integrations/calendly.md#calendly_oauth_client_secret',
+            },
+            {
+                'key': 'CALENDLY_WEBHOOK_VALIDATION_ENABLED',
+                'is_secret': False,
+                'is_boolean': True,
+                'optional': True,
+                'description': (
+                    'Set true to require a valid Calendly-Webhook-Signature '
+                    'header on the booked-call webhook (recommended in '
+                    'production). When false, signatures are not enforced so '
+                    'local replay works without the signing key.'
+                ),
+                'docs_url': '_docs/integrations/calendly.md#calendly_webhook_validation_enabled',
+            },
+        ],
+    },
+    {
         'name': 'github',
         'label': 'GitHub App',
         'keys': [

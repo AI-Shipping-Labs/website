@@ -32,6 +32,7 @@ from studio.views.banner_upload import (
     studio_workshop_remove_banner,
     studio_workshop_upload_banner,
 )
+from studio.views.calendly_oauth import calendly_callback, calendly_connect
 from studio.views.call_hosts import call_host_edit, call_host_list
 from studio.views.campaigns import (
     campaign_create,
@@ -590,6 +591,17 @@ urlpatterns = [
     # Call hosts (issue #870)
     path('call-hosts/', call_host_list, name='studio_call_host_list'),
     path('call-hosts/<int:host_id>/edit', call_host_edit, name='studio_call_host_edit'),
+    # Calendly OAuth connect (issue #884)
+    path(
+        'integrations/calendly/connect',
+        calendly_connect,
+        name='studio_calendly_connect',
+    ),
+    path(
+        'integrations/calendly/callback',
+        calendly_callback,
+        name='studio_calendly_callback',
+    ),
 
     # Projects
     path('projects/', project_list, name='studio_project_list'),

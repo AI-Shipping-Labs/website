@@ -137,7 +137,20 @@ Context:
       {% endfor %}
     </div>
 
-    <div class="mt-6 flex justify-end">
+    <div class="mt-6 flex justify-end gap-2">
+      {% if group.name == 'calendly' %}
+        {% comment %}
+        Optional OAuth connect (issue #884). Authorize Calendly and the
+        callback stores the host access token into CALENDLY_ACCESS_TOKEN
+        — the same row a manual paste writes. A GET link, not part of the
+        settings form, so it cannot be submitted accidentally.
+        {% endcomment %}
+        <a href="{% url 'studio_calendly_connect' %}"
+           data-testid="calendly-connect-link"
+           class="inline-flex items-center bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+          Connect Calendly
+        </a>
+      {% endif %}
       <button type="submit"
         class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
         Save {{ group.label }}

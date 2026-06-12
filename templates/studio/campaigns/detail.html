@@ -144,6 +144,24 @@
           placeholder="alice@example.com&#10;bob@example.com, carol@example.com"
           class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
         >{{ test_recipients }}</textarea>
+        {% if test_recipient_suggestions %}
+        <div class="mt-3" data-testid="test-recipient-suggestions">
+          <p class="text-xs text-muted-foreground mb-2">Quick fill</p>
+          <div class="flex flex-wrap gap-2">
+            {% for suggestion in test_recipient_suggestions %}
+            <button
+              type="button"
+              data-testid="test-recipient-chip"
+              data-email="{{ suggestion.email }}"
+              class="js-test-recipient-chip inline-flex items-center gap-1.5 bg-secondary border border-border text-foreground rounded-full px-3 py-1 text-xs font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-1 focus:ring-accent"
+            >
+              <span>{{ suggestion.email }}</span>
+              <span class="text-[10px] uppercase tracking-wide text-muted-foreground">{{ suggestion.label }}</span>
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
         <p class="text-xs text-muted-foreground mt-2">
           Comma, semicolon, space, or newline separated.
         </p>
@@ -207,4 +225,33 @@
 
 {% block extra_scripts %}
 {% include "_partials/mermaid_script.html" %}
+<script>
+  // Click-to-fill test-recipient chips (issue #921). Appends the chip's
+  // address to the Test Recipients textarea without submitting the form,
+  // skipping any address already present (case-insensitive).
+  (function () {
+    var textarea = document.getElementById('test-recipients');
+    if (!textarea) { return; }
+    var chips = document.querySelectorAll('.js-test-recipient-chip');
+    chips.forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        var email = (chip.getAttribute('data-email') || '').trim();
+        if (!email) { return; }
+        var current = textarea.value;
+        var lines = current.split(/[\s,;]+/).filter(function (s) { return s.trim() !== ''; });
+        var exists = lines.some(function (line) {
+          return line.toLowerCase() === email.toLowerCase();
+        });
+        if (!exists) {
+          if (current.trim() === '') {
+            textarea.value = email;
+          } else {
+            textarea.value = current.replace(/\s+$/, '') + '\n' + email;
+          }
+        }
+        textarea.focus();
+      });
+    });
+  })();
+</script>
 {% endblock %}

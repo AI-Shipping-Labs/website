@@ -119,6 +119,22 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/ses.md#campaign_batch_interval_seconds',
             },
+            {
+                'key': 'CAMPAIGN_TEST_RECIPIENTS',
+                'is_secret': False,
+                'optional': True,
+                'description': (
+                    'Comma/space/semicolon/newline-separated list of common '
+                    'test-send addresses surfaced as click-to-fill chips '
+                    'beneath the Test Recipients field on the campaign detail '
+                    'page (issue #921). Lets operators one-click-fill the '
+                    'mailboxes they repeatedly test to (a teammate, a QA seed '
+                    'inbox) instead of retyping. Invalid entries are silently '
+                    'dropped. Leave blank to show only the operator\'s own '
+                    'email and recently-sent addresses.'
+                ),
+                'docs_url': '_docs/integrations/ses.md#campaign_test_recipients',
+            },
         ],
     },
     {

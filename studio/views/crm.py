@@ -19,6 +19,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from accounts.models import TierOverride
+from community.models import STATUS_BOOKED, BookedCall
 from crm.models import (
     STATUS_CHOICES,
     AppliedProgressChange,
@@ -225,6 +226,15 @@ def _record_detail_context(record):
         and onboarding_response.status == 'submitted'
     )
 
+    # Booked calls captured from Calendly (issue #884). Show the member's
+    # active (not-canceled) bookings, soonest first, with the host.
+    booked_calls = list(
+        BookedCall.objects
+        .filter(member=record.user, status=STATUS_BOOKED)
+        .select_related('host')
+        .order_by('scheduled_at', 'created_at')
+    )
+
     return {
         'record': record,
         'detail_user': record.user,
@@ -232,6 +242,7 @@ def _record_detail_context(record):
         'tier_slug': tier_info['slug'],
         'tier_source': tier_info['source'],
         'member_plans': member_plans,
+        'booked_calls': booked_calls,
         'onboarding_response': onboarding_response,
         'onboarding_answers': onboarding_answers,
         'onboarding_submitted': onboarding_submitted,

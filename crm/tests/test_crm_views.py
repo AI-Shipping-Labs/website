@@ -203,6 +203,56 @@ class CRMDetailViewTest(CRMViewsBase):
         self.assertNotContains(response, 'data-testid="crm-detail-archive"')
 
 
+class CRMBookedCallsSectionTest(CRMViewsBase):
+    """Booked calls captured from Calendly appear on the CRM record (#884)."""
+
+    def test_detail_renders_booked_calls_section(self):
+        record = CRMRecord.objects.create(user=self.member)
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+        self.assertContains(response, 'data-testid="crm-booked-calls-section"')
+
+    def test_empty_state_when_no_booked_calls(self):
+        record = CRMRecord.objects.create(user=self.member)
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+        self.assertContains(response, 'data-testid="crm-booked-calls-empty"')
+
+    def test_active_booked_call_shows_host_and_time(self):
+        from community.models import BookedCall, CallHost
+
+        record = CRMRecord.objects.create(user=self.member)
+        host = CallHost.objects.create(
+            name='Alexey', slug='alexey-cal',
+            booking_url='https://calendly.com/alexey-test/intro',
+        )
+        BookedCall.objects.create(
+            host=host,
+            member=self.member,
+            invitee_email=self.member.email,
+            scheduled_at=datetime.datetime(2099, 1, 15, 15, 0, tzinfo=datetime.timezone.utc),
+            calendly_event_uri='https://api.calendly.com/scheduled_events/EVTX',
+        )
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+        self.assertContains(response, 'data-testid="crm-booked-call-item"')
+        self.assertContains(response, 'With Alexey')
+        self.assertContains(response, '2099-01-15')
+        self.assertNotContains(response, 'data-testid="crm-booked-calls-empty"')
+
+    def test_canceled_booked_call_is_not_shown(self):
+        from community.models import STATUS_CANCELED, BookedCall, CallHost
+
+        record = CRMRecord.objects.create(user=self.member)
+        host = CallHost.objects.create(name='Alexey', slug='alexey-cal')
+        BookedCall.objects.create(
+            host=host,
+            member=self.member,
+            invitee_email=self.member.email,
+            status=STATUS_CANCELED,
+            calendly_event_uri='https://api.calendly.com/scheduled_events/EVTY',
+        )
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+        self.assertContains(response, 'data-testid="crm-booked-calls-empty"')
+
+
 class CRMOnboardingSectionTest(CRMViewsBase):
     """The Onboarding section on the CRM detail page (issue #871).
 

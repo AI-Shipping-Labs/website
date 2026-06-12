@@ -163,6 +163,30 @@
   {% endif %}
 </section>
 
+<!-- Booked calls from Calendly (issue #884) -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-booked-calls-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Upcoming booked calls</h2>
+  {% if booked_calls %}
+  <ul class="divide-y divide-border" data-testid="crm-booked-calls-list">
+    {% for call in booked_calls %}
+    <li class="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"
+        data-testid="crm-booked-call-item">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-foreground" data-testid="crm-booked-call-host">
+          With {{ call.host.name }}
+        </p>
+        <p class="text-xs text-muted-foreground" data-testid="crm-booked-call-time">
+          {% if call.scheduled_at %}{{ call.scheduled_at|date:"Y-m-d H:i" }}{% else %}Time not set{% endif %}
+        </p>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="crm-booked-calls-empty">No booked calls yet.</p>
+  {% endif %}
+</section>
+
 <!-- Slack updates from #plan-sprints (issue #889) -->
 {% include 'studio/crm/_slack_updates.html' %}
 

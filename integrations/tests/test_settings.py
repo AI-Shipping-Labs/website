@@ -342,7 +342,7 @@ class SettingsDashboardViewTest(TestCase):
             for section in sections
         }
         self.assertEqual(groups_by_section['payments'], ['stripe'])
-        self.assertEqual(groups_by_section['content'], ['zoom', 'youtube', 'github'])
+        self.assertEqual(groups_by_section['content'], ['zoom', 'youtube', 'calendly', 'github'])
         self.assertEqual(groups_by_section['messaging'], ['ses', 'slack'])
         self.assertEqual(groups_by_section['storage'], ['s3_recordings', 's3_content'])
         self.assertEqual(groups_by_section['site'], ['site'])
@@ -396,9 +396,10 @@ class SettingsDashboardViewTest(TestCase):
         summary = response.context['status_summary']
         expected_total_items = len(response.context['auth_providers']) + len(response.context['groups'])
         self.assertEqual(summary['total_items'], expected_total_items)
-        # Google OAuth + the `analytics` group (all keys optional, so
-        # "configured" by default even with no value set).
-        self.assertEqual(summary['configured_count'], 2)
+        # Google OAuth + the `analytics` group + the `calendly` group
+        # (both have all-optional keys, so "configured" by default even
+        # with no value set — calendly added in issue #884).
+        self.assertEqual(summary['configured_count'], 3)
         # Stripe has one DB-backed key, SES has one env-backed key,
         # GitHub has the default Secrets Manager path but no App IDs,
         # LLM has provider+model defaults but no API key (issue #799), and

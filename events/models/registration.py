@@ -16,6 +16,12 @@ class EventRegistration(models.Model):
         related_name='event_registrations',
     )
     registered_at = models.DateTimeField(auto_now_add=True)
+    # Issue #936: per-registration attendance status. Null means
+    # "registered but never joined". Non-null is the timestamp of the
+    # first live-window join-link click (first-join-wins; see
+    # ``event_join_redirect``). This is the deduplicated rollup of the
+    # full ``EventJoinClick`` per-click log.
+    joined_at = models.DateTimeField(null=True, blank=True, db_index=False)
 
     class Meta:
         unique_together = [('event', 'user')]

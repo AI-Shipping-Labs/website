@@ -378,6 +378,18 @@ def event_join_redirect(request, slug):
         target_url=studio_event_url(event.pk),
     )
 
+    # Issue #936: mark this registration as "joined" on the first
+    # live-window click. A guarded ``filter(joined_at__isnull=True)``
+    # update is a single race-safe statement (first-join-wins): a second
+    # click during the window matches zero rows and never overwrites the
+    # original timestamp. The registration row is guaranteed to exist
+    # here — the unregistered branch above already returned.
+    # #853's per-user activity timeline reads the canonical
+    # ``EventJoinClick`` log, not this field, so the two do not
+    # double-instrument the same click.
+    EventRegistration.objects.filter(
+        event=event, user=request.user, joined_at__isnull=True,
+    ).update(joined_at=timezone.now())
     return redirect(event.zoom_join_url)
 
 

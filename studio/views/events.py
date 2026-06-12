@@ -724,6 +724,13 @@ def event_edit(request, event_id):
     )
     context['registrations'] = registrations
     context['registration_count'] = registrations.count()
+    # Issue #936: per-event attendance rollup. ``joined_count`` is the
+    # number of registrations whose ``joined_at`` is set (first
+    # live-window join click). Rendered as ``joined_count /
+    # registration_count`` in the State panel.
+    context['joined_count'] = registrations.filter(
+        joined_at__isnull=False,
+    ).count()
     context['registrations_csv_url'] = reverse(
         'studio_event_registrations_csv', kwargs={'event_id': event.pk},
     )
@@ -793,7 +800,10 @@ def event_registrations_csv(request, event_id):
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
 
     writer = csv.writer(response)
-    writer.writerow(['email', 'name', 'registered_at', 'tier'])
+    # Issue #936: ``joined_at`` is appended after the locked
+    # ``email, name, registered_at, tier`` columns (those keep their
+    # order). Cell is ISO 8601 UTC when set, empty string when null.
+    writer.writerow(['email', 'name', 'registered_at', 'tier', 'joined_at'])
     for reg in registrations:
         user = reg.user
         name = user.get_full_name() or ''
@@ -803,6 +813,12 @@ def event_registrations_csv(request, event_id):
             name,
             reg.registered_at.isoformat() if reg.registered_at else '',
             tier_name,
+            (
+                reg.joined_at
+                .astimezone(_datetime.timezone.utc)
+                .isoformat()
+                if reg.joined_at else ''
+            ),
         ])
 
     return response

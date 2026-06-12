@@ -270,6 +270,84 @@ class SettingsDashboardViewTest(TestCase):
         zoom_group = next(g for g in groups if g['name'] == 'zoom')
         self.assertEqual(zoom_group['status'], 'partial')
 
+    def _group_from_settings(self, name, *, env=None):
+        """Render /studio/settings/ and return the named group context.
+
+        Clears the given env keys (so a value leaking in from the dev
+        shell can't make an all-optional group look configured), applies
+        any provided env values, then reads the group from the view.
+        """
+        self.client.login(email='admin@test.com', password='testpass')
+        overrides = dict(env or {})
+        with patch.dict(os.environ, overrides, clear=False):
+            for key in (env or {}):
+                if env[key] == '':
+                    os.environ.pop(key, None)
+            response = self.client.get('/studio/settings/')
+        groups = response.context['groups']
+        return next(g for g in groups if g['name'] == name)
+
+    def test_analytics_all_optional_unset_is_not_configured(self):
+        # Issue #938: an all-optional group with nothing set must not be
+        # "configured" by vacuous truth (0 required keys set == 0 required).
+        analytics = self._group_from_settings(
+            'analytics', env={'GOOGLE_ANALYTICS_ID': ''}
+        )
+        self.assertEqual(analytics['status'], 'not_configured')
+
+    def test_analytics_configured_when_id_set_via_db(self):
+        IntegrationSetting.objects.create(
+            key='GOOGLE_ANALYTICS_ID', value='G-ABC123XYZ', group='analytics'
+        )
+        analytics = self._group_from_settings('analytics')
+        self.assertEqual(analytics['status'], 'configured')
+
+    def test_analytics_configured_when_id_set_via_env(self):
+        analytics = self._group_from_settings(
+            'analytics', env={'GOOGLE_ANALYTICS_ID': 'G-ENVVALUE1'}
+        )
+        self.assertEqual(analytics['status'], 'configured')
+
+    def test_analytics_default_only_retention_does_not_configure_group(self):
+        # USER_ACTIVITY_RETENTION_DAYS resolves to its registry default
+        # (365, source 'default'). A default alone must NOT mark the group
+        # configured, and GA being unset keeps it not_configured.
+        analytics = self._group_from_settings(
+            'analytics', env={'GOOGLE_ANALYTICS_ID': ''}
+        )
+        retention = next(
+            f for f in analytics['fields']
+            if f['key'] == 'USER_ACTIVITY_RETENTION_DAYS'
+        )
+        self.assertEqual(retention['source'], 'default')
+        self.assertEqual(retention['current_value'], '365')
+        self.assertEqual(analytics['status'], 'not_configured')
+
+    def test_all_optional_group_never_partial(self):
+        # An all-optional group has total_keys == 0, so it must never emit
+        # 'partial' (the template would render the nonsensical "Partial
+        # (x/0)"). It is only ever configured or not_configured.
+        analytics = self._group_from_settings(
+            'analytics', env={'GOOGLE_ANALYTICS_ID': 'G-PARTIAL01'}
+        )
+        self.assertEqual(analytics['total_keys'], 0)
+        self.assertEqual(analytics['status'], 'configured')
+        self.assertNotEqual(analytics['status'], 'partial')
+
+    def test_calendly_all_optional_unset_is_not_configured(self):
+        calendly = self._group_from_settings(
+            'calendly', env={'CALENDLY_ACCESS_TOKEN': ''}
+        )
+        self.assertEqual(calendly['total_keys'], 0)
+        self.assertEqual(calendly['status'], 'not_configured')
+
+    def test_calendly_configured_when_token_set_via_db(self):
+        IntegrationSetting.objects.create(
+            key='CALENDLY_ACCESS_TOKEN', value='cal-token', group='calendly'
+        )
+        calendly = self._group_from_settings('calendly')
+        self.assertEqual(calendly['status'], 'configured')
+
     def test_secret_fields_marked_is_secret(self):
         self.client.login(email='admin@test.com', password='testpass')
         response = self.client.get('/studio/settings/')
@@ -396,10 +474,12 @@ class SettingsDashboardViewTest(TestCase):
         summary = response.context['status_summary']
         expected_total_items = len(response.context['auth_providers']) + len(response.context['groups'])
         self.assertEqual(summary['total_items'], expected_total_items)
-        # Google OAuth + the `analytics` group + the `calendly` group
-        # (both have all-optional keys, so "configured" by default even
-        # with no value set — calendly added in issue #884).
-        self.assertEqual(summary['configured_count'], 3)
+        # Only Google OAuth is configured here. The `analytics` and
+        # `calendly` groups are all-optional and nothing is set, so after
+        # issue #938 they are `not_configured` rather than "configured" by
+        # vacuous truth. A registry default alone (e.g. analytics'
+        # USER_ACTIVITY_RETENTION_DAYS=365) does not count as set.
+        self.assertEqual(summary['configured_count'], 1)
         # Stripe has one DB-backed key, SES has one env-backed key,
         # GitHub has the default Secrets Manager path but no App IDs,
         # LLM has provider+model defaults but no API key (issue #799), and

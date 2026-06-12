@@ -94,6 +94,9 @@ class TestNyAdminCreatesEventInLocalTime:
         page.fill('input[name="event_date"]', "15/06/2027")
         page.fill('input[name="event_time"]', "14:30")
         page.fill('input[name="duration_hours"]', "1")
+        # Issue #860: link-less Zoom event — accept the "no meeting link"
+        # confirm on submit.
+        page.on("dialog", lambda d: d.accept())
         page.locator('[data-testid="event-create-submit"]').click()
 
         page.wait_for_url(re.compile(r".*/studio/events/\d+/edit$"))
@@ -146,7 +149,9 @@ class TestEditEventPreservesEventTimezone:
         assert time_value == "14:30", time_value
 
         # No-op save: refresh the form and submit unchanged. The stored
-        # instant must not drift.
+        # instant must not drift. Issue #860: this link-less event triggers
+        # the "no meeting link" confirm — accept it.
+        page.on("dialog", lambda d: d.accept())
         page.locator("button:has-text('Save Changes')").first.click()
         page.wait_for_url(
             re.compile(rf".*/studio/events/{event.pk}/edit$"),

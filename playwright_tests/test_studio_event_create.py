@@ -77,6 +77,9 @@ class TestScenario1CreateOneOff:
         page.fill('input[name="event_date"]', "21/05/2026")
         page.fill('input[name="event_time"]', "18:00")
         # Leave duration blank — defaults to 1 hour.
+        # Issue #860: this Zoom event has no meeting/URL yet, so submit fires
+        # the "no meeting link" confirm — accept it to proceed.
+        page.on("dialog", lambda d: d.accept())
         page.locator('[data-testid="event-create-submit"]').click()
 
         page.wait_for_url(re.compile(r".*/studio/events/\d+/edit$"))
@@ -132,6 +135,8 @@ class TestScenario2PublishAndView:
         page.fill('input[name="event_time"]', "19:00")
         # Switch status to upcoming so the row appears on /events.
         page.select_option('select[name="status"]', "upcoming")
+        # Issue #860: link-less Zoom event — accept the confirm on submit.
+        page.on("dialog", lambda d: d.accept())
         page.locator('[data-testid="event-create-submit"]').click()
         page.wait_for_url(re.compile(r".*/studio/events/\d+/edit$"))
 
@@ -177,6 +182,11 @@ class TestScenario3Validation:
             f"{django_server}/studio/events/new",
             wait_until="domcontentloaded",
         )
+
+        # Issue #860: this link-less Zoom event fires the "no meeting link"
+        # confirm on submit — accept it so the POST reaches the server and we
+        # exercise the server-side validation branch.
+        page.on("dialog", lambda d: d.accept())
 
         # Submit without filling title — bypass HTML5 required attribute so
         # we exercise the server-side validation branch.
@@ -249,6 +259,9 @@ class TestScenario4DuplicateSlug:
         page.fill('input[name="slug"]', "office-hours")
         page.fill('input[name="event_date"]', "20/06/2026")
         page.fill('input[name="event_time"]', "18:00")
+        # Issue #860: link-less Zoom event — accept the "no meeting link"
+        # confirm so the POST reaches the server-side duplicate-slug check.
+        page.on("dialog", lambda d: d.accept())
         page.locator('[data-testid="event-create-submit"]').click()
 
         page.wait_for_load_state("domcontentloaded")
@@ -341,6 +354,9 @@ class TestScenario5OriginEditGate:
         assert not page.locator('input[name="tags"]').first.is_disabled()
 
         # Edit the title and save; reload confirms the new title persisted.
+        # Issue #860: this event has no Zoom meeting / URL, so Save fires the
+        # "no meeting link" confirm — accept it to let the save through.
+        page.on("dialog", lambda d: d.accept())
         page.fill('input[name="title"]', "Studio Event Renamed")
         page.locator("button:has-text('Save Changes')").first.click()
         page.wait_for_url(

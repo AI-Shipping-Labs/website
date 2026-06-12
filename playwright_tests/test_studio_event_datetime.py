@@ -127,8 +127,10 @@ class TestScenario2StaffEditsEventPrePopulated:
         duration_field.fill("")
         duration_field.fill("3")
 
-        # Click Save Changes
-        page.locator('button[type="submit"]').click()
+        # Click Save Changes. Issue #860: this link-less event triggers the
+        # "no meeting link" confirm on submit — accept it.
+        page.on("dialog", lambda d: d.accept())
+        page.locator('[data-testid="sticky-save-action"]').click()
         page.wait_for_load_state("domcontentloaded")
 
         # Then: Verify in DB

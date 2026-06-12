@@ -129,6 +129,9 @@ class TestStudioEventBannerAuthorJourney:
         page.fill('input[name="event_date"]', future)
         page.fill('input[name="event_time"]', "18:00")
         page.select_option('select[name="required_level"]', "20")
+        # Issue #860: link-less Zoom event — accept the "no meeting link"
+        # confirm dialog so the create proceeds.
+        page.on("dialog", lambda d: d.accept())
         page.locator('[data-testid="event-create-submit"]').click()
 
         page.wait_for_url(re.compile(r".*/studio/events/\d+/edit$"))

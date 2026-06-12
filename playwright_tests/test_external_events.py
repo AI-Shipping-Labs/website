@@ -397,7 +397,10 @@ class TestClearingExternalHostRevertsToCommunityFlow:
             '[data-testid="studio-event-external-host"]',
         ).select_option("")
 
-        # Submit the form via the sticky save button.
+        # Submit the form via the sticky save button. Issue #860: clearing the
+        # external host leaves a link-less Zoom event, so submit fires the
+        # "no meeting link" confirm — accept it.
+        page.on("dialog", lambda d: d.accept())
         with page.expect_navigation(wait_until="domcontentloaded"):
             page.locator('button[type="submit"]').first.click()
 
@@ -663,6 +666,9 @@ class TestStaffSwitchesEventBackToCommunity:
         assert select.input_value() == "Luma"
         select.select_option("")
 
+        # Issue #860: clearing the external host leaves a link-less Zoom
+        # event, so submit fires the "no meeting link" confirm — accept it.
+        page.on("dialog", lambda d: d.accept())
         with page.expect_navigation(wait_until="domcontentloaded"):
             page.locator('button[type="submit"]').first.click()
 

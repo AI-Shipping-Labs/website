@@ -45,6 +45,7 @@ from api.views.event_series import (
     event_series_detail,
     event_series_occurrence_detail,
     event_series_occurrences_bulk,
+    event_series_zoom_meetings,
 )
 from api.views.events import event_detail, events_collection
 from api.views.integration_settings import integration_settings
@@ -193,6 +194,15 @@ urlpatterns = [
         "event-series/<int:series_id>/occurrences/bulk",
         event_series_occurrences_bulk,
         name="api_event_series_occurrences_bulk",
+    ),
+    # ---- Bulk Zoom-meeting creation for a series (issue #932) ----------
+    # POST-only. The ``zoom-meetings`` literal must stay BEFORE the
+    # ``occurrences/<int:occurrence_id>`` capture so an ``<int>`` converter
+    # never swallows it (same ordering discipline as ``occurrences/bulk``).
+    path(
+        "event-series/<int:series_id>/zoom-meetings",
+        event_series_zoom_meetings,
+        name="api_event_series_zoom_meetings",
     ),
     path(
         "event-series/<int:series_id>/occurrences/<int:occurrence_id>",

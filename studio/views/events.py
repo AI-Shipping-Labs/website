@@ -266,11 +266,43 @@ def _maybe_notify_reschedule(request, event, old_start):
     if count > 0:
         enqueue_reschedule_notice(event.pk, old_start.isoformat())
 
+    # Issue #869: series subscribers get the canonical UPDATE as a
+    # multi-event series invite (the per-event reschedule notice above
+    # skips them to avoid double emails). Enqueue the series fan-out for
+    # an occurrence that belongs to a series.
+    if event.event_series_id:
+        from events.tasks.notify_series_invite import enqueue_series_update
+        enqueue_series_update(event.pk)
+
     label = 'attendee' if count == 1 else 'attendees'
     messages.success(
         request,
         f'Rescheduling notice sent to {count} registered {label}.',
     )
+
+
+def _maybe_notify_series_cancellation(event, old_status):
+    """Issue #869: notify series subscribers when an occurrence is cancelled.
+
+    Fires only on a transition INTO ``cancelled`` for an occurrence that
+    belongs to a series. Bumps ``ics_sequence`` so the ``METHOD:CANCEL``
+    ``.ics`` carries a higher SEQUENCE than the last invite the subscriber
+    received (calendar clients only honour a CANCEL whose SEQUENCE is
+    greater-or-equal), then enqueues the per-subscriber CANCEL fan-out.
+
+    API cancellations stay notification-free per the #678 contract — this
+    is wired only into the Studio edit path.
+    """
+    if not event.event_series_id:
+        return
+    if event.status != 'cancelled' or old_status == 'cancelled':
+        return
+
+    event.ics_sequence = (event.ics_sequence or 0) + 1
+    event.save(update_fields=['ics_sequence'])
+
+    from events.tasks.notify_series_invite import enqueue_series_cancellation
+    enqueue_series_cancellation(event.pk)
 
 
 @staff_required
@@ -478,6 +510,10 @@ def event_edit(request, event_id):
     default_tz = _default_timezone_for(request.user)
 
     if request.method == 'POST':
+        # Issue #869: snapshot the persisted status before any in-memory
+        # mutation so we can detect a transition INTO ``cancelled`` after
+        # save and notify series subscribers (CANCEL their calendar entry).
+        old_status = Event.objects.values_list('status', flat=True).get(pk=event.pk)
         if synced:
             # Synced events: only allow operational fields
             max_p = request.POST.get('max_participants', '')
@@ -516,6 +552,9 @@ def event_edit(request, event_id):
                     enroll_series_registrants_in_event,
                 )
                 enroll_series_registrants_in_event(event)
+            # Issue #869: a status flip to cancelled removes the occurrence
+            # from series subscribers' calendars via a METHOD:CANCEL .ics.
+            _maybe_notify_series_cancellation(event, old_status)
         else:
             # Issue #670: snapshot the persisted start time BEFORE we
             # mutate the in-memory event. The Studio form re-parses
@@ -605,6 +644,10 @@ def event_edit(request, event_id):
             # future, and the delta is >= 60s. End-only edits and
             # past-event edits stay silent.
             _maybe_notify_reschedule(request, event, old_start)
+
+            # Issue #869: a status flip to cancelled removes the occurrence
+            # from series subscribers' calendars via a METHOD:CANCEL .ics.
+            _maybe_notify_series_cancellation(event, old_status)
 
             # Issue #895: a title change drifts the auto-banner title hash,
             # so re-enqueue the render. ``enqueue_if_missing`` short-circuits

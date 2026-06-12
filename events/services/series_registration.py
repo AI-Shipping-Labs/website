@@ -175,6 +175,7 @@ def enroll_series_registrants_in_event(event):
         )
 
         enrolled = 0
+        enrolled_user_ids = []
         users = User.objects.filter(id__in=registrant_user_ids)
         for user in users:
             if user.id in already_registered_ids:
@@ -186,6 +187,23 @@ def enroll_series_registrants_in_event(event):
                 break
             EventRegistration.objects.create(event=event, user=user)
             enrolled += 1
+            enrolled_user_ids.append(user.id)
+
+        # Issue #869: subscribers auto-enrolled into a newly added/published
+        # occurrence get an updated series invite covering the new session.
+        # Fire-and-forget; an enqueue failure must not block enrollment.
+        if enrolled_user_ids:
+            try:
+                from events.tasks.notify_series_invite import (
+                    enqueue_series_update,
+                )
+                enqueue_series_update(event.pk, enrolled_user_ids)
+            except Exception:
+                logger.exception(
+                    'Failed to enqueue series update after auto-enroll for '
+                    'event "%s"',
+                    getattr(event, 'slug', '?'),
+                )
         return enrolled
     except Exception:
         logger.exception(

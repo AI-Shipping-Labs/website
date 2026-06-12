@@ -1,17 +1,22 @@
 """Calendar invite (.ics) generation for events.
 
-Two surfaces share the same per-event payload:
+Three surfaces share the same per-event payload:
 
 - ``generate_ics(event)`` builds a single-event ``VCALENDAR`` with
   ``METHOD:REQUEST`` — used for the per-event ``.ics`` attachment in
   registration emails and the per-event download at
   ``/events/<slug>/calendar.ics`` (issue #484).
+- ``generate_series_ics(events, method)`` builds a multi-event
+  ``VCALENDAR`` WITH a ``METHOD`` property — used for the series
+  subscriber invite (issue #869) so a whole series lands in the
+  recipient's calendar from one email, and to UPDATE/CANCEL it when
+  occurrences change. The multi-VEVENT sibling of ``generate_ics``.
 - ``generate_feed_ics(events_qs)`` builds a multi-event ``VCALENDAR``
   with NO ``METHOD`` property — used for the subscribable platform-wide
   feed at ``/events/calendar.ics`` (issue #578). Subscribed clients
   treat a ``METHOD`` header as a republish, so we deliberately omit it.
 
-Both surfaces consume ``build_vevent(event)`` so the per-event payload
+All surfaces consume ``build_vevent(event)`` so the per-event payload
 (UID, DTSTART/DTEND, DESCRIPTION truncation, SUMMARY prefix for external
 events, URL/LOCATION shape) stays consistent.
 """
@@ -187,6 +192,48 @@ def generate_ics(event, method='REQUEST'):
     cal.add('version', '2.0')
     cal.add('method', method)
     cal.add_component(build_vevent(event))
+    return cal.to_ical()
+
+
+def generate_series_ics(events, method='REQUEST'):
+    """Generate a multi-event ``.ics`` invite covering several occurrences.
+
+    Used by the series subscriber invite (issue #869): when a member
+    registers for a whole series (or the series changes) we send ONE
+    ``.ics`` containing a ``VEVENT`` per upcoming occurrence so the
+    entire series lands in the recipient's calendar from a single email.
+
+    Unlike ``generate_feed_ics`` (the subscribable platform feed, which
+    deliberately omits ``METHOD`` so clients do not treat each fetch as a
+    republish), this carries a ``METHOD`` property (``REQUEST`` for a
+    new/updated invite, ``CANCEL`` to remove). It is the multi-VEVENT
+    sibling of ``generate_ics``.
+
+    Each ``VEVENT`` reuses ``build_vevent(event)``, so every occurrence
+    keeps its stable per-event UID (``event-<slug>@aishippinglabs.com``)
+    and its own ``ics_sequence``. Calendar clients de-dupe by UID, so an
+    occurrence received via both the per-event invite and this series
+    invite merges into one entry, and a bumped SEQUENCE on a later send
+    UPDATEs that entry rather than duplicating it.
+
+    The series invite intentionally does NOT introduce a series-level
+    UID — the per-event UID + SEQUENCE stay the single source of truth.
+
+    Args:
+        events: Iterable of ``Event`` rows to include (caller owns the
+            inclusion query — accessibility, upcoming, etc.).
+        method: iCalendar method (``REQUEST`` for new/update,
+            ``CANCEL`` for cancellation).
+
+    Returns:
+        bytes: The ``.ics`` file content.
+    """
+    cal = Calendar()
+    cal.add('prodid', '-//AI Shipping Labs//Events//EN')
+    cal.add('version', '2.0')
+    cal.add('method', method)
+    for event in events:
+        cal.add_component(build_vevent(event))
     return cal.to_ical()
 
 

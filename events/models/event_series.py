@@ -100,6 +100,16 @@ class EventSeries(TimestampedModelMixin, models.Model):
             "renders."
         ),
     )
+    zoom_meetings_last_run = models.JSONField(
+        null=True, blank=True, default=None,
+        help_text=(
+            "Issue #859: structured summary of the most recent "
+            "'Create Zoom meetings for all events' background run. Shape: "
+            "``{finished_at, created: [event_id], skipped_existing: n, "
+            "skipped_ineligible: n, failed: [{event_id, title, error}]}``. "
+            "Null until the action has run at least once."
+        ),
+    )
 
     class Meta:
         ordering = ['-created_at']

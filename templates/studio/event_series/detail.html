@@ -44,6 +44,31 @@
               data-testid="event-series-announce-slack">
         Post to Slack
       </button>
+      {% comment %}Issue #859: one-click create Zoom meetings for every eligible
+         occurrence. POST-only (never a GET) and staff-gated by the view.
+         Disabled with explanatory copy when nothing is eligible.{% endcomment %}
+      {% if zoom_eligible_count > 0 %}
+      <form method="post" action="{% url 'studio_event_series_create_zoom' series_id=series.pk %}"
+            class="inline-flex flex-col items-start" data-testid="series-create-zoom-form">
+        {% csrf_token %}
+        <button type="submit"
+                class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                data-testid="series-create-zoom">
+          Create Zoom meetings for all events
+        </button>
+        <span class="mt-1 text-xs text-muted-foreground" data-testid="series-zoom-eligible-note">
+          {{ zoom_eligible_count }} occurrence{{ zoom_eligible_count|pluralize }} need a Zoom meeting
+        </span>
+      </form>
+      {% else %}
+      <div class="inline-flex flex-col items-start">
+        <button type="button" disabled
+                class="bg-secondary border border-border text-muted-foreground px-4 py-2 rounded-lg text-sm font-medium cursor-not-allowed"
+                data-testid="series-create-zoom-disabled">
+          All occurrences have Zoom meetings
+        </button>
+      </div>
+      {% endif %}
       <button type="submit"
               form="event-series-metadata-form"
               class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
@@ -70,11 +95,33 @@
 </div>
 {% endif %}
 
+{% comment %}Issue #859: last-run summary of the one-click Zoom-meeting creation. Shown
+   after the background job finishes and the staff member reloads the page.{% endcomment %}
+{% if zoom_last_run %}
+<div class="mb-4 rounded-md border border-border bg-card px-4 py-3 text-sm" data-testid="series-zoom-summary">
+  <p class="font-medium text-foreground">Last Zoom-meeting run</p>
+  <p class="mt-1 text-muted-foreground" data-testid="series-zoom-summary-counts">
+    Created {{ zoom_last_run.created|length }},
+    skipped {{ zoom_last_run.skipped_existing|add:zoom_last_run.skipped_ineligible }}
+    ({{ zoom_last_run.skipped_existing }} already had a meeting,
+    {{ zoom_last_run.skipped_ineligible }} ineligible),
+    failed {{ zoom_last_run.failed|length }}.
+  </p>
+  {% if zoom_last_run.failed %}
+  <ul class="mt-2 space-y-1 text-red-300" data-testid="series-zoom-failures">
+    {% for failure in zoom_last_run.failed %}
+    <li>{{ failure.title }} — {{ failure.error }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endif %}
+
 <div id="series-notify-status" class="mb-4 rounded-md border px-4 py-2 text-sm" style="display:none;" data-testid="series-notify-status"></div>
 <div id="series-slack-status" class="mb-4 rounded-md border px-4 py-2 text-sm" style="display:none;" data-testid="series-slack-status"></div>
 
-{# Issue #858: single-column (row) layout. Sections stack top-to-bottom:
-   member events, add occurrence, series metadata, delete panel. #}
+{% comment %}Issue #858: single-column (row) layout. Sections stack top-to-bottom:
+   member events, add occurrence, series metadata, delete panel.{% endcomment %}
 <div class="space-y-6">
 
   <!-- Member events table -->
@@ -86,6 +133,7 @@
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Visibility</th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Zoom</th>
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Start</th>
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Registrations</th>
             <th class="px-4 py-2 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
@@ -98,10 +146,10 @@
             <td class="px-4 py-3 text-sm text-foreground" data-label="Title">
               <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="hover:text-accent">{{ event.title }}</a>
             </td>
-            {# Issue #858: viewer-friendly publish state. The bare "Draft"
+            {% comment %}Issue #858: viewer-friendly publish state. The bare "Draft"
                wording is gone — a draft reads "Not published", a visible
                occurrence reads "Published", and terminal states keep their
-               own label. ``derived_status`` still drives the data-status hook. #}
+               own label. ``derived_status`` still drives the data-status hook.{% endcomment %}
             <td class="px-4 py-3 text-sm" data-label="Visibility">
               {% if event.status == 'draft' %}
               <span class="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground"
@@ -115,6 +163,16 @@
               {% else %}
               <span class="inline-flex items-center rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-400"
                     data-testid="event-publish-state" data-status="{{ event.derived_status }}">Published</span>
+              {% endif %}
+            </td>
+            {# Issue #859: whether this occurrence has a Zoom meeting yet. #}
+            <td class="px-4 py-3 text-sm" data-label="Zoom">
+              {% if event.zoom_meeting_id %}
+              <span class="inline-flex items-center gap-1 text-green-400" data-testid="event-zoom-indicator" data-zoom="yes">
+                <i data-lucide="check" class="w-4 h-4"></i> Zoom
+              </span>
+              {% else %}
+              <span class="text-muted-foreground/60" data-testid="event-zoom-indicator" data-zoom="no">—</span>
               {% endif %}
             </td>
             <td class="px-4 py-3 text-sm text-muted-foreground" data-testid="event-start" data-label="Start">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
@@ -138,7 +196,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="6" class="px-4 py-6 text-center text-sm text-muted-foreground">No member events.</td>
+            <td colspan="7" class="px-4 py-6 text-center text-sm text-muted-foreground">No member events.</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -194,8 +252,8 @@
       <textarea id="meta-description" name="description" rows="4"
                 class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono">{{ series.description }}</textarea>
     </div>
-    {# Issue #858: staff hide flag. Default checked (visible). When unchecked
-       the public series page 404s even if it has published events. #}
+    {% comment %}Issue #858: staff hide flag. Default checked (visible). When unchecked
+       the public series page 404s even if it has published events.{% endcomment %}
     <div class="flex items-start gap-2 pt-1">
       <input id="meta-is-active" type="checkbox" name="is_active" {% if series.is_active %}checked{% endif %}
              class="mt-0.5 h-4 w-4 rounded border-border bg-secondary text-accent focus:ring-accent"

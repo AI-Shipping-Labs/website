@@ -199,6 +199,17 @@ class StudioEventSeriesDetailTest(StaffMixin, TestCase):
         self.assertContains(response, 'Session 2')
         self.assertContains(response, 'Session 3')
 
+    def test_template_comments_do_not_leak_into_rendered_page(self):
+        """Multi-line {# #} comments leak every line but the last as body
+        text. They must be {% comment %} blocks instead — guard against the
+        sentinels that were rendering on the operator's screen."""
+        response = self.client.get(f'/studio/event-series/{self.series.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Issue #859')
+        self.assertNotContains(response, 'Issue #858')
+        self.assertNotContains(response, 'Issue #854')
+        self.assertNotContains(response, 'Issue #896')
+
     def test_edit_links_point_to_event_edit(self):
         response = self.client.get(f'/studio/event-series/{self.series.pk}/')
         event = self.series.events.get(series_position=1)

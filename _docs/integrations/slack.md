@@ -356,6 +356,78 @@ Rotation: Same as `SLACK_PLAN_SPRINTS_CHANNEL_ID`.
 Test vs live: This key is the test counterpart to
 `SLACK_PLAN_SPRINTS_CHANNEL_ID`.
 
+## SLACK_TEAM_REQUESTS_CHANNEL_ID
+
+Purpose: Production channel ID of the team-requests channel — where staff
+notifications land for two member-initiated flows. Read by
+`community/slack_config.py:get_slack_team_requests_channel_id` and consumed by:
+
+- the plan-request ping ("Ask the team to plan with me", issue #585) in
+  `plans/views/sprints.py`, and
+- the onboarding-submitted staff heads-up (issue #882) in
+  `crm/services/onboarding_notify.py`.
+
+Used only when `SLACK_ENVIRONMENT=production`.
+
+Without it (blank): The Slack post is skipped — only that side of the
+notification is suppressed. The email and in-app notifications still run, so
+staff are still notified through those channels. No error is raised.
+
+Where to find it: Right click the team-requests channel in Slack > "View
+channel details" > copy the ID at the bottom (looks like `C01ABC234`).
+
+Prereqs:
+- `SLACK_ENABLED` must be true and `SLACK_BOT_TOKEN` set.
+- The bot must be a member of the team-requests channel — invite it from
+  inside the channel with `/invite @<bot-name>`, otherwise the post fails
+  with `not_in_channel`.
+
+Rotation: Permanent for the channel. Replace the value when you cut over to a
+new team-requests channel.
+
+Test vs live: This key is the live (production) channel. Use
+`SLACK_DEV_TEAM_REQUESTS_CHANNEL_ID` for development and
+`SLACK_TEST_TEAM_REQUESTS_CHANNEL_ID` for test.
+
+## SLACK_DEV_TEAM_REQUESTS_CHANNEL_ID
+
+Purpose: Development-only team-requests channel ID. Same shape and consumers
+as `SLACK_TEAM_REQUESTS_CHANNEL_ID` (plan-request ping #585 and onboarding
+heads-up #882). Used only when `SLACK_ENVIRONMENT=development`.
+
+Without it (in development mode): The Slack post no-ops on the development
+workspace; email + in-app notifications still run. Production is unaffected
+because it uses a different key.
+
+Where to find it: Same as `SLACK_TEAM_REQUESTS_CHANNEL_ID`, but on the
+development workspace.
+
+Prereqs: Same as `SLACK_TEAM_REQUESTS_CHANNEL_ID`.
+
+Rotation: Same as `SLACK_TEAM_REQUESTS_CHANNEL_ID`.
+
+Test vs live: This key is the development counterpart to
+`SLACK_TEAM_REQUESTS_CHANNEL_ID`.
+
+## SLACK_TEST_TEAM_REQUESTS_CHANNEL_ID
+
+Purpose: Test-only team-requests channel ID. Same shape and consumers as
+`SLACK_TEAM_REQUESTS_CHANNEL_ID` (plan-request ping #585 and onboarding
+heads-up #882). Used only when `SLACK_ENVIRONMENT=test`.
+
+Without it (in test mode): The Slack post no-ops; email + in-app
+notifications still run.
+
+Where to find it: Same as `SLACK_TEAM_REQUESTS_CHANNEL_ID`, but on the test
+workspace / channel.
+
+Prereqs: Same as `SLACK_TEAM_REQUESTS_CHANNEL_ID`.
+
+Rotation: Same as `SLACK_TEAM_REQUESTS_CHANNEL_ID`.
+
+Test vs live: This key is the test counterpart to
+`SLACK_TEAM_REQUESTS_CHANNEL_ID`.
+
 ## SLACK_INVITE_URL
 
 Purpose: Public Slack workspace invite URL (the `https://join.slack.com/t/...`

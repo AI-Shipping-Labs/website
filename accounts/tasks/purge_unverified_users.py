@@ -65,6 +65,14 @@ _PURGE_IGNORED_RELATIONS = frozenset({
     # ``post_save`` signal on User, so every user has exactly one of
     # these. It carries UTM data, not user-driven activity.
     "attribution",
+    # analytics.UserActivity (issue #853): every user gets a ``signup``
+    # row written by the same ``post_save`` chokepoint as ``attribution``.
+    # For an unverified, never-logged-in email signup that is the ONLY
+    # possible row (enroll / lesson / payment / event all require a
+    # verified, authenticated session), so this relation is signup
+    # bookkeeping — not user-driven activity — and must not block the
+    # purge of an abandoned account.
+    "activities",
 })
 
 # Extra reverse relations ignored only by the eager-bounce bucket

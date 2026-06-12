@@ -49,6 +49,7 @@ class EntrypointRegistersSchedulesTest(TestCase):
         expected = {
             'health-check',
             'cleanup-webhook-logs',
+            'purge-user-activity',
             'event-reminders',
             'complete-finished-events',
             'expire-tier-overrides',

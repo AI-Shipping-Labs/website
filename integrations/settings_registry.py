@@ -339,6 +339,22 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/analytics.md#google_analytics_id',
             },
+            {
+                'key': 'USER_ACTIVITY_RETENTION_DAYS',
+                'is_secret': False,
+                'optional': True,
+                'default': '365',
+                'description': (
+                    'How many days of per-user CRM activity timeline rows '
+                    '(analytics.UserActivity) to keep before the daily '
+                    'purge_old_user_activity job deletes them. Longer than '
+                    'the 90-day SES audit-log window because activity is a '
+                    'CRM signal staff use, but still bounded for storage / '
+                    'PII. Default 365. A non-integer or non-positive '
+                    'override falls back to 365. Issue #853.'
+                ),
+                'docs_url': '_docs/integrations/analytics.md#user_activity_retention_days',
+            },
         ],
     },
     {

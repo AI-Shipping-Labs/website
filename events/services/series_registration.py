@@ -90,6 +90,8 @@ def enroll_user_in_series(user, series):
             summary['skipped_full'] += 1
             continue
         EventRegistration.objects.create(event=event, user=user)
+        from analytics.activity import record_event_register
+        record_event_register(user, event)
         new_events.append(event)
         summary['registered'] += 1
 
@@ -186,6 +188,8 @@ def enroll_series_registrants_in_event(event):
                 # Capacity can be reached mid-loop; recheck each time.
                 break
             EventRegistration.objects.create(event=event, user=user)
+            from analytics.activity import record_event_register
+            record_event_register(user, event)
             enrolled += 1
             enrolled_user_ids.append(user.id)
 

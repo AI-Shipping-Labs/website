@@ -994,6 +994,52 @@ def _build_course_enrollments(user):
     return sorted(rows, key=lambda row: row['last_activity_at'], reverse=True)
 
 
+# Number of most-recent activity rows shown on the user detail page
+# (issue #853). When the user has more than this many total activities,
+# the template renders a "Showing 20 of N events" line.
+USER_ACTIVITY_DISPLAY_LIMIT = 20
+
+
+def _build_activity_timeline(user):
+    """Return the user's recent activity rows plus a total count.
+
+    Bounded by ``USER_ACTIVITY_DISPLAY_LIMIT``. Adds at most 2 DB queries
+    to the user detail page regardless of event count: one for the window
+    and one for the total. The denormalised ``label`` / ``target_url`` on
+    each ``UserActivity`` row mean no per-row joins are needed.
+    """
+    from analytics.models import UserActivity
+
+    rows = list(
+        UserActivity.objects
+        .filter(user=user)
+        .order_by('-occurred_at')[:USER_ACTIVITY_DISPLAY_LIMIT]
+    )
+    activities = [
+        {
+            'type_label': activity.get_event_type_display(),
+            'label': activity.label,
+            'occurred_at': activity.occurred_at,
+            'target_url': activity.target_url,
+        }
+        for activity in rows
+    ]
+
+    if len(rows) < USER_ACTIVITY_DISPLAY_LIMIT:
+        # Fewer than a full window -> we already know the total; no extra
+        # query needed.
+        total = len(rows)
+    else:
+        total = UserActivity.objects.filter(user=user).count()
+
+    return {
+        'activities': activities,
+        'activity_total': total,
+        'activity_limit': USER_ACTIVITY_DISPLAY_LIMIT,
+        'activity_has_more': total > USER_ACTIVITY_DISPLAY_LIMIT,
+    }
+
+
 @staff_required
 def user_detail(request, user_id):
     """Staff-only user detail page focused on account-level data.
@@ -1007,6 +1053,7 @@ def user_detail(request, user_id):
     override = _active_override_for_user(user)
     crm_record = CRMRecord.objects.filter(user=user).first()
     course_enrollments = _build_course_enrollments(user)
+    activity_timeline = _build_activity_timeline(user)
 
     # Inline tier-override block (issue #562). Reuses the same business
     # rules as the standalone /studio/users/tier-override/ page: only
@@ -1079,6 +1126,10 @@ def user_detail(request, user_id):
         'status': _user_status(user),
         'crm_record': crm_record,
         'course_enrollments': course_enrollments,
+        'activities': activity_timeline['activities'],
+        'activity_total': activity_timeline['activity_total'],
+        'activity_limit': activity_timeline['activity_limit'],
+        'activity_has_more': activity_timeline['activity_has_more'],
         # /admin/accounts/user/<id>/change/ is the canonical destructive
         # surface for users (delete, password reset, full ORM edits).
         # Linking it from the Studio overview keeps Studio focused on

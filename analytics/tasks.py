@@ -3,8 +3,10 @@
 import logging
 
 from django.core.cache import cache
+from django.utils import timezone
 
-from analytics.models import CampaignVisit
+from analytics.activity import get_user_activity_retention_days
+from analytics.models import CampaignVisit, UserActivity
 from integrations.models import UtmCampaign
 
 logger = logging.getLogger(__name__)
@@ -85,3 +87,23 @@ def record_visit(
     logger.debug('Recorded CampaignVisit id=%s utm_campaign=%s campaign_id=%s',
                  visit.id, utm_campaign, campaign_id)
     return visit.id
+
+
+def purge_old_user_activity():
+    """Delete UserActivity rows older than the retention window (issue #853).
+
+    Scheduled daily via ``setup_schedules`` (off-peak). The window comes
+    from ``get_user_activity_retention_days`` (the Studio-editable
+    ``USER_ACTIVITY_RETENTION_DAYS`` setting), so it can be tuned without a
+    redeploy. Logs how many rows were deleted.
+    """
+    days = get_user_activity_retention_days()
+    cutoff = timezone.now() - timezone.timedelta(days=days)
+    deleted_count, _ = UserActivity.objects.filter(
+        occurred_at__lt=cutoff,
+    ).delete()
+    logger.info(
+        'Purged %d UserActivity rows older than %d days',
+        deleted_count, days,
+    )
+    return {'deleted': deleted_count, 'cutoff_days': days}

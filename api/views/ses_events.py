@@ -656,6 +656,7 @@ def _handle_engagement(*, payload, inner, message_id, notification_type):
         )
         return JsonResponse({"status": "ok"}, status=200)
 
+    first_click = False
     try:
         with transaction.atomic():
             SesEvent.objects.create(
@@ -676,6 +677,7 @@ def _handle_engagement(*, payload, inner, message_id, notification_type):
                 updates = {"clicks": F("clicks") + 1}
                 if locked_log.clicked_at is None:
                     updates["clicked_at"] = event_timestamp
+                    first_click = True
                 if locked_log.opened_at is None:
                     updates["opened_at"] = event_timestamp
             EmailLog.objects.filter(pk=locked_log.pk).update(**updates)
@@ -683,6 +685,25 @@ def _handle_engagement(*, payload, inner, message_id, notification_type):
         logger.info(
             "Duplicate SesEvent for MessageId=%s; skipping engagement update",
             message_id,
+        )
+        return JsonResponse({"status": "ok"}, status=200)
+
+    # Mirror the first tracked email click onto the CRM timeline (issue
+    # #853), matching EmailLog's first-click semantics. Only when
+    # ``clicked_at`` transitioned from NULL in this request and the log
+    # has an associated user. Defensive — never raises into the callback.
+    if first_click and email_log.user_id is not None:
+        from analytics.activity import record_activity
+        from analytics.models import UserActivity
+        subject = getattr(getattr(email_log, "campaign", None), "subject", "") or ""
+        label = f"Clicked email link: {subject}" if subject else "Clicked email link"
+        record_activity(
+            email_log.user,
+            UserActivity.EVENT_EMAIL_CLICK,
+            label=label,
+            object_type="email",
+            object_id=str(email_log.pk),
+            occurred_at=event_timestamp,
         )
 
     return JsonResponse({"status": "ok"}, status=200)

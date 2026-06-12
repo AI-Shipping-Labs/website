@@ -240,6 +240,8 @@ def _register_anonymous(request, event):
         registration = EventRegistration.objects.create(
             event=event, user=existing_user,
         )
+        from analytics.activity import record_event_register
+        record_event_register(existing_user, event)
         try:
             from events.services.registration_email import (
                 send_registration_confirmation,
@@ -276,6 +278,8 @@ def _register_anonymous(request, event):
         email, preferred_timezone=submitted_timezone,
     )
     registration = EventRegistration.objects.create(event=event, user=user)
+    from analytics.activity import record_event_register
+    record_event_register(user, event)
 
     # Send registration confirmation (with .ics) AND the verification
     # email so the user can claim the account. Both emails are sent
@@ -375,6 +379,11 @@ def register_for_event(request, slug):
     registration = EventRegistration.objects.create(
         event=event, user=request.user,
     )
+
+    # Record an `event_register` activity row for the CRM timeline
+    # (issue #853). Defensive — never raises into the registration path.
+    from analytics.activity import record_event_register
+    record_event_register(request.user, event)
 
     # Issue #768: event registration is a real platform action — flip
     # ``account_activated`` for the authenticated user. Idempotent.

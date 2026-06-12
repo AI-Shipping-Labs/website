@@ -44,6 +44,7 @@ from datetime import datetime
 
 from django.db import DatabaseError, transaction
 
+from analytics.activity import record_activity
 from analytics.middleware import (
     ANON_ID_COOKIE,
     FIRST_TOUCH_COOKIE,
@@ -51,7 +52,7 @@ from analytics.middleware import (
     SESSION_LAST_TOUCH,
     SESSION_LAST_TOUCH_REFERRER,
 )
-from analytics.models import CampaignVisit, UserAttribution
+from analytics.models import CampaignVisit, UserActivity, UserAttribution
 from analytics.referrer_source import ReferrerSource
 from analytics.request_context import (
     consume_stripe_user_creation,
@@ -221,6 +222,17 @@ def create_user_attribution(sender, instance, created, **kwargs):
             'Failed to create UserAttribution for user_id=%s', instance.pk
         )
         return
+
+    # Record a `signup` activity row for the CRM timeline (issue #853).
+    # Same chokepoint as UserAttribution so the two stay in sync. Uses
+    # `date_joined` so the timeline is chronologically correct. Defensive
+    # by construction — `record_activity` never raises.
+    record_activity(
+        instance,
+        UserActivity.EVENT_SIGNUP,
+        label='Signed up',
+        occurred_at=getattr(instance, 'date_joined', None),
+    )
 
     # Backfill prior anonymous CampaignVisit rows. Only touches rows with
     # user_id NULL so we never steal visits attributed to another user.

@@ -144,6 +144,20 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(schedule.cron, '0 8 * * *')
         self.assertEqual(schedule.schedule_type, Schedule.CRON)
 
+    def test_creates_purge_user_activity_schedule(self):
+        """Command creates the purge-user-activity schedule (issue #853).
+
+        The registered ``func`` must point at the task function so django-q
+        can resolve it at fire time. Runs daily, off-peak.
+        """
+        call_command('setup_schedules', stdout=StringIO())
+        schedule = Schedule.objects.get(name='purge-user-activity')
+        self.assertEqual(
+            schedule.func, 'analytics.tasks.purge_old_user_activity',
+        )
+        self.assertEqual(schedule.cron, '30 3 * * *')
+        self.assertEqual(schedule.schedule_type, Schedule.CRON)
+
     def test_idempotent(self):
         """Running command twice does not create duplicate schedules."""
         call_command('setup_schedules', stdout=StringIO())
@@ -204,6 +218,7 @@ class SetupSchedulesCommandTest(TestCase):
         expected = {
             'health-check',
             'cleanup-webhook-logs',
+            'purge-user-activity',
             'event-reminders',
             'complete-finished-events',
             'expire-tier-overrides',

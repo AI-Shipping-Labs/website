@@ -541,6 +541,7 @@ class SignalRobustnessTest(TestCase):
                  'analytics.signals.UserAttribution.objects.create',
                  return_value=attribution,
              ), \
+             patch('analytics.signals.record_activity'), \
              patch(
                  'analytics.signals.CampaignVisit.objects.filter',
              ) as filter_mock, \

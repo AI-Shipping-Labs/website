@@ -364,6 +364,20 @@ def event_join_redirect(request, slug):
     # delta <= 5 min AND now <= end_or_grace_cutoff: record click and
     # redirect to Zoom.
     EventJoinClick.objects.create(event=event, user=request.user)
+
+    # Mirror the join click onto the CRM timeline (issue #853).
+    # Defensive — never raises into the redirect path.
+    from analytics.activity import record_activity, studio_event_url
+    from analytics.models import UserActivity
+    record_activity(
+        request.user,
+        UserActivity.EVENT_EVENT_JOIN,
+        label=f'Joined event: {event.title}',
+        object_type='event',
+        object_id=event.slug,
+        target_url=studio_event_url(event.pk),
+    )
+
     return redirect(event.zoom_join_url)
 
 

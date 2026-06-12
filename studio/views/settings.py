@@ -186,6 +186,7 @@ def _build_group_context(group_def, db_settings):
     """
     fields = []
     keys_set = 0
+    actively_set = 0
     total_keys = sum(
         1 for key_def in group_def['keys'] if not key_def.get('optional')
     )
@@ -212,6 +213,14 @@ def _build_group_context(group_def, db_settings):
         if current_value and not key_def.get('optional'):
             keys_set += 1
 
+        # A key counts as "actively set" only when an operator override
+        # (``db``) or environment value (``env``) supplies it. A registry
+        # ``default`` does NOT count — otherwise an all-optional group such
+        # as ``analytics`` (whose ``USER_ACTIVITY_RETENTION_DAYS`` defaults
+        # to ``365``) would look configured with nothing actually set.
+        if source in ('db', 'env'):
+            actively_set += 1
+
         fields.append({
             'key': key,
             'description': key_def.get('description', key),
@@ -230,12 +239,25 @@ def _build_group_context(group_def, db_settings):
             'docs_url': _resolve_docs_url(key_def.get('docs_url', '')),
         })
 
-    if keys_set == total_keys:
-        status = 'configured'
-    elif keys_set > 0:
-        status = 'partial'
+    # Status rules.
+    #
+    # Groups with required keys keep their historical behavior: configured
+    # when every required key has a value, partial when some do, otherwise
+    # not configured.
+    #
+    # All-optional groups (``total_keys == 0``) must NOT be configured by
+    # vacuous truth (``0 == 0``). They are configured only when at least one
+    # key is actively set (``db`` or ``env``), and never "partial" — there
+    # is no fraction to show, so the template never renders "Partial (x/0)".
+    if total_keys > 0:
+        if keys_set == total_keys:
+            status = 'configured'
+        elif keys_set > 0 or actively_set > 0:
+            status = 'partial'
+        else:
+            status = 'not_configured'
     else:
-        status = 'not_configured'
+        status = 'configured' if actively_set > 0 else 'not_configured'
 
     return {
         'name': group_def['name'],

@@ -316,6 +316,76 @@ def page(browser):
 # Shared E2E helpers
 # ---------------------------------------------------------------------------
 
+# Dev-smoke bounded-retry navigation tuning (Issue #928). These are
+# test-harness constants, not runtime product settings, so they are plain
+# module-level defaults and do NOT go through the IntegrationSetting framework.
+# Rationale: the scheduled dev suite runs against a live ECS service that can
+# briefly serve a 5xx while a rolling deploy swaps tasks. A bounded retry
+# absorbs that transient blip; a persistent 5xx still fails (we return the last
+# response so the caller's assertion produces the normal failure message).
+GOTO_RETRY_ATTEMPTS = 3
+GOTO_RETRY_BACKOFF_SECONDS = 2.0
+
+
+def _is_retryable_status(status):
+    """Return True when a navigation result should be retried.
+
+    Pure decision function (no Playwright coupling) so it is unit-testable
+    without a browser. A result is retryable when:
+
+    - ``status is None`` — navigation produced no response (network/nav error).
+    - ``status >= 500`` — server error (500, 502, 503, 504): transient during
+      an ECS rolling-deploy window.
+
+    Every other status (2xx success, 3xx redirect, 401, 403, 404, etc.) is NOT
+    retryable and must be returned to the caller immediately so it asserts on
+    the real status exactly as before (the unknown-route test relies on a 404
+    coming back as 404 on the first attempt).
+    """
+    if status is None:
+        return True
+    return status >= 500
+
+
+def goto_with_retry(
+    page,
+    url,
+    *,
+    expected_status=200,
+    wait_until="domcontentloaded",
+    attempts=GOTO_RETRY_ATTEMPTS,
+    backoff_seconds=GOTO_RETRY_BACKOFF_SECONDS,
+):
+    """Navigate to ``url`` with a bounded retry on transient server errors.
+
+    Drop-in wrapper around ``page.goto`` for the dev-smoke tests (Issue #928).
+    Behaves identically to ``page.goto`` on the happy path: a first-attempt
+    non-5xx response (200, redirect, 401/403/404, ...) is returned immediately
+    with zero added sleep.
+
+    On a retryable result (``response is None`` or ``status >= 500``, decided by
+    ``_is_retryable_status``) it sleeps a constant ``backoff_seconds`` and
+    retries, up to ``attempts`` total attempts. If every attempt is retryable it
+    returns the LAST response (it does NOT raise and does NOT fabricate a 200),
+    so the caller's existing ``assert response.status == expected_status``
+    produces the normal, readable failure — a persistent 5xx still fails.
+
+    ``expected_status`` is accepted so call sites read self-documentingly (e.g.
+    ``expected_status=404`` for the unknown-route test) but it does NOT change
+    the retry decision: only 5xx / ``None`` are retried, never the expected
+    status itself.
+    """
+    response = None
+    for attempt in range(attempts):
+        response = page.goto(url, wait_until=wait_until)
+        status = response.status if response is not None else None
+        if not _is_retryable_status(status):
+            return response
+        if attempt < attempts - 1:
+            time.sleep(backoff_seconds)
+    return response
+
+
 VIEWPORT = {"width": 1280, "height": 720}
 
 DEFAULT_PASSWORD = "TestPass123!"

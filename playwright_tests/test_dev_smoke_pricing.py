@@ -18,7 +18,11 @@ import os
 
 import pytest
 
-from playwright_tests.conftest import base_url_is_local, ensure_tiers
+from playwright_tests.conftest import (
+    base_url_is_local,
+    ensure_tiers,
+    goto_with_retry,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -35,9 +39,7 @@ def _ensure_tiers_seeded(django_db_blocker):
 @pytest.mark.django_db
 def test_pricing_page_renders_tier_grid(django_server, page):
     """/pricing renders the tier comparison grid with all four tier cards."""
-    response = page.goto(
-        f"{django_server}/pricing", wait_until="domcontentloaded"
-    )
+    response = goto_with_retry(page, f"{django_server}/pricing")
     assert response.status == 200, f"/pricing returned {response.status}"
     # The pricing template renders one ``[data-tier-card]`` per tier.
     expected_tiers = {"free", "basic", "main", "premium"}

@@ -15,7 +15,11 @@ import os
 
 import pytest
 
-from playwright_tests.conftest import base_url_is_local, ensure_tiers
+from playwright_tests.conftest import (
+    base_url_is_local,
+    ensure_tiers,
+    goto_with_retry,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -31,8 +35,6 @@ def _ensure_tiers_seeded(django_db_blocker):
 
 def test_events_listing_renders(django_server, page):
     """/events returns 200 and renders a main heading."""
-    response = page.goto(
-        f"{django_server}/events", wait_until="domcontentloaded"
-    )
+    response = goto_with_retry(page, f"{django_server}/events")
     assert response.status == 200, f"/events returned {response.status}"
     assert page.locator("main h1").count() >= 1

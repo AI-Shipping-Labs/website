@@ -7,14 +7,14 @@ the local Django ORM, inject session cookies, or submit forms.
 
 import os
 
+from playwright_tests.conftest import goto_with_retry
+
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
 def test_login_page_renders_form(django_server, page):
     """/accounts/login/ renders the email + password login form."""
-    response = page.goto(
-        f"{django_server}/accounts/login/", wait_until="domcontentloaded"
-    )
+    response = goto_with_retry(page, f"{django_server}/accounts/login/")
     assert response.status == 200, (
         f"/accounts/login/ returned {response.status}"
     )

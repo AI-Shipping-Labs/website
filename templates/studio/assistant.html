@@ -1,0 +1,108 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Assistant{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6 max-w-3xl">
+  <h1 class="text-2xl font-semibold text-foreground">AI Assistant</h1>
+  <p class="text-sm text-muted-foreground mt-1">
+    Describe a CRM change in plain language. The assistant proposes the
+    action for your review — nothing is written until you confirm. It can
+    only <span class="font-mono">add member notes</span> or
+    <span class="font-mono">update member profiles</span>.
+  </p>
+</div>
+
+{% if not configured %}
+<div class="bg-card border border-border rounded-lg p-6 max-w-3xl"
+     data-testid="assistant-not-configured">
+  <h2 class="text-base font-medium text-foreground">Assistant not configured</h2>
+  <p class="text-sm text-muted-foreground mt-2">
+    No LLM provider is configured. Add an <span class="font-mono">LLM_API_KEY</span>
+    in <a href="{% url 'studio_settings' %}" class="text-accent underline underline-offset-4">Studio settings</a>
+    to enable the assistant.
+  </p>
+</div>
+{% else %}
+
+{% if error %}
+<div class="mb-6 max-w-3xl rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-foreground"
+     data-testid="assistant-error">
+  {{ error }}
+</div>
+{% endif %}
+
+{% if result %}
+<div class="mb-6 max-w-3xl rounded-lg border {% if result.declined %}border-border bg-secondary/40{% else %}border-green-500/40 bg-green-500/10{% endif %} px-4 py-3 text-sm text-foreground"
+     data-testid="{% if result.declined %}assistant-declined{% else %}assistant-result{% endif %}">
+  {{ result.message }}
+</div>
+{% endif %}
+
+{% if proposal %}
+<div class="mb-6 max-w-3xl bg-card border border-border rounded-lg p-6"
+     data-testid="assistant-proposal">
+  <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+    Proposed action — review before confirming
+  </p>
+  <h2 class="text-base font-medium text-foreground" data-testid="assistant-proposal-tool">
+    {{ proposal.tool_label }} for {{ proposal.member_email }}
+  </h2>
+  <dl class="mt-3 space-y-1 text-sm" data-testid="assistant-proposal-changes">
+    {% for key, value in proposal.changes.items %}
+    <div class="flex gap-2">
+      <dt class="font-mono text-muted-foreground">{{ key }}:</dt>
+      <dd class="text-foreground whitespace-pre-wrap">{{ value }}</dd>
+    </div>
+    {% endfor %}
+  </dl>
+
+  <div class="mt-5 flex items-center gap-3">
+    <form method="post" action="{% url 'studio_assistant' %}">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="confirm">
+      <input type="hidden" name="tool_name" value="{{ proposal.tool_name }}">
+      <input type="hidden" name="payload" value="{{ proposal.payload_json }}">
+      <input type="hidden" name="request_text" value="{{ request_text }}">
+      <button type="submit"
+              data-testid="assistant-confirm"
+              class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:bg-accent/90 transition-colors">
+        Confirm
+      </button>
+    </form>
+    <form method="post" action="{% url 'studio_assistant' %}">
+      {% csrf_token %}
+      <button type="submit"
+              data-testid="assistant-cancel"
+              class="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+        Cancel
+      </button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-3xl">
+  <form method="post" action="{% url 'studio_assistant' %}" data-testid="assistant-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="propose">
+    <label for="assistant-request" class="block text-sm font-medium text-foreground mb-2">
+      What would you like to do?
+    </label>
+    <textarea id="assistant-request"
+              name="request_text"
+              rows="3"
+              data-testid="assistant-input"
+              placeholder="e.g. Add a note to jane@example.com: she wants the Premium teardown"
+              class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent">{{ request_text }}</textarea>
+    <div class="mt-4">
+      <button type="submit"
+              data-testid="assistant-submit"
+              class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:bg-accent/90 transition-colors">
+        Propose action
+      </button>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

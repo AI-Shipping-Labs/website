@@ -8,6 +8,7 @@ from studio.views.api_tokens import (
     studio_api_token_revoke,
 )
 from studio.views.articles import article_edit, article_list
+from studio.views.assistant import assistant
 from studio.views.banner_regenerate import (
     studio_article_regenerate_banner,
     studio_course_regenerate_banner,
@@ -747,6 +748,10 @@ urlpatterns = [
         crm_slack_progress_change_undo,
         name='studio_crm_slack_progress_change_undo',
     ),
+    # AI assistant (issue #872). Staff-only propose -> confirm -> execute
+    # over two hand-mapped CRM tools. Registered in the People/CRM group.
+    path('assistant/', assistant, name='studio_assistant'),
+
     path('crm/<int:crm_id>/', crm_detail, name='studio_crm_detail'),
     path('crm/<int:crm_id>/edit', crm_edit, name='studio_crm_edit'),
     path(

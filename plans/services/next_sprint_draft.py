@@ -40,6 +40,14 @@ SYSTEM_PROMPT = (
     'state — their goal, narrative summary, and their done vs. not-done '
     'checkpoints, deliverables, and next steps — and (b) the text of their '
     'most recent #plan-sprints Slack updates, newest first.\n\n'
+    'You may also be given (c) the participant\'s onboarding profile — '
+    'their stated background and goals, a persona label, and a CRM summary '
+    'and next-steps captured by staff. When a profile is present, ground '
+    'the draft in it alongside the plan state and recent updates: align the '
+    'next-sprint goal with the participant\'s stated goals and persona, and '
+    'respect the background they reported. Do NOT invent facts that are not '
+    'present in the profile, the updates, or the current state. When no '
+    'profile is given, draft from plan state and updates alone.\n\n'
     'Draft forward-looking plan content for the NEXT sprint, grounded in '
     'what the participant actually reported and where they currently are. '
     'Carry the momentum of finished work forward, address the unfinished '
@@ -130,6 +138,18 @@ class RecentUpdate(BaseModel):
     text: str = ''
 
 
+class OnboardingAnswer(BaseModel):
+    """One answered onboarding question: ``(prompt, answer)``.
+
+    Plain (ORM-free) mirror of the flattened onboarding row's ``prompt`` +
+    ``display`` strings. The caller passes only ANSWERED rows; this module
+    never sees raw answer objects or the questionnaires app.
+    """
+
+    prompt: str = ''
+    answer: str = ''
+
+
 class NextSprintDraftInput(BaseModel):
     """Plain (ORM-free) input the caller assembles for the draft.
 
@@ -144,6 +164,16 @@ class NextSprintDraftInput(BaseModel):
     current_sprint_name: str = ''
     next_sprint_name: str = ''
     next_sprint_duration_weeks: int | None = None
+
+    # Member onboarding profile (issue #913). All plain strings/lists,
+    # assembled by the service layer from ``build_member_profile_context``.
+    # Empty when the member has no onboarding response / CRM record, or when
+    # the profile-injection setting is off — in which case no profile block
+    # is rendered.
+    persona: str = ''
+    crm_summary: str = ''
+    crm_next_steps: str = ''
+    onboarding_answers: list[OnboardingAnswer] = Field(default_factory=list)
 
     # "Where the member is now" — current plan state.
     goal: str = ''
@@ -199,6 +229,40 @@ def _render_items(label, items):
     return lines
 
 
+def _build_profile_lines(draft_input):
+    """Render the member-profile subsections, or ``[]`` when all empty.
+
+    Returns the body lines for the ``=== Member profile ===`` block. Empty
+    subsections are omitted entirely; when nothing is set the caller skips
+    the block header so no stray/empty section is rendered.
+    """
+    persona = (draft_input.persona or '').strip()
+    crm_summary = (draft_input.crm_summary or '').strip()
+    crm_next_steps = (draft_input.crm_next_steps or '').strip()
+    answers = [
+        a for a in draft_input.onboarding_answers
+        if (a.prompt or '').strip() and (a.answer or '').strip()
+    ]
+
+    if not (persona or crm_summary or crm_next_steps or answers):
+        return []
+
+    lines = []
+    if persona:
+        lines.append(f'Persona: {persona}')
+    if crm_summary:
+        lines.append(f'CRM summary: {crm_summary}')
+    if crm_next_steps:
+        lines.append(f'CRM next steps: {crm_next_steps}')
+    if answers:
+        lines.append('Onboarding answers:')
+        for answer in answers:
+            prompt = answer.prompt.strip()
+            value = answer.answer.strip()
+            lines.append(f'  - {prompt}: {value}')
+    return lines
+
+
 def _build_user_message(draft_input):
     """Render the user message text from the plain input."""
     lines = []
@@ -213,6 +277,12 @@ def _build_user_message(draft_input):
             f'Next sprint duration: '
             f'{draft_input.next_sprint_duration_weeks} weeks'
         )
+
+    profile_lines = _build_profile_lines(draft_input)
+    if profile_lines:
+        lines.append('')
+        lines.append('=== Member profile ===')
+        lines.extend(profile_lines)
 
     lines.append('')
     lines.append('=== Current plan state ===')

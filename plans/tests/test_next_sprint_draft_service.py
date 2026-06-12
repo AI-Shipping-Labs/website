@@ -13,6 +13,9 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from crm.models import CRMRecord
+from integrations.config import clear_config_cache
+from integrations.models import IntegrationSetting
 from integrations.services.llm import LLMError
 from plans.models import (
     Checkpoint,
@@ -25,8 +28,36 @@ from plans.models import (
 )
 from plans.services import draft_next_sprint_plan
 from plans.services.next_sprint_draft import NextSprintDraftResult
+from plans.services.next_sprint_draft_service import _build_draft_input
+from questionnaires.models import (
+    Answer,
+    Questionnaire,
+    Response,
+    ResponseQuestion,
+)
 
 User = get_user_model()
+
+
+def _onboarding_response(member, *, qa):
+    """Create a submitted onboarding response from ``(prompt, text)`` tuples.
+
+    A ``text`` of ``None`` leaves the question unanswered (no ``Answer``
+    row), mirroring a member who skipped a question.
+    """
+    response = Response.objects.create(
+        questionnaire=Questionnaire.objects.get(slug='onboarding-general'),
+        respondent=member,
+        status='submitted',
+    )
+    for order, (prompt, text) in enumerate(qa):
+        rq = ResponseQuestion.objects.create(
+            response=response, question_type='long_text',
+            prompt=prompt, order=order,
+        )
+        if text is not None:
+            Answer.objects.create(response=response, question=rq, text_value=text)
+    return response
 
 
 def _draft_result(goal='Ship the next thing'):
@@ -189,3 +220,171 @@ class DraftServiceTest(TestCase):
         )
         # No partial draft row.
         self.assertEqual(NextSprintPlanDraft.objects.filter(plan=dest).count(), 0)
+
+
+class DraftProfileInjectionTest(TestCase):
+    """Member-profile injection into the shared draft path (#913).
+
+    The profile is assembled by the #883 ``build_member_profile_context``
+    and mapped onto the plain ``NextSprintDraftInput`` fields. The LLM is
+    stubbed at the service boundary in every test.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff913@test.com', password='pw', is_staff=True,
+        )
+        cls.s_jun = Sprint.objects.create(
+            name='Jun', slug='jun-913', start_date=datetime.date(2026, 6, 1),
+        )
+
+    def tearDown(self):
+        IntegrationSetting.objects.filter(
+            key='NEXT_SPRINT_DRAFT_USE_PROFILE',
+        ).delete()
+        clear_config_cache()
+
+    def _profiled_member(self, email):
+        member = User.objects.create_user(email=email, password='pw')
+        _onboarding_response(member, qa=[
+            ('What are your goals?', 'Switch into an AI engineering role'),
+            ('Background?', 'Ten years of backend Java'),
+        ])
+        CRMRecord.objects.create(
+            user=member, persona='Sam — Technical Professional',
+            summary='Strong engineer, needs a portfolio piece.',
+            next_steps='Ship a RAG project this sprint.',
+        )
+        return member
+
+    def _enable_llm(self, draft=None):
+        return (
+            patch(
+                'plans.services.next_sprint_draft_service.llm.is_enabled',
+                return_value=True,
+            ),
+            patch(
+                'plans.services.next_sprint_draft_service.draft_next_sprint',
+                return_value=draft or _draft_result(),
+            ),
+        )
+
+    def test_profile_fields_flow_into_draft_input(self):
+        member = self._profiled_member('profiled@test.com')
+        dest = _make_plan(member, self.s_jun)
+
+        draft_input = _build_draft_input(
+            destination_plan=dest, source_plan=None, recent_updates=[],
+        )
+
+        self.assertEqual(draft_input.persona, 'Sam — Technical Professional')
+        self.assertEqual(
+            draft_input.crm_summary, 'Strong engineer, needs a portfolio piece.',
+        )
+        self.assertEqual(
+            draft_input.crm_next_steps, 'Ship a RAG project this sprint.',
+        )
+        answers = {a.prompt: a.answer for a in draft_input.onboarding_answers}
+        self.assertEqual(
+            answers['What are your goals?'],
+            'Switch into an AI engineering role',
+        )
+        self.assertEqual(answers['Background?'], 'Ten years of backend Java')
+
+    def test_profile_block_rendered_in_user_message_via_service(self):
+        from plans.services.next_sprint_draft import _build_user_message
+
+        member = self._profiled_member('profiled2@test.com')
+        dest = _make_plan(member, self.s_jun)
+
+        draft_input = _build_draft_input(
+            destination_plan=dest, source_plan=None, recent_updates=[],
+        )
+        message = _build_user_message(draft_input)
+
+        self.assertIn('=== Member profile ===', message)
+        self.assertIn('Persona: Sam — Technical Professional', message)
+        self.assertLess(
+            message.index('=== Member profile ==='),
+            message.index('=== Current plan state ==='),
+        )
+
+    def test_unanswered_onboarding_questions_excluded(self):
+        member = User.objects.create_user(email='partial@test.com', password='pw')
+        _onboarding_response(member, qa=[
+            ('What are your goals?', 'Become an AI engineer'),
+            ('Anything else?', None),
+        ])
+        dest = _make_plan(member, self.s_jun)
+
+        draft_input = _build_draft_input(
+            destination_plan=dest, source_plan=None, recent_updates=[],
+        )
+
+        prompts = {a.prompt for a in draft_input.onboarding_answers}
+        self.assertIn('What are your goals?', prompts)
+        self.assertNotIn('Anything else?', prompts)
+
+    def test_member_with_no_profile_still_drafts(self):
+        member = User.objects.create_user(email='blank@test.com', password='pw')
+        dest = _make_plan(member, self.s_jun)
+
+        enable, stub = self._enable_llm()
+        with enable, stub:
+            draft_next_sprint_plan(destination_plan=dest, actor=self.staff)
+
+        self.assertEqual(NextSprintPlanDraft.objects.filter(plan=dest).count(), 1)
+        # Empty profile fields -> no profile block in the rendered message.
+        draft_input = _build_draft_input(
+            destination_plan=dest, source_plan=None, recent_updates=[],
+        )
+        self.assertEqual(draft_input.persona, '')
+        self.assertEqual(draft_input.crm_summary, '')
+        self.assertEqual(draft_input.onboarding_answers, [])
+
+    def test_gate_off_omits_profile_from_input(self):
+        member = self._profiled_member('gated@test.com')
+        dest = _make_plan(member, self.s_jun)
+
+        IntegrationSetting.objects.update_or_create(
+            key='NEXT_SPRINT_DRAFT_USE_PROFILE',
+            defaults={'value': 'false'},
+        )
+        clear_config_cache()
+
+        draft_input = _build_draft_input(
+            destination_plan=dest, source_plan=None, recent_updates=[],
+        )
+
+        self.assertEqual(draft_input.persona, '')
+        self.assertEqual(draft_input.crm_summary, '')
+        self.assertEqual(draft_input.crm_next_steps, '')
+        self.assertEqual(draft_input.onboarding_answers, [])
+
+        from plans.services.next_sprint_draft import _build_user_message
+        self.assertNotIn('=== Member profile ===', _build_user_message(draft_input))
+
+    def test_shared_service_feeds_profile_to_the_llm_callable(self):
+        # Both the Studio button and POST /api/plans/<id>/draft-next-sprint
+        # call draft_next_sprint_plan, so asserting the callable receives a
+        # profile-bearing input proves both surfaces inherit the change.
+        member = self._profiled_member('shared@test.com')
+        dest = _make_plan(member, self.s_jun)
+
+        with patch(
+            'plans.services.next_sprint_draft_service.llm.is_enabled',
+            return_value=True,
+        ), patch(
+            'plans.services.next_sprint_draft_service.draft_next_sprint',
+            return_value=_draft_result(),
+        ) as mock_draft:
+            draft_next_sprint_plan(destination_plan=dest, actor=self.staff)
+
+        passed_input = mock_draft.call_args.args[0]
+        self.assertEqual(passed_input.persona, 'Sam — Technical Professional')
+        answers = {a.prompt: a.answer for a in passed_input.onboarding_answers}
+        self.assertEqual(
+            answers['What are your goals?'],
+            'Switch into an AI engineering role',
+        )

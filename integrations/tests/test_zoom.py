@@ -32,6 +32,31 @@ ZOOM_TEST_CLIENT_SECRET = 'test-client-secret'
 ZOOM_TEST_ACCOUNT_ID = 'test-account-id'
 
 
+class _ZoomSecretIsolationMixin:
+    """Isolate Zoom webhook-secret tests from leaked config state.
+
+    ``validate_webhook_signature`` resolves ``ZOOM_WEBHOOK_SECRET_TOKEN`` via
+    ``get_config``, which returns a DB ``IntegrationSetting`` override (and an
+    in-process cache of it) BEFORE the Django ``settings`` value. Under CI
+    sharding another test can persist a row or warm the cache for that key,
+    which then wins over this suite's ``@override_settings`` and makes the
+    signed request fail validation (issue #939). Clearing any override row and
+    the config cache before each test forces ``get_config`` to fall through to
+    the overridden ``settings`` value deterministically.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from integrations.config import clear_config_cache
+        from integrations.models import IntegrationSetting
+
+        IntegrationSetting.objects.filter(
+            key='ZOOM_WEBHOOK_SECRET_TOKEN'
+        ).delete()
+        clear_config_cache()
+        self.addCleanup(clear_config_cache)
+
+
 def make_zoom_signature(body, timestamp, secret=ZOOM_TEST_SECRET):
     """Create a valid Zoom webhook signature for testing."""
     message = f'v0:{timestamp}:{body}'
@@ -291,7 +316,7 @@ class ZoomCreateMeetingTest(TestCase):
         self.assertEqual(ctx.exception.status_code, 400)
 
 
-class ZoomValidateWebhookSignatureTest(TestCase):
+class ZoomValidateWebhookSignatureTest(_ZoomSecretIsolationMixin, TestCase):
     """Test Zoom webhook signature validation."""
 
     @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
@@ -373,10 +398,11 @@ class ZoomValidateWebhookSignatureTest(TestCase):
 
 
 @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
-class ZoomWebhookEndpointTest(TestCase):
+class ZoomWebhookEndpointTest(_ZoomSecretIsolationMixin, TestCase):
     """Test POST /api/webhooks/zoom endpoint."""
 
     def setUp(self):
+        super().setUp()
         self.client = Client()
 
     def _post_webhook(self, payload_dict):
@@ -441,10 +467,11 @@ class ZoomWebhookEndpointTest(TestCase):
 
 
 @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
-class ZoomWebhookUrlValidationTest(TestCase):
+class ZoomWebhookUrlValidationTest(_ZoomSecretIsolationMixin, TestCase):
     """Test Zoom endpoint URL validation (challenge/response)."""
 
     def setUp(self):
+        super().setUp()
         self.client = Client()
 
     def test_url_validation_challenge(self):
@@ -483,10 +510,11 @@ class ZoomWebhookUrlValidationTest(TestCase):
 
 
 @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
-class ZoomRecordingCompletedTest(TestCase):
+class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
     """Test recording.completed webhook creates Recording and updates Event."""
 
     def setUp(self):
+        super().setUp()
         self.client = Client()
         self.event = Event.objects.create(
             title='Workshop: Building AI Agents',

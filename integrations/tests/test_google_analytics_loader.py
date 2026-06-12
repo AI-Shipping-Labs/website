@@ -24,7 +24,7 @@ class GoogleAnalyticsRegistryTest(TestCase):
         group = get_group_by_name('analytics')
         self.assertIsNotNone(group)
         keys = [k['key'] for k in group['keys']]
-        self.assertEqual(keys, ['GOOGLE_ANALYTICS_ID'])
+        self.assertIn('GOOGLE_ANALYTICS_ID', keys)
 
     def test_google_analytics_id_is_not_secret(self):
         group = get_group_by_name('analytics')

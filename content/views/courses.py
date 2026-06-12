@@ -482,6 +482,13 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
         )
         return render(request, 'content/course_unit_detail.html', context, status=403)
 
+    # Record a `lesson_open` activity row for the CRM timeline (issue #853),
+    # only for authenticated users who have access (this branch). Deduped:
+    # re-opening the same unit within 30 minutes does not create a new row.
+    # Defensive — never raises into the page render.
+    from analytics.activity import record_lesson_open
+    record_lesson_open(user, unit=unit)
+
     context = course_unit_service.build_course_unit_navigation_context(
         user, course, module, unit,
     )
@@ -620,6 +627,20 @@ def api_cohort_enroll(request, slug, cohort_id):
         )
 
     CohortEnrollment.objects.create(cohort=cohort, user=user)
+
+    # Record a `course_enroll` activity row for the CRM timeline
+    # (issue #853). Defensive — never raises into the enroll path.
+    from analytics.activity import record_activity, studio_course_url
+    from analytics.models import UserActivity
+    record_activity(
+        user,
+        UserActivity.EVENT_COURSE_ENROLL,
+        label=f'Enrolled in course: {course.title}',
+        object_type='course',
+        object_id=course.slug,
+        target_url=studio_course_url(course.pk),
+    )
+
     return JsonResponse({'enrolled': True, 'cohort_id': cohort.pk})
 
 

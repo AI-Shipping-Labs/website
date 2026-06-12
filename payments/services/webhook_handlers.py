@@ -245,6 +245,22 @@ def handle_checkout_completed(session_data):
             session_data.get("id"),
         )
 
+    # Record a `payment` activity row for the CRM timeline (issue #853).
+    # The webhook runs without an HttpRequest bound; the timestamp defaults
+    # to now (the event is processed near real-time). ConversionAttribution
+    # above already snapshots the UTM/conversion data — this is the
+    # timeline marker only, not a duplicate of that data. Defensive —
+    # `record_activity` never raises into the webhook.
+    from analytics.activity import record_activity
+    from analytics.models import UserActivity
+    record_activity(
+        user,
+        UserActivity.EVENT_PAYMENT,
+        label=f'Payment: {tier.name}',
+        object_type='tier',
+        object_id=tier.slug,
+    )
+
     # Community integration: invite user if tier qualifies (Main+ = level >= 20)
     if tier.level >= 20:
         _services._community_invite(user)

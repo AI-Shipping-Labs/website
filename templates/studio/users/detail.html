@@ -697,6 +697,52 @@
   {% endif %}
 </section>
 
+<!-- Activity timeline (issue #853).
+     Curated server-side record of high-signal authenticated-user actions
+     (signup, enroll, lesson, register, join, payment, email click). Newest
+     first, capped at {{ activity_limit }} rows. The denormalised label /
+     target_url mean rows render without per-row queries. -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl"
+         data-testid="user-activity-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Activity</h2>
+  {% if activities %}
+  <ul class="divide-y divide-border">
+    {% for activity in activities %}
+    <li class="py-3 flex items-start gap-3" data-testid="user-activity-row">
+      <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground shrink-0"
+            data-testid="user-activity-type">
+        {{ activity.type_label }}
+      </span>
+      <div class="min-w-0 flex-1">
+        {% if activity.target_url %}
+        <a href="{{ activity.target_url }}"
+           class="text-foreground hover:text-accent hover:underline"
+           data-testid="user-activity-label">
+          {{ activity.label }}
+        </a>
+        {% else %}
+        <span class="text-foreground" data-testid="user-activity-label">{{ activity.label }}</span>
+        {% endif %}
+      </div>
+      <span class="text-xs text-muted-foreground font-mono tabular-nums shrink-0"
+            data-testid="user-activity-time">
+        {{ activity.occurred_at|date:"Y-m-d H:i" }}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if activity_has_more %}
+  <p class="text-xs text-muted-foreground mt-4" data-testid="user-activity-more">
+    Showing {{ activity_limit }} of {{ activity_total }} events
+  </p>
+  {% endif %}
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="user-activity-empty">
+    No recorded activity yet. Activity will appear here as the member uses the site.
+  </p>
+  {% endif %}
+</section>
+
 <!-- CRM section (issue #560).
      The profile renders only a CTA — all relationship-rich data
      (plans, notes, persona, summary, next steps) lives on the CRM

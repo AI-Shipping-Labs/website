@@ -31,6 +31,17 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: cleanup-webhook-logs (daily at 3 AM)'))
 
+        # Purge old per-user CRM activity timeline rows daily at 03:30 UTC
+        # (issue #853). Off-peak, after the webhook-log cleanup. The
+        # retention window comes from the Studio-editable
+        # USER_ACTIVITY_RETENTION_DAYS setting (default 365 days).
+        schedule(
+            'analytics.tasks.purge_old_user_activity',
+            cron='30 3 * * *',
+            name='purge-user-activity',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: purge-user-activity (daily at 03:30 UTC)'))
+
         # Event reminders once per hour at minute 0 (issue #919; cadence
         # reduced from every 15 min — hourly is enough for the reminder
         # windows). update_or_create on the schedule name means an existing

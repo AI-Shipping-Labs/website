@@ -23,6 +23,10 @@ from accounts.services.timezones import (
 )
 from events.models import Event, EventFeedback, EventRegistration
 from events.models.event import EXTERNAL_HOST_CHOICES
+from events.services.host_invite import (
+    maybe_send_initial_host_invite,
+    send_host_reschedule_invite,
+)
 from events.tasks.notify_reschedule import enqueue_reschedule_notice
 from events.tasks.send_post_event_followup import enqueue_post_event_followup
 from integrations.services.banner_generator.dispatch import enqueue_if_missing
@@ -262,6 +266,11 @@ def _maybe_notify_reschedule(request, event, old_start):
     event.ics_sequence = (event.ics_sequence or 0) + 1
     event.save(update_fields=['ics_sequence'])
 
+    # Issue #861: re-issue the host's calendar invite with the bumped
+    # SEQUENCE so their entry moves to the new time (UID unchanged →
+    # UPDATE, not duplicate). Best-effort; never breaks the save.
+    send_host_reschedule_invite(event)
+
     count = EventRegistration.objects.filter(event=event).count()
     if count > 0:
         enqueue_reschedule_notice(event.pk, old_start.isoformat())
@@ -392,6 +401,7 @@ def event_create(request):
         'max_participants': '',
         'external_host': '',
         'custom_url': '',
+        'host_email': '',
     }
 
     if request.method == 'POST':
@@ -464,6 +474,7 @@ def event_create(request):
                 max_participants=max_participants,
                 status=status,
                 external_host=external_host,
+                host_email=form_values['host_email'],
                 origin='studio',
                 published=True,
             )
@@ -474,6 +485,10 @@ def event_create(request):
             # (fire-and-forget; no-ops when banner-generator is disabled or
             # a cover image is supplied).
             enqueue_if_missing('event', event.pk)
+            # Issue #861: send the host their calendar invite when the event
+            # is created in a published (non-draft) state. Best-effort and
+            # idempotent — never breaks the save.
+            maybe_send_initial_host_invite(event)
             return redirect('studio_event_edit', event_id=event.pk)
 
     # Determine TZ value used for the shared picker partial.
@@ -543,6 +558,11 @@ def event_edit(request, event_id):
                 'post_event_summary', '',
             )
 
+            # Issue #861: host mailbox for the host calendar invite is
+            # operational metadata (not synced content), so it is editable
+            # even on synced rows.
+            event.host_email = request.POST.get('host_email', '').strip()
+
             event.save()
             # Issue #857: publishing/editing a series occurrence into a
             # registrable state auto-enrolls existing series registrants.
@@ -555,6 +575,10 @@ def event_edit(request, event_id):
             # Issue #869: a status flip to cancelled removes the occurrence
             # from series subscribers' calendars via a METHOD:CANCEL .ics.
             _maybe_notify_series_cancellation(event, old_status)
+            # Issue #861: a synced event flipping to a published state still
+            # gets a one-time host invite (to the default mailbox or any
+            # host_email). EmailLog-guarded; best-effort.
+            maybe_send_initial_host_invite(event)
         else:
             # Issue #670: snapshot the persisted start time BEFORE we
             # mutate the in-memory event. The Studio form re-parses
@@ -628,6 +652,9 @@ def event_edit(request, event_id):
                 'post_event_summary', '',
             )
 
+            # Issue #861: host mailbox for the host calendar invite.
+            event.host_email = request.POST.get('host_email', '').strip()
+
             event.save()
 
             # Issue #857: publishing/editing a series occurrence into a
@@ -644,6 +671,13 @@ def event_edit(request, event_id):
             # future, and the delta is >= 60s. End-only edits and
             # past-event edits stay silent.
             _maybe_notify_reschedule(request, event, old_start)
+
+            # Issue #861: send the host their initial calendar invite when
+            # the event is (now) published and they have not been invited
+            # yet — e.g. a draft being published, or a host_email added
+            # after the first publish. EmailLog-guarded so a plain re-save
+            # never re-sends. Best-effort; never breaks the save.
+            maybe_send_initial_host_invite(event)
 
             # Issue #869: a status flip to cancelled removes the occurrence
             # from series subscribers' calendars via a METHOD:CANCEL .ics.

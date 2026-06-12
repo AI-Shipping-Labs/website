@@ -11,7 +11,7 @@ Coverage:
   original registration invite.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -19,7 +19,12 @@ from django.test import TestCase
 from icalendar import Calendar
 
 from email_app.models import EmailLog
-from events.models import Event, EventRegistration
+from events.models import (
+    Event,
+    EventRegistration,
+    EventSeries,
+    SeriesRegistration,
+)
 from events.services.calendar_invite import generate_ics
 from events.tasks.notify_reschedule import (
     enqueue_reschedule_notice,
@@ -312,3 +317,98 @@ class SendRescheduleNoticeOneTest(TestCase):
         self.assertEqual(result['status'], 'skipped')
         self.assertEqual(result['reason'], 'missing_user')
         mock_send.assert_not_called()
+
+
+class SeriesSubscriberDedupTest(TestCase):
+    """Issue #869 de-dup contract: a user enrolled in an occurrence BOTH
+    via a standing ``SeriesRegistration`` AND an ``EventRegistration`` must
+    receive exactly ONE reschedule email — the canonical multi-event series
+    update — not a duplicate per-event reschedule notice.
+
+    The per-event notice (``send_reschedule_notice_one``) therefore skips a
+    recipient who has a ``SeriesRegistration`` for the occurrence's series,
+    and still sends to a one-off registrant who is not a series subscriber.
+
+    If the skip branch were removed, the dual-enrolled user in case (a)
+    would receive the per-event notice (status ``sent``, an EmailLog row,
+    a raw send) and the assertions below would fail — no false positive.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.series = EventSeries.objects.create(
+            name='Office Hours',
+            slug='office-hours',
+            start_time=time(16, 0),
+            timezone='UTC',
+        )
+        cls.event = Event.objects.create(
+            title='Office Hours #5',
+            slug='office-hours-5',
+            start_datetime=datetime(2026, 6, 15, 16, 0, tzinfo=UTC),
+            end_datetime=datetime(2026, 6, 15, 17, 0, tzinfo=UTC),
+            status='upcoming',
+            timezone='UTC',
+            event_series=cls.series,
+        )
+        # (a) Dual-enrolled: standing series subscription AND a concrete
+        #     per-occurrence registration.
+        cls.series_subscriber = User.objects.create_user(
+            email='series-sub@test.com',
+            preferred_timezone='UTC',
+        )
+        SeriesRegistration.objects.create(
+            series=cls.series, user=cls.series_subscriber,
+        )
+        # (b) One-off registrant of the same occurrence with NO series
+        #     subscription.
+        cls.one_off = User.objects.create_user(
+            email='one-off@test.com',
+            preferred_timezone='UTC',
+        )
+
+    def setUp(self):
+        EventRegistration.objects.create(
+            event=self.event, user=self.series_subscriber,
+        )
+        EventRegistration.objects.create(event=self.event, user=self.one_off)
+
+    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-x')
+    def test_series_subscriber_skipped(self, mock_send):
+        """(a) Dual-enrolled subscriber is skipped with reason
+        ``series_subscriber`` — no per-event email, no EmailLog row."""
+        result = send_reschedule_notice_one(
+            self.event.pk,
+            self.series_subscriber.pk,
+            '2026-06-08T16:00:00+00:00',
+        )
+
+        self.assertEqual(result['status'], 'skipped')
+        self.assertEqual(result['reason'], 'series_subscriber')
+        mock_send.assert_not_called()
+        self.assertFalse(
+            EmailLog.objects.filter(
+                email_type='event_rescheduled', user=self.series_subscriber,
+            ).exists(),
+        )
+
+    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-y')
+    def test_one_off_registrant_still_notified(self, mock_send):
+        """(b) A one-off registrant without a SeriesRegistration still gets
+        the per-event reschedule notice."""
+        result = send_reschedule_notice_one(
+            self.event.pk,
+            self.one_off.pk,
+            '2026-06-08T16:00:00+00:00',
+        )
+
+        self.assertEqual(result['status'], 'sent')
+        mock_send.assert_called_once()
+        self.assertEqual(
+            mock_send.call_args.kwargs['to_email'], 'one-off@test.com',
+        )
+        self.assertTrue(
+            EmailLog.objects.filter(
+                email_type='event_rescheduled', user=self.one_off,
+            ).exists(),
+        )

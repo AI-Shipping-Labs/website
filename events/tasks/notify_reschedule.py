@@ -30,7 +30,7 @@ from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 
 from accounts.services.timezones import format_user_datetime
-from events.models import Event, EventRegistration
+from events.models import Event, EventRegistration, SeriesRegistration
 from events.services.calendar_invite import generate_ics
 from events.services.cancel_token import generate_cancel_token
 from events.services.registration_email import _send_raw_email
@@ -143,6 +143,21 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
         return {
             "status": "skipped",
             "reason": "registration_cancelled",
+            "user_id": user_id,
+        }
+
+    # Issue #869 de-dup contract: a series subscriber's canonical update
+    # for a time change is the multi-event series invite
+    # (``send_series_update_to_subscribers``), sent from the Studio
+    # reschedule path. To avoid sending that subscriber two emails for the
+    # same change (a single-event reschedule notice AND a series update),
+    # the per-event reschedule notice goes to one-off registrants only.
+    if event.event_series_id and SeriesRegistration.objects.filter(
+        series_id=event.event_series_id, user=user,
+    ).exists():
+        return {
+            "status": "skipped",
+            "reason": "series_subscriber",
             "user_id": user_id,
         }
 

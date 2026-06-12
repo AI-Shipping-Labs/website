@@ -527,13 +527,14 @@ def series_registration(request, series_slug):
     from accounts.utils.activation import mark_activated
     mark_activated(request.user)
 
-    # Send ONE summary confirmation email (non-blocking).
+    # Send ONE confirmation email with a multi-event .ics covering the
+    # occurrences we just enrolled the user in (issue #869). Non-blocking.
     if new_events:
         try:
-            from events.services.registration_email import (
-                send_series_registration_confirmation,
+            from events.services.series_invite import (
+                send_series_registration_invite,
             )
-            send_series_registration_confirmation(
+            send_series_registration_invite(
                 request.user, series, new_events,
             )
         except Exception:

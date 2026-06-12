@@ -191,7 +191,7 @@
                 <td class="px-4 py-3 text-foreground">
                   <a href="{% url 'studio_worker_task_detail' item.task.id %}"
                      class="hover:underline"
-                     onclick="event.stopPropagation();">{{ item.task.name }}</a>
+                     onclick="event.stopPropagation();">{{ item.display_name|default:"—" }}</a>
                 </td>
                 <td class="px-4 py-3 text-muted-foreground" data-label="Started">{{ item.task.started|date:"Y-m-d H:i:s" }}</td>
                 <td class="px-4 py-3 text-muted-foreground" data-label="Duration">
@@ -279,7 +279,7 @@
                    class="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground failed-task-chevron"></i>
                 <div class="min-w-0 flex-1">
                   <div class="flex items-baseline flex-wrap gap-x-2">
-                    <span class="font-medium text-foreground">{{ item.task.name }}</span>
+                    <span class="font-medium text-foreground">{{ item.display_name|default:"—" }}</span>
                     <span class="text-xs text-muted-foreground">{{ item.task.started|date:"Y-m-d H:i:s" }}</span>
                   </div>
                   <p class="text-xs text-red-500 dark:text-red-400 font-mono mt-1 truncate">
@@ -289,14 +289,14 @@
               </button>
               <div class="flex items-center gap-2 shrink-0">
                 <form method="post" action="{% url 'studio_worker_retry_failed' item.task.id %}" class="{% studio_list_class 'action_form' %}"
-                      onsubmit="return confirm('Re-queue failed task {{ item.task.name|escapejs }}?');">
+                      onsubmit="return confirm('Re-queue failed task {{ item.display_name|escapejs }}?');">
                   {% csrf_token %}
                   <button type="submit"
                           class="{% studio_action_class 'async' %}"
                           data-action="retry-failed">Retry</button>
                 </form>
                 <form method="post" action="{% url 'studio_worker_delete_failed' item.task.id %}" class="{% studio_list_class 'action_form' %}"
-                      onsubmit="return confirm('Delete failed task {{ item.task.name|escapejs }}? This cannot be undone.');">
+                      onsubmit="return confirm('Delete failed task {{ item.display_name|escapejs }}? This cannot be undone.');">
                   {% csrf_token %}
                   <button type="submit"
                           class="{% studio_action_class 'destructive' %}"

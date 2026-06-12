@@ -323,6 +323,89 @@ class WorkerStatusFailedTasksTest(TestCase):
         self.assertEqual(len(response.context['failed_with_details']), 0)
 
 
+class WorkerDisplayNameTest(TestCase):
+    """Display-layer humanization on the worker dashboard (issue #920).
+
+    Codename / empty stored names fall back to the dotted func path; descriptive
+    names (including hyphenated schedule names like ``event-reminders``) pass
+    through unchanged. The raw stored name stays available on the detail page.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff_user = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
+        patcher = patch('studio.worker_health.Stat.get_all', return_value=[])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_recent_codename_task_shows_func_path_not_codename(self):
+        now = timezone.now()
+        _create_task(
+            name='texas-texas-oscar-earth',
+            func='community.tasks.email_matcher.match_community_emails',
+            started=now, stopped=now, success=True,
+        )
+        response = self.client.get('/studio/worker/')
+        self.assertContains(
+            response, 'community.tasks.email_matcher.match_community_emails'
+        )
+        self.assertNotContains(response, 'texas-texas-oscar-earth')
+
+    def test_recent_descriptive_name_passes_through(self):
+        now = timezone.now()
+        _create_task(
+            name='Sync content source: repo from content sync queue',
+            func='integrations.services.github.sync_content_source',
+            started=now, stopped=now, success=True,
+        )
+        response = self.client.get('/studio/worker/')
+        self.assertContains(
+            response, 'Sync content source: repo from content sync queue'
+        )
+
+    def test_recent_hyphenated_schedule_name_not_misclassified(self):
+        now = timezone.now()
+        _create_task(
+            name='event-reminders',
+            func='events.tasks.send_reminders.run',
+            started=now, stopped=now, success=True,
+        )
+        response = self.client.get('/studio/worker/')
+        self.assertContains(response, 'event-reminders')
+
+    def test_failed_codename_task_shows_func_path(self):
+        now = timezone.now()
+        _create_task(
+            name='red-single-oranges-cold',
+            func='email_app.tasks.send_campaign.run',
+            started=now, stopped=now, success=False,
+            result='RuntimeError: boom',
+        )
+        response = self.client.get('/studio/worker/')
+        self.assertContains(response, 'email_app.tasks.send_campaign.run')
+        self.assertNotContains(response, 'red-single-oranges-cold')
+
+    def test_detail_page_preserves_raw_codename_name(self):
+        now = timezone.now()
+        task = _create_task(
+            name='texas-texas-oscar-earth',
+            func='community.tasks.email_matcher.match_community_emails',
+            started=now, stopped=now, success=True,
+        )
+        response = self.client.get(f'/studio/worker/task/{task.id}/')
+        # Humanized display name is shown...
+        self.assertContains(
+            response, 'community.tasks.email_matcher.match_community_emails'
+        )
+        # ...and the raw Django-Q codename is still preserved for debugging.
+        self.assertContains(response, 'texas-texas-oscar-earth')
+
+
 class WorkerStatusFailedTaskCollapseTest(TestCase):
     """Failed-task tracebacks render collapsed by default with a one-line summary.
 

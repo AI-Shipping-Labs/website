@@ -45,7 +45,11 @@ from django_q.models import OrmQ, Task
 from django_q.tasks import async_task
 
 from api.serializers.worker import extract_error_summary
-from jobs.tasks.names import build_task_name, constrain_task_name
+from jobs.tasks.names import (
+    build_task_name,
+    constrain_task_name,
+    humanize_task_name,
+)
 from studio.decorators import staff_required
 from studio.worker_health import get_worker_status
 
@@ -98,12 +102,17 @@ def _ormq_summary(ormq, now=None):
         else:
             lock_state = 'expired'
             lock_seconds = -delta
+    name = _safe_task_field(ormq, 'name')
+    func = _safe_task_field(ormq, 'func')
     return {
         'id': ormq.pk,
         'key': ormq.key,
         'task_id': _safe_task_field(ormq, 'task_id'),
-        'name': _safe_task_field(ormq, 'name'),
-        'func': _safe_task_field(ormq, 'func'),
+        'name': name,
+        # Display-layer fallback (issue #920): codename / empty names become
+        # the dotted func path so the operator can still identify the task.
+        'display_name': humanize_task_name(name, func),
+        'func': func,
         'group': _safe_task_field(ormq, 'group'),
         'args': _safe_task_field(ormq, 'args'),
         'kwargs': _safe_task_field(ormq, 'kwargs'),
@@ -166,6 +175,7 @@ def worker_status(request):
             'task': task,
             'duration': duration,
             'error_message': error_message,
+            'display_name': humanize_task_name(task.name, task.func),
         })
 
     failed_with_details = []
@@ -179,6 +189,7 @@ def worker_status(request):
             'task': task,
             'error_message': error_message,
             'error_summary': summary_line,
+            'display_name': humanize_task_name(task.name, task.func),
         })
 
     return render(request, 'studio/worker.html', {
@@ -320,6 +331,7 @@ def worker_task_detail(request, task_id):
     result_text = _format_task_value(task.result)
     return render(request, 'studio/worker_task_detail.html', {
         'task': task,
+        'display_name': humanize_task_name(task.name, task.func),
         'duration_seconds': duration,
         'args_text': _format_task_value(task.args),
         'kwargs_text': _format_task_value(task.kwargs),

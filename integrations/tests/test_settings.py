@@ -646,3 +646,132 @@ class IntegrationRegistryDocsCoverageTest(SimpleTestCase):
             missing, [],
             f"Keys without docs_url: {missing}",
         )
+
+
+TEAM_REQUESTS_KEYS = [
+    'SLACK_TEAM_REQUESTS_CHANNEL_ID',
+    'SLACK_DEV_TEAM_REQUESTS_CHANNEL_ID',
+    'SLACK_TEST_TEAM_REQUESTS_CHANNEL_ID',
+]
+
+
+class SlackTeamRequestsRegistryTest(SimpleTestCase):
+    """The team-requests channel keys must be registered in the slack group
+    (issue #902), each optional + non-secret, with a docs_url anchor that
+    resolves to a real ``## `` section in slack.md.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.slack_group = next(
+            g for g in INTEGRATION_GROUPS if g['name'] == 'slack'
+        )
+        cls.entries_by_key = {e['key']: e for e in cls.slack_group['keys']}
+
+    def test_three_team_requests_keys_registered_in_slack_group(self):
+        for key in TEAM_REQUESTS_KEYS:
+            self.assertIn(
+                key, self.entries_by_key,
+                f"{key} is not registered in the slack settings group",
+            )
+
+    def test_team_requests_keys_are_optional_and_not_secret(self):
+        for key in TEAM_REQUESTS_KEYS:
+            entry = self.entries_by_key[key]
+            self.assertFalse(
+                entry.get('is_secret', False),
+                f"{key} should not be marked is_secret",
+            )
+            self.assertTrue(
+                entry.get('optional', False),
+                f"{key} should be marked optional",
+            )
+            self.assertTrue(
+                entry.get('description'),
+                f"{key} should have a non-empty description",
+            )
+
+    def test_team_requests_docs_anchors_resolve_to_sections(self):
+        slack_md = os.path.join(
+            settings.BASE_DIR, '_docs', 'integrations', 'slack.md'
+        )
+        with open(slack_md, encoding='utf-8') as fh:
+            content = fh.read()
+        for key in TEAM_REQUESTS_KEYS:
+            entry = self.entries_by_key[key]
+            docs_url = entry.get('docs_url', '')
+            self.assertEqual(
+                docs_url, f'_docs/integrations/slack.md#{key.lower()}',
+                f"{key} docs_url does not point at the expected anchor",
+            )
+            # The anchor (lowercased key) must be a real ``## `` heading.
+            self.assertIn(
+                f'## {key}\n', content,
+                f"slack.md has no '## {key}' section for the docs anchor",
+            )
+
+
+class SlackTeamRequestsDashboardTest(TestCase):
+    """The team-requests keys must render as editable Slack fields on
+    /studio/settings/ with a Source badge that flips to 'db' once an
+    IntegrationSetting override exists (issue #902).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff_user = User.objects.create_user(
+            email='trqadmin@test.com', password='testpass', is_staff=True,
+        )
+        cls.regular_user = User.objects.create_user(
+            email='trquser@test.com', password='testpass', is_staff=False,
+        )
+
+    def _slack_fields(self, response):
+        groups = response.context['groups']
+        slack_group = next(g for g in groups if g['name'] == 'slack')
+        return {f['key']: f for f in slack_group['fields']}
+
+    def test_keys_render_as_editable_slack_fields(self):
+        self.client.login(email='trqadmin@test.com', password='testpass')
+        response = self.client.get('/studio/settings/')
+        fields = self._slack_fields(response)
+        for key in TEAM_REQUESTS_KEYS:
+            self.assertIn(
+                key, fields,
+                f"{key} does not render as a Slack field on the dashboard",
+            )
+            self.assertFalse(fields[key]['is_secret'])
+
+    def test_source_badge_is_env_or_default_without_override(self):
+        self.client.login(email='trqadmin@test.com', password='testpass')
+        with patch.dict(os.environ, {}, clear=False):
+            for key in TEAM_REQUESTS_KEYS:
+                os.environ.pop(key, None)
+            response = self.client.get('/studio/settings/')
+        fields = self._slack_fields(response)
+        # Optional, no env, no DB row -> resolves to env or default, never db.
+        self.assertIn(
+            fields['SLACK_TEAM_REQUESTS_CHANNEL_ID']['source'],
+            ('env', 'default', ''),
+        )
+        self.assertNotEqual(fields['SLACK_TEAM_REQUESTS_CHANNEL_ID']['source'], 'db')
+
+    def test_source_badge_flips_to_db_override(self):
+        IntegrationSetting.objects.create(
+            key='SLACK_TEAM_REQUESTS_CHANNEL_ID', value='C0TEAMREQ1', group='slack',
+        )
+        clear_config_cache()
+        self.addCleanup(clear_config_cache)
+        self.client.login(email='trqadmin@test.com', password='testpass')
+        response = self.client.get('/studio/settings/')
+        fields = self._slack_fields(response)
+        self.assertEqual(
+            fields['SLACK_TEAM_REQUESTS_CHANNEL_ID']['source'], 'db',
+        )
+        self.assertEqual(get_config('SLACK_TEAM_REQUESTS_CHANNEL_ID'), 'C0TEAMREQ1')
+
+    def test_non_staff_cannot_see_team_requests_fields(self):
+        self.client.login(email='trquser@test.com', password='testpass')
+        response = self.client.get('/studio/settings/')
+        self.assertEqual(response.status_code, 403)

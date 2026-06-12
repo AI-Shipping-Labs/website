@@ -86,8 +86,9 @@ def _enable_banner_generator():
 
 def _make_series(slug, name, **overrides):
     from django.db import connection
+    from django.utils import timezone as dj_tz
 
-    from events.models import EventSeries
+    from events.models import Event, EventSeries
 
     defaults = dict(
         slug=slug,
@@ -100,6 +101,17 @@ def _make_series(slug, name, **overrides):
     )
     defaults.update(overrides)
     series = EventSeries.objects.create(**defaults)
+    # Issue #858: a series needs a published (non-draft) occurrence to be
+    # publicly reachable; without one the public page 404s for non-staff.
+    Event.objects.create(
+        title=f"{name} — Session 1",
+        slug=f"{slug}-session-1",
+        start_datetime=dj_tz.now() + timedelta(days=7),
+        status="upcoming",
+        origin="studio",
+        event_series=series,
+        series_position=1,
+    )
     connection.close()
     return series
 

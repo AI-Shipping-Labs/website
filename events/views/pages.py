@@ -649,6 +649,13 @@ def event_series_public(request, slug):
     useful for previewing a series and managing cancelled occurrences.
     """
     series = get_object_or_404(EventSeries, slug=slug)
+    # Issue #858: an empty / hidden series 404s for the public so visitors
+    # never land on a "no published events yet" placeholder or a series the
+    # staff explicitly hid (``is_active=False``). Staff bypass this so they
+    # can preview a series before publishing. The rule lives once on the
+    # model (``is_publicly_visible``) so the view and tests share it.
+    if not request.user.is_staff and not series.is_publicly_visible():
+        raise Http404('Series is not publicly visible.')
     # Issue #668: annotate Count('registrations') so the attendee-count
     # chip on every card resolves from the SELECT, not from N follow-up
     # `COUNT(*)` queries. The template reads `event.attendee_count`,

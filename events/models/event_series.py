@@ -128,3 +128,22 @@ class EventSeries(TimestampedModelMixin, models.Model):
         # ``cancelled`` so cancelling an occurrence decrements the count and the
         # number matches what the public series page lists.
         return self.events.filter(status__in=PUBLIC_EVENT_STATUSES).count()
+
+    def is_publicly_visible(self):
+        """Return True when a non-staff visitor may load the public page.
+
+        Issue #858: an empty / unpublished series should 404 for the public
+        rather than show a "no published events yet" placeholder. Two gates
+        compose here:
+
+        - ``is_active`` is the staff hide flag. When False the series is
+          hidden from the public regardless of how many events it has.
+        - At least one member event must be published. ``published_event_count``
+          counts the ``upcoming`` / ``completed`` occurrences a visitor
+          actually sees; a series whose occurrences are all still draft 404s
+          for the public until staff publish at least one.
+
+        Staff bypass this guard in the view so they can preview a series
+        before publishing.
+        """
+        return self.is_active and self.published_event_count > 0

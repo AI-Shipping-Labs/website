@@ -79,6 +79,15 @@ class StudioEditButtonEventSeriesTest(TestCase):
             slug='sample-series',
             start_time=time(18, 0),
         )
+        # Issue #858: a series needs a published occurrence to be publicly
+        # reachable; without one the public page 404s for non-staff.
+        Event.objects.create(
+            title='Sample Session',
+            slug='sample-series-session-1',
+            start_datetime=timezone.now() + timezone.timedelta(days=7),
+            status='upcoming',
+            event_series=cls.series, series_position=1, origin='studio',
+        )
 
     def test_staff_sees_button(self):
         _staff_user()

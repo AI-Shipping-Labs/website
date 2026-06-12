@@ -88,6 +88,37 @@ def _iter_python_files(root: pathlib.Path) -> Iterable[pathlib.Path]:
         yield path
 
 
+# Modules from which ``async_task`` is imported. An import like
+# ``from django_q.tasks import async_task as enqueue`` binds the enqueue
+# callable to ``enqueue``; calls through that alias must still be audited.
+_ASYNC_TASK_SOURCE_MODULES = frozenset({
+    'django_q.tasks',
+    'jobs.tasks',
+    'jobs.tasks.helpers',
+})
+
+
+def _async_task_aliases(tree: ast.AST) -> set[str]:
+    """Return every local name bound to the enqueue ``async_task`` callable.
+
+    Resolves ``from <module> import async_task`` and
+    ``from <module> import async_task as <alias>`` (both module-level and
+    function-local) so a call through an alias such as
+    ``from django_q.tasks import async_task as enqueue`` is audited too.
+    The bare name ``async_task`` is always included.
+    """
+    aliases = {'async_task'}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if node.module not in _ASYNC_TASK_SOURCE_MODULES:
+            continue
+        for alias in node.names:
+            if alias.name == 'async_task':
+                aliases.add(alias.asname or alias.name)
+    return aliases
+
+
 def _call_func_name(call: ast.Call) -> str | None:
     """Return the bare name of the callable in a ``Call`` node, if any."""
     func = call.func
@@ -128,10 +159,14 @@ class AsyncTaskTaskNameStaticAnalysisTest(SimpleTestCase):
             except SyntaxError:  # pragma: no cover - malformed file
                 continue
 
+            # Resolve any aliased ``async_task`` imports so calls through an
+            # alias (e.g. ``async_task as enqueue``) are audited too.
+            callable_names = _async_task_aliases(tree)
+
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call):
                     continue
-                if _call_func_name(node) != 'async_task':
+                if _call_func_name(node) not in callable_names:
                     continue
                 if _has_task_name_kwarg(node):
                     continue
@@ -172,6 +207,83 @@ class AsyncTaskTaskNameStaticAnalysisTest(SimpleTestCase):
                 f"{PROJECT_ROOT}. Expected the production tree to contain at "
                 "least a dozen Python modules; a near-zero count means the "
                 "walk filter is excluding everything. See issue #745."
+            ),
+        )
+
+    def test_aliased_async_task_import_is_audited(self):
+        """A ``from ... import async_task as <alias>`` call is still checked.
+
+        The bare-name match alone would miss an aliased enqueue. This pins the
+        alias-resolution so introducing ``async_task as enqueue`` without a
+        ``task_name=`` is caught.
+        """
+        source = (
+            "from django_q.tasks import async_task as enqueue\n"
+            "enqueue('some.task')\n"
+        )
+        tree = ast.parse(source)
+        aliases = _async_task_aliases(tree)
+        self.assertIn('enqueue', aliases)
+
+        offending = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and _call_func_name(node) in aliases
+            and not _has_task_name_kwarg(node)
+        ]
+        self.assertEqual(
+            len(offending),
+            1,
+            msg="Aliased async_task call without task_name= must be flagged.",
+        )
+
+    def test_aliased_async_task_with_task_name_passes(self):
+        """An aliased enqueue that passes ``task_name=`` is not flagged."""
+        source = (
+            "from django_q.tasks import async_task as enqueue\n"
+            "enqueue('some.task', task_name='Descriptive name')\n"
+        )
+        tree = ast.parse(source)
+        aliases = _async_task_aliases(tree)
+        offending = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and _call_func_name(node) in aliases
+            and not _has_task_name_kwarg(node)
+        ]
+        self.assertEqual(offending, [])
+
+    def test_every_schedule_passes_static_name(self):
+        """Every ``schedule(...)`` in setup_schedules.py passes ``name=``.
+
+        Issue #920 acceptance criterion: no schedule may rely on the func-path
+        default name. This AST guard fails if a new schedule is registered
+        without a descriptive static ``name=`` keyword.
+        """
+        path = PROJECT_ROOT / 'jobs' / 'management' / 'commands' / 'setup_schedules.py'
+        tree = ast.parse(path.read_text(encoding='utf-8'))
+        offenders = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if _call_func_name(node) != 'schedule':
+                continue
+            name_kw = next(
+                (kw for kw in node.keywords if kw.arg == 'name'), None
+            )
+            if name_kw is None or not (
+                isinstance(name_kw.value, ast.Constant)
+                and isinstance(name_kw.value.value, str)
+                and name_kw.value.value.strip()
+            ):
+                offenders.append(f"setup_schedules.py:{node.lineno}")
+        self.assertFalse(
+            offenders,
+            msg=(
+                "Every schedule(...) must pass a non-empty static name=. "
+                "Offending sites:\n  - " + "\n  - ".join(offenders)
             ),
         )
 

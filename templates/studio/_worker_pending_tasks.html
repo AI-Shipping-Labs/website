@@ -30,7 +30,7 @@ poller swaps in place every ~3s.
         <tbody>
           {% for q in queued_tasks %}
             <tr class="border-b border-border last:border-0 hover:bg-secondary/50" data-queued-task-id="{{ q.id }}">
-              <td class="px-4 py-3 text-foreground">{{ q.name|default:"—" }}</td>
+              <td class="px-4 py-3 text-foreground">{{ q.display_name|default:"—" }}</td>
               <td class="px-4 py-3 text-muted-foreground font-mono text-xs" data-label="Func">{{ q.func|default:"—"|truncatechars:60 }}</td>
               <td class="px-4 py-3 text-muted-foreground" data-label="Lock expires">
                 {% if q.lock_state == 'future' %}in {{ q.lock_seconds|floatformat:0 }}s{% elif q.lock_state == 'expired' %}expired {{ q.lock_seconds|floatformat:0 }}s ago{% else %}—{% endif %}
@@ -41,7 +41,7 @@ poller swaps in place every ~3s.
                    class="{% studio_action_class 'primary' %}"
                    data-action="inspect">Inspect</a>
                 <form method="post" action="{% url 'studio_worker_delete_queued' q.id %}" class="{% studio_list_class 'action_form' %}"
-                      onsubmit="return confirm('Delete queued task {{ q.name|default:q.id|escapejs }}? This cannot be undone.');">
+                      onsubmit="return confirm('Delete queued task {{ q.display_name|default:q.id|escapejs }}? This cannot be undone.');">
                   {% csrf_token %}
                   {% if q.task_id %}<input type="hidden" name="task_id" value="{{ q.task_id }}">{% endif %}
                   <button type="submit"

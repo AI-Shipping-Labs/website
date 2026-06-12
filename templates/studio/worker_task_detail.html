@@ -38,7 +38,12 @@
       </div>
       <div>
         <p class="text-xs text-muted-foreground uppercase">Name</p>
-        <p class="text-foreground">{{ task.name|default:"—" }}</p>
+        {# Humanized display name (issue #920): falls back to the func path for #}
+        {# codename/empty stored names. The raw Django-Q name is preserved below. #}
+        <p class="text-foreground" data-task-display-name>{{ display_name|default:"—" }}</p>
+        <p class="text-xs text-muted-foreground font-mono break-all mt-1" data-task-raw-name>
+          Stored name: {{ task.name|default:"—" }}
+        </p>
       </div>
       <div>
         <p class="text-xs text-muted-foreground uppercase">Group</p>

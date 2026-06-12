@@ -25,7 +25,7 @@ from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 from icalendar import Calendar
 
-from content.access import LEVEL_MAIN, LEVEL_OPEN
+from content.access import LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from email_app.models import EmailLog
 from events.models import (
     Event,
@@ -97,6 +97,15 @@ def _ics_from_raw(raw):
             payload = part.get_payload(decode=True).decode('utf-8')
             return payload, method
     raise AssertionError('no text/calendar part in message')
+
+
+def _html_from_raw(raw):
+    """Return the decoded text/html body part from a raw SES message."""
+    msg = email_lib.message_from_string(raw)
+    for part in msg.walk():
+        if part.get_content_type() == 'text/html':
+            return part.get_payload(decode=True).decode('utf-8')
+    raise AssertionError('no text/html part in message')
 
 
 @tag('core')
@@ -474,3 +483,157 @@ class AccessFilteredSubsetTest(TierSetupMixin, TestCase):
         self.assertIn('event-woh-o1@aishippinglabs.com', uids)
         self.assertIn('event-woh-o2@aishippinglabs.com', uids)
         self.assertNotIn('event-woh-g1@aishippinglabs.com', uids)
+
+
+@tag('core')
+@override_settings(SES_ENABLED=True, SITE_BASE_URL='https://aishippinglabs.com')
+class PartialAccessNoteTest(TierSetupMixin, TestCase):
+    """The upsell note flags gated sessions a recipient cannot yet access.
+
+    Reuses the open + gated mix: a free verified member registered for the
+    two open occurrences of a series that also has gated upcoming
+    occurrences. The note must surface the gated count, name the unlocking
+    tier, and link to ``/pricing`` — across all three send paths — while
+    staying empty when every upcoming occurrence is accessible.
+    """
+
+    PRICING_URL = 'https://aishippinglabs.com/pricing'
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.free_user = User.objects.create_user(
+            email='free@test.com', password='pass', email_verified=True,
+        )
+
+    def setUp(self):
+        self.series = _make_series()
+        self.open1 = _make_occurrence(self.series, offset_days=7, position=1,
+                                      required_level=LEVEL_OPEN, slug='woh-o1')
+        self.open2 = _make_occurrence(self.series, offset_days=14, position=2,
+                                      required_level=LEVEL_OPEN, slug='woh-o2')
+        self.gated = _make_occurrence(self.series, offset_days=21, position=3,
+                                      required_level=LEVEL_MAIN, slug='woh-g1')
+        SeriesRegistration.objects.create(series=self.series, user=self.free_user)
+        EventRegistration.objects.create(event=self.open1, user=self.free_user)
+        EventRegistration.objects.create(event=self.open2, user=self.free_user)
+
+    def _sent_html(self, mock_boto3):
+        raw = mock_boto3.client.return_value.send_email.call_args.kwargs[
+            'Content']['Raw']['Data']
+        return _html_from_raw(raw)
+
+    @patch('events.services.registration_email.boto3')
+    def test_registration_email_includes_upsell_note(self, mock_boto3):
+        client = mock_boto3.client.return_value
+        client.send_email.return_value = {'MessageId': 'm'}
+
+        send_series_registration_invite(
+            self.free_user, self.series, [self.open1, self.open2],
+        )
+
+        raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
+        html = _html_from_raw(raw)
+        # Gated-session count, the unlocking tier, and the pricing link.
+        self.assertIn('1 more session', html)
+        self.assertIn('Main tier', html)
+        self.assertIn(self.PRICING_URL, html)
+        # The .ics still carries only the two open VEVENTs (gated excluded).
+        ics, _ = _ics_from_raw(raw)
+        uids = {str(v.get('uid')) for v in _vevents(_parse(ics))}
+        self.assertEqual(uids, {
+            'event-woh-o1@aishippinglabs.com',
+            'event-woh-o2@aishippinglabs.com',
+        })
+
+    @patch('events.services.registration_email.boto3')
+    def test_full_access_subscriber_gets_no_note(self, mock_boto3):
+        client = mock_boto3.client.return_value
+        client.send_email.return_value = {'MessageId': 'm'}
+        # Open the gated session up so the recipient can access everything.
+        self.gated.required_level = LEVEL_OPEN
+        self.gated.save(update_fields=['required_level'])
+        EventRegistration.objects.create(event=self.gated, user=self.free_user)
+
+        send_series_registration_invite(
+            self.free_user, self.series,
+            [self.open1, self.open2, self.gated],
+        )
+
+        html = self._sent_html(mock_boto3)
+        self.assertNotIn(self.PRICING_URL, html)
+        self.assertNotIn('Upgrade any time', html)
+
+    @patch('events.services.registration_email.boto3')
+    def test_note_singular_for_one_gated_session(self, mock_boto3):
+        client = mock_boto3.client.return_value
+        client.send_email.return_value = {'MessageId': 'm'}
+
+        send_series_registration_invite(
+            self.free_user, self.series, [self.open1, self.open2],
+        )
+
+        html = self._sent_html(mock_boto3)
+        self.assertIn('1 more session in this series is', html)
+        self.assertNotIn('sessions in this series are', html)
+
+    @patch('events.services.registration_email.boto3')
+    def test_note_plural_for_multiple_gated_sessions(self, mock_boto3):
+        client = mock_boto3.client.return_value
+        client.send_email.return_value = {'MessageId': 'm'}
+        _make_occurrence(self.series, offset_days=28, position=4,
+                         required_level=LEVEL_MAIN, slug='woh-g2')
+
+        send_series_registration_invite(
+            self.free_user, self.series, [self.open1, self.open2],
+        )
+
+        html = self._sent_html(mock_boto3)
+        self.assertIn('2 more sessions in this series are', html)
+        self.assertNotIn('1 more session in this series is', html)
+
+    @patch('events.services.registration_email.boto3')
+    def test_note_names_highest_gated_tier(self, mock_boto3):
+        client = mock_boto3.client.return_value
+        client.send_email.return_value = {'MessageId': 'm'}
+        # gated session is Main; add a Premium-only gated session.
+        _make_occurrence(self.series, offset_days=28, position=4,
+                         required_level=LEVEL_PREMIUM, slug='woh-g2')
+
+        send_series_registration_invite(
+            self.free_user, self.series, [self.open1, self.open2],
+        )
+
+        html = self._sent_html(mock_boto3)
+        self.assertIn('Premium tier', html)
+        self.assertNotIn('Main tier', html)
+
+    @patch('events.services.registration_email.boto3')
+    def test_cancellation_note_computed_against_whole_series(self, mock_boto3):
+        client = mock_boto3.client.return_value
+        client.send_email.return_value = {'MessageId': 'm'}
+        # One open session is cancelled; the gated session remains gated.
+        self.open1.status = 'cancelled'
+        self.open1.save(update_fields=['status'])
+
+        sent = send_series_cancellation_to_subscribers(self.open1)
+
+        self.assertEqual(sent, 1)
+        html = self._sent_html(mock_boto3)
+        # The note reflects the still-gated Main session, not the cancelled one.
+        self.assertIn('1 more session', html)
+        self.assertIn('Main tier', html)
+        self.assertIn(self.PRICING_URL, html)
+
+    @patch('events.services.registration_email.boto3')
+    def test_update_note_for_partial_access_subscriber(self, mock_boto3):
+        client = mock_boto3.client.return_value
+        client.send_email.return_value = {'MessageId': 'm'}
+
+        sent = send_series_update_to_subscribers(self.open1)
+
+        self.assertEqual(sent, 1)
+        html = self._sent_html(mock_boto3)
+        self.assertIn('1 more session', html)
+        self.assertIn('Main tier', html)
+        self.assertIn(self.PRICING_URL, html)

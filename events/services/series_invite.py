@@ -41,11 +41,16 @@ import logging
 from django.template.loader import render_to_string
 
 from accounts.services.timezones import format_user_datetime
-from content.access import can_access
+from content.access import (
+    _resolve_required_level,
+    can_access,
+    get_required_tier_name,
+)
 from email_app.services.email_service import EmailService
 from events.models import EventRegistration
 from events.services.calendar_invite import generate_ics, generate_series_ics
 from events.services.registration_email import _send_raw_email
+from events.services.series_registration import _eligible_occurrences
 from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
@@ -79,6 +84,48 @@ def _subscriber_upcoming_events(user, series):
     return events
 
 
+def _partial_access_note(user, series, accessible_events, site_url):
+    """Build the plain-text upsell note for sessions ``user`` cannot access.
+
+    The gated set is ``_eligible_occurrences(series)`` (upcoming, non-draft,
+    non-cancelled) minus the accessible occurrences the invite already
+    covers, compared by event id, kept where ``can_access`` is False. When
+    there are none, returns ``''`` so the template's ``{% if partial_note %}``
+    guard renders nothing.
+
+    Names a single concrete upgrade target — the tier that unlocks the
+    highest-gated session — so the CTA reads cleanly even when gated
+    sessions span multiple tiers. Plain text only: the templates render
+    this through Django autoescaping, so the ``/pricing`` link is a bare
+    absolute URL.
+    """
+    accessible_ids = {event.id for event in accessible_events}
+    gated = [
+        event
+        for event in _eligible_occurrences(series)
+        if event.id not in accessible_ids and not can_access(user, event)
+    ]
+    if not gated:
+        return ''
+
+    count = len(gated)
+    plural = '' if count == 1 else 's'
+    is_are = 'is' if count == 1 else 'are'
+    isnt_arent = "isn't" if count == 1 else "aren't"
+    it_them = 'it' if count == 1 else 'them'
+
+    highest_level = max(_resolve_required_level(event) for event in gated)
+    tier_name = get_required_tier_name(highest_level)
+    pricing_url = f'{site_url}/pricing'
+
+    return (
+        f'Heads up: {count} more session{plural} in this series '
+        f'{is_are} available on the {tier_name} tier and {isnt_arent} '
+        f'included above. Upgrade any time to add {it_them} to your '
+        f'calendar: {pricing_url}'
+    )
+
+
 def _render_series_email(template_name, user, series, events, email_type):
     """Render the shared series email body for ``template_name``.
 
@@ -86,6 +133,7 @@ def _render_series_email(template_name, user, series, events, email_type):
     """
     site_url = site_base_url()
     series_url = f'{site_url}{series.get_absolute_url()}'
+    partial_note = _partial_access_note(user, series, events, site_url)
 
     ordered = sorted(events, key=lambda e: e.start_datetime)
     lines = [
@@ -105,7 +153,7 @@ def _render_series_email(template_name, user, series, events, email_type):
             'registered_count': registered_count,
             'registered_count_plural': '' if registered_count == 1 else 's',
             'occurrences_list': occurrences_list,
-            'partial_note': '',
+            'partial_note': partial_note,
         },
     )
     full_html = render_to_string('email_app/base_email.html', {

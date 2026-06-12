@@ -40,9 +40,18 @@ def backfill_workshop_rendered_html(apps, schema_editor):
     # Live models — see module docstring for the rationale.
     from content.models.workshop import Workshop, WorkshopPage
 
+    # ``.only(...)`` restricts the SELECT to the columns this backfill
+    # touches. Without it the query is ``SELECT *``, which would reference
+    # columns added by *later* migrations (e.g. ``custom_banner_url`` from
+    # 0046) that do not yet exist when this data migration runs on a fresh
+    # DB — crashing even with zero rows. ``save(update_fields=[...])`` only
+    # needs the deferred field's source markdown, which the model re-loads
+    # lazily, so restricting the initial fetch is safe.
     workshop_total = Workshop.objects.count()
     workshop_done = 0
-    for workshop in Workshop.objects.all().iterator():
+    for workshop in Workshop.objects.only(
+        'id', 'description', 'description_html',
+    ).iterator():
         workshop.save(update_fields=['description_html'])
         workshop_done += 1
         if workshop_done % 100 == 0:
@@ -54,7 +63,9 @@ def backfill_workshop_rendered_html(apps, schema_editor):
 
     page_total = WorkshopPage.objects.count()
     page_done = 0
-    for page in WorkshopPage.objects.all().iterator():
+    for page in WorkshopPage.objects.only(
+        'id', 'body', 'body_html',
+    ).iterator():
         page.save(update_fields=['body_html'])
         page_done += 1
         if page_done % 100 == 0:

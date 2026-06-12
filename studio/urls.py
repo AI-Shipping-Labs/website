@@ -16,6 +16,22 @@ from studio.views.banner_regenerate import (
     studio_project_regenerate_banner,
     studio_workshop_regenerate_banner,
 )
+from studio.views.banner_upload import (
+    studio_article_remove_banner,
+    studio_article_upload_banner,
+    studio_course_remove_banner,
+    studio_course_upload_banner,
+    studio_download_remove_banner,
+    studio_download_upload_banner,
+    studio_event_remove_banner,
+    studio_event_series_remove_banner,
+    studio_event_series_upload_banner,
+    studio_event_upload_banner,
+    studio_project_remove_banner,
+    studio_project_upload_banner,
+    studio_workshop_remove_banner,
+    studio_workshop_upload_banner,
+)
 from studio.views.call_hosts import call_host_edit, call_host_list
 from studio.views.campaigns import (
     campaign_create,
@@ -282,6 +298,16 @@ urlpatterns = [
         studio_course_regenerate_banner,
         name='studio_course_regenerate_banner',
     ),
+    path(
+        'courses/<int:course_id>/upload-banner',
+        studio_course_upload_banner,
+        name='studio_course_upload_banner',
+    ),
+    path(
+        'courses/<int:course_id>/remove-banner',
+        studio_course_remove_banner,
+        name='studio_course_remove_banner',
+    ),
     path('courses/<int:course_id>/peer-reviews', peer_review_management, name='studio_peer_review_management'),
     path('courses/<int:course_id>/peer-reviews/form-batch', peer_review_form_batch, name='studio_peer_review_form_batch'),
     path('courses/<int:course_id>/peer-reviews/issue-certificates', peer_review_issue_certificates, name='studio_peer_review_issue_certificates'),
@@ -317,6 +343,16 @@ urlpatterns = [
         'articles/<int:article_id>/regenerate-banner',
         studio_article_regenerate_banner,
         name='studio_article_regenerate_banner',
+    ),
+    path(
+        'articles/<int:article_id>/upload-banner',
+        studio_article_upload_banner,
+        name='studio_article_upload_banner',
+    ),
+    path(
+        'articles/<int:article_id>/remove-banner',
+        studio_article_remove_banner,
+        name='studio_article_remove_banner',
     ),
 
     # Events. The literal ``new`` route is registered before the
@@ -359,6 +395,16 @@ urlpatterns = [
         studio_event_regenerate_banner,
         name='studio_event_regenerate_banner',
     ),
+    path(
+        'events/<int:event_id>/upload-banner',
+        studio_event_upload_banner,
+        name='studio_event_upload_banner',
+    ),
+    path(
+        'events/<int:event_id>/remove-banner',
+        studio_event_remove_banner,
+        name='studio_event_remove_banner',
+    ),
 
     # Event series (issue #564, renamed from event-groups in #575). The
     # literal ``new`` route is registered before the ``<int:series_id>``
@@ -391,6 +437,16 @@ urlpatterns = [
         name='studio_event_series_regenerate_banner',
     ),
     path(
+        'event-series/<int:series_id>/upload-banner',
+        studio_event_series_upload_banner,
+        name='studio_event_series_upload_banner',
+    ),
+    path(
+        'event-series/<int:series_id>/remove-banner',
+        studio_event_series_remove_banner,
+        name='studio_event_series_remove_banner',
+    ),
+    path(
         'event-series/<int:series_id>/delete',
         event_series_delete,
         name='studio_event_series_delete',
@@ -409,6 +465,16 @@ urlpatterns = [
         'workshops/<int:workshop_id>/regenerate-banner',
         studio_workshop_regenerate_banner,
         name='studio_workshop_regenerate_banner',
+    ),
+    path(
+        'workshops/<int:workshop_id>/upload-banner',
+        studio_workshop_upload_banner,
+        name='studio_workshop_upload_banner',
+    ),
+    path(
+        'workshops/<int:workshop_id>/remove-banner',
+        studio_workshop_remove_banner,
+        name='studio_workshop_remove_banner',
     ),
 
     # Recordings
@@ -498,6 +564,16 @@ urlpatterns = [
         studio_download_regenerate_banner,
         name='studio_download_regenerate_banner',
     ),
+    path(
+        'downloads/<int:download_id>/upload-banner',
+        studio_download_upload_banner,
+        name='studio_download_upload_banner',
+    ),
+    path(
+        'downloads/<int:download_id>/remove-banner',
+        studio_download_remove_banner,
+        name='studio_download_remove_banner',
+    ),
 
     # Call hosts (issue #870)
     path('call-hosts/', call_host_list, name='studio_call_host_list'),
@@ -510,6 +586,16 @@ urlpatterns = [
         'projects/<int:project_id>/regenerate-banner',
         studio_project_regenerate_banner,
         name='studio_project_regenerate_banner',
+    ),
+    path(
+        'projects/<int:project_id>/upload-banner',
+        studio_project_upload_banner,
+        name='studio_project_upload_banner',
+    ),
+    path(
+        'projects/<int:project_id>/remove-banner',
+        studio_project_remove_banner,
+        name='studio_project_remove_banner',
     ),
 
     # Tier Overrides

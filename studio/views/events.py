@@ -25,13 +25,10 @@ from events.models import Event, EventFeedback, EventRegistration
 from events.models.event import EXTERNAL_HOST_CHOICES
 from events.tasks.notify_reschedule import enqueue_reschedule_notice
 from events.tasks.send_post_event_followup import enqueue_post_event_followup
-from integrations.services.banner_generator import (
-    is_enabled as banner_generator_is_enabled,
-)
 from integrations.services.banner_generator.dispatch import enqueue_if_missing
 from integrations.services.zoom import create_meeting
 from studio.decorators import staff_required
-from studio.services.banner_status import get_last_banner_task
+from studio.services.banner_panel import banner_panel_context
 from studio.utils import get_github_edit_url, is_synced
 from studio.views.form_helpers import parse_comma_separated_tags
 
@@ -675,17 +672,16 @@ def event_edit(request, event_id):
         feedback_entries.exclude(comment='').count()
     )
 
-    # Issue #895: auto-banner regenerate panel (parity with articles/etc).
-    # Only meaningful on the edit flow, where ``event`` exists.
-    banner_enabled = banner_generator_is_enabled()
-    context['banner_url'] = event.auto_banner_url
-    context['banner_regenerate_url'] = reverse(
-        'studio_event_regenerate_banner', kwargs={'event_id': event.pk},
-    )
-    context['banner_generator_enabled'] = banner_enabled
-    context['banner_last_task'] = (
-        get_last_banner_task('event', event.pk) if banner_enabled else None
-    )
+    # Issues #895/#931: banner / social-image panel (parity with
+    # articles/etc). Only meaningful on the edit flow, where ``event`` exists.
+    context.update(banner_panel_context(
+        content_type='event',
+        record=event,
+        regenerate_url_name='studio_event_regenerate_banner',
+        upload_url_name='studio_event_upload_banner',
+        remove_url_name='studio_event_remove_banner',
+        url_kwarg='event_id',
+    ))
     return render(request, 'studio/events/form.html', context)
 
 

@@ -5,9 +5,8 @@ from django.urls import reverse
 from django.utils.text import slugify
 
 from content.models import Download
-from integrations.services.banner_generator import is_enabled as banner_generator_is_enabled
 from studio.decorators import staff_required
-from studio.services.banner_status import get_last_banner_task
+from studio.services.banner_panel import banner_panel_context
 from studio.utils import get_github_edit_url, is_synced
 from studio.views.form_helpers import (
     parse_comma_separated_tags,
@@ -53,7 +52,6 @@ def download_edit(request, download_id):
         download.save()
         return redirect('studio_download_edit', download_id=download.pk)
 
-    banner_enabled = banner_generator_is_enabled()
     context = {
         'download': download,
         'form_action': 'edit',
@@ -61,15 +59,14 @@ def download_edit(request, download_id):
         'github_edit_url': get_github_edit_url(download),
         'notify_url': reverse('studio_download_notify', kwargs={'download_id': download.pk}),
         'announce_url': reverse('studio_download_announce_slack', kwargs={'download_id': download.pk}),
-        # Issue #788: auto-banner regenerate panel.
-        'banner_url': download.auto_banner_url,
-        'banner_regenerate_url': reverse(
-            'studio_download_regenerate_banner',
-            kwargs={'download_id': download.pk},
-        ),
-        'banner_generator_enabled': banner_enabled,
-        'banner_last_task': (
-            get_last_banner_task('download', download.pk) if banner_enabled else None
+        # Issues #788/#931: banner / social-image panel.
+        **banner_panel_context(
+            content_type='download',
+            record=download,
+            regenerate_url_name='studio_download_regenerate_banner',
+            upload_url_name='studio_download_upload_banner',
+            remove_url_name='studio_download_remove_banner',
+            url_kwarg='download_id',
         ),
     }
     return render(request, 'studio/downloads/form.html', context)

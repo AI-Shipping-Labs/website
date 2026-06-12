@@ -12,9 +12,8 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from content.models import Course, CourseAccess, Enrollment, Module, Unit
-from integrations.services.banner_generator import is_enabled as banner_generator_is_enabled
 from studio.decorators import staff_required
-from studio.services.banner_status import get_last_banner_task
+from studio.services.banner_panel import banner_panel_context
 from studio.utils import get_github_edit_url, is_synced
 from studio.views.form_helpers import (
     parse_comma_separated_tags,
@@ -93,7 +92,6 @@ def course_edit(request, course_id):
         course=course, unenrolled_at__isnull=True,
     ).count()
 
-    banner_enabled = banner_generator_is_enabled()
     return render(request, 'studio/courses/form.html', {
         'course': course,
         'modules': modules,
@@ -105,15 +103,14 @@ def course_edit(request, course_id):
         'announce_url': reverse('studio_course_announce_slack', kwargs={'course_id': course.pk}),
         'access_count': access_count,
         'active_enrollment_count': active_enrollment_count,
-        # Issue #788: auto-banner regenerate panel.
-        'banner_url': course.auto_banner_url,
-        'banner_regenerate_url': reverse(
-            'studio_course_regenerate_banner',
-            kwargs={'course_id': course.pk},
-        ),
-        'banner_generator_enabled': banner_enabled,
-        'banner_last_task': (
-            get_last_banner_task('course', course.pk) if banner_enabled else None
+        # Issues #788/#931: banner / social-image panel.
+        **banner_panel_context(
+            content_type='course',
+            record=course,
+            regenerate_url_name='studio_course_regenerate_banner',
+            upload_url_name='studio_course_upload_banner',
+            remove_url_name='studio_course_remove_banner',
+            url_kwarg='course_id',
         ),
     })
 

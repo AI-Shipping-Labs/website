@@ -133,3 +133,72 @@ class ArticleSyncEnqueuesBannerTest(_BannerGeneratorCacheCleanupMixin, TestCase)
             if len(call.args) >= 3 and call.args[1] == 'article' and call.args[2] == article.pk
         ]
         self.assertEqual(len(article_calls), 0)
+
+
+class CustomBannerSurvivesResyncTest(
+    _BannerGeneratorCacheCleanupMixin, TestCase,
+):
+    """Issue #931: a Studio custom upload is never clobbered by a re-sync.
+
+    The sync dispatchers write ``cover_image_url`` (from frontmatter) and
+    never write ``custom_banner_url``. This is the critical guarantee that
+    makes the custom upload a sync-safe override — assert it through a real
+    ``sync_content_source`` run rather than by reading the dispatcher code.
+    """
+
+    def setUp(self):
+        super().setUp()
+        _configure_banner_generator()
+        self.source = make_content_source('test-org/content')
+
+    def _write_article(self, repo, **frontmatter_overrides):
+        fm = {
+            'title': 'Sync Safe',
+            'slug': 'sync-safe',
+            'date': '2026-01-01',
+            'tags': ['guides'],
+            **frontmatter_overrides,
+        }
+        repo.write_markdown(
+            'articles/sync-safe.md', frontmatter=fm, body='Body.',
+        )
+
+    @patch(DISPATCH_PATCH)
+    def test_custom_banner_url_unchanged_after_resync(self, _mock_async):
+        custom = 'https://cdn.example.com/custom-banners/article/9-abc.png'
+        repo = SyncTestRepo(self)
+        # Frontmatter has NO cover_image, so cover_image_url stays empty.
+        self._write_article(repo)
+        sync_repo(self.source, repo)
+
+        article = Article.objects.get(slug='sync-safe')
+        # Simulate an operator's custom upload landing on the record.
+        Article.objects.filter(pk=article.pk).update(custom_banner_url=custom)
+
+        # Re-sync the same (unchanged) content.
+        sync_repo(self.source, repo)
+
+        article.refresh_from_db()
+        self.assertEqual(article.custom_banner_url, custom)
+        # And it remains empty for cover_image (the sync-owned field) so the
+        # custom upload is still the effective banner.
+        self.assertEqual(article.cover_image_url, '')
+
+    @patch(DISPATCH_PATCH)
+    def test_custom_banner_survives_even_when_frontmatter_changes(
+        self, _mock_async,
+    ):
+        custom = 'https://cdn.example.com/custom-banners/article/9-def.png'
+        repo = SyncTestRepo(self)
+        self._write_article(repo)
+        sync_repo(self.source, repo)
+        article = Article.objects.get(slug='sync-safe')
+        Article.objects.filter(pk=article.pk).update(custom_banner_url=custom)
+
+        # Change the title (forces a real re-save of the article row).
+        self._write_article(repo, title='Sync Safe Renamed')
+        sync_repo(self.source, repo)
+
+        article.refresh_from_db()
+        self.assertEqual(article.title, 'Sync Safe Renamed')
+        self.assertEqual(article.custom_banner_url, custom)

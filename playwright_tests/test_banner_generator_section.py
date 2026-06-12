@@ -311,8 +311,17 @@ class TestBannerGeneratorHintOnArticleEdit:
         new_url = _simulate_successful_worker("article", article.pk)
 
         page.goto(edit_url, wait_until="domcontentloaded")
+        # The manual cover is preserved on the record (regenerate never
+        # touches cover_image_url).
         assert page.locator('input[name="cover_image_url"]').input_value() == manual_cover
+        # The generated banner WAS regenerated to a fresh cache-busting URL.
+        assert new_url != old_url
+        assert new_url.endswith(".jpg")
+        # Issue #931: the panel preview now shows the EFFECTIVE banner, and a
+        # frontmatter cover outranks the generated banner — so the preview is
+        # the manual cover (with the "Frontmatter cover" source badge), not
+        # the generated JPEG.
         src = page.locator('[data-testid="banner-generator-image"]').get_attribute("src")
-        assert src == new_url
-        assert src != old_url
-        assert src.endswith(".jpg")
+        assert src == manual_cover
+        badge = page.locator('[data-testid="banner-source-badge"]')
+        assert badge.inner_text().strip() == "Frontmatter cover"

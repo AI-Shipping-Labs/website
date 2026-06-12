@@ -44,6 +44,14 @@ class Article(
             "should prefer ``cover_image_url`` and fall back to this."
         ),
     )
+    custom_banner_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text=(
+            "Operator-uploaded custom banner/social image. Survives content "
+            "re-sync. Wins over the generated banner; loses to a frontmatter "
+            "cover_image_url."
+        ),
+    )
     auto_banner_title_hash = models.CharField(
         max_length=64, blank=True, default='',
         help_text=(

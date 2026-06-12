@@ -21,7 +21,35 @@ class EmailLog(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='email_logs',
-        help_text='User who received the email.',
+        null=True,
+        blank=True,
+        help_text=(
+            'User who received the email. Null for sends to an address that '
+            'is not a registered platform user (e.g. an event host mailbox); '
+            'see ``recipient_email`` in that case.'
+        ),
+    )
+    # Issue #861: the host calendar-invite goes to ``Event.host_email`` (or a
+    # configured default), which may be an address with no platform account.
+    # ``recipient_email`` records the actual destination so the send is
+    # auditable even when ``user`` is null. ``event`` lets the host-invite
+    # EmailLog guard ("has this event already invited its host?") query by
+    # (event, email_type) without a user FK.
+    event = models.ForeignKey(
+        'events.Event',
+        on_delete=models.CASCADE,
+        related_name='email_logs',
+        null=True,
+        blank=True,
+        help_text='Event this email relates to (null for non-event emails).',
+    )
+    recipient_email = models.EmailField(
+        blank=True,
+        default='',
+        help_text=(
+            'Destination address. Populated for sends to a non-user mailbox '
+            '(e.g. an event host); blank when ``user`` carries the address.'
+        ),
     )
     email_type = models.CharField(
         max_length=100,
@@ -115,4 +143,5 @@ class EmailLog(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.email_type} to {self.user} at {self.sent_at}'
+        recipient = self.user or self.recipient_email or 'unknown'
+        return f'{self.email_type} to {recipient} at {self.sent_at}'

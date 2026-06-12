@@ -322,6 +322,19 @@ INTEGRATION_GROUPS = [
                 'optional': True,
                 'docs_url': '_docs/integrations/site.md#staff_signup_notify_email',
             },
+            {
+                'key': 'EVENTS_HOST_INVITE_EMAIL',
+                'is_secret': False,
+                'description': (
+                    'Default mailbox that receives the host calendar invite '
+                    '(with host-only management links) when an event has no '
+                    'per-event ``host_email`` set. Leave blank to skip the '
+                    'host invite for events without an explicit host address '
+                    '(the save still succeeds; a warning is logged).'
+                ),
+                'optional': True,
+                'docs_url': '_docs/integrations/site.md#events_host_invite_email',
+            },
         ],
     },
     {

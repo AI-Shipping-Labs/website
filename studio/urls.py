@@ -95,6 +95,7 @@ from studio.views.event_series import (
     event_series_add_occurrence,
     event_series_announce_slack,
     event_series_create,
+    event_series_create_zoom,
     event_series_delete,
     event_series_detail,
     event_series_event_publish,
@@ -432,6 +433,11 @@ urlpatterns = [
         'event-series/<int:series_id>/announce-slack',
         event_series_announce_slack,
         name='studio_event_series_announce_slack',
+    ),
+    path(
+        'event-series/<int:series_id>/create-zoom',
+        event_series_create_zoom,
+        name='studio_event_series_create_zoom',
     ),
     path(
         'event-series/<int:series_id>/regenerate-banner',

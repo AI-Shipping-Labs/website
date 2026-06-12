@@ -38,6 +38,10 @@ from events.models import Event, EventSeries
 from events.services.series_registration import (
     enroll_series_registrants_in_event,
 )
+from events.tasks.create_series_zoom_meetings import (
+    eligible_occurrence_count,
+    enqueue_create_series_zoom_meetings,
+)
 from integrations.services.banner_generator import (
     is_enabled as banner_generator_is_enabled,
 )
@@ -465,6 +469,9 @@ def event_series_detail(request, series_id):
             not series.timezone
             and _should_autodetect_tz(request.user)
         ),
+        # Issue #859: one-click "create Zoom meetings for all events".
+        'zoom_eligible_count': eligible_occurrence_count(series),
+        'zoom_last_run': series.zoom_meetings_last_run,
         # Issues #896/#931: banner / social-image panel.
         **banner_panel_context(
             content_type='event_series',
@@ -706,6 +713,38 @@ def event_series_regenerate_banner(request, series_id):
             'Banner regeneration queued. Refresh in a few seconds to see '
             'the new image.',
         )
+    return redirect('studio_event_series_detail', series_id=series.pk)
+
+
+@staff_required
+@require_POST
+def event_series_create_zoom(request, series_id):
+    """Enqueue Zoom-meeting creation for every eligible occurrence (issue #859).
+
+    Idempotent and partial-failure safe — the heavy lifting runs in the
+    ``create_series_zoom_meetings`` background job. This view only counts the
+    eligible occurrences (future, Zoom platform, no existing meeting),
+    enqueues the job, flashes a "creating…" message, and redirects back so
+    the request never blocks on Zoom API round-trips. When nothing is
+    eligible we skip the enqueue and say so.
+    """
+    series = get_object_or_404(EventSeries, pk=series_id)
+    eligible = eligible_occurrence_count(series)
+
+    if eligible == 0:
+        messages.info(
+            request,
+            'All occurrences already have Zoom meetings — nothing to create.',
+        )
+        return redirect('studio_event_series_detail', series_id=series.pk)
+
+    enqueue_create_series_zoom_meetings(series.pk)
+    messages.success(
+        request,
+        f'Creating Zoom meetings for {eligible} eligible '
+        f'occurrence{"" if eligible == 1 else "s"}… '
+        'Reload in a few seconds to see the result.',
+    )
     return redirect('studio_event_series_detail', series_id=series.pk)
 
 

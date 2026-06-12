@@ -32,6 +32,13 @@ dependencies = [
     "whitenoise>=6.12.0",
 ]
 
+[tool.tmuxctl]
+# Per-session MemoryMax cap for tmux sessions created in this repo (cgroup v2).
+# Non-Python repos can use a dedicated cgroups.toml with a top-level `mem` key
+# instead; it wins over this section when both are present.
+mem = "50G"
+swap = "16G"
+
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "website.settings"
 pythonpath = ["."]

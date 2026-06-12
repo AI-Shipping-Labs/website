@@ -15,18 +15,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Unit & Integration Tests
+  # One-time deploy gates (#888): these are independent of the test suite and
+  # must NOT be duplicated across every test shard. They run once here while the
+  # sharded `test` matrix runs the suite. A failure in any of them still blocks
+  # deploy because the `deploy` job `needs:` this job.
+  checks:
+    name: Deploy Gates (migrations / OpenAPI / system check / static)
     runs-on: ubuntu-latest
-    # Safety net for #269: a test failure can leave a django-q scheduler thread
-    # alive, causing the job to hang for ~1h40m. Bound the blast radius.
-    # Bumped 30 -> 45 (#888): the suite now runs ~1760s (~29.3m) of pure
-    # test time, and runner-to-runner variance pushes the total job
-    # wall-clock past the old 30m cap, cancelling a green run and skipping
-    # deploy (run 27158919559 reported "Ran 9908 tests ... OK" then was
-    # cancelled at 30m0s). 45m keeps the hang blast radius well under the
-    # ~1h40m worst case while giving the healthy suite headroom.
-    timeout-minutes: 45
+    timeout-minutes: 15
 
     steps:
       - name: Start CI timing profile
@@ -34,36 +30,18 @@ jobs:
           now=$(date +%s)
           echo "CI_JOB_START=${now}" >> "$GITHUB_ENV"
           echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
-          echo "CI_TIMING phase=job_start epoch=${now} sha=${GITHUB_SHA}"
+          echo "CI_TIMING phase=job_start job=checks epoch=${now} sha=${GITHUB_SHA}"
 
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Report checkout timing
-        run: |
-          now=$(date +%s)
-          echo "CI_TIMING phase=checkout seconds=$((now - CI_PHASE_START)) source=runner_clock"
-          echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
-
       - name: Install uv
         uses: astral-sh/setup-uv@v7
-
-      - name: Report setup-uv timing
-        run: |
-          now=$(date +%s)
-          echo "CI_TIMING phase=setup_uv seconds=$((now - CI_PHASE_START)) source=runner_clock"
-          echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-
-      - name: Report setup-python timing
-        run: |
-          now=$(date +%s)
-          echo "CI_TIMING phase=setup_python seconds=$((now - CI_PHASE_START)) source=runner_clock"
-          echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
 
       # We use `--locked` so any drift between pyproject.toml and uv.lock
       # fails the install step loudly with "requirements are unsatisfiable"
@@ -133,6 +111,84 @@ jobs:
           end=$(date +%s)
           echo "CI_TIMING phase=django_check seconds=$((end - start))"
 
+      - name: Report total job timing
+        if: always()
+        run: |
+          now=$(date +%s)
+          echo "CI_TIMING phase=job_total job=checks seconds=$((now - CI_JOB_START)) source=runner_clock_excludes_post_job_steps"
+
+  test:
+    name: Unit & Integration Tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ubuntu-latest
+    # Sharded test matrix (#888). The Django suite grew to ~9908 tests / ~1760s
+    # (~29m) in a single job and was creeping toward the timeout — run
+    # 27158919559 passed ("Ran 9908 tests ... OK") then got cancelled at the
+    # cap, skipping deploy. Instead of just raising the ceiling we fan the
+    # suite out across N runners. Each shard runs a deterministic, disjoint
+    # subset (see website/test_runner.py: SHA-256(test id) % N), so the wall
+    # time is ~1/N and the suite stays under cap as it grows. To change N,
+    # edit the `shard` list below to 1..N and TEST_SHARD_COUNT to N — nothing
+    # else is pinned to a specific N. The deterministic split guarantees the
+    # summed per-shard "Ran N tests" counts equal the single-job count (no test
+    # run twice, none dropped).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      TEST_SHARD_COUNT: "4"
+      TEST_SHARD_INDEX: ${{ matrix.shard }}
+    # Per-shard #269 hang safety net. Each shard runs ~1/4 of the suite
+    # (~7-8m test runtime + ~2-3m setup), so 20m leaves >40% headroom while
+    # keeping the django-q-hang blast radius (#269) far below the historical
+    # ~1h40m worst case — much tighter than the old single-job 45m cap.
+    timeout-minutes: 20
+
+    steps:
+      - name: Start CI timing profile
+        run: |
+          now=$(date +%s)
+          echo "CI_JOB_START=${now}" >> "$GITHUB_ENV"
+          echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
+          echo "CI_TIMING phase=job_start shard=${{ matrix.shard }}/${{ strategy.job-total }} epoch=${now} sha=${GITHUB_SHA}"
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Report checkout timing
+        run: |
+          now=$(date +%s)
+          echo "CI_TIMING phase=checkout seconds=$((now - CI_PHASE_START)) source=runner_clock"
+          echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Report setup-uv timing
+        run: |
+          now=$(date +%s)
+          echo "CI_TIMING phase=setup_uv seconds=$((now - CI_PHASE_START)) source=runner_clock"
+          echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Report setup-python timing
+        run: |
+          now=$(date +%s)
+          echo "CI_TIMING phase=setup_python seconds=$((now - CI_PHASE_START)) source=runner_clock"
+          echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
+
+      # See the install-step comment in the `checks` job for why `--locked`.
+      - name: Install dependencies
+        run: |
+          start=$(date +%s)
+          uv sync --locked
+          end=$(date +%s)
+          echo "CI_TIMING phase=uv_sync seconds=$((end - start))"
+
       - name: Start test database cache restore timing
         run: echo "CI_PHASE_START=$(date +%s)" >> "$GITHUB_ENV"
 
@@ -141,7 +197,9 @@ jobs:
         # Issue #532: DJANGO_TEST_DB_NAME below moves Django's SQLite test
         # database off the default in-memory URI so --keepdb has files to
         # preserve between runs. The cache key hashes every migration file in
-        # the tree so migration edits trigger a fresh rebuild.
+        # the tree so migration edits trigger a fresh rebuild. The per-shard
+        # `shard${{ matrix.shard }}` key suffix (#888) gives each matrix job
+        # its own cache entry so concurrent shards don't race on cache save.
         uses: actions/cache@v5
         with:
           path: |
@@ -149,7 +207,7 @@ jobs:
             test_db*.sqlite3
             test_db*.sqlite3-wal
             test_db*.sqlite3-shm
-          key: test-db-v2-${{ runner.os }}-py3.13-${{ hashFiles('**/migrations/*.py') }}
+          key: test-db-v2-${{ runner.os }}-py3.13-shard${{ matrix.shard }}-${{ hashFiles('**/migrations/*.py') }}
 
       - name: Report test database cache restore timing
         run: |
@@ -207,6 +265,11 @@ jobs:
         # tracebacks back to the parent without crashing the IPC.
         # Issue #532: DJANGO_TEST_DB_NAME makes SQLite tests file-backed so
         # --keepdb can reuse the cached test_db*.sqlite3 files.
+        # Issue #888: TEST_SHARD_COUNT/TEST_SHARD_INDEX (job-level env) make the
+        # runner keep only this shard's deterministic subset. `--parallel 4`
+        # matches the GitHub-hosted ubuntu-latest 4-vCPU runner — do NOT raise
+        # it above the runner's vCPU count (oversubscription thrashes); the
+        # sharding matrix is the lever for scaling, not intra-job parallelism.
         env:
           DJANGO_TEST_DB_NAME: test_db.sqlite3
         run: |
@@ -218,11 +281,11 @@ jobs:
           set -e
           end=$(date +%s)
           runner_seconds=$(sed -nE 's/^Ran [0-9]+ tests in ([0-9.]+)s$/\1/p' test-output.log | tail -1)
-          echo "CI_TIMING phase=test_wall seconds=$((end - start))"
+          echo "CI_TIMING phase=test_wall shard=${{ matrix.shard }}/${{ strategy.job-total }} seconds=$((end - start))"
           if [ -n "${runner_seconds}" ]; then
-            echo "CI_TIMING phase=test_runner seconds=${runner_seconds}"
+            echo "CI_TIMING phase=test_runner shard=${{ matrix.shard }}/${{ strategy.job-total }} seconds=${runner_seconds}"
           else
-            echo "CI_TIMING phase=test_runner seconds=unavailable"
+            echo "CI_TIMING phase=test_runner shard=${{ matrix.shard }}/${{ strategy.job-total }} seconds=unavailable"
           fi
           exit "${status}"
 
@@ -230,7 +293,7 @@ jobs:
         if: always()
         run: |
           now=$(date +%s)
-          echo "CI_TIMING phase=job_total seconds=$((now - CI_JOB_START)) source=runner_clock_excludes_post_job_steps"
+          echo "CI_TIMING phase=job_total shard=${{ matrix.shard }}/${{ strategy.job-total }} seconds=$((now - CI_JOB_START)) source=runner_clock_excludes_post_job_steps"
           echo "CI_TIMING phase=post_job_overhead seconds=unavailable source=github_actions_native_step_timings note=cache_save_and_action_post_steps_run_after_final_step"
 
   playwright-core:
@@ -264,7 +327,11 @@ jobs:
   deploy:
     name: Deploy to Dev
     runs-on: ubuntu-latest
-    needs: [test, playwright-core]
+    # #888: deploy gates on every test shard plus the one-time `checks` job and
+    # the Playwright core set. A `needs` array entry only succeeds when ALL of a
+    # matrix job's shards succeed, so listing `test` here means deploy runs only
+    # when all 4 shards are green.
+    needs: [checks, test, playwright-core]
     if: github.ref == 'refs/heads/main'
 
     permissions:

@@ -49,7 +49,8 @@
 {% endif %}
 {% endif %}
 
-<form id="event-edit-form" method="post" class="space-y-6">
+<form id="event-edit-form" method="post" class="space-y-6"
+      data-has-zoom-meeting="{% if event.zoom_meeting_id %}true{% else %}false{% endif %}">
   {% csrf_token %}
 
   <div class="bg-card border border-border rounded-lg p-6 space-y-4">
@@ -639,6 +640,53 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Initialize visibility on page load
   updatePlatformVisibility();
+
+  // Issue #860: warn (but do not block) before saving an event with no
+  // meeting link. An event HAS a link when any of these hold at submit time:
+  //   1. platform === 'zoom' AND a Zoom meeting is already created
+  //      (data-has-zoom-meeting="true" on the form; only ever true on edit).
+  //   2. platform === 'custom' AND the custom URL input is non-empty.
+  //   3. the external host select has a non-empty value (off-platform host).
+  // Otherwise the event is MISSING a link and we confirm the save. The
+  // warning fires on EVERY link-less save attempt (no suppression flag).
+  var form = document.getElementById('event-edit-form');
+  if (form) {
+    var customUrlInput = document.getElementById('custom-url-input');
+
+    function eventHasMeetingLink() {
+      var platform = platformSelect.value;
+      var hasZoomMeeting = form.getAttribute('data-has-zoom-meeting') === 'true';
+      var hasExternalHost = !!(
+        externalHostInput && (externalHostInput.value || '').trim()
+      );
+      var hasCustomUrl = !!(
+        customUrlInput && (customUrlInput.value || '').trim()
+      );
+      if (hasExternalHost) {
+        return true;
+      }
+      if (platform === 'zoom' && hasZoomMeeting) {
+        return true;
+      }
+      if (platform === 'custom' && hasCustomUrl) {
+        return true;
+      }
+      return false;
+    }
+
+    form.addEventListener('submit', function(event) {
+      if (eventHasMeetingLink()) {
+        return;
+      }
+      var ok = window.confirm(
+        'You are not creating a Zoom event or setting any other URL — ' +
+        'are you sure you want to save now?'
+      );
+      if (!ok) {
+        event.preventDefault();
+      }
+    });
+  }
 });
 </script>
 

@@ -192,6 +192,8 @@ class TestRenameEmitsNewSlug:
         )
         slug_input = admin.locator('input[name="slug"]')
         slug_input.fill("q-and-a-may")
+        # Issue #860: link-less event — accept the "no meeting link" confirm.
+        admin.on("dialog", lambda d: d.accept())
         admin.locator('button[type="submit"]').first.click()
         admin.wait_for_load_state("domcontentloaded")
 

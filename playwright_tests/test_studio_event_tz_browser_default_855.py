@@ -249,6 +249,9 @@ class TestUtcStaysSelectable:
         page.fill('input[name="event_time"]', "14:30")
         page.fill('input[name="duration_hours"]', "1")
         page.select_option('[data-testid="dtp-event-tz"]', "UTC")
+        # Issue #860: link-less Zoom event — accept the "no meeting link"
+        # confirm on submit.
+        page.on("dialog", lambda d: d.accept())
         page.locator('[data-testid="event-create-submit"]').click()
         page.wait_for_url(re.compile(r".*/studio/events/\d+/edit$"))
 

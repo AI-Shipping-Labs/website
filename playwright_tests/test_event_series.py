@@ -152,6 +152,8 @@ class TestScenario2StudioEditable:
         page.fill('input[name="title"]', "Spring Workshop — Special Session")
         page.fill('textarea[name="description"]', "We're moving this one indoors.")
         page.fill('input[name="event_time"]', "19:00")
+        # Issue #860: link-less event — accept the "no meeting link" confirm.
+        page.on("dialog", lambda d: d.accept())
         page.locator("button:has-text('Save Changes')").first.click()
         page.wait_for_url(re.compile(rf".*/studio/events/{target.pk}/edit$"))
 
@@ -726,6 +728,9 @@ class TestScenario11StatusBadgePerOccurrence:
             f"{django_server}/studio/events/{draft.pk}/edit",
             wait_until="domcontentloaded",
         )
+        # Issue #860: this occurrence has no Zoom meeting / URL, so Save fires
+        # the "no meeting link" confirm — accept it to let the save through.
+        page.on("dialog", lambda d: d.accept())
         page.select_option('select[name="status"]', "upcoming")
         page.locator("button:has-text('Save Changes')").first.click()
         page.wait_for_url(re.compile(rf".*/studio/events/{draft.pk}/edit$"))

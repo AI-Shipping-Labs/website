@@ -148,6 +148,8 @@ class TestStudioEventReschedule:
         date_field = page.locator('input[name="event_date"]')
         date_field.fill('')
         date_field.fill(new_date)
+        # Issue #860: link-less event — accept the "no meeting link" confirm.
+        page.on("dialog", lambda d: d.accept())
         page.locator('button[type="submit"]').first.click()
         page.wait_for_load_state("domcontentloaded")
 
@@ -187,6 +189,8 @@ class TestStudioEventReschedule:
         # Change the description only — no date/time mutation.
         description = page.locator('textarea[name="description"]')
         description.fill('Bring questions!')
+        # Issue #860: link-less event — accept the "no meeting link" confirm.
+        page.on("dialog", lambda d: d.accept())
         page.locator('button[type="submit"]').first.click()
         page.wait_for_load_state("domcontentloaded")
 
@@ -226,6 +230,8 @@ class TestStudioEventReschedule:
         date_field = page.locator('input[name="event_date"]')
         date_field.fill('')
         date_field.fill(new_date)
+        # Issue #860: link-less event — accept the "no meeting link" confirm.
+        page.on("dialog", lambda d: d.accept())
         page.locator('button[type="submit"]').first.click()
         page.wait_for_load_state("domcontentloaded")
 

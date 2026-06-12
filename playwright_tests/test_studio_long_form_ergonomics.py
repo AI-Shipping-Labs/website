@@ -168,6 +168,8 @@ def test_staff_saves_event_from_sticky_action_and_sees_integrations(django_serve
     page.goto(f"{django_server}/studio/events/{event.pk}/edit", wait_until="domcontentloaded")
     page.locator('input[name="location"]').fill("Studio Room")
     page.mouse.wheel(0, 1200)
+    # Issue #860: link-less event — accept the "no meeting link" confirm.
+    page.on("dialog", lambda d: d.accept())
     page.locator('[data-testid="sticky-save-action"]').click()
     page.wait_for_load_state("domcontentloaded")
 

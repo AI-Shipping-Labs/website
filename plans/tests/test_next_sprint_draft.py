@@ -14,7 +14,9 @@ from plans.services.next_sprint_draft import (
     NextSprintDraftInput,
     NextSprintDraftResult,
     NextSprintDraftUnavailable,
+    OnboardingAnswer,
     RecentUpdate,
+    _build_user_message,
     draft_next_sprint,
 )
 
@@ -149,6 +151,71 @@ class DraftErrorTest(SimpleTestCase):
         ):
             with self.assertRaises(LLMError):
                 draft_next_sprint(_input())
+
+
+class ProfileBlockRenderingTest(SimpleTestCase):
+    """The ``=== Member profile ===`` block in ``_build_user_message`` (#913)."""
+
+    def _profiled_input(self):
+        return NextSprintDraftInput(
+            member_label='m@test.com',
+            next_sprint_name='June Cohort',
+            goal='Build a RAG prototype',
+            persona='Sam — Technical Professional',
+            crm_summary='Strong engineer, needs a portfolio piece.',
+            crm_next_steps='Ship a RAG project this sprint.',
+            onboarding_answers=[
+                OnboardingAnswer(
+                    prompt='What are your goals?',
+                    answer='Switch into an AI engineering role',
+                ),
+                OnboardingAnswer(
+                    prompt='Background?', answer='Ten years of backend Java',
+                ),
+            ],
+        )
+
+    def test_profile_block_rendered_before_plan_state(self):
+        message = _build_user_message(self._profiled_input())
+
+        self.assertIn('=== Member profile ===', message)
+        self.assertIn('Persona: Sam — Technical Professional', message)
+        self.assertIn(
+            'CRM summary: Strong engineer, needs a portfolio piece.', message,
+        )
+        self.assertIn('CRM next steps: Ship a RAG project this sprint.', message)
+        self.assertIn(
+            '  - What are your goals?: Switch into an AI engineering role',
+            message,
+        )
+        self.assertIn('  - Background?: Ten years of backend Java', message)
+        # Positioned before the current-plan-state block.
+        self.assertLess(
+            message.index('=== Member profile ==='),
+            message.index('=== Current plan state ==='),
+        )
+
+    def test_no_profile_block_when_all_fields_empty(self):
+        message = _build_user_message(
+            NextSprintDraftInput(member_label='m@test.com', goal='Do a thing'),
+        )
+
+        self.assertNotIn('=== Member profile ===', message)
+        self.assertNotIn('Persona:', message)
+        # The rest of the message is still intact.
+        self.assertIn('=== Current plan state ===', message)
+        self.assertIn('=== Recent #plan-sprints updates (newest first) ===', message)
+
+    def test_only_set_profile_subsections_are_rendered(self):
+        message = _build_user_message(
+            NextSprintDraftInput(persona='Sam — Technical Professional'),
+        )
+
+        self.assertIn('=== Member profile ===', message)
+        self.assertIn('Persona: Sam — Technical Professional', message)
+        self.assertNotIn('CRM summary:', message)
+        self.assertNotIn('CRM next steps:', message)
+        self.assertNotIn('Onboarding answers:', message)
 
 
 class DraftImportIsolationTest(SimpleTestCase):

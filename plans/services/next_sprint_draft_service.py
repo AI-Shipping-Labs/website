@@ -33,6 +33,7 @@ import logging
 
 from django.utils import timezone
 
+from crm.services.member_profile import build_member_profile_context
 from crm.services.slack_updates import threads_for_member, threads_for_plan
 from integrations.config import get_config
 from integrations.services import llm
@@ -40,6 +41,7 @@ from integrations.services.llm import LLMError
 from plans.models import NextSprintPlanDraft
 from plans.services.next_sprint_draft import (
     NextSprintDraftInput,
+    OnboardingAnswer,
     RecentUpdate,
     draft_next_sprint,
 )
@@ -49,6 +51,26 @@ from plans.services.plan_lifecycle import (
 )
 
 logger = logging.getLogger(__name__)
+
+# IntegrationSetting key (default ON) gating profile injection into the
+# draft. When off, the draft input carries no profile fields and the
+# rendered user message has no member-profile block (pre-#913 behaviour).
+PROFILE_INJECTION_KEY = 'NEXT_SPRINT_DRAFT_USE_PROFILE'
+
+
+def _profile_injection_enabled():
+    """True when the member profile should be fed into the draft.
+
+    Defaults ON when unset (mirrors ``ai_onboarding_available`` and the
+    ``ONBOARDING_AI_ENABLED`` flag): the key exists to turn profile
+    injection OFF without a redeploy, so only an explicit falsey value
+    disables it. Read via ``get_config`` from the IntegrationSetting
+    framework — never raw ``os.environ`` / ``settings.X``.
+    """
+    raw = get_config(PROFILE_INJECTION_KEY, 'true')
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('true', '1', 'yes')
 
 
 def _split_done(items):
@@ -85,6 +107,42 @@ def _collect_recent_updates(threads, *, max_threads=5):
     return updates, len(updates)
 
 
+def _build_profile_fields(member):
+    """Return the member-profile fields for the draft input.
+
+    Reuses the #883 ``build_member_profile_context`` rather than re-querying
+    onboarding/CRM, and maps its dict onto the plain (ORM-free) fields the
+    pure callable expects. Only ANSWERED onboarding rows are passed so the
+    prompt stays tight. Gated by the ``NEXT_SPRINT_DRAFT_USE_PROFILE``
+    IntegrationSetting key (default ON); when off, returns empty fields so
+    no profile block is rendered.
+
+    A member with no onboarding response and/or no CRM record yields empty
+    fields — ``build_member_profile_context`` always returns a fully
+    populated dict with empty markers, so no extra guarding is needed.
+    """
+    if not _profile_injection_enabled():
+        return {
+            'persona': '',
+            'crm_summary': '',
+            'crm_next_steps': '',
+            'onboarding_answers': [],
+        }
+
+    context = build_member_profile_context(member)
+    onboarding_answers = [
+        OnboardingAnswer(prompt=row['prompt'], answer=row['display'])
+        for row in context['onboarding_answers']
+        if row['answered']
+    ]
+    return {
+        'persona': context['persona'],
+        'crm_summary': context['summary'],
+        'crm_next_steps': context['next_steps'],
+        'onboarding_answers': onboarding_answers,
+    }
+
+
 def _build_draft_input(*, destination_plan, source_plan, recent_updates):
     """Assemble the plain ``NextSprintDraftInput`` from ORM reads."""
     checkpoints = []
@@ -97,6 +155,8 @@ def _build_draft_input(*, destination_plan, source_plan, recent_updates):
     current_sprint_name = (
         source_plan.sprint.name if source_plan is not None else ''
     )
+
+    profile_fields = _build_profile_fields(destination_plan.member)
 
     return NextSprintDraftInput(
         member_label=destination_plan.member.email,
@@ -115,6 +175,7 @@ def _build_draft_input(*, destination_plan, source_plan, recent_updates):
         done_next_steps=done_ns,
         not_done_next_steps=not_done_ns,
         recent_updates=recent_updates,
+        **profile_fields,
     )
 
 

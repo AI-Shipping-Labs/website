@@ -557,6 +557,26 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/llm.md#onboarding_ai_streaming',
             },
+            {
+                'key': 'NEXT_SPRINT_DRAFT_USE_PROFILE',
+                'is_secret': False,
+                'is_boolean': True,
+                'default': 'true',
+                'description': (
+                    'Set true to feed the member onboarding profile (stated '
+                    'background/goals, persona, CRM summary and next-steps) '
+                    'into the LLM next-sprint plan draft, so the generated '
+                    'draft is informed by the profile and not just plan state '
+                    'and recent #plan-sprints updates. When off, the draft is '
+                    'assembled without the profile block (pre-#913 behaviour). '
+                    'Affects both the Studio "Draft next sprint plan" button '
+                    'and POST /api/plans/<id>/draft-next-sprint. Defaults on; '
+                    'switchable without a redeploy.'
+                ),
+                'docs_url': (
+                    '_docs/integrations/llm.md#next_sprint_draft_use_profile'
+                ),
+            },
         ],
     },
     {

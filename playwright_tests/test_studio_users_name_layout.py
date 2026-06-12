@@ -132,12 +132,17 @@ def _seed_dense_paid_users(count):
     from payments.models import Tier
 
     paid = Tier.objects.get(slug='main')
+    # Issue #930: ``filter=paid`` now requires an active Stripe subscription
+    # (``subscription_id != ''`` paired with a paid base tier), not just a
+    # paid tier. Set a non-empty ``subscription_id`` so these users qualify
+    # as paying under the #923 paid/override decomposition.
     users = [
         User(
             email=f'dense-{idx:03d}@example.com',
             first_name=f'First{idx:03d}',
             last_name=f'Last{idx:03d}',
             tier=paid,
+            subscription_id=f'sub_dense_{idx:03d}',
             email_verified=True,
             password='!',
         )

@@ -395,6 +395,11 @@ def event_series_detail(request, series_id):
                 series.description = request.POST.get(
                     'description', series.description,
                 )
+                # Issue #858: "Visible to the public" toggle. The metadata
+                # form always submits the checkbox field, so an unchecked box
+                # (absent in POST) means hide. Default stays True for series
+                # created before this field existed.
+                series.is_active = request.POST.get('is_active') == 'on'
                 series.save()
                 if propagate:
                     updated = _propagate_series_to_children(series)
@@ -705,6 +710,45 @@ def event_series_regenerate_banner(request, series_id):
             'Banner regeneration queued. Refresh in a few seconds to see '
             'the new image.',
         )
+    return redirect('studio_event_series_detail', series_id=series.pk)
+
+
+@staff_required
+@require_POST
+def event_series_event_publish(request, series_id, event_id):
+    """Publish a draft member event so the public series page lists it.
+
+    Issue #858: replaces the confusing "draft" status as the
+    series-management surface. Publishing flips ``draft`` -> ``upcoming``
+    (the visible state the public events surfaces key on). Events already
+    in a visible state, or in a terminal state (``cancelled`` /
+    ``completed``), are left untouched so we never resurrect a cancelled
+    occurrence by clicking Publish. Redirects back to the series detail.
+    """
+    series = get_object_or_404(EventSeries, pk=series_id)
+    event = get_object_or_404(Event, pk=event_id, event_series=series)
+    if event.status == 'draft':
+        event.status = 'upcoming'
+        event.save()
+    return redirect('studio_event_series_detail', series_id=series.pk)
+
+
+@staff_required
+@require_POST
+def event_series_event_unpublish(request, series_id, event_id):
+    """Unpublish an upcoming member event, pulling it from the public page.
+
+    Issue #858: flips ``upcoming`` -> ``draft`` so the occurrence drops
+    out of every public events surface. Cancelled and completed
+    occurrences are terminal states and are intentionally not
+    "unpublished" — clicking has no effect on them. Redirects back to the
+    series detail.
+    """
+    series = get_object_or_404(EventSeries, pk=series_id)
+    event = get_object_or_404(Event, pk=event_id, event_series=series)
+    if event.status == 'upcoming':
+        event.status = 'draft'
+        event.save()
     return redirect('studio_event_series_detail', series_id=series.pk)
 
 

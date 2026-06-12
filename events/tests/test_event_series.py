@@ -10,7 +10,7 @@ Covers:
 - Public events list shows series link when an event belongs to a series.
 """
 
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -218,6 +218,104 @@ class PublicEventSeriesViewTest(TestCase):
         )
 
 
+class PublicEventSeriesVisibilityTest(TestCase):
+    """Issue #858: empty / hidden series 404 for the public, render for staff."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff858@test.com', password='pass', is_staff=True,
+        )
+        # All-draft series: no published occurrences.
+        cls.empty_series = EventSeries.objects.create(
+            name='All Draft', slug='all-draft', start_time=time(18, 0),
+        )
+        cls.draft_only = Event.objects.create(
+            title='Hidden Session', slug='all-draft-session-1',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='draft',
+            event_series=cls.empty_series, series_position=1, origin='studio',
+        )
+        # Populated, visible series with one published occurrence.
+        cls.live_series = EventSeries.objects.create(
+            name='Live Series', slug='live-series-858', start_time=time(18, 0),
+        )
+        cls.published = Event.objects.create(
+            title='Open Session', slug='live-series-858-session-1',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            event_series=cls.live_series, series_position=1, origin='studio',
+        )
+
+    def test_model_visibility_rule(self):
+        self.assertFalse(self.empty_series.is_publicly_visible())
+        self.assertTrue(self.live_series.is_publicly_visible())
+
+    def test_anonymous_404s_on_empty_series(self):
+        response = self.client.get(
+            f'/events/groups/{self.empty_series.slug}',
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_anonymous_never_sees_no_published_placeholder_or_draft(self):
+        response = self.client.get(
+            f'/events/groups/{self.empty_series.slug}',
+        )
+        self.assertNotContains(
+            response, 'No published events', status_code=404,
+        )
+        self.assertNotContains(response, 'Draft', status_code=404)
+
+    def test_staff_previews_empty_series(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(
+            f'/events/groups/{self.empty_series.slug}',
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_publishing_makes_series_reachable(self):
+        self.draft_only.status = 'upcoming'
+        self.draft_only.save()
+        response = self.client.get(
+            f'/events/groups/{self.empty_series.slug}',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Hidden Session')
+
+    def test_is_active_false_404s_even_with_published_events(self):
+        self.live_series.is_active = False
+        self.live_series.save()
+        response = self.client.get(
+            f'/events/groups/{self.live_series.slug}',
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_is_active_false_still_renders_for_staff(self):
+        self.live_series.is_active = False
+        self.live_series.save()
+        self.client.force_login(self.staff)
+        response = self.client.get(
+            f'/events/groups/{self.live_series.slug}',
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_public_series_page_never_shows_draft_word(self):
+        # A series with one published and one draft occurrence.
+        draft = Event.objects.create(
+            title='Second Session', slug='live-series-858-session-2',
+            start_datetime=timezone.now() + timedelta(days=14),
+            status='draft',
+            event_series=self.live_series, series_position=2, origin='studio',
+        )
+        response = self.client.get(
+            f'/events/groups/{self.live_series.slug}',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Open Session')
+        self.assertNotContains(response, draft.title)
+        self.assertNotContains(response, 'Draft')
+
+
 class PublicEventSeriesBannerTest(TestCase):
     """Issue #896: the public series page surfaces ``auto_banner_url``."""
 
@@ -234,6 +332,16 @@ class PublicEventSeriesBannerTest(TestCase):
             name='Plain Series', slug='plain-series',
             start_time=time(18, 0),
         )
+        # Issue #858: each series needs a published occurrence so the public
+        # page renders (an empty series 404s for non-staff).
+        for idx, series in enumerate((cls.with_banner, cls.no_banner)):
+            Event.objects.create(
+                title=f'Banner Test Session {idx}',
+                slug=f'{series.slug}-session-1',
+                start_datetime=timezone.now() + timedelta(days=7),
+                status='upcoming',
+                event_series=series, series_position=1, origin='studio',
+            )
 
     def test_header_banner_image_rendered_when_set(self):
         response = self.client.get(f'/events/groups/{self.with_banner.slug}')

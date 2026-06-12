@@ -81,6 +81,8 @@ from studio.views.event_series import (
     event_series_create,
     event_series_delete,
     event_series_detail,
+    event_series_event_publish,
+    event_series_event_unpublish,
     event_series_list,
     event_series_notify,
     event_series_regenerate_banner,
@@ -389,6 +391,16 @@ urlpatterns = [
         'event-series/<int:series_id>/regenerate-banner',
         event_series_regenerate_banner,
         name='studio_event_series_regenerate_banner',
+    ),
+    path(
+        'event-series/<int:series_id>/events/<int:event_id>/publish',
+        event_series_event_publish,
+        name='studio_event_series_event_publish',
+    ),
+    path(
+        'event-series/<int:series_id>/events/<int:event_id>/unpublish',
+        event_series_event_unpublish,
+        name='studio_event_series_event_unpublish',
     ),
     path(
         'event-series/<int:series_id>/delete',

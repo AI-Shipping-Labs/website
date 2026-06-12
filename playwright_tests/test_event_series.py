@@ -703,21 +703,23 @@ class TestScenario11StatusBadgePerOccurrence:
             wait_until="domcontentloaded",
         )
 
-        # The draft occurrence's row carries a Draft badge.
-        draft_badge = page.locator(
+        # Issue #858: the bare "Draft" badge is replaced by viewer-friendly
+        # publish wording. The draft occurrence reads "Not published".
+        draft_state = page.locator(
             f'tr:has(a[href="/studio/events/{draft.pk}/edit"]) '
-            '[data-testid="event-status-badge"]'
+            '[data-testid="event-publish-state"]'
         ).first
-        assert draft_badge.get_attribute("data-status") == "draft"
-        assert "Draft" in draft_badge.inner_text()
+        assert draft_state.get_attribute("data-status") == "draft"
+        assert "Not published" in draft_state.inner_text()
+        assert "Draft" not in draft_state.inner_text()
 
-        # The upcoming occurrence's row carries an Upcoming badge.
-        upcoming_badge = page.locator(
+        # The upcoming occurrence reads "Published".
+        upcoming_state = page.locator(
             f'tr:has(a[href="/studio/events/{upcoming.pk}/edit"]) '
-            '[data-testid="event-status-badge"]'
+            '[data-testid="event-publish-state"]'
         ).first
-        assert upcoming_badge.get_attribute("data-status") == "upcoming"
-        assert "Upcoming" in upcoming_badge.inner_text()
+        assert upcoming_state.get_attribute("data-status") == "upcoming"
+        assert "Published" in upcoming_state.inner_text()
 
         # Flip the draft occurrence to published (upcoming) via its editor.
         page.goto(
@@ -728,17 +730,17 @@ class TestScenario11StatusBadgePerOccurrence:
         page.locator("button:has-text('Save Changes')").first.click()
         page.wait_for_url(re.compile(rf".*/studio/events/{draft.pk}/edit$"))
 
-        # Back on the series page, that row no longer reads Draft.
+        # Back on the series page, that row no longer reads "Not published".
         page.goto(
             f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
-        flipped_badge = page.locator(
+        flipped_state = page.locator(
             f'tr:has(a[href="/studio/events/{draft.pk}/edit"]) '
-            '[data-testid="event-status-badge"]'
+            '[data-testid="event-publish-state"]'
         ).first
-        assert flipped_badge.get_attribute("data-status") != "draft"
-        assert "Draft" not in flipped_badge.inner_text()
+        assert flipped_state.get_attribute("data-status") != "draft"
+        assert "Not published" not in flipped_state.inner_text()
 
         ctx.close()
 
@@ -1044,5 +1046,254 @@ class TestScenario854Propagation:
         series = EventSeries.objects.get(pk=series_pk)
         for child in series.events.all():
             assert child.slug.startswith("founder-office-hours-session-")
+
+        ctx.close()
+
+
+# ---------------------------------------------------------------------------
+# Issue #858: explicit Publish model + hide-empty-series + row layout
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestScenario858PublishAndVisibility:
+    def test_publish_then_unpublish_drives_public_visibility(
+        self, django_server, browser
+    ):
+        from events.models import Event
+
+        _reset_event_state()
+        _create_staff_user("staff-eg858a@test.com")
+        # All occurrences start as draft (default status).
+        series_pk = _seed_office_hours_series()
+
+        ctx = _auth_context(browser, "staff-eg858a@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/event-series/{series_pk}/",
+            wait_until="domcontentloaded",
+        )
+
+        # Every occurrence reads "Not published" with a Publish control.
+        states = page.locator('[data-testid="event-publish-state"]')
+        assert states.count() == 3
+        assert "Not published" in states.first.inner_text()
+        publish_btns = page.locator('[data-testid="member-event-publish"]')
+        assert publish_btns.count() == 3
+
+        first_event = Event.objects.filter(
+            event_series_id=series_pk
+        ).order_by("series_position").first()
+        publish_row = page.locator(
+            f'tr:has(a[href="/studio/events/{first_event.pk}/edit"])'
+        )
+        publish_row.locator(
+            '[data-testid="member-event-publish"]'
+        ).click()
+        page.wait_for_url(
+            re.compile(rf".*/studio/event-series/{series_pk}/$")
+        )
+
+        # That row now reads "Published" and offers Unpublish.
+        publish_row = page.locator(
+            f'tr:has(a[href="/studio/events/{first_event.pk}/edit"])'
+        )
+        assert "Published" in publish_row.locator(
+            '[data-testid="event-publish-state"]'
+        ).inner_text()
+        assert publish_row.locator(
+            '[data-testid="member-event-unpublish"]'
+        ).is_visible()
+
+        # The published occurrence is now visible to an anonymous visitor and
+        # the series page loads (no 404).
+        anon = browser.new_context(viewport={"width": 1280, "height": 720})
+        anon_page = anon.new_page()
+        resp = anon_page.goto(
+            f"{django_server}/events/groups/office-hours",
+            wait_until="domcontentloaded",
+        )
+        assert resp.status == 200
+        events = anon_page.locator('[data-testid="series-event"]')
+        assert events.count() == 1
+        body = anon_page.locator("body").inner_text()
+        assert "Draft" not in body
+        anon.close()
+
+        # Unpublish pulls it back out: the only published event is gone, so the
+        # series 404s again for the anonymous visitor.
+        page.goto(
+            f"{django_server}/studio/event-series/{series_pk}/",
+            wait_until="domcontentloaded",
+        )
+        page.locator(
+            f'tr:has(a[href="/studio/events/{first_event.pk}/edit"]) '
+            '[data-testid="member-event-unpublish"]'
+        ).click()
+        page.wait_for_url(
+            re.compile(rf".*/studio/event-series/{series_pk}/$")
+        )
+
+        anon2 = browser.new_context(viewport={"width": 1280, "height": 720})
+        anon2_page = anon2.new_page()
+        resp2 = anon2_page.goto(
+            f"{django_server}/events/groups/office-hours",
+            wait_until="domcontentloaded",
+        )
+        assert resp2.status == 404
+        anon2.close()
+
+        ctx.close()
+
+    def test_empty_series_404s_for_anon_but_renders_for_staff(
+        self, django_server, browser
+    ):
+        _reset_event_state()
+        _create_staff_user("staff-eg858b@test.com")
+        # All-draft series: zero published occurrences.
+        _seed_office_hours_series()
+
+        # Anonymous visitor 404s and never sees the placeholder or "Draft".
+        anon = browser.new_context(viewport={"width": 1280, "height": 720})
+        anon_page = anon.new_page()
+        resp = anon_page.goto(
+            f"{django_server}/events/groups/office-hours",
+            wait_until="domcontentloaded",
+        )
+        assert resp.status == 404
+        body = anon_page.locator("body").inner_text()
+        assert "No published events" not in body
+        assert "Draft" not in body
+        anon.close()
+
+        # Staff previews the same empty series (renders, no 404).
+        ctx = _auth_context(browser, "staff-eg858b@test.com")
+        page = ctx.new_page()
+        resp_staff = page.goto(
+            f"{django_server}/events/groups/office-hours",
+            wait_until="domcontentloaded",
+        )
+        assert resp_staff.status == 200
+        assert page.locator('[data-testid="series-name"]').is_visible()
+        ctx.close()
+
+    def test_hide_populated_series_via_visibility_toggle(
+        self, django_server, browser
+    ):
+        from events.models import Event
+
+        _reset_event_state()
+        _create_staff_user("staff-eg858c@test.com")
+        series_pk = _seed_office_hours_series()
+        # Publish one occurrence so the series has published events.
+        Event.objects.filter(event_series_id=series_pk).update(
+            status="upcoming"
+        )
+
+        # Visible by default: anonymous can load it.
+        anon = browser.new_context(viewport={"width": 1280, "height": 720})
+        anon_page = anon.new_page()
+        assert anon_page.goto(
+            f"{django_server}/events/groups/office-hours",
+            wait_until="domcontentloaded",
+        ).status == 200
+        anon.close()
+
+        # Staff unchecks "Visible to the public" and saves metadata.
+        ctx = _auth_context(browser, "staff-eg858c@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/event-series/{series_pk}/",
+            wait_until="domcontentloaded",
+        )
+        page.uncheck('[data-testid="event-series-is-active"]')
+        page.locator('[data-testid="event-series-metadata-save"]').click()
+        page.wait_for_url(
+            re.compile(rf".*/studio/event-series/{series_pk}/$")
+        )
+
+        # Anonymous now 404s even though published events exist.
+        anon2 = browser.new_context(viewport={"width": 1280, "height": 720})
+        anon2_page = anon2.new_page()
+        assert anon2_page.goto(
+            f"{django_server}/events/groups/office-hours",
+            wait_until="domcontentloaded",
+        ).status == 404
+        anon2.close()
+
+        # Re-check and save: the page loads again for anonymous visitors.
+        page.goto(
+            f"{django_server}/studio/event-series/{series_pk}/",
+            wait_until="domcontentloaded",
+        )
+        page.check('[data-testid="event-series-is-active"]')
+        page.locator('[data-testid="event-series-metadata-save"]').click()
+        page.wait_for_url(
+            re.compile(rf".*/studio/event-series/{series_pk}/$")
+        )
+
+        anon3 = browser.new_context(viewport={"width": 1280, "height": 720})
+        anon3_page = anon3.new_page()
+        assert anon3_page.goto(
+            f"{django_server}/events/groups/office-hours",
+            wait_until="domcontentloaded",
+        ).status == 200
+        anon3.close()
+        ctx.close()
+
+    def test_series_detail_is_single_column_rows(
+        self, django_server, browser
+    ):
+        _reset_event_state()
+        _create_staff_user("staff-eg858d@test.com")
+        series_pk = _seed_office_hours_series()
+
+        ctx = _auth_context(browser, "staff-eg858d@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/event-series/{series_pk}/",
+            wait_until="domcontentloaded",
+        )
+
+        # The four key sections stack vertically (rows): member events table,
+        # add-occurrence form, metadata form, delete panel. Assert each is
+        # full-width by comparing bounding-box left edges (same x start) and
+        # strictly increasing top edges (one under the other).
+        member_table = page.locator(
+            '[data-testid="event-series-member-row"]'
+        ).first
+        add_form = page.locator('[data-testid="add-occurrence-form"]')
+        meta_form = page.locator('[data-testid="event-series-metadata-form"]')
+        delete_panel = page.locator(
+            '[data-testid="event-series-delete-panel"]'
+        )
+
+        boxes = [
+            member_table.bounding_box(),
+            add_form.bounding_box(),
+            meta_form.bounding_box(),
+            delete_panel.bounding_box(),
+        ]
+        tops = [b["y"] for b in boxes]
+        assert tops == sorted(tops), (
+            "Sections are not stacked top-to-bottom: " + str(tops)
+        )
+        # The stacked content forms (add/metadata/delete) share a left edge,
+        # confirming a single column rather than a side-by-side grid.
+        lefts = [boxes[1]["x"], boxes[2]["x"], boxes[3]["x"]]
+        assert max(lefts) - min(lefts) < 2, (
+            "Sections are not left-aligned in one column: " + str(lefts)
+        )
+
+        # The metadata save still works after the layout change.
+        page.fill('input[name="name"]', "Renamed Office Hours")
+        page.locator('[data-testid="event-series-metadata-save"]').click()
+        page.wait_for_url(
+            re.compile(rf".*/studio/event-series/{series_pk}/$")
+        )
+        assert "Renamed Office Hours" in page.locator(
+            '[data-testid="event-series-name"]'
+        ).inner_text()
 
         ctx.close()

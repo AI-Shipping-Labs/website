@@ -622,3 +622,134 @@ class StudioEventSeriesSidebarTest(StaffMixin, TestCase):
         response = self.client.get('/studio/')
         self.assertContains(response, 'data-testid="sidebar-event-series-link"')
         self.assertContains(response, '/studio/event-series/')
+
+
+class StudioEventSeriesPublishTest(StaffMixin, TestCase):
+    """Issue #858: per-event Publish / Unpublish on the series detail page."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.series = EventSeries.objects.create(
+            name='Publish Series', slug='publish-series', start_time=time(18, 0),
+        )
+        cls.draft = Event.objects.create(
+            title='Draft Session', slug='publish-series-session-1',
+            start_datetime=timezone.now() + timedelta(days=7),
+            event_series=cls.series, series_position=1,
+            status='draft', origin='studio',
+        )
+        cls.live = Event.objects.create(
+            title='Live Session', slug='publish-series-session-2',
+            start_datetime=timezone.now() + timedelta(days=14),
+            event_series=cls.series, series_position=2,
+            status='upcoming', origin='studio',
+        )
+
+    def _publish_url(self, event):
+        return (
+            f'/studio/event-series/{self.series.pk}'
+            f'/events/{event.pk}/publish'
+        )
+
+    def _unpublish_url(self, event):
+        return (
+            f'/studio/event-series/{self.series.pk}'
+            f'/events/{event.pk}/unpublish'
+        )
+
+    def test_publish_flips_draft_to_upcoming(self):
+        response = self.client.post(self._publish_url(self.draft))
+        self.assertEqual(response.status_code, 302)
+        self.draft.refresh_from_db()
+        self.assertEqual(self.draft.status, 'upcoming')
+
+    def test_unpublish_flips_upcoming_to_draft(self):
+        response = self.client.post(self._unpublish_url(self.live))
+        self.assertEqual(response.status_code, 302)
+        self.live.refresh_from_db()
+        self.assertEqual(self.live.status, 'draft')
+
+    def test_publish_does_not_resurrect_cancelled(self):
+        cancelled = Event.objects.create(
+            title='Cancelled Session', slug='publish-series-session-3',
+            start_datetime=timezone.now() + timedelta(days=21),
+            event_series=self.series, series_position=3,
+            status='cancelled', origin='studio',
+        )
+        self.client.post(self._publish_url(cancelled))
+        cancelled.refresh_from_db()
+        self.assertEqual(cancelled.status, 'cancelled')
+
+    def test_publish_requires_post(self):
+        response = self.client.get(self._publish_url(self.draft))
+        self.assertEqual(response.status_code, 405)
+        self.draft.refresh_from_db()
+        self.assertEqual(self.draft.status, 'draft')
+
+    def test_publish_is_staff_only(self):
+        User.objects.create_user(email='plain858@test.com', password='pass')
+        client = Client()
+        client.login(email='plain858@test.com', password='pass')
+        response = client.post(self._publish_url(self.draft))
+        self.assertEqual(response.status_code, 403)
+        self.draft.refresh_from_db()
+        self.assertEqual(self.draft.status, 'draft')
+
+    def test_publish_rejects_event_from_other_series(self):
+        other = EventSeries.objects.create(
+            name='Other', slug='other-pub', start_time=time(18, 0),
+        )
+        stray = Event.objects.create(
+            title='Stray', slug='stray-858',
+            start_datetime=timezone.now() + timedelta(days=2),
+            event_series=other, series_position=1,
+            status='draft', origin='studio',
+        )
+        response = self.client.post(self._publish_url(stray))
+        self.assertEqual(response.status_code, 404)
+
+    def test_detail_renders_not_published_wording_not_draft(self):
+        response = self.client.get(f'/studio/event-series/{self.series.pk}/')
+        self.assertContains(response, 'Not published')
+        self.assertContains(response, 'data-testid="member-event-publish"')
+        self.assertContains(response, 'data-testid="member-event-unpublish"')
+        # The bare "Draft" badge wording is gone from the member table.
+        self.assertNotContains(response, '>Draft<')
+
+
+class StudioEventSeriesVisibilityToggleTest(StaffMixin, TestCase):
+    """Issue #858: the metadata form drives ``EventSeries.is_active``."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.series = EventSeries.objects.create(
+            name='Toggle Series', slug='toggle-series', start_time=time(18, 0),
+        )
+
+    def test_metadata_save_without_checkbox_hides_series(self):
+        # An unchecked "Visible to the public" box is absent from POST.
+        self.client.post(
+            f'/studio/event-series/{self.series.pk}/',
+            {'name': self.series.name, 'slug': self.series.slug,
+             'description': ''},
+        )
+        self.series.refresh_from_db()
+        self.assertFalse(self.series.is_active)
+
+    def test_metadata_save_with_checkbox_keeps_series_visible(self):
+        self.series.is_active = False
+        self.series.save()
+        self.client.post(
+            f'/studio/event-series/{self.series.pk}/',
+            {'name': self.series.name, 'slug': self.series.slug,
+             'description': '', 'is_active': 'on'},
+        )
+        self.series.refresh_from_db()
+        self.assertTrue(self.series.is_active)
+
+    def test_detail_renders_visibility_checkbox(self):
+        response = self.client.get(f'/studio/event-series/{self.series.pk}/')
+        self.assertContains(response, 'data-testid="event-series-is-active"')
+        self.assertContains(response, 'Visible to the public')

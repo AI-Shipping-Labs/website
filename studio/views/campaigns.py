@@ -15,11 +15,20 @@ from accounts.utils.tags import normalize_tags
 from email_app.models import EmailCampaign
 from email_app.services.email_classification import EMAIL_KIND_PROMOTIONAL
 from email_app.services.email_service import EmailService, EmailServiceError
+from integrations.config import get_config
 from studio.decorators import staff_required
 
 logger = logging.getLogger(__name__)
 
 TEST_RECIPIENT_SPLIT_RE = re.compile(r"[\s,;]+")
+# Session key + cap for remembering the operator's recent test-send
+# addresses so they resurface as one-click chips (issue #921). No DB
+# model — test sends don't write EmailLog rows, so the session is the
+# lightest correct place to persist this per-operator convenience list.
+RECENT_TEST_RECIPIENTS_SESSION_KEY = "recent_test_recipients"
+RECENT_TEST_RECIPIENTS_CAP = 5
+# Cap the merged You/Recent/Common suggestion row so it stays compact.
+TEST_RECIPIENT_SUGGESTIONS_CAP = 8
 # Operators may type tags comma-, space-, semicolon-, or newline-separated
 # in the include/exclude inputs (issue #357). The form also submits HTML
 # multi-select values as a list, so we accept both shapes.
@@ -30,7 +39,99 @@ TEST_EMAIL_FOOTER_NOTE = (
 User = get_user_model()
 
 
-def _build_campaign_detail_context(campaign, *, test_recipients=""):
+def _valid_email_or_none(candidate):
+    """Return the trimmed address if it validates, else None."""
+    candidate = (candidate or "").strip()
+    if not candidate:
+        return None
+    try:
+        validate_email(candidate)
+    except ValidationError:
+        return None
+    return candidate
+
+
+def _split_recipient_config(raw):
+    """Split a free-form CAMPAIGN_TEST_RECIPIENTS string into addresses."""
+    if not raw:
+        return []
+    return [piece for piece in TEST_RECIPIENT_SPLIT_RE.split(raw) if piece.strip()]
+
+
+def _test_recipient_suggestions(request):
+    """Build the ordered, de-duplicated, validated suggestion list.
+
+    Sources, in display order (issue #921):
+
+    1. ``You`` — the operator's own ``request.user.email``, always first.
+    2. ``Recent`` — addresses the operator most recently test-sent to,
+       persisted in ``request.session`` (most-recent-first).
+    3. ``Common`` — the configurable ``CAMPAIGN_TEST_RECIPIENTS`` list,
+       read via ``get_config`` (Studio-editable, no redeploy).
+
+    Invalid addresses are silently dropped. De-duplication is
+    case-insensitive (first occurrence + its source ordering wins) and
+    the merged list is capped at ``TEST_RECIPIENT_SUGGESTIONS_CAP`` so
+    the chip row stays compact.
+    """
+    suggestions = []
+    seen = set()
+
+    def _add(raw_email, label):
+        email = _valid_email_or_none(raw_email)
+        if email is None:
+            return
+        normalized = email.casefold()
+        if normalized in seen:
+            return
+        seen.add(normalized)
+        suggestions.append({"email": email, "label": label})
+
+    user = getattr(request, "user", None)
+    if user is not None and getattr(user, "is_authenticated", False):
+        _add(getattr(user, "email", ""), "You")
+
+    session = getattr(request, "session", None)
+    if session is not None:
+        for email in session.get(RECENT_TEST_RECIPIENTS_SESSION_KEY, []) or []:
+            _add(email, "Recent")
+
+    for email in _split_recipient_config(get_config("CAMPAIGN_TEST_RECIPIENTS", "")):
+        _add(email, "Common")
+
+    return suggestions[:TEST_RECIPIENT_SUGGESTIONS_CAP]
+
+
+def _remember_recent_test_recipients(request, recipients):
+    """Prepend just-sent addresses to the session recent list (cap 5).
+
+    Most-recent-first, de-duplicated case-insensitively, so the next
+    visit resurfaces them as ``Recent`` chips.
+    """
+    session = getattr(request, "session", None)
+    if session is None or not recipients:
+        return
+
+    existing = session.get(RECENT_TEST_RECIPIENTS_SESSION_KEY, []) or []
+    merged = list(recipients) + list(existing)
+
+    ordered = []
+    seen = set()
+    for email in merged:
+        email = (email or "").strip()
+        if not email:
+            continue
+        normalized = email.casefold()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(email)
+
+    session[RECENT_TEST_RECIPIENTS_SESSION_KEY] = ordered[:RECENT_TEST_RECIPIENTS_CAP]
+    session.modified = True
+
+
+def _build_campaign_detail_context(campaign, *, test_recipients="", test_recipient_suggestions=None):
     """Build the shared context for the campaign detail page."""
     engagement = campaign.email_logs.aggregate(
         sent=Count("id"),
@@ -54,6 +155,7 @@ def _build_campaign_detail_context(campaign, *, test_recipients=""):
             "clicked_rate": clicked_rate,
         },
         "test_recipients": test_recipients,
+        "test_recipient_suggestions": test_recipient_suggestions or [],
     }
 
 
@@ -333,7 +435,10 @@ def campaign_detail(request, campaign_id):
         ),
     )
 
-    context = _build_campaign_detail_context(campaign)
+    context = _build_campaign_detail_context(
+        campaign,
+        test_recipient_suggestions=_test_recipient_suggestions(request),
+    )
     context["preview_html"] = preview_html
     return render(request, "studio/campaigns/detail.html", context)
 
@@ -367,6 +472,7 @@ def campaign_test_send(request, campaign_id):
             _build_campaign_detail_context(
                 campaign,
                 test_recipients=raw_test_recipients,
+                test_recipient_suggestions=_test_recipient_suggestions(request),
             ),
         )
 
@@ -382,6 +488,7 @@ def campaign_test_send(request, campaign_id):
             _build_campaign_detail_context(
                 campaign,
                 test_recipients=raw_test_recipients,
+                test_recipient_suggestions=_test_recipient_suggestions(request),
             ),
         )
 
@@ -393,6 +500,7 @@ def campaign_test_send(request, campaign_id):
             _build_campaign_detail_context(
                 campaign,
                 test_recipients=raw_test_recipients,
+                test_recipient_suggestions=_test_recipient_suggestions(request),
             ),
         )
 
@@ -437,6 +545,7 @@ def campaign_test_send(request, campaign_id):
             sent.append(recipient)
 
     if failed and sent:
+        _remember_recent_test_recipients(request, sent)
         messages.warning(
             request,
             "Sent test email to "
@@ -458,9 +567,11 @@ def campaign_test_send(request, campaign_id):
             _build_campaign_detail_context(
                 campaign,
                 test_recipients=raw_test_recipients,
+                test_recipient_suggestions=_test_recipient_suggestions(request),
             ),
         )
 
+    _remember_recent_test_recipients(request, sent)
     messages.success(
         request,
         f"Test email sent to {len(sent)} address(es): {_summarize_recipients(sent)}.",

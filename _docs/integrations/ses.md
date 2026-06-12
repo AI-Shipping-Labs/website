@@ -373,3 +373,34 @@ slower overall delivery for a gentler send rate.
 Test vs live: Tests and local dev can leave it at the default. Tune
 it in production if SES throttling (rate-exceeded) errors appear in
 campaign sends.
+
+## CAMPAIGN_TEST_RECIPIENTS
+
+Purpose: A list of commonly-used test-send addresses surfaced as
+click-to-fill chips beneath the Test Recipients field on the campaign
+detail page (issue #921). Operators repeatedly send campaign tests to
+the same handful of mailboxes (a teammate, a QA seed inbox); this lets
+them fill the field with one click instead of retyping. The chips also
+include the operator's own email (always first) and the addresses they
+most recently test-sent to (remembered per browser session), so this
+setting only needs the shared/team addresses.
+
+Format: Comma-, space-, semicolon-, or newline-separated email
+addresses (e.g. `seed@example.com, team@example.com`). Invalid entries
+are silently dropped so a typo never errors the page. The merged
+suggestion list (own email + recent + this list) is de-duplicated
+case-insensitively and capped at 8 chips.
+
+Default: empty. When blank, only the operator's own email and their
+recently-sent addresses appear (and nothing at all renders if both are
+empty).
+
+Where to find it: Studio-only setting (Email (SES) group). These are
+operator-chosen test mailboxes, not a value read from any AWS
+dashboard.
+
+Prereqs: None. Purely a UI convenience on the campaign test-send form;
+it does not affect who a real campaign send reaches.
+
+Test vs live: Safe to leave blank in tests and local dev. Set it in
+production with the team's shared QA/test inboxes.

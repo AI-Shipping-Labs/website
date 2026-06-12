@@ -761,6 +761,40 @@ sync + `tiers.yaml` seed). Do not add `django_db`, `local_only`,
 file; if you need ORM seeding, the test belongs in a regular
 `test_*.py` file marked `local_only`.
 
+Transient-500 retry wrapper (Issue #928): every `test_dev_smoke_*.py`
+navigates via `goto_with_retry(page, url, ...)` from
+`playwright_tests/conftest.py`, not raw `page.goto`. The dev environment
+runs on ECS and can briefly serve a 5xx (500/502/503/504) while a rolling
+deploy swaps tasks; a single transient blip used to fail the whole shard
+and fire `[CI] Scheduled Playwright (dev) full suite failing` on a false
+red. `goto_with_retry` does a bounded retry (`attempts=3`, constant
+`backoff_seconds=2.0`, so at most two retries / ~4s of added wait worst
+case) on a retryable result — `response is None` (navigation error) or
+`status >= 500`. The retry decision is the pure, unit-tested
+`_is_retryable_status(status)`. Invariants:
+
+- A non-5xx status (200, 301/302, 401, 403, 404, ...) is NEVER retried —
+  it returns on the first attempt so callers assert on it exactly as
+  before. The unknown-route test (`expected_status=404`) still gets its
+  404 on the first attempt.
+- The happy path adds zero latency: a first-attempt 200 returns
+  immediately with no backoff sleep.
+- A persistent 5xx STILL FAILS the test. The helper never raises and never
+  fabricates a 200; after exhausting `attempts` it returns the last (still
+  5xx / `None`) response, so the existing `assert response.status == 200`
+  produces the normal, readable failure. The retry absorbs a transient
+  blip, it never masks a sustained outage.
+
+The retry helper is exercised without a live dev environment by
+`tests/test_dev_smoke_goto_retry.py` (Django `SimpleTestCase` tagged
+`core`, backoff sleep stubbed), so the logic is covered by `make
+test-core` and push CI. The attempt count and backoff are test-harness
+tuning constants (function kwargs in `conftest.py`), not runtime product
+settings, so they intentionally do NOT go through the `IntegrationSetting`
+framework. The infra root cause (why dev 5xxes during a deploy at all)
+is tracked separately in `ai-shipping-labs-infra` (ECS task count, ALB
+deregistration delay, health-check grace period).
+
 Failure-issue lineages are intentionally separate:
 
 - `[CI] Scheduled Playwright full suite failing` — local-runner suite

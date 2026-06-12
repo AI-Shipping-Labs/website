@@ -7,6 +7,8 @@ the local Django ORM, inject session cookies, or submit forms.
 
 import os
 
+from playwright_tests.conftest import goto_with_retry
+
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -18,9 +20,7 @@ def test_register_page_renders_form(django_server, page):
     and assert on the final form rather than depending on whichever URL
     the dev environment exposes.
     """
-    response = page.goto(
-        f"{django_server}/accounts/register/", wait_until="domcontentloaded"
-    )
+    response = goto_with_retry(page, f"{django_server}/accounts/register/")
     assert response.status == 200, (
         f"/accounts/register/ returned {response.status}"
     )

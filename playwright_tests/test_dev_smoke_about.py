@@ -15,7 +15,11 @@ import os
 
 import pytest
 
-from playwright_tests.conftest import base_url_is_local, ensure_tiers
+from playwright_tests.conftest import (
+    base_url_is_local,
+    ensure_tiers,
+    goto_with_retry,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -31,9 +35,7 @@ def _ensure_tiers_seeded(django_db_blocker):
 
 def test_about_page_renders_with_founder_links(django_server, page):
     """/about returns 200 and renders the founder LinkedIn links."""
-    response = page.goto(
-        f"{django_server}/about", wait_until="domcontentloaded"
-    )
+    response = goto_with_retry(page, f"{django_server}/about")
     assert response.status == 200, f"/about returned {response.status}"
     # The founder bio cards each link to LinkedIn. Lucide dropped brand
     # icons around v0.475 (#277), so this assertion also guards against

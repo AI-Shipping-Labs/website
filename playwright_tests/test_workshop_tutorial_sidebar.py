@@ -25,6 +25,9 @@ os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')
 pytestmark = pytest.mark.local_only
 
 from playwright_tests.conftest import (  # noqa: E402
+    SETTLE_TIMEOUT_MS,
+)
+from playwright_tests.conftest import (  # noqa: E402
     auth_context as _auth_context,
 )
 from playwright_tests.conftest import (  # noqa: E402
@@ -198,7 +201,10 @@ class TestSidebarFitsColumnOnLongTitle:
                   return window.scrollY >= Math.min(800, max);
                 }
                 """,
-                timeout=2000,
+                # Load-tolerant scroll-settle budget (#903): a contended
+                # 4-way shard can repaint after a tight 2000ms poll even
+                # though the scroll position is already correct.
+                timeout=SETTLE_TIMEOUT_MS,
             )
 
             # Take an after-scroll screenshot for review.

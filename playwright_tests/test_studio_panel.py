@@ -29,6 +29,10 @@ import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import (
+    SETTLE_TIMEOUT_MS,
+    settle_click,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
 from playwright_tests.conftest import (
@@ -840,8 +844,10 @@ class TestScenario10StaffExportsSubscribers:
         for i in range(2):
             assert f"inactive-{i}@test.com" in table_text
 
-        # Step 2: Switch to the "Subscribers" chip.
-        page.locator('a[data-filter="subscribers"]').click()
+        # Step 2: Switch to the "Subscribers" chip. Settle on the chip before
+        # clicking and use a load-tolerant click budget (#903): a contended
+        # shard may not have the chip interactive within the default timeout.
+        settle_click(page.locator('a[data-filter="subscribers"]'))
         page.wait_for_load_state("domcontentloaded")
         assert "filter=subscribers" in page.url
 
@@ -853,7 +859,7 @@ class TestScenario10StaffExportsSubscribers:
             assert f"inactive-{i}@test.com" not in table_text
 
         # Step 3: Switch back to the "All" chip.
-        page.locator('a[data-filter="all"]').click()
+        settle_click(page.locator('a[data-filter="all"]'))
         page.wait_for_load_state("domcontentloaded")
         assert "filter=all" in page.url
 
@@ -865,11 +871,15 @@ class TestScenario10StaffExportsSubscribers:
             assert f"inactive-{i}@test.com" in table_text
 
         # Step 4: Click the export CSV link -- it inherits the current filter.
-        export_href = page.locator('a:has-text("Export CSV")').get_attribute("href")
+        export_link = page.locator('a:has-text("Export CSV")')
+        export_href = export_link.get_attribute("href")
         assert "filter=all" in export_href
         assert "slack=any" in export_href
+        # Settle on the export link before triggering the download with a
+        # load-tolerant click budget (#903).
+        export_link.wait_for(state="visible", timeout=SETTLE_TIMEOUT_MS)
         with page.expect_download() as download_info:
-            page.click('a:has-text("Export CSV")')
+            export_link.click(timeout=SETTLE_TIMEOUT_MS)
 
         download = download_info.value
         assert download.suggested_filename.startswith("aishippinglabs-contacts-")

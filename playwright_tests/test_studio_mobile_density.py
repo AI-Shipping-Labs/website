@@ -33,6 +33,9 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from playwright_tests.conftest import (
+    settle_click,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -481,8 +484,11 @@ def test_users_list_dense_rows_and_view_link_works(django_server, browser):
         assert h < 240, f"User row height {h}px exceeds 240px target"
 
     # Tap the View action on the first user row → navigates to detail.
+    # Settle on the link's visibility before tapping and use a load-tolerant
+    # click budget (#903): on a contended shard the dense table can finish
+    # rendering after the default click timeout would have fired.
     first_row = page.locator("tbody tr").first
-    first_row.locator('[data-testid="user-view-link"]').first.click()
+    settle_click(first_row.locator('[data-testid="user-view-link"]').first)
     page.wait_for_load_state("domcontentloaded")
     assert "/studio/users/" in page.url
     assert page.url != f"{django_server}/studio/users/"

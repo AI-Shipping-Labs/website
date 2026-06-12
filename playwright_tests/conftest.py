@@ -390,6 +390,36 @@ VIEWPORT = {"width": 1280, "height": 720}
 
 DEFAULT_PASSWORD = "TestPass123!"
 
+# Shared, load-tolerant settle budget for client-side UI waits
+# (``wait_for_function`` / ``locator.click`` / ``expect(...).to_be_visible``).
+#
+# Rationale (issue #903): the full suite runs 4 shards in parallel on a single
+# shared CI runner (``scheduled-playwright.yml``). A tight sub-3s poll that is
+# correct in isolation can lose the CPU race on a contended shard — the page IS
+# in the right state, but the repaint/scroll-settle lands after the wait budget
+# expires, producing a spurious ``Timeout 2000ms exceeded`` red. These reds are
+# never real product bugs; they rotate run-to-run to whichever test happens to
+# starve. Reusing one generous-but-bounded budget for these settle waits keeps
+# the happy path instant (a fast shard still resolves immediately) while giving
+# a loaded shard enough headroom to settle.
+#
+# Do NOT re-introduce a 2000ms (or default-30s ``click``) settle poll for these
+# load-sensitive waits — route them through this constant instead.
+SETTLE_TIMEOUT_MS = 8000
+
+
+def settle_click(locator, *, timeout=SETTLE_TIMEOUT_MS):
+    """Wait for ``locator`` to be visible, then click it with a load-tolerant
+    timeout.
+
+    Thin helper for load-sensitive Studio-list / reader actions (issue #903).
+    On a fast shard the visibility wait resolves instantly and the click is a
+    no-op-fast; on a contended shard the explicit settle + raised click budget
+    absorb the shard-contention delay instead of firing a spurious timeout.
+    """
+    locator.wait_for(state="visible", timeout=timeout)
+    locator.click(timeout=timeout)
+
 
 def expand_studio_sidebar_section(page, slug):
     """Expand a Studio sidebar section if it is currently collapsed."""

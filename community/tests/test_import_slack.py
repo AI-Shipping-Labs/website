@@ -278,7 +278,9 @@ class SlackImportWelcomeEmailTest(TestCase):
         self.assertIn("does not grant paid membership", html_body)
         self.assertIn("Set your password", html_body)
         self.assertIn("Sign in to AI Shipping Labs", html_body)
-        self.assertEqual(mock_send.call_args.kwargs["email_kind"], "transactional")
+        self.assertEqual(
+            mock_send.call_args.kwargs["email_type"], "welcome_imported"
+        )
         self.assertIsNone(mock_send.call_args.kwargs["unsubscribe_url"])
         self.assertNotIn("/api/unsubscribe?token=", html_body)
         self.assertNotIn("unsubscribe link below", html_body)

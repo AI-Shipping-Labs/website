@@ -11,10 +11,12 @@ EMAIL_KIND_PROMOTIONAL = "promotional"
 
 TRANSACTIONAL_FROM_KEY = "SES_TRANSACTIONAL_FROM_EMAIL"
 PROMOTIONAL_FROM_KEY = "SES_PROMOTIONAL_FROM_EMAIL"
+WELCOME_FROM_KEY = "SES_WELCOME_FROM_EMAIL"
 LEGACY_FROM_KEY = "SES_FROM_EMAIL"
 
 DEFAULT_TRANSACTIONAL_FROM_EMAIL = "noreply@aishippinglabs.com"
 DEFAULT_PROMOTIONAL_FROM_EMAIL = "content@aishippinglabs.com"
+DEFAULT_WELCOME_FROM_EMAIL = "welcome@aishippinglabs.com"
 
 # community_invite is transactional: it grants access to the paid/member
 # community. lead_magnet_delivery is transactional: it delivers a resource the
@@ -61,6 +63,27 @@ PROMOTIONAL_EMAIL_TYPES = {
     "campaign",
     "workshop_announcement",
 }
+
+# Issue #937: welcome emails go out from a dedicated `welcome@` sender, but
+# they MUST keep their transactional delivery semantics — an unsubscribed
+# paid user still receives their welcome, and welcome mail gets no
+# unsubscribe footer. So these stay a SUBSET of TRANSACTIONAL_EMAIL_TYPES;
+# only the From address is overridden, never the classification.
+WELCOME_EMAIL_TYPES = {
+    "welcome",
+    "cofounder_welcome",
+    "basic_welcome",
+    "premium_welcome",
+    "welcome_imported",
+}
+
+# Guard against anyone editing one set without the other. If a welcome type
+# is ever dropped from TRANSACTIONAL_EMAIL_TYPES it would silently lose its
+# unsubscribe-bypass delivery semantics for paid users.
+assert WELCOME_EMAIL_TYPES <= TRANSACTIONAL_EMAIL_TYPES, (
+    "WELCOME_EMAIL_TYPES must be a subset of TRANSACTIONAL_EMAIL_TYPES so "
+    "welcome emails keep transactional delivery semantics."
+)
 
 
 class EmailClassificationError(ValueError):
@@ -118,3 +141,31 @@ def get_sender_for_kind(email_kind):
         return get_config(LEGACY_FROM_KEY, default)
 
     return default
+
+
+def get_sender_for_email_type(email_type):
+    """Resolve the configured From address for a specific email type.
+
+    Welcome types (issue #937) resolve to the dedicated welcome sender via a
+    per-type override on top of the transactional kind — their classification
+    and delivery semantics are unchanged. Every other classified type
+    delegates to ``get_sender_for_kind(classify_email_type(...))`` so
+    behaviour is identical to before.
+
+    ``None`` (or any unclassified type) falls back to the transactional
+    sender, matching the historical ``email_kind='transactional'`` default
+    of ``_send_ses`` — this covers low-level callers that render their own
+    HTML and pass no template name (e.g. campaign preview sends pass
+    ``'campaign'`` explicitly; SES-plumbing tests pass nothing).
+    """
+    if email_type in WELCOME_EMAIL_TYPES:
+        if _has_runtime_value(WELCOME_FROM_KEY, DEFAULT_WELCOME_FROM_EMAIL):
+            return get_config(WELCOME_FROM_KEY, DEFAULT_WELCOME_FROM_EMAIL)
+        if _has_runtime_value(LEGACY_FROM_KEY):
+            return get_config(LEGACY_FROM_KEY, DEFAULT_WELCOME_FROM_EMAIL)
+        return DEFAULT_WELCOME_FROM_EMAIL
+
+    if email_type in PROMOTIONAL_EMAIL_TYPES:
+        return get_sender_for_kind(EMAIL_KIND_PROMOTIONAL)
+
+    return get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL)

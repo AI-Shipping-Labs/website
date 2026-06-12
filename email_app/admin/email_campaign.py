@@ -7,7 +7,6 @@ from django.http import JsonResponse
 from django.urls import path, reverse
 
 from email_app.models import EmailCampaign
-from email_app.services.email_classification import EMAIL_KIND_PROMOTIONAL
 from studio.admin_links import studio_link
 
 logger = logging.getLogger(__name__)
@@ -125,7 +124,7 @@ class EmailCampaignAdmin(admin.ModelAdmin):
                 request.user.email,
                 f'[TEST] {campaign.subject}',
                 full_html,
-                email_kind=EMAIL_KIND_PROMOTIONAL,
+                email_type='campaign',
                 unsubscribe_url=unsubscribe_url,
             )
 

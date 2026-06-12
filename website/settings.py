@@ -403,6 +403,10 @@ SES_PROMOTIONAL_FROM_EMAIL = os.environ.get(
     'SES_PROMOTIONAL_FROM_EMAIL',
     SES_FROM_EMAIL or 'content@aishippinglabs.com',
 )
+SES_WELCOME_FROM_EMAIL = os.environ.get(
+    'SES_WELCOME_FROM_EMAIL',
+    SES_FROM_EMAIL or 'welcome@aishippinglabs.com',
+)
 SES_CONFIGURATION_SET_NAME = (
     '' if TESTING else os.environ.get('SES_CONFIGURATION_SET_NAME', '')
 )

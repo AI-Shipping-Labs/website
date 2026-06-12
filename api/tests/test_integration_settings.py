@@ -26,6 +26,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from accounts.models import Token
+from email_app.services.email_classification import get_sender_for_email_type
+from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from integrations.settings_registry import INTEGRATION_GROUPS
 
@@ -155,6 +157,31 @@ class IntegrationSettingsApiTest(TestCase):
         row = IntegrationSetting.objects.get(key="CONTENT_CDN_BASE")
         self.assertEqual(row.value, "https://cdn.example.com")
         self.assertEqual(row.group, "s3_content")
+
+    def test_post_welcome_from_email_updates_setting(self):
+        # Issue #937: the welcome sender is registry-driven, so it is
+        # writable via the API and a subsequent resolution reflects it.
+        self.addCleanup(clear_config_cache)
+        response = self._post_json({
+            "updates": [
+                {
+                    "key": "SES_WELCOME_FROM_EMAIL",
+                    "value": "hello@aishippinglabs.com",
+                },
+            ],
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok", "updated": 1})
+        row = IntegrationSetting.objects.get(key="SES_WELCOME_FROM_EMAIL")
+        self.assertEqual(row.value, "hello@aishippinglabs.com")
+        self.assertEqual(row.group, "ses")
+
+        clear_config_cache()
+        self.assertEqual(
+            get_sender_for_email_type("welcome"),
+            "hello@aishippinglabs.com",
+        )
 
     def test_post_ses_configuration_set_uses_column_safe_description(self):
         """Regression for #814: prod Postgres enforces description max_length."""
@@ -443,6 +470,18 @@ class IntegrationSettingsGetApiTest(TestCase):
         self.assertEqual(sample["label"], "Stripe")
         self.assertTrue(sample["is_secret"])
         self.assertFalse(sample["is_boolean"])
+
+    def test_get_lists_welcome_from_email_key(self):
+        # Issue #937: the registry pickup surfaces the welcome sender in the
+        # ses group, never leaking its value.
+        response = self._get()
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+
+        entry = self._entry_for(body, "SES_WELCOME_FROM_EMAIL")
+        self.assertEqual(entry["group"], "ses")
+        self.assertFalse(entry["is_secret"])
+        self.assertNotIn("value", entry)
 
     # ---- auth -------------------------------------------------------------
 

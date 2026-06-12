@@ -21,9 +21,9 @@ from django.test import TestCase, override_settings, tag
 
 from email_app.models import EmailLog
 from email_app.services.email_classification import (
-    EMAIL_KIND_PROMOTIONAL,
     EMAIL_KIND_TRANSACTIONAL,
     classify_email_type,
+    get_sender_for_email_type,
 )
 from email_app.services.email_service import EmailService, EmailServiceError
 from integrations.config import clear_config_cache
@@ -130,14 +130,18 @@ class EmailServiceSendTest(TestCase):
         self.assertNotIn('/api/unsubscribe?token=', html_body)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-msg-006b')
-    def test_transactional_send_uses_transactional_kind(self, mock_ses):
+    def test_transactional_send_passes_email_type_and_no_unsubscribe(self, mock_ses):
+        # Issue #937: send() threads the template name through as email_type
+        # so _send_ses can resolve the From address per type. The From
+        # address itself (welcome@ vs noreply@) is asserted in the
+        # SES-integration tests where the real boto3 payload is captured.
         self.service.send(
             self.user,
             'password_reset',
             {'reset_url': 'https://example.test/reset'},
         )
 
-        self.assertEqual(mock_ses.call_args.kwargs['email_kind'], EMAIL_KIND_TRANSACTIONAL)
+        self.assertEqual(mock_ses.call_args.kwargs['email_type'], 'password_reset')
         self.assertIsNone(mock_ses.call_args.kwargs['unsubscribe_url'])
 
     @patch.object(EmailService, '_send_ses', return_value='ses-msg-007')
@@ -453,7 +457,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'to@example.com',
             'Sub',
             '<html/>',
-            email_kind=EMAIL_KIND_TRANSACTIONAL,
+            email_type='password_reset',
         )
 
         call_kwargs = mock_client.send_email.call_args[1]
@@ -476,7 +480,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'to@example.com',
             'Sub',
             '<html/>',
-            email_kind=EMAIL_KIND_TRANSACTIONAL,
+            email_type='password_reset',
         )
 
         call_kwargs = mock_client.send_email.call_args[1]
@@ -493,7 +497,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'to@example.com',
             'Sub',
             '<html/>',
-            email_kind=EMAIL_KIND_PROMOTIONAL,
+            email_type='campaign',
         )
 
         call_kwargs = mock_client.send_email.call_args[1]
@@ -514,7 +518,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'to@example.com',
             'Sub',
             '<html/>',
-            email_kind=EMAIL_KIND_TRANSACTIONAL,
+            email_type='password_reset',
         )
 
         call_kwargs = mock_client.send_email.call_args[1]
@@ -548,6 +552,123 @@ class EmailServiceSESIntegrationTest(TestCase):
 
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertNotIn('ConfigurationSetName', call_kwargs)
+
+    # -- Issue #937: per-type welcome sender on the send chokepoint ---------
+
+    @patch('email_app.services.email_service.boto3')
+    def test_welcome_send_uses_welcome_from_address(self, mock_boto3):
+        """A welcome-type send through the full send() path must hand SES
+        the dedicated welcome@ From address."""
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-w'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service.send(self.user, 'welcome', {'tier_name': 'Main'})
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(
+            call_kwargs['FromEmailAddress'],
+            'welcome@aishippinglabs.com',
+        )
+
+    @patch('email_app.services.email_service.boto3')
+    def test_password_reset_send_uses_noreply_from_address(self, mock_boto3):
+        """A non-welcome transactional send is unchanged: noreply@."""
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-pr'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service.send(
+            self.user,
+            'password_reset',
+            {'reset_url': 'https://example.test/reset'},
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(
+            call_kwargs['FromEmailAddress'],
+            'noreply@aishippinglabs.com',
+        )
+
+    @patch('email_app.services.email_service.boto3')
+    def test_welcome_send_to_unsubscribed_user_still_sends(self, mock_boto3):
+        """Delivery semantics preserved: an unsubscribed user is NOT skipped
+        for a welcome send — SES is invoked and an EmailLog is returned."""
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-wu'}
+        mock_boto3.client.return_value = mock_client
+
+        self.user.unsubscribed = True
+        self.user.save(update_fields=['unsubscribed'])
+
+        log = self.service.send(self.user, 'welcome', {'tier_name': 'Main'})
+
+        self.assertIsNotNone(log)
+        mock_client.send_email.assert_called_once()
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(
+            call_kwargs['FromEmailAddress'],
+            'welcome@aishippinglabs.com',
+        )
+
+    @patch('email_app.services.email_service.boto3')
+    def test_promotional_send_to_unsubscribed_user_skipped(self, mock_boto3):
+        """Regression control: an unsubscribed user IS skipped for a
+        promotional send (SES not invoked, no EmailLog)."""
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-cu'}
+        mock_boto3.client.return_value = mock_client
+
+        self.user.unsubscribed = True
+        self.user.save(update_fields=['unsubscribed'])
+
+        log = self.service.send(self.user, 'campaign', {'subject': 'Hi'})
+
+        self.assertIsNone(log)
+        mock_client.send_email.assert_not_called()
+
+    @patch('email_app.services.email_service.boto3')
+    def test_welcome_send_has_no_unsubscribe_header(self, mock_boto3):
+        """A welcome send is still transactional: no List-Unsubscribe header
+        and no unsubscribe footer in the body."""
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-wh'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service.send(self.user, 'welcome', {'tier_name': 'Main'})
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        headers = call_kwargs['Content']['Simple'].get('Headers', [])
+        header_names = {h['Name'] for h in headers}
+        self.assertNotIn('List-Unsubscribe', header_names)
+        self.assertNotIn('List-Unsubscribe-Post', header_names)
+
+        html_body = call_kwargs['Content']['Simple']['Body']['Html']['Data']
+        self.assertNotIn('/api/unsubscribe?token=', html_body)
+
+    @override_settings(SES_WELCOME_FROM_EMAIL='hello@aishippinglabs.com')
+    @patch('email_app.services.email_service.boto3')
+    def test_welcome_send_honours_db_or_env_welcome_override(self, mock_boto3):
+        """The welcome From address is resolved through get_config, so an
+        override (env here) flows to the SES payload with no code change."""
+        clear_config_cache()
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-ov'}
+        mock_boto3.client.return_value = mock_client
+
+        # Sanity: the resolver agrees with what _send_ses will use.
+        self.assertEqual(
+            get_sender_for_email_type('welcome'),
+            'hello@aishippinglabs.com',
+        )
+
+        self.service.send(self.user, 'welcome', {'tier_name': 'Main'})
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(
+            call_kwargs['FromEmailAddress'],
+            'hello@aishippinglabs.com',
+        )
 
 
 class BuildUnsubscribeUrlTest(TestCase):

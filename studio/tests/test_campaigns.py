@@ -270,7 +270,7 @@ class StudioCampaignDetailTest(TestCase):
             "preview@example.com",
             "[TEST] Detail Campaign",
             "<html>test</html>",
-            email_kind="promotional",
+            email_type="campaign",
             unsubscribe_url=None,
         )
 
@@ -297,7 +297,7 @@ class StudioCampaignDetailTest(TestCase):
         html = mock_ses.call_args[0][2]
         self.assertIn("/api/unsubscribe?token=", html)
         self.assertNotIn('<p class="verify-email-cta">', html)
-        self.assertEqual(mock_ses.call_args.kwargs["email_kind"], "promotional")
+        self.assertEqual(mock_ses.call_args.kwargs["email_type"], "campaign")
         self.assertIn(
             "/api/unsubscribe?token=",
             mock_ses.call_args.kwargs["unsubscribe_url"],

@@ -24,6 +24,9 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from playwright_tests.conftest import (
+    settle_click,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -201,7 +204,10 @@ class TestStudioUsersScanability:
         _assert_no_horizontal_overflow(page)
         _capture_screenshot(page, "users-1280px")
 
-        login_as.click()
+        # Settle on the Login-as control before clicking with a load-tolerant
+        # budget (#903): the dense table can finish settling after the default
+        # click timeout on a contended shard.
+        settle_click(login_as)
         page.wait_for_load_state("domcontentloaded")
         assert page.url == f"{django_server}/"
         context.close()

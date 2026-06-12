@@ -24,6 +24,9 @@ from unittest.mock import patch
 import pytest
 
 from playwright_tests.conftest import (
+    SETTLE_TIMEOUT_MS,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
 from playwright_tests.conftest import (
@@ -341,7 +344,12 @@ class TestMidStreamDrop:
                     "() => document.querySelector("
                     "'[data-testid=\\'onboarding-chat-transcript\\']')"
                     ".innerText.includes('about your weekly time')",
-                    timeout=6000,
+                    # The mocked stream-drop -> client re-issue -> full v1
+                    # server round-trip -> re-render chain needs more headroom
+                    # than a single UI-settle on a contended shard (#903). Use
+                    # twice the shared settle budget (16s) so a loaded shard
+                    # still completes the fallback before the wait expires.
+                    timeout=2 * SETTLE_TIMEOUT_MS,
                 )
             transcript = page.locator(
                 '[data-testid="onboarding-chat-transcript"]'

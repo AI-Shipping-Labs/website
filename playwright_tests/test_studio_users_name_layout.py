@@ -48,6 +48,9 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from playwright_tests.conftest import (
+    settle_click,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -517,10 +520,12 @@ class TestStudioUsersNameLayout:
             assert named_rows_on_page_two >= 1
 
             # The "first" pager link drops back to page=1 and keeps filter=paid.
+            # Settle on the pager control before clicking with a load-tolerant
+            # budget (#903): pagination render can lag on a contended shard.
             first_link = page.locator(
                 '[data-testid="user-list-pager-first"]'
             ).first
-            first_link.click()
+            settle_click(first_link)
             page.wait_for_load_state('domcontentloaded')
             assert 'page=1' in page.url
             assert 'filter=paid' in page.url

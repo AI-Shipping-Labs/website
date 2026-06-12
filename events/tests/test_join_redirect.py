@@ -555,6 +555,128 @@ class EventEffectiveEndDatetimePropertyTest(TestCase):
         self.assertEqual(event.effective_end_datetime, expected)
 
 
+class EventJoinedAtTest(TierSetupMixin, TestCase):
+    """Issue #936: ``EventRegistration.joined_at`` is set on the first
+    live-window join click and left null in every other branch.
+
+    The branch selection is time-driven, so we drive each branch with
+    ``freeze_time`` against a fixed event start, mirroring
+    ``EventJoinTimeWindowTest``.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.user = User.objects.create_user(
+            email='attendee@example.com',
+            password='testpass123',
+        )
+        cls.event = Event.objects.create(
+            title='Joined Window Event',
+            slug='joined-window-event',
+            start_datetime=datetime.datetime(
+                2026, 3, 1, 15, 0, 0, tzinfo=datetime.UTC,
+            ),
+            status='upcoming',
+            zoom_join_url='https://zoom.us/j/joined',
+        )
+        EventRegistration.objects.create(event=cls.event, user=cls.user)
+
+    def _login(self):
+        self.client.login(email='attendee@example.com', password='testpass123')
+
+    def _reg(self):
+        return EventRegistration.objects.get(event=self.event, user=self.user)
+
+    @freeze_time('2026-03-01T14:56:00Z')  # 4 min before start -> live window
+    def test_live_window_click_sets_joined_at(self):
+        self._login()
+        response = self.client.get('/events/joined-window-event/join')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], 'https://zoom.us/j/joined')
+        reg = self._reg()
+        self.assertIsNotNone(reg.joined_at)
+        self.assertEqual(
+            reg.joined_at,
+            datetime.datetime(2026, 3, 1, 14, 56, 0, tzinfo=datetime.UTC),
+        )
+        # The per-click log is still written.
+        self.assertEqual(
+            EventJoinClick.objects.filter(
+                event=self.event, user=self.user,
+            ).count(),
+            1,
+        )
+
+    @freeze_time('2026-03-01T14:30:00Z')  # 30 min before -> too-early branch
+    def test_too_early_branch_leaves_joined_at_null(self):
+        self._login()
+        response = self.client.get('/events/joined-window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_too_early.html')
+        self.assertIsNone(self._reg().joined_at)
+        self.assertEqual(EventJoinClick.objects.count(), 0)
+
+    @freeze_time('2026-03-01T14:52:00Z')  # 8 min before -> countdown branch
+    def test_countdown_branch_leaves_joined_at_null(self):
+        self._login()
+        response = self.client.get('/events/joined-window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_countdown.html')
+        self.assertIsNone(self._reg().joined_at)
+
+    @freeze_time('2026-03-01T16:01:00Z')  # past the 1h fallback -> past branch
+    def test_past_branch_leaves_joined_at_null(self):
+        self._login()
+        response = self.client.get('/events/joined-window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_unavailable.html')
+        self.assertIsNone(self._reg().joined_at)
+
+    def test_second_live_window_click_does_not_overwrite_joined_at(self):
+        """First-join-wins: a second click keeps the original timestamp."""
+        self._login()
+        with freeze_time('2026-03-01T14:56:00Z'):
+            self.client.get('/events/joined-window-event/join')
+        first_joined_at = self._reg().joined_at
+        self.assertEqual(
+            first_joined_at,
+            datetime.datetime(2026, 3, 1, 14, 56, 0, tzinfo=datetime.UTC),
+        )
+        # A second click a minute later, still inside the live window.
+        with freeze_time('2026-03-01T14:57:00Z'):
+            self.client.get('/events/joined-window-event/join')
+        reg = self._reg()
+        # joined_at unchanged; a second click row exists.
+        self.assertEqual(reg.joined_at, first_joined_at)
+        self.assertEqual(
+            EventJoinClick.objects.filter(
+                event=self.event, user=self.user,
+            ).count(),
+            2,
+        )
+
+    @freeze_time('2026-03-01T14:56:00Z')  # live window
+    def test_unregistered_user_writes_nothing(self):
+        """An unregistered user is redirected away; no registration row
+        is created and no click/joined_at is written."""
+        User.objects.create_user(
+            email='nobody@example.com',
+            password='testpass123',
+        )
+        self.client.login(email='nobody@example.com', password='testpass123')
+        response = self.client.get('/events/joined-window-event/join')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], self.event.get_absolute_url())
+        self.assertEqual(EventJoinClick.objects.count(), 0)
+        # Only the one pre-existing registration (the setUpTestData user).
+        self.assertEqual(
+            EventRegistration.objects.filter(event=self.event).count(), 1,
+        )
+        # The pre-existing registration is untouched.
+        self.assertIsNone(self._reg().joined_at)
+
+
 class EventJoinClickCountPropertyTest(TestCase):
     """Test the join_click_count property on Event."""
 

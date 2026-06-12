@@ -252,7 +252,11 @@ class EventRegistrationsCsvTest(TierSetupMixin, StaffUserMixin, TestCase):
         response = self.client.get(self.url)
         reader = csv.reader(io.StringIO(response.content.decode()))
         header = next(reader)
-        self.assertEqual(header, ['email', 'name', 'registered_at', 'tier'])
+        # Issue #936: ``joined_at`` is appended after the original four
+        # columns, which keep their order.
+        self.assertEqual(
+            header, ['email', 'name', 'registered_at', 'tier', 'joined_at'],
+        )
 
     def test_csv_has_one_data_row_per_registration(self):
         response = self.client.get(self.url)
@@ -312,7 +316,9 @@ class EventRegistrationsCsvTest(TierSetupMixin, StaffUserMixin, TestCase):
         self.assertEqual(rows, [])
         # The header row is still present (DictReader consumes it).
         header_line = response.content.decode().splitlines()[0]
-        self.assertEqual(header_line, 'email,name,registered_at,tier')
+        self.assertEqual(
+            header_line, 'email,name,registered_at,tier,joined_at',
+        )
 
     def test_csv_404_for_unknown_event(self):
         response = self.client.get('/studio/events/999999/registrations.csv')
@@ -334,3 +340,164 @@ class EventRegistrationsCsvTest(TierSetupMixin, StaffUserMixin, TestCase):
         self.client.login(email='member-701@test.com', password='pw')
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
+
+
+class EventEditJoinedAttendanceTest(TierSetupMixin, StaffUserMixin, TestCase):
+    """Issue #936: the Studio roster surfaces per-registration attendance.
+
+    Covers the ``joined_count`` context value, the ``joined-count`` stat
+    rendering as ``joined / registrations``, and the per-row Joined badge
+    vs. ``Not joined`` indicator.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.event = Event.objects.create(
+            title='Attendance Event',
+            slug='attendance-event',
+            start_datetime=timezone.now() + timedelta(days=5),
+        )
+        cls.alice = User.objects.create_user(
+            email='alice@test.com', password='pw',
+            first_name='Alice', last_name='Anders',
+        )
+        cls.bob = User.objects.create_user(email='bob@test.com', password='pw')
+        cls.carol = User.objects.create_user(email='carol@test.com', password='pw')
+        cls.reg_alice = EventRegistration.objects.create(
+            event=cls.event, user=cls.alice,
+        )
+        # Alice joined; Bob and Carol registered but never joined.
+        joined_ts = timezone.now() - timedelta(hours=1)
+        EventRegistration.objects.filter(pk=cls.reg_alice.pk).update(
+            joined_at=joined_ts,
+        )
+        EventRegistration.objects.create(event=cls.event, user=cls.bob)
+        EventRegistration.objects.create(event=cls.event, user=cls.carol)
+
+    def setUp(self):
+        self.client.login(**self.staff_credentials)
+        self.url = f'/studio/events/{self.event.pk}/edit'
+
+    def test_joined_count_in_context(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['joined_count'], 1)
+        self.assertEqual(response.context['registration_count'], 3)
+
+    def test_joined_stat_renders_ratio(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, 'data-testid="joined-count"')
+        # The stat reads "1 / 3".
+        html = response.content.decode()
+        stat = re.search(
+            r'data-testid="joined-count"[^>]*>([^<]*)<', html,
+        )
+        self.assertIsNotNone(stat)
+        self.assertEqual(stat.group(1).strip(), '1 / 3')
+
+    def test_joined_row_shows_badge_and_timestamp(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, 'data-testid="registration-joined-badge"')
+        # Exactly one Joined badge (only Alice joined).
+        self.assertContains(
+            response, 'data-testid="registration-joined-badge"', count=1,
+        )
+
+    def test_not_joined_rows_show_muted_indicator(self):
+        response = self.client.get(self.url)
+        # Bob and Carol did not join -> two "Not joined" indicators.
+        self.assertContains(
+            response, 'data-testid="registration-not-joined"', count=2,
+        )
+
+
+class EventEditAllZeroJoinedTest(TierSetupMixin, StaffUserMixin, TestCase):
+    """Issue #936: an event nobody has joined shows a clean ``0 / N`` state."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.event = Event.objects.create(
+            title='Nobody Joined Event',
+            slug='nobody-joined-event',
+            start_datetime=timezone.now() + timedelta(days=2),
+        )
+        cls.u1 = User.objects.create_user(email='u1@test.com', password='pw')
+        cls.u2 = User.objects.create_user(email='u2@test.com', password='pw')
+        EventRegistration.objects.create(event=cls.event, user=cls.u1)
+        EventRegistration.objects.create(event=cls.event, user=cls.u2)
+
+    def setUp(self):
+        self.client.login(**self.staff_credentials)
+        self.url = f'/studio/events/{self.event.pk}/edit'
+
+    def test_joined_count_zero(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['joined_count'], 0)
+
+    def test_stat_reads_zero_over_total(self):
+        response = self.client.get(self.url)
+        html = response.content.decode()
+        stat = re.search(r'data-testid="joined-count"[^>]*>([^<]*)<', html)
+        self.assertIsNotNone(stat)
+        self.assertEqual(stat.group(1).strip(), '0 / 2')
+
+    def test_all_rows_not_joined_no_badge(self):
+        response = self.client.get(self.url)
+        self.assertContains(
+            response, 'data-testid="registration-not-joined"', count=2,
+        )
+        self.assertNotContains(
+            response, 'data-testid="registration-joined-badge"',
+        )
+
+
+class EventRegistrationsCsvJoinedColumnTest(
+    TierSetupMixin, StaffUserMixin, TestCase,
+):
+    """Issue #936: the CSV's trailing ``joined_at`` column."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.event = Event.objects.create(
+            title='CSV Joined Event',
+            slug='csv-joined-event',
+            start_datetime=timezone.now() + timedelta(days=7),
+        )
+        cls.joined_user = User.objects.create_user(
+            email='joined@test.com', password='pw',
+        )
+        cls.not_joined_user = User.objects.create_user(
+            email='notjoined@test.com', password='pw',
+        )
+        cls.reg_joined = EventRegistration.objects.create(
+            event=cls.event, user=cls.joined_user,
+        )
+        cls.joined_ts = timezone.now() - timedelta(hours=2)
+        EventRegistration.objects.filter(pk=cls.reg_joined.pk).update(
+            joined_at=cls.joined_ts,
+        )
+        EventRegistration.objects.create(
+            event=cls.event, user=cls.not_joined_user,
+        )
+
+    def setUp(self):
+        self.client.login(**self.staff_credentials)
+        self.url = f'/studio/events/{self.event.pk}/registrations.csv'
+
+    def test_joined_row_has_iso_utc_timestamp(self):
+        response = self.client.get(self.url)
+        rows = {row['email']: row for row in _parse_csv(response)}
+        value = rows['joined@test.com']['joined_at']
+        # ISO 8601 with a UTC offset (+00:00).
+        self.assertRegex(
+            value,
+            r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*\+00:00$',
+            f'Expected ISO 8601 UTC, got {value!r}',
+        )
+
+    def test_not_joined_row_has_empty_cell(self):
+        response = self.client.get(self.url)
+        rows = {row['email']: row for row in _parse_csv(response)}
+        self.assertEqual(rows['notjoined@test.com']['joined_at'], '')

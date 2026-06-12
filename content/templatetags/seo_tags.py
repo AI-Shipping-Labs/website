@@ -19,6 +19,7 @@ from django.utils.safestring import mark_safe
 
 from events.services.display_time import format_event_tz_strip
 from integrations.config import site_base_url
+from integrations.services.banner_generator.resolve import effective_banner_url
 
 register = template.Library()
 
@@ -417,17 +418,15 @@ def _get_og_type(obj):
 def _get_image_url(obj):
     """Get the best image URL for a content object.
 
-    Operator-supplied ``cover_image_url`` always wins; the
-    platform-generated ``auto_banner_url`` (issue #895) is the fallback
-    used as the OG/Twitter preview image when no cover is set. Events,
-    workshops, articles, courses, projects, and downloads all store an
-    ``auto_banner_url`` once the banner-generator pipeline has run.
+    Resolves the public OG/Twitter preview image with the issue #931
+    precedence: frontmatter ``cover_image_url`` wins, then the
+    operator-uploaded ``custom_banner_url`` (sync-safe Studio upload), then
+    the platform-generated ``auto_banner_url``. Delegated to
+    :func:`integrations.services.banner_generator.resolve.effective_banner_url`
+    so the public meta tags, every model ``display_image_url`` accessor,
+    and the Studio preview panel stay in lockstep.
     """
-    for attr in ('cover_image_url', 'auto_banner_url'):
-        url = getattr(obj, attr, '')
-        if url:
-            return url
-    return ''
+    return effective_banner_url(obj)
 
 
 @register.simple_tag(takes_context=True)

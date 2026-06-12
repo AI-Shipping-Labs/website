@@ -5,9 +5,8 @@ from django.urls import reverse
 from django.utils.text import slugify
 
 from content.models import Article
-from integrations.services.banner_generator import is_enabled as banner_generator_is_enabled
 from studio.decorators import staff_required
-from studio.services.banner_status import get_last_banner_task
+from studio.services.banner_panel import banner_panel_context
 from studio.utils import get_github_edit_url, is_synced
 from studio.views.form_helpers import (
     parse_comma_separated_tags,
@@ -73,7 +72,6 @@ def article_edit(request, article_id):
 
         return redirect('studio_article_edit', article_id=article.pk)
 
-    banner_enabled = banner_generator_is_enabled()
     context = {
         'article': article,
         'form_action': 'edit',
@@ -81,15 +79,14 @@ def article_edit(request, article_id):
         'github_edit_url': get_github_edit_url(article),
         'notify_url': reverse('studio_article_notify', kwargs={'article_id': article.pk}),
         'announce_url': reverse('studio_article_announce_slack', kwargs={'article_id': article.pk}),
-        # Issue #788: auto-banner regenerate panel.
-        'banner_url': article.auto_banner_url,
-        'banner_regenerate_url': reverse(
-            'studio_article_regenerate_banner',
-            kwargs={'article_id': article.pk},
-        ),
-        'banner_generator_enabled': banner_enabled,
-        'banner_last_task': (
-            get_last_banner_task('article', article.pk) if banner_enabled else None
+        # Issues #788/#931: banner / social-image panel.
+        **banner_panel_context(
+            content_type='article',
+            record=article,
+            regenerate_url_name='studio_article_regenerate_banner',
+            upload_url_name='studio_article_upload_banner',
+            remove_url_name='studio_article_remove_banner',
+            url_kwarg='article_id',
         ),
     }
     return render(request, 'studio/articles/form.html', context)

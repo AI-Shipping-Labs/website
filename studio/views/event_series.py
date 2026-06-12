@@ -25,7 +25,6 @@ from django.contrib import messages
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
 from django.utils import timezone as dj_timezone
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
@@ -53,7 +52,7 @@ from notifications.services.slack_announcements import (
     post_series_slack_announcement,
 )
 from studio.decorators import staff_required
-from studio.services.banner_status import get_last_banner_task
+from studio.services.banner_panel import banner_panel_context
 from studio.views.events import (
     _default_timezone_for,
     _should_autodetect_tz,
@@ -453,8 +452,6 @@ def event_series_detail(request, series_id):
     # it in the picker so the admin sees the active zone next to the
     # date input.
     tz_value = series.timezone or _default_timezone_for(request.user)
-    # Issue #896: auto-banner regenerate panel (parity with events/articles).
-    banner_enabled = banner_generator_is_enabled()
     return render(request, 'studio/event_series/detail.html', {
         'series': series,
         'events': events,
@@ -468,15 +465,14 @@ def event_series_detail(request, series_id):
             not series.timezone
             and _should_autodetect_tz(request.user)
         ),
-        # Issue #896: auto-banner panel context.
-        'banner_url': series.auto_banner_url,
-        'banner_regenerate_url': reverse(
-            'studio_event_series_regenerate_banner', kwargs={'series_id': series.pk},
-        ),
-        'banner_generator_enabled': banner_enabled,
-        'banner_last_task': (
-            get_last_banner_task('event_series', series.pk)
-            if banner_enabled else None
+        # Issues #896/#931: banner / social-image panel.
+        **banner_panel_context(
+            content_type='event_series',
+            record=series,
+            regenerate_url_name='studio_event_series_regenerate_banner',
+            upload_url_name='studio_event_series_upload_banner',
+            remove_url_name='studio_event_series_remove_banner',
+            url_kwarg='series_id',
         ),
     })
 

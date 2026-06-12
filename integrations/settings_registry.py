@@ -325,6 +325,42 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/banner_generator.md#banner_generator_timeout_seconds',
             },
+            {
+                'key': 'BANNER_UPLOAD_MAX_MB',
+                'is_secret': False,
+                'optional': True,
+                'default': '5',
+                'description': (
+                    'Maximum size (in MB) for an operator-uploaded custom '
+                    'banner/social image in Studio. Default 5. A non-integer '
+                    'or non-positive override falls back to 5.'
+                ),
+                'docs_url': '_docs/integrations/banner_generator.md#banner_upload_max_mb',
+            },
+            {
+                'key': 'BANNER_UPLOAD_ALLOWED_TYPES',
+                'is_secret': False,
+                'optional': True,
+                'default': 'image/jpeg,image/png,image/webp',
+                'description': (
+                    'Comma-separated list of MIME types accepted for custom '
+                    'banner uploads. Only JPEG, PNG, and WebP are supported '
+                    'by the storage key builder; unknown types are ignored.'
+                ),
+                'docs_url': '_docs/integrations/banner_generator.md#banner_upload_allowed_types',
+            },
+            {
+                'key': 'BANNER_UPLOAD_KEY_PREFIX',
+                'is_secret': False,
+                'optional': True,
+                'default': 'custom-banners',
+                'description': (
+                    'CDN/S3 key prefix under which operator-uploaded custom '
+                    'banners are stored (e.g. custom-banners/article/...). '
+                    'The safe-delete cleanup is scoped to this prefix.'
+                ),
+                'docs_url': '_docs/integrations/banner_generator.md#banner_upload_key_prefix',
+            },
         ],
     },
     {

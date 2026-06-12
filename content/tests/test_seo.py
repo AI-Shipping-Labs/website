@@ -595,6 +595,76 @@ class WorkshopOgImageAutoBannerFallbackTest(TestCase):
         self.assertEqual(neither.display_image_url, '')
 
 
+class CustomBannerPrecedenceTest(TestCase):
+    """Issue #931: ``custom_banner_url`` sits between cover and auto banner.
+
+    Precedence everywhere a banner/OG image is resolved:
+    ``cover_image_url`` -> ``custom_banner_url`` -> ``auto_banner_url``.
+    """
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _render(self, obj, var='article'):
+        template = Template('{% load seo_tags %}{% og_tags ' + var + ' %}')
+        request = self.factory.get('/')
+        context = Context({var: obj, 'request': request})
+        return template.render(context)
+
+    def test_custom_banner_used_when_no_cover(self):
+        article = Article.objects.create(
+            title='Custom Banner Article', slug='cb-article',
+            date=date(2026, 1, 1),
+            cover_image_url='',
+            custom_banner_url='https://cdn.example.com/custom-banners/article/7-a.png',
+            auto_banner_url='https://cdn.example.com/banners/article/7.jpg',
+        )
+        result = self._render(article)
+        # Custom upload beats the generated banner as the public og:image.
+        self.assertIn(
+            '<meta property="og:image" content="'
+            'https://cdn.example.com/custom-banners/article/7-a.png">',
+            result,
+        )
+        self.assertIn(
+            '<meta name="twitter:image" content="'
+            'https://cdn.example.com/custom-banners/article/7-a.png">',
+            result,
+        )
+        # The generated banner is NOT used while a custom upload exists.
+        self.assertNotIn('banners/article/7.jpg', result)
+
+    def test_frontmatter_cover_wins_over_custom_banner(self):
+        article = Article.objects.create(
+            title='Cover Wins Article', slug='cover-wins',
+            date=date(2026, 1, 1),
+            cover_image_url='https://cdn.example.com/manual/cover.png',
+            custom_banner_url='https://cdn.example.com/custom-banners/article/8-b.png',
+            auto_banner_url='https://cdn.example.com/banners/article/8.jpg',
+        )
+        result = self._render(article)
+        self.assertIn(
+            '<meta property="og:image" content="'
+            'https://cdn.example.com/manual/cover.png">',
+            result,
+        )
+        # Neither the custom upload nor the generated banner appears.
+        self.assertNotIn('custom-banners/article/8-b.png', result)
+        self.assertNotIn('banners/article/8.jpg', result)
+
+    def test_workshop_display_image_url_honors_custom_banner(self):
+        workshop = Workshop.objects.create(
+            slug='cb-ws', title='CB Workshop', date=date(2026, 4, 13),
+            cover_image_url='',
+            custom_banner_url='https://cdn.example.com/custom-banners/workshop/3-c.png',
+            auto_banner_url='https://cdn.example.com/banners/workshop/3.jpg',
+        )
+        self.assertEqual(
+            workshop.display_image_url,
+            'https://cdn.example.com/custom-banners/workshop/3-c.png',
+        )
+
+
 class EventPreviewDescriptionTest(TestCase):
     """Issue #817: event link previews lead with the multi-timezone strip."""
 

@@ -50,6 +50,10 @@ from events.models.event_series import EVENT_SERIES_CADENCE_CHOICES
 from events.services.series_registration import (
     enroll_series_registrants_in_event,
 )
+from events.tasks.create_series_zoom_meetings import (
+    eligible_occurrence_count,
+    enqueue_create_series_zoom_meetings,
+)
 
 SERIES_DELETE_NOT_AVAILABLE_MESSAGE = (
     "Event series deletion is not available through the API. "
@@ -76,6 +80,13 @@ _EVENT_SERIES_EXAMPLE = {
     "is_active": True,
     "event_count": 12,
     "published_event_count": 10,
+    "zoom_meetings_last_run": {
+        "finished_at": "2026-04-15T12:05:00+00:00",
+        "created": [42, 43],
+        "skipped_existing": 1,
+        "skipped_ineligible": 0,
+        "failed": [],
+    },
     "created_at": "2026-04-15T12:00:00+00:00",
     "updated_at": "2026-04-15T12:00:00+00:00",
 }
@@ -112,6 +123,7 @@ def serialize_event_series(series):
         "is_active": series.is_active,
         "event_count": series.event_count,
         "published_event_count": series.published_event_count,
+        "zoom_meetings_last_run": series.zoom_meetings_last_run,
         "created_at": _iso(series.created_at),
         "updated_at": _iso(series.updated_at),
     }
@@ -975,3 +987,185 @@ def event_series_occurrence_detail(request, series_id, occurrence_id):
     if save_error is not None:
         return save_error
     return JsonResponse(serialize_event(event), status=200)
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Event Series",
+    summary="Bulk-create Zoom meetings for a series (#932)",
+    methods={
+        "POST": {
+            "summary": "Create Zoom meetings for every eligible occurrence",
+            "description": (
+                "Programmatic equivalent of the Studio \"Create Zoom "
+                "meetings for all events\" button (#859). Enqueues the same "
+                "idempotent background job that creates a Zoom meeting for "
+                "every eligible occurrence -- future (``is_upcoming``), "
+                "``platform='zoom'``, and no existing ``zoom_meeting_id``. "
+                "Past / cancelled / draft and ``custom``-platform "
+                "occurrences are skipped. The request returns immediately; "
+                "the N Zoom API round-trips run on the worker.\n\n"
+                "Pass ``{\"dry_run\": true}`` to get the eligibility count "
+                "WITHOUT enqueuing or calling Zoom. Unknown top-level keys "
+                "are ignored; a body that is present but not a JSON object "
+                "returns 422.\n\n"
+                "Idempotent: occurrences that already carry a "
+                "``zoom_meeting_id`` are never recreated, so re-POSTing is "
+                "safe and returns ``noop`` once nothing is left to create. "
+                "Two rapid POSTs may enqueue two jobs, but the second job "
+                "creates nothing for already-handled occurrences; there is "
+                "no locking in v1.\n\n"
+                "No DELETE / remove counterpart is exposed (no-deletes-via-"
+                "API policy) -- recreating or removing meetings would orphan "
+                "live join links already mailed to attendees. Read the "
+                "run result from ``zoom_meetings_last_run`` on "
+                "``GET /api/event-series/<id>``."
+            ),
+            "request_body": {
+                "properties": {
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": (
+                            "Preview the eligible count without enqueuing "
+                            "or calling Zoom."
+                        ),
+                    },
+                },
+                "example": {"dry_run": True},
+            },
+            "responses": {
+                202: {
+                    "description": "Background Zoom-creation job enqueued.",
+                    "example": {
+                        "status": "enqueued",
+                        "eligible_count": 3,
+                        "task_id": "a1b2c3d4e5f6",
+                        "series_id": 1,
+                    },
+                },
+                200: {
+                    "description": (
+                        "Either a dry-run preview, or a noop when nothing "
+                        "is eligible."
+                    ),
+                    "example": {
+                        "dry_run": True,
+                        "eligible_count": 2,
+                        "series_id": 1,
+                    },
+                },
+                404: {
+                    "description": "Event series not found.",
+                    "example": {
+                        "error": "Event series not found",
+                        "code": "unknown_series",
+                    },
+                },
+                422: {
+                    "description": "Body present but not a JSON object.",
+                    "example": {
+                        "error": "Body must be a JSON object",
+                        "code": "invalid_type",
+                    },
+                },
+            },
+        },
+    },
+)
+def event_series_zoom_meetings(request, series_id):
+    """``POST /api/event-series/<series_id>/zoom-meetings``.
+
+    Programmatic equivalent of the Studio "Create Zoom meetings for all
+    events" button (#859). Reuses the SAME service layer end to end --
+    ``eligible_occurrence_count`` and ``enqueue_create_series_zoom_meetings``
+    from ``events.tasks.create_series_zoom_meetings`` -- so there is no
+    second Zoom or eligibility code path.
+
+    Body (optional JSON object):
+    - ``dry_run`` (bool, default false): return the eligibility breakdown
+      without enqueuing the job or calling Zoom. Unknown top-level keys are
+      ignored; a present body that is not a JSON object returns 422.
+
+    Responses:
+    - 202 ``{"status": "enqueued", ...}`` when eligible occurrences exist
+      (and not dry-run). The heavy work runs on the worker.
+    - 200 ``{"status": "noop", "eligible_count": 0, ...}`` when nothing is
+      eligible -- a success, matching the Studio "nothing to create" branch.
+    - 200 ``{"dry_run": true, "eligible_count": N, ...}`` for a preview.
+    - 404 when the series does not exist.
+
+    Idempotency: the underlying task skips occurrences that already have a
+    ``zoom_meeting_id`` (#859), so a re-POST after a successful run returns
+    ``noop``. Two rapid POSTs may enqueue two jobs but never double-create.
+    No locking in v1.
+
+    NO DELETE / remove counterpart -- recreating or removing meetings would
+    orphan live join links already mailed to attendees.
+    """
+    series = EventSeries.objects.filter(pk=series_id).first()
+    if series is None:
+        return _unknown_series_response()
+
+    # Optional body. Absent body == defaults. A present body that is not a
+    # JSON object is a 422; unknown keys are ignored.
+    if request.body:
+        data, parse_error = parse_json_body(request)
+        if parse_error is not None:
+            return parse_error
+        if not isinstance(data, dict):
+            return error_response(
+                "Body must be a JSON object",
+                "invalid_type",
+                status=422,
+                details={"field": "body", "expected": "object"},
+            )
+    else:
+        data = {}
+
+    dry_run = data.get("dry_run", False)
+    if not isinstance(dry_run, bool):
+        return error_response(
+            "dry_run must be a boolean",
+            "invalid_type",
+            status=422,
+            details={"field": "dry_run", "expected": "boolean"},
+        )
+
+    eligible_count = eligible_occurrence_count(series)
+
+    if dry_run:
+        return JsonResponse(
+            {
+                "dry_run": True,
+                "eligible_count": eligible_count,
+                "series_id": series.pk,
+            },
+            status=200,
+        )
+
+    if eligible_count == 0:
+        return JsonResponse(
+            {
+                "status": "noop",
+                "eligible_count": 0,
+                "detail": (
+                    "All occurrences already have Zoom meetings — "
+                    "nothing to create."
+                ),
+                "series_id": series.pk,
+            },
+            status=200,
+        )
+
+    task_id = enqueue_create_series_zoom_meetings(series.pk)
+    return JsonResponse(
+        {
+            "status": "enqueued",
+            "eligible_count": eligible_count,
+            "task_id": str(task_id) if task_id else None,
+            "series_id": series.pk,
+        },
+        status=202,
+    )

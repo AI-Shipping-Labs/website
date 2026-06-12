@@ -193,6 +193,7 @@ class EventSeriesListTest(EventSeriesApiTestBase):
                 "is_active",
                 "event_count",
                 "published_event_count",
+                "zoom_meetings_last_run",
                 "created_at",
                 "updated_at",
             },

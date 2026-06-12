@@ -53,11 +53,12 @@ def _reset_event_state():
     connection.close()
 
 
-def _make_series(slug, name, occurrences, *, main_only_positions=()):
+def _make_series(slug, name, occurrences, *, main_only_positions=(),
+                 premium_only_positions=()):
     from django.db import connection
     from django.utils import timezone
 
-    from content.access import LEVEL_MAIN, LEVEL_OPEN
+    from content.access import LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
     from events.models import Event, EventSeries
 
     series = EventSeries(
@@ -68,7 +69,12 @@ def _make_series(slug, name, occurrences, *, main_only_positions=()):
     )
     series.save()
     for i in range(1, occurrences + 1):
-        level = LEVEL_MAIN if i in main_only_positions else LEVEL_OPEN
+        if i in premium_only_positions:
+            level = LEVEL_PREMIUM
+        elif i in main_only_positions:
+            level = LEVEL_MAIN
+        else:
+            level = LEVEL_OPEN
         Event(
             title=f"{name} — Session {i}",
             slug=f"{slug}-session-{i}",
@@ -161,5 +167,59 @@ class TestPartialAccessLogsInvite:
             ).count()
             == 1
         )
+
+        ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestPartialGatedSeriesDashboardEnrollment:
+    """Issue #934: free member registers for a partly-gated series.
+
+    Confirms the register entry point enrolls the member in only the open
+    sessions (the Premium-only session is not added to their dashboard
+    upcoming-events list). The emailed upsell note itself is asserted in
+    ``events/tests/test_series_invite.py`` (SES is mocked there).
+    """
+
+    def test_free_member_enrolled_in_open_sessions_only(
+        self, django_server, browser,
+    ):
+        _reset_event_state()
+        _create_user("member-934@test.com", tier_slug="free")
+        series = _make_series(
+            "woh-934", "Calendar Series 934", 3,
+            premium_only_positions=(3,),
+        )
+
+        ctx = _auth_context(browser, "member-934@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/events/groups/{series.slug}",
+            wait_until="domcontentloaded",
+        )
+        page.locator('[data-testid="series-register-button"]').click()
+        page.locator(
+            '[data-testid="series-registered-state"]'
+        ).wait_for(state="visible")
+
+        # The dashboard upcoming-events section shows only the 2 open
+        # sessions; the Premium-only session is not enrolled.
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+        upcoming = page.locator(
+            "section", has=page.get_by_role(
+                "heading", name="Upcoming Events",
+            ),
+        )
+        upcoming.wait_for(state="visible")
+        upcoming_text = upcoming.inner_text()
+        assert "Calendar Series 934 — Session 1" in upcoming_text
+        assert "Calendar Series 934 — Session 2" in upcoming_text
+        assert "Calendar Series 934 — Session 3" not in upcoming_text
+
+        from accounts.models import User
+        from events.models import EventRegistration
+
+        user = User.objects.get(email="member-934@test.com")
+        assert EventRegistration.objects.filter(user=user).count() == 2
 
         ctx.close()

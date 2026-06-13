@@ -121,6 +121,67 @@ class FinalizeWritesStandardArtifactsTest(TestCase):
 
 
 @tag('core')
+class CompletionRepointsToInferredPersonaTest(TestCase):
+    """Issue #823: completion still repoints to the inferred persona.
+
+    The interview is now archetype-aware DURING the chat, but the
+    completion CONTRACT is unchanged: a recognised ``persona_signal``
+    repoints the ``Response`` to that persona's default questionnaire and
+    the extracted answers land on its materialized ``ResponseQuestion``
+    rows; ``blend``/``other`` falls back to the generic questionnaire.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.member = User.objects.create_user(
+            email='ai-repoint@test.com', password='pw',
+        )
+
+    def _complete_with_signal(self, persona_signal):
+        response, conversation = get_or_create_ai_onboarding_response(
+            self.member,
+        )
+        extraction = dict(VALID_EXTRACTION, persona_signal=persona_signal)
+        with patch(
+            'questionnaires.onboarding_ai.llm.complete',
+            return_value=LLMResult(
+                text='done',
+                tool_input=extraction,
+                tool_name='record_onboarding',
+            ),
+        ):
+            run_member_turn(conversation, 'here are my answers')
+        response.refresh_from_db()
+        return response
+
+    def test_taylor_signal_repoints_response_and_lands_answers(self):
+        response = self._complete_with_signal('taylor')
+        # Repointed to the Taylor persona questionnaire.
+        self.assertEqual(response.questionnaire.slug, 'onboarding-taylor')
+        # The extracted primary-goal spine answer lands on a ResponseQuestion
+        # of the Taylor questionnaire.
+        primary_prompt = (
+            'What is the one concrete outcome you want by the end of the next '
+            '6 to 8 weeks?'
+        )
+        rq = response.response_questions.filter(prompt=primary_prompt).first()
+        self.assertIsNotNone(rq)
+        answer = response.answers.filter(question=rq).first()
+        self.assertIsNotNone(answer)
+        self.assertEqual(answer.text_value, VALID_EXTRACTION['primary_goal'])
+
+    def test_blend_signal_falls_back_to_generic(self):
+        response = self._complete_with_signal('blend')
+        self.assertEqual(response.questionnaire.slug, GENERIC_ONBOARDING_SLUG)
+        # The answer still lands on the generic questionnaire's spine.
+        self.assertTrue(
+            response.answers.filter(
+                text_value=VALID_EXTRACTION['primary_goal'],
+            ).exists(),
+        )
+
+
+@tag('core')
 class ResumeConversationTest(TestCase):
     @classmethod
     def setUpTestData(cls):

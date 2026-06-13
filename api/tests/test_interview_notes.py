@@ -93,7 +93,7 @@ class InterviewNoteDetailTest(InterviewNotesTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["id"], self.external_note.id)
 
-    def test_member_notes_detail_alias_patch_and_delete(self):
+    def test_member_notes_detail_alias_patch_still_works(self):
         note = InterviewNote.objects.create(
             plan=None,
             member=self.member,
@@ -112,12 +112,26 @@ class InterviewNoteDetailTest(InterviewNotesTestBase):
         note.refresh_from_db()
         self.assertEqual(note.body, "after")
 
+    def test_member_notes_detail_alias_delete_returns_405_and_keeps_row(self):
+        # Issue #864 (2026-06-13): interview-note DELETE is blocked via the
+        # API on both URL aliases. The note row survives; delete in Studio.
+        note = InterviewNote.objects.create(
+            plan=None,
+            member=self.member,
+            visibility="external",
+            kind="general",
+            body="keep me",
+            created_by=self.staff,
+        )
         response = self.client.delete(
             f"/api/member-notes/{note.id}",
             **self._auth(self.staff_token),
         )
-        self.assertEqual(response.status_code, 204)
-        self.assertFalse(InterviewNote.objects.filter(pk=note.pk).exists())
+        self.assertEqual(response.status_code, 405)
+        body = response.json()
+        self.assertEqual(body["code"], "interview_note_delete_not_available")
+        self.assertIn("Studio", body["error"])
+        self.assertTrue(InterviewNote.objects.filter(pk=note.pk).exists())
 
 
 class InterviewNoteCreateTest(InterviewNotesTestBase):

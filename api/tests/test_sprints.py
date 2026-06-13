@@ -121,22 +121,30 @@ class SprintDetailTest(SprintApiTestBase):
         self.assertEqual(body["name"], "May 2026")
         self.assertEqual(body["start_date"], "2026-05-01")
 
-    def test_delete_with_attached_plans_returns_409(self):
+    def test_delete_returns_405_pointing_to_studio(self):
+        # Issue #864 (2026-06-13): sprint DELETE is blocked via the API. The
+        # 405 fires before any lookup and the sprint row is never touched.
         Plan.objects.create(member=self.member, sprint=self.sprint_active)
         response = self.client.delete(
             "/api/sprints/may-2026", **self._auth(),
         )
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.json()["code"], "sprint_has_plans")
+        self.assertEqual(response.status_code, 405)
+        body = response.json()
+        self.assertEqual(body["code"], "sprint_delete_not_available")
+        self.assertIn("Studio", body["error"])
         self.assertTrue(Sprint.objects.filter(slug="may-2026").exists())
 
-    def test_delete_empty_sprint_returns_204(self):
-        # Use the draft sprint which has no attached plans.
+    def test_delete_empty_sprint_also_returns_405(self):
+        # Even an empty sprint (no attached plans) cannot be deleted via the
+        # API; the row survives.
         response = self.client.delete(
             "/api/sprints/jul-2026", **self._auth(),
         )
-        self.assertEqual(response.status_code, 204)
-        self.assertFalse(Sprint.objects.filter(slug="jul-2026").exists())
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(
+            response.json()["code"], "sprint_delete_not_available",
+        )
+        self.assertTrue(Sprint.objects.filter(slug="jul-2026").exists())
 
 
 class SprintsAuthTest(SprintApiTestBase):

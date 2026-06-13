@@ -28,6 +28,15 @@ Studio so ownership and sync rules stay explicit.
 | `api/views/event_series.py` (`event_series_collection`, `event_series_detail`) | `series_delete_not_available` |
 | `api/views/event_series.py` (`event_series_occurrence_detail`) | `occurrence_delete_not_available` |
 | `api/views/sync_sources.py` (`sync_sources_collection`, `sync_source_trigger`) | `sync_source_delete_not_available` |
+| `api/views/sprints.py` (`sprint_detail`) | `sprint_delete_not_available` |
+| `api/views/course_certificates.py` (`course_certificate_detail`) | `certificate_delete_not_available` |
+| `api/views/redirects.py` (`redirect_detail`) | `redirect_delete_not_available` |
+| `api/views/interview_notes.py` (`interview_note_detail`) | `interview_note_delete_not_available` |
+| `api/views/enrollments.py` (`sprint_enrollment_detail`) | `sprint_enrollment_delete_not_available` |
+
+The last five were added per the human decision (Alexey, 2026-06-13, issue #864)
+to block delete on all five previously-pending endpoints. See the rationale
+table below.
 
 ### 2. Relationship / attribute removal (legitimate — keep)
 
@@ -38,7 +47,6 @@ content survives. Idempotent and audited where applicable.
 | --- | --- |
 | `api/views/aliases.py` (`user_aliases_remove`) | one `EmailAlias` mapping; account untouched |
 | `api/views/users.py` (`user_tags_remove`) | one tag from the `user.tags` JSON list |
-| `api/views/enrollments.py` (`sprint_enrollment_detail`) | a `SprintEnrollment` membership row (auto-privates the plan) |
 
 ### 3. Soft-delete (legitimate — keep)
 
@@ -62,19 +70,23 @@ would break the editor. All are gated by `visible_plans_for(user)`.
 | `api/views/checkpoints.py` (`checkpoint_detail`) | a `Checkpoint`, re-packs |
 | `api/views/plan_items.py` (`resource_detail`, `deliverable_detail`, `next_step_detail`) | a plan item, re-packs |
 
-### 5. Staff working-data hard deletes (legitimate — keep, per human decision)
+### 5. Previously-pending endpoints — now 405-protected (human decision)
 
-These hard-delete persistent records that are also editable in Studio. They are
-operational config or mutable staff working data, not member-facing canonical
-content, and each has a Studio delete counterpart and/or a guard. Kept as
-hard-deletable per the per-resource decision recorded in issue #864.
+Five endpoints were flagged as borderline during the original audit and left as
+hard-deletable pending a per-resource human decision. On 2026-06-13 Alexey
+decided to BLOCK delete on all five: each now returns `405` pointing the
+operator to Studio (listed in the 405-protected table above). Cancellation /
+hiding via `PATCH` stays available where it already existed (e.g. a redirect can
+still be deactivated with `PATCH is_active=false`; a sprint's status can still
+be changed with `PATCH status=...`); only the hard-`DELETE` is blocked.
 
-| Endpoint (view) | Rationale |
+| Endpoint (view) | Decision rationale (Alexey, 2026-06-13) |
 | --- | --- |
-| `api/views/redirects.py` (`redirect_detail`) | operational config; Studio already has a redirect-delete UI |
-| `api/views/interview_notes.py` (`interview_note_detail`) | mutable staff working data; Studio deletes notes too |
-| `api/views/sprints.py` (`sprint_detail`) | staff-only; 409-guarded if the sprint has attached plans; API is the only delete path |
-| `api/views/course_certificates.py` (`course_certificate_detail`) | staff-only credential management |
+| `api/views/sprints.py` (`sprint_detail`) | forbid — treat sprints like canonical content; delete only in Studio |
+| `api/views/course_certificates.py` (`course_certificate_detail`) | forbid — a granted credential must not be hard-revoked via the API; revoke in Studio |
+| `api/views/redirects.py` (`redirect_detail`) | forbid — Studio already has a redirect-delete UI; deactivate via PATCH `is_active=false` |
+| `api/views/interview_notes.py` (`interview_note_detail`) | forbid — delete notes in Studio, not via the API |
+| `api/views/enrollments.py` (`sprint_enrollment_detail`) | forbid — unenroll in Studio, not via the API |
 
 ## The guard
 
@@ -87,6 +99,9 @@ hard-deletable per the per-resource decision recorded in issue #864.
    (`api/delete_policy.py`) OR is 405-protected. Adding a new, unclassified
    `DELETE` handler fails CI until it is classified — so a violation cannot be
    silently reintroduced.
+
+Current classification (issue #864, after the 2026-06-13 human decision): 12
+forbidden (405-protected) + 9 legitimate = 21 `DELETE` handlers in `api/views/`.
 
 When you add or change a `DELETE` handler, update both this document and the
 classification in `api/delete_policy.py`.

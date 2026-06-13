@@ -49,6 +49,22 @@ VALID_KINDS = {choice for choice, _label in KIND_CHOICES}
 _VISIBILITIES_ENUM = sorted(VALID_VISIBILITIES)
 _KINDS_ENUM = sorted(VALID_KINDS)
 
+# Issue #864 (human decision, 2026-06-13): interview-note hard-delete is not
+# available through the API. DELETE is accepted but returns 405 pointing the
+# operator to Studio, matching the events guard pattern.
+INTERVIEW_NOTE_DELETE_NOT_AVAILABLE_MESSAGE = (
+    "Interview note deletion is not available through the API. "
+    "Go to Studio to delete this note manually."
+)
+
+
+def _interview_note_delete_not_available_response():
+    return error_response(
+        INTERVIEW_NOTE_DELETE_NOT_AVAILABLE_MESSAGE,
+        "interview_note_delete_not_available",
+        status=405,
+    )
+
 _INTERVIEW_NOTE_EXAMPLE = {
     "id": 12,
     "plan_id": 5,
@@ -305,21 +321,36 @@ def user_interview_notes(request, email):
             },
         },
         "DELETE": {
-            "summary": "Delete an interview note",
+            "summary": "DELETE is not available on this route",
+            "description": (
+                "Interview note deletion is not available through the "
+                "API (issue #864); use Studio to delete a note. DELETE "
+                "returns a structured 405."
+            ),
             "responses": {
-                204: {"description": "Note deleted (empty body)."},
-                404: {"description": "Note not found."},
+                405: {
+                    "description": "Note deletion is not available.",
+                    "example": {
+                        "error": INTERVIEW_NOTE_DELETE_NOT_AVAILABLE_MESSAGE,
+                        "code": "interview_note_delete_not_available",
+                    },
+                },
             },
         },
     },
 )
 def interview_note_detail(request, note_id):
-    """``GET / PATCH / DELETE /api/interview-notes/<note_id>/``.
+    """``GET / PATCH /api/interview-notes/<note_id>/``.
 
-    Lookups go through ``visible_interview_notes_for`` so a non-staff
-    bearer asking for an internal note id gets a clean 404 ``unknown_note``
-    -- the bearer cannot even tell whether the row exists.
+    DELETE is intentionally unavailable (issue #864): it returns 405 with a
+    Studio pointer before any lookup. Lookups for GET/PATCH go through
+    ``visible_interview_notes_for`` so a non-staff bearer asking for an
+    internal note id gets a clean 404 ``unknown_note`` -- the bearer cannot
+    even tell whether the row exists.
     """
+    if request.method == "DELETE":
+        return _interview_note_delete_not_available_response()
+
     note = (
         visible_interview_notes_for(request.user)
         .select_related("member", "created_by")
@@ -335,10 +366,6 @@ def interview_note_detail(request, note_id):
 
     if request.method == "GET":
         return JsonResponse(serialize_interview_note(note), status=200)
-
-    if request.method == "DELETE":
-        note.delete()
-        return JsonResponse({}, status=204)
 
     # PATCH
     data, parse_error = parse_json_body(request)

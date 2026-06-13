@@ -167,6 +167,12 @@ class EnrollmentsBulkPostTest(EnrollmentApiTestBase):
 
 
 class EnrollmentDeleteTest(EnrollmentApiTestBase):
+    """Issue #864 (2026-06-13): sprint-enrollment DELETE is blocked via the API.
+
+    The endpoint returns 405 with a Studio pointer before any lookup and never
+    removes the membership row or re-privates the plan; unenroll in Studio.
+    """
+
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
@@ -175,14 +181,7 @@ class EnrollmentDeleteTest(EnrollmentApiTestBase):
             'main',
         )
 
-    def test_delete_idempotent_204_when_not_enrolled(self):
-        response = self.client.delete(
-            '/api/sprints/may-2026/enrollments/main@test.com',
-            **self._auth(),
-        )
-        self.assertEqual(response.status_code, 204)
-
-    def test_delete_removes_enrollment_and_auto_privates_plan(self):
+    def test_delete_returns_405_and_keeps_enrollment_and_plan(self):
         SprintEnrollment.objects.create(sprint=self.sprint, user=self.target)
         plan = Plan.objects.create(
             member=self.target, sprint=self.sprint, visibility='cohort',
@@ -191,32 +190,29 @@ class EnrollmentDeleteTest(EnrollmentApiTestBase):
             '/api/sprints/may-2026/enrollments/main@test.com',
             **self._auth(),
         )
-        self.assertEqual(response.status_code, 204)
-        self.assertFalse(
+        self.assertEqual(response.status_code, 405)
+        body = response.json()
+        self.assertEqual(
+            body['code'], 'sprint_enrollment_delete_not_available',
+        )
+        self.assertIn('Studio', body['error'])
+        # The membership row and the plan's visibility are untouched.
+        self.assertTrue(
             SprintEnrollment.objects.filter(
                 sprint=self.sprint, user=self.target,
             ).exists()
         )
         plan.refresh_from_db()
-        self.assertEqual(plan.visibility, 'private')
+        self.assertEqual(plan.visibility, 'cohort')
 
-    def test_repeated_delete_is_204(self):
-        SprintEnrollment.objects.create(sprint=self.sprint, user=self.target)
-        first = self.client.delete(
-            '/api/sprints/may-2026/enrollments/main@test.com',
-            **self._auth(),
-        )
-        second = self.client.delete(
-            '/api/sprints/may-2026/enrollments/main@test.com',
-            **self._auth(),
-        )
-        self.assertEqual(first.status_code, 204)
-        self.assertEqual(second.status_code, 204)
-
-    def test_unknown_sprint_returns_404(self):
+    def test_delete_returns_405_before_unknown_sprint_lookup(self):
+        # The 405 fires before the sprint lookup, so an unknown sprint slug
+        # returns the same structured 405 (no 404 leak).
         response = self.client.delete(
             '/api/sprints/nope/enrollments/main@test.com',
             **self._auth(),
         )
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()['code'], 'unknown_sprint')
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(
+            response.json()['code'], 'sprint_enrollment_delete_not_available',
+        )

@@ -47,6 +47,22 @@ User = get_user_model()
 
 _url_validator = URLValidator(schemes=['http', 'https'])
 
+# Issue #864 (human decision, 2026-06-13): revoking a granted credential via a
+# hard delete is not available through the API. DELETE is accepted but returns
+# 405 pointing the operator to Studio, matching the events guard pattern.
+CERTIFICATE_DELETE_NOT_AVAILABLE_MESSAGE = (
+    "Course certificate deletion is not available through the API. "
+    "Go to Studio to revoke this certificate manually."
+)
+
+
+def _certificate_delete_not_available_response():
+    return error_response(
+        CERTIFICATE_DELETE_NOT_AVAILABLE_MESSAGE,
+        "certificate_delete_not_available",
+        status=405,
+    )
+
 
 def _serialize_certificate(cert):
     return {
@@ -281,50 +297,31 @@ def course_certificates_collection(request, slug):
 @require_methods('DELETE')
 @openapi_spec(
     tag="Course Certificates",
-    summary="Delete a course certificate (staff-only)",
+    summary="DELETE is not available on this route",
     methods={
         "DELETE": {
-            "summary": "Delete a course certificate",
+            "summary": "DELETE is not available on this route",
             "description": (
-                "Staff-only. Idempotent -- returns 204 whether or not "
-                "a row was deleted. There is no GET / PATCH on this "
-                "URL; use the collection endpoint for those."
+                "Course certificate deletion is not available through "
+                "the API (issue #864); revoking a granted credential must "
+                "be done in Studio. DELETE returns a structured 405."
             ),
             "responses": {
-                204: {"description": "Certificate deleted (empty body)."},
-                403: {
-                    "description": "Non-staff bearer.",
+                405: {
+                    "description": "Certificate deletion is not available.",
                     "example": {
-                        "error": "Certificate delete is staff-only",
-                        "code": "forbidden_other_user_plan",
+                        "error": CERTIFICATE_DELETE_NOT_AVAILABLE_MESSAGE,
+                        "code": "certificate_delete_not_available",
                     },
                 },
-                404: {"description": "Course not found or unpublished."},
             },
         },
     },
 )
 def course_certificate_detail(request, slug, email):
-    """``DELETE /api/courses/<slug>/certificates/<email>`` -- staff only.
+    """``DELETE /api/courses/<slug>/certificates/<email>``.
 
-    Idempotent: returns 204 whether or not a row was deleted.
+    Deletion is intentionally unavailable (issue #864): returns 405 with a
+    Studio pointer. Revoke a credential in Studio instead.
     """
-    if not bearer_is_admin(request.user):
-        return error_response(
-            'Certificate delete is staff-only',
-            'forbidden_other_user_plan',
-            status=403,
-        )
-
-    course = _get_published_course(slug)
-    if course is None:
-        return error_response(
-            'Course not found', 'unknown_course', status=404,
-        )
-
-    target = User.objects.filter(email__iexact=email).first()
-    if target is not None:
-        CourseCertificate.objects.filter(
-            user=target, course=course,
-        ).delete()
-    return JsonResponse({}, status=204)
+    return _certificate_delete_not_available_response()

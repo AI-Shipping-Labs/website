@@ -926,7 +926,7 @@
     },
     "/api/courses/{slug}/certificates/{email}": {
       "delete": {
-        "description": "Staff-only. Idempotent -- returns 204 whether or not a row was deleted. There is no GET / PATCH on this URL; use the collection endpoint for those.",
+        "description": "Course certificate deletion is not available through the API (issue #864); revoking a granted credential must be done in Studio. DELETE returns a structured 405.",
         "parameters": [
           {
             "in": "path",
@@ -946,25 +946,19 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": "Certificate deleted (empty body)."
-          },
-          "403": {
+          "405": {
             "content": {
               "application/json": {
                 "example": {
-                  "code": "forbidden_other_user_plan",
-                  "error": "Certificate delete is staff-only"
+                  "code": "certificate_delete_not_available",
+                  "error": "Course certificate deletion is not available through the API. Go to Studio to revoke this certificate manually."
                 }
               }
             },
-            "description": "Non-staff bearer."
-          },
-          "404": {
-            "description": "Course not found or unpublished."
+            "description": "Certificate deletion is not available."
           }
         },
-        "summary": "Delete a course certificate",
+        "summary": "DELETE is not available on this route",
         "tags": [
           "Course Certificates"
         ]
@@ -2885,6 +2879,7 @@
     },
     "/api/interview-notes/{note_id}": {
       "delete": {
+        "description": "Interview note deletion is not available through the API (issue #864); use Studio to delete a note. DELETE returns a structured 405.",
         "parameters": [
           {
             "in": "path",
@@ -2896,14 +2891,19 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": "Note deleted (empty body)."
-          },
-          "404": {
-            "description": "Note not found."
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "interview_note_delete_not_available",
+                  "error": "Interview note deletion is not available through the API. Go to Studio to delete this note manually."
+                }
+              }
+            },
+            "description": "Note deletion is not available."
           }
         },
-        "summary": "Delete an interview note",
+        "summary": "DELETE is not available on this route",
         "tags": [
           "Interview Notes"
         ]
@@ -3257,6 +3257,7 @@
     },
     "/api/member-notes/{note_id}": {
       "delete": {
+        "description": "Interview note deletion is not available through the API (issue #864); use Studio to delete a note. DELETE returns a structured 405.",
         "parameters": [
           {
             "in": "path",
@@ -3268,14 +3269,19 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": "Note deleted (empty body)."
-          },
-          "404": {
-            "description": "Note not found."
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "interview_note_delete_not_available",
+                  "error": "Interview note deletion is not available through the API. Go to Studio to delete this note manually."
+                }
+              }
+            },
+            "description": "Note deletion is not available."
           }
         },
-        "summary": "Delete an interview note",
+        "summary": "DELETE is not available on this route",
         "tags": [
           "Interview Notes"
         ]
@@ -3425,6 +3431,7 @@
     },
     "/api/member-notes/{note_id}/": {
       "delete": {
+        "description": "Interview note deletion is not available through the API (issue #864); use Studio to delete a note. DELETE returns a structured 405.",
         "parameters": [
           {
             "in": "path",
@@ -3436,14 +3443,19 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": "Note deleted (empty body)."
-          },
-          "404": {
-            "description": "Note not found."
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "interview_note_delete_not_available",
+                  "error": "Interview note deletion is not available through the API. Go to Studio to delete this note manually."
+                }
+              }
+            },
+            "description": "Note deletion is not available."
           }
         },
-        "summary": "Delete an interview note",
+        "summary": "DELETE is not available on this route",
         "tags": [
           "Interview Notes"
         ]
@@ -5202,6 +5214,7 @@
     },
     "/api/redirects/{redirect_id}": {
       "delete": {
+        "description": "Redirect deletion is not available through the API (issue #864); use Studio to delete, or deactivate with ``PATCH is_active=false``. DELETE returns a structured 405.",
         "parameters": [
           {
             "in": "path",
@@ -5213,14 +5226,19 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": "Redirect deleted (empty body)."
-          },
-          "404": {
-            "description": "Redirect not found."
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "redirect_delete_not_available",
+                  "error": "Redirect deletion is not available through the API. Go to Studio to delete this redirect manually, or deactivate it with PATCH is_active=false."
+                }
+              }
+            },
+            "description": "Redirect deletion is not available."
           }
         },
-        "summary": "Delete a redirect",
+        "summary": "DELETE is not available on this route",
         "tags": [
           "Redirects"
         ]
@@ -5802,7 +5820,7 @@
     },
     "/api/sprints/{slug}": {
       "delete": {
-        "description": "409 with code ``sprint_has_plans`` if any plans are still attached -- the API does not cascade-delete.",
+        "description": "Sprint deletion is not available through the API (issue #864); operators must use Studio. DELETE returns a structured 405. Update sprint state with ``PATCH status=...`` instead.",
         "parameters": [
           {
             "in": "path",
@@ -5814,28 +5832,19 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": "Sprint deleted (empty body)."
-          },
-          "403": {
-            "description": "Non-staff token."
-          },
-          "404": {
-            "description": "Sprint not found."
-          },
-          "409": {
+          "405": {
             "content": {
               "application/json": {
                 "example": {
-                  "code": "sprint_has_plans",
-                  "error": "Sprint has attached plans"
+                  "code": "sprint_delete_not_available",
+                  "error": "Sprint deletion is not available through the API. Go to Studio to delete this sprint manually."
                 }
               }
             },
-            "description": "Sprint has attached plans."
+            "description": "Sprint deletion is not available."
           }
         },
-        "summary": "Delete a sprint (staff-only)",
+        "summary": "DELETE is not available on this route",
         "tags": [
           "Sprints"
         ]
@@ -6096,7 +6105,7 @@
     },
     "/api/sprints/{slug}/enrollments/{email}": {
       "delete": {
-        "description": "Staff-only. Idempotent: returns 204 whether or not a row was deleted. Auto-privates the user's plan if one exists, mirroring the member-leave flow. There is no GET / PATCH on this URL.",
+        "description": "Sprint enrollment deletion is not available through the API (issue #864); unenroll a user in Studio instead. DELETE returns a structured 405.",
         "parameters": [
           {
             "in": "path",
@@ -6116,25 +6125,19 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": "Enrollment removed (empty body)."
-          },
-          "403": {
+          "405": {
             "content": {
               "application/json": {
                 "example": {
-                  "code": "forbidden_other_user_plan",
-                  "error": "Enrollment delete is staff-only"
+                  "code": "sprint_enrollment_delete_not_available",
+                  "error": "Sprint enrollment deletion is not available through the API. Go to Studio to unenroll this user manually."
                 }
               }
             },
-            "description": "Non-staff bearer."
-          },
-          "404": {
-            "description": "Sprint not found."
+            "description": "Enrollment deletion is not available."
           }
         },
-        "summary": "Unenroll a user from a sprint",
+        "summary": "DELETE is not available on this route",
         "tags": [
           "Sprint Enrollments"
         ]

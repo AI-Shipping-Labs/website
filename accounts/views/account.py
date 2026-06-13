@@ -10,6 +10,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.http import HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -156,12 +157,16 @@ def _render_account_page(
     # Slack community card (issue #700). Same gating rule as the
     # dashboard: raw ``user.tier.level >= LEVEL_MAIN`` — admin tier
     # overrides do NOT grant Slack workspace access.
-    slack_invite_url = getattr(settings, "SLACK_INVITE_URL", "")
+    # Issue #953: the CTA links to the gated /community/slack redirect, not
+    # the raw invite URL — but the card is still only shown when an invite
+    # URL is actually configured (nothing to redirect to otherwise).
+    slack_invite_configured = bool(get_config("SLACK_INVITE_URL", ""))
+    slack_join_url = reverse("community_slack_join")
     has_qualifying_slack_tier = bool(
         user.tier_id and user.tier.level >= LEVEL_MAIN
     )
     show_slack_join = bool(
-        slack_invite_url
+        slack_invite_configured
         and has_qualifying_slack_tier
         and not user.slack_member
     )
@@ -213,7 +218,7 @@ def _render_account_page(
         # ``includes/_slack_account_card.html`` partial.
         "show_slack_join": show_slack_join,
         "slack_connected": slack_connected,
-        "slack_invite_url": slack_invite_url,
+        "slack_join_url": slack_join_url,
         "slack_user_id": slack_user_id,
         "slack_profile_url": slack_profile_url,
     }

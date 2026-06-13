@@ -123,9 +123,10 @@ class AccountSlackJoinCtaTest(
         self.assertContains(response, 'data-testid="slack-account-card"')
         self.assertContains(response, 'data-testid="slack-account-card-join"')
         self.assertContains(response, "Join our Slack community")
-        # The CTA must point at the configured invite URL — locked to the
-        # join anchor so an unrelated link with the same href would still
-        # fail correctly if the CTA disappeared.
+        # Issue #953: the CTA must point at the gated /community/slack
+        # redirect, NEVER the raw invite URL — locked to the join anchor
+        # so an unrelated link would still fail correctly if the CTA
+        # disappeared.
         anchor_match = re.search(
             r'<a[^>]*data-testid="slack-account-card-join"[^>]*>',
             response.content.decode(),
@@ -133,9 +134,10 @@ class AccountSlackJoinCtaTest(
         )
         self.assertIsNotNone(anchor_match, "Join Slack anchor must render")
         attrs = anchor_match.group(0)
-        self.assertIn(f'href="{TEST_INVITE_URL}"', attrs)
-        self.assertIn('target="_blank"', attrs)
+        self.assertIn('href="/community/slack"', attrs)
         self.assertIn('rel="noopener"', attrs)
+        # The raw invite URL must not leak anywhere on the rendered page.
+        self.assertNotContains(response, TEST_INVITE_URL)
 
     def test_premium_user_also_sees_join_card(self):
         user = User.objects.create_user(email="prem@test.com", password="pw")
@@ -315,7 +317,10 @@ class SlackProfileUrlContextKeyTest(
         ctx = response.context
         self.assertFalse(ctx["show_slack_join"])
         self.assertTrue(ctx["slack_connected"])
-        self.assertEqual(ctx["slack_invite_url"], TEST_INVITE_URL)
+        # Issue #953: context exposes the gated redirect path, not the raw
+        # invite URL.
+        self.assertEqual(ctx["slack_join_url"], "/community/slack")
+        self.assertNotIn("slack_invite_url", ctx)
         self.assertEqual(ctx["slack_user_id"], "U0CONTEXT1")
         self.assertEqual(
             ctx["slack_profile_url"],

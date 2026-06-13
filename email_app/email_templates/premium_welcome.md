@@ -6,7 +6,7 @@ Hey {{ user_first_name|default:"there" }},
 
 We're Alexey and Valeriia, the co-founders of AI Shipping Labs — thank you so much for joining on the Premium plan, our top tier!
 
-Premium gives you everything we offer: all our workshop write-ups and recordings, full community (Slack) access, and our mini-courses.
+Premium gives you everything we offer: all our workshop write-ups and recordings, full community (Slack) access, and our mini-courses. You can [Join our Slack community]({{ site_url }}/community/slack) right away.
 
 One honest note on the courses: we're building them right now, and there aren't any on the platform yet. Premium is where they'll land first, and as a Premium member you'll get them as soon as they're ready — at no extra cost.
 

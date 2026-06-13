@@ -413,7 +413,10 @@ class HookTasksInviteEmailFallbackTest(TestCase):
         mock_send_mail.assert_called_once()
         kwargs = mock_send_mail.call_args.kwargs
         self.assertIn(self.user.email, kwargs["recipient_list"])
-        self.assertIn("https://join.slack.com/test", kwargs["message"])
+        # Issue #953: the invite email links to the gated /community/slack
+        # redirect, never the raw SLACK_INVITE_URL.
+        self.assertIn("/community/slack", kwargs["message"])
+        self.assertNotIn("https://join.slack.com/test", kwargs["message"])
 
         mock_post.assert_not_called()
         mock_get_service.assert_not_called()
@@ -482,7 +485,10 @@ class HookTasksInviteEmailFallbackTest(TestCase):
         mock_send_mail.assert_called_once()
         kwargs = mock_send_mail.call_args.kwargs
         self.assertIn(self.user.email, kwargs["recipient_list"])
-        self.assertIn("https://join.slack.com/test", kwargs["message"])
+        # Issue #953: the invite email links to the gated /community/slack
+        # redirect, never the raw SLACK_INVITE_URL.
+        self.assertIn("/community/slack", kwargs["message"])
+        self.assertNotIn("https://join.slack.com/test", kwargs["message"])
 
         mock_post.assert_not_called()
         mock_get_service.assert_not_called()

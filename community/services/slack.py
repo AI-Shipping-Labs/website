@@ -25,7 +25,7 @@ from django.core.mail import send_mail
 from community.models import CommunityAuditLog
 from community.services.base import CommunityService
 from community.slack_config import get_slack_community_channel_ids
-from integrations.config import get_config, is_enabled
+from integrations.config import get_config, is_enabled, site_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -562,7 +562,10 @@ class SlackCommunityService(CommunityService):
         Args:
             user: User model instance.
         """
-        slack_invite_url = get_config('SLACK_INVITE_URL')
+        # Issue #953: link to the gated /community/slack redirect on our own
+        # site instead of the raw SLACK_INVITE_URL, so the invite cannot be
+        # forwarded to non-members and each click is tracked.
+        slack_join_url = f"{site_base_url()}/community/slack"
         try:
             send_mail(
                 subject="Welcome to AI Shipping Labs community!",
@@ -570,7 +573,7 @@ class SlackCommunityService(CommunityService):
                     f"Hi,\n\n"
                     f"Welcome to AI Shipping Labs! Your membership includes access "
                     f"to our Slack community.\n\n"
-                    f"Join our Slack workspace here: {slack_invite_url}\n\n"
+                    f"Join our Slack workspace here: {slack_join_url}\n\n"
                     f"Once you join, our system will automatically detect your email "
                     f"and add you to the community channels.\n\n"
                     f"- AI Shipping Labs"

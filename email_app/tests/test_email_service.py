@@ -227,6 +227,9 @@ class EmailServiceTemplateRenderingTest(TestCase):
 
     @patch.object(EmailService, '_send_ses', return_value='test-id')
     def test_community_invite_template(self, mock_ses):
+        # Issue #953: the invite links to the gated /community/slack
+        # redirect (built from the injected site_url), never the raw
+        # SLACK_INVITE_URL — even if a caller still passes one.
         self.service.send(self.user, 'community_invite', {
             'slack_invite_url': 'https://slack.com/join/abc',
         })
@@ -234,7 +237,8 @@ class EmailServiceTemplateRenderingTest(TestCase):
         subject = call_args[0][1]
         html = call_args[0][2]
         self.assertIn('community', subject)
-        self.assertIn('slack.com/join/abc', html)
+        self.assertIn('/community/slack', html)
+        self.assertNotIn('slack.com/join/abc', html)
 
     @patch.object(EmailService, '_send_ses', return_value='test-id')
     def test_lead_magnet_delivery_template(self, mock_ses):

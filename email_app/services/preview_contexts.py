@@ -49,7 +49,10 @@ PREVIEW_CONTEXTS = {
     },
     'community_invite': {
         'user_name': 'Ada',
-        'slack_invite_url': 'https://example.com/slack/invite',
+        # Issue #953: the invite now links to the gated /community/slack
+        # redirect built from ``site_url`` (auto-injected on real sends),
+        # never the raw SLACK_INVITE_URL.
+        'site_url': 'https://aishippinglabs.com',
     },
     'event_registration': {
         'user_name': 'Ada',

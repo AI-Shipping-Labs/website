@@ -300,13 +300,17 @@ def _dashboard(request):
     # Slack join link is based on user.tier.level (NOT overridden level)
     # because Slack access requires a paid subscription.
     from content.access import LEVEL_MAIN
-    slack_invite_url = getattr(settings, 'SLACK_INVITE_URL', '')
+    # Issue #953: the dashboard CTA links to the gated /community/slack
+    # redirect, not the raw invite URL. The card is still only shown when
+    # an invite URL is actually configured (nothing to redirect to else).
+    slack_invite_configured = bool(get_config('SLACK_INVITE_URL', ''))
+    slack_join_url = reverse('community_slack_join')
     has_qualifying_tier = user.tier_id and user.tier.level >= LEVEL_MAIN
     # Issue #358: gate on the verified ``slack_member`` boolean rather
     # than ``slack_user_id`` (which is populated by Slack OAuth even
     # for users who never joined the workspace).
     show_slack_join = bool(
-        slack_invite_url and has_qualifying_tier and not user.slack_member
+        slack_invite_configured and has_qualifying_tier and not user.slack_member
     )
     slack_connected = bool(has_qualifying_tier and user.slack_member)
     # Issue #700: surface the user's Slack ID + deep-link to their Slack
@@ -334,7 +338,7 @@ def _dashboard(request):
         'quick_actions': quick_actions,
         'show_slack_join': show_slack_join,
         'slack_connected': slack_connected,
-        'slack_invite_url': slack_invite_url,
+        'slack_join_url': slack_join_url,
         'slack_user_id': slack_user_id,
         'slack_profile_url': slack_profile_url,
     }

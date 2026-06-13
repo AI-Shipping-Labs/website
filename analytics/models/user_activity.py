@@ -32,6 +32,7 @@ class UserActivity(models.Model):
     EVENT_EVENT_JOIN = 'event_join'
     EVENT_PAYMENT = 'payment'
     EVENT_EMAIL_CLICK = 'email_click'
+    EVENT_SLACK_JOIN = 'slack_join_click'
 
     EVENT_TYPE_CHOICES = [
         (EVENT_SIGNUP, 'Signup'),
@@ -41,6 +42,7 @@ class UserActivity(models.Model):
         (EVENT_EVENT_JOIN, 'Joined'),
         (EVENT_PAYMENT, 'Payment'),
         (EVENT_EMAIL_CLICK, 'Email click'),
+        (EVENT_SLACK_JOIN, 'Slack join'),
     ]
 
     user = models.ForeignKey(

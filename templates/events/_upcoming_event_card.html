@@ -1,0 +1,97 @@
+{% load access_tags %}
+{% comment %}
+Issue #866: single upcoming event card, extracted from events_list.html so
+the Upcoming loop can render either an event row or a grouped series row.
+``event`` is the Event in scope; ``registered_event_ids`` is the set of
+event ids the current user is registered for. Behaviour is unchanged from
+the inline card it replaced (#523 / #673 / #857 / #572).
+{% endcomment %}
+<article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
+  {% if event.event_series %}
+  {% comment %}
+  The series link lives OUTSIDE the wrapping clickable-card <a>
+  below. HTML5 forbids nested anchors — putting an <a> inside
+  another <a> causes the parser to split the outer anchor,
+  producing multiple sibling links and breaking the card's
+  click target. Same pattern as blog_list.html tag chips.
+  event.stopPropagation() is defensive in case a future
+  card-level click handler lands on the <article>.
+  {% endcomment %}
+  <p class="mb-2 text-sm" data-testid="event-card-series-link">
+    <a href="{{ event.event_series.get_absolute_url }}" class="text-accent hover:underline" onclick="event.stopPropagation();">
+      Series: {{ event.event_series.name }}
+    </a>
+  </p>
+  {% endif %}
+  {# Issue #523 — keyboard-focus ring on the wrapping <a>. #}
+  {# Issue #673 — single source of truth for the event URL is event.get_absolute_url. #}
+  {# Issue #857 — a series occurrence routes the whole card to the #}
+  {# series screen so the user lands where they can register for #}
+  {# all upcoming sessions or any single one. #}
+  <a href="{% if event.event_series %}{{ event.event_series.get_absolute_url }}{% else %}{{ event.get_absolute_url }}{% endif %}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="event-card-link">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          {% if event.required_level > 0 %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent">
+            <i data-lucide="lock" class="h-3 w-3"></i>
+            {{ event.required_level|required_tier_label }}
+          </span>
+          {% endif %}
+          {% if event.id in registered_event_ids %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">
+            <i data-lucide="check" class="h-3 w-3"></i>
+            Registered
+          </span>
+          {% endif %}
+          {% if event.is_external %}
+          {# Issue #572 — pill marking a third-party-hosted event so the user knows registration happens off-platform. #}
+          <span class="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="event-card-external-badge">
+            <i data-lucide="external-link" class="h-3 w-3"></i>
+            Hosted on {{ event.external_host }}
+          </span>
+          {% endif %}
+        </div>
+        <h3 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
+          {{ event.title }}
+        </h3>
+        {% if event.description_html %}
+        <p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description_html|striptags|truncatechars:200 }}</p>
+        {% endif %}
+        <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="calendar" class="h-4 w-4"></i>
+            {{ event.formatted_date }}
+          </span>
+          {% if event.location %}
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="map-pin" class="h-4 w-4"></i>
+            {{ event.location }}
+          </span>
+          {% endif %}
+          {% if event.spots_remaining is not None %}
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="users" class="h-4 w-4"></i>
+            {% if event.is_full %}
+            <span class="text-red-400">Event is full</span>
+            {% else %}
+            {{ event.spots_remaining }} spot{{ event.spots_remaining|pluralize }} remaining
+            {% endif %}
+          </span>
+          {% endif %}
+        </div>
+        {% if event.tags %}
+        <div class="mt-3 flex flex-wrap gap-1.5" data-testid="event-card-tags">
+          {% for tag in event.tags|slice:":3" %}
+          <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+          {% endfor %}
+          {% if event.tags|length > 3 %}
+          <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ event.tags|length|add:'-3' }} more event tags">+{{ event.tags|length|add:"-3" }}</span>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+      <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+    </div>
+  </a>
+</article>

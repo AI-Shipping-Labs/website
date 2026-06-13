@@ -100,57 +100,68 @@
         </div>
       </div>
 
-      <ol class="space-y-3" data-testid="series-events">
+      {# Issue #866 (Part B): the occurrence list is a single bordered #}
+      {# container with hairline dividers; each occurrence is a compact row #}
+      {# (px-4 py-3, 44px tap targets) rather than a large per-row card. #}
+      {# Cancelled occurrences are excluded from the public list by the view #}
+      {# (only staff see them here, carrying a visible "Cancelled" chip). #}
+      {% if events %}
+      <ol class="overflow-hidden rounded-lg border border-border divide-y divide-border" data-testid="series-events">
         {% for event in events %}
-        <li class="rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="series-event" data-event-slug="{{ event.slug }}">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <a href="{{ event.get_absolute_url }}" class="text-lg font-medium text-foreground hover:text-accent" data-testid="series-event-link">
-                {{ event.title }}
-              </a>
-              <p class="text-sm text-muted-foreground mt-1" data-testid="series-event-date">
+        <li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-4 py-3" data-testid="series-event" data-event-slug="{{ event.slug }}">
+          <div class="min-w-0 flex-1">
+            <a href="{{ event.get_absolute_url }}" class="inline-flex min-h-[44px] items-center text-base font-medium text-foreground hover:text-accent" data-testid="series-event-link">
+              {{ event.title }}
+            </a>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span data-testid="series-event-date">
                 {% timezone event.timezone %}{{ event.start_datetime|date:"l, M d, Y · H:i" }}{% endtimezone %} {{ event.timezone }}
-              </p>
+              </span>
               {# Issue #668: per-occurrence social-proof chip. View annotates #}
               {# _attendee_count so this renders in a single SQL pass. #}
-              <div class="mt-2 flex flex-wrap items-center gap-2">
-                {% include "events/_event_attendee_count.html" %}
-              </div>
-            </div>
-            <div class="text-sm">
-              {# Issue #857: per-occurrence registration state. #}
-              {% if event.user_reg_state == 'registered' %}
-              <span class="inline-flex items-center gap-1 rounded-full bg-green-500/20 px-2.5 py-1 text-xs font-medium text-green-400" data-testid="series-event-state-registered">
-                <i data-lucide="check" class="h-3 w-3"></i>
-                Registered
-              </span>
-              {% elif event.user_reg_state == 'past' %}
-              <span class="inline-flex items-center rounded bg-secondary px-2 py-1 text-xs font-medium text-muted-foreground" data-testid="series-event-state-past">
-                Past
-              </span>
-              {% elif event.user_reg_state == 'full' %}
-              <span class="inline-flex items-center rounded-full bg-red-500/20 px-2.5 py-1 text-xs font-medium text-red-400" data-testid="series-event-state-full">
-                Full
-              </span>
-              {% elif event.user_reg_state == 'no_access' %}
-              <a href="{{ pricing_url }}" class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/30" data-testid="series-event-state-no-access">
-                <i data-lucide="lock" class="h-3 w-3"></i>
-                Upgrade to register
-              </a>
-              {% else %}
-              <a href="{{ event.get_absolute_url }}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-foreground hover:bg-secondary/80" data-testid="series-event-state-register">
-                Register
-              </a>
-              {% endif %}
+              {% include "events/_event_attendee_count.html" %}
             </div>
           </div>
-        </li>
-        {% empty %}
-        <li class="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
-          No published events in this series yet.
+          <div class="flex-shrink-0 text-sm">
+            {# Issue #863/#866: staff preview surfaces cancelled occurrences #}
+            {# with a clear red chip; the public list never includes them. #}
+            {% if event.status == 'cancelled' %}
+            <span class="inline-flex min-h-[44px] items-center rounded-full bg-red-500/20 px-2.5 py-1 text-xs font-medium text-red-400" data-testid="series-event-state-cancelled">
+              Cancelled
+            </span>
+            {# Issue #857: per-occurrence registration state. #}
+            {% elif event.user_reg_state == 'registered' %}
+            <span class="inline-flex min-h-[44px] items-center gap-1 rounded-full bg-green-500/20 px-2.5 py-1 text-xs font-medium text-green-400" data-testid="series-event-state-registered">
+              <i data-lucide="check" class="h-3 w-3"></i>
+              Registered
+            </span>
+            {% elif event.user_reg_state == 'past' %}
+            <span class="inline-flex min-h-[44px] items-center rounded bg-secondary px-2 py-1 text-xs font-medium text-muted-foreground" data-testid="series-event-state-past">
+              Past
+            </span>
+            {% elif event.user_reg_state == 'full' %}
+            <span class="inline-flex min-h-[44px] items-center rounded-full bg-red-500/20 px-2.5 py-1 text-xs font-medium text-red-400" data-testid="series-event-state-full">
+              Full
+            </span>
+            {% elif event.user_reg_state == 'no_access' %}
+            <a href="{{ pricing_url }}" class="inline-flex min-h-[44px] items-center gap-1 rounded-full bg-accent/20 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/30" data-testid="series-event-state-no-access">
+              <i data-lucide="lock" class="h-3 w-3"></i>
+              Upgrade to register
+            </a>
+            {% else %}
+            <a href="{{ event.get_absolute_url }}" class="inline-flex min-h-[44px] items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-foreground hover:bg-secondary/80" data-testid="series-event-state-register">
+              Register
+            </a>
+            {% endif %}
+          </div>
         </li>
         {% endfor %}
       </ol>
+      {% else %}
+      <div class="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground" data-testid="series-events">
+        No published events in this series yet.
+      </div>
+      {% endif %}
     </div>
   </section>
 </main>

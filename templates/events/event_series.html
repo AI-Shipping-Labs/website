@@ -40,9 +40,20 @@
       <div class="mb-10">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Event series</p>
         <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl" data-testid="series-name">{{ series.name }}</h1>
+        {% comment %}
+          Issue #877: the cadence label is derived from the real occurrences
+          (EventSeries.schedule_label), not from the series' first-occurrence
+          fields. Since #854 added irregular schedules, the old fixed weekly
+          claim could be false; schedule_label returns a neutral session
+          summary for irregular/short series and the legacy weekly phrasing
+          only when the occurrences truly follow it. Empty for a 0-occurrence
+          (staff-preview) series, so the <p> is omitted to avoid a blank line.
+        {% endcomment %}
+        {% if series.schedule_label %}
         <p class="mt-2 text-sm text-muted-foreground" data-testid="series-cadence">
-          {{ series.get_cadence_display }} on {{ series.get_day_of_week_display }} at {{ series.start_time|time:"H:i" }} {{ series.timezone }}
+          {{ series.schedule_label }}
         </p>
+        {% endif %}
         {% if series.description_html %}
         <div class="prose prose-invert mt-4 max-w-none">
           {{ series.description_html|safe }}

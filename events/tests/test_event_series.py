@@ -10,6 +10,7 @@ Covers:
 - Public events list shows series link when an event belongs to a series.
 """
 
+import zoneinfo
 from datetime import UTC, datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
@@ -58,6 +59,183 @@ class EventSeriesModelTest(TestCase):
             event_series=series, series_position=1, origin='studio',
         )
         self.assertEqual(series.event_count, 1)
+
+
+class ScheduleLabelTest(TestCase):
+    """Issue #877: cadence label derived from real occurrences.
+
+    ``is_regular_cadence`` decides whether the stored weekly claim is honest;
+    ``schedule_label`` renders the header string. Both compute over the
+    publicly-visible occurrences (``upcoming`` / ``completed``).
+    """
+
+    @staticmethod
+    def _series(**kwargs):
+        defaults = dict(
+            name='Cadence Series',
+            day_of_week=2,  # Wednesday
+            start_time=time(18, 0),
+            timezone='Europe/Berlin',
+        )
+        defaults.update(kwargs)
+        return EventSeries.objects.create(**defaults)
+
+    @staticmethod
+    def _occurrence(series, start_local, position, tz='Europe/Berlin',
+                    status='upcoming'):
+        """Create an occurrence whose local start is ``start_local`` in ``tz``."""
+        aware = start_local.replace(tzinfo=zoneinfo.ZoneInfo(tz))
+        return Event.objects.create(
+            title=f'Session {position}',
+            slug=f'{series.slug}-session-{position}',
+            start_datetime=aware,
+            timezone=tz,
+            status=status,
+            event_series=series,
+            series_position=position,
+            origin='studio',
+        )
+
+    # --- is_regular_cadence ------------------------------------------------
+
+    def test_regular_weekly_series_is_regular(self):
+        series = self._series()
+        for i in range(3):
+            self._occurrence(
+                series,
+                datetime(2026, 6, 17, 18, 0) + timedelta(weeks=i),  # Wednesdays
+                position=i + 1,
+            )
+        self.assertTrue(series.is_regular_cadence)
+
+    def test_mixed_weekdays_is_not_regular(self):
+        # Reporter's example: occurrences land on mixed weekdays.
+        series = self._series()
+        schedule = [
+            datetime(2026, 6, 15, 18, 0),  # Monday
+            datetime(2026, 6, 24, 18, 0),  # Wednesday
+            datetime(2026, 6, 29, 18, 0),  # Monday
+            datetime(2026, 7, 6, 18, 0),   # Monday
+        ]
+        for i, dt in enumerate(schedule):
+            self._occurrence(series, dt, position=i + 1)
+        self.assertFalse(series.is_regular_cadence)
+
+    def test_right_weekday_but_irregular_gaps_is_not_regular(self):
+        # Weeks 1, 2, 4 — all Wednesdays at 18:00 but a 14-day gap.
+        series = self._series()
+        for i, dt in enumerate([
+            datetime(2026, 6, 17, 18, 0),
+            datetime(2026, 6, 24, 18, 0),
+            datetime(2026, 7, 8, 18, 0),  # skips a week -> 14-day gap
+        ]):
+            self._occurrence(series, dt, position=i + 1)
+        self.assertFalse(series.is_regular_cadence)
+
+    def test_wrong_time_is_not_regular(self):
+        series = self._series()
+        self._occurrence(series, datetime(2026, 6, 17, 18, 0), position=1)
+        self._occurrence(series, datetime(2026, 6, 24, 19, 0), position=2)
+        self.assertFalse(series.is_regular_cadence)
+
+    def test_zero_occurrences_is_not_regular(self):
+        self.assertFalse(self._series().is_regular_cadence)
+
+    def test_single_occurrence_is_not_regular(self):
+        series = self._series()
+        self._occurrence(series, datetime(2026, 6, 17, 18, 0), position=1)
+        self.assertFalse(series.is_regular_cadence)
+
+    def test_six_day_utc_gap_within_tolerance_is_regular(self):
+        # A weekly series whose host moved across timezones: every occurrence
+        # is the stored weekday at the stored local time, but because one
+        # occurrence is stored in a far-eastern tz the UTC-instant gap rounds
+        # to 6 days. The +/-1 day tolerance must still treat it as weekly.
+        series = self._series()
+        self._occurrence(series, datetime(2026, 6, 17, 18, 0), position=1)
+        # Wed 18:00 Auckland (UTC+12) is ~10h earlier in UTC than Wed 18:00
+        # Berlin, so the instant gap is 6 days 14 hours -> .days == 6.
+        # day_of_week (2/Wednesday) and start_time (18:00) still match in NZ.
+        self._occurrence(
+            series, datetime(2026, 6, 24, 18, 0), position=2,
+            tz='Pacific/Auckland',
+        )
+        self.assertTrue(series.is_regular_cadence)
+
+    def test_draft_and_cancelled_occurrences_ignored(self):
+        # A clean weekly series plus a stray draft on a different weekday and a
+        # cancelled occurrence at a different time must still read as regular.
+        series = self._series()
+        for i in range(3):
+            self._occurrence(
+                series, datetime(2026, 6, 17, 18, 0) + timedelta(weeks=i), position=i + 1,
+            )
+        self._occurrence(
+            series, datetime(2026, 6, 19, 9, 0), position=99,
+            status='draft',
+        )
+        self._occurrence(
+            series, datetime(2026, 6, 20, 9, 0), position=98,
+            status='cancelled',
+        )
+        self.assertTrue(series.is_regular_cadence)
+
+    # --- schedule_label ----------------------------------------------------
+
+    def test_label_for_regular_series_matches_legacy_string(self):
+        series = self._series()
+        for i in range(3):
+            self._occurrence(
+                series, datetime(2026, 6, 17, 18, 0) + timedelta(weeks=i), position=i + 1,
+            )
+        self.assertEqual(
+            series.schedule_label,
+            'Weekly on Wednesday at 18:00 Europe/Berlin',
+        )
+
+    def test_label_for_irregular_series_is_neutral_summary(self):
+        series = self._series()
+        for i, dt in enumerate([
+            datetime(2026, 6, 15, 18, 0),  # Monday
+            datetime(2026, 6, 24, 18, 0),
+            datetime(2026, 6, 29, 18, 0),
+            datetime(2026, 7, 6, 18, 0),
+            datetime(2026, 7, 21, 18, 0),
+            datetime(2026, 8, 3, 18, 0),
+        ]):
+            self._occurrence(series, dt, position=i + 1)
+        label = series.schedule_label
+        self.assertEqual(label, '6 sessions · Jun 15, 2026 – Aug 03, 2026')
+        self.assertNotIn('Weekly', label)
+        self.assertNotIn('Monday', label)
+
+    def test_label_for_single_occurrence_has_no_dash(self):
+        series = self._series()
+        self._occurrence(series, datetime(2026, 6, 15, 18, 0), position=1)
+        label = series.schedule_label
+        self.assertEqual(label, '1 session · Jun 15, 2026')
+        self.assertNotIn('–', label)
+        self.assertNotIn('Weekly', label)
+
+    def test_label_for_zero_occurrences_is_empty(self):
+        self.assertEqual(self._series().schedule_label, '')
+
+    def test_label_ignores_draft_and_cancelled_for_count(self):
+        series = self._series()
+        for i, dt in enumerate([
+            datetime(2026, 6, 15, 18, 0),
+            datetime(2026, 6, 24, 18, 0),
+            datetime(2026, 6, 29, 18, 0),
+        ]):
+            self._occurrence(series, dt, position=i + 1)
+        self._occurrence(
+            series, datetime(2026, 7, 1, 18, 0), position=98, status='draft',
+        )
+        self._occurrence(
+            series, datetime(2026, 7, 2, 18, 0), position=99,
+            status='cancelled',
+        )
+        self.assertTrue(series.schedule_label.startswith('3 sessions · '))
 
 
 class EventOriginInvariantTest(TestCase):

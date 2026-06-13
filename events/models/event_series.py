@@ -11,6 +11,8 @@ issue #575 renamed it to ``EventSeries`` everywhere to match the product
 term.
 """
 
+import zoneinfo
+
 from django.db import models
 from django.utils.text import slugify
 
@@ -21,6 +23,14 @@ from events.models.event import PUBLIC_EVENT_STATUSES
 EVENT_SERIES_CADENCE_CHOICES = [
     ('weekly', 'Weekly'),
 ]
+
+# Issue #877: a weekly series' occurrences are 7 days apart, but a clock
+# change inside the series shifts one gap by an hour, which can push the
+# day-boundary by one calendar day. We allow +/- 1 day around 7 so a
+# genuinely-weekly European series spanning a DST change still reads as
+# regular.
+WEEKLY_GAP_DAYS = 7
+WEEKLY_GAP_TOLERANCE_DAYS = 1
 
 
 DAY_OF_WEEK_CHOICES = [
@@ -165,3 +175,101 @@ class EventSeries(TimestampedModelMixin, models.Model):
         before publishing.
         """
         return self.is_active and self.published_event_count > 0
+
+    def _visible_occurrences(self):
+        """Ordered list of the occurrences a public visitor actually sees.
+
+        Issue #877: the cadence label is derived from real occurrences, not
+        from the series' first-occurrence fields. We compute over
+        ``PUBLIC_EVENT_STATUSES`` (``upcoming`` / ``completed``) — the same
+        set the public page lists — so the label a visitor reads matches the
+        occurrence cards below it. A staff member previewing a draft-heavy
+        series will see a label that counts only the visible occurrences,
+        which is acceptable and documented.
+        """
+        return list(
+            self.events.filter(status__in=PUBLIC_EVENT_STATUSES)
+            .order_by('start_datetime')
+        )
+
+    @property
+    def is_regular_cadence(self):
+        """True only when the visible occurrences truly follow the weekly claim.
+
+        Issue #854 introduced manually-defined / irregular schedules, so the
+        stored ``day_of_week`` / ``start_time`` (the first occurrence) no
+        longer describe the whole series. This property is the single source
+        of truth for whether the fixed-cadence label is honest. It returns
+        ``True`` only when every visible occurrence lands on the stored
+        weekday at the stored local start time (each evaluated in that
+        occurrence's own timezone), spaced ~7 days apart.
+        """
+        occurrences = self._visible_occurrences()
+        if len(occurrences) < 2:
+            # A 0- or 1-occurrence series cannot establish a cadence.
+            return False
+
+        for occ in occurrences:
+            local = occ.start_datetime.astimezone(
+                zoneinfo.ZoneInfo(occ.timezone)
+            )
+            if local.weekday() != self.day_of_week:
+                return False
+            if (local.hour, local.minute) != (
+                self.start_time.hour, self.start_time.minute,
+            ):
+                return False
+
+        for earlier, later in zip(occurrences, occurrences[1:]):
+            gap_days = (
+                later.start_datetime - earlier.start_datetime
+            ).days
+            if not (
+                WEEKLY_GAP_DAYS - WEEKLY_GAP_TOLERANCE_DAYS
+                <= gap_days
+                <= WEEKLY_GAP_DAYS + WEEKLY_GAP_TOLERANCE_DAYS
+            ):
+                return False
+
+        return True
+
+    @property
+    def schedule_label(self):
+        """Rendered header string describing when the series meets.
+
+        Issue #877: derives the label from the real occurrences so it stays
+        honest once a schedule drifts (see ``is_regular_cadence``). The
+        template renders this verbatim; no inline cadence computation.
+
+        - Regular series keep the legacy phrasing, byte-identical to before.
+        - Irregular series get a neutral, accurate summary of the actual
+          sessions rather than a false weekly claim.
+        - A zero-occurrence series returns ``''`` (the public page 404s for
+          empty series; staff preview may still reach this and must not
+          raise).
+        """
+        if self.is_regular_cadence:
+            return (
+                f'{self.get_cadence_display()} on '
+                f'{self.get_day_of_week_display()} at '
+                f'{self.start_time.strftime("%H:%M")} {self.timezone}'
+            )
+
+        occurrences = self._visible_occurrences()
+        if not occurrences:
+            return ''
+
+        count = len(occurrences)
+        first = occurrences[0].start_datetime.astimezone(
+            zoneinfo.ZoneInfo(occurrences[0].timezone)
+        )
+        last = occurrences[-1].start_datetime.astimezone(
+            zoneinfo.ZoneInfo(occurrences[-1].timezone)
+        )
+        noun = 'session' if count == 1 else 'sessions'
+        first_str = first.strftime('%b %d, %Y')
+        if count == 1:
+            return f'{count} {noun} · {first_str}'
+        last_str = last.strftime('%b %d, %Y')
+        # En dash between the first and last date.
+        return f'{count} {noun} · {first_str} – {last_str}'

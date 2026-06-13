@@ -11,6 +11,7 @@ Usage:
 
 import os
 import re
+import zoneinfo
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -827,6 +828,145 @@ class TestScenario10CancelledHiddenFromPublic:
         staff_body = staff_page.locator("body").inner_text()
         assert "Cancelled Occurrence 1" in staff_body
         staff_ctx.close()
+
+
+# ---------------------------------------------------------------------------
+# Issue #877: the public series cadence label is derived from real
+# occurrences, so it stays honest once the schedule drifts (irregular) and is
+# unchanged for a genuinely-weekly series.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestScenario877ScheduleLabel:
+    def test_irregular_series_shows_honest_summary(
+        self, django_server, browser
+    ):
+        from django.db import connection
+
+        from events.models import Event, EventSeries
+
+        _reset_event_state()
+        # Series first occurrence is a Wednesday at 18:00 Europe/Berlin, but
+        # the real schedule drifts across mixed weekdays over several weeks.
+        series = EventSeries(
+            name="Drifted Series",
+            slug="drifted-series",
+            day_of_week=2,  # Wednesday
+            start_time=datetime(2026, 1, 1, 18, 0).time(),
+            timezone="Europe/Berlin",
+        )
+        series.save()
+        schedule = [
+            datetime(2026, 6, 15, 18, 0),  # Monday
+            datetime(2026, 6, 24, 18, 0),  # Wednesday
+            datetime(2026, 6, 29, 18, 0),  # Monday
+            datetime(2026, 7, 6, 18, 0),   # Monday
+            datetime(2026, 7, 21, 18, 0),  # Tuesday
+            datetime(2026, 8, 3, 18, 0),   # Monday
+        ]
+        for i, dt in enumerate(schedule, start=1):
+            aware = dt.replace(tzinfo=zoneinfo.ZoneInfo("Europe/Berlin"))
+            Event(
+                title=f"Drift Session {i}",
+                slug=f"drifted-series-session-{i}",
+                start_datetime=aware,
+                timezone="Europe/Berlin",
+                status="upcoming",
+                origin="studio",
+                event_series=series,
+                series_position=i,
+            ).save()
+        connection.close()
+
+        ctx = browser.new_context(viewport={"width": 1280, "height": 720})
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/events/groups/drifted-series",
+            wait_until="domcontentloaded",
+        )
+        cadence = page.locator('[data-testid="series-cadence"]')
+        label = cadence.inner_text()
+        # No false weekly-cadence claim.
+        assert "Weekly on" not in label
+        assert "Monday" not in label
+        # Honest neutral summary naming the session count and date range.
+        assert "6 sessions" in label
+        assert "–" in label
+        # The stated count matches the number of occurrence cards.
+        rows = page.locator('[data-testid="series-event"]')
+        assert rows.count() == 6
+
+        ctx.close()
+
+    def test_weekly_series_keeps_familiar_label(
+        self, django_server, browser
+    ):
+        from django.db import connection
+
+        from events.models import Event, EventSeries
+
+        _reset_event_state()
+        series = EventSeries(
+            name="Weekly Series",
+            slug="weekly-series",
+            day_of_week=2,  # Wednesday
+            start_time=datetime(2026, 1, 1, 18, 0).time(),
+            timezone="Europe/Berlin",
+        )
+        series.save()
+        base = datetime(2026, 6, 17, 18, 0)  # Wednesday
+        for i in range(3):
+            aware = (base + timedelta(weeks=i)).replace(
+                tzinfo=zoneinfo.ZoneInfo("Europe/Berlin"))
+            Event(
+                title=f"Weekly Session {i + 1}",
+                slug=f"weekly-series-session-{i + 1}",
+                start_datetime=aware,
+                timezone="Europe/Berlin",
+                status="upcoming",
+                origin="studio",
+                event_series=series,
+                series_position=i + 1,
+            ).save()
+        connection.close()
+
+        ctx = browser.new_context(viewport={"width": 1280, "height": 720})
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/events/groups/weekly-series",
+            wait_until="domcontentloaded",
+        )
+        label = page.locator(
+            '[data-testid="series-cadence"]').inner_text().strip()
+        assert label == "Weekly on Wednesday at 18:00 Europe/Berlin"
+        # No neutral "N sessions" summary in place of the weekly label.
+        assert "sessions" not in label
+
+        ctx.close()
+
+    def test_staff_preview_draft_only_series_has_no_blank_cadence_line(
+        self, django_server, browser
+    ):
+        _reset_event_state()
+        _create_staff_user("staff-eg877@test.com")
+        # All-draft series: zero publicly-visible occurrences, so the label is
+        # empty and the cadence paragraph must be omitted entirely.
+        _seed_office_hours_series()
+
+        ctx = _auth_context(browser, "staff-eg877@test.com")
+        page = ctx.new_page()
+        resp = page.goto(
+            f"{django_server}/events/groups/office-hours",
+            wait_until="domcontentloaded",
+        )
+        assert resp.status == 200
+        assert page.locator('[data-testid="series-name"]').is_visible()
+        # The cadence paragraph is absent rather than rendered blank.
+        assert page.locator('[data-testid="series-cadence"]').count() == 0
+
+        ctx.close()
 
 
 # ---------------------------------------------------------------------------

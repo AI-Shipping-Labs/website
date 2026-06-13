@@ -58,6 +58,7 @@ from .stripe_client import (  # noqa: E402
     _tier_for_price_id,
 )
 from .subscriptions import (  # noqa: E402
+    _get_subscription_interval,
     _get_subscription_period_end,
     _get_subscription_price_id,
     _tier_from_subscription,

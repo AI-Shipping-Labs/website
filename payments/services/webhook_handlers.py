@@ -292,6 +292,12 @@ def handle_checkout_completed(session_data):
                 notify_paid_signup,
             )
 
+            # Issue #952: thread the REAL charged amount + currency and
+            # the Stripe ids the handler already loaded so the staff
+            # email renders the actual charge, the plan interval, and
+            # account-scoped dashboard deep-links. NO new Stripe round-trip
+            # is added here — every value below comes from ``session_data``
+            # or the local ``subscription_id`` already in scope.
             notify_paid_signup(
                 user=user,
                 tier=tier,
@@ -300,6 +306,10 @@ def handle_checkout_completed(session_data):
                 stripe_customer_id=customer_id,
                 session_id=session_id,
                 billing_period=billing_period,
+                amount_total_minor=session_data.get("amount_total"),
+                currency=session_data.get("currency", "") or "",
+                payment_intent_id=session_data.get("payment_intent", "") or "",
+                subscription_id=subscription_id,
             )
         except Exception:
             # Defensive: notify_paid_signup wraps each send internally,

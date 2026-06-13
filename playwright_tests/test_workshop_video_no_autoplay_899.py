@@ -27,6 +27,9 @@ import os
 import pytest
 
 from playwright_tests.conftest import (
+    SETTLE_TIMEOUT_MS,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
 from playwright_tests.conftest import (
@@ -189,7 +192,7 @@ class TestSelfHostedCuePausedThenPlays:
         )
         page.wait_for_function(
             "() => document.getElementById('video-player-self-hosted').paused === false",
-            timeout=5000,
+            timeout=SETTLE_TIMEOUT_MS,
         )
         playing_time = page.evaluate(
             "() => document.getElementById('video-player-self-hosted').currentTime"
@@ -285,7 +288,7 @@ class TestSelfHostedChapterClickStillPlays:
         page.wait_for_function(
             "() => { const v = document.getElementById('video-player-self-hosted');"
             " return v.currentTime > 900 && v.paused === false; }",
-            timeout=5000,
+            timeout=SETTLE_TIMEOUT_MS,
         )
         state = page.evaluate(
             "() => { const v = document.getElementById('video-player-self-hosted');"

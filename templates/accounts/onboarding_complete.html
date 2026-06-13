@@ -19,6 +19,32 @@
           Thanks — we'll use your answers to prepare your plan. Here is what
           you told us.
         </p>
+
+        {% if valeria_booking_url or alexey_booking_url %}
+        <div class="mt-6 rounded-2xl border border-accent/40 bg-accent/10 p-5" data-testid="onboarding-complete-book-block">
+          <p class="text-base font-medium text-foreground">We'd love to meet you.</p>
+          <p class="text-sm text-muted-foreground mt-1">
+            Book a quick 1:1 with one of the founders to kick things off.
+          </p>
+          <div class="mt-4 flex flex-wrap gap-3">
+            {% if valeria_booking_url %}
+            <a href="{{ valeria_booking_url }}" target="_blank" rel="noopener noreferrer"
+               class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
+               data-testid="onboarding-complete-book-valeria">
+              Book a call with Valeria
+            </a>
+            {% endif %}
+            {% if alexey_booking_url %}
+            <a href="{{ alexey_booking_url }}" target="_blank" rel="noopener noreferrer"
+               class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
+               data-testid="onboarding-complete-book-alexey">
+              Book a call with Alexey
+            </a>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
         <div class="mt-4 flex flex-wrap gap-3">
           <a href="{% url 'home' %}"
              class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"

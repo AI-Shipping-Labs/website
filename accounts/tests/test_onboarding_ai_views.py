@@ -156,7 +156,8 @@ class ChatTurnTest(TestCase):
                 '/onboarding/chat/message', {'message': 'all answered'},
             )
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp['Location'], reverse('home'))
+        # Land on the end-of-onboarding completion screen (#951), not home.
+        self.assertEqual(resp['Location'], reverse('onboarding_start'))
         response = Response.objects.get(respondent=self.member)
         self.assertEqual(response.status, 'submitted')
 

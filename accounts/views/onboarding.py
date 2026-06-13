@@ -17,6 +17,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from community.models import CallHost
 from crm.services.onboarding_notify import notify_staff_onboarding_submitted
 from questionnaires.models import OnboardingConversation, Persona, Response
 from questionnaires.onboarding import (
@@ -53,11 +54,7 @@ def onboarding_start(request):
     existing = get_onboarding_response(request.user)
 
     if existing is not None and existing.status == 'submitted':
-        rows = _read_only_rows(existing)
-        return render(request, 'accounts/onboarding_complete.html', {
-            'response': existing,
-            'rows': rows,
-        })
+        return _render_onboarding_complete(request, existing)
 
     ai_available = ai_onboarding_available()
     wants_change = request.GET.get('change') == '1'
@@ -185,6 +182,39 @@ def _read_only_rows(response):
     return rows
 
 
+def _founder_booking_urls():
+    """Founder booking URLs for the completion screen CTAs (#951).
+
+    Reads the per-founder scheduler links from the Studio-editable
+    ``CallHost`` store (the same source ``/request-a-call`` uses) rather
+    than forking them into IntegrationSetting keys. A blank ``booking_url``
+    yields ``''`` so the template hides that founder's CTA cleanly.
+    """
+    by_slug = {
+        host.slug: (host.booking_url or '')
+        for host in CallHost.objects.filter(slug__in=['valeria', 'alexey'])
+    }
+    return {
+        'valeria_booking_url': by_slug.get('valeria', ''),
+        'alexey_booking_url': by_slug.get('alexey', ''),
+    }
+
+
+def _render_onboarding_complete(request, response):
+    """Render the end-of-onboarding completion screen for a submitted response.
+
+    Shared by the self-ID resume path and both finish flows (form submit +
+    AI chat). Surfaces the read-only answers plus the founder booking-call
+    CTAs (#951).
+    """
+    context = {
+        'response': response,
+        'rows': _read_only_rows(response),
+    }
+    context.update(_founder_booking_urls())
+    return render(request, 'accounts/onboarding_complete.html', context)
+
+
 def _render_onboarding_fill(request, response):
     """Render / handle the fill-in page for an already-resolved response.
 
@@ -297,5 +327,7 @@ def onboarding_submit(request, response_id):
         request,
         "Thanks — we'll use this to prepare your plan.",
     )
-    # The authenticated dashboard is the ``home`` view's logged-in branch.
-    return redirect('home')
+    # Land on the end-of-onboarding completion screen (#951) so the new
+    # member sees the founder booking CTAs. ``onboarding_start`` renders the
+    # completion screen for a submitted response.
+    return redirect('onboarding_start')

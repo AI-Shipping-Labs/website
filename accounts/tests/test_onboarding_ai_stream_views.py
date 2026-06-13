@@ -159,7 +159,8 @@ class StreamCompletionTest(TestCase):
         mock_complete.assert_not_called()
         self.assertIn('event: done', body)
         self.assertIn('"complete": true', body)
-        self.assertIn(reverse('home'), body)
+        # Completion routes to the end-of-onboarding screen (#951), not home.
+        self.assertIn(reverse('onboarding_start'), body)
         response = Response.objects.get(respondent=self.member)
         self.assertEqual(response.status, 'submitted')
 

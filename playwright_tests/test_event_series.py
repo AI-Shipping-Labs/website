@@ -970,6 +970,83 @@ class TestScenario877ScheduleLabel:
 
 
 # ---------------------------------------------------------------------------
+# Issue #947: the /events grouped series card cadence is the honest
+# schedule_label too, matching the series page (the false "Weekly on …" claim
+# is gone for irregular series everywhere).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestScenario947ListingCardCadence:
+    def test_listing_card_shows_honest_cadence_matching_series_page(
+        self, django_server, browser
+    ):
+        from django.db import connection
+
+        from events.models import Event, EventSeries
+
+        _reset_event_state()
+        # First occurrence is a Wednesday at 18:00 Europe/Berlin, but the real
+        # schedule drifts across weekdays — an irregular series with 3 upcoming
+        # live occurrences, so /events renders it as one grouped series card.
+        series = EventSeries(
+            name="Listing Drifted Series",
+            slug="listing-drifted-series",
+            day_of_week=2,  # Wednesday (claimed)
+            start_time=datetime(2026, 1, 1, 18, 0).time(),
+            timezone="Europe/Berlin",
+        )
+        series.save()
+        schedule = [
+            datetime(2026, 6, 15, 18, 0),  # Monday
+            datetime(2026, 6, 24, 18, 0),  # Wednesday
+            datetime(2026, 6, 29, 18, 0),  # Monday
+        ]
+        for i, dt in enumerate(schedule, start=1):
+            aware = dt.replace(tzinfo=zoneinfo.ZoneInfo("Europe/Berlin"))
+            Event(
+                title=f"Listing Drift Session {i}",
+                slug=f"listing-drifted-series-session-{i}",
+                start_datetime=aware,
+                timezone="Europe/Berlin",
+                status="upcoming",
+                origin="studio",
+                event_series=series,
+                series_position=i,
+            ).save()
+        connection.close()
+
+        ctx = browser.new_context(viewport={"width": 1280, "height": 720})
+        page = ctx.new_page()
+        page.goto(f"{django_server}/events", wait_until="domcontentloaded")
+
+        card = page.locator(
+            '[data-testid="event-series-card"]'
+            '[data-series-slug="listing-drifted-series"]'
+        )
+        assert card.count() == 1
+        meta = card.locator('[data-testid="series-card-meta"]').inner_text()
+        # No false weekly-cadence claim; honest session summary + suffix.
+        assert "Weekly on" not in meta
+        assert "3 sessions" in meta
+        assert "3 upcoming session" in meta
+
+        # Click through to the series page; its header agrees with the card.
+        card.locator('[data-testid="series-card-link"]').click()
+        page.wait_for_url(
+            re.compile(r".*/events/groups/listing-drifted-series$")
+        )
+        page_label = page.locator(
+            '[data-testid="series-cadence"]'
+        ).inner_text().strip()
+        assert "Weekly on" not in page_label
+        assert "3 sessions" in page_label
+
+        ctx.close()
+
+
+# ---------------------------------------------------------------------------
 # Issue #854 Part A: irregular schedules — per-occurrence date + time + title
 # ---------------------------------------------------------------------------
 

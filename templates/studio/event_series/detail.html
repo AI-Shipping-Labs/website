@@ -19,9 +19,15 @@
   <header class="flex flex-col gap-4" data-testid="studio-header">
     <div class="min-w-0">
       <h1 class="text-2xl font-semibold text-foreground" data-testid="event-series-name">{{ series.name }}</h1>
+      {% comment %}
+      Issue #947: honest cadence from ``schedule_label`` (#877). Keep the
+      ``— N occurrence(s)`` suffix; only the leading cadence clause changed.
+      ``schedule_label`` is empty for a 0-occurrence (staff-preview) series,
+      in which case the {% if %} drops the leading clause and its em-dash
+      separator so no stray ``—`` renders before the count.
+      {% endcomment %}
       <p class="text-muted-foreground mt-1" data-testid="event-series-cadence">
-        {{ series.get_cadence_display }} on {{ series.get_day_of_week_display }} at {{ series.start_time|time:"H:i" }} {{ series.timezone }}
-        — {{ events|length }} occurrence{{ events|length|pluralize }}
+        {% if series.schedule_label %}{{ series.schedule_label }} — {% endif %}{{ events|length }} occurrence{{ events|length|pluralize }}
       </p>
     </div>
     <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">

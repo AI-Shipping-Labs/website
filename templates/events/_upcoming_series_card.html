@@ -19,9 +19,15 @@ can register for the whole series or any single session).
         <h3 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors" data-testid="series-card-title">
           {{ row.series.name }}
         </h3>
+        {% comment %}
+        Issue #947: cadence is the honest ``schedule_label`` derived from the
+        real occurrences (#877), not the old first-occurrence weekly claim.
+        It can be empty for a 0-occurrence series, but a grouped series card
+        only renders for 2+ upcoming occurrences so the label is non-empty
+        here; the {% if %} still guards the leading separator defensively.
+        {% endcomment %}
         <p class="mt-2 text-sm text-muted-foreground" data-testid="series-card-meta">
-          {{ row.series.get_cadence_display }} on {{ row.series.get_day_of_week_display }} at {{ row.series.start_time|time:"H:i" }} {{ row.series.timezone }}
-          · {{ row.count }} upcoming session{{ row.count|pluralize }}
+          {% if row.series.schedule_label %}{{ row.series.schedule_label }} · {% endif %}{{ row.count }} upcoming session{{ row.count|pluralize }}
         </p>
         <ul class="mt-4 flex flex-col gap-1.5 text-sm text-muted-foreground" data-testid="series-card-dates">
           {% for occ in row.preview %}

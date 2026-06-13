@@ -36,8 +36,13 @@
           <a href="{% url 'studio_event_series_detail' series_id=series.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ series.name }}</a>
           <p class="text-xs text-muted-foreground mt-1">/{{ series.slug }}</p>
         </td>
+        {% comment %}
+        Issue #947: honest cadence from ``schedule_label`` (#877), computed
+        over public occurrences. Empty for a 0-occurrence series — render
+        nothing rather than a false weekly claim.
+        {% endcomment %}
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Cadence">
-          {{ series.get_cadence_display }} on {{ series.get_day_of_week_display }} at {{ series.start_time|time:"H:i" }} {{ series.timezone }}
+          {{ series.schedule_label }}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Events">{{ series.event_count }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Created">{{ series.created_at|date:"M d, Y" }}</td>

@@ -8,11 +8,11 @@ We're Alexey and Valeriia, the co-founders of AI Shipping Labs — thank you so 
 
 We'd love to learn more about what you're hoping to get from the community. This information will help us improve the community experience and give us the context we need to prepare a personalized plan based on your background, goals, and current situation.
 
-You'll be able to use that plan in our community sprints. {{ current_sprint_status_paragraph }}
+We regularly run community sprints — focused stretches where members work toward their goals together. You'll be able to use your plan in our sprints, and we're happy to help you prepare a plan for the next one. You can see what's coming up here: {{ site_url }}/sprints{{ current_sprint_status_paragraph }}
 
-The best first step is to fill in your onboarding form — it takes a few minutes and tells us about your background and goals: {{ site_url }}/onboarding/
+The best first step is to finish your onboarding — it takes a few minutes and tells us about your background and goals: {{ site_url }}/onboarding/
 
-Once you've done that, we can hop on a short call to go over your personalized plan.
+Once you've finished onboarding, we'd love to have a short call to go over your personalized plan.
 
 Welcome to the community!
 

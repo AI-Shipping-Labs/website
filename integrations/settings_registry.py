@@ -80,6 +80,21 @@ INTEGRATION_GROUPS = [
             {'key': 'SES_PROMOTIONAL_FROM_EMAIL', 'is_secret': False, 'description': 'Sender address for campaigns, newsletters, and marketing email. Must be verified in SES.', 'docs_url': '_docs/integrations/ses.md#ses_promotional_from_email'},
             {'key': 'SES_WELCOME_FROM_EMAIL', 'is_secret': False, 'description': 'Sender address for welcome emails (welcome, paid-signup, imported-user welcomes). Must be verified in SES.', 'docs_url': '_docs/integrations/ses.md#ses_welcome_from_email'},
             {
+                'key': 'SES_WELCOME_REPLY_TO_EMAIL',
+                'is_secret': False,
+                'optional': True,
+                'default': 'welcome@aishippinglabs.com',
+                'description': (
+                    'Reply-To address set on welcome emails so a member who '
+                    'replies reaches a monitored, team-forwarded inbox '
+                    'instead of the send-only welcome/noreply mailbox. '
+                    'Defaults to welcome@aishippinglabs.com (forwarded to the '
+                    'founders by the inbound email-forwarder Lambda). Leave '
+                    'blank to send welcome emails with no Reply-To header.'
+                ),
+                'docs_url': '_docs/integrations/ses.md#ses_welcome_reply_to_email',
+            },
+            {
                 'key': 'SES_CONFIGURATION_SET_NAME',
                 'is_secret': False,
                 'description': (

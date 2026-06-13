@@ -93,7 +93,7 @@ def notify_paid_signup(
 
     # (A) Co-founder welcome to the user. Independent try/except.
     try:
-        _send_cofounder_welcome(user, tier, ctx, cc=staff_email or None)
+        _send_cofounder_welcome(user, tier, ctx, bcc=staff_email or None)
     except Exception:
         # Broad catch by design: any failure inside EmailService /
         # template rendering / SES must not block the staff heads-up or
@@ -232,13 +232,14 @@ def _welcome_template_for_tier(tier):
     return "cofounder_welcome"
 
 
-def _send_cofounder_welcome(user, tier, ctx, *, cc):
+def _send_cofounder_welcome(user, tier, ctx, *, bcc):
     """Send (A) — the welcome to the new paid user.
 
     The template is selected by the purchased tier so each paid tier gets
-    exactly its own email (Basic / Main / Premium). The CC-to-staff
-    behaviour and the EmailLog write are unchanged — only the template
-    selection varies.
+    exactly its own email (Basic / Main / Premium). Issue #950: the staff
+    mailbox rides on BCC (not CC) so the new member never sees the
+    internal address and can't Reply-All to it; the EmailLog write is
+    unchanged.
     """
     from email_app.services import EmailService
 
@@ -247,7 +248,7 @@ def _send_cofounder_welcome(user, tier, ctx, *, cc):
         "user_first_name": ctx["first_name_raw"],
         "current_sprint_status_paragraph": _current_sprint_paragraph(),
     }
-    EmailService().send(user, template_slug, welcome_ctx, cc=cc)
+    EmailService().send(user, template_slug, welcome_ctx, bcc=bcc)
 
 
 def _send_staff_signup_notification(staff_email, ctx):
@@ -381,61 +382,17 @@ def _format_amount(tier, billing_period):
 
 
 def _current_sprint_paragraph():
-    """Resolve the sprint-status sentence for the welcome email.
+    """Sprint-status sentence injected into the welcome email.
 
-    Returns the running-sprint sentence only when a sprint with
-    ``status='active'`` has a computed ``end_date``
-    (``start_date + duration_weeks``) that is today or in the future —
-    i.e. the sprint is genuinely live/upcoming. A sprint marked
-    ``active`` whose end date has already passed (a finished sprint
-    whose status was never flipped) must NOT leak a "started ... ends"
-    sentence into the welcome, so an empty string is returned instead.
-
-    When no qualifying live/upcoming sprint exists, returns an empty
-    string ``""`` — there is no generic fallback. An empty string
-    renders as nothing in the template, leaving the sprint lead-in
-    sentence to stand on its own.
-
-    Imports ``Sprint`` lazily because ``community.services`` is imported
-    at app startup by ``community/apps.py`` indirectly — keeping the
-    model import inside the function avoids tight app-loading coupling.
+    Issue #950: the welcome copy is now EVERGREEN — it links the public
+    ``/sprints`` page and says we regularly run community sprints, all
+    in the template itself. No dated, specific-sprint sentence is ever
+    injected, so the email can't go stale (e.g. naming a finished sprint
+    or a past month). This helper therefore always returns an empty
+    string; it is retained as a stable injection point and so existing
+    callers/tests keep a defined contract.
     """
-    from datetime import timedelta
-
-    from django.utils import timezone
-
-    try:
-        from plans.models import Sprint
-
-        today = timezone.localdate()
-        sprint = (
-            Sprint.objects.filter(status="active")
-            .order_by("-start_date")
-            .first()
-        )
-    except Exception:
-        # Defensive: if the plans app or DB is unhealthy at the moment
-        # of the welcome send, return an empty string rather than
-        # blocking the user-facing email.
-        logger.exception(
-            "notify_paid_signup: failed to query active Sprint for welcome"
-        )
-        return ""
-
-    if sprint is None:
-        return ""
-
-    end_date = sprint.start_date + timedelta(weeks=sprint.duration_weeks)
-    if end_date < today:
-        # The sprint is marked active but its real-world end date has
-        # already passed — do not surface a finished sprint.
-        return ""
-
-    return (
-        f"Sprint {sprint.name} is currently running — it started on "
-        f"{sprint.start_date.isoformat()} and ends on "
-        f"{end_date.isoformat()}."
-    )
+    return ""
 
 
 def _or_dash(value):

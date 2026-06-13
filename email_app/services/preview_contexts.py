@@ -172,6 +172,13 @@ PREVIEW_CONTEXTS = {
     # ``site_url``; mirror both so the Studio preview resolves the
     # greeting and the ``/onboarding/`` link instead of leaving them
     # blank.
+    'cofounder_welcome': {
+        'user_first_name': 'Ada',
+        'site_url': 'https://aishippinglabs.com',
+        # Issue #950: the welcome copy is evergreen; the injected sprint
+        # paragraph is always empty now, so the preview mirrors that.
+        'current_sprint_status_paragraph': '',
+    },
     'basic_welcome': {
         'user_first_name': 'Ada',
         'site_url': 'https://aishippinglabs.com',

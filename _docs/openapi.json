@@ -1645,6 +1645,113 @@
         ]
       }
     },
+    "/api/event-series/{series_id}/occurrences": {
+      "put": {
+        "description": "Idempotent schedule-replace. Unlike the additive ``POST .../occurrences/bulk`` (which only adds), this declares the FULL desired set in one atomic transaction:\n- desired dates with no matching occurrence are created (same per-row defaults as the bulk creator; new drafts carry ``published=False`` per the #878 visibility contract),\n- desired dates matching an existing non-cancelled occurrence are kept untouched (dedup by minute-rounded ``start_datetime``),\n- a desired date matching a CANCELLED occurrence reactivates that row to ``status='upcoming'`` instead of creating a duplicate,\n- every other currently non-cancelled occurrence is CANCELLED (``status='cancelled'`` \u2014 never hard-deleted, per the no-deletes-via-API policy #864).\n\nRe-submitting the same set is a no-op. In-batch duplicate desired dates return 422 ``duplicate_in_batch``. Any per-row validation failure rolls the whole reconcile back and reports the failing index.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "occurrences": [
+                  {
+                    "start_datetime": "2026-05-05T17:00:00+02:00"
+                  },
+                  {
+                    "start_datetime": "2026-05-19T17:00:00+02:00"
+                  }
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "occurrences": {
+                    "items": {
+                      "properties": {
+                        "slug": {
+                          "type": "string"
+                        },
+                        "start_datetime": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "start_datetime"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "occurrences"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cancelled": [
+                    43
+                  ],
+                  "cancelled_count": 1,
+                  "created": [
+                    44
+                  ],
+                  "created_count": 1,
+                  "kept": [
+                    42
+                  ],
+                  "kept_count": 1,
+                  "reactivated": [],
+                  "reactivated_count": 0
+                }
+              }
+            },
+            "description": "Reconcile summary."
+          },
+          "400": {
+            "description": "Invalid JSON or missing field."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_series",
+                  "error": "Event series not found"
+                }
+              }
+            },
+            "description": "Event series not found."
+          },
+          "422": {
+            "description": "Validation error or in-batch duplicate start_datetime."
+          }
+        },
+        "summary": "Declare the exact desired occurrence set",
+        "tags": [
+          "Event Series"
+        ]
+      }
+    },
     "/api/event-series/{series_id}/occurrences/bulk": {
       "post": {
         "description": "Atomic create of N events linked to ``series_id``. Any per-row validation failure rolls the whole batch back; the response includes the failing index. Dedup key is ``(event_series_id, start_datetime)`` rounded to the minute -- in-batch duplicates return 422 ``duplicate_in_batch``, and rows matching existing series events are silently counted as ``skipped_existing`` for idempotent retries.",

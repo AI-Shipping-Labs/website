@@ -21,6 +21,31 @@ Source-of-truth contract:
   propagation (the "Propagate the changes to the events" checkbox) is a
   Studio-only convenience in v1 and is intentionally NOT exposed via the
   API; PATCH a series here only mutates the ``EventSeries`` row.
+
+Visibility contract (issue #878):
+- ``Event.status`` is the SINGLE source of truth for public visibility.
+  ``draft`` and ``cancelled`` occurrences are hidden from visitors
+  (``HIDDEN_FROM_PUBLIC_STATUSES`` in ``events/models/event.py``); only
+  ``upcoming`` / ``completed`` are public. The #858 Publish action flips
+  an occurrence between ``draft`` and ``upcoming``.
+- ``Event.published`` is a SEPARATE narrow boolean that governs ONLY the
+  ``/events?filter=past`` recordings page. It must NEVER be ``True`` while
+  ``status='draft'`` — that combination is contradictory (reads as
+  "published" while the occurrence is actually hidden) and also stamps a
+  bogus first-publish ``published_at`` via ``Event.save()``. Occurrences
+  created/reactivated here follow this contract: a new draft has
+  ``published=False`` and ``published_at=None``.
+
+Write verbs for the occurrence set:
+- ``POST .../occurrences/bulk`` is ADDITIVE: it only adds missing dates,
+  dedup-skips dates that already exist, and NEVER removes/cancels. Use it
+  for the "just add these" workflow.
+- ``PUT .../occurrences`` is the EXACT-SET verb (issue #878): it declares
+  the full desired occurrence set in one atomic call — creates missing
+  dates, keeps matching dates untouched, reactivates a matching cancelled
+  occurrence instead of duplicating it, and cancels every extra
+  (``status='cancelled'``, never a hard-delete, per #864). Re-submitting
+  the same set is a no-op.
 """
 
 import json as _json
@@ -618,6 +643,115 @@ def renumber_series_occurrences(series):
             event.save(update_fields=update_fields)
 
 
+def _create_series_occurrence(series, row, *, slug_position, index):
+    """Create one occurrence for ``series`` from a desired ``row``.
+
+    Shared by the additive bulk endpoint and the idempotent reconcile
+    (issue #878) so both build occurrences identically: same series
+    defaults, same auto-title/slug derivation, same #876 ``title_is_auto``
+    flag, and the same #878 visibility contract (a new draft has
+    ``published=False`` and no ``published_at``).
+
+    Returns ``(event, None)`` on success or ``(None, error_response)`` on a
+    per-row validation failure (the response already carries ``index``).
+    The caller owns the surrounding transaction and the chronological
+    renumber pass.
+    """
+    # Build the per-occurrence payload that ``_collect_event_values``
+    # expects. Inject series defaults where the row leaves a field blank so
+    # the operator can pass just ``start_datetime``.
+    row_payload = dict(row)
+    if "timezone" not in row_payload:
+        row_payload["timezone"] = series.timezone
+    # An explicit, non-blank title makes this an operator title (issue
+    # #876, Decision 4): it is verbatim and never rewritten. Otherwise the
+    # title is auto-generated and will be (re)written chronologically by
+    # ``renumber_series_occurrences``.
+    title_is_auto = not str(row_payload.get("title") or "").strip()
+    if title_is_auto:
+        # Provisional auto-title; overwritten by the renumber pass once
+        # every occurrence has its chronological position.
+        row_payload["title"] = auto_occurrence_title(
+            series.name, slug_position,
+        )
+    if "slug" not in row_payload or not str(
+        row_payload.get("slug") or "",
+    ).strip():
+        row_payload["slug"] = f"{series.slug}-session-{slug_position}"
+
+    values, errors = _collect_event_values(row_payload, existing=None)
+    if errors:
+        details = {"index": index}
+        details.update(errors)
+        return None, error_response(
+            "Validation error",
+            "validation_error",
+            status=422,
+            details=details,
+        )
+
+    event = Event(
+        kind="standard",
+        platform="zoom",
+        timezone=series.timezone,
+        status="draft",
+        required_level=0,
+        # Issue #878: occurrences are created as ``draft`` and MUST NOT
+        # carry a contradictory ``published=True``. ``status`` is the single
+        # source of truth for public visibility; a draft is hidden.
+        # ``published`` governs only the /events?filter=past recordings page
+        # and must never be True while status='draft' (writing True also
+        # stamped a bogus first-publish ``published_at`` via Event.save()).
+        published=False,
+        tags=[],
+        location="",
+        external_host="",
+        max_participants=None,
+        origin="studio",
+        source_repo="",
+        event_series=series,
+        series_position=slug_position,
+        title_is_auto=title_is_auto,
+    )
+    _apply_event_values(event, values)
+    save_error = _save_event_or_error(event)
+    if save_error is not None:
+        # Bubble the validation error code/body but annotate the offending
+        # index for the caller.
+        try:
+            decoded = _json.loads(save_error.content.decode("utf-8"))
+            decoded.setdefault("details", {})
+            decoded["details"]["index"] = index
+            return None, JsonResponse(
+                decoded, status=save_error.status_code,
+            )
+        except (ValueError, AttributeError):
+            return None, save_error
+
+    # Issue #857: auto-enroll existing series registrants into the new
+    # occurrence. Best-effort, idempotent, and gated on ``is_upcoming``
+    # (drafts enroll nobody until published).
+    enroll_series_registrants_in_event(event)
+    return event, None
+
+
+def _next_slug_position(series):
+    """Return the next monotonic slug position for a new occurrence.
+
+    Slugs are minted once and never rewritten (issue #876, Decision 3), so
+    this counter stays a monotonic insertion-order value independent of the
+    chronological ``series_position``.
+    """
+    max_pos = (
+        Event.objects.filter(event_series=series)
+        .exclude(series_position__isnull=True)
+        .order_by("-series_position")
+        .values_list("series_position", flat=True)
+        .first()
+    )
+    return (max_pos or 0) + 1
+
+
 @token_required
 @csrf_exempt
 @require_methods("POST")
@@ -813,17 +947,7 @@ def event_series_occurrences_bulk(request, series_id):
     skipped_existing = 0
 
     with transaction.atomic():
-        # Slugs are minted once and never rewritten (issue #876, Decision
-        # 3), so the slug counter stays a monotonic insertion-order value
-        # that is independent of the chronological ``series_position``.
-        max_pos = (
-            Event.objects.filter(event_series=series)
-            .exclude(series_position__isnull=True)
-            .order_by("-series_position")
-            .values_list("series_position", flat=True)
-            .first()
-        )
-        next_slug_position = (max_pos or 0) + 1
+        next_slug_position = _next_slug_position(series)
 
         for index, row, parsed_start in parsed_rows:
             key = _dedup_key(parsed_start)
@@ -831,83 +955,14 @@ def event_series_occurrences_bulk(request, series_id):
                 skipped_existing += 1
                 continue
 
-            # Build the per-occurrence payload that ``_collect_event_values``
-            # expects. Inject series defaults where the row leaves a field
-            # blank so the operator can pass just ``start_datetime``.
-            row_payload = dict(row)
-            if "timezone" not in row_payload:
-                row_payload["timezone"] = series.timezone
-            # An explicit, non-blank title makes this an operator title
-            # (issue #876, Decision 4): it is verbatim and never rewritten.
-            # Otherwise the title is auto-generated and will be (re)written
-            # chronologically by ``renumber_series_occurrences`` below.
-            title_is_auto = not str(
-                row_payload.get("title") or "",
-            ).strip()
-            if title_is_auto:
-                # Provisional auto-title; overwritten by the renumber pass
-                # once every occurrence has its chronological position.
-                row_payload["title"] = auto_occurrence_title(
-                    series.name, next_slug_position,
-                )
-            if "slug" not in row_payload or not str(
-                row_payload.get("slug") or "",
-            ).strip():
-                row_payload["slug"] = (
-                    f"{series.slug}-session-{next_slug_position}"
-                )
-
-            values, errors = _collect_event_values(
-                row_payload, existing=None,
+            event, row_error = _create_series_occurrence(
+                series, row, slug_position=next_slug_position, index=index,
             )
-            if errors:
+            if row_error is not None:
                 transaction.set_rollback(True)
-                details = {"index": index}
-                details.update(errors)
-                return error_response(
-                    "Validation error",
-                    "validation_error",
-                    status=422,
-                    details=details,
-                )
-
-            event = Event(
-                kind="standard",
-                platform="zoom",
-                timezone=series.timezone,
-                status="draft",
-                required_level=0,
-                published=True,
-                tags=[],
-                location="",
-                external_host="",
-                max_participants=None,
-                origin="studio",
-                source_repo="",
-                event_series=series,
-                series_position=next_slug_position,
-                title_is_auto=title_is_auto,
-            )
-            _apply_event_values(event, values)
-            save_error = _save_event_or_error(event)
-            if save_error is not None:
-                transaction.set_rollback(True)
-                # Bubble the validation error code/body but annotate the
-                # offending index for the caller.
-                try:
-                    body = save_error.content
-                    decoded = _json.loads(body.decode("utf-8"))
-                    decoded.setdefault("details", {})
-                    decoded["details"]["index"] = index
-                    return JsonResponse(decoded, status=save_error.status_code)
-                except (ValueError, AttributeError):
-                    return save_error
+                return row_error
 
             occurrence_ids.append(event.pk)
-            # Issue #857: auto-enroll existing series registrants into the
-            # new occurrence. Best-effort, idempotent, and gated on
-            # ``is_upcoming`` (drafts enroll nobody until published).
-            enroll_series_registrants_in_event(event)
             # Mark this dedup key as seen so a transient duplicate in the
             # payload after a DB write is still treated correctly even
             # though the in-batch check above already covers it.
@@ -928,6 +983,301 @@ def event_series_occurrences_bulk(request, series_id):
             "occurrence_ids": occurrence_ids,
         },
         status=201,
+    )
+
+
+def _parse_reconcile_rows(payload):
+    """Validate + parse the desired occurrence rows for a reconcile.
+
+    Returns ``(parsed_rows, error_response)``. ``parsed_rows`` is a list of
+    ``(index, row_dict, parsed_start)``. The validation rules and error
+    codes match the additive bulk endpoint exactly (issue #878), so the two
+    verbs agree on what a well-formed desired row looks like.
+    """
+    if not isinstance(payload, list):
+        return None, error_response(
+            "occurrences must be a list",
+            "invalid_type",
+            details={"field": "occurrences", "expected": "list"},
+        )
+    parsed_rows = []
+    for index, row in enumerate(payload):
+        if not isinstance(row, dict):
+            return None, error_response(
+                "occurrences entries must be objects",
+                "validation_error",
+                status=422,
+                details={"index": index},
+            )
+        raw_start = row.get("start_datetime")
+        if not raw_start:
+            return None, error_response(
+                "Missing required field: start_datetime",
+                "missing_field",
+                status=400,
+                details={"index": index, "field": "start_datetime"},
+            )
+        if not isinstance(raw_start, str):
+            return None, error_response(
+                "start_datetime must be an ISO 8601 datetime string",
+                "validation_error",
+                status=422,
+                details={
+                    "index": index,
+                    "start_datetime": "Must be an ISO 8601 datetime.",
+                },
+            )
+        parsed_start = parse_datetime(raw_start)
+        if parsed_start is None:
+            return None, error_response(
+                "start_datetime must be an ISO 8601 datetime string",
+                "validation_error",
+                status=422,
+                details={
+                    "index": index,
+                    "start_datetime": "Must be an ISO 8601 datetime.",
+                },
+            )
+        parsed_rows.append((index, row, parsed_start))
+
+    # In-batch dedup. Two desired rows that round to the same minute collide
+    # (same key + error code as the bulk endpoint).
+    seen_keys = {}
+    for index, _row, parsed_start in parsed_rows:
+        key = _dedup_key(parsed_start)
+        if key in seen_keys:
+            return None, error_response(
+                "Duplicate start_datetime within the batch",
+                "duplicate_in_batch",
+                status=422,
+                details={
+                    "indexes": [seen_keys[key], index],
+                    "start_datetime": parsed_start.isoformat(),
+                },
+            )
+        seen_keys[key] = index
+    return parsed_rows, None
+
+
+@token_required
+@csrf_exempt
+@require_methods("PUT")
+@openapi_spec(
+    tag="Event Series",
+    summary="Reconcile the exact occurrence set for a series (#878)",
+    methods={
+        "PUT": {
+            "summary": "Declare the exact desired occurrence set",
+            "description": (
+                "Idempotent schedule-replace. Unlike the additive "
+                "``POST .../occurrences/bulk`` (which only adds), this "
+                "declares the FULL desired set in one atomic transaction:\n"
+                "- desired dates with no matching occurrence are created "
+                "(same per-row defaults as the bulk creator; new drafts "
+                "carry ``published=False`` per the #878 visibility "
+                "contract),\n"
+                "- desired dates matching an existing non-cancelled "
+                "occurrence are kept untouched (dedup by minute-rounded "
+                "``start_datetime``),\n"
+                "- a desired date matching a CANCELLED occurrence "
+                "reactivates that row to ``status='upcoming'`` instead of "
+                "creating a duplicate,\n"
+                "- every other currently non-cancelled occurrence is "
+                "CANCELLED (``status='cancelled'`` — never hard-deleted, "
+                "per the no-deletes-via-API policy #864).\n\n"
+                "Re-submitting the same set is a no-op. In-batch duplicate "
+                "desired dates return 422 ``duplicate_in_batch``. Any "
+                "per-row validation failure rolls the whole reconcile back "
+                "and reports the failing index."
+            ),
+            "request_body": {
+                "required": ["occurrences"],
+                "properties": {
+                    "occurrences": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "start_datetime": {
+                                    "type": "string",
+                                    "format": "date-time",
+                                },
+                                "title": {"type": "string"},
+                                "slug": {"type": "string"},
+                            },
+                            "required": ["start_datetime"],
+                        },
+                    },
+                },
+                "example": {
+                    "occurrences": [
+                        {"start_datetime": "2026-05-05T17:00:00+02:00"},
+                        {"start_datetime": "2026-05-19T17:00:00+02:00"},
+                    ],
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Reconcile summary.",
+                    "example": {
+                        "created": [44],
+                        "kept": [42],
+                        "cancelled": [43],
+                        "reactivated": [],
+                        "created_count": 1,
+                        "kept_count": 1,
+                        "cancelled_count": 1,
+                        "reactivated_count": 0,
+                    },
+                },
+                400: {"description": "Invalid JSON or missing field."},
+                404: {
+                    "description": "Event series not found.",
+                    "example": {
+                        "error": "Event series not found",
+                        "code": "unknown_series",
+                    },
+                },
+                422: {
+                    "description": (
+                        "Validation error or in-batch duplicate "
+                        "start_datetime."
+                    ),
+                },
+            },
+        },
+    },
+)
+def event_series_occurrences_reconcile(request, series_id):
+    """``PUT /api/event-series/<series_id>/occurrences``.
+
+    Idempotent schedule-replace (issue #878). Declares the EXACT desired
+    occurrence set and converges to it in one atomic transaction:
+
+    - create occurrences for desired dates with no matching occurrence
+      (reuses ``_create_series_occurrence`` so titles/slugs/series defaults
+      and the #878 visibility contract stay identical to the bulk creator),
+    - keep matching non-cancelled occurrences untouched (dedup by
+      minute-rounded ``start_datetime`` via ``_dedup_key``),
+    - reactivate a matching CANCELLED occurrence to ``status='upcoming'``
+      rather than creating a duplicate,
+    - cancel every other currently non-cancelled occurrence
+      (``status='cancelled'`` — never hard-delete, per #864). Already
+      cancelled rows that are not re-declared are left as-is.
+
+    Re-submitting the same set is a no-op. Atomic: any per-row validation
+    failure rolls the whole reconcile back and reports the failing index.
+    """
+    series = EventSeries.objects.filter(pk=series_id).first()
+    if series is None:
+        return _unknown_series_response()
+
+    data, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return parse_error
+    if not isinstance(data, dict):
+        return _body_must_be_object_response()
+
+    payload = data.get("occurrences")
+    if payload is None:
+        return error_response(
+            "Missing required field: occurrences",
+            "missing_field",
+            details={"field": "occurrences"},
+        )
+
+    parsed_rows, parse_err = _parse_reconcile_rows(payload)
+    if parse_err is not None:
+        return parse_err
+
+    desired_keys = {
+        _dedup_key(parsed_start) for _index, _row, parsed_start in parsed_rows
+    }
+
+    created = []
+    kept = []
+    cancelled = []
+    reactivated = []
+
+    with transaction.atomic():
+        # Index existing occurrences by minute-rounded key. A given minute
+        # may carry at most one occurrence under the series invariant, but
+        # we keep the newest non-cancelled (or any) row deterministically.
+        existing_by_key = {}
+        for event in Event.objects.filter(event_series=series).order_by("id"):
+            key = _dedup_key(event.start_datetime)
+            if key is None:
+                continue
+            # Prefer a non-cancelled row at this key so a desired date keeps
+            # the live occurrence rather than reactivating a stale ghost.
+            current = existing_by_key.get(key)
+            if current is None or (
+                current.status == "cancelled" and event.status != "cancelled"
+            ):
+                existing_by_key[key] = event
+
+        next_slug_position = _next_slug_position(series)
+        any_created_or_reactivated = False
+
+        for index, row, parsed_start in parsed_rows:
+            key = _dedup_key(parsed_start)
+            existing = existing_by_key.get(key)
+            if existing is None:
+                event, row_error = _create_series_occurrence(
+                    series, row,
+                    slug_position=next_slug_position, index=index,
+                )
+                if row_error is not None:
+                    transaction.set_rollback(True)
+                    return row_error
+                created.append(event.pk)
+                next_slug_position += 1
+                any_created_or_reactivated = True
+            elif existing.status == "cancelled":
+                # Re-adding a previously-dropped date reactivates the row
+                # instead of leaving a cancelled ghost plus a new row.
+                existing.status = "upcoming"
+                existing.save(update_fields=["status"])
+                reactivated.append(existing.pk)
+                # Reactivated dates re-enroll series registrants (#857),
+                # matching newly-created occurrences.
+                enroll_series_registrants_in_event(existing)
+                any_created_or_reactivated = True
+            else:
+                kept.append(existing.pk)
+
+        # Cancel every currently non-cancelled occurrence not in the desired
+        # set. Removal is cancellation, never a hard-delete (#864).
+        extras = (
+            Event.objects.filter(event_series=series)
+            .exclude(status="cancelled")
+            .order_by("series_position", "start_datetime", "id")
+        )
+        for event in extras:
+            if _dedup_key(event.start_datetime) in desired_keys:
+                continue
+            event.status = "cancelled"
+            event.save(update_fields=["status"])
+            cancelled.append(event.pk)
+
+        # Recompute chronological positions + auto-titles once the set has
+        # converged (issue #876). Cancelling does not change a date, but
+        # creating/reactivating can, so only run when the set changed.
+        if any_created_or_reactivated:
+            renumber_series_occurrences(series)
+
+    return JsonResponse(
+        {
+            "created": created,
+            "kept": kept,
+            "cancelled": cancelled,
+            "reactivated": reactivated,
+            "created_count": len(created),
+            "kept_count": len(kept),
+            "cancelled_count": len(cancelled),
+            "reactivated_count": len(reactivated),
+        },
+        status=200,
     )
 
 

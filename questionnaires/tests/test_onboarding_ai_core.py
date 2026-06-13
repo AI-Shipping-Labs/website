@@ -14,12 +14,14 @@ from django.test import SimpleTestCase, tag
 
 from integrations.services.llm import LLMError, LLMResult
 from questionnaires.onboarding_ai import (
+    _INTERNAL_PERSONA_NAMES,
     GREETING,
     OnboardingExtraction,
     OnboardingTurnResult,
     PersonaInfo,
     PersonaQuestion,
     TraceSink,
+    _sanitize,
     run_onboarding_turn,
 )
 
@@ -236,6 +238,26 @@ class PersonaNameNeverLeaksTest(SimpleTestCase):
                 [], member_message='done', persona_catalog=CATALOG,
             )
         self.assertNotIn('Taylor', result.assistant_message)
+
+    def test_sanitize_codename_probe_reads_grammatically(self):
+        # The adversarial codename-probe path: a reply that names every
+        # codename, each preceded by a leading article. The sanitized output
+        # must (a) leak no codename and (b) carry no broken-article artifact.
+        probe_reply = (
+            "You're clearly a Taylor, and an Alex or a Priya would also "
+            "fit Sam."
+        )
+
+        cleaned = _sanitize(probe_reply)
+
+        # (a) No internal codename survives.
+        for name in _INTERNAL_PERSONA_NAMES:
+            self.assertNotIn(name, cleaned)
+        # The member-facing term is used as the replacement.
+        self.assertIn('your archetype', cleaned)
+        # (b) No dangling leading article from the substitution.
+        self.assertNotIn('a your archetype', cleaned.lower())
+        self.assertNotIn('an your archetype', cleaned.lower())
 
 
 class TraceSinkTest(SimpleTestCase):

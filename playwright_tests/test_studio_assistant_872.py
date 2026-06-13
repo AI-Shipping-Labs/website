@@ -336,3 +336,98 @@ class TestGatingAndConfig:
             assert page.locator(
                 '[data-testid="assistant-form"]',
             ).count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+class TestAssistantPolish942:
+    """Polish from acceptance reviews (issue #942): consistent nav/H1 label
+    and the request textarea clearing only after a successful execute."""
+
+    @pytest.mark.core
+    def test_nav_and_heading_label_match(self, django_server, browser):
+        page = _login_admin(browser, django_server)
+        page.goto(
+            f"{django_server}/studio/assistant/",
+            wait_until="domcontentloaded",
+        )
+        # The assistant nav entry lives inside the collapsible "people"
+        # section, which is not expanded on the assistant page, so the link
+        # is present in the DOM but not necessarily visible. The label text
+        # is what this scenario asserts, so read it without a visibility
+        # wait — it still fails if the span says "Assistant".
+        nav = page.locator('[data-testid="studio-nav-assistant"]')
+        nav.wait_for(state="attached", timeout=10000)
+        heading = page.get_by_role("heading", name="AI Assistant", exact=True)
+        # Both the nav entry and the page H1 read "AI Assistant" — no
+        # "Assistant" vs "AI Assistant" mismatch.
+        assert nav.text_content().strip() == "AI Assistant"
+        assert heading.count() == 1
+        _shot(page, "label_consistency")
+
+    @pytest.mark.core
+    def test_textarea_cleared_after_successful_confirm(
+        self, django_server, browser,
+    ):
+        _reset()
+        _seed_member("jane@example.com")
+        request = (
+            "Add a note to jane@example.com: wants the Premium teardown"
+        )
+        page = _login_admin(browser, django_server)
+        with _llm_enabled(), patch(
+            "studio.services.assistant.llm.complete",
+            return_value=_note_result(
+                "jane@example.com", "wants the Premium teardown",
+            ),
+        ):
+            page.goto(
+                f"{django_server}/studio/assistant/",
+                wait_until="domcontentloaded",
+            )
+            page.locator('[data-testid="assistant-input"]').fill(request)
+            page.locator('[data-testid="assistant-submit"]').click()
+            page.wait_for_load_state("domcontentloaded")
+            page.locator('[data-testid="assistant-proposal"]').wait_for(
+                state="visible", timeout=10000,
+            )
+            page.locator('[data-testid="assistant-confirm"]').click()
+            page.wait_for_load_state("domcontentloaded")
+            page.locator('[data-testid="assistant-result"]').wait_for(
+                state="visible", timeout=10000,
+            )
+            # After a successful execute the request box is empty, so a
+            # second submit cannot resubmit the old request.
+            assert (
+                page.locator('[data-testid="assistant-input"]').input_value()
+                == ""
+            )
+            _shot(page, "textarea_cleared_after_success")
+
+    @pytest.mark.core
+    def test_textarea_preserved_on_unknown_member_error(
+        self, django_server, browser,
+    ):
+        _reset()
+        request = "Add a note to nobody@nowhere.test: hi"
+        page = _login_admin(browser, django_server)
+        with _llm_enabled(), patch(
+            "studio.services.assistant.llm.complete",
+            return_value=_note_result("nobody@nowhere.test", "hi"),
+        ):
+            page.goto(
+                f"{django_server}/studio/assistant/",
+                wait_until="domcontentloaded",
+            )
+            page.locator('[data-testid="assistant-input"]').fill(request)
+            page.locator('[data-testid="assistant-submit"]').click()
+            page.wait_for_load_state("domcontentloaded")
+            error = page.locator('[data-testid="assistant-error"]')
+            error.wait_for(state="visible", timeout=10000)
+            assert "nobody@nowhere.test" in error.inner_text()
+            # The error path keeps the request so the admin can fix the
+            # email and retry.
+            assert (
+                page.locator('[data-testid="assistant-input"]').input_value()
+                == request
+            )
+            _shot(page, "textarea_preserved_on_error")

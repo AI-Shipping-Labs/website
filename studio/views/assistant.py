@@ -307,4 +307,8 @@ def _handle_confirm(request, context):
         message=message,
     )
     context['result'] = {'declined': False, 'message': message}
+    # Clear the request box once the action has been applied so a second
+    # submit does not accidentally re-run the same request. Error/decline
+    # branches above intentionally retain the text for edit-and-retry.
+    context['request_text'] = ''
     return render(request, 'studio/assistant.html', context)

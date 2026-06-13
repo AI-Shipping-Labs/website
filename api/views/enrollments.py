@@ -25,7 +25,7 @@ from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from api.views._permissions import bearer_is_admin
 from content.access import get_user_level
-from plans.models import Plan, Sprint, SprintEnrollment
+from plans.models import Sprint, SprintEnrollment
 
 _SPRINT_ENROLLMENT_EXAMPLE = {
     "user_email": "alice@example.com",
@@ -34,6 +34,22 @@ _SPRINT_ENROLLMENT_EXAMPLE = {
 }
 
 User = get_user_model()
+
+# Issue #864 (human decision, 2026-06-13): sprint-enrollment hard-delete is not
+# available through the API. DELETE is accepted but returns 405 pointing the
+# operator to Studio, matching the events guard pattern.
+SPRINT_ENROLLMENT_DELETE_NOT_AVAILABLE_MESSAGE = (
+    "Sprint enrollment deletion is not available through the API. "
+    "Go to Studio to unenroll this user manually."
+)
+
+
+def _sprint_enrollment_delete_not_available_response():
+    return error_response(
+        SPRINT_ENROLLMENT_DELETE_NOT_AVAILABLE_MESSAGE,
+        "sprint_enrollment_delete_not_available",
+        status=405,
+    )
 
 
 def _serialize_enrollment(enrollment):
@@ -238,62 +254,31 @@ def sprint_enrollments_collection(request, slug):
 @require_methods('DELETE')
 @openapi_spec(
     tag="Sprint Enrollments",
-    summary="Unenroll a user from a sprint (staff-only)",
+    summary="DELETE is not available on this route",
     methods={
         "DELETE": {
-            "summary": "Unenroll a user from a sprint",
+            "summary": "DELETE is not available on this route",
             "description": (
-                "Staff-only. Idempotent: returns 204 whether or not a "
-                "row was deleted. Auto-privates the user's plan if one "
-                "exists, mirroring the member-leave flow. There is no "
-                "GET / PATCH on this URL."
+                "Sprint enrollment deletion is not available through the "
+                "API (issue #864); unenroll a user in Studio instead. "
+                "DELETE returns a structured 405."
             ),
             "responses": {
-                204: {"description": "Enrollment removed (empty body)."},
-                403: {
-                    "description": "Non-staff bearer.",
+                405: {
+                    "description": "Enrollment deletion is not available.",
                     "example": {
-                        "error": "Enrollment delete is staff-only",
-                        "code": "forbidden_other_user_plan",
+                        "error": SPRINT_ENROLLMENT_DELETE_NOT_AVAILABLE_MESSAGE,
+                        "code": "sprint_enrollment_delete_not_available",
                     },
                 },
-                404: {"description": "Sprint not found."},
             },
         },
     },
 )
 def sprint_enrollment_detail(request, slug, email):
-    """``DELETE /api/sprints/<slug>/enrollments/<email>`` -- staff only.
+    """``DELETE /api/sprints/<slug>/enrollments/<email>``.
 
-    Idempotent: returns 204 whether or not a row was deleted. Auto-
-    privates the user's plan if one exists, mirroring the member-leave
-    flow.
+    Deletion is intentionally unavailable (issue #864): returns 405 with a
+    Studio pointer. Unenroll a user in Studio instead.
     """
-    if not bearer_is_admin(request.user):
-        return error_response(
-            'Enrollment delete is staff-only',
-            'forbidden_other_user_plan',
-            status=403,
-        )
-
-    sprint = Sprint.objects.filter(slug=slug).first()
-    if sprint is None:
-        return error_response(
-            'Sprint not found', 'unknown_sprint', status=404,
-        )
-
-    target = User.objects.filter(email__iexact=email).first()
-
-    with transaction.atomic():
-        if target is not None:
-            SprintEnrollment.objects.filter(
-                sprint=sprint, user=target,
-            ).delete()
-            plan = Plan.objects.filter(
-                sprint=sprint, member=target,
-            ).first()
-            if plan is not None and plan.visibility != 'private':
-                plan.visibility = 'private'
-                plan.save(update_fields=['visibility', 'updated_at'])
-
-    return JsonResponse({}, status=204)
+    return _sprint_enrollment_delete_not_available_response()

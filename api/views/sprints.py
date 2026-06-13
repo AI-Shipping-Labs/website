@@ -24,6 +24,22 @@ from plans.models import SPRINT_STATUS_CHOICES, Sprint
 
 VALID_SPRINT_STATUSES = {choice for choice, _label in SPRINT_STATUS_CHOICES}
 
+# Issue #864 (human decision, 2026-06-13): sprint hard-delete is not available
+# through the API. The DELETE method is accepted but returns 405 pointing the
+# operator to Studio, matching the events/event_series guard pattern.
+SPRINT_DELETE_NOT_AVAILABLE_MESSAGE = (
+    "Sprint deletion is not available through the API. "
+    "Go to Studio to delete this sprint manually."
+)
+
+
+def _sprint_delete_not_available_response():
+    return error_response(
+        SPRINT_DELETE_NOT_AVAILABLE_MESSAGE,
+        "sprint_delete_not_available",
+        status=405,
+    )
+
 # Sorted list for OpenAPI ``enum`` entries (deterministic output).
 _SPRINT_STATUS_ENUM = sorted(VALID_SPRINT_STATUSES)
 
@@ -286,20 +302,19 @@ def sprints_collection(request):
             },
         },
         "DELETE": {
-            "summary": "Delete a sprint (staff-only)",
+            "summary": "DELETE is not available on this route",
             "description": (
-                "409 with code ``sprint_has_plans`` if any plans are "
-                "still attached -- the API does not cascade-delete."
+                "Sprint deletion is not available through the API "
+                "(issue #864); operators must use Studio. DELETE returns "
+                "a structured 405. Update sprint state with "
+                "``PATCH status=...`` instead."
             ),
             "responses": {
-                204: {"description": "Sprint deleted (empty body)."},
-                403: {"description": "Non-staff token."},
-                404: {"description": "Sprint not found."},
-                409: {
-                    "description": "Sprint has attached plans.",
+                405: {
+                    "description": "Sprint deletion is not available.",
                     "example": {
-                        "error": "Sprint has attached plans",
-                        "code": "sprint_has_plans",
+                        "error": SPRINT_DELETE_NOT_AVAILABLE_MESSAGE,
+                        "code": "sprint_delete_not_available",
                     },
                 },
             },
@@ -307,7 +322,14 @@ def sprints_collection(request):
     },
 )
 def sprint_detail(request, slug):
-    """``GET / PATCH / DELETE /api/sprints/<slug>/``."""
+    """``GET / PATCH /api/sprints/<slug>/``.
+
+    DELETE is intentionally unavailable (issue #864): it returns 405 with a
+    Studio pointer before any lookup. Update sprint state via PATCH instead.
+    """
+    if request.method == "DELETE":
+        return _sprint_delete_not_available_response()
+
     sprint = Sprint.objects.filter(slug=slug).first()
     if sprint is None:
         return error_response(
@@ -325,23 +347,13 @@ def sprint_detail(request, slug):
             )
         return JsonResponse(serialize_sprint(sprint), status=200)
 
-    # PATCH and DELETE are staff-only.
+    # PATCH is staff-only.
     if not bearer_is_admin(request.user):
         return error_response(
             "Staff-only endpoint",
             "forbidden_other_user_plan",
             status=403,
         )
-
-    if request.method == "DELETE":
-        if sprint.plans.exists():
-            return error_response(
-                "Sprint has attached plans",
-                "sprint_has_plans",
-                status=409,
-            )
-        sprint.delete()
-        return JsonResponse({}, status=204)
 
     # PATCH
     data, parse_error = parse_json_body(request)

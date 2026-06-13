@@ -326,22 +326,18 @@ class RedirectDetailTest(RedirectsApiBase):
         mock_clear.assert_not_called()
 
     @mock.patch("api.views.redirects.clear_redirect_cache")
-    def test_delete_returns_204_and_clears_cache(self, mock_clear):
+    def test_delete_returns_405_and_keeps_row(self, mock_clear):
+        # Issue #864 (2026-06-13): redirect DELETE is blocked via the API.
+        # The row survives and the redirect cache is never cleared (no write
+        # happened). Use Studio to delete, or PATCH is_active=false.
         obj = Redirect.objects.create(source_path="/a", target_path="/b")
         response = self._delete(obj.pk)
-        self.assertEqual(response.status_code, 204)
-        self.assertEqual(response.content, b"")
-        self.assertFalse(Redirect.objects.filter(pk=obj.pk).exists())
-        mock_clear.assert_called_once()
-
-    def test_delete_then_get_returns_404(self):
-        obj = Redirect.objects.create(source_path="/a", target_path="/b")
-        with mock.patch("api.views.redirects.clear_redirect_cache"):
-            self._delete(obj.pk)
-        response = self.client.get(
-            f"/api/redirects/{obj.pk}", **self._auth(),
-        )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 405)
+        body = response.json()
+        self.assertEqual(body["code"], "redirect_delete_not_available")
+        self.assertIn("Studio", body["error"])
+        self.assertTrue(Redirect.objects.filter(pk=obj.pk).exists())
+        mock_clear.assert_not_called()
 
     def test_detail_requires_auth(self):
         obj = Redirect.objects.create(source_path="/a", target_path="/b")

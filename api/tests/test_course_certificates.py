@@ -329,7 +329,13 @@ class CourseCertificateCreateTest(CourseCertificateApiTestBase):
 
 
 class CourseCertificateDeleteTest(CourseCertificateApiTestBase):
-    def test_delete_removes_existing_row(self):
+    """Issue #864 (2026-06-13): certificate DELETE is blocked via the API.
+
+    The endpoint returns 405 with a Studio pointer and never removes the row;
+    revoking a granted credential is a Studio-only action.
+    """
+
+    def test_delete_existing_row_returns_405_and_keeps_row(self):
         CourseCertificate.objects.create(
             user=self.alice, course=self.course,
         )
@@ -337,41 +343,34 @@ class CourseCertificateDeleteTest(CourseCertificateApiTestBase):
             '/api/courses/ai-buildcamp/certificates/alice@test.com',
             **self._auth(),
         )
-        self.assertEqual(response.status_code, 204)
-        self.assertFalse(
+        self.assertEqual(response.status_code, 405)
+        body = response.json()
+        self.assertEqual(body['code'], 'certificate_delete_not_available')
+        self.assertIn('Studio', body['error'])
+        self.assertTrue(
             CourseCertificate.objects.filter(
                 user=self.alice, course=self.course,
             ).exists()
         )
 
-    def test_delete_is_idempotent_when_no_row(self):
+    def test_delete_returns_405_before_any_lookup(self):
+        # The 405 fires before the course / email lookup, so even an unknown
+        # course or email returns the same structured 405 (no 404 leak) and
+        # creates / removes nothing.
         before = CourseCertificate.objects.count()
         response = self.client.delete(
-            '/api/courses/ai-buildcamp/certificates/alice@test.com',
+            '/api/courses/nope/certificates/nobody@x.com',
             **self._auth(),
         )
-        self.assertEqual(response.status_code, 204)
-        self.assertEqual(CourseCertificate.objects.count(), before)
-
-    def test_delete_unknown_email_returns_204(self):
-        before = CourseCertificate.objects.count()
-        response = self.client.delete(
-            '/api/courses/ai-buildcamp/certificates/nobody@x.com',
-            **self._auth(),
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(
+            response.json()['code'], 'certificate_delete_not_available',
         )
-        self.assertEqual(response.status_code, 204)
         self.assertEqual(CourseCertificate.objects.count(), before)
 
-    def test_unknown_course_returns_404(self):
-        before = CourseCertificate.objects.count()
-        response = self.client.delete(
-            '/api/courses/nope/certificates/alice@test.com',
-            **self._auth(),
-        )
-        self.assert_json_error(response, status=404, code='unknown_course')
-        self.assertEqual(CourseCertificate.objects.count(), before)
-
-    def test_non_staff_token_cannot_delete_existing_row(self):
+    def test_non_staff_token_still_blocked_with_401_before_405(self):
+        # ``@token_required`` is outermost, so a non-staff (invalid) token is
+        # rejected with 401 before the 405 guard runs. The row is untouched.
         CourseCertificate.objects.create(
             user=self.alice, course=self.course,
         )

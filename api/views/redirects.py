@@ -39,6 +39,15 @@ _REDIRECT_EXAMPLE = {
 
 VALID_REDIRECT_TYPES = {301, 302}
 
+# Issue #864 (human decision, 2026-06-13): redirect hard-delete is not available
+# through the API. DELETE is accepted but returns 405 pointing the operator to
+# Studio (which has its own redirect-delete UI), matching the events guard.
+REDIRECT_DELETE_NOT_AVAILABLE_MESSAGE = (
+    "Redirect deletion is not available through the API. "
+    "Go to Studio to delete this redirect manually, "
+    "or deactivate it with PATCH is_active=false."
+)
+
 # Truthy ``?is_active`` query values. Anything else (including unset) is
 # treated as "no filter".
 _TRUE_VALUES = {"1", "true", "True", "yes", "on"}
@@ -212,6 +221,14 @@ def _conflict_response(source_path, *, index=None):
     )
 
 
+def _redirect_delete_not_available_response():
+    return error_response(
+        REDIRECT_DELETE_NOT_AVAILABLE_MESSAGE,
+        "redirect_delete_not_available",
+        status=405,
+    )
+
+
 @token_required
 @csrf_exempt
 @require_methods("GET", "POST")
@@ -379,16 +396,33 @@ def redirects_collection(request):
             },
         },
         "DELETE": {
-            "summary": "Delete a redirect",
+            "summary": "DELETE is not available on this route",
+            "description": (
+                "Redirect deletion is not available through the API "
+                "(issue #864); use Studio to delete, or deactivate with "
+                "``PATCH is_active=false``. DELETE returns a structured 405."
+            ),
             "responses": {
-                204: {"description": "Redirect deleted (empty body)."},
-                404: {"description": "Redirect not found."},
+                405: {
+                    "description": "Redirect deletion is not available.",
+                    "example": {
+                        "error": REDIRECT_DELETE_NOT_AVAILABLE_MESSAGE,
+                        "code": "redirect_delete_not_available",
+                    },
+                },
             },
         },
     },
 )
 def redirect_detail(request, redirect_id):
-    """``GET / PATCH / DELETE /api/redirects/<id>``."""
+    """``GET / PATCH /api/redirects/<id>``.
+
+    DELETE is intentionally unavailable (issue #864): it returns 405 with a
+    Studio pointer before any lookup. Deactivate via ``PATCH is_active=false``.
+    """
+    if request.method == "DELETE":
+        return _redirect_delete_not_available_response()
+
     redirect_obj = Redirect.objects.filter(pk=redirect_id).first()
     if redirect_obj is None:
         return error_response(
@@ -399,11 +433,6 @@ def redirect_detail(request, redirect_id):
 
     if request.method == "GET":
         return JsonResponse(_serialize_redirect(redirect_obj))
-
-    if request.method == "DELETE":
-        redirect_obj.delete()
-        clear_redirect_cache()
-        return JsonResponse({}, status=204)
 
     # PATCH
     data, parse_error = parse_json_body(request)

@@ -154,6 +154,35 @@ class ForbiddenDeleteRoutesTest(TestCase):
                 ),
                 "sync_source_delete_not_available",
             ),
+            # Issue #864 human decision (2026-06-13): the five
+            # previously-pending endpoints now 405 too. Slugs / ids / emails
+            # need not exist; the 405 fires before any lookup.
+            (
+                reverse("api_sprint_detail", args=["any-sprint"]),
+                "sprint_delete_not_available",
+            ),
+            (
+                reverse("api_redirect_detail", args=[1]),
+                "redirect_delete_not_available",
+            ),
+            (
+                reverse("api_interview_note_detail", args=[1]),
+                "interview_note_delete_not_available",
+            ),
+            (
+                reverse(
+                    "api_course_certificate_detail",
+                    args=["any-course", "nobody@example.com"],
+                ),
+                "certificate_delete_not_available",
+            ),
+            (
+                reverse(
+                    "api_sprint_enrollment_detail",
+                    args=["any-sprint", "nobody@example.com"],
+                ),
+                "sprint_enrollment_delete_not_available",
+            ),
         ]
 
         for path, expected_code in routes:

@@ -15,7 +15,6 @@ PREVIEW_CONTEXTS = {
         'user_name': 'Ada',
         'tier_name': 'Main',
         'site_url': 'https://aishippinglabs.com',
-        'slack_invite_url': 'https://example.com/slack',
     },
     'email_verification_signup': {
         'user_name': 'Ada',

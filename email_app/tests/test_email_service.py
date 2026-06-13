@@ -191,14 +191,14 @@ class EmailServiceTemplateRenderingTest(TestCase):
     def test_welcome_template(self, mock_ses):
         self.service.send(self.user, 'welcome', {
             'tier_name': 'Main',
-            'slack_invite_url': 'https://slack.com/invite',
         })
         call_args = mock_ses.call_args
         subject = call_args[0][1]
         html = call_args[0][2]
         self.assertIn('Welcome to Main', subject)
         self.assertIn('Tester', html)
-        self.assertIn('slack.com/invite', html)
+        # #954: the gated /community/slack redirect, not a raw invite URL.
+        self.assertIn('/community/slack', html)
 
     @patch.object(EmailService, '_send_ses', return_value='test-id')
     def test_payment_failed_template(self, mock_ses):

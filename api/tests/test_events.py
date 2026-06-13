@@ -173,6 +173,7 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "required_level",
                 "max_participants",
                 "status",
+                "series_position",
                 "external_host",
                 "published",
                 "origin",

@@ -183,7 +183,7 @@ class TestFooterNewsletterSuppression:
             _seed_anon_workshop()
 
         page.goto(
-            f'{django_server}/workshops/supp-653-workshop',
+            f'{django_server}/workshops/2026-04-21-supp-653-workshop',
             wait_until='domcontentloaded',
         )
         # Inline register card renders (pages paywall + signup CTA).

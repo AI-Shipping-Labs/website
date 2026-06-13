@@ -191,7 +191,7 @@ class TestWatchBarRoundTrip:
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/ws/tutorial/page-a',
+            f'{django_server}/workshops/2026-04-21-ws/tutorial/page-a',
             wait_until='domcontentloaded',
         )
         # Page A has no video_start -> no bar.
@@ -213,7 +213,7 @@ class TestWatchBarRoundTrip:
         ctx = _auth_context(browser, 'basic@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/ws/tutorial/page-c',
+            f'{django_server}/workshops/2026-04-21-ws/tutorial/page-c',
             wait_until='domcontentloaded',
         )
         # Body renders (Basic tier passes pages gate).
@@ -238,7 +238,7 @@ class TestVideoDeepLink:
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/ws/video?t=16:00',
+            f'{django_server}/workshops/2026-04-21-ws/video?t=16:00',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -259,7 +259,7 @@ class TestVideoDeepLink:
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
         response = page.goto(
-            f'{django_server}/workshops/ws/video?t=not-a-time',
+            f'{django_server}/workshops/2026-04-21-ws/video?t=not-a-time',
             wait_until='domcontentloaded',
         )
         assert response is not None and response.status == 200

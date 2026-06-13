@@ -49,9 +49,6 @@ from content.views.request_call import request_a_call
 from content.views.tags import tags_detail, tags_index
 from content.views.workshops import (
     api_workshop_page_complete,
-    legacy_workshop_landing_redirect,
-    legacy_workshop_page_redirect,
-    legacy_workshop_video_redirect,
     workshop_detail,
     workshop_page_detail,
     workshop_video,
@@ -92,17 +89,19 @@ urlpatterns = [
     # Issue #750: detail URLs are keyed on ``<YYYY-MM-DD>-<slug>`` so the
     # URL is derivable from the content repo and slug collisions across
     # different dates no longer clobber each other. The canonical routes
-    # use a regex that ONLY matches the ``YYYY-MM-DD-<slug>`` shape, so a
-    # bare slug like ``build-your-own-search-engine`` falls through to
-    # the legacy slug-only routes registered just below, which 301 to the
-    # canonical URL. We can't use a simple ``<str:>`` converter and 404
-    # inside the view, because Django doesn't re-resolve when a view
-    # raises Http404 — it returns 404 immediately.
+    # use a regex that intentionally ONLY matches the ``YYYY-MM-DD-<slug>``
+    # shape.
+    #
+    # Issue #915: the legacy slug-only routes (``/workshops/<slug>`` etc.)
+    # and their 301 redirects were removed. A bare slug like
+    # ``build-your-own-search-engine`` now matches no workshop route and
+    # returns 404. If a specific high-value old bare-slug URL must keep
+    # working, an operator can add a one-off 301 in the Studio ``Redirect``
+    # table (no redeploy required).
     #
     # The regex matches dates loosely (``\d{4}-\d{2}-\d{2}``); the view
-    # parses the date strictly and 404s on invalid month/day (e.g.
-    # ``9999-99-99``), which is the right behaviour because the slug-only
-    # route would never produce that shape anyway.
+    # parses the date strictly and 404s on an invalid month/day (e.g.
+    # ``9999-99-99``).
     path('workshops', workshops_list, name='workshops_list'),
     # Canonical routes (date-slug). Regex anchors the date prefix shape.
     re_path(
@@ -119,24 +118,6 @@ urlpatterns = [
         r'^workshops/(?P<date_slug>\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*)/tutorial/(?P<page_slug>[a-z0-9][a-z0-9-]*)$',
         workshop_page_detail,
         name='workshop_page_detail',
-    ),
-    # Legacy slug-only routes — 301 to the canonical date-slug URLs.
-    # Registered after the canonical routes so they only fire when the
-    # input is a bare slug (no date prefix).
-    path(
-        'workshops/<slug:slug>',
-        legacy_workshop_landing_redirect,
-        name='legacy_workshop_landing_redirect',
-    ),
-    path(
-        'workshops/<slug:slug>/video',
-        legacy_workshop_video_redirect,
-        name='legacy_workshop_video_redirect',
-    ),
-    path(
-        'workshops/<slug:slug>/tutorial/<slug:page_slug>',
-        legacy_workshop_page_redirect,
-        name='legacy_workshop_page_redirect',
     ),
     # Courses
     path('courses', courses_list, name='courses_list'),

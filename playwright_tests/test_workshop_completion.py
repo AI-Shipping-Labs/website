@@ -130,7 +130,7 @@ class TestMarkCompletedPersistsAcrossReload:
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/{workshop.slug}/tutorial/intro',
+            f'{django_server}/workshops/{workshop.url_key}/tutorial/intro',
             wait_until='domcontentloaded',
         )
         # Initial state: button visible, in default styling.
@@ -228,7 +228,7 @@ class TestFinishingLastPageRemovesFromContinueLearning:
         page = ctx.new_page()
         # Visit the third page and click Mark as completed.
         page.goto(
-            f'{django_server}/workshops/{workshop.slug}/tutorial/deploy',
+            f'{django_server}/workshops/{workshop.url_key}/tutorial/deploy',
             wait_until='domcontentloaded',
         )
         btn = page.locator('[data-testid="mark-page-complete-btn"]').first
@@ -325,7 +325,7 @@ class TestAnonymousCannotSeeButton:
             pages_required_level=0,
         )
         page.goto(
-            f'{django_server}/workshops/{workshop.slug}/tutorial/intro',
+            f'{django_server}/workshops/{workshop.url_key}/tutorial/intro',
             wait_until='domcontentloaded',
         )
         body = page.content()

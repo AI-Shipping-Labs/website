@@ -734,16 +734,14 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'aria-current="page"')
 
 
-class LegacyWorkshopPageRedirectTest(TierSetupMixin, TestCase):
-    """Issue #750 — legacy slug-only URLs 301 to the canonical date-slug URL.
+class LegacyWorkshopUrlNow404sTest(TierSetupMixin, TestCase):
+    """Issue #915 — the legacy slug-only URLs were removed and now 404.
 
-    Three legacy shapes are kept alive so old email / Slack / newsletter
-    links don't 404:
-    - ``/workshops/<slug>`` -> ``/workshops/<date>-<slug>``
-    - ``/workshops/<slug>/video`` -> ``/workshops/<date>-<slug>/video``
-    - ``/workshops/<slug>/tutorial/<page>`` -> ``/workshops/<date>-<slug>/tutorial/<page>``
-
-    Each preserves the request query string on the 301.
+    Issue #750 kept three slug-only shapes alive that 301'd to the
+    canonical date-slug URL. #915 removed them. A bare-slug landing,
+    video, or tutorial URL now returns 404 with no ``Location`` header,
+    whether or not a published workshop with that slug exists. The
+    canonical date-slug URLs are unchanged.
     """
     @classmethod
     def setUpTestData(cls):
@@ -759,111 +757,50 @@ class LegacyWorkshopPageRedirectTest(TierSetupMixin, TestCase):
             email='legacy-basic@x.com', password='pw', tier=cls.basic_tier,
         )
 
-    def test_legacy_landing_redirects_permanently_to_canonical(self):
+    def test_bare_slug_landing_for_published_workshop_404s(self):
+        # Previously 301'd to the canonical URL; now 404, no redirect.
         response = self.client.get('/workshops/legacy-ws')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], self.canonical)
-
-    def test_legacy_landing_redirect_preserves_query_string(self):
-        response = self.client.get(
-            '/workshops/legacy-ws?utm_source=old-link',
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'],
-            f'{self.canonical}?utm_source=old-link',
-        )
-
-    def test_legacy_video_redirects_permanently_to_canonical(self):
-        response = self.client.get('/workshops/legacy-ws/video')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'], f'{self.canonical}/video',
-        )
-
-    def test_legacy_video_redirect_preserves_timestamp_query(self):
-        response = self.client.get('/workshops/legacy-ws/video?t=16:00')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'], f'{self.canonical}/video?t=16:00',
-        )
-
-    def test_legacy_tutorial_redirects_permanently_to_canonical(self):
-        response = self.client.get(
-            '/workshops/legacy-ws/tutorial/starting-notebook',
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'],
-            f'{self.canonical}/tutorial/starting-notebook',
-        )
-
-    def test_legacy_tutorial_redirect_preserves_query_string(self):
-        response = self.client.get(
-            '/workshops/legacy-ws/tutorial/starting-notebook'
-            '?utm_source=old-link',
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'],
-            f'{self.canonical}/tutorial/starting-notebook'
-            '?utm_source=old-link',
-        )
-
-    def test_legacy_landing_redirect_target_renders(self):
-        response = self.client.get(
-            '/workshops/legacy-ws', follow=True,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.redirect_chain, [(self.canonical, 301)],
-        )
-        self.assertContains(response, 'Legacy Workshop')
-
-    def test_legacy_tutorial_redirect_target_renders(self):
-        self.client.force_login(self.user_basic)
-        response = self.client.get(
-            '/workshops/legacy-ws/tutorial/starting-notebook',
-            follow=True,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.redirect_chain,
-            [(f'{self.canonical}/tutorial/starting-notebook', 301)],
-        )
-        self.assertContains(response, 'data-testid="page-title"')
-        self.assertContains(response, 'Starting Notebook')
-
-    def test_canonical_tutorial_page_renders_directly(self):
-        # Anonymous user fails the default pages gate (Basic+); issue #515
-        # returns 403 with the teaser layout. The point of the test is
-        # that we don't redirect — the gated render still happens.
-        response = self.client.get(
-            f'{self.canonical}/tutorial/starting-notebook',
-        )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
         self.assertNotIn('Location', response)
 
-    def test_unknown_workshop_legacy_landing_404s(self):
-        # Issue #750: a slug-only URL with no matching workshop falls
-        # through to the legacy redirect view, which 404s when no
-        # published workshop has that slug.
+    def test_bare_slug_video_for_published_workshop_404s(self):
+        response = self.client.get('/workshops/legacy-ws/video?t=16:00')
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn('Location', response)
+
+    def test_bare_slug_tutorial_for_published_workshop_404s(self):
+        response = self.client.get(
+            '/workshops/legacy-ws/tutorial/starting-notebook',
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn('Location', response)
+
+    def test_bare_slug_landing_for_unknown_workshop_404s(self):
         response = self.client.get('/workshops/missing-workshop')
         self.assertEqual(response.status_code, 404)
         self.assertNotIn('Location', response)
 
-    def test_unknown_workshop_legacy_tutorial_404s(self):
+    def test_bare_slug_tutorial_for_unknown_workshop_404s(self):
         response = self.client.get(
             '/workshops/missing-workshop/tutorial/starting-notebook',
         )
         self.assertEqual(response.status_code, 404)
         self.assertNotIn('Location', response)
 
-    def test_unknown_page_in_legacy_tutorial_404s(self):
+    def test_canonical_landing_still_renders(self):
+        # The canonical date-slug landing is unchanged by #915.
+        response = self.client.get(self.canonical)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Legacy Workshop')
+
+    def test_canonical_tutorial_page_renders_directly(self):
+        # Anonymous user fails the default pages gate (Basic+); issue #515
+        # returns 403 with the teaser layout. The point of the test is
+        # that the canonical URL still serves a gated render (no redirect).
         response = self.client.get(
-            '/workshops/legacy-ws/tutorial/missing-page',
+            f'{self.canonical}/tutorial/starting-notebook',
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 403)
         self.assertNotIn('Location', response)
 
 

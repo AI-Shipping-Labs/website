@@ -152,7 +152,7 @@ class TestReadmeBecomesLandingDescription:
         assert non_info == [], non_info
 
         page.goto(
-            f'{django_server}/workshops/readme-driven',
+            f'{django_server}/workshops/2026-04-21-readme-driven',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -362,7 +362,7 @@ class TestWorkshopWithoutDescriptionRendersCleanLanding:
         assert sync_log.errors == [], sync_log.errors
 
         page.goto(
-            f'{django_server}/workshops/no-copy',
+            f'{django_server}/workshops/2026-04-21-no-copy',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -408,7 +408,7 @@ class TestReadmeImagesResolveToCdnUrls:
         assert non_info == [], non_info
 
         page.goto(
-            f'{django_server}/workshops/image-readme',
+            f'{django_server}/workshops/2026-04-21-image-readme',
             wait_until='domcontentloaded',
         )
         # Find the architecture image inside the description block.

@@ -217,7 +217,9 @@ def _seed_listings():
         'module_slug': 'sample-module',
         'project_slug': 'sample-project',
         'tutorial_slug': 'sample-tutorial',
-        'workshop_slug': 'sample-workshop',
+        # Issue #915: workshop detail URLs are keyed on the canonical
+        # ``<YYYY-MM-DD>-<slug>`` shape; bare-slug URLs no longer redirect.
+        'workshop_slug': '2026-01-01-sample-workshop',
         'event_slug': 'sample-event',
         'event_path': event_path,
         'poll_uuid': str(poll.id),

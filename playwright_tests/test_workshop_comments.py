@@ -160,7 +160,7 @@ class TestWorkshopReaderAsksQuestion:
         ctx = _auth_context(browser, 'basic@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/prod-agents/tutorial/intro',
+            f'{django_server}/workshops/2026-04-21-prod-agents/tutorial/intro',
             wait_until='networkidle',
         )
 
@@ -313,7 +313,7 @@ class TestGatedUserDoesNotSeeQA:
         ctx = _auth_context(browser, 'free@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/paid-ws/tutorial/intro',
+            f'{django_server}/workshops/2026-04-21-paid-ws/tutorial/intro',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -360,7 +360,7 @@ class TestReaderReplies:
         ctx = _auth_context(browser, 'userb@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/prod-agents/tutorial/intro',
+            f'{django_server}/workshops/2026-04-21-prod-agents/tutorial/intro',
             wait_until='networkidle',
         )
 
@@ -420,7 +420,7 @@ class TestUpvotePersistsAcrossReload:
         ctx = _auth_context(browser, 'voter@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/prod-agents/tutorial/intro',
+            f'{django_server}/workshops/2026-04-21-prod-agents/tutorial/intro',
             wait_until='networkidle',
         )
 
@@ -558,7 +558,7 @@ class TestContentIsolationAcrossSurfaces:
 
         # On the workshop page, only the workshop question is visible.
         page.goto(
-            f'{django_server}/workshops/ws-iso/tutorial/intro',
+            f'{django_server}/workshops/2026-04-21-ws-iso/tutorial/intro',
             wait_until='networkidle',
         )
         page.wait_for_function(

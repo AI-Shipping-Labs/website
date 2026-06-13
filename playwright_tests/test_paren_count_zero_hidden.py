@@ -347,7 +347,7 @@ class TestWorkshopPageAnonymousNoQA:
         _create_open_workshop_page(slug="paren-ws")
 
         page.goto(
-            f"{django_server}/workshops/paren-ws/tutorial/welcome",
+            f"{django_server}/workshops/2026-04-21-paren-ws/tutorial/welcome",
             wait_until="domcontentloaded")
 
         assert page.locator("#qa-section").is_visible()

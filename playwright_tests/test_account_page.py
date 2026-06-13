@@ -24,7 +24,9 @@ from django.utils import timezone
 
 from playwright_tests.conftest import (
     DEFAULT_PASSWORD,
+    SETTLE_TIMEOUT_MS,
     VIEWPORT,
+    settle_click,
 )
 from playwright_tests.conftest import (
     create_session_for_user as _create_session_for_user,
@@ -743,10 +745,10 @@ class TestScenarioChangePasswordSuccess:
         page.fill("#current-password", DEFAULT_PASSWORD)
         page.fill("#new-password", "NewSecure456!")
         page.fill("#confirm-new-password", "NewSecure456!")
-        page.click("#change-password-form button[type='submit']")
+        settle_click(page.locator("#change-password-form button[type='submit']"))
 
         success = page.locator("#password-success")
-        expect(success).to_be_visible(timeout=5000)
+        expect(success).to_be_visible(timeout=SETTLE_TIMEOUT_MS)
         assert "password" in success.inner_text().lower()
 
         assert page.locator("#current-password").input_value() == ""
@@ -757,8 +759,8 @@ class TestScenarioChangePasswordSuccess:
         page.fill("#current-password", "NewSecure456!")
         page.fill("#new-password", DEFAULT_PASSWORD)
         page.fill("#confirm-new-password", DEFAULT_PASSWORD)
-        page.click("#change-password-form button[type='submit']")
-        expect(success).to_be_visible(timeout=5000)
+        settle_click(page.locator("#change-password-form button[type='submit']"))
+        expect(success).to_be_visible(timeout=SETTLE_TIMEOUT_MS)
         ctx.close()
     def test_new_password_works_after_change(
         self, django_server, test_users, django_db_blocker
@@ -777,8 +779,10 @@ class TestScenarioChangePasswordSuccess:
         page.fill("#current-password", DEFAULT_PASSWORD)
         page.fill("#new-password", "NewSecure456!")
         page.fill("#confirm-new-password", "NewSecure456!")
-        page.click("#change-password-form button[type='submit']")
-        expect(page.locator("#password-success")).to_be_visible(timeout=5000)
+        settle_click(page.locator("#change-password-form button[type='submit']"))
+        expect(page.locator("#password-success")).to_be_visible(
+            timeout=SETTLE_TIMEOUT_MS
+        )
         ctx.close()
 
         # Verify new session works
@@ -799,8 +803,10 @@ class TestScenarioChangePasswordSuccess:
         page3.fill("#current-password", "NewSecure456!")
         page3.fill("#new-password", DEFAULT_PASSWORD)
         page3.fill("#confirm-new-password", DEFAULT_PASSWORD)
-        page3.click("#change-password-form button[type='submit']")
-        expect(page3.locator("#password-success")).to_be_visible(timeout=5000)
+        settle_click(page3.locator("#change-password-form button[type='submit']"))
+        expect(page3.locator("#password-success")).to_be_visible(
+            timeout=SETTLE_TIMEOUT_MS
+        )
         ctx3.close()
 # ---------------------------------------------------------------
 # Scenario: Change password error
@@ -825,9 +831,11 @@ class TestScenarioChangePasswordError:
         page.fill("#current-password", "WrongPassword99")
         page.fill("#new-password", "NewSecure456!")
         page.fill("#confirm-new-password", "NewSecure456!")
-        page.click("#change-password-form button[type='submit']")
+        settle_click(page.locator("#change-password-form button[type='submit']"))
 
-        expect(page.locator("#password-error")).to_be_visible(timeout=5000)
+        expect(page.locator("#password-error")).to_be_visible(
+            timeout=SETTLE_TIMEOUT_MS
+        )
         assert page.locator("#password-success").is_hidden()
         ctx.close()
     def test_old_password_still_works_after_failed_change(
@@ -846,8 +854,10 @@ class TestScenarioChangePasswordError:
         page.fill("#current-password", "WrongPassword99")
         page.fill("#new-password", "NewSecure456!")
         page.fill("#confirm-new-password", "NewSecure456!")
-        page.click("#change-password-form button[type='submit']")
-        expect(page.locator("#password-error")).to_be_visible(timeout=5000)
+        settle_click(page.locator("#change-password-form button[type='submit']"))
+        expect(page.locator("#password-error")).to_be_visible(
+            timeout=SETTLE_TIMEOUT_MS
+        )
         ctx.close()
 
         # Verify old password works (create new session)

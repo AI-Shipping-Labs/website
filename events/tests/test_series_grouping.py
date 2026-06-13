@@ -14,6 +14,7 @@ suite (registration interaction); the structural/state-chip rendering of the
 compact rows is asserted here at the Django layer.
 """
 
+import zoneinfo
 from datetime import time, timedelta
 
 from django.contrib.auth import get_user_model
@@ -24,6 +25,35 @@ from events.models import Event, EventSeries
 from events.views.pages import _build_upcoming_rows
 
 User = get_user_model()
+
+
+def _weekly_occurrence_starts(after, weekday, hour, minute, count,
+                              tz='Europe/Berlin'):
+    """Return ``count`` tz-aware UTC datetimes, one per week, each landing on
+    ``weekday`` at ``hour:minute`` local ``tz``.
+
+    Each occurrence is built from a local wall-clock date 7 days after the
+    previous one and then converted to UTC, so every occurrence stays at the
+    same local time even across a DST change. Used to build a genuinely-weekly
+    fixture whose occurrences land on the series' stored weekday/time, so
+    ``EventSeries.is_regular_cadence`` is True and ``schedule_label`` reads
+    "Weekly on …". The first occurrence is at least 3 days out so a soonest
+    standalone event (``now + 1 day``) stays ahead of the series in the
+    chronological ordering assertions.
+    """
+    zone = zoneinfo.ZoneInfo(tz)
+    local = after.astimezone(zone)
+    first_date = local.date() + timedelta(days=3)
+    while first_date.weekday() != weekday:
+        first_date += timedelta(days=1)
+    starts = []
+    for i in range(count):
+        day = first_date + timedelta(days=7 * i)
+        wall = timezone.datetime(
+            day.year, day.month, day.day, hour, minute, tzinfo=zone,
+        )
+        starts.append(wall.astimezone(zoneinfo.ZoneInfo('UTC')))
+    return starts
 
 
 class UpcomingRowsBuilderTest(TestCase):
@@ -127,11 +157,20 @@ class EventsListSeriesCardRenderTest(TestCase):
             cadence='weekly', day_of_week=2, start_time=time(18, 0),
             timezone='Europe/Berlin',
         )
-        # 4 upcoming live occurrences of the series.
-        for i in range(4):
+        # 4 upcoming live occurrences on the next four Wednesdays at 18:00
+        # Europe/Berlin. Issue #877/#947: the card cadence is now the honest
+        # ``schedule_label`` derived from the real occurrences, so a genuinely
+        # weekly fixture is required for the card to read "Weekly on Wednesday
+        # at 18:00 Europe/Berlin". (The old fixture spaced occurrences 7 days
+        # from ``now`` on an arbitrary weekday, which is no longer regular.)
+        starts = _weekly_occurrence_starts(
+            now, weekday=2, hour=18, minute=0, count=4,
+        )
+        for i, start in enumerate(starts):
             Event.objects.create(
                 title=f'Office Hours Session {i}', slug=f'oh-session-{i}',
-                start_datetime=now + timedelta(days=2 + i * 7),
+                start_datetime=start,
+                timezone='Europe/Berlin',
                 status='upcoming', origin='studio',
                 event_series=cls.series, series_position=i + 1,
             )

@@ -3,7 +3,9 @@
 Issue #564 (renamed from event-group in #575).
 """
 
-from datetime import date, time, timedelta
+import re
+import zoneinfo
+from datetime import date, datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
@@ -446,6 +448,147 @@ class StudioEventSeriesPropagateTest(StaffMixin, TestCase):
         for i in range(1, 4):
             child = self.series.events.get(series_position=i)
             self.assertEqual(child.slug, f'office-hours-session-{i}')
+
+
+class StudioEventSeriesCadenceLabelTest(StaffMixin, TestCase):
+    """Issue #947: the Studio series list Cadence column and the detail
+    header render the honest ``schedule_label`` (#877), not the old
+    first-occurrence weekly claim. A regular series keeps the weekly
+    phrasing; an irregular series shows the session summary and never the
+    literal ``Weekly on``. The detail header keeps its
+    ``— N occurrence(s)`` suffix. A 0-occurrence (staff-preview) series,
+    whose label is empty, renders neither ``Weekly on`` nor an orphaned
+    separator.
+    """
+
+    @staticmethod
+    def _occurrence(series, local_dt, position, tz='Europe/Berlin'):
+        aware = local_dt.replace(tzinfo=zoneinfo.ZoneInfo(tz))
+        return Event.objects.create(
+            title=f'{series.name} Session {position}',
+            slug=f'{series.slug}-session-{position}',
+            start_datetime=aware,
+            timezone=tz,
+            status='upcoming',
+            event_series=series,
+            series_position=position,
+            origin='studio',
+        )
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.regular = EventSeries.objects.create(
+            name='Regular Series', slug='regular-series',
+            day_of_week=2,  # Wednesday
+            start_time=time(18, 0), timezone='Europe/Berlin',
+        )
+        for i in range(3):
+            cls._occurrence(
+                cls.regular,
+                datetime(2026, 6, 17, 18, 0) + timedelta(weeks=i),
+                position=i + 1,
+            )
+
+        cls.irregular = EventSeries.objects.create(
+            name='Irregular Series', slug='irregular-series',
+            day_of_week=2, start_time=time(18, 0), timezone='Europe/Berlin',
+        )
+        for i, dt in enumerate([
+            datetime(2026, 6, 15, 18, 0),  # Monday
+            datetime(2026, 6, 24, 18, 0),
+            datetime(2026, 6, 29, 18, 0),
+        ]):
+            cls._occurrence(cls.irregular, dt, position=i + 1)
+
+        # No occurrences -> schedule_label == '' (staff-preview only).
+        cls.empty = EventSeries.objects.create(
+            name='Empty Series', slug='empty-series',
+            day_of_week=2, start_time=time(18, 0), timezone='Europe/Berlin',
+        )
+
+    @staticmethod
+    def _cell(html, data_label, label_value):
+        """Return collapsed text of the ``data-label`` cell whose row matches
+        ``label_value`` (used to isolate one series row in the list)."""
+        # Find the row containing label_value, then its target cell.
+        row_start = html.index(label_value)
+        # Walk back to the row open tag and forward to its close.
+        tr_open = html.rindex('<tr', 0, row_start)
+        tr_close = html.index('</tr>', row_start)
+        row = html[tr_open:tr_close]
+        match = re.search(
+            rf'data-label="{data_label}"[^>]*>(.*?)</td>',
+            row, re.DOTALL,
+        )
+        assert match, f'{data_label} cell not found in row'
+        return ' '.join(match.group(1).split())
+
+    # --- Studio list Cadence column ---------------------------------------
+
+    def test_list_regular_row_shows_weekly_label(self):
+        response = self.client.get('/studio/event-series/')
+        html = response.content.decode()
+        cell = self._cell(html, 'Cadence', '/regular-series')
+        self.assertEqual(cell, 'Weekly on Wednesday at 18:00 Europe/Berlin')
+
+    def test_list_irregular_row_shows_summary_not_weekly(self):
+        response = self.client.get('/studio/event-series/')
+        html = response.content.decode()
+        cell = self._cell(html, 'Cadence', '/irregular-series')
+        self.assertEqual(cell, '3 sessions · Jun 15, 2026 – Jun 29, 2026')
+        self.assertNotIn('Weekly on', cell)
+
+    def test_list_empty_series_cadence_cell_is_blank(self):
+        response = self.client.get('/studio/event-series/')
+        html = response.content.decode()
+        cell = self._cell(html, 'Cadence', '/empty-series')
+        self.assertEqual(cell, '')
+
+    # --- Studio detail header ---------------------------------------------
+
+    def _cadence_header(self, series):
+        response = self.client.get(f'/studio/event-series/{series.pk}/')
+        match = re.search(
+            r'data-testid="event-series-cadence"[^>]*>(.*?)</p>',
+            response.content.decode(), re.DOTALL,
+        )
+        self.assertIsNotNone(match, 'event-series-cadence paragraph not found')
+        return ' '.join(match.group(1).split())
+
+    def test_detail_regular_header_shows_weekly_and_suffix(self):
+        self.assertEqual(
+            self._cadence_header(self.regular),
+            'Weekly on Wednesday at 18:00 Europe/Berlin — 3 occurrences',
+        )
+
+    def test_detail_irregular_header_shows_summary_not_weekly(self):
+        header = self._cadence_header(self.irregular)
+        self.assertEqual(
+            header,
+            '3 sessions · Jun 15, 2026 – Jun 29, 2026 — 3 occurrences',
+        )
+        self.assertNotIn('Weekly on', header)
+
+    def test_detail_empty_header_has_no_stray_separator(self):
+        # schedule_label == '' -> no leading clause, no orphaned em dash.
+        header = self._cadence_header(self.empty)
+        self.assertEqual(header, '0 occurrences')
+        self.assertNotIn('Weekly on', header)
+        self.assertNotIn('—', header)
+
+    def test_surfaces_agree_with_schedule_label(self):
+        # Each surface's cadence clause equals the series' schedule_label.
+        list_html = self.client.get('/studio/event-series/').content.decode()
+        for series, slug in (
+            (self.regular, '/regular-series'),
+            (self.irregular, '/irregular-series'),
+        ):
+            label = series.schedule_label
+            list_cell = self._cell(list_html, 'Cadence', slug)
+            self.assertEqual(list_cell, label)
+            header = self._cadence_header(series)
+            self.assertTrue(header.startswith(label))
 
 
 class StudioEventSeriesDeleteTest(StaffMixin, TestCase):

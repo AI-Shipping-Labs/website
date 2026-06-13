@@ -10,6 +10,7 @@ Covers:
 - Public events list shows series link when an event belongs to a series.
 """
 
+import re
 import zoneinfo
 from datetime import UTC, datetime, time, timedelta
 
@@ -556,6 +557,96 @@ class PublicEventSeriesBannerTest(TestCase):
         response = self.client.get(f'/events/groups/{self.no_banner.slug}')
         self.assertContains(response, 'ai-shipping-labs.jpg')
         self.assertNotContains(response, '/banners/event_series/')
+
+
+class UpcomingSeriesCardCadenceTest(TestCase):
+    """Issue #947: the /events grouped series card renders the honest
+    ``schedule_label`` for its cadence clause, not the old first-occurrence
+    weekly claim. A regular series keeps the byte-identical weekly phrasing;
+    an irregular series shows the neutral session summary and never the
+    literal ``Weekly on``. The ``· N upcoming session(s)`` suffix is preserved.
+    """
+
+    @staticmethod
+    def _occurrence(series, local_dt, position, tz='Europe/Berlin'):
+        aware = local_dt.replace(tzinfo=zoneinfo.ZoneInfo(tz))
+        return Event.objects.create(
+            title=f'{series.name} Session {position}',
+            slug=f'{series.slug}-session-{position}',
+            start_datetime=aware,
+            timezone=tz,
+            status='upcoming',
+            event_series=series,
+            series_position=position,
+            origin='studio',
+        )
+
+    @classmethod
+    def setUpTestData(cls):
+        # All occurrences are future-dated (today is 2026-06-13) so they
+        # render in the Upcoming section as a grouped series card.
+        cls.regular = EventSeries.objects.create(
+            name='Regular Office Hours', slug='regular-oh',
+            day_of_week=2,  # Wednesday
+            start_time=time(18, 0), timezone='Europe/Berlin',
+        )
+        # June 17 / 24 / July 1, 2026 are consecutive Wednesdays at 18:00.
+        for i in range(3):
+            cls._occurrence(
+                cls.regular,
+                datetime(2026, 6, 17, 18, 0) + timedelta(weeks=i),
+                position=i + 1,
+            )
+
+        cls.irregular = EventSeries.objects.create(
+            name='Irregular Workshop', slug='irregular-ws',
+            day_of_week=2,  # Wednesday (claimed) — occurrences drift
+            start_time=time(18, 0), timezone='Europe/Berlin',
+        )
+        for i, dt in enumerate([
+            datetime(2026, 6, 15, 18, 0),  # Monday
+            datetime(2026, 6, 24, 18, 0),
+            datetime(2026, 6, 29, 18, 0),
+        ]):
+            cls._occurrence(cls.irregular, dt, position=i + 1)
+
+    def _meta(self, response, series_slug):
+        """Return the text inside the series-card-meta paragraph for a card."""
+        html = response.content.decode()
+        # Isolate the card for this series, then its meta paragraph.
+        card_marker = f'data-series-slug="{series_slug}"'
+        start = html.index(card_marker)
+        segment = html[start:start + 4000]
+        match = re.search(
+            r'data-testid="series-card-meta"[^>]*>(.*?)</p>',
+            segment, re.DOTALL,
+        )
+        self.assertIsNotNone(match, 'series-card-meta paragraph not found')
+        return ' '.join(match.group(1).split())
+
+    def test_regular_series_card_shows_weekly_label_and_suffix(self):
+        response = self.client.get('/events')
+        meta = self._meta(response, 'regular-oh')
+        self.assertEqual(
+            meta,
+            'Weekly on Wednesday at 18:00 Europe/Berlin '
+            '· 3 upcoming sessions',
+        )
+
+    def test_irregular_series_card_shows_session_summary_not_weekly(self):
+        response = self.client.get('/events')
+        meta = self._meta(response, 'irregular-ws')
+        self.assertEqual(
+            meta,
+            '3 sessions · Jun 15, 2026 – Jun 29, 2026 '
+            '· 3 upcoming sessions',
+        )
+        self.assertNotIn('Weekly on', meta)
+
+    def test_irregular_card_meta_matches_schedule_label(self):
+        response = self.client.get('/events')
+        meta = self._meta(response, 'irregular-ws')
+        self.assertTrue(meta.startswith(self.irregular.schedule_label))
 
 
 class PublicEventsListSeriesLinkTest(TestCase):

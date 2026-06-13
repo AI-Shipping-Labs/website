@@ -13,6 +13,11 @@ re-running creates no duplicates. Prints a per-event-type summary count.
 Strategy A (confirmed in the issue): forward-writing instrumentation lives
 in the request/webhook chokepoints; this command seeds history. ``payment``
 and ``lesson_open`` have no reliable pre-feature source and are forward-only.
+
+``resource_view`` (issue #773) is likewise FORWARD-ONLY: there is no
+historical browsing source (we never logged content views before that
+feature), so this command intentionally never creates ``resource_view``
+rows. They accrue only from live content views going forward.
 """
 
 from django.core.management.base import BaseCommand

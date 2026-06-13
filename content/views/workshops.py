@@ -489,6 +489,19 @@ def workshop_video(request, date_slug):
         'can_show_materials': can_show_materials,
     })
 
+    # Record a `resource_view` for an authenticated member who can watch
+    # the recording (issue #773). Gated on can_access_recording so a
+    # paywalled teaser is not counted. Deduped + defensive in the helper.
+    if user.is_authenticated and context['can_access_recording']:
+        from analytics.activity import _safe_public_url, record_resource_view
+        record_resource_view(
+            user,
+            object_type='recording',
+            object_id=workshop.slug,
+            title=workshop.title,
+            target_url=_safe_public_url('workshop_video', workshop.url_key),
+        )
+
     status = 200
     # Build teaser context only when the recording gate trips and the
     # landing gate didn't (a landing-failed visitor sees a wholesale

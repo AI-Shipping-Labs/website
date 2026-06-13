@@ -147,6 +147,94 @@ def _safe_studio_unit_url(unit_pk):
         return ''
 
 
+def _safe_public_url(name, *args):
+    """Reverse a named public URL, returning '' on ``NoReverseMatch``.
+
+    Used by ``record_resource_view`` to denormalise the PUBLIC content URL
+    the member actually saw, so staff can click through from the CRM
+    timeline to the resource the member engaged with.
+    """
+    try:
+        return reverse(name, args=args)
+    except NoReverseMatch:
+        return ''
+
+
+# Human-readable kind labels for ``resource_view`` rows (issue #773). Maps
+# the stored ``object_type`` to the noun used in the timeline label
+# ("Viewed {kind}: {title}").
+RESOURCE_VIEW_KIND_LABELS = {
+    'article': 'article',
+    'project': 'project',
+    'tutorial': 'tutorial',
+    'recording': 'recording',
+    'curated_link': 'curated resource',
+    'download': 'download',
+}
+
+
+def record_resource_view(
+    user,
+    *,
+    object_type,
+    object_id,
+    title,
+    target_url='',
+    dedupe_minutes=360,
+):
+    """Record a ``resource_view`` for a logged-in member (issue #773).
+
+    Mirrors :func:`record_lesson_open`: skips anonymous users, dedupes one
+    row per (user, resource) within ``dedupe_minutes`` (default 360 = 6h),
+    and NEVER raises into the content request. Callers must already have
+    confirmed the member can access the resource (``can_access`` True) —
+    paywalled teasers a member bounced off are deliberately not recorded.
+
+    ``object_type`` is the content kind (article/project/tutorial/recording/
+    curated_link/download); ``object_id`` is the resource slug or pk;
+    ``target_url`` is the PUBLIC content URL the member saw. Stores no raw
+    IP / user-agent / querystring. Returns the created row, or ``None``
+    (anonymous user, deduped, or a caught error).
+    """
+    try:
+        if user is None or not getattr(user, 'is_authenticated', False):
+            return None
+        if getattr(user, 'pk', None) is None:
+            return None
+
+        object_id_str = str(object_id or '')
+        cutoff = timezone.now() - timezone.timedelta(minutes=dedupe_minutes)
+        recent_exists = UserActivity.objects.filter(
+            user=user,
+            event_type=UserActivity.EVENT_RESOURCE_VIEW,
+            object_type=object_type,
+            object_id=object_id_str[:64],
+            occurred_at__gte=cutoff,
+        ).exists()
+        if recent_exists:
+            return None
+
+        kind = RESOURCE_VIEW_KIND_LABELS.get(object_type, object_type)
+        label = f'Viewed {kind}: {title}'
+        return record_activity(
+            user,
+            UserActivity.EVENT_RESOURCE_VIEW,
+            label=label,
+            object_type=object_type,
+            object_id=object_id_str,
+            target_url=target_url,
+        )
+    except Exception:
+        logger.exception(
+            'Failed to record resource_view for user=%s object_type=%s '
+            'object_id=%s',
+            getattr(user, 'pk', None),
+            object_type,
+            object_id,
+        )
+        return None
+
+
 def record_event_register(user, event):
     """Record an `event_register` activity row for the CRM timeline.
 
@@ -181,6 +269,7 @@ def studio_event_url(event_pk):
 __all__ = [
     'record_activity',
     'record_lesson_open',
+    'record_resource_view',
     'record_event_register',
     'studio_course_url',
     'studio_event_url',

@@ -83,18 +83,20 @@ class ActivitySectionTest(TestCase):
         self.assertContains(response, 'href="/studio/courses/5/edit"')
 
     def test_more_line_when_over_limit(self):
-        for i in range(25):
+        # Display window raised to 30 in #773 (resource_view rows share
+        # the timeline).
+        for i in range(35):
             self._add(UserActivity.EVENT_LESSON_OPEN, f'Lesson {i}', minutes_ago=i)
         response = self.client.get(self._url())
-        self.assertContains(response, 'data-testid="user-activity-row"', count=20)
+        self.assertContains(response, 'data-testid="user-activity-row"', count=30)
         self.assertContains(response, 'data-testid="user-activity-more"')
-        self.assertContains(response, 'Showing 20 of 25 events')
+        self.assertContains(response, 'Showing 30 of 35 events')
 
     def test_no_more_line_when_at_or_under_limit(self):
-        for i in range(20):
+        for i in range(30):
             self._add(UserActivity.EVENT_LESSON_OPEN, f'Lesson {i}', minutes_ago=i)
         response = self.client.get(self._url())
-        self.assertContains(response, 'data-testid="user-activity-row"', count=20)
+        self.assertContains(response, 'data-testid="user-activity-row"', count=30)
         self.assertNotContains(response, 'data-testid="user-activity-more"')
 
     def test_query_budget_is_bounded(self):

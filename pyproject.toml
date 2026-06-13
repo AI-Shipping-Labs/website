@@ -4,32 +4,27 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
-    "anthropic>=0.105.2",
-    "apispec>=6.6.0",
-    "boto3>=1.42.52",
-    "coverage>=7.13.4",
-    "croniter>=6.0.0",
-    "dj-database-url>=3.1.2",
-    "django>=6.0.2",
-    "django-allauth>=65.14.3",
-    "django-q2>=1.9.0",
-    "freezegun>=1.5.5",
-    "gunicorn>=25.1.0",
-    "icalendar>=7.0.3",
-    "logfire>=4.34.0",
-    "markdown>=3.10.2",
-    "pillow>=12.1.1",
-    "playwright>=1.58.0",
-    "psycopg2-binary>=2.9.11",
-    "pygments>=2.19.2",
-    "pyjwt[crypto]>=2.11.0",
-    "pytest-django>=4.12.0",
-    "pytest-playwright>=0.7.2",
-    "python-dotenv>=1.2.1",
-    "python-frontmatter>=1.1.0",
-    "stripe>=14.3.0",
-    "watchdog>=6.0.0",
-    "whitenoise>=6.12.0",
+    "anthropic>=0.105.2",         # Claude API client — onboarding AI, Studio assistant, AI eval suite
+    "apispec>=6.6.0",             # builds the OpenAPI schema in api/openapi/builder.py
+    "boto3>=1.42.52",             # AWS SDK — S3 image uploads (content sync) + SES email sending
+    "croniter>=6.0.0",            # django-q2 parses the cron= schedules in jobs/.../setup_schedules.py
+    "dj-database-url>=3.1.2",     # parses DATABASE_URL into Django DATABASES config (website/settings.py)
+    "django>=6.0.2",              # the web framework
+    "django-allauth>=65.14.3",    # OAuth/social login + account management
+    "django-q2>=1.9.0",           # async task queue / scheduled jobs (qcluster worker)
+    "gunicorn>=25.1.0",           # production WSGI server (Dockerfile / entrypoint.sh)
+    "icalendar>=7.0.3",           # generates .ics calendar invites/feeds (events/services/calendar_invite.py)
+    "logfire>=4.34.0",            # observability/tracing (integrations/services/observability.py)
+    "markdown>=3.10.2",           # renders article/course/workshop markdown to HTML
+    "pillow>=12.1.1",             # image processing for banners/uploads (ImageField)
+    "psycopg2-binary>=2.9.11",    # PostgreSQL driver
+    "pygments>=2.19.2",           # syntax highlighting for fenced code blocks in markdown
+    "pyjwt[crypto]>=2.11.0",      # JWT signing/verification — GitHub App auth + API tokens
+    "python-dotenv>=1.2.1",       # loads .env files for local/runtime configuration
+    "python-frontmatter>=1.1.0",  # parses YAML frontmatter in synced content (github_sync/parsing.py)
+    "stripe>=14.3.0",             # payments — checkout, subscriptions, webhooks (payments/*)
+    "watchdog>=6.0.0",            # filesystem watching — content watch command + dev autoreload
+    "whitenoise>=6.12.0",         # serves static files in production
 ]
 
 [tool.tmuxctl]
@@ -94,12 +89,19 @@ exclude_lines = [
     "if __name__ == .__main__.:",
 ]
 
+# Dev/test-only — installed in CI/test (uv sync with dev group) but
+# excluded from the prod image (Dockerfile uses `uv sync --no-dev --frozen`).
 [dependency-groups]
 dev = [
-    "honcho>=2.0.0",
-    "pytest-xdist>=3.8.0",
-    "ruff>=0.11.0",
-    "tblib>=3.2.2",
+    "coverage>=7.13.4",        # test coverage measurement (make coverage)
+    "freezegun>=1.5.5",        # freezes time in unit tests (reminders, tier overrides, etc.)
+    "honcho>=2.0.0",           # runs Procfile.dev (web + qcluster) for local development
+    "playwright>=1.58.0",      # browser automation — Playwright E2E + scripts/capture_screenshots.py
+    "pytest-django>=4.12.0",   # Django integration for the pytest-based Playwright suite
+    "pytest-playwright>=0.7.2",# Playwright pytest fixtures for the E2E suite
+    "pytest-xdist>=3.8.0",     # parallelizes the Playwright test run
+    "ruff>=0.11.0",            # linter/formatter (make lint, CI)
+    "tblib>=3.2.2",            # serializes tracebacks across processes for --parallel test runs
 ]
 
 [tool.ruff]

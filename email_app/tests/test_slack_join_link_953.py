@@ -46,6 +46,16 @@ class WelcomeSlackLinkTest(TestCase):
         self.assertNotIn(RAW_INVITE, html)
 
     @override_settings(SLACK_INVITE_URL=RAW_INVITE)
+    def test_generic_welcome_has_gated_link(self):
+        # Legacy generic `welcome` template (#954): no raw invite URL,
+        # only the gated /community/slack redirect.
+        html = self._render("welcome")
+        self.assertIn(
+            'href="https://aishippinglabs.com/community/slack"', html,
+        )
+        self.assertNotIn(RAW_INVITE, html)
+
+    @override_settings(SLACK_INVITE_URL=RAW_INVITE)
     def test_basic_welcome_has_no_slack_link(self):
         html = self._render("basic_welcome")
         self.assertNotIn("/community/slack", html)

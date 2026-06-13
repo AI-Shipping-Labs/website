@@ -12,7 +12,7 @@ Here's what else you can do next:
 
 - Browse our [tutorials and resources]({{ site_url }}/tutorials/)
 - Check out upcoming [events]({{ site_url }}/events/)
-{% if slack_invite_url %}- Join the community on Slack: [Accept Invite]({{ slack_invite_url }}){% endif %}
+- Join the community on Slack: [Join our Slack community]({{ site_url }}/community/slack)
 
 If you have any questions, just reply to this email.
 

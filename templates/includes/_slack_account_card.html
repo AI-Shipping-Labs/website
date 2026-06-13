@@ -3,8 +3,9 @@
 
   Renders one of two states based on context flags:
 
-  - ``show_slack_join``: render the Join Slack CTA. Requires
-    ``slack_invite_url`` to be set.
+  - ``show_slack_join``: render the Join Slack CTA. The CTA links to the
+    gated ``slack_join_url`` (/community/slack), never the raw invite URL
+    (issue #953).
   - ``slack_connected``: render the connected confirmation, with the
     user's ``slack_user_id`` in monospace and an optional "Open in
     Slack" anchor when ``slack_profile_url`` is non-empty.
@@ -14,7 +15,7 @@
   pre-refactor dashboard behaviour.
 
   Context keys consumed:
-    show_slack_join, slack_connected, slack_invite_url,
+    show_slack_join, slack_connected, slack_join_url,
     slack_user_id, slack_profile_url
 {% endcomment %}
 {% load accounts_extras %}
@@ -30,7 +31,7 @@
         <p class="mt-1 text-sm text-muted-foreground">Connect with other builders in our private Slack workspace.</p>
         <p class="mt-2 text-xs text-muted-foreground">Already joined? It may take up to an hour for your account to be linked automatically.</p>
       </div>
-      <a href="{{ slack_invite_url }}" target="_blank" rel="noopener" class="{% button_classes 'secondary' 'shrink-0' %}" data-testid="slack-account-card-join">
+      <a href="{{ slack_join_url }}" rel="noopener" class="{% button_classes 'secondary' 'shrink-0' %}" data-testid="slack-account-card-join">
         <i data-lucide="message-square" class="h-4 w-4"></i>
         Join Slack
       </a>

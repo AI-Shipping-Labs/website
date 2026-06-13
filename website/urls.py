@@ -38,6 +38,7 @@ urlpatterns = [
     path('', include('comments.urls')),
     path('', include('email_app.urls')),
     path('', include('plans.urls')),
+    path('', include('community.urls')),
     path('studio/', include('studio.urls')),
 ]
 

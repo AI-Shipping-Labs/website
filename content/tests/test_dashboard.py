@@ -11,6 +11,7 @@ Covers:
 - Empty states for all sections
 """
 
+import re
 from datetime import date, timedelta
 from urllib.parse import urlparse
 
@@ -955,25 +956,23 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         content = response.content.decode()
         self.assertIn('Join our Slack community', content)
 
-    def test_join_button_links_to_slack_invite_url(self):
-        """The Join Slack button links to the configured SLACK_INVITE_URL."""
+    def test_join_button_links_to_gated_endpoint_not_raw_invite(self):
+        """Issue #953: the Join Slack button links to /community/slack and
+        the raw SLACK_INVITE_URL never appears in the dashboard HTML."""
         self._create_user('main-link@test.com', tier=self.main_tier)
         self.client.login(email='main-link@test.com', password='testpass')
         invite_url = 'https://join.slack.com/t/aishippinglabs/shared_invite/abc123'
         with self.settings(SLACK_INVITE_URL=invite_url):
             response = self.client.get('/')
-        content = response.content.decode()
-        self.assertIn(invite_url, content)
-
-    def test_join_button_opens_in_new_tab(self):
-        """The Join Slack link has target=_blank and rel=noopener."""
-        self._create_user('main-tab@test.com', tier=self.main_tier)
-        self.client.login(email='main-tab@test.com', password='testpass')
-        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
-            response = self.client.get('/')
-        content = response.content.decode()
-        self.assertIn('target="_blank"', content)
-        self.assertIn('rel="noopener"', content)
+        anchor_match = re.search(
+            r'<a[^>]*data-testid="slack-account-card-join"[^>]*>',
+            response.content.decode(),
+            re.DOTALL,
+        )
+        self.assertIsNotNone(anchor_match, 'Join Slack anchor must render')
+        self.assertIn('href="/community/slack"', anchor_match.group(0))
+        # The raw invite URL must not leak anywhere on the dashboard.
+        self.assertNotContains(response, invite_url)
 
     def test_slack_connected_hides_card_on_dashboard(self):
         """Issue #729: when slack_member is True, the dashboard does NOT
@@ -1062,10 +1061,12 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
             response = self.client.get('/')
         self.assertTrue(response.context['show_slack_join'])
         self.assertFalse(response.context['slack_connected'])
+        # Issue #953: the context exposes the gated redirect path, not the
+        # raw invite URL.
         self.assertEqual(
-            response.context['slack_invite_url'],
-            'https://join.slack.com/test',
+            response.context['slack_join_url'], '/community/slack',
         )
+        self.assertNotIn('slack_invite_url', response.context)
 
     def test_context_variables_slack_connected(self):
         """The slack_connected context variable is True for verified members."""

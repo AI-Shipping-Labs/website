@@ -129,7 +129,9 @@ def _dashboard_quick_actions(page):
     return page.locator('section:has(h2:has-text("Quick Actions"))')
 
 
-def _assert_slack_join_panel(page, expected_href):
+def _assert_slack_join_panel(page, raw_invite_url):
+    """Issue #953: the dashboard Slack CTA links to the gated
+    /community/slack redirect, never the raw invite URL."""
     slack_panel = page.locator(
         'section:has(h2:has-text("Join our Slack community"))'
     )
@@ -138,9 +140,11 @@ def _assert_slack_join_panel(page, expected_href):
 
     join_link = slack_panel.get_by_role("link", name="Join Slack")
     assert join_link.count() == 1
-    assert join_link.first.get_attribute("href") == expected_href
-    assert join_link.first.get_attribute("target") == "_blank"
+    assert join_link.first.get_attribute("href") == "/community/slack"
     assert join_link.first.get_attribute("rel") == "noopener"
+
+    # The raw invite URL must never be exposed in the dashboard HTML.
+    assert raw_invite_url not in page.content()
 
     assert page.locator('a[href="/community"]').count() == 0
 
@@ -389,6 +393,48 @@ class TestScenario5PremiumMemberSeesCommunityAction:
         )
         assert _dashboard_quick_actions(page).is_visible()
         _assert_slack_join_panel(page, slack_invite_url)
+
+
+# ---------------------------------------------------------------
+# Scenario 5b (issue #953): the dashboard Slack CTA points at the
+# gated /community/slack endpoint, which redirects an eligible
+# member onward to the real Slack invite. The raw invite URL is
+# never rendered in the dashboard HTML.
+# ---------------------------------------------------------------
+
+@pytest.mark.django_db(transaction=True)
+class TestGatedSlackJoinFlow:
+    """Eligible non-joined member follows the gated dashboard CTA."""
+
+    def test_main_member_cta_links_to_gated_endpoint(
+        self, django_server, browser, settings,
+    ):
+        _ensure_tiers()
+        _create_user("gated@test.com", tier_slug="main")
+        raw_invite = "https://join.slack.com/test-gated-redirect"
+        settings.SLACK_INVITE_URL = raw_invite
+
+        context = _auth_context(browser, "gated@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        slack_panel = page.locator(
+            'section:has(h2:has-text("Join our Slack community"))'
+        )
+        join_link = slack_panel.get_by_role("link", name="Join Slack")
+        assert join_link.first.get_attribute("href") == "/community/slack"
+        # The raw invite never appears in the dashboard markup.
+        assert raw_invite not in page.content()
+
+        # Following the gated endpoint lands the eligible member in Slack.
+        response = page.request.get(
+            f"{django_server}/community/slack",
+            max_redirects=0,
+        )
+        assert response.status == 302
+        assert response.headers["location"] == raw_invite
+
+
 # ---------------------------------------------------------------
 # Scenario 10: Admin reviews community audit log in Django admin
 # ---------------------------------------------------------------

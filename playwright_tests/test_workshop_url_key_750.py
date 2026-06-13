@@ -1,19 +1,17 @@
-"""Playwright E2E tests for issue #750 — date-slug workshop URLs.
+"""Playwright E2E tests for date-slug workshop URLs (#750) and the
+removal of the legacy slug-only redirects (#915).
 
 Scenarios:
 
 1. Catalog click lands directly on the canonical date-slug URL (no 301).
-2. Old slug-only landing URL 301s to the canonical URL.
-3. Old slug-only video URL 301s to canonical + preserves ``?t=`` query.
-4. Old slug-only tutorial URL 301s to canonical.
-5. ``?t=`` deep-link survives the legacy video redirect.
+2. Canonical tutorial deep-link renders directly (no redirect).
+3. Old bare-slug landing URL now returns 404 (no ``Location`` header).
+4. Old bare-slug video URL (with ``?t=``) now returns 404.
+5. Old bare-slug tutorial URL now returns 404.
 6. Sitemap exposes the canonical URLs and not the bare-slug shape.
-7. Malformed inputs return 404 (no slug-only fallback that 200s).
-
-The collision scenario (two workshops sharing a slug) is covered by the
-Django unit tests in ``content/tests/test_workshop_url_key_750.py`` —
-``Workshop.slug`` still carries a DB-level unique constraint, so a real
-two-row collision isn't reproducible through Playwright.
+7. Malformed / unknown inputs return 404.
+8. Studio ``Redirect`` mitigation: an operator-added 301 row restores a
+   single old bare-slug URL without a redeploy.
 
 Usage:
     uv run pytest playwright_tests/test_workshop_url_key_750.py -v
@@ -81,6 +79,7 @@ def _create_workshop(slug=WORKSHOP_SLUG, date=WORKSHOP_DATE):
 
 @pytest.mark.django_db(transaction=True)
 class TestCanonicalUrlsRenderDirectly:
+    @pytest.mark.core
     def test_catalog_click_lands_on_date_slug_url_no_redirect(
         self, django_server, page,
     ):
@@ -118,12 +117,31 @@ class TestCanonicalUrlsRenderDirectly:
             f'{[(r.url, r.status) for r in navigation_redirects]}'
         )
 
-
-@pytest.mark.django_db(transaction=True)
-class TestLegacyUrlsRedirectToCanonical:
-    def test_legacy_landing_redirects_to_canonical(
+    def test_canonical_tutorial_deep_link_renders_directly(
         self, django_server, page,
     ):
+        _clear_workshops()
+        _create_workshop()
+
+        response = page.goto(
+            f'{django_server}/workshops/{DATE_SLUG}/tutorial/intro',
+            wait_until='domcontentloaded',
+        )
+        # No redirect — the canonical tutorial URL lands directly and
+        # renders the page title/body for an entitled (open) page.
+        assert page.url == (
+            f'{django_server}/workshops/{DATE_SLUG}/tutorial/intro'
+        )
+        assert response is not None and response.status == 200
+        assert 'Introduction' in page.content()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestLegacyUrlsNow404:
+    """Issue #915: old bare-slug URLs 404 instead of 301-ing to canonical."""
+
+    @pytest.mark.core
+    def test_legacy_landing_now_404s(self, django_server, page):
         _clear_workshops()
         _create_workshop()
 
@@ -131,54 +149,33 @@ class TestLegacyUrlsRedirectToCanonical:
             f'{django_server}/workshops/{WORKSHOP_SLUG}',
             wait_until='domcontentloaded',
         )
-        # Browser ends up at the canonical date-slug URL.
-        assert page.url == f'{django_server}/workshops/{DATE_SLUG}'
-        # The landing renders normally (200 after the 301).
-        assert response is not None and response.status == 200
-        assert 'Build Your Own Search Engine' in page.content()
+        # Not silently redirected to canonical anymore — the bare-slug
+        # URL returns 404 and the browser stays put.
+        assert response is not None and response.status == 404
+        assert page.url == f'{django_server}/workshops/{WORKSHOP_SLUG}'
 
-    def test_legacy_video_redirects_to_canonical(
+    def test_legacy_video_with_t_query_now_404s(
         self, django_server, page,
     ):
         _clear_workshops()
         _create_workshop()
 
-        page.goto(
-            f'{django_server}/workshops/{WORKSHOP_SLUG}/video',
-            wait_until='domcontentloaded',
-        )
-        assert page.url == f'{django_server}/workshops/{DATE_SLUG}/video'
-
-    def test_legacy_video_redirect_preserves_t_query(
-        self, django_server, page,
-    ):
-        _clear_workshops()
-        _create_workshop()
-
-        page.goto(
+        response = page.goto(
             f'{django_server}/workshops/{WORKSHOP_SLUG}/video?t=300',
             wait_until='domcontentloaded',
         )
-        # ``?t=`` deep-link survives the 301 so the embed still drops
-        # the viewer at the right offset.
-        assert page.url == (
-            f'{django_server}/workshops/{DATE_SLUG}/video?t=300'
-        )
+        # The legacy 301-with-preserved-timestamp behavior is gone.
+        assert response is not None and response.status == 404
 
-    def test_legacy_tutorial_redirects_to_canonical(
-        self, django_server, page,
-    ):
+    def test_legacy_tutorial_now_404s(self, django_server, page):
         _clear_workshops()
         _create_workshop()
 
-        page.goto(
+        response = page.goto(
             f'{django_server}/workshops/{WORKSHOP_SLUG}/tutorial/intro',
             wait_until='domcontentloaded',
         )
-        assert page.url == (
-            f'{django_server}/workshops/{DATE_SLUG}/tutorial/intro'
-        )
-        assert 'Introduction' in page.content()
+        assert response is not None and response.status == 404
 
 
 @pytest.mark.django_db(transaction=True)
@@ -241,3 +238,58 @@ class TestMalformedUrls:
             wait_until='domcontentloaded',
         )
         assert response is not None and response.status == 404
+
+
+def _clear_redirects():
+    from integrations.middleware import clear_redirect_cache
+    from integrations.models import Redirect
+    Redirect.objects.all().delete()
+    clear_redirect_cache()
+    connection.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStudioRedirectMitigation:
+    """Issue #915 mitigation: an operator can restore one old bare-slug URL
+    via the Studio ``Redirect`` table without a redeploy.
+    """
+
+    @pytest.mark.core
+    def test_studio_redirect_row_restores_old_url(
+        self, django_server, page,
+    ):
+        from integrations.middleware import clear_redirect_cache
+        from integrations.models import Redirect
+
+        _clear_workshops()
+        _clear_redirects()
+        _create_workshop()
+
+        # Without a redirect row, the old bare-slug URL 404s.
+        response = page.goto(
+            f'{django_server}/workshops/{WORKSHOP_SLUG}',
+            wait_until='domcontentloaded',
+        )
+        assert response is not None and response.status == 404
+
+        # Operator adds a one-off 301 in Studio (modelled directly here).
+        Redirect.objects.create(
+            source_path=f'/workshops/{WORKSHOP_SLUG}',
+            target_path=f'/workshops/{DATE_SLUG}',
+            redirect_type=301,
+            is_active=True,
+        )
+        clear_redirect_cache()
+        connection.close()
+
+        # Now the same old URL 301s to the canonical page — no redeploy.
+        response = page.goto(
+            f'{django_server}/workshops/{WORKSHOP_SLUG}',
+            wait_until='domcontentloaded',
+        )
+        assert page.url == f'{django_server}/workshops/{DATE_SLUG}'
+        assert response is not None and response.status == 200
+        assert 'Build Your Own Search Engine' in page.content()
+
+        # Cleanup so the redirect doesn't leak into other tests.
+        _clear_redirects()

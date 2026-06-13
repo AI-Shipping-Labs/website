@@ -421,7 +421,7 @@ class TestWorkshopReaderMobileParity:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/parity-483/tutorial/p1",
+                f"{django_server}/workshops/2026-04-21-parity-483/tutorial/p1",
                 wait_until="domcontentloaded",
             )
 

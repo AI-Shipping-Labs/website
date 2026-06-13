@@ -412,8 +412,11 @@ class TestScenario2LoomRecordingTimestamps:
         context = _auth_context(browser, "free-loom@test.com")
         page = context.new_page()
         # Recording lives on the workshop video page (issue #426).
+        # Issue #915: bare-slug URLs no longer redirect — use url_key.
+        from content.models import Workshop
+        url_key = Workshop.objects.get(slug="product-demo").url_key
         page.goto(
-            f"{django_server}/workshops/product-demo/video",
+            f"{django_server}/workshops/{url_key}/video",
             wait_until="domcontentloaded",
         )
 
@@ -621,8 +624,11 @@ class TestScenario6RecordingWithoutVideoURL:
         )
 
         # Workshop video page is the canonical recording surface.
+        # Issue #915: bare-slug URLs no longer redirect — use url_key.
+        from content.models import Workshop
+        url_key = Workshop.objects.get(slug="community-qa").url_key
         response = page.goto(
-            f"{django_server}/workshops/community-qa/video",
+            f"{django_server}/workshops/{url_key}/video",
             wait_until="domcontentloaded",
         )
         assert response.status == 200
@@ -671,8 +677,11 @@ class TestScenario7HourLongTimestamps:
             required_level=0,
         )
 
+        # Issue #915: bare-slug URLs no longer redirect — use url_key.
+        from content.models import Workshop
+        url_key = Workshop.objects.get(slug="full-day-workshop").url_key
         page.goto(
-            f"{django_server}/workshops/full-day-workshop/video",
+            f"{django_server}/workshops/{url_key}/video",
             wait_until="domcontentloaded",
         )
 
@@ -833,8 +842,11 @@ class TestScenario10AdminTimestampEditor:
         page.wait_for_load_state("domcontentloaded")
 
         # Navigate to the public recording page (workshop video, issue #426)
+        # Issue #915: bare-slug URLs no longer redirect — use url_key.
+        from content.models import Workshop
+        url_key = Workshop.objects.get(slug="workshop-demo").url_key
         page.goto(
-            f"{django_server}/workshops/workshop-demo/video",
+            f"{django_server}/workshops/{url_key}/video",
             wait_until="domcontentloaded",
         )
 
@@ -894,8 +906,11 @@ class TestChaptersDisclosureExpandSeekCollapse:
         )
 
         # Workshop video page is the canonical recording surface (issue #426).
+        # Issue #915: bare-slug URLs no longer redirect — use url_key.
+        from content.models import Workshop
+        url_key = Workshop.objects.get(slug="chapters-disclosure-demo").url_key
         page.goto(
-            f"{django_server}/workshops/chapters-disclosure-demo/video",
+            f"{django_server}/workshops/{url_key}/video",
             wait_until="domcontentloaded",
         )
 
@@ -988,8 +1003,11 @@ class TestNoChaptersWhenTimestampsEmpty:
         )
 
         # Workshop video page is the canonical recording surface (issue #426).
+        # Issue #915: bare-slug URLs no longer redirect — use url_key.
+        from content.models import Workshop
+        url_key = Workshop.objects.get(slug="no-chapters-recording").url_key
         page.goto(
-            f"{django_server}/workshops/no-chapters-recording/video",
+            f"{django_server}/workshops/{url_key}/video",
             wait_until="domcontentloaded",
         )
 

@@ -171,7 +171,7 @@ class TestLandingAndDrawerRowsMatchAnonymous:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/agent-skills-527/",
+                f"{django_server}/workshops/2026-04-21-agent-skills-527/",
                 wait_until="domcontentloaded",
             )
 
@@ -195,7 +195,7 @@ class TestLandingAndDrawerRowsMatchAnonymous:
 
             # Now navigate to the tutorial page and open the drawer.
             page.goto(
-                f"{django_server}/workshops/agent-skills-527/tutorial/intro",
+                f"{django_server}/workshops/2026-04-21-agent-skills-527/tutorial/intro",
                 wait_until="domcontentloaded",
             )
             toggle = page.locator(
@@ -281,7 +281,7 @@ class TestLoggedInCompletionGlyphsNoTypographyDrift:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/agent-skills-527/tutorial/intro",
+                f"{django_server}/workshops/2026-04-21-agent-skills-527/tutorial/intro",
                 wait_until="domcontentloaded",
             )
             page.locator(
@@ -417,7 +417,7 @@ class TestAnonAndLoggedInDrawerRowsMatch:
         page_anon = ctx_anon.new_page()
         try:
             page_anon.goto(
-                f"{django_server}/workshops/agent-skills-527/tutorial/intro",
+                f"{django_server}/workshops/2026-04-21-agent-skills-527/tutorial/intro",
                 wait_until="domcontentloaded",
             )
             page_anon.locator(
@@ -434,7 +434,7 @@ class TestAnonAndLoggedInDrawerRowsMatch:
         page_auth = ctx_auth.new_page()
         try:
             page_auth.goto(
-                f"{django_server}/workshops/agent-skills-527/tutorial/intro",
+                f"{django_server}/workshops/2026-04-21-agent-skills-527/tutorial/intro",
                 wait_until="domcontentloaded",
             )
             page_auth.locator(
@@ -473,7 +473,7 @@ class TestWalkthroughProseListInSameFamily:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/agent-skills-527/",
+                f"{django_server}/workshops/2026-04-21-agent-skills-527/",
                 wait_until="domcontentloaded",
             )
 
@@ -563,7 +563,7 @@ class TestDesktopUnchanged:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/agent-skills-527/tutorial/intro",
+                f"{django_server}/workshops/2026-04-21-agent-skills-527/tutorial/intro",
                 wait_until="domcontentloaded",
             )
             # On desktop the sidebar nav is always visible (lg:block).
@@ -716,7 +716,7 @@ class TestRhythmTighterButTapTargetPreserved:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/agent-skills-527/",
+                f"{django_server}/workshops/2026-04-21-agent-skills-527/",
                 wait_until="domcontentloaded",
             )
             # Each row is at least 44px tall (tap target preserved).
@@ -784,7 +784,7 @@ class TestNoRegressionOn516Summaries:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/video-527/video",
+                f"{django_server}/workshops/2026-04-21-video-527/video",
                 wait_until="domcontentloaded",
             )
             # Find the first <details><summary> on the page (Chapters or

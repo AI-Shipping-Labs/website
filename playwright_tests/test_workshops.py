@@ -275,15 +275,15 @@ class TestVisitorBrowsesCatalog:
 
 @pytest.mark.django_db(transaction=True)
 class TestBasicUserReadsPagesButNotRecording:
-    def test_basic_user_legacy_link_redirects_to_canonical_tutorial(
+    def test_basic_user_reads_canonical_tutorial_page(
         self, browser, django_server,
     ):
-        """Bare-slug tutorial URL 301s to the canonical date-slug URL.
+        """Basic user reads a tutorial via the canonical date-slug URL.
 
-        Issue #750 keeps a legacy ``/workshops/<slug>/tutorial/<page>``
-        redirect that points at the new ``/workshops/<date>-<slug>/
-        tutorial/<page>`` canonical URL. The chain shape (old URL ->
-        301 -> new URL) is what we verify here, not just the final URL.
+        Issue #915 removed the legacy ``/workshops/<slug>/tutorial/<page>``
+        301 redirect, so we navigate straight to the canonical
+        ``/workshops/<date>-<slug>/tutorial/<page>`` URL (no redirect) and
+        verify the bare-slug URL now 404s.
         """
         _clear_workshops()
         workshop = _create_workshop(
@@ -306,35 +306,25 @@ class TestBasicUserReadsPagesButNotRecording:
             f'tutorial/starting-notebook'
         )
 
-        # Capture the navigation chain so we can assert on the 301.
-        responses = []
-
         ctx = _auth_context(browser, 'basic@test.com')
         page = ctx.new_page()
-        page.on('response', lambda r: responses.append(r))
 
-        response = page.goto(legacy_url, wait_until='domcontentloaded')
-
-        # Final URL is the canonical date-slug tutorial URL.
+        # The canonical URL renders directly (no redirect).
+        response = page.goto(canonical_url, wait_until='domcontentloaded')
         assert response is not None and response.status == 200
         assert page.url == canonical_url
-
-        # The chain went through a 301 from the legacy URL to the
-        # canonical one — not a direct render.
-        legacy_redirects = [
-            r for r in responses
-            if 300 <= r.status < 400 and r.url == legacy_url
-        ]
-        assert legacy_redirects, (
-            f'Expected a 3xx redirect from {legacy_url}; '
-            f'saw {[(r.url, r.status) for r in responses]}'
-        )
-        assert legacy_redirects[0].status == 301
 
         body = page.content()
         assert 'Starting Notebook' in body
         assert 'data-testid="page-body"' in body
         assert 'Open the notebook.' in body
+
+        # Issue #915: the old bare-slug tutorial URL now 404s.
+        legacy_response = page.goto(
+            legacy_url, wait_until='domcontentloaded',
+        )
+        assert legacy_response is not None
+        assert legacy_response.status == 404
 
         ctx.close()
 

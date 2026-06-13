@@ -122,7 +122,7 @@ class TestWorkshopMermaidDiagramRenders:
         )
         page.goto(
             f'{django_server}'
-            f'/workshops/architecture-walk-through/tutorial/architecture',
+            f'/workshops/2026-04-21-architecture-walk-through/tutorial/architecture',
             wait_until='domcontentloaded',
         )
 
@@ -208,7 +208,7 @@ class TestPagesWithoutDiagramsSkipMermaidDownload:
 
         page.goto(
             f'{django_server}'
-            f'/workshops/architecture-walk-through/tutorial/setup',
+            f'/workshops/2026-04-21-architecture-walk-through/tutorial/setup',
             wait_until='domcontentloaded',
         )
         # The assertion below is "no CDN requests fired"; wait for the
@@ -312,7 +312,7 @@ class TestMermaidEscapesHtmlSpecialCharacters:
         page.on('dialog', _on_dialog)
 
         page.goto(
-            f'{django_server}/workshops/xss-walkthrough/tutorial/xss',
+            f'{django_server}/workshops/2026-04-21-xss-walkthrough/tutorial/xss',
             wait_until='domcontentloaded',
         )
 
@@ -391,7 +391,7 @@ class TestWorkshopMermaidBrTagInLabel:
         page.on('dialog', _on_dialog)
 
         page.goto(
-            f'{django_server}/workshops/br-tag-walkthrough/tutorial/arch',
+            f'{django_server}/workshops/2026-04-21-br-tag-walkthrough/tutorial/arch',
             wait_until='domcontentloaded',
         )
 
@@ -528,7 +528,7 @@ class TestWorkshopMermaidBrTagBackfill:
         # Sanity check: confirm the landing page currently renders the
         # stale HTML (i.e. the pre-fix prod state is in place).
         page.goto(
-            f'{django_server}/workshops/br-backfill-walkthrough',
+            f'{django_server}/workshops/2026-04-21-br-backfill-walkthrough',
             wait_until='domcontentloaded',
         )
         # Give the page a moment to download Mermaid before checking.
@@ -561,7 +561,7 @@ class TestWorkshopMermaidBrTagBackfill:
         page.on('dialog', _on_dialog)
 
         page.goto(
-            f'{django_server}/workshops/br-backfill-walkthrough',
+            f'{django_server}/workshops/2026-04-21-br-backfill-walkthrough',
             wait_until='domcontentloaded',
         )
 

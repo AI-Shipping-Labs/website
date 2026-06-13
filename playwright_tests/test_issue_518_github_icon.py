@@ -179,7 +179,7 @@ def test_workshop_landing_light_mode_1280(django_server, browser):
     page = context.new_page()
     _set_theme(page, "light")
     page.goto(
-        f"{django_server}/workshops/aihero-workshop",
+        f"{django_server}/workshops/2026-04-21-aihero-workshop",
         wait_until="domcontentloaded",
     )
     _set_theme(page, "light")
@@ -230,7 +230,7 @@ def test_workshop_landing_dark_mode_1280(django_server, browser):
     page = context.new_page()
     _set_theme(page, "dark")
     page.goto(
-        f"{django_server}/workshops/aihero-workshop",
+        f"{django_server}/workshops/2026-04-21-aihero-workshop",
         wait_until="domcontentloaded",
     )
     _set_theme(page, "dark")
@@ -289,7 +289,7 @@ def test_workshop_landing_mobile_light_and_dark(django_server, browser):
     # Light mode 393.
     _set_theme(page, "light")
     page.goto(
-        f"{django_server}/workshops/aihero-workshop",
+        f"{django_server}/workshops/2026-04-21-aihero-workshop",
         wait_until="domcontentloaded",
     )
     _set_theme(page, "light")
@@ -360,7 +360,7 @@ def test_workshop_reader_sidebar_dark(django_server, browser):
 
     _set_theme(page, "dark")
     page.goto(
-        f"{django_server}/workshops/reader-ws/tutorial/intro",
+        f"{django_server}/workshops/2026-04-21-reader-ws/tutorial/intro",
         wait_until="domcontentloaded",
     )
     _set_theme(page, "dark")
@@ -525,7 +525,7 @@ def test_sibling_lucide_icons_still_hydrate(django_server, browser):
     page = context.new_page()
     _set_theme(page, "dark")
     page.goto(
-        f"{django_server}/workshops/sibling-ws",
+        f"{django_server}/workshops/2026-04-21-sibling-ws",
         wait_until="domcontentloaded",
     )
     _set_theme(page, "dark")

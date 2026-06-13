@@ -227,7 +227,7 @@ class TestFreeMemberOnBasicTutorial:
         try:
             page = ctx.new_page()
             page.goto(
-                f'{django_server}/workshops/paid-tut/tutorial/intro',
+                f'{django_server}/workshops/2026-04-21-paid-tut/tutorial/intro',
                 wait_until='domcontentloaded',
             )
             body = page.content()
@@ -270,7 +270,7 @@ class TestMainMemberFullBody:
         try:
             page = ctx.new_page()
             response = page.goto(
-                f'{django_server}/workshops/main-tut/tutorial/intro',
+                f'{django_server}/workshops/2026-04-21-main-tut/tutorial/intro',
                 wait_until='domcontentloaded',
             )
             assert response.status == 200
@@ -348,7 +348,7 @@ class TestFreeMemberOnMainRecording:
         try:
             page = ctx.new_page()
             page.goto(
-                f'{django_server}/workshops/main-vid/video',
+                f'{django_server}/workshops/2026-04-21-main-vid/video',
                 wait_until='domcontentloaded',
             )
             body = page.content()
@@ -390,7 +390,7 @@ class TestPremiumMemberFullVideo:
         try:
             page = ctx.new_page()
             response = page.goto(
-                f'{django_server}/workshops/prem-vid/video',
+                f'{django_server}/workshops/2026-04-21-prem-vid/video',
                 wait_until='domcontentloaded',
             )
             assert response.status == 200
@@ -427,7 +427,7 @@ class TestEmptyBodyFallback:
         try:
             page = ctx.new_page()
             page.goto(
-                f'{django_server}/workshops/empty-tut/tutorial/blank',
+                f'{django_server}/workshops/2026-04-21-empty-tut/tutorial/blank',
                 wait_until='domcontentloaded',
             )
             body = page.content()
@@ -511,7 +511,7 @@ class TestUnverifiedEmailCard:
         try:
             page = ctx.new_page()
             page.goto(
-                f'{django_server}/workshops/verify-tut/tutorial/intro',
+                f'{django_server}/workshops/2026-04-21-verify-tut/tutorial/intro',
                 wait_until='domcontentloaded',
             )
             body = page.content()

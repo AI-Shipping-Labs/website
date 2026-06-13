@@ -455,8 +455,13 @@ class TestScenario4BasicMemberWatchesBasicRecording:
         context = _auth_context(browser, "basic-rec@test.com")
         page = context.new_page()
         # Recording lives on the workshop video page (issue #426).
+        # Issue #915: bare-slug URLs no longer redirect — use the canonical
+        # date-slug URL (workshop date defaults to today-30 in the helper).
+        rec_date = (
+            datetime.date.today() - datetime.timedelta(days=30)
+        ).isoformat()
         page.goto(
-            f"{django_server}/workshops/ai-tool-breakdown-cursor/video",
+            f"{django_server}/workshops/{rec_date}-ai-tool-breakdown-cursor/video",
             wait_until="domcontentloaded",
         )
 

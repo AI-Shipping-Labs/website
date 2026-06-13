@@ -7,17 +7,15 @@ Covers:
 - The internal helpers ``_parse_date_slug`` and ``_resolve_workshop_by_key``
   raise ``Http404`` on malformed input vs. missing workshop.
 - Canonical date-slug URLs return 200 for published workshops.
-- Legacy slug-only URLs 301 to the canonical URL (landing, video, tutorial).
-- Query strings (notably ``?t=`` deep links) survive each redirect.
-- Slug collisions across different dates: the legacy redirect picks the
-  newest workshop and emits a WARNING log naming both.
+- Issue #915: the legacy slug-only routes were removed — a bare slug
+  URL (landing, video, tutorial) now returns 404 with no ``Location``
+  header instead of 301-redirecting to the canonical URL.
 - Malformed URLs (bad date prefix, no date prefix + missing slug) return 404.
 - ``reverse('workshop_detail', kwargs={'date_slug': ...})`` succeeds;
   passing ``slug=...`` raises NoReverseMatch.
 - Sitemap emits the canonical date-slug URLs only — no slug-only shape.
 """
 
-import logging
 from datetime import date
 
 from django.http import Http404
@@ -26,7 +24,6 @@ from django.urls import NoReverseMatch, reverse
 
 from content.models import Workshop, WorkshopPage
 from content.views.workshops import (
-    _lookup_legacy_workshop,
     _parse_date_slug,
     _resolve_workshop_by_key,
 )
@@ -77,9 +74,9 @@ class ParseDateSlugTest(SimpleTestCase):
         self.assertEqual(slug, 'build-it')
 
     def test_no_date_prefix_raises_http404(self):
-        # A bare slug (the shape that lives in old emails) does not match
-        # the date-slug regex and must 404 so the resolver falls through
-        # to the legacy slug-only route.
+        # A bare slug (the shape that lived in old emails) does not match
+        # the date-slug regex and must 404. Issue #915 removed the legacy
+        # slug-only fallback, so there is nothing else for it to match.
         with self.assertRaises(Http404):
             _parse_date_slug('build-it')
 
@@ -142,88 +139,6 @@ class ResolveWorkshopByKeyTest(TestCase):
             _resolve_workshop_by_key('not-a-key')
 
 
-class LookupLegacyWorkshopTest(TestCase):
-    """``_lookup_legacy_workshop`` picks the newest published match and warns.
-
-    Issue #750. The DB-level ``Workshop.slug`` field still carries
-    ``unique=True`` (no migration is included by this issue), so in
-    production today the multi-match branch is defensive. The collision
-    branch is exercised via ``unittest.mock`` so the test still locks
-    in the contract for the day the constraint is relaxed.
-    """
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.workshop = Workshop.objects.create(
-            slug='agents-101',
-            title='Agents 101',
-            date=date(2026, 5, 14),
-            status='published',
-            landing_required_level=0,
-            pages_required_level=0,
-            recording_required_level=0,
-        )
-
-    def test_single_match_returns_workshop_no_warning(self):
-        with self.assertNoLogs(
-            'content.views.workshops', level='WARNING',
-        ):
-            ws = _lookup_legacy_workshop('agents-101')
-        self.assertEqual(ws.pk, self.workshop.pk)
-
-    def test_collision_picks_newest_and_logs_warning(self):
-        # Simulate two workshops sharing the slug. Build a second row
-        # in memory (no save — the unique constraint would reject it)
-        # and patch the queryset that ``_lookup_legacy_workshop``
-        # consumes so the multi-match branch fires deterministically.
-        from unittest.mock import patch
-
-        older = Workshop(
-            slug='agents-101',
-            title='Agents 101 (older)',
-            date=date(2025, 2, 1),
-            status='published',
-        )
-
-        # The helper does ``Workshop.objects.filter(...)``,
-        # ``.order_by('-date')``, then ``.first()`` and ``.count()``.
-        # Patch the manager so the in-memory pair is what those calls
-        # see — ``newest`` first, then ``older``.
-        class FakeQS:
-            def __init__(self, rows):
-                self._rows = rows
-
-            def first(self):
-                return self._rows[0] if self._rows else None
-
-            def count(self):
-                return len(self._rows)
-
-            def __getitem__(self, idx):
-                return self._rows[idx]
-
-        fake = FakeQS([self.workshop, older])
-        with patch(
-            'content.views.workshops.Workshop.objects.filter',
-        ) as mock_filter:
-            mock_filter.return_value.order_by.return_value = fake
-            with self.assertLogs(
-                'content.views.workshops', level='WARNING',
-            ) as cm:
-                ws = _lookup_legacy_workshop('agents-101')
-        self.assertEqual(ws.pk, self.workshop.pk)
-        joined = '\n'.join(cm.output)
-        # Warning names both candidates so an operator auditing the log
-        # can tell which slug-only URL got routed where.
-        self.assertIn('2025-02-01', joined)
-        self.assertIn('2026-05-14', joined)
-        self.assertIn('agents-101', joined)
-
-    def test_missing_slug_raises_http404(self):
-        with self.assertRaises(Http404):
-            _lookup_legacy_workshop('totally-made-up')
-
-
 class CanonicalUrlsResolveTest(TestCase):
     """End-to-end: the canonical date-slug URLs return 200 for published rows."""
 
@@ -261,118 +176,24 @@ class CanonicalUrlsResolveTest(TestCase):
 
     def test_bare_slug_with_no_match_returns_404(self):
         # ``totally-made-up-slug`` has no date prefix, so the canonical
-        # route doesn't match. The legacy slug-only redirect view fires,
-        # finds no workshop, and 404s.
+        # route doesn't match. Issue #915 removed the legacy slug-only
+        # fallback, so the request 404s.
         response = self.client.get('/workshops/totally-made-up-slug')
         self.assertEqual(response.status_code, 404)
 
-
-class LegacyRedirectsTest(TestCase):
-    """Legacy slug-only URLs 301 to the canonical date-slug URLs."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.workshop = Workshop.objects.create(
-            slug='build-search',
-            title='Build Search',
-            date=date(2026, 5, 14),
-            status='published',
-            landing_required_level=0,
-            pages_required_level=0,
-            recording_required_level=0,
-        )
-        cls.page = WorkshopPage.objects.create(
-            workshop=cls.workshop, slug='intro', title='Intro',
-            sort_order=1, body='Hello.',
-        )
-        cls.canonical = '/workshops/2026-05-14-build-search'
-
-    def test_legacy_landing_301s_to_canonical(self):
-        response = self.client.get('/workshops/build-search')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], self.canonical)
-
-    def test_legacy_video_301s_to_canonical(self):
-        response = self.client.get('/workshops/build-search/video')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], f'{self.canonical}/video')
-
-    def test_legacy_tutorial_301s_to_canonical(self):
-        response = self.client.get(
-            '/workshops/build-search/tutorial/intro',
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'], f'{self.canonical}/tutorial/intro',
-        )
-
-    def test_legacy_video_redirect_preserves_t_query_string(self):
-        # The ``?t=`` deep-link timestamp on old recording URLs must
-        # survive the 301 so the embed still drops the viewer at the
-        # right offset.
-        response = self.client.get(
-            '/workshops/build-search/video?t=300',
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'], f'{self.canonical}/video?t=300',
-        )
-
-    def test_legacy_tutorial_redirect_preserves_arbitrary_query(self):
-        response = self.client.get(
-            '/workshops/build-search/tutorial/intro?ref=email',
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'],
-            f'{self.canonical}/tutorial/intro?ref=email',
-        )
-
-    def test_legacy_landing_redirect_preserves_tracking_query(self):
-        response = self.client.get(
-            '/workshops/build-search?utm_source=newsletter',
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'],
-            f'{self.canonical}?utm_source=newsletter',
-        )
-
-    def test_legacy_landing_for_unknown_slug_returns_404(self):
-        response = self.client.get('/workshops/no-such-slug')
-        self.assertEqual(response.status_code, 404)
-
-
-class LegacyRedirectCollisionTest(TestCase):
-    """View-level slug collision: legacy URL lands on the newer workshop.
-
-    Same caveat as :class:`LookupLegacyWorkshopTest` — the model still
-    enforces ``slug`` uniqueness, so we patch the helper to simulate the
-    collision shape end-to-end through the view layer.
-    """
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.newest = Workshop.objects.create(
-            slug='agents-101',
-            title='Agents 101 (2026)',
-            date=date(2026, 5, 14),
-            status='published',
-            landing_required_level=0,
-            pages_required_level=0,
-            recording_required_level=0,
-        )
-
-    def test_legacy_landing_lands_on_newest(self):
-        # No collision in the DB — assert the redirect targets the
-        # one workshop we have and no WARNING fires.
-        logger = logging.getLogger('content.views.workshops')
-        with self.assertNoLogs(logger, level='WARNING'):
-            response = self.client.get('/workshops/agents-101')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'], '/workshops/2026-05-14-agents-101',
-        )
+    def test_bare_slug_matching_published_workshop_now_404s(self):
+        # Issue #915: a bare slug that DOES match a published workshop
+        # used to 301 to the canonical date-slug URL. Now it 404s with
+        # no ``Location`` header — the legacy redirect was removed.
+        for path in (
+            '/workshops/build-it',
+            '/workshops/build-it/video',
+            '/workshops/build-it/tutorial/intro',
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 404)
+                self.assertNotIn('Location', response)
 
 
 class ReverseWorkshopUrlTest(TestCase):

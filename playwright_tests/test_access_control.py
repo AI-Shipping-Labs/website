@@ -937,8 +937,13 @@ class TestScenario5PremiumMemberUnrestrictedAccess:
         context = _auth_context(browser, "premium@test.com")
         page = context.new_page()
         # Recording lives on the workshop video page (issue #426).
+        # Issue #915: bare-slug URLs no longer redirect — build the
+        # canonical date-slug URL (helper dates recordings at today-1).
+        rec_date = (
+            datetime.date.today() - datetime.timedelta(days=1)
+        ).isoformat()
         page.goto(
-            f"{django_server}/workshops/main-recording-prem/video",
+            f"{django_server}/workshops/{rec_date}-main-recording-prem/video",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -1054,8 +1059,13 @@ class TestScenario7BasicMemberBlockedFromMainRecording:
         context = _auth_context(browser, "basic@test.com")
         page = context.new_page()
         # Workshop video page enforces the recording paywall.
+        # Issue #915: build the canonical date-slug URL (helper dates
+        # recordings at today-1; bare-slug URLs no longer redirect).
+        rec_date = (
+            datetime.date.today() - datetime.timedelta(days=1)
+        ).isoformat()
         page.goto(
-            f"{django_server}/workshops/main-gated-recording/video",
+            f"{django_server}/workshops/{rec_date}-main-gated-recording/video",
             wait_until="domcontentloaded",
         )
 

@@ -5,8 +5,8 @@
 {% block meta_description %}Series page for {{ series.name }} — listing every upcoming and past occurrence.{% endblock %}
 
 {% block og_tags %}
-{# Issue #896: the series uses its auto-generated banner as the OG/Twitter
-   image when one is set, falling back to the site default otherwise. #}
+{% comment %}Issue #896: the series uses its auto-generated banner as the OG/Twitter
+   image when one is set, falling back to the site default otherwise.{% endcomment %}
 <meta property="og:title" content="{{ series.name }}">
 <meta property="og:description" content="Series page for {{ series.name }} — every upcoming and past occurrence.">
 <meta property="og:url" content="{{ site_url }}{{ series.get_absolute_url }}">

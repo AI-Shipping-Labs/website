@@ -558,6 +558,14 @@ class PublicEventSeriesBannerTest(TestCase):
         self.assertContains(response, 'ai-shipping-labs.jpg')
         self.assertNotContains(response, '/banners/event_series/')
 
+    def test_dev_comment_not_leaked_into_head(self):
+        # Issue #946: the #896 OG-image note was a multi-line {# #} comment,
+        # which Django treats as single-line — leaking lines 2+ as literal
+        # text into <head>. It is now a {% comment %} block; the distinctive
+        # phrase must not appear in the rendered page.
+        response = self.client.get(f'/events/groups/{self.with_banner.slug}')
+        self.assertNotContains(response, 'falling back to the site default')
+
 
 class UpcomingSeriesCardCadenceTest(TestCase):
     """Issue #947: the /events grouped series card renders the honest

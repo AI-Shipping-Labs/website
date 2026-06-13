@@ -129,8 +129,11 @@ class TestNotYetJoinedMainMemberSeesCtaNearTopOfAccount:
                 '[data-testid="slack-account-card-join"]'
             )
             assert join_anchor.count() == 1
-            assert join_anchor.first.get_attribute("href") == SLACK_INVITE_URL
-            assert join_anchor.first.get_attribute("target") == "_blank"
+            # Issue #953: the Join CTA links to the gated /community/slack
+            # redirect, not the raw invite URL, and opens in the same tab
+            # (no target="_blank") so the redirect view can track the click.
+            assert join_anchor.first.get_attribute("href") == "/community/slack"
+            assert join_anchor.first.get_attribute("target") is None
             assert join_anchor.first.get_attribute("rel") == "noopener"
 
             # The Slack card sits between Profile and Membership in the

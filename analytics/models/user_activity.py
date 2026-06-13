@@ -33,6 +33,7 @@ class UserActivity(models.Model):
     EVENT_PAYMENT = 'payment'
     EVENT_EMAIL_CLICK = 'email_click'
     EVENT_SLACK_JOIN = 'slack_join_click'
+    EVENT_RESOURCE_VIEW = 'resource_view'
 
     EVENT_TYPE_CHOICES = [
         (EVENT_SIGNUP, 'Signup'),
@@ -43,6 +44,11 @@ class UserActivity(models.Model):
         (EVENT_PAYMENT, 'Payment'),
         (EVENT_EMAIL_CLICK, 'Email click'),
         (EVENT_SLACK_JOIN, 'Slack join'),
+        # Phase 2 (issue #773): a logged-in member opened an accessible
+        # content resource (article/project/tutorial/recording/curated
+        # link/download). Forward-only browsing signal for the pre-upgrade
+        # journey. Course units stay on EVENT_LESSON_OPEN, not this.
+        (EVENT_RESOURCE_VIEW, 'Viewed'),
     ]
 
     user = models.ForeignKey(

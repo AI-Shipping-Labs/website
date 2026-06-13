@@ -995,9 +995,10 @@ def _build_course_enrollments(user):
 
 
 # Number of most-recent activity rows shown on the user detail page
-# (issue #853). When the user has more than this many total activities,
-# the template renders a "Showing 20 of N events" line.
-USER_ACTIVITY_DISPLAY_LIMIT = 20
+# (issue #853; raised to 30 in #773 once `resource_view` browsing rows
+# share the timeline). When the user has more than this many total
+# activities, the template renders a "Showing 30 of N events" line.
+USER_ACTIVITY_DISPLAY_LIMIT = 30
 
 
 def _build_activity_timeline(user):
@@ -1005,8 +1006,18 @@ def _build_activity_timeline(user):
 
     Bounded by ``USER_ACTIVITY_DISPLAY_LIMIT``. Adds at most 2 DB queries
     to the user detail page regardless of event count: one for the window
-    and one for the total. The denormalised ``label`` / ``target_url`` on
-    each ``UserActivity`` row mean no per-row joins are needed.
+    and one for the total. The first-payment marker adds no query — it is
+    derived in Python from the already-fetched window rows. The
+    denormalised ``label`` / ``target_url`` on each ``UserActivity`` row
+    mean no per-row joins are needed.
+
+    ``first_payment_at`` (issue #773) is the ``occurred_at`` of the
+    earliest ``payment`` event WITHIN the displayed window, or ``None``
+    when none is shown. The template renders an "Upgraded to paid" marker
+    at that chronological position so pre-upgrade browsing (``resource_view``
+    rows older than it) is visually separable. Computing it from the
+    already-fetched window rows adds NO extra query — the marker only
+    matters where it can actually render among the displayed rows.
     """
     from analytics.models import UserActivity
 
@@ -1021,6 +1032,7 @@ def _build_activity_timeline(user):
             'label': activity.label,
             'occurred_at': activity.occurred_at,
             'target_url': activity.target_url,
+            'is_payment': activity.event_type == UserActivity.EVENT_PAYMENT,
         }
         for activity in rows
     ]
@@ -1032,11 +1044,29 @@ def _build_activity_timeline(user):
     else:
         total = UserActivity.objects.filter(user=user).count()
 
+    # First (oldest) payment among the displayed rows. Derived in Python
+    # from ``rows`` so no extra query is issued. ``rows`` are newest-first,
+    # so the LAST payment in the list is the earliest in time.
+    first_payment_at = None
+    for activity in activities:
+        if activity['is_payment']:
+            first_payment_at = activity['occurred_at']
+    # Tag exactly the earliest payment row so the template renders the
+    # "Upgraded to paid" marker there once. Browsing rows older than it
+    # (below it in the newest-first list) read as pre-upgrade.
+    for activity in activities:
+        activity['is_upgrade_marker'] = (
+            first_payment_at is not None
+            and activity['is_payment']
+            and activity['occurred_at'] == first_payment_at
+        )
+
     return {
         'activities': activities,
         'activity_total': total,
         'activity_limit': USER_ACTIVITY_DISPLAY_LIMIT,
         'activity_has_more': total > USER_ACTIVITY_DISPLAY_LIMIT,
+        'first_payment_at': first_payment_at,
     }
 
 
@@ -1130,6 +1160,7 @@ def user_detail(request, user_id):
         'activity_total': activity_timeline['activity_total'],
         'activity_limit': activity_timeline['activity_limit'],
         'activity_has_more': activity_timeline['activity_has_more'],
+        'first_payment_at': activity_timeline['first_payment_at'],
         # /admin/accounts/user/<id>/change/ is the canonical destructive
         # surface for users (delete, password reset, full ORM edits).
         # Linking it from the Studio overview keeps Studio focused on

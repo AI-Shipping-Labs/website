@@ -15,6 +15,31 @@ from content.tier_config import get_activities
 from plans.models import Plan, Sprint, SprintEnrollment
 
 
+def _record_resource_view_if_accessible(
+    request, obj, object_type, object_id, url_name, *url_args,
+):
+    """Record a `resource_view` only when the member can access ``obj``.
+
+    Shared by the public content detail views (issue #773). Records the
+    PUBLIC content URL the member saw so staff can click through from the
+    CRM timeline. No-op for anonymous users or gated teasers (``can_access``
+    False). Defensive — ``record_resource_view`` never raises.
+    """
+    from analytics.activity import _safe_public_url, record_resource_view
+
+    if not request.user.is_authenticated:
+        return
+    if not can_access(request.user, obj):
+        return
+    record_resource_view(
+        request.user,
+        object_type=object_type,
+        object_id=object_id,
+        title=getattr(obj, 'title', '') or str(object_id),
+        target_url=_safe_public_url(url_name, *url_args),
+    )
+
+
 def _get_selected_tags(request):
     """Extract selected tags from query params. Supports ?tag=X&tag=Y."""
     return [t.strip() for t in request.GET.getlist('tag') if t.strip()]
@@ -201,6 +226,11 @@ def blog_detail(request, slug):
     article = get_object_or_404(Article, slug=slug, published=True)
 
     if article.page_type == 'learning_path':
+        # Record the resource view for learning-path reads too (issue
+        # #773) before the early return, gated on authenticated + access.
+        _record_resource_view_if_accessible(
+            request, article, 'article', article.slug, 'blog_detail', slug,
+        )
         context = {
             'article': article,
             'title': article.title,
@@ -217,6 +247,9 @@ def blog_detail(request, slug):
         'tag_rules': tag_rules,
     }
     context.update(build_gating_context(request.user, article, 'article'))
+    _record_resource_view_if_accessible(
+        request, article, 'article', article.slug, 'blog_detail', slug,
+    )
     return render(request, 'content/blog_detail.html', context)
 
 
@@ -263,6 +296,9 @@ def project_detail(request, slug):
     tag_rules = _get_tag_rules_for_tags(project.tags)
     context = {'project': project, 'tag_rules': tag_rules}
     context.update(build_gating_context(request.user, project, 'project'))
+    _record_resource_view_if_accessible(
+        request, project, 'project', project.slug, 'project_detail', slug,
+    )
     return render(request, 'content/project_detail.html', context)
 
 
@@ -356,6 +392,12 @@ def curated_link_go(request, link_id):
     link = get_object_or_404(CuratedLink, pk=link_id, published=True)
     gating = build_gating_context(request.user, link, 'curated_link')
     if not gating['is_gated']:
+        # The member can access and is being redirected to the resource —
+        # record the view (issue #773). target_url is the public go URL so
+        # staff land on the same redirect the member followed.
+        _record_resource_view_if_accessible(
+            request, link, 'curated_link', link.pk, 'curated_link_go', link.pk,
+        )
         return redirect(link.url)
     if gating.get('gated_reason') == 'unverified_email':
         return render(
@@ -378,6 +420,9 @@ def tutorial_detail(request, slug):
     tag_rules = _get_tag_rules_for_tags(tutorial.tags)
     context = {'tutorial': tutorial, 'tag_rules': tag_rules}
     context.update(build_gating_context(request.user, tutorial, 'tutorial'))
+    _record_resource_view_if_accessible(
+        request, tutorial, 'tutorial', tutorial.slug, 'tutorial_detail', slug,
+    )
     return render(request, 'content/tutorial_detail.html', context)
 
 

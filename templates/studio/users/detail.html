@@ -729,6 +729,16 @@
         {{ activity.occurred_at|date:"Y-m-d H:i" }}
       </span>
     </li>
+    {% if activity.is_upgrade_marker %}
+    {# Issue #773: marks the first payment's chronological position so
+       resource_view rows below it (older) read as pre-upgrade browsing. #}
+    <li class="py-2 flex items-center gap-2 text-xs font-medium text-accent"
+        data-testid="user-activity-upgrade-marker">
+      <span class="flex-1 border-t border-accent/40"></span>
+      <span class="shrink-0 uppercase tracking-wide">Upgraded to paid</span>
+      <span class="flex-1 border-t border-accent/40"></span>
+    </li>
+    {% endif %}
     {% endfor %}
   </ul>
   {% if activity_has_more %}

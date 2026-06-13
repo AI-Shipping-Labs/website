@@ -134,4 +134,18 @@ def download_file(request, slug):
 
     # User is authorized: increment download count and redirect to file
     download.increment_download_count()
+
+    # Record a `resource_view` for an authenticated member on a successful
+    # authorised serve (issue #773). Anonymous lead-magnet downloads return
+    # 401 above and never reach here; deduped + defensive in the helper.
+    if request.user.is_authenticated:
+        from analytics.activity import _safe_public_url, record_resource_view
+        record_resource_view(
+            request.user,
+            object_type='download',
+            object_id=download.slug,
+            title=download.title,
+            target_url=_safe_public_url('downloads_list'),
+        )
+
     return HttpResponseRedirect(download.file_url)

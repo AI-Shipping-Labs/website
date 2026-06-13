@@ -626,3 +626,315 @@ class EventSeriesUrlOrderingTest(EventSeriesApiTestBase):
         self.assertEqual(
             match.url_name, "api_event_series_occurrences_bulk",
         )
+
+
+class EventSeriesChronologicalNamingTest(EventSeriesApiTestBase):
+    """Issue #876: chronological numbering + non-stale auto-titles."""
+
+    def setUp(self):
+        # A clean series with no pre-existing occurrences so positions are
+        # unambiguous (the shared fixture series already has Sessions 1-2).
+        self.fresh = EventSeries.objects.create(
+            name="LLM Zoomcamp office hours",
+            slug="llm-zoomcamp-office-hours",
+            cadence="weekly",
+            day_of_week=1,
+            start_time=time(17, 0),
+            timezone="Europe/Berlin",
+        )
+        self.base = timezone.now().replace(microsecond=0) + timedelta(days=10)
+
+    def _dt(self, days):
+        return (self.base + timedelta(days=days)).isoformat()
+
+    def _bulk(self, rows):
+        return self._post(
+            f"/api/event-series/{self.fresh.pk}/occurrences/bulk",
+            {"occurrences": rows},
+        )
+
+    def test_out_of_order_bulk_creates_chronological_positions(self):
+        # Submit six dates shuffled; positions must follow date order.
+        day_offsets = [2, 11, 16, 23, 38, 51]
+        shuffled = [day_offsets[i] for i in (2, 0, 4, 3, 1, 5)]
+        resp = self._bulk([{"start_datetime": self._dt(d)} for d in shuffled])
+        self.assertEqual(resp.status_code, 201)
+
+        occ = list(
+            Event.objects.filter(event_series=self.fresh).order_by(
+                "start_datetime",
+            )
+        )
+        self.assertEqual(
+            [e.series_position for e in occ], [1, 2, 3, 4, 5, 6],
+        )
+        # Each auto-title's trailing "Session N" equals its position.
+        for event in occ:
+            self.assertTrue(
+                event.title.endswith(f"Session {event.series_position}"),
+                event.title,
+            )
+            self.assertEqual(
+                event.title,
+                f"LLM Zoomcamp office hours — Session "
+                f"{event.series_position}",
+            )
+
+    def test_serialize_event_includes_series_position(self):
+        self._bulk([{"start_datetime": self._dt(2)}])
+        occ = Event.objects.get(event_series=self.fresh)
+        detail = self._get(
+            f"/api/event-series/{self.fresh.pk}/occurrences/{occ.pk}",
+        )
+        self.assertEqual(detail.json()["series_position"], 1)
+        # A standalone (non-series) event serializes series_position null.
+        standalone = Event.objects.create(
+            title="Standalone",
+            slug="standalone-evt-876",
+            start_datetime=self.base,
+            end_datetime=self.base + timedelta(hours=1),
+            status="upcoming",
+            origin="studio",
+        )
+        resp = self._get(f"/api/events/{standalone.slug}")
+        self.assertIsNone(resp.json()["series_position"])
+
+    def test_appending_later_occurrence_keeps_existing_numbers(self):
+        self._bulk(
+            [
+                {"start_datetime": self._dt(2)},
+                {"start_datetime": self._dt(9)},
+                {"start_datetime": self._dt(16)},
+            ],
+        )
+        before = {
+            e.pk: e.series_position
+            for e in Event.objects.filter(event_series=self.fresh)
+        }
+        # Add a strictly later date.
+        self._bulk([{"start_datetime": self._dt(30)}])
+        after = {
+            e.pk: e.series_position
+            for e in Event.objects.filter(event_series=self.fresh)
+        }
+        # The three originals keep their positions; the new one is 4.
+        for pk, pos in before.items():
+            self.assertEqual(after[pk], pos)
+        newest = Event.objects.filter(event_series=self.fresh).order_by(
+            "-start_datetime",
+        ).first()
+        self.assertEqual(newest.series_position, 4)
+
+    def test_inserting_earlier_occurrence_renumbers_and_retitles(self):
+        self._bulk(
+            [
+                {"start_datetime": self._dt(2)},
+                {"start_datetime": self._dt(16)},
+                {"start_datetime": self._dt(30)},
+            ],
+        )
+        # Insert a date between the first two (Session 2 slot).
+        self._bulk([{"start_datetime": self._dt(9)}])
+        occ = list(
+            Event.objects.filter(event_series=self.fresh).order_by(
+                "start_datetime",
+            )
+        )
+        self.assertEqual([e.series_position for e in occ], [1, 2, 3, 4])
+        # The inserted date sits at position 2.
+        inserted = Event.objects.get(
+            event_series=self.fresh,
+            start_datetime=self.base + timedelta(days=9),
+        )
+        self.assertEqual(inserted.series_position, 2)
+        # Every auto-title number matches the new chronological position.
+        for event in occ:
+            self.assertTrue(
+                event.title.endswith(f"Session {event.series_position}"),
+                event.title,
+            )
+
+    def test_series_rename_rewrites_auto_titles_only(self):
+        self._bulk(
+            [
+                {"start_datetime": self._dt(2)},
+                {"start_datetime": self._dt(9)},
+                {
+                    "start_datetime": self._dt(16),
+                    "title": "Kickoff special",
+                },
+            ],
+        )
+        operator = Event.objects.get(title="Kickoff special")
+        slugs_before = {
+            e.pk: e.slug
+            for e in Event.objects.filter(event_series=self.fresh)
+        }
+
+        resp = self._patch(
+            f"/api/event-series/{self.fresh.pk}",
+            {"name": "LLM Zoomcamp 2026 office hours"},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        autos = Event.objects.filter(
+            event_series=self.fresh, title_is_auto=True,
+        )
+        for event in autos:
+            self.assertTrue(
+                event.title.startswith("LLM Zoomcamp 2026 office hours — "),
+                event.title,
+            )
+        # No occurrence retains the old name.
+        self.assertFalse(
+            Event.objects.filter(
+                event_series=self.fresh,
+                title__contains="LLM Zoomcamp office hours",
+            ).exists(),
+        )
+        # The operator title is untouched.
+        operator.refresh_from_db()
+        self.assertEqual(operator.title, "Kickoff special")
+        self.assertFalse(operator.title_is_auto)
+        # All slugs are byte-for-byte unchanged.
+        slugs_after = {
+            e.pk: e.slug
+            for e in Event.objects.filter(event_series=self.fresh)
+        }
+        self.assertEqual(slugs_before, slugs_after)
+
+    def test_explicit_title_at_create_is_not_auto(self):
+        self._bulk(
+            [{"start_datetime": self._dt(2), "title": "Bring-your-own demo"}],
+        )
+        event = Event.objects.get(event_series=self.fresh)
+        self.assertEqual(event.title, "Bring-your-own demo")
+        self.assertFalse(event.title_is_auto)
+
+    def test_occurrence_patch_title_freezes_against_rename(self):
+        self._bulk(
+            [
+                {"start_datetime": self._dt(2)},
+                {"start_datetime": self._dt(9)},
+            ],
+        )
+        target = Event.objects.filter(event_series=self.fresh).order_by(
+            "start_datetime",
+        ).first()
+        patch_resp = self._patch(
+            f"/api/event-series/{self.fresh.pk}/occurrences/{target.pk}",
+            {"title": "Custom session name"},
+        )
+        self.assertEqual(patch_resp.status_code, 200)
+        target.refresh_from_db()
+        self.assertFalse(target.title_is_auto)
+
+        # A later series rename must not touch the custom title.
+        self._patch(
+            f"/api/event-series/{self.fresh.pk}",
+            {"name": "Renamed Series"},
+        )
+        target.refresh_from_db()
+        self.assertEqual(target.title, "Custom session name")
+
+    def test_occurrence_patch_start_datetime_renumbers(self):
+        self._bulk(
+            [
+                {"start_datetime": self._dt(2)},
+                {"start_datetime": self._dt(9)},
+                {"start_datetime": self._dt(16)},
+            ],
+        )
+        # Move the earliest (position 1) to after the last → it becomes 3.
+        first = Event.objects.filter(event_series=self.fresh).order_by(
+            "start_datetime",
+        ).first()
+        new_start = self.base + timedelta(days=40)
+        resp = self._patch(
+            f"/api/event-series/{self.fresh.pk}/occurrences/{first.pk}",
+            {
+                "start_datetime": new_start.isoformat(),
+                "end_datetime": (
+                    new_start + timedelta(hours=1)
+                ).isoformat(),
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["series_position"], 3)
+        occ = list(
+            Event.objects.filter(event_series=self.fresh).order_by(
+                "start_datetime",
+            )
+        )
+        self.assertEqual([e.series_position for e in occ], [1, 2, 3])
+
+    def test_series_get_occurrences_contiguous_and_titled(self):
+        self._bulk(
+            [
+                {"start_datetime": self._dt(16)},
+                {"start_datetime": self._dt(2)},
+                {"start_datetime": self._dt(9)},
+            ],
+        )
+        body = self._get(f"/api/event-series/{self.fresh.pk}").json()
+        positions = [o["series_position"] for o in body["occurrences"]]
+        self.assertEqual(positions, [1, 2, 3])
+        for occ in body["occurrences"]:
+            self.assertTrue(
+                occ["title"].endswith(f"Session {occ['series_position']}"),
+                occ["title"],
+            )
+
+
+class TitleIsAutoBackfillMigrationTest(TestCase):
+    """Issue #876: the data migration classifies legacy titles correctly."""
+
+    def test_backfill_classifies_existing_titles(self):
+        from importlib import import_module
+
+        from django.apps import apps as global_apps
+
+        series = EventSeries.objects.create(
+            name="Migration Series",
+            slug="migration-series-876",
+            cadence="weekly",
+            day_of_week=1,
+            start_time=time(17, 0),
+            timezone="Europe/Berlin",
+        )
+        base = timezone.now().replace(microsecond=0) + timedelta(days=5)
+        auto = Event.objects.create(
+            title="Migration Series — Session 5",
+            slug="migration-session-5",
+            start_datetime=base,
+            end_datetime=base + timedelta(hours=1),
+            status="upcoming",
+            origin="studio",
+            event_series=series,
+            series_position=5,
+        )
+        operator = Event.objects.create(
+            title="Kickoff special",
+            slug="migration-kickoff",
+            start_datetime=base + timedelta(days=1),
+            end_datetime=base + timedelta(days=1, hours=1),
+            status="upcoming",
+            origin="studio",
+            event_series=series,
+            series_position=1,
+        )
+        # Both default to title_is_auto=True; the backfill should only flip
+        # the operator-named row to False.
+        Event.objects.filter(
+            pk__in=[auto.pk, operator.pk],
+        ).update(title_is_auto=True)
+
+        migration = import_module(
+            "events.migrations.0031_backfill_title_is_auto",
+        )
+        migration.backfill(global_apps, None)
+
+        auto.refresh_from_db()
+        operator.refresh_from_db()
+        self.assertTrue(auto.title_is_auto)
+        self.assertFalse(operator.title_is_auto)

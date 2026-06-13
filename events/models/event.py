@@ -345,6 +345,15 @@ class Event(
         null=True, blank=True,
         help_text='1-indexed position within the parent event series.',
     )
+    title_is_auto = models.BooleanField(
+        default=True,
+        help_text=(
+            'True when the occurrence title is auto-generated from the '
+            'series name + chronological position, so it is rewritten on '
+            'series rename / renumber. Set False the moment an operator '
+            'supplies an explicit title (then it is sacrosanct).'
+        ),
+    )
 
     # Issue #572: third-party host indicator. Empty string (the default)
     # means the event is community-hosted (current behavior). A non-empty

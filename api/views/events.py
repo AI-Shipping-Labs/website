@@ -123,6 +123,7 @@ def serialize_event(event):
         "required_level": event.required_level,
         "max_participants": event.max_participants,
         "status": event.status,
+        "series_position": event.series_position,
         "external_host": event.external_host,
         "published": event.published,
         "origin": event.origin,

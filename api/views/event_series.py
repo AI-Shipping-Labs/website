@@ -553,10 +553,18 @@ def event_series_detail(request, series_id):
     if errors:
         return _validation_response(errors)
 
-    _apply_series_values(series, values)
-    save_error = _save_series_or_error(series)
-    if save_error is not None:
-        return save_error
+    name_changed = "name" in values and values["name"] != series.name
+
+    with transaction.atomic():
+        _apply_series_values(series, values)
+        save_error = _save_series_or_error(series)
+        if save_error is not None:
+            return save_error
+        # Issue #876, Decision 2: a rename rewrites the title of every
+        # auto-named occurrence to the new series name (operator titles and
+        # slugs are left untouched). Positions are unchanged by a rename.
+        if name_changed:
+            renumber_series_occurrences(series)
     return JsonResponse(serialize_event_series(series), status=200)
 
 
@@ -565,6 +573,49 @@ def _dedup_key(start_datetime):
     if start_datetime is None:
         return None
     return start_datetime.replace(second=0, microsecond=0)
+
+
+def auto_occurrence_title(series_name, position):
+    """Render the canonical auto-title for an occurrence (issue #876).
+
+    ``"{series_name} — Session {position}"`` where ``position`` is the
+    chronological ``series_position``. This is the one place the pattern
+    lives so create / rename / renumber all agree.
+    """
+    return f"{series_name} — Session {position}"
+
+
+def renumber_series_occurrences(series):
+    """Recompute chronological positions + auto-titles for one series.
+
+    Assigns a 1-indexed ``series_position`` to every occurrence of
+    ``series`` in ``(start_datetime, id)`` ascending order so position 1
+    is the earliest-dated occurrence (ties broken by creation order). For
+    occurrences whose title is still auto-generated (``title_is_auto``),
+    the stored ``title`` is regenerated from the CURRENT series name and
+    the new position. Operator titles (``title_is_auto=False``) and all
+    slugs are left untouched.
+
+    Only rows whose ``series_position`` or ``title`` actually change are
+    saved, and only those two fields are written.
+    """
+    occurrences = list(
+        Event.objects.filter(event_series=series).order_by(
+            "start_datetime", "id",
+        )
+    )
+    for index, event in enumerate(occurrences, start=1):
+        update_fields = []
+        if event.series_position != index:
+            event.series_position = index
+            update_fields.append("series_position")
+        if event.title_is_auto:
+            new_title = auto_occurrence_title(series.name, index)
+            if event.title != new_title:
+                event.title = new_title
+                update_fields.append("title")
+        if update_fields:
+            event.save(update_fields=update_fields)
 
 
 @token_required
@@ -762,6 +813,9 @@ def event_series_occurrences_bulk(request, series_id):
     skipped_existing = 0
 
     with transaction.atomic():
+        # Slugs are minted once and never rewritten (issue #876, Decision
+        # 3), so the slug counter stays a monotonic insertion-order value
+        # that is independent of the chronological ``series_position``.
         max_pos = (
             Event.objects.filter(event_series=series)
             .exclude(series_position__isnull=True)
@@ -769,7 +823,7 @@ def event_series_occurrences_bulk(request, series_id):
             .values_list("series_position", flat=True)
             .first()
         )
-        next_position = (max_pos or 0) + 1
+        next_slug_position = (max_pos or 0) + 1
 
         for index, row, parsed_start in parsed_rows:
             key = _dedup_key(parsed_start)
@@ -783,17 +837,24 @@ def event_series_occurrences_bulk(request, series_id):
             row_payload = dict(row)
             if "timezone" not in row_payload:
                 row_payload["timezone"] = series.timezone
-            if "title" not in row_payload or not str(
+            # An explicit, non-blank title makes this an operator title
+            # (issue #876, Decision 4): it is verbatim and never rewritten.
+            # Otherwise the title is auto-generated and will be (re)written
+            # chronologically by ``renumber_series_occurrences`` below.
+            title_is_auto = not str(
                 row_payload.get("title") or "",
-            ).strip():
-                row_payload["title"] = (
-                    f"{series.name} — Session {next_position}"
+            ).strip()
+            if title_is_auto:
+                # Provisional auto-title; overwritten by the renumber pass
+                # once every occurrence has its chronological position.
+                row_payload["title"] = auto_occurrence_title(
+                    series.name, next_slug_position,
                 )
             if "slug" not in row_payload or not str(
                 row_payload.get("slug") or "",
             ).strip():
                 row_payload["slug"] = (
-                    f"{series.slug}-session-{next_position}"
+                    f"{series.slug}-session-{next_slug_position}"
                 )
 
             values, errors = _collect_event_values(
@@ -824,7 +885,8 @@ def event_series_occurrences_bulk(request, series_id):
                 origin="studio",
                 source_repo="",
                 event_series=series,
-                series_position=next_position,
+                series_position=next_slug_position,
+                title_is_auto=title_is_auto,
             )
             _apply_event_values(event, values)
             save_error = _save_event_or_error(event)
@@ -850,7 +912,14 @@ def event_series_occurrences_bulk(request, series_id):
             # payload after a DB write is still treated correctly even
             # though the in-batch check above already covers it.
             existing_starts.add(key)
-            next_position += 1
+            next_slug_position += 1
+
+        # Recompute chronological positions + auto-titles across the whole
+        # series so position 1 is the earliest-dated occurrence regardless
+        # of payload order (issue #876, Decision 1). Runs once after all
+        # rows are written; a no-op if nothing was created.
+        if occurrence_ids:
+            renumber_series_occurrences(series)
 
     return JsonResponse(
         {
@@ -982,10 +1051,25 @@ def event_series_occurrence_detail(request, series_id, occurrence_id):
     if errors:
         return _validation_response(errors)
 
-    _apply_event_values(event, values)
-    save_error = _save_event_or_error(event)
-    if save_error is not None:
-        return save_error
+    # Issue #876: an operator-supplied title freezes the occurrence so a
+    # later renumber / series rename never overwrites it (Decision 4). A
+    # start_datetime change re-ranks the whole series chronologically.
+    title_set = "title" in values
+    start_changed = (
+        "start_datetime" in values
+        and values["start_datetime"] != event.start_datetime
+    )
+
+    with transaction.atomic():
+        if title_set:
+            event.title_is_auto = False
+        _apply_event_values(event, values)
+        save_error = _save_event_or_error(event)
+        if save_error is not None:
+            return save_error
+        if start_changed:
+            renumber_series_occurrences(series)
+            event.refresh_from_db()
     return JsonResponse(serialize_event(event), status=200)
 
 

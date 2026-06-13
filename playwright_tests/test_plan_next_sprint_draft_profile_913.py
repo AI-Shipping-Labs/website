@@ -63,6 +63,28 @@ def _llm_enabled():
         connection.close()
 
 
+def _ensure_onboarding_seed():
+    """Idempotently re-create the onboarding seed (#801 migration data).
+
+    Other transactional Playwright suites (e.g. ``test_studio_questionnaires``,
+    ``test_sprint_feedback_803``) create-and-truncate questionnaires within the
+    shared transactional test DB, which orphans the migration-seeded
+    ``onboarding-general`` row. Re-running the data-migration ``seed()`` keeps
+    this suite self-contained regardless of test ordering, so
+    ``_onboarding_questionnaire()`` never hits ``DoesNotExist``.
+    """
+    import importlib
+
+    from django.apps import apps as django_apps
+    from django.db import connection
+
+    seed_module = importlib.import_module(
+        "questionnaires.migrations.0003_seed_personas_and_onboarding",
+    )
+    seed_module.seed(django_apps, None)
+    connection.close()
+
+
 def _onboarding_questionnaire():
     from questionnaires.models import Questionnaire
 
@@ -158,6 +180,7 @@ class TestDraftReflectsMemberProfile:
         with django_db_blocker.unblock():
             from django.db import connection
 
+            _ensure_onboarding_seed()
             create_staff_user("admin-913a@test.com")
             member = _seed_profiled_member("m-913a@test.com")
             plan = _plan_with_week(member, _sprint("jun-913a"))

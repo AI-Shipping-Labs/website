@@ -508,6 +508,7 @@ class TestPlanningSection:
             "Merge accounts",
             "New user",
             "CRM",
+            "AI Assistant",
         ]
 
         planning.click()

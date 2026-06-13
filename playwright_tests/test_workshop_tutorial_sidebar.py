@@ -16,6 +16,7 @@ Usage:
 import os
 
 import pytest
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')
 
@@ -186,13 +187,20 @@ class TestSidebarFitsColumnOnLongTitle:
                 wait_until='domcontentloaded',
             )
 
-            page.evaluate('window.scrollTo(0, 800)')
-            # Poll for scroll to settle rather than sleeping a fixed
-            # 150ms — exits as soon as the requested scroll position is
-            # observable (#290). The fixture page may not be tall enough
-            # to reach 800px, so cap against the actual maximum scroll.
-            page.wait_for_function(
-                """
+            # Scroll and wait for the position to settle rather than
+            # sleeping a fixed 150ms — exits as soon as the requested
+            # scroll position is observable (#290). The fixture page may
+            # not be tall enough to reach 800px, so cap against the actual
+            # maximum scroll.
+            #
+            # Re-issue the scroll inside a bounded retry (#944): on a
+            # contended 4-way shard a single starved repaint could consume
+            # the whole 8000ms budget even though the scroll position is
+            # already correct. Splitting the budget across a few short
+            # polls — re-issuing the scroll between attempts — means one
+            # starved repaint no longer fails the test, while the
+            # condition itself is unchanged.
+            settle_predicate = """
                 () => {
                   const max = Math.max(
                     document.documentElement.scrollHeight - window.innerHeight,
@@ -200,12 +208,20 @@ class TestSidebarFitsColumnOnLongTitle:
                   );
                   return window.scrollY >= Math.min(800, max);
                 }
-                """,
-                # Load-tolerant scroll-settle budget (#903): a contended
-                # 4-way shard can repaint after a tight 2000ms poll even
-                # though the scroll position is already correct.
-                timeout=SETTLE_TIMEOUT_MS,
-            )
+                """
+            attempts = 4
+            per_attempt_timeout = SETTLE_TIMEOUT_MS / attempts
+            for attempt in range(attempts):
+                page.evaluate('window.scrollTo(0, 800)')
+                try:
+                    page.wait_for_function(
+                        settle_predicate,
+                        timeout=per_attempt_timeout,
+                    )
+                    break
+                except PlaywrightTimeoutError:
+                    if attempt == attempts - 1:
+                        raise
 
             # Take an after-scroll screenshot for review.
             page.screenshot(

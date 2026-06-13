@@ -160,14 +160,15 @@ def onboarding_chat_stream(request):
             yield _sse('fallback', {'reason': 'stream-error'})
             return
         if result is not None and result.is_complete:
-            # The redirect target is the v1 thank-you destination. The flash
-            # message cannot be set here (the streaming response headers are
-            # already sent), so the client lands on home and the submitted
-            # state is the durable signal -- the persisted artifacts match
-            # the non-streaming path either way.
+            # The redirect target is the end-of-onboarding completion screen
+            # (#951) with the founder booking CTAs. The flash message cannot
+            # be set here (the streaming response headers are already sent),
+            # so the completion screen carries its own thank-you copy and the
+            # submitted state is the durable signal -- the persisted
+            # artifacts match the non-streaming path either way.
             yield _sse('done', {
                 'complete': True,
-                'redirect': reverse('home'),
+                'redirect': reverse('onboarding_start'),
             })
         else:
             yield _sse('done', {'complete': False, 'redirect': None})
@@ -235,7 +236,10 @@ def onboarding_chat_message(request):
             request,
             "Thanks -- we'll use this to prepare your plan.",
         )
-        return redirect('home')
+        # Land on the end-of-onboarding completion screen (#951) with the
+        # founder booking CTAs; ``onboarding_start`` renders it for a
+        # submitted response.
+        return redirect('onboarding_start')
 
     return render(request, 'accounts/onboarding_chat.html', {
         'conversation': conversation,

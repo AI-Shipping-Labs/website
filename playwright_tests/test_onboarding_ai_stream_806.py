@@ -284,9 +284,15 @@ class TestStreamedCompletion:
                     "Here is everything",
                 )
                 page.locator('[data-testid="onboarding-chat-send"]').click()
-                # On completion the client redirects to the thank-you home.
-                page.wait_for_url(f"{django_server}/", timeout=5000)
-            # The onboarding prompt is gone -- onboarding is complete.
+                # On completion the client redirects to the end-of-onboarding
+                # completion screen (#951), not home.
+                page.wait_for_url(
+                    f"{django_server}/onboarding/", timeout=5000,
+                )
+            # The completion screen renders -- onboarding is complete.
+            page.locator(
+                '[data-testid="onboarding-complete-title"]'
+            ).wait_for(state="visible")
             assert page.locator(
                 '[data-testid="onboarding-prompt"]'
             ).count() == 0

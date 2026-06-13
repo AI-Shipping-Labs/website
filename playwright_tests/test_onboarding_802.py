@@ -364,6 +364,107 @@ class TestCompleteAndResume:
         _shot(page, "completed_confirmation")
 
 
+def _set_call_host_booking_urls(valeria_url, alexey_url):
+    """Set (or blank) the founder booking URLs in the CallHost store (#951)."""
+    from community.models import CallHost
+
+    CallHost.objects.update_or_create(
+        slug="valeria",
+        defaults={"name": "Valeriia Kuka", "booking_url": valeria_url},
+    )
+    CallHost.objects.update_or_create(
+        slug="alexey",
+        defaults={"name": "Alexey Grigorev", "booking_url": alexey_url},
+    )
+    connection.close()
+
+
+def _submit_generic_onboarding(email):
+    """Mark the member's generic onboarding Response submitted (#951)."""
+    from accounts.models import User
+    from questionnaires.models import Questionnaire, Response
+
+    user = User.objects.get(email=email)
+    generic = Questionnaire.objects.get(slug="onboarding-general")
+    Response.objects.create(
+        questionnaire=generic, respondent=user, status="submitted",
+    )
+    connection.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestEndOfOnboardingBookingCtas:
+    """End-of-onboarding founder booking CTAs (#951)."""
+
+    @pytest.mark.core
+    def test_finish_shows_both_working_booking_ctas(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _reset_responses()
+        _create_user("bookboth@test.com", tier_slug="main", email_verified=True)
+        # Pin both founders' booking URLs so the suite is self-contained
+        # regardless of CallHost mutations by other Playwright suites.
+        _set_call_host_booking_urls(
+            "https://calendar.app.google/Rh5oWPU9ZAuuDLPt9",
+            "https://calendly.com/dtc-alexey/ai-shipping-labs-call",
+        )
+
+        context = _auth_context(browser, "bookboth@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/onboarding/", wait_until="domcontentloaded")
+        page.locator(
+            '[data-testid="onboarding-option"] input[value="none"]'
+        ).check()
+        page.locator('[data-testid="onboarding-continue-button"]').click()
+        page.locator('[data-testid="questionnaire-response-form"]').wait_for(
+            state="visible",
+        )
+        # The seeded generic questions are optional; submit immediately. The
+        # finish path now lands on the completion screen with the CTAs (#951).
+        page.locator('[data-testid="questionnaire-submit-button"]').click()
+        page.locator('[data-testid="onboarding-complete-title"]').wait_for(
+            state="visible",
+        )
+
+        valeria = page.locator('[data-testid="onboarding-complete-book-valeria"]')
+        alexey = page.locator('[data-testid="onboarding-complete-book-alexey"]')
+        valeria.wait_for(state="visible")
+        alexey.wait_for(state="visible")
+        # Links point at the founders' schedulers and open in a new tab.
+        assert "calendar.app.google" in valeria.get_attribute("href")
+        assert "calendly.com/dtc-alexey" in alexey.get_attribute("href")
+        assert valeria.get_attribute("target") == "_blank"
+        assert alexey.get_attribute("target") == "_blank"
+        assert "noopener" in (valeria.get_attribute("rel") or "")
+        _shot(page, "booking_ctas_both")
+
+    @pytest.mark.core
+    def test_blank_booking_url_hides_its_cta(self, django_server, browser):
+        _ensure_tiers()
+        _reset_responses()
+        _create_user("bookone@test.com", tier_slug="main", email_verified=True)
+        _submit_generic_onboarding("bookone@test.com")
+        # Valeria has a link; Alexey's is blank -> only Valeria's CTA shows.
+        _set_call_host_booking_urls(
+            "https://calendar.app.google/Rh5oWPU9ZAuuDLPt9", "",
+        )
+
+        context = _auth_context(browser, "bookone@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/onboarding/", wait_until="domcontentloaded")
+        page.locator('[data-testid="onboarding-complete-title"]').wait_for(
+            state="visible",
+        )
+        assert page.locator(
+            '[data-testid="onboarding-complete-book-valeria"]'
+        ).count() == 1
+        assert page.locator(
+            '[data-testid="onboarding-complete-book-alexey"]'
+        ).count() == 0
+        _shot(page, "booking_ctas_one_blank")
+
+
 @pytest.mark.django_db(transaction=True)
 class TestAccessControl:
     @pytest.mark.core

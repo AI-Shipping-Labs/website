@@ -247,6 +247,28 @@ Rotation: Same flow as `SES_TRANSACTIONAL_FROM_EMAIL`.
 
 Test vs live: n/a beyond per-environment override.
 
+## SES_WELCOME_REPLY_TO_EMAIL
+
+Purpose: Reply-To address set on the five welcome types (`welcome`,
+`cofounder_welcome`, `basic_welcome`, `premium_welcome`,
+`welcome_imported`). A member who hits Reply on a welcome email reaches
+this monitored inbox instead of the send-only `welcome@` / `noreply@`
+mailbox. Default: `welcome@aishippinglabs.com`, which the inbound
+`email-forwarder` Lambda (see `ai-shipping-labs-infra/email.tf`) forwards
+to both founders, so welcome replies land in a human inbox.
+
+Without it: Leaving this blank omits the `Reply-To` header entirely —
+welcome emails then reply to the From address. Only welcome types get a
+Reply-To; every other transactional / promotional email is unaffected.
+
+Where to find it: Any mailbox you control and that the inbound forwarder
+routes to a real person. Must NOT be a black-hole address.
+
+Rotation: Change the Studio override (or env var) to a new monitored
+inbox; no redeploy needed.
+
+Test vs live: n/a beyond per-environment override.
+
 ## SES_CONFIGURATION_SET_NAME
 
 Purpose: SES configuration-set name applied to every outbound email

@@ -670,6 +670,261 @@ class EmailServiceSESIntegrationTest(TestCase):
             'hello@aishippinglabs.com',
         )
 
+    # -- Issue #950: cofounder_welcome From regression --------------------
+
+    @patch('email_app.services.email_service.boto3')
+    def test_cofounder_welcome_sends_from_welcome_address(self, mock_boto3):
+        """Regression (issue #950 part 1): a cofounder_welcome send resolves
+        the SES From to welcome@ end-to-end, i.e. the email_type is actually
+        threaded through send() -> _send_ses() -> get_sender_for_email_type.
+        """
+        clear_config_cache()
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-cw'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service.send(
+            self.user,
+            'cofounder_welcome',
+            {
+                'user_first_name': '',
+                'current_sprint_status_paragraph': '',
+            },
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(
+            call_kwargs['FromEmailAddress'],
+            'welcome@aishippinglabs.com',
+        )
+
+    @override_settings(SES_FROM_EMAIL='noreply@aishippinglabs.com')
+    @patch('email_app.services.email_service.boto3')
+    def test_cofounder_welcome_from_studio_override_beats_legacy_noreply(
+        self, mock_boto3,
+    ):
+        """Issue #950 grooming mitigation: when a stray legacy
+        SES_FROM_EMAIL=noreply@ is present, a Studio (DB) override of
+        SES_WELCOME_FROM_EMAIL=welcome@ pins the welcome From back to
+        welcome@. This is the config-only guard the issue prescribes — a
+        DB override counts as a runtime value even when it equals the code
+        default, unlike a settings-level value.
+        """
+        IntegrationSetting.objects.create(
+            key='SES_WELCOME_FROM_EMAIL',
+            value='welcome@aishippinglabs.com',
+            group='ses',
+        )
+        clear_config_cache()
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-cw2'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service.send(
+            self.user,
+            'cofounder_welcome',
+            {
+                'user_first_name': '',
+                'current_sprint_status_paragraph': '',
+            },
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(
+            call_kwargs['FromEmailAddress'],
+            'welcome@aishippinglabs.com',
+        )
+
+    @patch('email_app.services.email_service.boto3')
+    def test_cofounder_welcome_from_is_welcome_without_legacy_override(
+        self, mock_boto3,
+    ):
+        """Prod reality (per #950 grooming: infra injects NO SES_FROM_EMAIL):
+        with no legacy override set, cofounder_welcome resolves From to the
+        welcome@ default end-to-end through send() -> _send_ses().
+        """
+        clear_config_cache()
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-cw3'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service.send(
+            self.user,
+            'cofounder_welcome',
+            {
+                'user_first_name': '',
+                'current_sprint_status_paragraph': '',
+            },
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(
+            call_kwargs['FromEmailAddress'],
+            'welcome@aishippinglabs.com',
+        )
+
+    # -- Issue #950: Reply-To on welcome emails ---------------------------
+
+    @patch('email_app.services.email_service.boto3')
+    def test_welcome_send_sets_default_reply_to(self, mock_boto3):
+        """A welcome send sets ReplyToAddresses to the monitored inbox
+        default when SES_WELCOME_REPLY_TO_EMAIL is not overridden.
+        """
+        clear_config_cache()
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-rt'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service.send(
+            self.user,
+            'cofounder_welcome',
+            {
+                'user_first_name': '',
+                'current_sprint_status_paragraph': '',
+            },
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(
+            call_kwargs['ReplyToAddresses'],
+            ['welcome@aishippinglabs.com'],
+        )
+
+    @patch('email_app.services.email_service.boto3')
+    def test_welcome_reply_to_honours_db_override(self, mock_boto3):
+        """An IntegrationSetting override changes the welcome Reply-To
+        address without a code change.
+        """
+        IntegrationSetting.objects.create(
+            key='SES_WELCOME_REPLY_TO_EMAIL',
+            value='team@aishippinglabs.com',
+            group='ses',
+        )
+        clear_config_cache()
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-rt2'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service.send(
+            self.user,
+            'welcome',
+            {'tier_name': 'Main'},
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(
+            call_kwargs['ReplyToAddresses'],
+            ['team@aishippinglabs.com'],
+        )
+
+    @patch('email_app.services.email_service.get_config')
+    @patch('email_app.services.email_service.boto3')
+    def test_welcome_reply_to_omitted_when_empty(self, mock_boto3, mock_get_config):
+        """When the resolved SES_WELCOME_REPLY_TO_EMAIL is empty, the
+        Reply-To header is omitted entirely (SES rejects an empty list).
+
+        Note: an empty IntegrationSetting value cannot blank the welcome
+        Reply-To because get_config falls through empty DB values to the
+        code default. To exercise the omit branch we drive the resolved
+        value to '' directly — the realistic way to disable Reply-To is to
+        set the key's default empty in the registry, not via a blank
+        override.
+        """
+        clear_config_cache()
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-rt3'}
+        mock_boto3.client.return_value = mock_client
+
+        def _cfg(key, default=''):
+            if key == 'SES_WELCOME_REPLY_TO_EMAIL':
+                return ''
+            return default
+
+        mock_get_config.side_effect = _cfg
+
+        self.service._send_ses(
+            'member@example.com',
+            'Sub',
+            '<html/>',
+            email_type='welcome',
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertNotIn('ReplyToAddresses', call_kwargs)
+
+    @patch('email_app.services.email_service.boto3')
+    def test_non_welcome_send_has_no_reply_to(self, mock_boto3):
+        """Non-welcome (e.g. password_reset) emails carry no Reply-To —
+        the monitored-inbox routing is welcome-only.
+        """
+        clear_config_cache()
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-rt4'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service._send_ses(
+            'to@example.com',
+            'Sub',
+            '<html/>',
+            email_type='password_reset',
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertNotIn('ReplyToAddresses', call_kwargs)
+
+    # -- Issue #950: BCC plumbing -----------------------------------------
+
+    @patch('email_app.services.email_service.boto3')
+    def test_send_ses_bcc_lands_in_destination(self, mock_boto3):
+        """A bcc passed to _send_ses builds Destination.BccAddresses and
+        leaves CcAddresses absent."""
+        clear_config_cache()
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-bcc'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service._send_ses(
+            'member@example.com',
+            'Sub',
+            '<html/>',
+            email_type='cofounder_welcome',
+            bcc='staff@aishippinglabs.com',
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        destination = call_kwargs['Destination']
+        self.assertEqual(destination['ToAddresses'], ['member@example.com'])
+        self.assertEqual(
+            destination['BccAddresses'],
+            ['staff@aishippinglabs.com'],
+        )
+        self.assertNotIn('CcAddresses', destination)
+
+    @patch('email_app.services.email_service.boto3')
+    def test_send_threads_bcc_through_to_destination(self, mock_boto3):
+        """EmailService.send(bcc=...) reaches the SES Destination."""
+        clear_config_cache()
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-bcc2'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service.send(
+            self.user,
+            'cofounder_welcome',
+            {
+                'user_first_name': '',
+                'current_sprint_status_paragraph': '',
+            },
+            bcc='staff@aishippinglabs.com',
+        )
+
+        destination = mock_client.send_email.call_args[1]['Destination']
+        self.assertEqual(
+            destination['BccAddresses'],
+            ['staff@aishippinglabs.com'],
+        )
+        self.assertNotIn('CcAddresses', destination)
+
 
 class BuildUnsubscribeUrlTest(TestCase):
     """Regression test for issue #321: the unsubscribe link must use

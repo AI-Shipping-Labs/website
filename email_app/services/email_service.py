@@ -27,6 +27,7 @@ from django.template.loader import render_to_string
 from accounts.services.timezones import format_user_datetime
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
+    WELCOME_EMAIL_TYPES,
     EmailClassificationError,
     classify_email_type,
     get_sender_for_email_type,
@@ -56,6 +57,14 @@ EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {
 # email opened days after delivery still works, but bounded so an old archived
 # email does not stay verifiable forever.
 VERIFY_FOOTER_TOKEN_EXPIRY_HOURS = 24 * 7
+
+# Issue #950: welcome emails (issue #937 sender set) carry a Reply-To pointing
+# at a monitored, team-forwarded inbox so a reply to a welcome reaches a human
+# instead of bouncing off the noreply/welcome send-only mailbox. The address is
+# editable from Studio via this IntegrationSetting key; an empty value omits the
+# Reply-To header entirely.
+WELCOME_REPLY_TO_KEY = "SES_WELCOME_REPLY_TO_EMAIL"
+DEFAULT_WELCOME_REPLY_TO_EMAIL = "welcome@aishippinglabs.com"
 
 
 def _normalize_cc(cc):
@@ -103,7 +112,7 @@ class EmailService:
             )
         return self._ses_client
 
-    def send(self, user, template_name, context=None, cc=None):
+    def send(self, user, template_name, context=None, cc=None, bcc=None):
         """Send a transactional email to a user.
 
         Args:
@@ -119,6 +128,10 @@ class EmailService:
                 values send without a CC. Issue #703: lets the
                 co-founder welcome put a staff mailbox on CC so the new
                 user sees who else is on the thread.
+            bcc: Optional BCC recipient(s). Same shape rules as ``cc``.
+                Issue #950: the co-founder welcome puts the staff mailbox
+                on BCC instead of CC so the new member never sees the
+                internal address and can't Reply-All to it.
 
         Returns:
             EmailLog instance for the sent email.
@@ -181,6 +194,7 @@ class EmailService:
             email_type=template_name,
             unsubscribe_url=unsubscribe_url,
             cc=cc,
+            bcc=bcc,
         )
 
         # Log the send. Internal sends to an ad-hoc recipient surrogate
@@ -430,6 +444,7 @@ class EmailService:
         email_type=None,
         unsubscribe_url=None,
         cc=None,
+        bcc=None,
     ):
         """Send an email via Amazon SES v2 SendEmail API.
 
@@ -441,12 +456,16 @@ class EmailService:
                 'password_reset'). Used to resolve the From address via
                 ``get_sender_for_email_type`` so welcome types pick up the
                 dedicated welcome sender while every other type resolves by
-                its kind exactly as before (issue #937).
+                its kind exactly as before (issue #937). Welcome types
+                (issue #950) also get a Reply-To set to a monitored inbox.
             unsubscribe_url: Optional one-click unsubscribe URL for
                 campaign-style mail.
             cc: Optional CC recipient(s) (string or list). Empty values
                 are treated as "no CC" and the ``CcAddresses`` key is
                 omitted from the SES payload.
+            bcc: Optional BCC recipient(s) (string or list). Same
+                normalisation as ``cc``; empty values omit the
+                ``BccAddresses`` key (issue #950).
 
         Returns:
             str: SES message ID.
@@ -455,6 +474,7 @@ class EmailService:
             EmailServiceError: If SES API call fails.
         """
         cc_list = _normalize_cc(cc)
+        bcc_list = _normalize_cc(bcc)
 
         # Issue #509: kill-switch for tests / local dev. When SES_ENABLED is
         # False the gate short-circuits BEFORE the boto3 client is built, so
@@ -463,10 +483,12 @@ class EmailService:
         # recognisable in EmailLog queries during incident response.
         if not getattr(settings, "SES_ENABLED", False):
             cc_label = f" cc={cc_list}" if cc_list else ""
+            bcc_label = f" bcc={bcc_list}" if bcc_list else ""
             logger.info(
-                "SES disabled - skipping send to %s%s (subject=%s)",
+                "SES disabled - skipping send to %s%s%s (subject=%s)",
                 to_email,
                 cc_label,
+                bcc_label,
                 subject,
             )
             # Local dev affordance: when DEBUG is on, print the email's
@@ -507,11 +529,25 @@ class EmailService:
         destination = {"ToAddresses": [to_email]}
         if cc_list:
             destination["CcAddresses"] = cc_list
+        if bcc_list:
+            destination["BccAddresses"] = bcc_list
         send_kwargs = {
             "FromEmailAddress": from_email,
             "Destination": destination,
             "Content": content,
         }
+
+        # Issue #950: route replies to welcome emails to a monitored inbox.
+        # Only welcome types get a Reply-To; an empty configured value omits
+        # the header so an operator can disable it without touching code.
+        if email_type in WELCOME_EMAIL_TYPES:
+            reply_to = get_config(
+                WELCOME_REPLY_TO_KEY,
+                DEFAULT_WELCOME_REPLY_TO_EMAIL,
+            ).strip()
+            if reply_to:
+                send_kwargs["ReplyToAddresses"] = [reply_to]
+
         configuration_set_name = get_config("SES_CONFIGURATION_SET_NAME", "").strip()
         if configuration_set_name:
             send_kwargs["ConfigurationSetName"] = configuration_set_name

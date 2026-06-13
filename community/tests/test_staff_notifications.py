@@ -3,8 +3,8 @@
 Covers the helper that fires three independent best-effort sends on
 every paid checkout (Basic+):
 
-- (A) Personalised co-founder welcome to the new user, CC'ing the
-  configured staff mailbox.
+- (A) Personalised co-founder welcome to the new user, BCC'ing the
+  configured staff mailbox (issue #950; was CC under #703).
 - (B1) Structured internal heads-up email to staff.
 - (B2) Plain mrkdwn Slack post to the staff channel.
 
@@ -73,7 +73,7 @@ class NotifyPaidSignupHelperTest(TestCase):
     # ------------------------------------------------------------------
     # Happy path: all three sends fire and carry the right payload.
     # ------------------------------------------------------------------
-    def test_happy_path_fires_welcome_with_cc_staff_email_and_slack(self):
+    def test_happy_path_fires_welcome_with_bcc_staff_email_and_slack(self):
         from community.services import staff_notifications
 
         with patch(
@@ -104,10 +104,11 @@ class NotifyPaidSignupHelperTest(TestCase):
                 billing_period="monthly",
             )
 
-        # Welcome called with cc=staff email.
+        # Issue #950: welcome called with bcc=staff email (not cc).
         mock_welcome.assert_called_once()
         welcome_kwargs = mock_welcome.call_args.kwargs
-        self.assertEqual(welcome_kwargs.get("cc"), self.STAFF_EMAIL)
+        self.assertEqual(welcome_kwargs.get("bcc"), self.STAFF_EMAIL)
+        self.assertNotIn("cc", welcome_kwargs)
 
         # Internal email sent to the staff mailbox.
         mock_staff_email.assert_called_once()
@@ -127,7 +128,7 @@ class NotifyPaidSignupHelperTest(TestCase):
     # STAFF_SIGNUP_NOTIFY_EMAIL empty: welcome still goes, no CC, no
     # staff email.
     # ------------------------------------------------------------------
-    def test_no_staff_email_setting_drops_cc_and_staff_email(self):
+    def test_no_staff_email_setting_drops_bcc_and_staff_email(self):
         from community.services import staff_notifications
 
         with patch(
@@ -158,9 +159,9 @@ class NotifyPaidSignupHelperTest(TestCase):
                 billing_period="monthly",
             )
 
-        # Welcome still went, but without a cc.
+        # Welcome still went, but without a bcc.
         mock_welcome.assert_called_once()
-        self.assertIsNone(mock_welcome.call_args.kwargs.get("cc"))
+        self.assertIsNone(mock_welcome.call_args.kwargs.get("bcc"))
 
         # Staff email path did NOT run.
         mock_staff_email.assert_not_called()
@@ -433,7 +434,7 @@ class NotifyPaidSignupEndToEndTest(TestCase):
 
     Uses Django's locmem mail backend (SES is disabled in test
     settings) to assert that the welcome email actually lands in
-    ``mail.outbox`` with the right CC, that the internal email also
+    ``mail.outbox`` with the right BCC, that the internal email also
     lands, and that the Slack post fires.
     """
 
@@ -474,7 +475,7 @@ class NotifyPaidSignupEndToEndTest(TestCase):
             "metadata": {"tier_slug": "basic", "user_id": str(user.pk)},
         }
 
-    def test_paid_checkout_sends_welcome_with_cc_and_staff_email(self):
+    def test_paid_checkout_sends_welcome_with_bcc_and_staff_email(self):
         user = User.objects.create_user(
             email="endtoend@test.com",
             first_name="Riley",
@@ -499,7 +500,7 @@ class NotifyPaidSignupEndToEndTest(TestCase):
 
             handle_checkout_completed(self._basic_session(user))
 
-        # Two emails landed: welcome (with CC) and staff notification.
+        # Two emails landed: welcome (with BCC) and staff notification.
         # PAYMENT_NOTIFICATION_EMAIL was empty so the legacy ping is
         # skipped. SES is disabled in tests so EmailService routes
         # through django.core.mail when wired up — but the actual SES
@@ -826,15 +827,24 @@ class CofounderWelcomeTemplateContextTest(TestCase):
 
         self.assertIn("personalized plan", body)
 
-    def test_welcome_renders_running_sprint_paragraph(self):
-        """A currently-running sprint surfaces its name + start/end dates,
-        and the rendered welcome includes the sentence after the plan
-        lead-in.
+    def test_sprint_paragraph_is_always_empty_and_never_dated(self):
+        """Issue #950: the injected sprint paragraph is now always empty —
+        no dated, specific-sprint sentence is ever produced, even when an
+        active sprint exists, so the welcome copy cannot go stale.
         """
         from datetime import timedelta
 
         from django.utils import timezone
 
+        from community.services.staff_notifications import (
+            _current_sprint_paragraph,
+        )
+
+        # No sprints -> empty.
+        self.assertEqual(_current_sprint_paragraph(), "")
+
+        # A currently-running sprint must STILL produce no injected
+        # sentence — the evergreen copy lives in the template, not here.
         start = timezone.localdate() - timedelta(days=3)
         Sprint.objects.create(
             name="Spring 2026",
@@ -843,84 +853,60 @@ class CofounderWelcomeTemplateContextTest(TestCase):
             duration_weeks=4,
             status="active",
         )
+        self.assertEqual(_current_sprint_paragraph(), "")
 
-        from community.services.staff_notifications import (
-            _current_sprint_paragraph,
-        )
-
-        paragraph = _current_sprint_paragraph()
-        end = start + timedelta(weeks=4)
-
-        self.assertIn("Spring 2026", paragraph)
-        self.assertIn(start.isoformat(), paragraph)
-        self.assertIn(end.isoformat(), paragraph)
-
-        # Rendered welcome carries the running-sprint sentence after the
-        # plan lead-in.
-        user = User.objects.create_user(email="sprint@test.com", first_name="Sam")
-        body = self._render_welcome(user, paragraph)
-        lead_in_idx = body.find("community sprints")
-        sprint_idx = body.find("Spring 2026")
-        self.assertNotEqual(lead_in_idx, -1)
-        self.assertNotEqual(sprint_idx, -1)
-        self.assertLess(lead_in_idx, sprint_idx)
-
-    def test_welcome_omits_finished_sprint_with_past_end_date(self):
-        """A sprint marked active whose computed end_date is in the past
-        produces an empty paragraph — no ``started ... ends`` sentence
-        and no finished-sprint name in the rendered welcome.
+    def test_welcome_is_evergreen_links_sprints_and_has_no_month_literal(self):
+        """The rendered welcome links the public ``/sprints`` page, says we
+        regularly run community sprints, and contains NO month name or
+        ISO date literal so it can never name a stale/finished sprint.
         """
-        from datetime import timedelta
 
-        from django.utils import timezone
-
-        # Started long ago; 2-week sprint ended well before today.
-        start = timezone.localdate() - timedelta(weeks=12)
-        Sprint.objects.create(
-            name="Winter 2025",
-            slug="winter-2025",
-            start_date=start,
-            duration_weeks=2,
-            status="active",
-        )
-
+        user = User.objects.create_user(email="evergreen@test.com", first_name="Sam")
+        # Render with the production paragraph value (always "" now).
         from community.services.staff_notifications import (
             _current_sprint_paragraph,
         )
 
-        paragraph = _current_sprint_paragraph()
-        self.assertEqual(paragraph, "")
+        body = self._render_welcome(user, _current_sprint_paragraph())
 
-        user = User.objects.create_user(email="past@test.com", first_name="Sam")
-        body = self._render_welcome(user, paragraph)
-        self.assertNotIn("Winter 2025", body)
-        self.assertNotIn("currently running", body)
+        # Evergreen "we run sprints" framing + public sprints link.
+        self.assertIn("community sprints", body.lower())
+        self.assertRegex(body, r"https?://[^\s\"'<]+/sprints")
 
-    def test_welcome_returns_empty_string_when_no_active_sprint(self):
-        """No active sprint -> empty string (the old generic ``cohort
-        sprints / next one opens`` fallback is removed), and the rendered
-        sprint lead-in stands alone with no dangling fragment.
-        """
-        from community.services.staff_notifications import (
-            _current_sprint_paragraph,
-        )
-
-        # No sprints with status='active' in this test.
-        paragraph = _current_sprint_paragraph()
-
-        self.assertEqual(paragraph, "")
-        self.assertNotIn("cohort sprints", paragraph)
-        self.assertNotIn("next one opens", paragraph)
-
-        # The lead-in sentence reads cleanly with an empty paragraph.
-        user = User.objects.create_user(email="empty@test.com", first_name="Sam")
-        body = self._render_welcome(user, paragraph)
-        self.assertIn(
-            "be able to use that plan in our community sprints.",
+        # No month-name literal anywhere (case-insensitive, word-bounded).
+        months = (
+            "January February March April May June July August "
+            "September October November December"
+        ).split()
+        for month in months:
+            self.assertNotRegex(
+                body,
+                rf"\b{month}\b",
+                f"welcome leaked a month literal: {month}",
+            )
+        # No ISO date literal (YYYY-MM-DD) either.
+        self.assertNotRegex(
             body,
+            r"\b\d{4}-\d{2}-\d{2}\b",
+            "welcome leaked an ISO date literal",
         )
-        # No dangling running-sprint artefact.
+        # No leftover running-sprint artefact.
         self.assertNotIn("currently running", body)
+
+    def test_welcome_finish_onboarding_cta_promises_a_call(self):
+        """The CTA tells the member to finish onboarding and frames the
+        post-onboarding call (the actual booking links land in #951).
+        """
+        user = User.objects.create_user(email="cta951@test.com", first_name="Sam")
+        body = self._render_welcome(user, "")
+
+        # Finish-onboarding framing + the post-onboarding call promise.
+        self.assertRegex(body, r"https?://[^\s\"'<]+/onboarding/")
+        onboarding_idx = body.lower().find("onboarding")
+        call_idx = body.lower().find("call")
+        self.assertNotEqual(onboarding_idx, -1)
+        self.assertNotEqual(call_idx, -1)
+        self.assertIn("finish", body.lower())
 
 
 @tag('core')
@@ -1273,3 +1259,25 @@ class EmailServiceCcArgumentTest(TestCase):
             )
         mock_ses.assert_called_once()
         self.assertEqual(mock_ses.call_args.kwargs.get("cc"), "cc@test.com")
+
+    def test_send_bcc_string_lands_in_ses_payload(self):
+        """Issue #950: a bcc kwarg threads through send() to _send_ses,
+        and cc is left untouched so the two paths stay independent.
+        """
+        from email_app.services import EmailService
+
+        user = User.objects.create_user(email="bcc-recipient@test.com")
+        service = EmailService()
+        with patch.object(service, "_send_ses", return_value="ses-bcc-1") as mock_ses:
+            service.send(
+                user,
+                "cofounder_welcome",
+                {
+                    "user_first_name": "",
+                    "current_sprint_status_paragraph": "",
+                },
+                bcc="staff@test.com",
+            )
+        mock_ses.assert_called_once()
+        self.assertEqual(mock_ses.call_args.kwargs.get("bcc"), "staff@test.com")
+        self.assertIsNone(mock_ses.call_args.kwargs.get("cc"))

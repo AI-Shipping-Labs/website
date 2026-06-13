@@ -26,6 +26,7 @@ never surface a persona name to the member; the ``persona_signal`` field
 is the internal signal stored staff-side, never echoed to the member.
 """
 
+import re
 import time
 from datetime import date
 from enum import Enum
@@ -357,6 +358,10 @@ class TraceSink:
 # Internal persona names that must never appear in member-facing text.
 _INTERNAL_PERSONA_NAMES = ('Alex', 'Priya', 'Sam', 'Taylor')
 
+# Matches a leading article left dangling after a codename is replaced with
+# the bare noun phrase "your archetype" (e.g. "a your archetype").
+_LEADING_ARTICLE_RE = re.compile(r'\ban?\s+your archetype\b', re.IGNORECASE)
+
 
 def _shared_spine_prompts(persona_catalog):
     """Return the question prompts shared by EVERY persona, in first-seen order.
@@ -483,7 +488,10 @@ def _sanitize(text):
     """
     cleaned = text or ''
     for name in _INTERNAL_PERSONA_NAMES:
-        cleaned = cleaned.replace(name, 'your profile')
+        cleaned = cleaned.replace(name, 'your archetype')
+    # Collapse a now-redundant leading article so the substitution reads
+    # naturally (e.g. "a Taylor" -> "a your archetype" -> "your archetype").
+    cleaned = _LEADING_ARTICLE_RE.sub('your archetype', cleaned)
     return cleaned
 
 

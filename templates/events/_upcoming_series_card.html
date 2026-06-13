@@ -1,0 +1,45 @@
+{% load tz %}
+{% comment %}
+Issue #866: grouped "series card" shown in the Upcoming section when a
+series has 2+ upcoming live occurrences. ``row`` carries ``series``,
+``count``, ``preview`` (first up to 3 occurrences) and ``extra`` (N - 3).
+Every link routes to the series page (consistent with #857: land where you
+can register for the whole series or any single session).
+{% endcomment %}
+<article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50" data-testid="event-series-card" data-series-slug="{{ row.series.slug }}">
+  <a href="{{ row.series.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="series-card-link">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="series-card-badge">
+            <i data-lucide="repeat" class="h-3 w-3"></i>
+            Event series
+          </span>
+        </div>
+        <h3 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors" data-testid="series-card-title">
+          {{ row.series.name }}
+        </h3>
+        <p class="mt-2 text-sm text-muted-foreground" data-testid="series-card-meta">
+          {{ row.series.get_cadence_display }} on {{ row.series.get_day_of_week_display }} at {{ row.series.start_time|time:"H:i" }} {{ row.series.timezone }}
+          · {{ row.count }} upcoming session{{ row.count|pluralize }}
+        </p>
+        <ul class="mt-4 flex flex-col gap-1.5 text-sm text-muted-foreground" data-testid="series-card-dates">
+          {% for occ in row.preview %}
+          <li class="flex items-center gap-1.5">
+            <i data-lucide="calendar" class="h-4 w-4"></i>
+            {% timezone occ.timezone %}{{ occ.start_datetime|date:"D, M d, Y · H:i" }}{% endtimezone %}
+          </li>
+          {% endfor %}
+          {% if row.extra > 0 %}
+          <li class="text-xs font-medium text-muted-foreground" data-testid="series-card-extra">+{{ row.extra }} more</li>
+          {% endif %}
+        </ul>
+        <span class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-colors group-hover:bg-accent/90 min-h-[44px]" data-testid="series-card-cta">
+          View series
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </span>
+      </div>
+      <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+    </div>
+  </a>
+</article>

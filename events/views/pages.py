@@ -62,6 +62,83 @@ def _filter_by_tags(queryset, selected_tags):
     return queryset.filter(pk__in=matching_ids)
 
 
+def _build_upcoming_rows(upcoming_events):
+    """Group upcoming series occurrences into single "series cards".
+
+    Issue #866: a visitor scanning /events should recognise recurring
+    sessions of one program at a glance instead of seeing N near-identical
+    cards. We partition the chronological ``upcoming_events`` list into:
+
+    - standalone events (no ``event_series``), and
+    - per-series buckets of their upcoming occurrences.
+
+    ``upcoming_events`` is already filtered to live upcoming events (future,
+    non-draft, non-cancelled) and ordered by ``start_datetime``, so each
+    series bucket is naturally chronological and excludes cancelled/draft
+    occurrences — they never inflate the count or the date list.
+
+    A series with 2+ upcoming occurrences becomes ONE grouped row; a series
+    with exactly 1 falls back to a normal single-event row (no benefit to a
+    one-item group). Each row is sorted by its earliest upcoming
+    ``start_datetime`` so the overall list stays chronological.
+
+    Returns a list of dicts, each either::
+
+        {'kind': 'event', 'event': <Event>, 'sort_dt': <datetime>}
+        {'kind': 'series', 'series': <EventSeries>,
+         'occurrences': [<Event>, ...], 'count': N,
+         'preview': [<first up to 3 Events>], 'extra': max(0, N - 3),
+         'sort_dt': <earliest datetime>}
+    """
+    series_buckets = {}
+    series_order = []
+    standalone = []
+    for event in upcoming_events:
+        if event.event_series_id:
+            bucket = series_buckets.get(event.event_series_id)
+            if bucket is None:
+                bucket = []
+                series_buckets[event.event_series_id] = bucket
+                series_order.append(event.event_series_id)
+            bucket.append(event)
+        else:
+            standalone.append(event)
+
+    rows = []
+    for event in standalone:
+        rows.append({
+            'kind': 'event',
+            'event': event,
+            'sort_dt': event.start_datetime,
+        })
+
+    for series_id in series_order:
+        occurrences = series_buckets[series_id]
+        # A one-occurrence series stays a normal single card (which keeps the
+        # existing "Series: <name>" link), so membership is still visible.
+        if len(occurrences) < 2:
+            event = occurrences[0]
+            rows.append({
+                'kind': 'event',
+                'event': event,
+                'sort_dt': event.start_datetime,
+            })
+            continue
+        count = len(occurrences)
+        rows.append({
+            'kind': 'series',
+            'series': occurrences[0].event_series,
+            'occurrences': occurrences,
+            'count': count,
+            'preview': occurrences[:3],
+            'extra': max(0, count - 3),
+            'sort_dt': occurrences[0].start_datetime,
+        })
+
+    rows.sort(key=lambda r: r['sort_dt'])
+    return rows
+
+
 def events_calendar(request, year=None, month=None):
     """Monthly calendar grid view for events."""
     today = date.today()
@@ -187,7 +264,7 @@ def events_list(request):
 
     upcoming_events = events.filter(upcoming_filter).exclude(
         status='cancelled',
-    ).order_by('start_datetime')
+    ).select_related('event_series').order_by('start_datetime')
 
     # For the "past" surface we show finished events with a recording
     # (and honor the ``published`` flag). The default "all" view does not
@@ -253,11 +330,17 @@ def events_list(request):
     # canonical https:// URL exposed for copy-paste into Outlook etc.
     subscribe_urls = build_subscribe_urls()
 
+    # Issue #866: group a series' 2+ upcoming occurrences into a single
+    # "series card" in the Upcoming section. The grouping logic lives in the
+    # view; the template only renders the two row shapes (event or series).
+    upcoming_rows = _build_upcoming_rows(upcoming_events)
+
     context = {
         'filter_mode': filter_mode,
         'show_upcoming': filter_mode in ('all', 'upcoming'),
         'show_past': filter_mode in ('all', 'past'),
         'upcoming_events': upcoming_events,
+        'upcoming_rows': upcoming_rows,
         'past_events': past_events,
         'page_obj': page_obj,
         'is_paginated': is_paginated,

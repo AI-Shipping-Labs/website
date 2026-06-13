@@ -227,8 +227,11 @@ class TestScenarioEntryPointFromListing:
             f"{django_server}/events?filter=upcoming",
             wait_until="domcontentloaded",
         )
-        # The card's primary link routes to the series screen.
-        page.locator('[data-testid="event-card-link"]').first.click()
+        # A 2+ occurrence series is grouped into one series card whose
+        # primary link routes to the series screen.
+        page.locator(
+            '[data-testid="event-series-card"] [data-testid="series-card-link"]'
+        ).first.click()
         page.wait_for_url(lambda url: f"groups/{series.slug}" in url)
         assert page.locator('[data-testid="series-name"]').is_visible()
 

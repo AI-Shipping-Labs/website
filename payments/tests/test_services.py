@@ -19,6 +19,7 @@ from accounts.models import User
 from content.models import Course, CourseAccess
 from payments.models import ConversionAttribution, Tier, WebhookEvent
 from payments.services import (
+    _get_subscription_interval,
     _get_subscription_period_end,
     _get_subscription_price_id,
     _subscription_price_id,
@@ -148,6 +149,30 @@ class SubscriptionExtractionTest(TestCase):
             _get_subscription_price_id("sub_dict_price"),
             "price_basic_yearly",
         )
+
+    @patch("payments.services._get_stripe_client")
+    def test_interval_from_subscription_price_recurring(self, mock_get_client):
+        # Issue #952: the optional interval fallback reads recurring.interval.
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.return_value = {
+            "items": {
+                "data": [
+                    {"price": {"recurring": {"interval": "year"}}},
+                ],
+            },
+        }
+        mock_get_client.return_value = mock_client
+
+        self.assertEqual(_get_subscription_interval("sub_interval"), "year")
+
+    @patch("payments.services._get_stripe_client")
+    def test_interval_returns_empty_on_stripe_error(self, mock_get_client):
+        # A failing Stripe call yields "" so the staff email still sends.
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.side_effect = stripe.StripeError("boom")
+        mock_get_client.return_value = mock_client
+
+        self.assertEqual(_get_subscription_interval("sub_err"), "")
 
     @patch("payments.services._get_stripe_client")
     def test_price_id_from_mapping_object_with_items_method_collision(

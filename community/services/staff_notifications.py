@@ -32,8 +32,16 @@ logger = logging.getLogger(__name__)
 
 
 _DASH = "—"
-_STRIPE_CUSTOMER_DASHBOARD_BASE = "https://dashboard.stripe.com/customers"
+_STRIPE_DASHBOARD_BASE = "https://dashboard.stripe.com"
 _SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
+
+# Final fallback when neither the live charged amount nor a tier price is
+# available. NEVER render "unknown" — the founder must know the gap is a
+# missing-data state, not a literal zero/unknown amount.
+_AMOUNT_PENDING = "Amount pending — see Stripe"
+
+# How many recent activity rows to inline in the staff heads-up email.
+_ACTIVITY_LIMIT = 5
 
 
 def notify_paid_signup(
@@ -45,6 +53,10 @@ def notify_paid_signup(
     session_id,
     *,
     billing_period="",
+    amount_total_minor=None,
+    currency="",
+    payment_intent_id="",
+    subscription_id="",
 ):
     """Fire the welcome + staff heads-up for a paid checkout.
 
@@ -74,7 +86,19 @@ def notify_paid_signup(
         session_id: ``cs_...`` for traceability + match with
             ``WebhookEvent`` rows.
         billing_period: ``"monthly"`` / ``"yearly"`` / ``""`` (unknown).
-            Used to format the EUR amount paid in the staff payloads.
+            Rendered as the plan interval (Monthly / Yearly) in the staff
+            payloads.
+        amount_total_minor: The Checkout Session ``amount_total`` in minor
+            units (e.g. cents). Already loaded by the webhook handler — no
+            new Stripe round-trip. ``None`` when the handler did not carry
+            it (older event shapes); the formatter then falls back to the
+            tier price and finally to ``_AMOUNT_PENDING``.
+        currency: The Checkout Session ``currency`` (ISO code, lowercase),
+            paired with ``amount_total_minor`` to render the real charge.
+        payment_intent_id: ``pi_...`` from ``session_data.payment_intent``;
+            used to build the payment dashboard deep-link.
+        subscription_id: ``sub_...`` for the subscription dashboard link
+            and the optional interval fallback lookup.
     """
     staff_email = (get_config("STAFF_SIGNUP_NOTIFY_EMAIL", "") or "").strip()
     slack_channel_id = (get_config("STAFF_SIGNUP_NOTIFY_CHANNEL_ID", "") or "").strip()
@@ -89,6 +113,10 @@ def notify_paid_signup(
         stripe_customer_id=stripe_customer_id,
         session_id=session_id,
         billing_period=billing_period,
+        amount_total_minor=amount_total_minor,
+        currency=currency,
+        payment_intent_id=payment_intent_id,
+        subscription_id=subscription_id,
     )
 
     # (A) Co-founder welcome to the user. Independent try/except.
@@ -143,6 +171,10 @@ def _build_signup_context(
     stripe_customer_id,
     session_id,
     billing_period,
+    amount_total_minor=None,
+    currency="",
+    payment_intent_id="",
+    subscription_id="",
 ):
     """Materialise the shared context dict for all three sends."""
     tier_slug = getattr(tier, "slug", "") or ""
@@ -151,10 +183,29 @@ def _build_signup_context(
         getattr(previous_tier, "slug", "") if previous_tier is not None else ""
     )
 
-    # Amount: read off the tier matching the billing_period. price_eur_*
-    # may be ``None`` on misconfigured tiers — render "unknown" in that
-    # case so the founder sees the gap instead of a silent missing line.
-    amount_label = _format_amount(tier, billing_period)
+    # Amount: prefer the REAL charged value the webhook already loaded
+    # (``amount_total`` + ``currency`` from the Checkout Session). Fall
+    # back to the tier price for the billing period, then to a literal
+    # "Amount pending — see Stripe". Never "unknown".
+    amount_label = _format_charged_amount(
+        amount_total_minor, currency, tier, billing_period,
+    )
+
+    # Interval (Monthly / Yearly) derived from the billing_period the
+    # webhook already computed — the COMMON path makes no Stripe call.
+    # Only when billing_period is empty AND a subscription id is present do
+    # we attempt the OPTIONAL, fully-wrapped interval lookup; a slow or
+    # failing Stripe call there returns "" and the line is simply omitted.
+    interval_label = _format_interval(billing_period)
+    if not interval_label and subscription_id:
+        interval_label = _format_interval(
+            _safe_subscription_interval(subscription_id)
+        )
+
+    # Inline pre-upgrade activity (issue #853 query shape): newest-first
+    # window of the user's recorded activity so the founder sees what the
+    # new member did before paying, without leaving the email.
+    activity_lines = _recent_activity_lines(user)
 
     # UTM: pull through the OneToOne attribution row. Very old users may
     # not have an attribution row at all (the signal landed after their
@@ -171,7 +222,17 @@ def _build_signup_context(
     )
 
     studio_user_url = f"{site_base_url()}/studio/users/{user.pk}/"
-    stripe_customer_url = f"{_STRIPE_CUSTOMER_DASHBOARD_BASE}/{stripe_customer_id}"
+
+    # Account-scoped Stripe dashboard deep-links (issue #952). The account
+    # id encodes test/live mode; when blank every id renders as plain
+    # copyable text (matches the Studio user-page behaviour). The previous
+    # customer URL omitted ``<acct>`` entirely — fixed here.
+    account_id = (get_config("STRIPE_DASHBOARD_ACCOUNT_ID", "") or "").strip()
+    stripe_customer_url = _dashboard_url(account_id, "customers", stripe_customer_id)
+    stripe_payment_url = _dashboard_url(account_id, "payments", payment_intent_id)
+    stripe_subscription_url = _dashboard_url(
+        account_id, "subscriptions", subscription_id,
+    )
 
     return {
         # User-facing
@@ -183,14 +244,23 @@ def _build_signup_context(
         "tier_name": tier_name or _DASH,
         "previous_tier_slug": _or_dash(previous_tier_slug),
         "billing_period": billing_period or _DASH,
+        "interval_label": interval_label,
         # Flags
         "was_new_user_label": "yes" if was_new_user else "no",
         # Money
         "amount_label": amount_label,
-        # Stripe
+        # Stripe ids + (optional) dashboard deep-links. When the account id
+        # is blank the ``*_url`` value is "" and the template renders the id
+        # as plain text.
         "stripe_customer_id": stripe_customer_id or _DASH,
         "stripe_customer_url": stripe_customer_url,
+        "stripe_payment_intent_id": payment_intent_id or _DASH,
+        "stripe_payment_url": stripe_payment_url,
+        "stripe_subscription_id": subscription_id or _DASH,
+        "stripe_subscription_url": stripe_subscription_url,
         "stripe_session_id": session_id or _DASH,
+        # Inline pre-upgrade activity (newest-first, last 5).
+        "recent_activity_lines": activity_lines,
         # Attribution
         "first_touch_utm_source": first_touch_utm_source,
         "first_touch_utm_campaign": first_touch_utm_campaign,
@@ -349,26 +419,98 @@ def _post_slack_signup_notification(channel_id, ctx):
 
 def _build_slack_text(ctx):
     """Compose the plain mrkdwn body for the staff Slack heads-up."""
+    customer_ref = _slack_link(ctx["stripe_customer_url"], "Stripe customer")
+    interval = ctx["interval_label"]
+    tier_line = (
+        f"{ctx['tier_name']} ({interval})" if interval else ctx["tier_name"]
+    )
     return (
         f"*New paid signup:* {ctx['paid_user_email']} → "
-        f"{ctx['tier_name']} ({ctx['billing_period']})\n"
+        f"{tier_line}\n"
         f"*Name:* {ctx['paid_user_first_name']}\n"
         f"*Was new user:* {ctx['was_new_user_label']}\n"
         f"*Previous tier:* {ctx['previous_tier_slug']}\n"
-        f"*Amount:* {ctx['amount_label']} | "
-        f"<{ctx['stripe_customer_url']}|Stripe customer>\n"
+        f"*Amount:* {ctx['amount_label']} | {customer_ref}\n"
         f"*UTM source / campaign:* {ctx['first_touch_utm_source']} / "
         f"{ctx['first_touch_utm_campaign']}\n"
         f"*Studio:* <{ctx['studio_user_url']}|user page>"
     )
 
 
-def _format_amount(tier, billing_period):
-    """Render the EUR amount paid in a single human-friendly token.
+def _slack_link(url, label):
+    """Render a Slack mrkdwn link, or just the label when the URL is blank.
 
-    Returns ``"€20 (monthly)"`` etc. when the tier has the matching
-    price field set; ``"unknown"`` when it doesn't (misconfigured tier
-    or unmapped billing period). Never raises.
+    Keeps the Slack body tidy when ``STRIPE_DASHBOARD_ACCOUNT_ID`` is
+    unset and there is no clickable dashboard target.
+    """
+    if url:
+        return f"<{url}|{label}>"
+    return label
+
+
+_CURRENCY_SYMBOLS = {
+    "eur": "€",
+    "usd": "$",
+    "gbp": "£",
+}
+
+
+def _format_charged_amount(amount_total_minor, currency, tier, billing_period):
+    """Render the amount the member was actually charged.
+
+    Resolution order:
+
+    1. The REAL charged value — ``amount_total`` (minor units) + the
+       session ``currency`` the webhook already loaded. Rendered as e.g.
+       ``"€20.00"`` (or ``"USD 20.00"`` when the symbol is unknown).
+    2. The tier price for the billing period (fallback for old event
+       shapes that did not carry ``amount_total``).
+    3. The literal ``"Amount pending — see Stripe"`` — NEVER ``"unknown"``.
+
+    Never raises.
+    """
+    real = _format_minor_amount(amount_total_minor, currency)
+    if real:
+        return real
+
+    tier_fallback = _format_amount(tier, billing_period)
+    if tier_fallback:
+        return tier_fallback
+
+    return _AMOUNT_PENDING
+
+
+def _format_minor_amount(amount_total_minor, currency):
+    """Format ``amount_total`` (minor units) + currency, or "" when absent.
+
+    Returns ``""`` (not a placeholder) so the caller can decide on the
+    fallback chain. Zero-decimal currencies are not special-cased — the
+    overwhelming majority of our charges are EUR; a missing amount simply
+    yields "".
+    """
+    if amount_total_minor is None:
+        return ""
+    try:
+        major = int(amount_total_minor) / 100
+    except (TypeError, ValueError):
+        return ""
+
+    code = (currency or "").strip().lower()
+    symbol = _CURRENCY_SYMBOLS.get(code)
+    if symbol:
+        return f"{symbol}{major:.2f}"
+    if code:
+        return f"{code.upper()} {major:.2f}"
+    # No currency at all — render the bare amount rather than guessing.
+    return f"{major:.2f}"
+
+
+def _format_amount(tier, billing_period):
+    """Tier-price FALLBACK token, or "" when the tier price is missing.
+
+    Returns ``"€20 (monthly)"`` etc. when the tier has the matching price
+    field set; ``""`` (empty — NOT a placeholder) when it doesn't, so the
+    caller falls through to ``_AMOUNT_PENDING``. Never raises.
     """
     if billing_period == "monthly":
         price = getattr(tier, "price_eur_month", None)
@@ -377,8 +519,99 @@ def _format_amount(tier, billing_period):
     else:
         price = None
     if price is None:
-        return "unknown"
+        return ""
     return f"€{price} ({billing_period})"
+
+
+def _format_interval(billing_period):
+    """Render the plan interval as ``"Monthly"`` / ``"Yearly"`` / ``""``.
+
+    Accepts both the webhook ``billing_period`` tokens (``"monthly"`` /
+    ``"yearly"``) and Stripe's raw ``recurring.interval`` tokens
+    (``"month"`` / ``"year"``). One-time purchases carry no period, so an
+    empty / unknown value yields ``""`` and the template OMITS the
+    interval line entirely (rather than showing a blank or dash).
+    """
+    if billing_period in ("monthly", "month"):
+        return "Monthly"
+    if billing_period in ("yearly", "year"):
+        return "Yearly"
+    return ""
+
+
+def _safe_subscription_interval(subscription_id):
+    """Optional, fully-wrapped Stripe interval lookup.
+
+    Returns ``"month"`` / ``"year"`` / ``""``. NEVER raises — a slow or
+    failing Stripe call yields ``""`` so the staff email still sends with
+    the interval line simply omitted. This is only reached when the
+    webhook-computed ``billing_period`` was empty, so the common paid
+    flow never makes this call.
+    """
+    try:
+        from payments.services import _get_subscription_interval
+
+        return _get_subscription_interval(subscription_id) or ""
+    except Exception:  # noqa: BLE001 - optional best-effort lookup, never blocks the send
+        logger.warning(
+            "notify_paid_signup: optional interval lookup failed for "
+            "subscription=%s",
+            subscription_id,
+            exc_info=True,
+        )
+        return ""
+
+
+def _dashboard_url(account_id, resource, object_id):
+    """Build an account-scoped Stripe dashboard deep-link, or "" when blank.
+
+    ``https://dashboard.stripe.com/<acct>/<resource>/<object_id>``. Returns
+    ``""`` when either the account id or the object id is missing — the
+    template then renders the id as plain copyable text (matching the
+    Studio user-page behaviour). The account id encodes test vs live mode.
+    """
+    if not account_id or not object_id:
+        return ""
+    return f"{_STRIPE_DASHBOARD_BASE}/{account_id}/{resource}/{object_id}"
+
+
+def _recent_activity_lines(user):
+    """Return up to the last 5 activity rows as rendered text lines.
+
+    Reuses the issue #853 query shape (``UserActivity`` ordered
+    newest-first on ``occurred_at``). Each line is a short
+    ``"<when> — <type>: <label>"`` summary. Returns a list with a single
+    "No recorded activity yet" sentinel when the user has no rows so the
+    template always has something to print.
+
+    Defensive: any failure (import, DB) yields the empty-state line rather
+    than breaking the staff email — the notification is best-effort.
+    """
+    try:
+        from analytics.models import UserActivity
+
+        rows = list(
+            UserActivity.objects
+            .filter(user=user)
+            .order_by("-occurred_at")[:_ACTIVITY_LIMIT]
+        )
+    except Exception:  # noqa: BLE001 - best-effort summary, never blocks the send
+        logger.exception(
+            "notify_paid_signup: failed to load recent activity for user=%s",
+            getattr(user, "pk", None),
+        )
+        return ["No recorded activity yet"]
+
+    if not rows:
+        return ["No recorded activity yet"]
+
+    lines = []
+    for row in rows:
+        when = row.occurred_at.strftime("%Y-%m-%d %H:%M") if row.occurred_at else _DASH
+        type_label = row.get_event_type_display()
+        label = (row.label or "").strip() or _DASH
+        lines.append(f"{when} — {type_label}: {label}")
+    return lines
 
 
 def _current_sprint_paragraph():

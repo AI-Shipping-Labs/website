@@ -537,6 +537,38 @@ class NotifyPaidSignupEndToEndTest(TestCase):
             self.SLACK_CHANNEL,
         )
 
+    def test_webhook_threads_real_amount_and_ids_into_notification(self):
+        """Issue #952: the handler passes the Checkout Session's
+        ``amount_total`` / ``currency`` / ``payment_intent`` (already
+        loaded — no live Stripe call) straight into ``notify_paid_signup``.
+        """
+        user = User.objects.create_user(email="thread@test.com")
+
+        session = self._basic_session(user)
+        session.update({
+            "amount_total": 2000,
+            "currency": "eur",
+            "payment_intent": "pi_THREAD",
+        })
+
+        cfg = self._cfg_full()
+        with patch(
+            "payments.services.get_config",
+            side_effect=cfg,
+        ), patch(
+            "community.services.staff_notifications.notify_paid_signup",
+        ) as mock_notify, patch(
+            "payments.services._get_stripe_client",
+            side_effect=AssertionError("live Stripe call in webnook path"),
+        ):
+            handle_checkout_completed(session)
+
+        mock_notify.assert_called_once()
+        kwargs = mock_notify.call_args.kwargs
+        self.assertEqual(kwargs["amount_total_minor"], 2000)
+        self.assertEqual(kwargs["currency"], "eur")
+        self.assertEqual(kwargs["payment_intent_id"], "pi_THREAD")
+
     def test_free_checkout_does_not_trigger_paid_signup_notifications(self):
         # Free signups never go through Stripe checkout, so the only
         # way to exercise this is to assert that handle_checkout_completed
@@ -1109,6 +1141,7 @@ class StaffSignupNotificationBodyTest(TestCase):
                 "SLACK_ENABLED": "true",
                 "SLACK_BOT_TOKEN": "xoxb-f",
                 "SITE_BASE_URL": "https://example.test",
+                "STRIPE_DASHBOARD_ACCOUNT_ID": "acct_FIELDS",
             }.get(key, default),
         ), patch(
             "community.services.staff_notifications.is_enabled",
@@ -1165,16 +1198,126 @@ class StaffSignupNotificationBodyTest(TestCase):
         self.assertEqual(staff_ctx["first_touch_utm_campaign"], "ai_eng_jan")
         self.assertIn(f"/studio/users/{user.pk}/", staff_ctx["studio_user_url"])
 
-        # Slack body carries the same fields.
+        # Slack body carries the same fields. Interval renders as the
+        # human label (issue #952), not the raw billing_period token.
         slack_text = mock_slack.call_args.kwargs["json"]["text"]
         self.assertIn("fields@test.com", slack_text)
         self.assertIn("basic", slack_text.lower())
-        self.assertIn("monthly", slack_text)
+        self.assertIn("Monthly", slack_text)
         self.assertIn("free", slack_text)  # previous tier slug
         self.assertIn("google", slack_text)
         self.assertIn("ai_eng_jan", slack_text)
-        self.assertIn("cus_FIELDS", slack_text)
+        self.assertIn("cus_FIELDS", slack_text)  # in the account-scoped link
         self.assertIn(f"/studio/users/{user.pk}/", slack_text)
+
+    def test_rendered_email_body_has_links_amount_and_activity(self):
+        """Issue #952: render the staff template and assert the real
+        amount, account-scoped deep-links, inline activity, and Studio
+        timeline link all land in the HTML body.
+        """
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from analytics.models import UserActivity
+        from email_app.services import EmailService
+
+        user = User.objects.create_user(email="body@test.com")
+        UserActivity.objects.create(
+            user=user,
+            event_type=UserActivity.EVENT_LESSON_OPEN,
+            occurred_at=timezone.now() - timedelta(minutes=1),
+            label="Opened lesson Intro",
+        )
+
+        from community.services import staff_notifications
+
+        with patch(
+            "community.services.staff_notifications.get_config",
+            side_effect=lambda key, default="": {
+                "SITE_BASE_URL": "https://example.test",
+                "STRIPE_DASHBOARD_ACCOUNT_ID": "acct_BODY",
+            }.get(key, default),
+        ):
+            ctx = staff_notifications._build_signup_context(
+                user=user,
+                tier=self.basic_tier,
+                previous_tier=None,
+                was_new_user=True,
+                stripe_customer_id="cus_BODY",
+                session_id="cs_BODY",
+                billing_period="monthly",
+                amount_total_minor=2000,
+                currency="eur",
+                payment_intent_id="pi_BODY",
+                subscription_id="sub_BODY",
+            )
+
+        service = EmailService()
+        recipient = User.objects.create_user(email="staff-body@test.com")
+        _, body_html, _ = service._render_template_with_footer(
+            "staff_signup_notification", recipient, ctx,
+        )
+
+        self.assertIn("€20.00", body_html)
+        self.assertIn(
+            "https://dashboard.stripe.com/acct_BODY/customers/cus_BODY", body_html,
+        )
+        self.assertIn(
+            "https://dashboard.stripe.com/acct_BODY/payments/pi_BODY", body_html,
+        )
+        self.assertIn(
+            "https://dashboard.stripe.com/acct_BODY/subscriptions/sub_BODY",
+            body_html,
+        )
+        self.assertIn("Opened lesson Intro", body_html)
+        self.assertIn(f"/studio/users/{user.pk}/", body_html)
+
+    def test_rendered_email_body_plain_ids_when_account_blank(self):
+        """Blank ``STRIPE_DASHBOARD_ACCOUNT_ID`` -> ids render as plain
+        text (no ``dashboard.stripe.com`` link) and the empty activity
+        line shows.
+        """
+        from analytics.models import UserActivity
+        from community.services import staff_notifications
+        from email_app.services import EmailService
+
+        user = User.objects.create_user(email="plain@test.com")
+        # Force the empty-activity state for the inline summary assertion.
+        UserActivity.objects.filter(user=user).delete()
+
+        with patch(
+            "community.services.staff_notifications.get_config",
+            side_effect=lambda key, default="": {
+                "SITE_BASE_URL": "https://example.test",
+                "STRIPE_DASHBOARD_ACCOUNT_ID": "",
+            }.get(key, default),
+        ):
+            ctx = staff_notifications._build_signup_context(
+                user=user,
+                tier=self.basic_tier,
+                previous_tier=None,
+                was_new_user=True,
+                stripe_customer_id="cus_PLAIN",
+                session_id="cs_PLAIN",
+                billing_period="monthly",
+                amount_total_minor=2000,
+                currency="eur",
+                payment_intent_id="pi_PLAIN",
+                subscription_id="sub_PLAIN",
+            )
+
+        service = EmailService()
+        recipient = User.objects.create_user(email="staff-plain@test.com")
+        _, body_html, _ = service._render_template_with_footer(
+            "staff_signup_notification", recipient, ctx,
+        )
+
+        self.assertNotIn("dashboard.stripe.com", body_html)
+        self.assertIn("cus_PLAIN", body_html)
+        self.assertIn("pi_PLAIN", body_html)
+        self.assertIn("sub_PLAIN", body_html)
+        self.assertIn("No recorded activity yet", body_html)
 
     def test_attribution_missing_renders_dash(self):
         user = User.objects.create_user(email="noattr@test.com")
@@ -1281,3 +1424,277 @@ class EmailServiceCcArgumentTest(TestCase):
         mock_ses.assert_called_once()
         self.assertEqual(mock_ses.call_args.kwargs.get("bcc"), "staff@test.com")
         self.assertIsNone(mock_ses.call_args.kwargs.get("cc"))
+
+
+@tag('core')
+class PaidSignupRealAmountAndLinksTest(TestCase):
+    """Issue #952: real charged amount + interval, account-scoped Stripe
+    dashboard deep-links, and inline pre-upgrade activity in the staff
+    heads-up email — all without a live Stripe round-trip.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.basic_tier = Tier.objects.get(slug="basic")
+        cls.basic_tier.price_eur_month = 20
+        cls.basic_tier.price_eur_year = 200
+        cls.basic_tier.save(update_fields=["price_eur_month", "price_eur_year"])
+
+    def setUp(self):
+        self.user = User.objects.create_user(email="real@test.com")
+
+    def _build_ctx(self, **kwargs):
+        """Call ``_build_signup_context`` with a patched get_config.
+
+        ``account_id`` controls ``STRIPE_DASHBOARD_ACCOUNT_ID``;
+        everything else is forwarded to the context builder. The Stripe
+        client is patched to a sentinel that raises if touched, so any
+        test that accidentally triggers a live call fails loudly.
+        """
+        from community.services import staff_notifications
+
+        account_id = kwargs.pop("account_id", "")
+        defaults = dict(
+            user=self.user,
+            tier=self.basic_tier,
+            previous_tier=None,
+            was_new_user=True,
+            stripe_customer_id="cus_X",
+            session_id="cs_X",
+            billing_period="monthly",
+        )
+        defaults.update(kwargs)
+
+        def _cfg(key, default=""):
+            if key == "STRIPE_DASHBOARD_ACCOUNT_ID":
+                return account_id
+            if key == "SITE_BASE_URL":
+                return "https://example.test"
+            return default
+
+        with patch(
+            "community.services.staff_notifications.get_config",
+            side_effect=_cfg,
+        ), patch(
+            "payments.services._get_stripe_client",
+            side_effect=AssertionError("live Stripe call in notification path"),
+        ):
+            return staff_notifications._build_signup_context(**defaults)
+
+    # -- Real charged amount ------------------------------------------
+    def test_real_amount_from_session_overrides_tier_price(self):
+        ctx = self._build_ctx(
+            amount_total_minor=2000, currency="eur", billing_period="monthly",
+        )
+        self.assertEqual(ctx["amount_label"], "€20.00")
+
+    def test_real_amount_yearly_renders_interval_yearly(self):
+        ctx = self._build_ctx(
+            amount_total_minor=20000, currency="eur", billing_period="yearly",
+        )
+        self.assertEqual(ctx["amount_label"], "€200.00")
+        self.assertEqual(ctx["interval_label"], "Yearly")
+
+    def test_real_amount_non_eur_currency_renders_code(self):
+        ctx = self._build_ctx(amount_total_minor=2500, currency="usd")
+        self.assertEqual(ctx["amount_label"], "$25.00")
+
+    def test_missing_amount_falls_back_to_tier_price(self):
+        # No amount_total -> fall back to the tier price for the period.
+        ctx = self._build_ctx(amount_total_minor=None, billing_period="monthly")
+        self.assertEqual(ctx["amount_label"], "€20 (monthly)")
+
+    def test_missing_amount_and_tier_price_renders_pending_not_unknown(self):
+        # Strip both prices off a tier and pass no real amount: the final
+        # fallback is the literal pending text, NEVER "unknown".
+        self.basic_tier.price_eur_month = None
+        self.basic_tier.price_eur_year = None
+        try:
+            ctx = self._build_ctx(amount_total_minor=None, billing_period="monthly")
+        finally:
+            self.basic_tier.price_eur_month = 20
+            self.basic_tier.price_eur_year = 200
+        self.assertEqual(ctx["amount_label"], "Amount pending — see Stripe")
+        self.assertNotIn("unknown", ctx["amount_label"].lower())
+
+    # -- Interval ------------------------------------------------------
+    def test_one_time_blank_billing_period_omits_interval(self):
+        ctx = self._build_ctx(
+            amount_total_minor=4900, currency="eur", billing_period="",
+        )
+        # One-time: interval is empty so the template omits the line.
+        self.assertEqual(ctx["interval_label"], "")
+
+    def test_interval_fallback_lookup_used_when_billing_period_empty(self):
+        """When billing_period is empty but a subscription exists, the
+        OPTIONAL Stripe interval lookup fills in the interval. The lookup
+        itself is mocked — no live Stripe call leaks through.
+        """
+        from community.services import staff_notifications
+
+        def _cfg(key, default=""):
+            return default
+
+        with patch(
+            "community.services.staff_notifications.get_config",
+            side_effect=_cfg,
+        ), patch(
+            "payments.services._get_subscription_interval",
+            return_value="year",
+        ) as mock_interval:
+            ctx = staff_notifications._build_signup_context(
+                user=self.user,
+                tier=self.basic_tier,
+                previous_tier=None,
+                was_new_user=True,
+                stripe_customer_id="cus_X",
+                session_id="cs_X",
+                billing_period="",
+                subscription_id="sub_FALLBACK",
+            )
+        mock_interval.assert_called_once_with("sub_FALLBACK")
+        self.assertEqual(ctx["interval_label"], "Yearly")
+
+    def test_interval_fallback_raises_omits_interval_and_still_builds(self):
+        """If the optional interval lookup raises, the interval is omitted
+        and the context still builds (the email still sends).
+        """
+        import stripe
+
+        from community.services import staff_notifications
+
+        def _cfg(key, default=""):
+            return default
+
+        with patch(
+            "community.services.staff_notifications.get_config",
+            side_effect=_cfg,
+        ), patch(
+            "payments.services._get_subscription_interval",
+            side_effect=stripe.StripeError("boom"),
+        ):
+            ctx = staff_notifications._build_signup_context(
+                user=self.user,
+                tier=self.basic_tier,
+                previous_tier=None,
+                was_new_user=True,
+                stripe_customer_id="cus_X",
+                session_id="cs_X",
+                billing_period="",
+                subscription_id="sub_RAISES",
+            )
+        self.assertEqual(ctx["interval_label"], "")
+
+    def test_common_path_with_billing_period_skips_interval_lookup(self):
+        """When billing_period is set, the optional Stripe lookup is NEVER
+        called — proving no added round-trip on the common webhook path.
+        """
+        from community.services import staff_notifications
+
+        def _cfg(key, default=""):
+            return default
+
+        with patch(
+            "community.services.staff_notifications.get_config",
+            side_effect=_cfg,
+        ), patch(
+            "payments.services._get_subscription_interval",
+            side_effect=AssertionError("interval lookup on common path"),
+        ):
+            ctx = staff_notifications._build_signup_context(
+                user=self.user,
+                tier=self.basic_tier,
+                previous_tier=None,
+                was_new_user=True,
+                stripe_customer_id="cus_X",
+                session_id="cs_X",
+                billing_period="monthly",
+                subscription_id="sub_COMMON",
+            )
+        self.assertEqual(ctx["interval_label"], "Monthly")
+
+    # -- Account-scoped dashboard links --------------------------------
+    def test_dashboard_links_account_scoped_when_account_id_set(self):
+        ctx = self._build_ctx(
+            account_id="acct_LIVE",
+            stripe_customer_id="cus_ABC",
+            payment_intent_id="pi_ABC",
+            subscription_id="sub_ABC",
+        )
+        self.assertEqual(
+            ctx["stripe_customer_url"],
+            "https://dashboard.stripe.com/acct_LIVE/customers/cus_ABC",
+        )
+        self.assertEqual(
+            ctx["stripe_payment_url"],
+            "https://dashboard.stripe.com/acct_LIVE/payments/pi_ABC",
+        )
+        self.assertEqual(
+            ctx["stripe_subscription_url"],
+            "https://dashboard.stripe.com/acct_LIVE/subscriptions/sub_ABC",
+        )
+
+    def test_dashboard_links_blank_when_account_id_missing(self):
+        ctx = self._build_ctx(
+            account_id="",
+            stripe_customer_id="cus_ABC",
+            payment_intent_id="pi_ABC",
+            subscription_id="sub_ABC",
+        )
+        # Blank account id -> no URL; the id stays available as plain text.
+        self.assertEqual(ctx["stripe_customer_url"], "")
+        self.assertEqual(ctx["stripe_payment_url"], "")
+        self.assertEqual(ctx["stripe_subscription_url"], "")
+        self.assertEqual(ctx["stripe_customer_id"], "cus_ABC")
+        self.assertEqual(ctx["stripe_payment_intent_id"], "pi_ABC")
+        self.assertEqual(ctx["stripe_subscription_id"], "sub_ABC")
+
+    # -- Inline pre-upgrade activity -----------------------------------
+    def test_recent_activity_lists_last_five_newest_first(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from analytics.models import UserActivity
+
+        # Drop any auto-created rows (e.g. a signup activity from
+        # create_user) so the window is exactly the rows we control.
+        UserActivity.objects.filter(user=self.user).delete()
+
+        base = timezone.now()
+        # Create 6 rows; only the newest 5 should appear, newest-first.
+        for i in range(6):
+            UserActivity.objects.create(
+                user=self.user,
+                event_type=UserActivity.EVENT_LESSON_OPEN,
+                occurred_at=base - timedelta(minutes=i),
+                label=f"Lesson {i}",
+            )
+
+        ctx = self._build_ctx()
+        lines = ctx["recent_activity_lines"]
+        self.assertEqual(len(lines), 5)
+        # Newest first: Lesson 0 before Lesson 4; Lesson 5 excluded.
+        self.assertIn("Lesson 0", lines[0])
+        self.assertIn("Lesson 4", lines[4])
+        self.assertFalse(any("Lesson 5" in line for line in lines))
+
+    def test_recent_activity_empty_state_line(self):
+        from analytics.models import UserActivity
+        # Remove the auto-created signup activity row so the user genuinely
+        # has no recorded activity.
+        UserActivity.objects.filter(user=self.user).delete()
+        ctx = self._build_ctx()
+        self.assertEqual(ctx["recent_activity_lines"], ["No recorded activity yet"])
+
+    # -- No live Stripe call -------------------------------------------
+    def test_build_context_never_calls_stripe(self):
+        # _build_ctx already patches _get_stripe_client to raise; a clean
+        # build proves the common path makes no live Stripe call.
+        ctx = self._build_ctx(
+            amount_total_minor=2000, currency="eur",
+            payment_intent_id="pi_NOCALL", subscription_id="sub_NOCALL",
+            account_id="acct_NOCALL",
+        )
+        self.assertEqual(ctx["amount_label"], "€20.00")
+        self.assertNotIn("unknown", ctx["amount_label"].lower())

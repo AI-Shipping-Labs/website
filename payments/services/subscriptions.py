@@ -43,6 +43,47 @@ def _get_subscription_period_end(subscription_id):
     return None
 
 
+def _get_subscription_interval(subscription_id):
+    """Return ``"month"`` / ``"year"`` for a subscription, or "" on failure.
+
+    Reads ``recurring.interval`` off the first subscription item's price.
+    This is an OPTIONAL resilience fallback for ``notify_paid_signup``
+    when the webhook-computed ``billing_period`` is empty; the common path
+    threads ``billing_period`` through and never reaches here, so no extra
+    Stripe round-trip is added to the common webhook flow.
+
+    Wrapped so a slow / failed Stripe call NEVER raises — returns "" and
+    the caller renders no interval. Returns "" on any error so the staff
+    notification still sends.
+    """
+    try:
+        client = _services._get_stripe_client()
+        subscription = client.subscriptions.retrieve(
+            subscription_id,
+            params={"expand": ["items.data.price"]},
+        )
+        item = _services._first_subscription_item(subscription)
+        price = _services._stripe_value(item, "price")
+        recurring = _services._stripe_value(price, "recurring")
+        interval = _services._stripe_value(recurring, "interval")
+        if interval and not _is_missing(interval):
+            return interval
+    except Exception:  # noqa: BLE001 - optional best-effort lookup, never blocks the send
+        _services.logger.warning(
+            "Failed to get interval for subscription %s",
+            subscription_id,
+            exc_info=True,
+        )
+    return ""
+
+
+def _is_missing(value):
+    """True when ``_stripe_value`` returned its ``_MISSING`` sentinel."""
+    from payments.services.stripe_client import _MISSING
+
+    return value is _MISSING
+
+
 def _get_subscription_price_id(subscription_id):
     """Return the price ID of the first item on a Stripe subscription.
 

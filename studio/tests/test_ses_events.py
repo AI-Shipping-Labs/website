@@ -147,10 +147,14 @@ class _SesEventFixtureMixin:
             bounce_subtype='Suppressed',
             received_at=now - datetime.timedelta(days=30),
         )
+        # Pin row6 to the very start of today rather than ``now - 1h`` so the
+        # "received today" matrix stays on today's calendar date even when the
+        # suite runs within the first hour after UTC midnight. With ``now - 1h``
+        # the row rolled onto the previous day and ``test_since_filter`` flaked.
         cls.row6 = _make_event(
             event_type=SesEvent.EVENT_TYPE_SUBSCRIPTION_CONFIRMATION,
             recipient_email='',
-            received_at=now - datetime.timedelta(hours=1),
+            received_at=now.replace(hour=0, minute=0, second=1, microsecond=0),
         )
 
 

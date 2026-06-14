@@ -73,7 +73,7 @@ SETTINGS_SECTIONS = [
         'id': 'messaging',
         'label': 'Messaging',
         'description': 'Email, notifications, and community messaging integrations.',
-        'group_names': {'ses', 'slack'},
+        'group_names': {'ses', 'slack', 'maven'},
     },
     {
         'id': 'storage',

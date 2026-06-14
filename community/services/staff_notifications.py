@@ -158,6 +158,165 @@ def notify_paid_signup(
             )
 
 
+def notify_maven_cohort_removal(user, cohort, course="", *, email=None):
+    """Send a staff heads-up that a Maven cohort removal arrived (issue #960).
+
+    Mirrors ``notify_paid_signup``'s staff paths (recipient =
+    ``STAFF_SIGNUP_NOTIFY_EMAIL`` plus the optional Slack staff channel) but
+    makes NO change to the user's access — a cohort removal is not a decision
+    to revoke community access. The notification suggests, never commands.
+
+    Best-effort: both sends are wrapped so a mail/Slack failure never raises
+    out of this function (the webhook must not 500 on a notification failure).
+
+    Args:
+        user: the resolved ``User``, or ``None`` when the email did not
+            resolve to any account (a lighter "unknown user" note is sent).
+        cohort: the cohort the user was removed from (text).
+        course: the course name, if present (text).
+        email: the raw email from the payload — used in the "unknown user"
+            note when ``user`` is ``None``.
+    """
+    staff_email = (get_config("STAFF_SIGNUP_NOTIFY_EMAIL", "") or "").strip()
+    slack_channel_id = (get_config("STAFF_SIGNUP_NOTIFY_CHANNEL_ID", "") or "").strip()
+
+    ctx = _build_removal_context(user, cohort, course, email)
+
+    if staff_email:
+        try:
+            _send_staff_removal_notification(staff_email, ctx)
+        except Exception:
+            logger.exception(
+                "notify_maven_cohort_removal: failed to send staff email to %s "
+                "(cohort=%s)",
+                staff_email,
+                cohort,
+            )
+
+    if slack_channel_id:
+        try:
+            _post_slack_removal_notification(slack_channel_id, ctx)
+        except Exception:
+            logger.exception(
+                "notify_maven_cohort_removal: failed to post Slack note to "
+                "channel=%s (cohort=%s)",
+                slack_channel_id,
+                cohort,
+            )
+
+
+def _build_removal_context(user, cohort, course, email):
+    """Materialise the shared context for the removal staff notification."""
+    if user is not None:
+        display_name = (
+            f"{user.first_name} {user.last_name}".strip()
+            or user.first_name
+            or user.email
+        )
+        return {
+            "user_known": True,
+            "removed_user_email": user.email,
+            "removed_user_name": _or_dash(display_name),
+            "removed_user_id": str(user.pk),
+            "studio_user_url": f"{site_base_url()}/studio/users/{user.pk}/",
+            "cohort": _or_dash(cohort),
+            "course": _or_dash(course),
+        }
+    return {
+        "user_known": False,
+        "removed_user_email": _or_dash(email),
+        "removed_user_name": _DASH,
+        "removed_user_id": _DASH,
+        "studio_user_url": "",
+        "cohort": _or_dash(cohort),
+        "course": _or_dash(course),
+    }
+
+
+def _send_staff_removal_notification(staff_email, ctx):
+    """Send the structured internal removal email to staff."""
+    from email_app.services import EmailService
+
+    staff_recipient = SimpleNamespace(
+        email=staff_email,
+        first_name="",
+        email_verified=True,
+        unsubscribed=False,
+        pk=0,
+    )
+    EmailService().send(staff_recipient, "maven_cohort_removal_notification", ctx)
+
+
+def _post_slack_removal_notification(channel_id, ctx):
+    """Post the mrkdwn removal heads-up to the staff Slack channel."""
+    if not is_enabled("SLACK_ENABLED"):
+        logger.debug("Skipping Maven removal Slack post: SLACK_ENABLED is not true")
+        return False
+
+    bot_token = get_config("SLACK_BOT_TOKEN")
+    if not bot_token:
+        logger.info("Skipping Maven removal Slack post: SLACK_BOT_TOKEN is not set")
+        return False
+
+    text = _build_removal_slack_text(ctx)
+    try:
+        response = requests.post(
+            _SLACK_POST_MESSAGE_URL,
+            json={"channel": channel_id, "text": text},
+            headers={
+                "Authorization": f"Bearer {bot_token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            timeout=10,
+        )
+    except requests.exceptions.RequestException:
+        logger.exception(
+            "Failed to POST Maven removal Slack notification to channel=%s",
+            channel_id,
+        )
+        return False
+
+    try:
+        data = response.json()
+    except ValueError:
+        logger.warning(
+            "Maven removal Slack notification returned non-JSON for channel=%s",
+            channel_id,
+        )
+        return False
+
+    if not isinstance(data, dict) or not data.get("ok"):
+        logger.warning(
+            "Maven removal Slack notification rejected for channel=%s: %s",
+            channel_id,
+            (data or {}).get("error", "unknown") if isinstance(data, dict) else "non-dict",
+        )
+        return False
+    return True
+
+
+def _build_removal_slack_text(ctx):
+    """Compose the plain mrkdwn body for the removal staff heads-up."""
+    cohort_line = ctx["cohort"]
+    if ctx["course"] and ctx["course"] != _DASH:
+        cohort_line = f"{ctx['cohort']} ({ctx['course']})"
+    if ctx["user_known"]:
+        return (
+            f"*Maven cohort removal:* {ctx['removed_user_name']} "
+            f"({ctx['removed_user_email']}) was removed from cohort "
+            f"`{cohort_line}`.\n"
+            f"*User ID:* {ctx['removed_user_id']} | "
+            f"*Studio:* <{ctx['studio_user_url']}|user page>\n"
+            "You may want to suspend their tier override / subscription. "
+            "Their access is unchanged until you act."
+        )
+    return (
+        f"*Maven cohort removal:* unknown user `{ctx['removed_user_email']}` "
+        f"was removed from cohort `{cohort_line}` — no matching account. "
+        "No action taken."
+    )
+
+
 # ---------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------

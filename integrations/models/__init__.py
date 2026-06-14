@@ -1,6 +1,7 @@
 from .announcement_banner import *
 from .content_source import *
 from .integration_setting import *
+from .maven_enrollment_event import *
 from .redirect import *
 from .utm_campaign import *
 from .webhook import *

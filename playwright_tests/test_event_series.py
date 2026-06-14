@@ -831,6 +831,90 @@ class TestScenario10CancelledHiddenFromPublic:
 
 
 # ---------------------------------------------------------------------------
+# Issue #956: the series page shows a per-session tier badge so an
+# anonymous visitor can see the Free-vs-paid split across sibling sessions
+# without signing in. Free rows read "Free" (no lock); gated rows read the
+# public tier label with a lock icon.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestScenario956PerSessionTierBadge:
+    def test_anon_distinguishes_free_from_paid_sessions(
+        self, django_server, browser
+    ):
+        from django.db import connection
+        from django.utils import timezone
+
+        from content.access import LEVEL_MAIN, LEVEL_OPEN
+        from events.models import Event, EventSeries
+
+        _reset_event_state()
+        series = EventSeries(
+            name="Tier Split Series",
+            slug="tier-split-series",
+            start_time=datetime(2026, 1, 1, 18, 0).time(),
+        )
+        series.save()
+        # Two upcoming sessions: one Free, one Main-gated. The whole point
+        # of the badge is the visible contrast between them.
+        Event(
+            title="Free Session",
+            slug="tier-split-free",
+            start_datetime=timezone.now() + timedelta(days=7),
+            status="upcoming",
+            origin="studio",
+            required_level=LEVEL_OPEN,
+            event_series=series,
+            series_position=1,
+        ).save()
+        Event(
+            title="Main Session",
+            slug="tier-split-main",
+            start_datetime=timezone.now() + timedelta(days=14),
+            status="upcoming",
+            origin="studio",
+            required_level=LEVEL_MAIN,
+            event_series=series,
+            series_position=2,
+        ).save()
+        connection.close()
+
+        anon = browser.new_context(viewport={"width": 1280, "height": 720})
+        page = anon.new_page()
+        page.goto(
+            f"{django_server}/events/groups/tier-split-series",
+            wait_until="domcontentloaded",
+        )
+
+        badges = page.locator('[data-testid="series-event-tier"]')
+        assert badges.count() == 2
+
+        # The Free badge (required-level 0) reads "Free" and has no lock.
+        # lucide.createIcons() swaps the <i data-lucide="lock"> for an
+        # <svg class="lucide lucide-lock">, so we assert on the rendered
+        # SVG class rather than the pre-render data-lucide attribute.
+        free_badge = page.locator(
+            '[data-testid="series-event-tier"][data-required-level="0"]'
+        )
+        assert free_badge.count() == 1
+        assert "Free" in free_badge.inner_text()
+        assert free_badge.locator("svg.lucide-lock").count() == 0
+
+        # The Main badge (required-level 20) reads the public label + lock.
+        main_badge = page.locator(
+            '[data-testid="series-event-tier"][data-required-level="20"]'
+        )
+        assert main_badge.count() == 1
+        assert "Main or above" in main_badge.inner_text()
+        main_badge.locator("svg.lucide-lock").first.wait_for()
+        assert main_badge.locator("svg.lucide-lock").count() == 1
+
+        anon.close()
+
+
+# ---------------------------------------------------------------------------
 # Issue #877: the public series cadence label is derived from real
 # occurrences, so it stays honest once the schedule drifts (irregular) and is
 # unchanged for a genuinely-weekly series.

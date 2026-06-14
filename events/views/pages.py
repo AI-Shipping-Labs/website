@@ -769,10 +769,15 @@ def event_series_public(request, slug):
     # chip on every card resolves from the SELECT, not from N follow-up
     # `COUNT(*)` queries. The template reads `event.attendee_count`,
     # which prefers the annotation when set.
+    # Issue #957: display occurrences in chronological order. ``series_position``
+    # is a 1-indexed position recomputed only on create/reactivate/rename, so a
+    # series rebuilt across multiple batches can carry stale positions that no
+    # longer match date order. Sorting by ``start_datetime`` (ties by ``id``)
+    # makes the page correct regardless of any position drift.
     events = list(
         series.events.annotate(
             _attendee_count=Count('registrations'),
-        ).order_by('series_position', 'start_datetime')
+        ).order_by('start_datetime', 'id')
     )
     if not request.user.is_staff:
         # Issue #863: hide both draft and cancelled occurrences from

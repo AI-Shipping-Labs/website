@@ -16,6 +16,7 @@ import zoneinfo
 from django.db import models
 from django.utils.text import slugify
 
+from content.access import LEVEL_OPEN, VISIBILITY_CHOICES
 from content.models.mixins import TimestampedModelMixin
 from content.utils.markdown import render_markdown
 from events.models.event import PUBLIC_EVENT_STATUSES
@@ -77,6 +78,18 @@ class EventSeries(TimestampedModelMixin, models.Model):
     timezone = models.CharField(
         max_length=100, default='Europe/Berlin',
         help_text='IANA timezone name, e.g. Europe/Berlin.',
+    )
+    required_level = models.IntegerField(
+        default=LEVEL_OPEN,
+        choices=VISIBILITY_CHOICES,
+        help_text=(
+            'Canonical access level for the series (issue #958). New '
+            'occurrences inherit this level when no level is supplied, and '
+            'occurrence writes via the API are validated against it (a '
+            'mismatch is rejected; Studio allows a human-confirmed override). '
+            'Changing this value never rewrites the levels of occurrences '
+            'that already exist.'
+        ),
     )
     is_active = models.BooleanField(
         default=True,

@@ -63,6 +63,7 @@ from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from api.views.events import (
     READ_ONLY_FIELDS,
+    VALID_REQUIRED_LEVELS,
     _apply_event_values,
     _body_must_be_object_response,
     _collect_event_values,
@@ -102,6 +103,7 @@ _EVENT_SERIES_EXAMPLE = {
     "day_of_week": 1,
     "start_time": "17:00:00",
     "timezone": "Europe/Berlin",
+    "required_level": 20,
     "is_active": True,
     "event_count": 12,
     "published_event_count": 10,
@@ -124,8 +126,14 @@ SERIES_WRITABLE_FIELDS = {
     "day_of_week",
     "start_time",
     "timezone",
+    "required_level",
     "is_active",
 }
+
+LEVEL_MISMATCH_MESSAGE = (
+    "Occurrence access level does not match the series. Adjust the level to "
+    "match the series, or make the change in Studio."
+)
 
 
 def _iso(value):
@@ -145,6 +153,7 @@ def serialize_event_series(series):
             series.start_time.isoformat() if series.start_time else None
         ),
         "timezone": series.timezone,
+        "required_level": series.required_level,
         "is_active": series.is_active,
         "event_count": series.event_count,
         "published_event_count": series.published_event_count,
@@ -273,6 +282,16 @@ def _collect_series_values(data, *, existing=None):
         else:
             values["timezone"] = tz_value.strip() or "Europe/Berlin"
 
+    if "required_level" in data:
+        try:
+            required_level = int(data["required_level"])
+        except (TypeError, ValueError):
+            required_level = None
+        if required_level not in VALID_REQUIRED_LEVELS:
+            errors["required_level"] = "Unknown tier level."
+        else:
+            values["required_level"] = required_level
+
     if "is_active" in data:
         if not isinstance(data["is_active"], bool):
             errors["is_active"] = "Must be a boolean."
@@ -317,6 +336,37 @@ def _apply_series_values(series, values):
     for field, value in values.items():
         if field in SERIES_WRITABLE_FIELDS:
             setattr(series, field, value)
+
+
+def _check_occurrence_level(series, occurrence_required_level, *, index=None):
+    """Reject an occurrence whose level differs from its series (issue #958).
+
+    Returns a ``422 level_mismatch`` ``error_response`` when
+    ``occurrence_required_level`` differs from ``series.required_level``,
+    else ``None``. There is NO override parameter — a mismatch is always
+    rejected over the API. The legitimate "first session free, rest paid"
+    case is handled through Studio only (a human confirmation), never the
+    API.
+
+    ``index`` is the offending row index on the bulk / reconcile endpoints
+    (which annotate per-row errors). On the single-occurrence PATCH there is
+    no index, so it is omitted from ``details``.
+    """
+    if occurrence_required_level == series.required_level:
+        return None
+    details = {
+        "field": "required_level",
+        "occurrence_required_level": occurrence_required_level,
+        "series_required_level": series.required_level,
+    }
+    if index is not None:
+        details = {"index": index, **details}
+    return error_response(
+        LEVEL_MISMATCH_MESSAGE,
+        "level_mismatch",
+        status=422,
+        details=details,
+    )
 
 
 def _save_series_or_error(series):
@@ -380,12 +430,23 @@ def _save_series_or_error(series):
                         "description": "HH:MM or HH:MM:SS.",
                     },
                     "timezone": {"type": "string"},
+                    "required_level": {
+                        "type": "integer",
+                        "enum": sorted(VALID_REQUIRED_LEVELS),
+                        "description": (
+                            "Canonical access level (0/10/20/30) the series' "
+                            "occurrences inherit and are validated against "
+                            "(issue #958). Changing it never rewrites existing "
+                            "occurrences."
+                        ),
+                    },
                     "is_active": {"type": "boolean"},
                 },
                 "example": {
                     "name": "Weekly Office Hours",
                     "day_of_week": 1,
                     "start_time": "17:00",
+                    "required_level": 20,
                 },
             },
             "responses": {
@@ -513,6 +574,16 @@ def event_series_collection(request):
                     },
                     "start_time": {"type": "string"},
                     "timezone": {"type": "string"},
+                    "required_level": {
+                        "type": "integer",
+                        "enum": sorted(VALID_REQUIRED_LEVELS),
+                        "description": (
+                            "Canonical access level (0/10/20/30). Changing it "
+                            "does NOT rewrite existing occurrences; future "
+                            "occurrence writes are validated against the new "
+                            "value (issue #958)."
+                        ),
+                    },
                     "is_active": {"type": "boolean"},
                 },
                 "example": {"is_active": False},
@@ -690,12 +761,26 @@ def _create_series_occurrence(series, row, *, slug_position, index):
             details=details,
         )
 
+    # Issue #958: occurrences inherit the series' ``required_level`` when the
+    # row omits a level. When the row supplies a level, it must equal the
+    # series level — a mismatch is rejected with ``level_mismatch`` (there is
+    # no API override; the legitimate exception lives in Studio only).
+    if "required_level" in values:
+        level_error = _check_occurrence_level(
+            series, values["required_level"], index=index,
+        )
+        if level_error is not None:
+            return None, level_error
+        occurrence_level = values["required_level"]
+    else:
+        occurrence_level = series.required_level
+
     event = Event(
         kind="standard",
         platform="zoom",
         timezone=series.timezone,
         status="draft",
-        required_level=0,
+        required_level=occurrence_level,
         # Issue #878: occurrences are created as ``draft`` and MUST NOT
         # carry a contradictory ``published=True``. ``status`` is the single
         # source of truth for public visibility; a draft is hidden.
@@ -785,6 +870,17 @@ def _next_slug_position(series):
                                 },
                                 "title": {"type": "string"},
                                 "slug": {"type": "string"},
+                                "required_level": {
+                                    "type": "integer",
+                                    "enum": sorted(VALID_REQUIRED_LEVELS),
+                                    "description": (
+                                        "Optional. Defaults to (inherits) the "
+                                        "series' required_level. If supplied it "
+                                        "MUST equal the series level — a "
+                                        "mismatch returns 422 level_mismatch "
+                                        "and rolls back the batch (issue #958)."
+                                    ),
+                                },
                             },
                             "required": ["start_datetime"],
                         },
@@ -817,15 +913,19 @@ def _next_slug_position(series):
                 404: {"description": "Event series not found."},
                 422: {
                     "description": (
-                        "Validation error or in-batch duplicate "
-                        "start_datetime."
+                        "Validation error, in-batch duplicate "
+                        "start_datetime, or a row whose required_level "
+                        "differs from the series level (level_mismatch, "
+                        "issue #958 — rolls the whole batch back)."
                     ),
                     "example": {
-                        "error": "Duplicate start_datetime within the batch",
-                        "code": "duplicate_in_batch",
+                        "error": LEVEL_MISMATCH_MESSAGE,
+                        "code": "level_mismatch",
                         "details": {
-                            "indexes": [0, 1],
-                            "start_datetime": "2026-05-05T17:00:00",
+                            "index": 0,
+                            "field": "required_level",
+                            "occurrence_required_level": 0,
+                            "series_required_level": 20,
                         },
                     },
                 },
@@ -1104,6 +1204,20 @@ def _parse_reconcile_rows(payload):
                                 },
                                 "title": {"type": "string"},
                                 "slug": {"type": "string"},
+                                "required_level": {
+                                    "type": "integer",
+                                    "enum": sorted(VALID_REQUIRED_LEVELS),
+                                    "description": (
+                                        "Optional. Defaults to the series' "
+                                        "required_level. For created/updated "
+                                        "rows it MUST equal the series level "
+                                        "or the reconcile returns 422 "
+                                        "level_mismatch and rolls back. "
+                                        "Reactivating a cancelled occurrence "
+                                        "does NOT change its stored level "
+                                        "(issue #958)."
+                                    ),
+                                },
                             },
                             "required": ["start_datetime"],
                         },
@@ -1140,9 +1254,21 @@ def _parse_reconcile_rows(payload):
                 },
                 422: {
                     "description": (
-                        "Validation error or in-batch duplicate "
-                        "start_datetime."
+                        "Validation error, in-batch duplicate "
+                        "start_datetime, or a created/updated row whose "
+                        "required_level differs from the series level "
+                        "(level_mismatch, issue #958 — rolls back)."
                     ),
+                    "example": {
+                        "error": LEVEL_MISMATCH_MESSAGE,
+                        "code": "level_mismatch",
+                        "details": {
+                            "index": 0,
+                            "field": "required_level",
+                            "occurrence_required_level": 0,
+                            "series_required_level": 20,
+                        },
+                    },
                 },
             },
         },
@@ -1321,6 +1447,16 @@ def event_series_occurrences_reconcile(request, series_id):
                         "type": "string",
                         "format": "date-time",
                     },
+                    "required_level": {
+                        "type": "integer",
+                        "enum": sorted(VALID_REQUIRED_LEVELS),
+                        "description": (
+                            "Setting this to a value differing from the "
+                            "series' required_level is rejected with 422 "
+                            "level_mismatch (no index); the stored level is "
+                            "left unchanged (issue #958)."
+                        ),
+                    },
                 },
                 "example": {"status": "cancelled"},
             },
@@ -1330,9 +1466,19 @@ def event_series_occurrences_reconcile(request, series_id):
                 404: {"description": "Series or occurrence not found."},
                 422: {
                     "description": (
-                        "Validation error or attempt to write a "
-                        "read-only field."
+                        "Validation error, attempt to write a read-only "
+                        "field, or a required_level differing from the "
+                        "series level (level_mismatch, issue #958)."
                     ),
+                    "example": {
+                        "error": LEVEL_MISMATCH_MESSAGE,
+                        "code": "level_mismatch",
+                        "details": {
+                            "field": "required_level",
+                            "occurrence_required_level": 0,
+                            "series_required_level": 20,
+                        },
+                    },
                 },
             },
         },
@@ -1400,6 +1546,16 @@ def event_series_occurrence_detail(request, series_id, occurrence_id):
     values, errors = _collect_event_values(data, existing=event)
     if errors:
         return _validation_response(errors)
+
+    # Issue #958: a PATCH that sets ``required_level`` to a value differing
+    # from the series level is rejected (no ``index`` on the single PATCH).
+    # The occurrence's stored level is left unchanged.
+    if "required_level" in values:
+        level_error = _check_occurrence_level(
+            series, values["required_level"],
+        )
+        if level_error is not None:
+            return level_error
 
     # Issue #876: an operator-supplied title freezes the occurrence so a
     # later renumber / series rename never overwrites it (Decision 4). A

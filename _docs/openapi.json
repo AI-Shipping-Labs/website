@@ -1315,6 +1315,7 @@
                       "is_active": true,
                       "name": "Weekly Office Hours",
                       "published_event_count": 10,
+                      "required_level": 20,
                       "slug": "weekly-office-hours",
                       "start_time": "17:00:00",
                       "timezone": "Europe/Berlin",
@@ -1349,6 +1350,7 @@
               "example": {
                 "day_of_week": 1,
                 "name": "Weekly Office Hours",
+                "required_level": 20,
                 "start_time": "17:00"
               },
               "schema": {
@@ -1372,6 +1374,16 @@
                   },
                   "name": {
                     "type": "string"
+                  },
+                  "required_level": {
+                    "description": "Canonical access level (0/10/20/30) the series' occurrences inherit and are validated against (issue #958). Changing it never rewrites existing occurrences.",
+                    "enum": [
+                      0,
+                      10,
+                      20,
+                      30
+                    ],
+                    "type": "integer"
                   },
                   "slug": {
                     "type": "string"
@@ -1409,6 +1421,7 @@
                   "is_active": true,
                   "name": "Weekly Office Hours",
                   "published_event_count": 10,
+                  "required_level": 20,
                   "slug": "weekly-office-hours",
                   "start_time": "17:00:00",
                   "timezone": "Europe/Berlin",
@@ -1498,6 +1511,7 @@
                   "name": "Weekly Office Hours",
                   "occurrences": [],
                   "published_event_count": 10,
+                  "required_level": 20,
                   "slug": "weekly-office-hours",
                   "start_time": "17:00:00",
                   "timezone": "Europe/Berlin",
@@ -1574,6 +1588,16 @@
                   "name": {
                     "type": "string"
                   },
+                  "required_level": {
+                    "description": "Canonical access level (0/10/20/30). Changing it does NOT rewrite existing occurrences; future occurrence writes are validated against the new value (issue #958).",
+                    "enum": [
+                      0,
+                      10,
+                      20,
+                      30
+                    ],
+                    "type": "integer"
+                  },
                   "slug": {
                     "type": "string"
                   },
@@ -1604,6 +1628,7 @@
                   "is_active": true,
                   "name": "Weekly Office Hours",
                   "published_event_count": 10,
+                  "required_level": 20,
                   "slug": "weekly-office-hours",
                   "start_time": "17:00:00",
                   "timezone": "Europe/Berlin",
@@ -1670,6 +1695,16 @@
                   "occurrences": {
                     "items": {
                       "properties": {
+                        "required_level": {
+                          "description": "Optional. Defaults to the series' required_level. For created/updated rows it MUST equal the series level or the reconcile returns 422 level_mismatch and rolls back. Reactivating a cancelled occurrence does NOT change its stored level (issue #958).",
+                          "enum": [
+                            0,
+                            10,
+                            20,
+                            30
+                          ],
+                          "type": "integer"
+                        },
                         "slug": {
                           "type": "string"
                         },
@@ -1737,7 +1772,21 @@
             "description": "Event series not found."
           },
           "422": {
-            "description": "Validation error or in-batch duplicate start_datetime."
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "level_mismatch",
+                  "details": {
+                    "field": "required_level",
+                    "index": 0,
+                    "occurrence_required_level": 0,
+                    "series_required_level": 20
+                  },
+                  "error": "Occurrence access level does not match the series. Adjust the level to match the series, or make the change in Studio."
+                }
+              }
+            },
+            "description": "Validation error, in-batch duplicate start_datetime, or a created/updated row whose required_level differs from the series level (level_mismatch, issue #958 \u2014 rolls back)."
           }
         },
         "summary": "Declare the exact desired occurrence set",
@@ -1777,6 +1826,16 @@
                   "occurrences": {
                     "items": {
                       "properties": {
+                        "required_level": {
+                          "description": "Optional. Defaults to (inherits) the series' required_level. If supplied it MUST equal the series level \u2014 a mismatch returns 422 level_mismatch and rolls back the batch (issue #958).",
+                          "enum": [
+                            0,
+                            10,
+                            20,
+                            30
+                          ],
+                          "type": "integer"
+                        },
                         "slug": {
                           "type": "string"
                         },
@@ -1843,19 +1902,18 @@
             "content": {
               "application/json": {
                 "example": {
-                  "code": "duplicate_in_batch",
+                  "code": "level_mismatch",
                   "details": {
-                    "indexes": [
-                      0,
-                      1
-                    ],
-                    "start_datetime": "2026-05-05T17:00:00"
+                    "field": "required_level",
+                    "index": 0,
+                    "occurrence_required_level": 0,
+                    "series_required_level": 20
                   },
-                  "error": "Duplicate start_datetime within the batch"
+                  "error": "Occurrence access level does not match the series. Adjust the level to match the series, or make the change in Studio."
                 }
               }
             },
-            "description": "Validation error or in-batch duplicate start_datetime."
+            "description": "Validation error, in-batch duplicate start_datetime, or a row whose required_level differs from the series level (level_mismatch, issue #958 \u2014 rolls the whole batch back)."
           }
         },
         "summary": "Bulk create occurrences",
@@ -1975,6 +2033,16 @@
                     "format": "date-time",
                     "type": "string"
                   },
+                  "required_level": {
+                    "description": "Setting this to a value differing from the series' required_level is rejected with 422 level_mismatch (no index); the stored level is left unchanged (issue #958).",
+                    "enum": [
+                      0,
+                      10,
+                      20,
+                      30
+                    ],
+                    "type": "integer"
+                  },
                   "start_datetime": {
                     "format": "date-time",
                     "type": "string"
@@ -2003,7 +2071,20 @@
             "description": "Series or occurrence not found."
           },
           "422": {
-            "description": "Validation error or attempt to write a read-only field."
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "level_mismatch",
+                  "details": {
+                    "field": "required_level",
+                    "occurrence_required_level": 0,
+                    "series_required_level": 20
+                  },
+                  "error": "Occurrence access level does not match the series. Adjust the level to match the series, or make the change in Studio."
+                }
+              }
+            },
+            "description": "Validation error, attempt to write a read-only field, or a required_level differing from the series level (level_mismatch, issue #958)."
           }
         },
         "summary": "Update an occurrence",

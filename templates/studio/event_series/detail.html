@@ -139,6 +139,8 @@
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Visibility</th>
+            {# Issue #958: per-occurrence access level so a mismatch with the series is visible. #}
+            <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Access</th>
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Zoom</th>
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Start</th>
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Registrations</th>
@@ -171,6 +173,11 @@
                     data-testid="event-publish-state" data-status="{{ event.derived_status }}">Published</span>
               {% endif %}
             </td>
+            {# Issue #958: the occurrence's own access level. A value other #}
+            {# than the series level flags a deliberate Studio exception. #}
+            <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Access">
+              <span data-testid="event-access-level" data-level="{{ event.required_level }}">{{ event.required_level|studio_access_label }}</span>
+            </td>
             {# Issue #859: whether this occurrence has a Zoom meeting yet. #}
             <td class="px-4 py-3 text-sm" data-label="Zoom">
               {% if event.zoom_meeting_id %}
@@ -202,7 +209,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="7" class="px-4 py-6 text-center text-sm text-muted-foreground">No member events.</td>
+            <td colspan="8" class="px-4 py-6 text-center text-sm text-muted-foreground">No member events.</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -211,9 +218,12 @@
   </div>
 
   <!-- Add another occurrence -->
+  {# Issue #958: the access-level selector pre-fills the series level; a #}
+  {# differing choice triggers a confirmation prompt before submitting. #}
   <form method="post" action="{% url 'studio_event_series_add_occurrence' series_id=series.pk %}"
         class="bg-card border border-border rounded-lg p-4 space-y-3"
-        data-testid="add-occurrence-form">
+        data-testid="add-occurrence-form"
+        data-series-required-level="{{ series.required_level }}">
     {% csrf_token %}
     <h2 class="text-sm font-medium text-foreground">Add another occurrence</h2>
     <p class="text-xs text-muted-foreground">Creates one more event in this series with the next available position. The time defaults to the series start time ({{ series.start_time|time:"H:i" }}) but you can set a different date and time per occurrence — useful for irregular schedules.</p>
@@ -225,6 +235,11 @@
       <p class="text-xs text-muted-foreground mt-1">Leave blank to auto-name this occurrence. A custom title also drives the event slug.</p>
     </div>
     {% include "studio/_partials/datetime_picker.html" with instance_id="add" date_name="start_date" time_name="start_time" duration_name="duration_hours" tz_name="timezone" date_value="" time_value=series.start_time|time:"H:i" duration_value="1" tz_value=timezone_value tz_label=timezone_label tz_options=timezone_options show_time=True date_label="Start date" %}
+    {# Issue #958: occurrence access level, pre-filled to the series level. #}
+    <div data-testid="add-occurrence-level">
+      {% include "studio/includes/forms/required_level.html" with selected=series.required_level disabled=False %}
+      <p class="text-xs text-muted-foreground mt-1">Defaults to the series level ({{ series.get_required_level_display }}). Choosing a different level asks for confirmation before saving.</p>
+    </div>
     <div class="mt-3">
       <button type="submit"
               class="inline-flex items-center justify-center rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
@@ -257,6 +272,13 @@
       <label class="block text-xs font-medium text-foreground mb-1" for="meta-description">Description (markdown)</label>
       <textarea id="meta-description" name="description" rows="4"
                 class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono">{{ series.description }}</textarea>
+    </div>
+    {# Issue #958: the canonical series access level. Editing it does NOT #}
+    {# rewrite existing occurrences — it only changes what future added #}
+    {# occurrences inherit and validate against. #}
+    <div data-testid="event-series-required-level">
+      {% include "studio/includes/forms/required_level.html" with selected=series.required_level disabled=False %}
+      <p class="text-xs text-muted-foreground mt-1">The level new occurrences inherit. Changing it does not alter occurrences that already exist.</p>
     </div>
     {% comment %}Issue #858: staff hide flag. Default checked (visible). When unchecked
        the public series page 404s even if it has published events.{% endcomment %}
@@ -373,6 +395,39 @@ function postSeriesToSlack() {
     btn.textContent = 'Post to Slack';
   });
 }
+
+// Issue #958: the add-occurrence form may set a per-occurrence access level
+// that differs from the series. Studio is the human-controlled override
+// surface: a differing level is allowed, but it must be confirmed first.
+// A matching level (the common case) saves with no prompt.
+(function () {
+  var form = document.querySelector('[data-testid="add-occurrence-form"]');
+  if (!form) { return; }
+  var seriesLevel = form.getAttribute('data-series-required-level');
+  form.addEventListener('submit', function (event) {
+    var select = form.querySelector('[name="required_level"]');
+    if (!select) { return; }
+    var chosen = select.value;
+    if (chosen === seriesLevel) { return; }
+    var chosenLabel = select.options[select.selectedIndex].text;
+    // Read the series label from the matching option so the X/Y labels in
+    // the prompt use the same wording.
+    var seriesLabel = seriesLevel;
+    for (var i = 0; i < select.options.length; i++) {
+      if (select.options[i].value === seriesLevel) {
+        seriesLabel = select.options[i].text;
+        break;
+      }
+    }
+    var message =
+      "This session's access level (" + chosenLabel +
+      ') differs from the series (' + seriesLabel +
+      '). Are you sure you want to do this?';
+    if (!window.confirm(message)) {
+      event.preventDefault();
+    }
+  });
+})();
 </script>
 
 {% endblock %}

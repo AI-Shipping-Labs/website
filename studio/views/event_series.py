@@ -34,6 +34,7 @@ from accounts.services.timezones import (
     get_timezone_label,
     is_valid_timezone,
 )
+from content.access import VISIBILITY_CHOICES
 from events.models import Event, EventSeries
 from events.services.series_registration import (
     enroll_series_registrants_in_event,
@@ -67,6 +68,9 @@ logger = logging.getLogger(__name__)
 
 # Sanity guard so a typo in the form cannot generate 1000 events.
 MAX_OCCURRENCES = 26
+
+# Issue #958: valid occurrence/series access levels.
+_VALID_REQUIRED_LEVELS = {value for value, _label in VISIBILITY_CHOICES}
 
 
 def _parse_date_str(date_str):
@@ -224,6 +228,9 @@ def event_series_create(request):
                     day_of_week=start_date.weekday(),
                     start_time=start_time,
                     timezone=timezone_value,
+                    # Issue #958: the chosen level is the canonical series
+                    # level AND is stamped on each generated occurrence.
+                    required_level=required_level,
                 )
                 series.save()
 
@@ -398,6 +405,20 @@ def event_series_detail(request, series_id):
                 series.description = request.POST.get(
                     'description', series.description,
                 )
+                # Issue #958: staff may edit the canonical series level here.
+                # Editing it does NOT rewrite existing occurrences — it only
+                # changes what future added occurrences inherit/validate
+                # against. A tampered/unknown value is ignored.
+                posted_level = (
+                    request.POST.get('required_level') or ''
+                ).strip()
+                if posted_level:
+                    try:
+                        new_level = int(posted_level)
+                    except ValueError:
+                        new_level = None
+                    if new_level in _VALID_REQUIRED_LEVELS:
+                        series.required_level = new_level
                 # Issue #858: "Visible to the public" toggle. The metadata
                 # form always submits the checkbox field, so an unchecked box
                 # (absent in POST) means hide. Default stays True for series
@@ -587,6 +608,21 @@ def event_series_add_occurrence(request, series_id):
     )
     event_end = event_start + timedelta(hours=duration_hours)
 
+    # Issue #958: the occurrence level defaults to (inherits) the series'
+    # required_level. Studio is human-controlled, so a differing level is
+    # permitted here (the template's confirmation prompt is the override).
+    # A tampered / unknown level falls back to the series level.
+    posted_level = (request.POST.get('required_level') or '').strip()
+    if posted_level:
+        try:
+            occurrence_level = int(posted_level)
+        except ValueError:
+            occurrence_level = series.required_level
+        if occurrence_level not in _VALID_REQUIRED_LEVELS:
+            occurrence_level = series.required_level
+    else:
+        occurrence_level = series.required_level
+
     # Issue #854 Part A: an explicit title drives the slug; a blank title
     # falls back to the default "{series.name} — Session {n}" and the
     # default slug base.
@@ -608,7 +644,7 @@ def event_series_add_occurrence(request, series_id):
         end_datetime=event_end,
         timezone=occurrence_tz,
         status='draft',
-        required_level=0,
+        required_level=occurrence_level,
         origin='studio',
         event_series=series,
         series_position=next_pos,

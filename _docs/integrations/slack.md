@@ -524,3 +524,33 @@ over to a new founder-feed channel.
 Test vs live: Single key in v1 — no dev/test channel splits. If you
 need a non-production channel, point this key at the staging channel
 in the staging environment's settings.
+
+## STAFF_SLACK_JOIN_NOTIFY_ENABLED
+
+Purpose: Boolean toggle that enables the staff heads-up (email +
+optional Slack post) fired when the periodic membership refresh
+observes a known user genuinely transition from "not a Slack member"
+to "Slack member". Read by
+`community/services/staff_notifications.py::notify_slack_join`, invoked
+from `community/tasks/slack_membership.py::refresh_slack_membership`.
+Recommended ON. Acts as a no-redeploy kill switch.
+
+Delivery reuses the existing paid-signup keys — no new recipient key:
+- Email recipient: `STAFF_SIGNUP_NOTIFY_EMAIL` (skipped when blank).
+- Slack post channel: `STAFF_SIGNUP_NOTIFY_CHANNEL_ID` (skipped when
+  blank or when Slack is disabled).
+
+Without it (off): No join email and no join Slack post are produced;
+the membership refresh still updates `slack_member` as normal.
+
+Backfill safety: The notification fires only on a forward transition
+observed on a PRIOR cycle (`slack_checked_at` already set,
+`slack_member` was False) — the first-ever observation of a user
+already in Slack seeds `slack_member` silently and never notifies, so
+the first sync after deploy cannot email-blast existing members.
+
+Prereqs for the Slack post side (the email side has none beyond the
+recipient key):
+- `SLACK_ENABLED` must be true.
+- `SLACK_BOT_TOKEN` must be set.
+- The bot must be a member of `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`.

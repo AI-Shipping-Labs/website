@@ -279,6 +279,21 @@ INTEGRATION_GROUPS = [
                 'optional': True,
                 'docs_url': '_docs/integrations/slack.md#staff_signup_notify_channel_id',
             },
+            {
+                'key': 'STAFF_SLACK_JOIN_NOTIFY_ENABLED',
+                'is_secret': False,
+                'is_boolean': True,
+                'optional': True,
+                'description': (
+                    'Enables the staff heads-up (email + optional Slack post) '
+                    'sent when the periodic membership refresh observes a known '
+                    'user genuinely join the Slack workspace. Recommended ON. '
+                    'Acts as a no-redeploy kill switch — turn off to suppress '
+                    'all join notifications. Reuses STAFF_SIGNUP_NOTIFY_EMAIL '
+                    'and STAFF_SIGNUP_NOTIFY_CHANNEL_ID for delivery.'
+                ),
+                'docs_url': '_docs/integrations/slack.md#staff_slack_join_notify_enabled',
+            },
             {'key': 'SLACK_DEV_COMMUNITY_CHANNEL_IDS', 'is_secret': False, 'description': 'Development-only community channel IDs. Used only when SLACK_ENVIRONMENT=development.', 'docs_url': '_docs/integrations/slack.md#slack_dev_community_channel_ids'},
             {'key': 'SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID', 'is_secret': False, 'description': 'Development-only announcement channel ID. Used only when SLACK_ENVIRONMENT=development.', 'docs_url': '_docs/integrations/slack.md#slack_dev_announcements_channel_id'},
             {'key': 'SLACK_TEST_COMMUNITY_CHANNEL_IDS', 'is_secret': False, 'description': 'Test-only community channel IDs. Used only when SLACK_ENVIRONMENT=test.', 'docs_url': '_docs/integrations/slack.md#slack_test_community_channel_ids'},

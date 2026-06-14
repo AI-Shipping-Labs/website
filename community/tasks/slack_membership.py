@@ -62,6 +62,7 @@ from accounts.models import User
 from accounts.utils.names import set_name_from_external
 from community.models import CommunityAuditLog
 from community.services import get_community_service
+from community.services.staff_notifications import notify_slack_join
 from content.access import LEVEL_MAIN
 from jobs.tasks import async_task, build_task_name
 
@@ -273,6 +274,22 @@ def refresh_slack_membership(
             if is_first_check or previous_member is not True:
                 transitions += 1
                 _log_check_transition(user, previous_member, True)
+            # Issue #959: staff heads-up on a GENUINE join. Fire ONLY on a
+            # forward transition observed on a PRIOR cycle: the user was a
+            # non-member previously (``previous_member is False``) AND was
+            # already checked before (``is_first_check is False``). The
+            # latter is the load-bearing backfill guard — it prevents the
+            # first-ever observation of a user who is already in Slack from
+            # email-blasting. Wrapped so a notifier failure never breaks the
+            # membership update or the chunk/chain loop.
+            if previous_member is False and is_first_check is False:
+                try:
+                    notify_slack_join(user)
+                except Exception:
+                    logger.exception(
+                        "Failed to send Slack-join staff notification for %s",
+                        user.email,
+                    )
         elif outcome == "not_member":
             user.slack_member = False
             user.slack_checked_at = now

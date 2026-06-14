@@ -41,6 +41,9 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # Issue #703: paid-signup automation.
     "cofounder_welcome",
     "staff_signup_notification",
+    # Issue #959: staff heads-up when a known user joins Slack. Internal
+    # transactional notification to the staff mailbox.
+    "slack_join_notification",
     # Issue #847: tier-specific paid-signup welcomes. Transactional for
     # the same reason as cofounder_welcome — the recipient just paid, so
     # an unsubscribed paid user still receives their welcome.

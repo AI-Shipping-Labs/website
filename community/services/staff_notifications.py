@@ -159,6 +159,196 @@ def notify_paid_signup(
 
 
 # ---------------------------------------------------------------------
+# Slack-join staff heads-up (issue #959)
+# ---------------------------------------------------------------------
+
+def notify_slack_join(user):
+    """Fire a best-effort staff heads-up when a known user joins Slack.
+
+    Called from ``community/tasks/slack_membership.py::refresh_slack_membership``
+    only on a GENUINE forward transition (``previous_member`` False ->
+    member, with ``slack_checked_at`` already set on a prior cycle). The
+    caller wraps this in its own try/except, but every send here is ALSO
+    wrapped so one failing path never blocks the other and nothing bubbles
+    out to the membership refresh loop.
+
+    Behaviour:
+
+    - Gated by ``is_enabled('STAFF_SLACK_JOIN_NOTIFY_ENABLED')``. When the
+      toggle is off, return immediately (no email, no Slack post).
+    - Email recipient: reuse ``STAFF_SIGNUP_NOTIFY_EMAIL`` (the same staff
+      mailbox the paid-signup heads-up uses). When blank, skip the email.
+    - Slack post: reuse ``STAFF_SIGNUP_NOTIFY_CHANNEL_ID``, gated on
+      ``SLACK_ENABLED`` AND a non-empty ``SLACK_BOT_TOKEN`` (same gating as
+      ``_post_slack_signup_notification``). When the channel id is blank or
+      Slack is disabled, skip the Slack post; the email side still runs.
+    """
+    if not is_enabled("STAFF_SLACK_JOIN_NOTIFY_ENABLED"):
+        logger.debug(
+            "notify_slack_join: STAFF_SLACK_JOIN_NOTIFY_ENABLED is off; "
+            "skipping for user=%s",
+            getattr(user, "pk", None),
+        )
+        return
+
+    staff_email = (get_config("STAFF_SIGNUP_NOTIFY_EMAIL", "") or "").strip()
+    slack_channel_id = (get_config("STAFF_SIGNUP_NOTIFY_CHANNEL_ID", "") or "").strip()
+
+    ctx = _build_slack_join_context(user)
+
+    # (1) Internal staff email. Independent try/except.
+    if staff_email:
+        try:
+            _send_slack_join_notification(staff_email, ctx)
+        except Exception:
+            logger.exception(
+                "notify_slack_join: failed to send staff join "
+                "notification to %s (user=%s)",
+                staff_email,
+                getattr(user, "pk", None),
+            )
+
+    # (2) Slack post. Independent try/except. Gated on settings.
+    if slack_channel_id:
+        try:
+            _post_slack_join_notification(slack_channel_id, ctx)
+        except Exception:
+            logger.exception(
+                "notify_slack_join: failed to post Slack join "
+                "notification to channel=%s (user=%s)",
+                slack_channel_id,
+                getattr(user, "pk", None),
+            )
+
+
+def _build_slack_join_context(user):
+    """Materialise the lightweight context for the Slack-join heads-up.
+
+    Keeps to the essentials the spec calls for: who the user is (full
+    name, email, id), how we know them (tier name + first-touch UTM
+    source), and the absolute Studio profile link. No Stripe block.
+    """
+    tier = getattr(user, "tier", None)
+    tier_name = (getattr(tier, "name", "") or getattr(tier, "slug", "")) if tier else ""
+
+    attribution = _safe_attribution(user)
+    signup_source = _or_dash(
+        getattr(attribution, "first_touch_utm_source", "") if attribution else ""
+    )
+
+    full_name = " ".join(
+        part for part in [
+            (getattr(user, "first_name", "") or "").strip(),
+            (getattr(user, "last_name", "") or "").strip(),
+        ] if part
+    ).strip()
+
+    return {
+        "user_email": user.email,
+        "user_full_name": _or_dash(full_name),
+        "user_first_name": _or_dash(getattr(user, "first_name", "")),
+        "user_id": user.pk,
+        "tier_name": _or_dash(tier_name),
+        "signup_source": signup_source,
+        "studio_user_url": f"{site_base_url()}/studio/users/{user.pk}/",
+    }
+
+
+def _send_slack_join_notification(staff_email, ctx):
+    """Send the structured internal Slack-join email to staff.
+
+    Uses the same ``SimpleNamespace`` staff-recipient surrogate as
+    ``_send_staff_signup_notification`` (the staff mailbox is an internal
+    pipe, not a real ``User`` row).
+    """
+    from email_app.services import EmailService
+
+    staff_recipient = SimpleNamespace(
+        email=staff_email,
+        first_name="",
+        email_verified=True,
+        unsubscribed=False,
+        pk=0,
+    )
+    EmailService().send(staff_recipient, "slack_join_notification", ctx)
+
+
+def _post_slack_join_notification(channel_id, ctx):
+    """Post the mrkdwn Slack-join heads-up to the staff channel.
+
+    Mirrors ``_post_slack_signup_notification``: silently skips when
+    ``SLACK_ENABLED`` is false or ``SLACK_BOT_TOKEN`` is empty.
+    """
+    if not is_enabled("SLACK_ENABLED"):
+        logger.debug(
+            "Skipping Slack-join Slack post: SLACK_ENABLED is not true"
+        )
+        return False
+
+    bot_token = get_config("SLACK_BOT_TOKEN")
+    if not bot_token:
+        logger.info(
+            "Skipping Slack-join Slack post: SLACK_BOT_TOKEN is not set"
+        )
+        return False
+
+    text = _build_slack_join_text(ctx)
+
+    try:
+        response = requests.post(
+            _SLACK_POST_MESSAGE_URL,
+            json={"channel": channel_id, "text": text},
+            headers={
+                "Authorization": f"Bearer {bot_token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            timeout=10,
+        )
+    except requests.exceptions.RequestException:
+        logger.exception(
+            "Failed to POST Slack-join notification to channel=%s",
+            channel_id,
+        )
+        return False
+
+    try:
+        data = response.json()
+    except ValueError:
+        logger.warning(
+            "Slack-join notification returned non-JSON response "
+            "for channel=%s",
+            channel_id,
+        )
+        return False
+
+    if not isinstance(data, dict) or not data.get("ok"):
+        logger.warning(
+            "Slack-join notification rejected for channel=%s: %s",
+            channel_id,
+            (data or {}).get("error", "unknown") if isinstance(data, dict) else "non-dict",
+        )
+        return False
+
+    logger.info(
+        "Posted Slack-join notification: channel=%s user=%s",
+        channel_id,
+        ctx["user_id"],
+    )
+    return True
+
+
+def _build_slack_join_text(ctx):
+    """Compose the plain mrkdwn body for the staff Slack-join heads-up."""
+    return (
+        f"*New Slack member — say hi:* {ctx['user_email']}\n"
+        f"*Name:* {ctx['user_full_name']}\n"
+        f"*Tier:* {ctx['tier_name']}\n"
+        f"*Signup source:* {ctx['signup_source']}\n"
+        f"*Studio:* <{ctx['studio_user_url']}|user page>"
+    )
+
+
+# ---------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------
 

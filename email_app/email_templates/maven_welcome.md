@@ -2,14 +2,6 @@
 subject: "You're enrolled in {{ course_name }} — welcome to the AI Shipping Labs community"
 ---
 
-<!--
-DRAFT COPY — issue #960. The product owner should review and tweak the tone,
-the opt-out wording, and the course value points before this is treated as
-final. Course-framed: thanks for enrolling, course activity lives in Slack,
-community access + workshops + events + onboarding, personalized plan after
-onboarding.
--->
-
 Hi {{ user_name }},
 
 Thanks for enrolling in **{{ course_name }}**. You're all set.

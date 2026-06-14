@@ -397,6 +397,109 @@ class PublicEventSeriesViewTest(TestCase):
         )
 
 
+class PublicEventSeriesChronologicalOrderTest(TestCase):
+    """Issue #957: the public series page sorts sessions by date, not by the
+    stored ``series_position``, so a series rebuilt across multiple batches
+    (and never renumbered) still reads in calendar order.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.series = EventSeries.objects.create(
+            name='Office Hours', start_time=time(18, 0),
+        )
+        now = timezone.now()
+        # Deliberately scramble series_position relative to start_datetime:
+        # the EARLIEST-dated session carries the HIGHEST position, mimicking a
+        # two-batch rebuild where later-created (but earlier-dated) sessions
+        # got higher positions.
+        cls.s_jun24 = Event.objects.create(
+            title='Office Hours — Session 4', slug='oh-session-4',
+            start_datetime=now + timedelta(days=10),
+            status='upcoming',
+            event_series=cls.series, series_position=4, origin='studio',
+        )
+        cls.s_jul06 = Event.objects.create(
+            title='Office Hours — Session 1', slug='oh-session-1',
+            start_datetime=now + timedelta(days=22),
+            status='upcoming',
+            event_series=cls.series, series_position=1, origin='studio',
+        )
+        cls.s_jul01 = Event.objects.create(
+            title='Office Hours — Session 3', slug='oh-session-3',
+            start_datetime=now + timedelta(days=17),
+            status='upcoming',
+            event_series=cls.series, series_position=3, origin='studio',
+        )
+        cls.s_jun28 = Event.objects.create(
+            title='Office Hours — Session 2', slug='oh-session-2',
+            start_datetime=now + timedelta(days=14),
+            status='upcoming',
+            event_series=cls.series, series_position=2, origin='studio',
+        )
+
+    def test_sessions_render_in_start_datetime_order(self):
+        response = self.client.get(f'/events/groups/{self.series.slug}')
+        self.assertEqual(response.status_code, 200)
+        rendered = list(response.context['events'])
+        # All four published occurrences present (none dropped by the new sort).
+        self.assertEqual(len(rendered), 4)
+        # Strictly ascending by start_datetime regardless of series_position.
+        starts = [e.start_datetime for e in rendered]
+        self.assertEqual(starts, sorted(starts))
+        # The earliest-dated session is first even though its position is 4.
+        self.assertEqual(rendered[0].pk, self.s_jun24.pk)
+        self.assertEqual(rendered[-1].pk, self.s_jul06.pk)
+
+    def test_drafts_and_cancelled_still_hidden_after_ordering_change(self):
+        now = timezone.now()
+        Event.objects.create(
+            title='Office Hours — Draft', slug='oh-draft',
+            start_datetime=now + timedelta(days=12),
+            status='draft',
+            event_series=self.series, series_position=9, origin='studio',
+        )
+        Event.objects.create(
+            title='Office Hours — Cancelled', slug='oh-cancelled',
+            start_datetime=now + timedelta(days=13),
+            status='cancelled',
+            event_series=self.series, series_position=8, origin='studio',
+        )
+        response = self.client.get(f'/events/groups/{self.series.slug}')
+        rendered = list(response.context['events'])
+        # Only the four published occurrences appear; draft + cancelled gone.
+        self.assertEqual(len(rendered), 4)
+        statuses = {e.status for e in rendered}
+        self.assertEqual(statuses, {'upcoming'})
+        # Still in start_datetime order.
+        starts = [e.start_datetime for e in rendered]
+        self.assertEqual(starts, sorted(starts))
+
+    def test_renumber_still_assigns_chronological_position_and_titles(self):
+        """Guard: the display sort change must not weaken the position
+        numbering / auto-title logic in ``renumber_series_occurrences``.
+        """
+        from api.views.event_series import renumber_series_occurrences
+
+        # Mark the auto-titled sessions so renumber rewrites their titles.
+        Event.objects.filter(event_series=self.series).update(
+            title_is_auto=True,
+        )
+        renumber_series_occurrences(self.series)
+
+        ordered = list(
+            Event.objects.filter(event_series=self.series).order_by(
+                'start_datetime', 'id',
+            )
+        )
+        for index, event in enumerate(ordered, start=1):
+            event.refresh_from_db()
+            self.assertEqual(event.series_position, index)
+            self.assertEqual(
+                event.title, f'{self.series.name} — Session {index}',
+            )
+
+
 class PublicEventSeriesVisibilityTest(TestCase):
     """Issue #858: empty / hidden series 404 for the public, render for staff."""
 

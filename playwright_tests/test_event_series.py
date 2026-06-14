@@ -599,6 +599,154 @@ class TestScenario8PublicSeriesPage:
 
 
 # ---------------------------------------------------------------------------
+# Issue #957: a rebuilt series with shuffled series_position still reads in
+# calendar order on the public series page; drafts + cancelled stay hidden.
+# ---------------------------------------------------------------------------
+
+
+def _seed_shuffled_office_hours():
+    """Seed a publicly-visible series whose stored ``series_position`` is
+    shuffled relative to ``start_datetime`` (one earlier-dated session carries
+    a later position), mimicking a two-batch rebuild. Returns the slug.
+    """
+    from django.db import connection
+    from django.utils import timezone
+
+    from events.models import Event, EventSeries
+
+    series = EventSeries(
+        name="Rebuilt Office Hours",
+        slug="rebuilt-office-hours",
+        start_time=datetime(2026, 1, 1, 18, 0).time(),
+        timezone="UTC",
+    )
+    series.save()
+    now = timezone.now()
+    # (days_out, series_position) — position deliberately disagrees with date.
+    plan = [
+        (10, 4),  # earliest date, highest position
+        (14, 2),
+        (17, 3),
+        (22, 1),  # latest date, lowest position
+    ]
+    for days, position in plan:
+        Event(
+            title=f"Rebuilt Office Hours — Session {position}",
+            slug=f"rebuilt-oh-session-{position}",
+            start_datetime=now + timedelta(days=days),
+            status="upcoming",
+            origin="studio",
+            timezone="UTC",
+            event_series=series,
+            series_position=position,
+        ).save()
+    connection.close()
+    return series.slug
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestScenario957ChronologicalOrder:
+    def test_sessions_read_top_to_bottom_in_date_order(
+        self, django_server, browser
+    ):
+        _reset_event_state()
+        slug = _seed_shuffled_office_hours()
+
+        ctx = browser.new_context(viewport={"width": 1280, "height": 720})
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/events/groups/{slug}",
+            wait_until="domcontentloaded",
+        )
+
+        rows = page.locator('[data-testid="series-event"]')
+        assert rows.count() == 4
+
+        # Read the rendered date string of each row top-to-bottom. Each row's
+        # date must be on or after the row above it (calendar order).
+        date_texts = page.locator(
+            '[data-testid="series-event-date"]'
+        ).all_inner_texts()
+        parsed = [
+            datetime.strptime(t.split(" · ")[0].strip(), "%A, %b %d, %Y")
+            for t in date_texts
+        ]
+        assert parsed == sorted(parsed), (
+            "Sessions are not in calendar order: " + str(date_texts)
+        )
+
+        # The first row is the earliest-dated session (position 4) and the
+        # last is the latest-dated (position 1), proving the sort ignores
+        # series_position.
+        first_slug = rows.first.get_attribute("data-event-slug")
+        last_slug = rows.last.get_attribute("data-event-slug")
+        assert first_slug == "rebuilt-oh-session-4"
+        assert last_slug == "rebuilt-oh-session-1"
+
+        ctx.close()
+
+    def test_draft_and_cancelled_stay_out_of_public_schedule(
+        self, django_server, browser
+    ):
+        from django.db import connection
+        from django.utils import timezone
+
+        from events.models import Event, EventSeries
+
+        _reset_event_state()
+        slug = _seed_shuffled_office_hours()
+        series = EventSeries.objects.get(slug=slug)
+        now = timezone.now()
+        Event(
+            title="Rebuilt Office Hours — Draft",
+            slug="rebuilt-oh-draft",
+            start_datetime=now + timedelta(days=12),
+            status="draft",
+            origin="studio",
+            timezone="UTC",
+            event_series=series,
+            series_position=9,
+        ).save()
+        Event(
+            title="Rebuilt Office Hours — Cancelled",
+            slug="rebuilt-oh-cancelled",
+            start_datetime=now + timedelta(days=13),
+            status="cancelled",
+            origin="studio",
+            timezone="UTC",
+            event_series=series,
+            series_position=8,
+        ).save()
+        connection.close()
+
+        ctx = browser.new_context(viewport={"width": 1280, "height": 720})
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/events/groups/{slug}",
+            wait_until="domcontentloaded",
+        )
+
+        # Only the four published upcoming sessions are listed, still in order.
+        rows = page.locator('[data-testid="series-event"]')
+        assert rows.count() == 4
+        body = page.locator("body").inner_text()
+        assert "Rebuilt Office Hours — Draft" not in body
+        assert "Rebuilt Office Hours — Cancelled" not in body
+
+        date_texts = page.locator(
+            '[data-testid="series-event-date"]'
+        ).all_inner_texts()
+        parsed = [
+            datetime.strptime(t.split(" · ")[0].strip(), "%A, %b %d, %Y")
+            for t in date_texts
+        ]
+        assert parsed == sorted(parsed)
+
+        ctx.close()
+
+
+# ---------------------------------------------------------------------------
 # Scenario 9: Public events listing surfaces the series link
 # ---------------------------------------------------------------------------
 

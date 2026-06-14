@@ -410,8 +410,10 @@ def event_series_detail(request, series_id):
             # A child slug collision rolled the whole save back. Re-render
             # the detail page with an error; the series slug is unchanged.
             series.refresh_from_db()
+            # Issue #957: chronological order, matching the main detail render
+            # and the public series page.
             events = list(series.events.all().order_by(
-                'series_position', 'start_datetime',
+                'start_datetime', 'id',
             ))
             now = dj_timezone.now()
             for event in events:
@@ -444,8 +446,11 @@ def event_series_detail(request, series_id):
             )
         return redirect('studio_event_series_detail', series_id=series.pk)
 
+    # Issue #957: match the public series page — list occurrences in
+    # chronological order so the staff table agrees with what visitors see,
+    # regardless of stale ``series_position`` values from a multi-batch rebuild.
     events = list(series.events.all().order_by(
-        'series_position', 'start_datetime',
+        'start_datetime', 'id',
     ))
     # Issue #893: annotate each occurrence with the same derived status the
     # events list uses so the detail table can render the shared badge.
@@ -490,8 +495,9 @@ def _render_add_occurrence_error(request, series, add_error):
     Issue #854 Part A: a partial occurrence is never written — the view
     falls through here before creating any ``Event`` row.
     """
+    # Issue #957: chronological order, consistent with the main detail render.
     events = list(
-        series.events.all().order_by('series_position', 'start_datetime'),
+        series.events.all().order_by('start_datetime', 'id'),
     )
     now = dj_timezone.now()
     for event in events:

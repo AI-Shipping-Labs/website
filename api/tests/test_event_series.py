@@ -190,6 +190,7 @@ class EventSeriesListTest(EventSeriesApiTestBase):
                 "day_of_week",
                 "start_time",
                 "timezone",
+                "required_level",
                 "is_active",
                 "event_count",
                 "published_event_count",
@@ -581,13 +582,18 @@ class EventSeriesOccurrencePatchTest(EventSeriesApiTestBase):
             f"/api/event-series/{self.series.pk}"
             f"/occurrences/{self.occurrence_1.pk}"
         )
+        # Issue #958: ``required_level`` is now guarded against the series
+        # level, so a writable-field PATCH must keep it equal to the series
+        # level (the base series defaults to 0). A differing value is
+        # rejected — that boundary is covered in the level-guardrail tests.
         response = self._patch(
-            path, {"title": "Renamed Occurrence", "required_level": 10},
+            path,
+            {"title": "Renamed Occurrence", "required_level": 0},
         )
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["title"], "Renamed Occurrence")
-        self.assertEqual(body["required_level"], 10)
+        self.assertEqual(body["required_level"], 0)
 
     def test_delete_occurrence_returns_405(self):
         path = (

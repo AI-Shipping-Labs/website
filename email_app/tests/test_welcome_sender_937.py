@@ -24,6 +24,8 @@ WELCOME_TYPES = [
     'basic_welcome',
     'premium_welcome',
     'welcome_imported',
+    # Issue #960: Maven course welcome sends from welcome@.
+    'maven_welcome',
 ]
 
 

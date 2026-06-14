@@ -61,6 +61,12 @@ class CommunityAuditLog(models.Model):
         # moved, and the fields filled, plus ``actor_token=<label>``. Dry runs and
         # the already-merged no-op write NO row.
         ("merge_events", "Studio: duplicate event merge"),
+        # Maven cohort enrollment auto-onboarding (issue #960). One row per
+        # override grant/refresh triggered by a ``user_cohort.enrolled``
+        # webhook. The ``user`` FK is the SUBJECT (the enrolled member);
+        # ``details`` records the tier slug, computed expiry, cohort, and
+        # whether the override was newly granted or refreshed/extended.
+        ("maven_enrollment_override", "Maven: cohort enrollment override"),
     ]
 
     user = models.ForeignKey(

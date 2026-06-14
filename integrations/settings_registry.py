@@ -18,7 +18,7 @@ container — ``.dockerignore`` excludes it (issue #664). Entries without
 ``docs_url`` keep working — the icon simply isn't rendered for them.
 
 NOTE: ``_docs/configuration.md`` references the count and names of these
-groups in the Studio sign-in section ("confirm 14 integration groups are
+groups in the Studio sign-in section ("confirm 16 integration groups are
 listed (...)"). When adding, removing, or renaming a group here, update
 that line of the doc in the same PR.
 """
@@ -648,6 +648,61 @@ INTEGRATION_GROUPS = [
                     '"production".'
                 ),
                 'docs_url': '_docs/integrations/observability.md#logfire_environment',
+            },
+        ],
+    },
+    {
+        'name': 'maven',
+        'label': 'Maven',
+        'keys': [
+            {
+                'key': 'MAVEN_ENROLLMENT_ENABLED',
+                'is_secret': False,
+                'is_boolean': True,
+                'default': 'false',
+                'description': (
+                    'Master switch for the Maven cohort auto-onboarding flow '
+                    '(issue #960). When off, the /api/webhooks/maven endpoint '
+                    'returns {"status":"disabled"} and creates no accounts, '
+                    'overrides, Slack invites, or emails. Default off.'
+                ),
+                'docs_url': '_docs/integrations/maven.md#maven_enrollment_enabled',
+            },
+            {
+                'key': 'MAVEN_WEBHOOK_SHARED_SECRET',
+                'is_secret': True,
+                'description': (
+                    'Shared secret that authenticates inbound Maven (or Zapier) '
+                    'webhook calls. Generate a long random token, paste it here, '
+                    'and put it in the webhook URL (?secret=...) or an '
+                    'X-Maven-Secret header. When blank the endpoint rejects all '
+                    'requests with 403, even when the feature is enabled.'
+                ),
+                'docs_url': '_docs/integrations/maven.md#maven_webhook_shared_secret',
+            },
+            {
+                'key': 'MAVEN_OVERRIDE_TIER_SLUG',
+                'is_secret': False,
+                'optional': True,
+                'default': 'main',
+                'description': (
+                    'Tier slug granted as a long-lived override to Maven '
+                    'enrollees. Validated against Tier; free / level-0 slugs are '
+                    'rejected and fall back to "main" (logged). Defaults to "main".'
+                ),
+                'docs_url': '_docs/integrations/maven.md#maven_override_tier_slug',
+            },
+            {
+                'key': 'MAVEN_OVERRIDE_DURATION_DAYS',
+                'is_secret': False,
+                'optional': True,
+                'default': '3650',
+                'description': (
+                    'Lifetime in days of the override granted to Maven enrollees '
+                    '(default 3650, ~10 years, matching the manual contact-import '
+                    'practice). An existing longer override is never shortened.'
+                ),
+                'docs_url': '_docs/integrations/maven.md#maven_override_duration_days',
             },
         ],
     },

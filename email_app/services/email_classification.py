@@ -60,6 +60,13 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # for them; unsubscribed users still receive it (same policy as
     # event_registration / event_reminder).
     "plan_shared",
+    # Issue #960: Maven cohort auto-onboarding. The course welcome is
+    # transactional — a Maven enrollee receives it as part of enrolling,
+    # so an unsubscribed user still gets it. The removal heads-up is an
+    # internal staff notification, transactional like
+    # staff_signup_notification.
+    "maven_welcome",
+    "maven_cohort_removal_notification",
 }
 
 PROMOTIONAL_EMAIL_TYPES = {
@@ -78,6 +85,9 @@ WELCOME_EMAIL_TYPES = {
     "basic_welcome",
     "premium_welcome",
     "welcome_imported",
+    # Issue #960: the Maven course welcome sends from welcome@ like the
+    # other welcomes, keeping its transactional delivery semantics.
+    "maven_welcome",
 }
 
 # Guard against anyone editing one set without the other. If a welcome type

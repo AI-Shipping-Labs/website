@@ -421,7 +421,7 @@ class SettingsDashboardViewTest(TestCase):
         }
         self.assertEqual(groups_by_section['payments'], ['stripe'])
         self.assertEqual(groups_by_section['content'], ['zoom', 'youtube', 'calendly', 'github'])
-        self.assertEqual(groups_by_section['messaging'], ['ses', 'slack'])
+        self.assertEqual(groups_by_section['messaging'], ['ses', 'slack', 'maven'])
         self.assertEqual(groups_by_section['storage'], ['s3_recordings', 's3_content'])
         self.assertEqual(groups_by_section['site'], ['site'])
         self.assertEqual(groups_by_section['analytics'], ['analytics'])
@@ -482,10 +482,12 @@ class SettingsDashboardViewTest(TestCase):
         self.assertEqual(summary['configured_count'], 1)
         # Stripe has one DB-backed key, SES has one env-backed key,
         # GitHub has the default Secrets Manager path but no App IDs,
-        # LLM has provider+model defaults but no API key (issue #799), and
+        # LLM has provider+model defaults but no API key (issue #799),
         # Observability has the LOGFIRE_ENABLED default ('false', a set
-        # value) but no token (issue #813).
-        self.assertEqual(summary['partial_count'], 5)
+        # value) but no token (issue #813), and Maven has the
+        # MAVEN_ENROLLMENT_ENABLED default ('false', a set value) but no
+        # shared secret (issue #960).
+        self.assertEqual(summary['partial_count'], 6)
         self.assertEqual(
             summary['missing_count'],
             expected_total_items - summary['configured_count'] - summary['partial_count'],

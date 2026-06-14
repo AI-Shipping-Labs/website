@@ -422,7 +422,7 @@ def _welcome_context(user, course):
         "user_name": display_name,
         "course_name": course or "your course",
         "password_reset_url": f"{site_url}/api/password-reset?token={reset_token}",
-        "sign_in_url": f"{site_url}/login/",
+        "sign_in_url": f"{site_url}/accounts/login/",
         "opt_out_url": f"{site_url}/api/unsubscribe?token={opt_out_token}",
     }
 

@@ -303,6 +303,22 @@ def timezone_preference_view(request):
         return JsonResponse({"error": "Invalid timezone"}, status=400)
 
     user = request.user
+
+    # Issue #961: the passive browser-tz backfill (fired automatically on
+    # authenticated page load) must never overwrite a non-empty
+    # ``preferred_timezone``. Account-settings choices and prior backfills
+    # are canonical, mirroring the registration-form rule in
+    # ``events/views/api.py``. The passive client marks the call with
+    # ``passive: true``; deliberate manual saves/clears from Account
+    # settings omit the flag and keep overwriting (including clearing).
+    passive = bool(data.get("passive"))
+    if passive and user.preferred_timezone:
+        return JsonResponse({
+            "status": "ok",
+            "timezone": user.preferred_timezone,
+            "label": get_timezone_label(user.preferred_timezone),
+        })
+
     user.preferred_timezone = timezone_name
     user.save(update_fields=["preferred_timezone"])
 

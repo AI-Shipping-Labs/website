@@ -56,6 +56,37 @@ def unverified_email_banner(request):
     return {"latest_verification_email": latest_verification_email}
 
 
+def timezone_backfill(request):
+    """Expose ``needs_timezone_backfill`` to every template (issue #961).
+
+    The base template runs a one-shot passive browser-timezone backfill
+    only when this flag is True, so transactional emails (reminders,
+    registration, reschedule, invites) render in the recipient's local
+    zone instead of falling back to UTC. The flag is True only when the
+    user is authenticated AND ``preferred_timezone`` is empty -- anonymous
+    and already-configured users pay a single attribute read. No DB hit.
+
+    The Account page (issue #582/#596) owns its own detect-and-preview
+    logic: it auto-detects the browser zone and shows it in the Display
+    Preferences selector as DISPLAY-ONLY, gating Save until the user picks
+    a value. The passive backfill must NOT fire there, or it would
+    silently persist the detected zone on mere page view and break that
+    informational-only contract. So we suppress the flag on the account
+    view by name; every other authenticated page keeps the backfill.
+    """
+    user = getattr(request, "user", None)
+    needs_backfill = bool(
+        user is not None
+        and user.is_authenticated
+        and not getattr(user, "preferred_timezone", "")
+    )
+    if needs_backfill:
+        resolver_match = getattr(request, "resolver_match", None)
+        if resolver_match is not None and resolver_match.view_name == "account":
+            needs_backfill = False
+    return {"needs_timezone_backfill": needs_backfill}
+
+
 def newsletter_only_user(request):
     """Expose ``is_newsletter_only`` to every template (issue #769).
 

@@ -204,6 +204,7 @@ TEMPLATES = [
                 'website.context_processors.studio_env_mismatch_context',
                 'accounts.context_processors.unverified_email_banner',
                 'accounts.context_processors.newsletter_only_user',
+                'accounts.context_processors.timezone_backfill',
             ],
         },
     },

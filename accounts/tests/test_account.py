@@ -873,6 +873,66 @@ class TimezonePreferenceAPITest(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"], "timezone must be a string")
 
+    def test_passive_backfill_persists_zone_when_empty(self):
+        # Issue #961: passive path backfills an empty preferred_timezone.
+        self.assertEqual(self.user.preferred_timezone, "")
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"timezone": "Europe/Berlin", "passive": True}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["timezone"], "Europe/Berlin")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.preferred_timezone, "Europe/Berlin")
+
+    def test_passive_backfill_does_not_overwrite_existing_zone(self):
+        # Issue #961: passive path is a no-op when a value is already set.
+        self.user.preferred_timezone = "America/New_York"
+        self.user.save(update_fields=["preferred_timezone"])
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"timezone": "Europe/Berlin", "passive": True}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["timezone"], "America/New_York")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.preferred_timezone, "America/New_York")
+
+    def test_passive_backfill_rejects_invalid_zone(self):
+        # Issue #961: invalid zones are still rejected with 400 on the
+        # passive path; the empty value is left unchanged.
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"timezone": "Not/AZone", "passive": True}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.preferred_timezone, "")
+
+    def test_manual_save_overwrites_existing_zone(self):
+        # Issue #961: deliberate Account-settings saves (no passive flag)
+        # must keep overwriting a non-empty value.
+        self.user.preferred_timezone = "America/New_York"
+        self.user.save(update_fields=["preferred_timezone"])
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"timezone": "Asia/Tokyo"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.preferred_timezone, "Asia/Tokyo")
+
 
 class AccountPageTimezonePreferenceDisplayTest(TestCase):
     def test_account_timezone_renders_as_select_not_datalist(self):

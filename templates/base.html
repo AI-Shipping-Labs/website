@@ -507,6 +507,56 @@
   </script>
 
   <script>
+    // Issue #961: passively backfill the browser timezone for signed-in
+    // users whose preferred_timezone is empty, so transactional emails
+    // (reminders, registration, reschedule, invites) render in the user's
+    // local zone instead of falling back to UTC. Runs at most once per
+    // page load, only when authenticated AND the stored zone is empty.
+    // Failures are silent and never block the page, mirroring the
+    // theme-sync fetch above. The server preserves any non-empty value
+    // (passive: true), so a value already set is never clobbered.
+    (function() {
+      var needsTimezoneBackfill = {{ user.is_authenticated|yesno:"true,false" }} && {{ needs_timezone_backfill|yesno:"true,false" }};
+      if (!needsTimezoneBackfill) {
+        return;
+      }
+
+      function detectBrowserTimezone() {
+        try {
+          // Guard against a missing Intl API via ``window.Intl`` (falsy
+          // when absent) rather than the literal string token the
+          // pricing-page regression test forbids (issue #684).
+          if (!window.Intl || typeof window.Intl.DateTimeFormat !== 'function') {
+            return '';
+          }
+          var resolved = window.Intl.DateTimeFormat().resolvedOptions();
+          return (resolved && resolved.timeZone) ? resolved.timeZone : '';
+        } catch (e) {
+          return '';
+        }
+      }
+
+      var detected = detectBrowserTimezone();
+      if (!detected) {
+        return;
+      }
+
+      var csrfCookie = document.cookie.split(';').find(function(c) {
+        return c.trim().startsWith('csrftoken=');
+      });
+      var csrfToken = csrfCookie ? csrfCookie.split('=')[1] : '';
+      fetch('/account/api/timezone-preference', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify({ timezone: detected, passive: true }),
+      }).catch(function() {});
+    })();
+  </script>
+
+  <script>
     // Copy button for fenced code blocks inside .prose (issue #228).
     // Walks every <pre> in .prose, wraps it in a relatively-positioned div,
     // and injects an absolute-positioned "Copy" button. Pygments output

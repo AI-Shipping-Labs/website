@@ -241,6 +241,8 @@ class TestMemberPlanPolish:
         page.goto(
             f"{django_server}/studio/sprints/{data['sprint_id']}/",
             wait_until="domcontentloaded")
-        page.get_by_role("link", name="member@test.com").click()
+        page.get_by_test_id("sprint-enrolled-members-table").get_by_role(
+            "link", name="member@test.com"
+        ).click()
         page.wait_for_url(f"{django_server}/studio/users/*/")
         context.close()

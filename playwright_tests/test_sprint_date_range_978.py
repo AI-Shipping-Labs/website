@@ -69,6 +69,19 @@ def _create_sprint(
     return sprint
 
 
+def _format_date(value):
+    return f"{value:%B} {value.day}, {value.year}"
+
+
+def _expected_sprint_range(start_date, duration_weeks):
+    end_date = start_date + datetime.timedelta(weeks=duration_weeks)
+    if start_date.year == end_date.year:
+        start_label = f"{start_date:%B} {start_date.day}"
+        end_label = _format_date(end_date)
+        return f"{start_label} – {end_label} ({duration_weeks} weeks)"
+    return f"{_format_date(start_date)} – {_format_date(end_date)} ({duration_weeks} weeks)"
+
+
 @pytest.mark.django_db(transaction=True)
 class TestSprintDateRange:
     def test_member_reads_when_current_sprint_runs(
@@ -80,24 +93,29 @@ class TestSprintDateRange:
             ensure_tiers()
             ensure_site_config_tiers()
             _clear_sprints()
-            _create_sprint()
+            start_date = datetime.date.today() - datetime.timedelta(days=7)
+            _create_sprint(
+                name="Current Sprint",
+                slug="current-sprint",
+                start_date=start_date,
+            )
             _create_user("main@test.com", tier_slug="main")
 
         ctx = _auth_context(browser, "main@test.com")
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/sprints/june-2026",
+            f"{django_server}/sprints/current-sprint",
             wait_until="domcontentloaded",
         )
 
         assert page.locator('[data-testid="sprint-detail-name"]').inner_text() == (
-            "June 2026"
+            "Current Sprint"
         )
         date_line = page.locator('[data-testid="sprint-date-range"]').inner_text()
-        assert date_line == "June 17 – July 29, 2026 (6 weeks)"
+        assert date_line == _expected_sprint_range(start_date, 6)
         # The old "Starts <date> · N weeks" wording is gone.
         body = page.locator("body").inner_text()
-        assert "Starts June 17, 2026" not in body
+        assert f"Starts {_format_date(start_date)}" not in body
         # The status badge survives, unchanged by this feature.
         badge = page.locator('[data-testid="sprint-status-badge"]')
         assert badge.is_visible()

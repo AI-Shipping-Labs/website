@@ -10,7 +10,9 @@ import datetime
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
+from events.models import Event, EventSeries
 from payments.models import Tier
 from plans.models import Sprint, SprintEnrollment
 
@@ -31,6 +33,44 @@ def _free_user(email):
     user.tier = Tier.objects.get(slug='free')
     user.save(update_fields=['tier'])
     return user
+
+
+def _main_user(email, *, preferred_timezone=''):
+    user = User.objects.create_user(email=email, password='pw')
+    user.tier = Tier.objects.get(slug='main')
+    user.preferred_timezone = preferred_timezone
+    user.save(update_fields=['tier', 'preferred_timezone'])
+    return user
+
+
+def _event_series(slug='sprint-calls'):
+    return EventSeries.objects.create(
+        name='Sprint calls',
+        slug=slug,
+        cadence='weekly',
+        day_of_week=2,
+        start_time=datetime.time(18, 0),
+        timezone='Europe/Berlin',
+    )
+
+
+def _series_event(series, *, title, slug, start, end=None, zoom_url=''):
+    return Event.objects.create(
+        title=title,
+        slug=slug,
+        description='',
+        kind='standard',
+        platform='zoom',
+        start_datetime=start,
+        end_datetime=end,
+        timezone='Europe/Berlin',
+        status='upcoming',
+        origin='studio',
+        event_series=series,
+        location='Zoom',
+        zoom_join_url=zoom_url,
+        published=True,
+    )
 
 
 class SprintDetailAnonymousTest(TestCase):
@@ -225,3 +265,118 @@ class SprintDetailDateRangeTest(TestCase):
         response = self.client.get(url)
         self.assertContains(response, '(1 week)')
         self.assertNotContains(response, '(1 weeks)')
+
+
+class SprintDetailCallsTest(TestCase):
+    """Sprint detail call rows for issue #981."""
+
+    def setUp(self):
+        self.user = _main_user(
+            'main-calls@test.com',
+            preferred_timezone='America/New_York',
+        )
+        self.series = _event_series()
+        self.sprint = Sprint.objects.create(
+            name='June 2026',
+            slug='june-2026',
+            start_date=datetime.date(2026, 6, 17),
+            duration_weeks=6,
+            status='active',
+            min_tier_level=20,
+            event_series=self.series,
+        )
+        SprintEnrollment.objects.create(sprint=self.sprint, user=self.user)
+
+    def _get(self):
+        self.client.force_login(self.user)
+        return self.client.get(
+            reverse('sprint_detail', kwargs={'sprint_slug': self.sprint.slug}),
+        )
+
+    def test_call_entry_uses_event_time_display_for_viewer_timezone(self):
+        start = datetime.datetime(
+            2026, 6, 17, 18, 0, tzinfo=datetime.timezone.utc,
+        )
+        _series_event(
+            self.series,
+            title='Kickoff call',
+            slug='kickoff-call',
+            start=start,
+            end=start + datetime.timedelta(hours=1),
+        )
+
+        response = self._get()
+
+        self.assertContains(response, 'data-testid="sprint-call-entry"')
+        self.assertContains(response, 'Kickoff call')
+        self.assertContains(response, 'data-testid="event-time-row"')
+        self.assertContains(response, 'data-start-utc="2026-06-17T18:00:00Z"')
+        self.assertContains(response, 'data-default-timezone="America/New_York"')
+        self.assertContains(response, 'data-browser-timezone-enabled="false"')
+        self.assertContains(response, 'Zoom')
+
+    def test_upcoming_call_open_now_uses_tracked_join_url(self):
+        start = timezone.now() + datetime.timedelta(minutes=10)
+        event = _series_event(
+            self.series,
+            title='Live call',
+            slug='live-call',
+            start=start,
+            end=start + datetime.timedelta(hours=1),
+            zoom_url='https://zoom.example.com/raw-live',
+        )
+
+        response = self._get()
+
+        self.assertContains(response, 'data-testid="sprint-call-join"')
+        self.assertContains(
+            response,
+            f'href="{reverse("event_join", kwargs={"slug": event.slug})}"',
+        )
+        self.assertContains(response, 'target="_blank"')
+        self.assertNotContains(response, 'https://zoom.example.com/raw-live')
+
+    def test_upcoming_call_not_open_yet_has_non_link_affordance(self):
+        event = _series_event(
+            self.series,
+            title='Planning call',
+            slug='planning-call',
+            start=timezone.now() + datetime.timedelta(days=1),
+            zoom_url='https://zoom.example.com/raw-planning',
+        )
+
+        response = self._get()
+
+        self.assertContains(response, 'data-testid="sprint-call-join-not-open"')
+        self.assertContains(response, 'Join link opens ~15 min before start')
+        self.assertContains(response, event.get_absolute_url())
+        self.assertNotContains(response, 'data-testid="sprint-call-join"')
+        self.assertNotContains(response, 'https://zoom.example.com/raw-planning')
+
+    def test_past_call_is_marked_past_and_has_no_join_button(self):
+        start = timezone.now() - datetime.timedelta(hours=2)
+        event = _series_event(
+            self.series,
+            title='Past call',
+            slug='past-call',
+            start=start,
+            end=start + datetime.timedelta(hours=1),
+            zoom_url='https://zoom.example.com/raw-past',
+        )
+
+        response = self._get()
+
+        self.assertContains(response, 'Past call')
+        self.assertContains(response, 'data-testid="sprint-call-status"')
+        self.assertContains(response, 'Past')
+        self.assertContains(response, event.get_absolute_url())
+        self.assertNotContains(response, 'data-testid="sprint-call-join"')
+        self.assertNotContains(response, 'https://zoom.example.com/raw-past')
+
+    def test_no_calls_empty_state_renders_with_action_panel(self):
+        response = self._get()
+
+        self.assertContains(response, 'data-testid="sprint-primary-action"')
+        self.assertContains(response, 'data-testid="sprint-cta-enrolled"')
+        self.assertContains(response, 'data-testid="sprint-calls-empty"')
+        self.assertContains(response, 'No calls scheduled yet')

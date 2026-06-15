@@ -32,6 +32,7 @@ from django.views.decorators.http import require_POST
 
 from content.access import LEVEL_TO_TIER_NAME, get_user_level
 from events.models import Event
+from events.services.display_time import build_event_time_display
 from integrations.config import get_config, is_enabled, site_base_url
 from notifications.models import Notification
 from plans.models import (
@@ -53,6 +54,40 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 PLAN_REQUEST_RATE_LIMIT = datetime.timedelta(hours=24)
+
+
+def _build_sprint_call_entries(events, user):
+    """Return presentation data for sprint call rows."""
+    entries = []
+    next_upcoming_marked = False
+    for event in events:
+        is_upcoming = event.is_upcoming
+        is_past = event.is_past
+        is_next_upcoming = False
+        if is_upcoming and not next_upcoming_marked:
+            is_next_upcoming = True
+            next_upcoming_marked = True
+        entries.append({
+            'event': event,
+            'time_display': build_event_time_display(event, user),
+            'can_join_now': is_upcoming and event.can_show_zoom_link(),
+            'is_upcoming': is_upcoming,
+            'is_past': is_past,
+            'is_next_upcoming': is_next_upcoming,
+            'location_label': _event_location_label(event),
+            'detail_url': event.get_absolute_url(),
+            'join_url': reverse('event_join', kwargs={'slug': event.slug}),
+        })
+    return entries
+
+
+def _event_location_label(event):
+    """Return compact platform/location copy without Zoom/Zoom duplication."""
+    platform = event.get_platform_display()
+    location = (event.location or '').strip()
+    if not location or location.lower() == platform.lower():
+        return platform
+    return f'{platform} · {location}'
 
 
 def _viewer_plan(sprint, user):
@@ -117,6 +152,7 @@ def sprint_detail(request, sprint_slug):
     event_series_events = (
         getattr(event_series, 'ordered_events', []) if event_series else []
     )
+    sprint_call_entries = _build_sprint_call_entries(event_series_events, user)
 
     feedback_response = _viewer_feedback_response(sprint, user)
 
@@ -132,6 +168,7 @@ def sprint_detail(request, sprint_slug):
             'required_tier_name': required_tier_name,
             'event_series': event_series,
             'event_series_events': event_series_events,
+            'sprint_call_entries': sprint_call_entries,
             'feedback_response': feedback_response,
         },
     )

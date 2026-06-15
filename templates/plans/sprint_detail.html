@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
 {% load sprint_extras %}
-{% load tz %}
+{% load static %}
 
 {% block title %}{{ sprint.name }} | {{ site_name }}{% endblock %}
 
@@ -14,21 +14,89 @@
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
 
-      <header class="mb-10">
+      <header class="mb-6">
         <p class="text-sm uppercase tracking-wide text-muted-foreground">Sprint</p>
-        <h1 class="text-3xl font-semibold tracking-tight mt-1" data-testid="sprint-detail-name">{{ sprint.name }}</h1>
-        <p class="text-sm text-muted-foreground mt-2">
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl" data-testid="sprint-detail-name">{{ sprint.name }}</h1>
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span data-testid="sprint-date-range">{% sprint_date_range sprint %}</span>
-          <span class="ml-2 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium uppercase tracking-wide {{ sprint.sprint_badge_current.css_class }}" data-testid="sprint-status-badge">
+          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium uppercase tracking-wide {{ sprint.sprint_badge_current.css_class }}" data-testid="sprint-status-badge">
             {{ sprint.sprint_badge_current.label }}
           </span>
-        </p>
+        </div>
         <p class="mt-3">
-          <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent" data-testid="sprint-tier-badge">
+          <span class="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-medium text-accent" data-testid="sprint-tier-badge">
             {{ required_tier_name }} tier required
           </span>
         </p>
       </header>
+
+      <section class="mb-6 rounded-lg border border-border bg-card/95 p-5 shadow-lg shadow-background/20" data-testid="sprint-primary-action">
+        {% if sprint.status == 'cancelled' and not enrolled %}
+          <p class="text-sm text-foreground" data-testid="sprint-cta-cancelled">
+            This sprint has been cancelled and is no longer open to join.
+          </p>
+        {% elif not is_authenticated %}
+          <p class="mb-4 text-sm text-muted-foreground">Log in to join this sprint and prepare your plan.</p>
+          <a href="/accounts/login/?next=/sprints/{{ sprint.slug }}"
+             class="min-h-[44px] w-full sm:w-auto {% button_classes 'primary' %}"
+             data-testid="sprint-cta-login">
+            Log in to join
+          </a>
+        {% elif enrolled %}
+          <p class="text-sm font-medium text-foreground" data-testid="sprint-cta-enrolled">You're enrolled.</p>
+          <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            {% if viewer_plan %}
+            <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}"
+               class="min-h-[44px] w-full sm:w-auto {% button_classes 'primary' %}"
+               data-testid="sprint-cta-open-plan">
+              Open my plan
+            </a>
+            {% else %}
+            <a href="{% url 'cohort_board' sprint_slug=sprint.slug %}"
+               class="min-h-[44px] w-full sm:w-auto {% button_classes 'secondary' %}"
+               data-testid="sprint-cta-board">
+              Your plan is being prepared
+            </a>
+            {% endif %}
+            <form method="post" action="{% url 'sprint_leave' sprint_slug=sprint.slug %}" class="w-full sm:w-auto" onsubmit="return confirm('Leave {{ sprint.name|escapejs }}? Your plan stays but is set to private and you’ll no longer see the cohort board.');">
+              {% csrf_token %}
+              <button type="submit"
+                      class="min-h-[44px] w-full sm:w-auto {% button_classes 'secondary' %}"
+                      data-testid="sprint-cta-leave">
+                Leave sprint
+              </button>
+            </form>
+            <p class="w-full text-xs text-muted-foreground" data-testid="sprint-cta-leave-hint">
+              Your plan and progress stay; the cohort just won&rsquo;t see them anymore.
+            </p>
+          </div>
+        {% elif not eligible %}
+          <p class="text-sm text-foreground">
+            This sprint requires the {{ required_tier_name }} tier.
+          </p>
+          <a href="/pricing"
+             class="mt-4 min-h-[44px] w-full sm:w-auto {% button_classes 'primary' %}"
+             data-testid="sprint-cta-upgrade">
+            Upgrade to {{ required_tier_name }} to join
+          </a>
+        {% else %}
+          <p class="mb-4 text-sm text-muted-foreground">Join the cohort and start preparing your sprint plan.</p>
+          <form method="post" action="{% url 'sprint_join' sprint_slug=sprint.slug %}">
+            {% csrf_token %}
+            {% comment %}
+            Issue #598: Join sprint keeps its emerald color override.
+            Uses the `!`-prefixed pattern (same as the amber verification
+            banner) so per-call utilities win the cascade against the
+            canonical primary `bg-accent`.
+            {% endcomment %}
+            <button type="submit"
+                    class="min-h-[44px] w-full sm:w-auto {% button_classes 'primary' extra='!bg-emerald-500 hover:!bg-emerald-600 !text-white' %}"
+                    data-testid="sprint-cta-join">
+              Join sprint
+            </button>
+          </form>
+        {% endif %}
+      </section>
 
       {% if messages %}
       <div class="mb-6 space-y-2" data-testid="sprint-messages">
@@ -40,43 +108,84 @@
       </div>
       {% endif %}
 
-      {% if event_series and event_series_events %}
-      <section class="mb-6 rounded-2xl border border-border bg-card p-6" data-testid="sprint-meeting-schedule">
-        <h2 class="text-lg font-semibold text-foreground mb-3">Meeting schedule</h2>
-        <ul class="divide-y divide-border" data-testid="sprint-meeting-schedule-list">
-          {% for ev in event_series_events %}
-          <li class="py-3" data-testid="sprint-meeting-schedule-row">
-            {# Issue #673 — event_detail is keyed on id+slug; go through get_absolute_url. #}
-            <a href="{{ ev.get_absolute_url }}"
-               class="block hover:bg-secondary/50 -mx-2 px-2 rounded-md transition-colors {% if ev.is_past %}text-muted-foreground{% else %}text-foreground{% endif %}"
-               data-testid="sprint-meeting-schedule-link">
-              <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span class="text-sm font-medium" data-testid="sprint-meeting-schedule-date">
-                  {% timezone ev.timezone %}{{ ev.start_datetime|date:"D, M j, Y" }}{% endtimezone %}
-                </span>
-                <span class="text-sm" data-testid="sprint-meeting-schedule-time">
-                  {% timezone ev.timezone %}{{ ev.start_datetime|date:"H:i" }}{% endtimezone %} {{ ev.timezone }}
-                </span>
-                {% if ev.location %}
-                <span class="text-xs text-muted-foreground" data-testid="sprint-meeting-schedule-location">
-                  {{ ev.location }}
-                </span>
-                {% else %}
-                <span class="text-xs text-muted-foreground" data-testid="sprint-meeting-schedule-location">
-                  {{ ev.get_platform_display }}
+      <section class="mb-6 rounded-lg border border-border bg-card p-6" data-testid="sprint-meeting-schedule">
+        <div class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p class="text-sm uppercase tracking-wide text-muted-foreground">Calls</p>
+            <h2 class="text-xl font-semibold text-foreground">Sprint calls</h2>
+          </div>
+          {% if event_series %}
+          <p class="text-sm text-muted-foreground">{{ event_series.name }}</p>
+          {% endif %}
+        </div>
+
+        {% if sprint_call_entries %}
+        <ul class="space-y-4" data-testid="sprint-meeting-schedule-list">
+          {% for call in sprint_call_entries %}
+          <li class="rounded-lg border p-4 transition-colors {% if call.is_next_upcoming %}border-accent/60 bg-accent/10{% elif call.is_past %}border-border bg-background/40 opacity-75{% else %}border-border bg-background/60{% endif %}"
+              data-testid="sprint-call-entry">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div class="min-w-0 space-y-3 break-words">
+                <div class="flex flex-wrap items-center gap-2">
+                  {% if call.is_past %}
+                  <span class="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="sprint-call-status">Past</span>
+                  {% elif call.is_next_upcoming %}
+                  <span class="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-emerald-300" data-testid="sprint-call-status">Next call</span>
+                  {% else %}
+                  <span class="inline-flex items-center rounded-full bg-sky-500/15 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-sky-300" data-testid="sprint-call-status">Upcoming</span>
+                  {% endif %}
+                </div>
+                <div>
+                  <a href="{{ call.detail_url }}"
+                     class="text-base font-semibold text-foreground hover:text-accent"
+                     data-testid="sprint-call-entry-link">
+                    {{ call.event.title }}
+                  </a>
+                  <div class="mt-2 text-sm text-muted-foreground" data-testid="sprint-call-time">
+                    {% include "events/_event_time_display.html" with event_time_display=call.time_display only %}
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="sprint-call-location">
+                  <i data-lucide="video" class="h-4 w-4"></i>
+                  <span>{{ call.location_label }}</span>
+                </div>
+              </div>
+
+              <div class="flex min-w-0 flex-col gap-2 sm:flex-row lg:flex-col lg:items-stretch">
+                {% if call.can_join_now %}
+                <a href="{{ call.join_url }}"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="min-h-[44px] w-full sm:w-auto {% button_classes 'primary' %}"
+                   data-testid="sprint-call-join">
+                  Join
+                </a>
+                {% elif call.is_upcoming %}
+                <span class="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-border bg-muted/40 px-4 py-2 text-sm font-medium text-muted-foreground sm:w-auto"
+                      data-testid="sprint-call-join-not-open">
+                  Join link opens ~15 min before start
                 </span>
                 {% endif %}
+                <a href="{{ call.detail_url }}"
+                   class="min-h-[44px] w-full sm:w-auto {% button_classes 'secondary' %}"
+                   data-testid="sprint-call-details">
+                  Details and calendar
+                </a>
               </div>
-              <div class="text-sm mt-1">{{ ev.title }}</div>
-            </a>
+            </div>
           </li>
           {% endfor %}
         </ul>
+        {% else %}
+        <div class="rounded-lg border border-dashed border-border bg-background/40 p-5 text-sm text-muted-foreground"
+             data-testid="sprint-calls-empty">
+          No calls scheduled yet — we'll post the schedule here once it's set.
+        </div>
+        {% endif %}
       </section>
-      {% endif %}
 
       {% if feedback_response %}
-      <section class="mb-6 rounded-2xl border border-accent/40 bg-accent/10 p-6" data-testid="sprint-feedback-cta-section">
+      <section class="mb-6 rounded-lg border border-accent/40 bg-accent/10 p-6" data-testid="sprint-feedback-cta-section">
         {% if feedback_response.status == 'submitted' %}
         <h2 class="text-lg font-semibold text-foreground mb-1" data-testid="sprint-feedback-cta-submitted">
           Feedback submitted — thank you
@@ -106,75 +215,14 @@
       </section>
       {% endif %}
 
-      <div class="rounded-2xl border border-border bg-card p-6">
-        {% if sprint.status == 'cancelled' and not enrolled %}
-          <p class="text-sm text-foreground" data-testid="sprint-cta-cancelled">
-            This sprint has been cancelled and is no longer open to join.
-          </p>
-        {% elif not is_authenticated %}
-          <a href="/accounts/login/?next=/sprints/{{ sprint.slug }}"
-             class="{% button_classes 'primary' %}"
-             data-testid="sprint-cta-login">
-            Log in to join
-          </a>
-        {% elif enrolled %}
-          <p class="text-sm text-foreground" data-testid="sprint-cta-enrolled">You're enrolled.</p>
-          <div class="mt-4 flex flex-wrap items-center gap-3">
-            {% if viewer_plan %}
-            <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}"
-               class="{% button_classes 'primary' %}"
-               data-testid="sprint-cta-open-plan">
-              Open my plan
-            </a>
-            {% else %}
-            <a href="{% url 'cohort_board' sprint_slug=sprint.slug %}"
-               class="{% button_classes 'secondary' %}"
-               data-testid="sprint-cta-board">
-              Your plan is being prepared
-            </a>
-            {% endif %}
-            <form method="post" action="{% url 'sprint_leave' sprint_slug=sprint.slug %}" class="inline-block" onsubmit="return confirm('Leave {{ sprint.name|escapejs }}? Your plan stays but is set to private and you’ll no longer see the cohort board.');">
-              {% csrf_token %}
-              <button type="submit"
-                      class="{% button_classes 'secondary' %}"
-                      data-testid="sprint-cta-leave">
-                Leave sprint
-              </button>
-            </form>
-            <p class="text-xs text-muted-foreground" data-testid="sprint-cta-leave-hint">
-              Your plan and progress stay; the cohort just won&rsquo;t see them anymore.
-            </p>
-          </div>
-        {% elif not eligible %}
-          <p class="text-sm text-foreground">
-            This sprint requires the {{ required_tier_name }} tier.
-          </p>
-          <a href="/pricing"
-             class="mt-4 {% button_classes 'primary' %}"
-             data-testid="sprint-cta-upgrade">
-            Upgrade to {{ required_tier_name }} to join
-          </a>
-        {% else %}
-          <form method="post" action="{% url 'sprint_join' sprint_slug=sprint.slug %}" class="inline-block">
-            {% csrf_token %}
-            {% comment %}
-            Issue #598: Join sprint keeps its emerald color override.
-            Uses the `!`-prefixed pattern (same as the amber verification
-            banner) so per-call utilities win the cascade against the
-            canonical primary `bg-accent`.
-            {% endcomment %}
-            <button type="submit"
-                    class="{% button_classes 'primary' extra='!bg-emerald-500 hover:!bg-emerald-600 !text-white' %}"
-                    data-testid="sprint-cta-join">
-              Join sprint
-            </button>
-          </form>
-        {% endif %}
-      </div>
-
     </div>
   </section>
 
   {% include "includes/footer.html" %}
 </main>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'js/events/event_detail.js' %}" defer></script>
 {% endblock %}

@@ -3,8 +3,8 @@ event-group in #575).
 
 Covers the model-level relationship (FK direction, ``SET_NULL`` semantics,
 one-series-many-sprints) and the public sprint detail page's "Meeting
-schedule" section (visible, hidden empty, hidden unlinked, single extra
-query). Studio form / detail surfaces are covered by
+schedule" section (visible, empty state, single extra query). Studio
+form / detail surfaces are covered by
 ``studio.tests.test_sprint_event_series``.
 """
 
@@ -109,7 +109,7 @@ class SprintEventSeriesRelationTest(TestCase):
 
 
 class PublicSprintDetailMeetingScheduleTest(TestCase):
-    """The public ``/sprints/<slug>`` "Meeting schedule" section."""
+    """The public ``/sprints/<slug>`` calls section."""
 
     @classmethod
     def setUpTestData(cls):
@@ -152,7 +152,7 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
         # All three occurrences are listed.
         self.assertContains(
             response,
-            'data-testid="sprint-meeting-schedule-row"',
+            'data-testid="sprint-call-entry"',
             count=3,
         )
         # Issue #673: each occurrence links to the canonical
@@ -161,7 +161,7 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
         self.assertContains(response, self.event_2.get_absolute_url())
         self.assertContains(response, self.event_3.get_absolute_url())
         # Heading appears.
-        self.assertContains(response, 'Meeting schedule')
+        self.assertContains(response, 'Sprint calls')
 
     def test_meeting_time_localized_to_event_timezone(self):
         """Issue #867: meeting times must render in the event's own timezone.
@@ -178,32 +178,27 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
         self.assertContains(response, '20:00 Europe/Berlin')
         self.assertNotContains(response, '18:00 Europe/Berlin')
 
-    def test_section_hidden_when_sprint_has_no_event_series(self):
+    def test_empty_state_when_sprint_has_no_event_series(self):
         url = reverse(
             'sprint_detail',
             kwargs={'sprint_slug': self.unlinked_sprint.slug},
         )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(
-            response, 'data-testid="sprint-meeting-schedule"',
-        )
-        self.assertNotContains(response, 'Meeting schedule')
+        self.assertContains(response, 'data-testid="sprint-meeting-schedule"')
+        self.assertContains(response, 'data-testid="sprint-calls-empty"')
+        self.assertContains(response, 'No calls scheduled yet')
 
-    def test_section_hidden_when_linked_series_has_no_events(self):
+    def test_empty_state_when_linked_series_has_no_events(self):
         url = reverse(
             'sprint_detail',
             kwargs={'sprint_slug': self.empty_series_sprint.slug},
         )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        # The section must be hidden entirely when the series is empty
-        # (no "no meetings yet" copy leaks to the public).
-        self.assertNotContains(
-            response, 'data-testid="sprint-meeting-schedule"',
-        )
-        self.assertNotContains(response, 'Meeting schedule')
-        self.assertNotContains(response, 'no meetings yet')
+        self.assertContains(response, 'data-testid="sprint-meeting-schedule"')
+        self.assertContains(response, 'data-testid="sprint-calls-empty"')
+        self.assertContains(response, 'No calls scheduled yet')
 
     def test_occurrences_ordered_by_start_datetime(self):
         # Insert an out-of-order event with an earlier start to verify

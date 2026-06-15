@@ -366,6 +366,21 @@ INTEGRATION_GROUPS = [
                 'optional': True,
                 'docs_url': '_docs/integrations/site.md#events_host_invite_email',
             },
+            {
+                'key': 'SPRINT_BADGE_WINDOW_DAYS',
+                'is_secret': False,
+                'optional': True,
+                'default': '7',
+                'description': (
+                    'Window in days around a sprint start / end that flips '
+                    'the date-derived sprint badge to "Starting soon" (within '
+                    'this many days before start) and "Ending soon" (within '
+                    'this many days of end). A larger window surfaces the '
+                    'soon-states earlier. Default 7. A blank, non-numeric, or '
+                    'non-positive override falls back to 7.'
+                ),
+                'docs_url': '_docs/integrations/site.md#sprint_badge_window_days',
+            },
         ],
     },
     {

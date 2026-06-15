@@ -14,6 +14,7 @@ view that forgets to filter them cannot leak staff-only context.
 """
 
 import uuid
+from dataclasses import dataclass
 from datetime import timedelta
 
 from django.conf import settings
@@ -59,6 +60,36 @@ KIND_CHOICES = [
     ('source', 'Source'),
     ('general', 'General'),
 ]
+
+# Default number of days before start / before end that flip the sprint
+# badge to ``Starting soon`` / ``Ending soon``. Overridable at runtime via
+# the ``SPRINT_BADGE_WINDOW_DAYS`` IntegrationSetting (issue #979).
+SPRINT_BADGE_WINDOW_DAYS_DEFAULT = 7
+
+# Human label + dark-theme pill colour per badge state (issue #979). The
+# label and css_class are display-only; the machine ``state`` key is what
+# the date logic returns. Pill shape is applied by the template; only the
+# colour varies here.
+SPRINT_BADGE_DISPLAY = {
+    'upcoming': ('Upcoming', 'border border-border text-muted-foreground'),
+    'starting_soon': ('Starting soon', 'bg-sky-500/15 text-sky-300'),
+    'active': ('Active', 'bg-emerald-500/15 text-emerald-300'),
+    'ending_soon': ('Ending soon', 'bg-amber-500/15 text-amber-300'),
+    'ended': ('Ended', 'bg-muted text-muted-foreground'),
+}
+
+
+@dataclass(frozen=True)
+class SprintBadge:
+    """Date-derived sprint lifecycle badge (issue #979).
+
+    Display-only value object returned by :meth:`Sprint.sprint_badge`. It
+    never reflects or mutates the stored ``status`` field.
+    """
+
+    state: str
+    label: str
+    css_class: str
 
 
 class Sprint(TimestampedModelMixin, models.Model):
@@ -139,6 +170,97 @@ class Sprint(TimestampedModelMixin, models.Model):
         if self.start_date is None or self.duration_weeks is None:
             return None
         return self.start_date + timedelta(weeks=self.duration_weeks)
+
+    @staticmethod
+    def _badge_window_days():
+        """Resolve the badge window ``W`` from config (issue #979).
+
+        Reads ``SPRINT_BADGE_WINDOW_DAYS`` (DB override -> env -> default 7)
+        and coerces to a positive int. A blank / non-numeric / non-positive
+        override falls back to the default rather than raising.
+        """
+        from integrations.config import get_config  # noqa: PLC0415
+
+        raw = get_config(
+            'SPRINT_BADGE_WINDOW_DAYS',
+            str(SPRINT_BADGE_WINDOW_DAYS_DEFAULT),
+        )
+        try:
+            value = int(str(raw).strip())
+        except (TypeError, ValueError):
+            return SPRINT_BADGE_WINDOW_DAYS_DEFAULT
+        if value <= 0:
+            return SPRINT_BADGE_WINDOW_DAYS_DEFAULT
+        return value
+
+    def sprint_badge(self, now=None):
+        """Return the date-derived lifecycle badge (issue #979).
+
+        Single source of truth for both the ``/sprints`` card and the sprint
+        detail page, so neither template nor view duplicates the date logic.
+        Display-only: this reads ``start_date`` / ``end_date`` and never
+        touches the stored ``status`` field. Compares plain dates (both
+        bounds are calendar dates, not datetimes).
+
+        ``now`` is injectable (defaults to :func:`timezone.localdate`) so
+        tests drive each state deterministically without freezing real time.
+
+        Given today ``now``, start ``s``, end ``e`` and window ``W`` days:
+
+        - ``now < s - W``            -> ``upcoming``
+        - ``s - W <= now < s``       -> ``starting_soon``
+        - ``s <= now <= e - W``      -> ``active``
+        - ``e - W < now <= e``       -> ``ending_soon``
+        - ``now > e``                -> ``ended``
+
+        Boundary rules: the start day itself is ``active`` (not
+        ``starting_soon``); the end day itself is ``ending_soon`` (not
+        ``ended``) and ``ended`` begins the day after ``end_date``.
+
+        Overlap rule: for a sprint shorter than ``W`` (where ``e - W < s``
+        so the two windows overlap), ``starting_soon`` wins before ``s`` and
+        the ``s..e`` range reads ``ending_soon`` -- such a sprint is never
+        ``active`` (it goes Starting soon -> Ending soon -> Ended).
+        """
+        if now is None:
+            now = timezone.localdate()
+
+        s = self.start_date
+        e = self.end_date
+        w = self._badge_window_days()
+        window = timedelta(days=w)
+
+        if s is None or e is None:
+            state = 'upcoming'
+        elif now < s:
+            # Before the sprint starts. ``starting_soon`` takes precedence
+            # over the end window so a short sprint (e - W < s) still reads
+            # ``Starting soon`` in the days before ``s`` rather than jumping
+            # straight to ``Ending soon``.
+            state = 'starting_soon' if now >= s - window else 'upcoming'
+        elif now > e:
+            state = 'ended'
+        elif now > e - window:
+            # On / after start, within W of the end (inclusive of the end
+            # day). Checked before ``active`` so the overlap case (short
+            # sprint, e - W < s) yields ``ending_soon`` over the whole s..e
+            # range instead of ``active``. A sprint shorter than W therefore
+            # never reads ``active`` (Starting soon -> Ending soon -> Ended).
+            state = 'ending_soon'
+        else:
+            # s <= now <= e - W. Start day -> active. For a sprint shorter
+            # than W this branch is never reached.
+            state = 'active'
+
+        label, css_class = SPRINT_BADGE_DISPLAY[state]
+        return SprintBadge(state=state, label=label, css_class=css_class)
+
+    @property
+    def sprint_badge_current(self):
+        """Convenience accessor so templates can render the badge with the
+        default (today) ``now``: ``{{ sprint.sprint_badge_current.label }}``.
+        """
+        return self.sprint_badge()
 
     def get_studio_edit_url(self):
         return f'/studio/sprints/{self.pk}/edit'

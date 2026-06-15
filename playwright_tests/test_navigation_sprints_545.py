@@ -52,15 +52,22 @@ def _create_sprint(
     status="active",
     min_tier_level=20,
     duration_weeks=4,
+    start_date=None,
 ):
     from django.db import connection
 
     from plans.models import Sprint
 
+    # Default the start two weeks back so the date-derived badge (#979)
+    # reads Active regardless of the calendar date the suite runs on
+    # (started, not within W of the derived end). Callers can override.
+    if start_date is None:
+        start_date = datetime.date.today() - datetime.timedelta(days=14)
+
     sprint = Sprint.objects.create(
         name=name,
         slug=slug,
-        start_date=datetime.date(2026, 5, 15),
+        start_date=start_date,
         duration_weeks=duration_weeks,
         status=status,
         min_tier_level=min_tier_level,
@@ -473,8 +480,10 @@ def test_sprints_page_lists_active_sprint(django_server, page, django_db_blocker
     assert card.is_visible()
     text = card.inner_text()
     assert "May Shipping Sprint" in text
+    # Badge is date-derived (#979): the sprint started two weeks ago and
+    # runs four weeks, so it reads ACTIVE (CSS-uppercased) on any run date.
     assert "ACTIVE" in text
-    assert "May 15 – June 12, 2026 (4 weeks)" in text
+    assert "(4 weeks)" in text
     assert "Membership: Main" in text
     assert card.locator('[data-testid="sprints-sprint-cta"]').get_attribute("href") == (
         "/accounts/login/?next=/sprints/may-shipping-sprint"

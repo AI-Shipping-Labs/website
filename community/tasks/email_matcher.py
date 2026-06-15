@@ -17,6 +17,7 @@ import json
 import logging
 
 from accounts.models import User
+from accounts.tier_audience import effective_level_at_least_q
 from community.models import CommunityAuditLog
 from community.services import get_community_service
 
@@ -39,11 +40,17 @@ def match_community_emails():
     """
     service = get_community_service()
 
-    # Find users with community-level tiers but no Slack ID
-    users = User.objects.filter(
-        tier__level__gte=COMMUNITY_TIER_LEVEL,
-        slack_user_id="",
-    ).select_related("tier")
+    # Find users with community-level EFFECTIVE tiers (base tier OR active
+    # override, issue #966) but no Slack ID. ``.distinct()`` because the
+    # override join can duplicate rows.
+    users = (
+        User.objects.filter(
+            effective_level_at_least_q(COMMUNITY_TIER_LEVEL),
+            slack_user_id="",
+        )
+        .select_related("tier")
+        .distinct()
+    )
 
     matched = 0
     not_found = 0

@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db import models
-from django.db.models import Q
-from django.utils import timezone
+
+from accounts.tier_audience import effective_level_at_least_q
 
 
 class EmailCampaign(models.Model):
@@ -161,14 +161,7 @@ class EmailCampaign(models.Model):
                 unsubscribed=False,
                 **verification_filter,
             )
-            .filter(
-                Q(tier__level__gte=self.target_min_level)
-                | Q(
-                    tier_overrides__is_active=True,
-                    tier_overrides__expires_at__gt=timezone.now(),
-                    tier_overrides__override_tier__level__gte=self.target_min_level,
-                )
-            )
+            .filter(effective_level_at_least_q(self.target_min_level))
         )
         if self.slack_filter == self.SLACK_FILTER_YES:
             base_qs = base_qs.filter(slack_member=True)

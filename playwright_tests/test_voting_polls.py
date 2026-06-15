@@ -363,36 +363,17 @@ class TestScenario3MaxVotesLimit:
         assert vote_count_4.inner_text() == "0"
 
         # Step 2: Attempt to vote on the 4th option
-        # The JS will show an alert with the error message.
-        # Capture the dialog.
-        dialog_messages = []
-        page.on(
-            "dialog",
-            lambda dialog: (
-                dialog_messages.append(dialog.message),
-                dialog.accept(),
-            ),
-        )
-
         vote_btn_4 = page.locator(
             f'button.vote-btn[data-option-id="{opt4.id}"]'
         )
-        vote_btn_4.click()
-
-        # Wait for the alert dialog to appear
-        page.wait_for_function(
-            """() => {
-                // Give time for the fetch + alert cycle
-                return true;
-            }""",
-            timeout=5000,
-        )
-        # Small delay to ensure the dialog handler fires
-        page.wait_for_load_state("domcontentloaded")
+        with page.expect_event("dialog") as dialog_info:
+            vote_btn_4.click()
+        dialog = dialog_info.value
+        dialog_message = dialog.message
+        dialog.accept()
 
         # Then: An error alert was shown about max votes
-        assert len(dialog_messages) >= 1
-        assert "Maximum 3 votes" in dialog_messages[0]
+        assert "Maximum 3 votes" in dialog_message
 
         # Then: Vote count for Option D unchanged (still 0)
         assert vote_count_4.inner_text() == "0"

@@ -44,19 +44,21 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(schedule.cron, '0 3 * * *')
 
     def test_creates_event_reminders_schedule(self):
-        """Command registers event-reminders at hourly cadence (issue #919).
+        """Command registers event-reminders every 15 min (issue #1001).
 
-        Cadence was reduced from ``*/15 * * * *`` to ``0 * * * *`` —
-        hourly at minute 0 is enough for the reminder windows.
+        Cadence was restored from ``0 * * * *`` (#919) back to
+        ``*/15 * * * *`` because the 10-min-wide 20m window needs a
+        sub-20-min tick — hourly never caught events starting outside
+        :15..:25.
         """
         out = StringIO()
         call_command('setup_schedules', stdout=out)
         schedule = Schedule.objects.get(name='event-reminders')
         self.assertEqual(schedule.func, 'notifications.services.event_reminders.check_event_reminders')
-        self.assertEqual(schedule.cron, '0 * * * *')
+        self.assertEqual(schedule.cron, '*/15 * * * *')
         self.assertEqual(schedule.schedule_type, Schedule.CRON)
-        self.assertIn('event-reminders (hourly at minute 0)', out.getvalue())
-        self.assertNotIn('event-reminders (every 15 min)', out.getvalue())
+        self.assertIn('event-reminders (every 15 min)', out.getvalue())
+        self.assertNotIn('event-reminders (hourly at minute 0)', out.getvalue())
 
     def test_creates_complete_finished_events_schedule(self):
         """Command registers complete-finished-events at daily cadence.
@@ -176,18 +178,22 @@ class SetupSchedulesCommandTest(TestCase):
     def test_updates_stale_cadence_on_existing_rows(self):
         """Re-running setup_schedules updates an existing row's cron in place.
 
-        Issue #919: the operator's running cluster already has the old
+        The operator's running cluster already holds rows with older
         cadences. setup_schedules must UPDATE the existing Schedule rows
-        (not just create-if-missing) so the new cadence takes effect on
-        the next run. We simulate the pre-#919 rows by registering the old
-        cron, then re-run and assert the cron is rewritten on the same row.
+        (not just create-if-missing) so the current cadence takes effect on
+        the next run. We seed the stale crons, re-run, and assert each cron
+        is rewritten on the SAME row (no duplicate).
+
+        Issue #1001: event-reminders is seeded with the stale hourly
+        ``0 * * * *`` (#919) and must be restored to ``*/15 * * * *`` in
+        place. slack-membership-refresh stays the #919 daily ``0 6 * * *``.
         """
-        # Pre-seed the existing rows with the old (pre-#919) cadences.
+        # Pre-seed the existing rows with the stale cadences.
         Schedule.objects.create(
             name='event-reminders',
             func='notifications.services.event_reminders.check_event_reminders',
             schedule_type=Schedule.CRON,
-            cron='*/15 * * * *',
+            cron='0 * * * *',
         )
         Schedule.objects.create(
             name='slack-membership-refresh',
@@ -208,7 +214,7 @@ class SetupSchedulesCommandTest(TestCase):
         slack = Schedule.objects.get(name='slack-membership-refresh')
         self.assertEqual(event.id, event_id)
         self.assertEqual(slack.id, slack_id)
-        self.assertEqual(event.cron, '0 * * * *')
+        self.assertEqual(event.cron, '*/15 * * * *')
         self.assertEqual(slack.cron, '0 6 * * *')
 
     def test_no_unexpected_schedules_created(self):

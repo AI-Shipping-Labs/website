@@ -1,8 +1,8 @@
 """Tests for the event reminder background job.
 
 All tests use freezegun to fix the clock so that time-window logic
-(23h45m-24h15m for the 24h window and 15m-25m for the 20-minute
-window, per issue #706) is deterministic.
+(23h45m-24h15m for the 24h window and 15m-30m for the 20-minute
+window, per issues #706 and #1001) is deterministic.
 """
 
 from datetime import datetime, timedelta
@@ -297,10 +297,14 @@ class CheckEventRemindersTest(TestCase):
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_event_at_edge_of_20m_window_end(self, mock_slack, mock_ses):
-        """Event at exactly 25m from now is inside the 20-min window."""
+        """Event at exactly 30m from now is inside the 20-min window.
+
+        Issue #1001: the window was widened from 25m to 30m (15 min wide,
+        == the */15 tick interval) so no start-minute falls between ticks.
+        """
         event = Event.objects.create(
             title='20m Edge End', slug='event-20m-edge-end',
-            start_datetime=FROZEN_NOW + timedelta(minutes=25),
+            start_datetime=FROZEN_NOW + timedelta(minutes=30),
             status='upcoming',
         )
         EventRegistration.objects.create(event=event, user=self.user)
@@ -327,10 +331,10 @@ class CheckEventRemindersTest(TestCase):
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_event_just_outside_20m_window_end(self, mock_slack, mock_ses):
-        """Event at 26m from now is outside the 20-min window."""
+        """Event at 31m from now is outside the (widened) 20-min window."""
         event = Event.objects.create(
             title='20m Outside End', slug='event-20m-outside-end',
-            start_datetime=FROZEN_NOW + timedelta(minutes=26),
+            start_datetime=FROZEN_NOW + timedelta(minutes=31),
             status='upcoming',
         )
         EventRegistration.objects.create(event=event, user=self.user)
@@ -639,6 +643,250 @@ class CheckEventRemindersTest(TestCase):
         self.assertEqual(
             EmailLog.objects.filter(
                 user=self.user, email_type='event_reminder',
+            ).count(),
+            1,
+        )
+
+
+@patch('email_app.services.email_service.EmailService._send_ses',
+       return_value='ses-msg-test')
+@patch('notifications.services.slack_announcements.post_slack_announcement')
+class OffMinuteCadenceTest(TestCase):
+    """Issue #1001: at the restored ``*/15`` cadence AND a 20m window widened
+    to 15 min (15-30, == the tick interval) the reminder windows catch events
+    starting at an ARBITRARY minute-of-hour, not just the band the broken
+    hourly (``0 * * * *``) cron could hit, and with no between-tick gaps.
+
+    Every scenario freezes ``now`` at a real ``*/15`` tick (a minute that is
+    a multiple of 15) and places the event at an off-minute start, proving
+    that the tick whose window covers the event delivers the reminder exactly
+    once. These tests would all FAIL under the hourly cadence because the
+    job would only ever run at ``:00``.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='offminute@example.com', password='testpass123',
+        )
+
+    def _tick_in_window(self, start, lead_min, lead_max):
+        """Return the real ``*/15`` tick whose clock lands in the reminder
+        window ``[start - lead_max, start - lead_min]``.
+
+        The cron only fires when ``now`` is a multiple of 15 minutes, so we
+        scan the ``*/15`` boundaries around the window and return the one
+        that actually sits inside it — the instant the job runs in prod.
+        The window is at least 15 min wide (== the tick spacing), so at
+        least one boundary always lands inside it (never zero) — issue
+        #1001. We return the earliest such tick.
+        """
+        win_start = start - timedelta(minutes=lead_max)
+        win_end = start - timedelta(minutes=lead_min)
+        # Snap win_start UP to the next */15 boundary.
+        minute_up = -(-win_start.minute // 15) * 15  # ceil to multiple of 15
+        if minute_up == 60:
+            candidate = (win_start + timedelta(hours=1)).replace(
+                minute=0, second=0, microsecond=0,
+            )
+        else:
+            candidate = win_start.replace(
+                minute=minute_up, second=0, microsecond=0,
+            )
+        assert win_start <= candidate <= win_end, (
+            f'no */15 tick in window [{win_start}, {win_end}]; got {candidate}'
+        )
+        return candidate
+
+    def _tick_24h(self, start):
+        return self._tick_in_window(start, lead_min=23 * 60 + 45, lead_max=24 * 60 + 15)
+
+    def _tick_20m(self, start):
+        # Window widened to 15-30 min (issue #1001) so every start-minute is
+        # covered by at least one */15 tick.
+        return self._tick_in_window(start, lead_min=15, lead_max=30)
+
+    def test_20m_reminder_fires_for_off_minute_starts(self, mock_slack, mock_ses):
+        """Events starting at off-minutes spanning all four */15 tick buckets
+        each get exactly one 20m reminder when the */15 tick lands inside the
+        15-30 min window.
+
+        Under hourly cadence (job only at :00) the :07, :38 and :52 events
+        would NEVER be in-window and would get no 20m reminder at all — this
+        is the core #1001 regression the */15 restore fixes.
+
+        Crucially this set includes the start-minutes (:11, :27, :42, :58)
+        that fell in the gap BETWEEN two consecutive */15 ticks when the
+        window was only 10 min wide (15-25 min): with the */15 cadence alone
+        those ~27% of events still got NO 20m reminder. Widening the window
+        to 15 min (15-30, == the tick interval) closes that gap, so every
+        one of these minutes is now covered by exactly one tick.
+        """
+        # :07/:23/:38/:52 were covered by the old 10-min window; :11/:27/:42/
+        # :58 are the formerly-uncovered between-tick gap minutes.
+        offsets = [7, 11, 23, 27, 38, 42, 52, 58]
+        for minute in offsets:
+            with self.subTest(start_minute=minute):
+                start = datetime(2026, 6, 15, 14, minute, 0, tzinfo=dt_tz.utc)
+                event = Event.objects.create(
+                    title=f'Off {minute}', slug=f'off-20m-{minute}',
+                    start_datetime=start, status='upcoming',
+                )
+                EventRegistration.objects.create(event=event, user=self.user)
+
+                # The real */15 tick that lands inside the 15-30 min window.
+                tick = self._tick_20m(start)
+                delta = (start - tick).total_seconds() / 60
+                # Sanity: the snapped tick is genuinely inside the 15-30 window.
+                self.assertGreaterEqual(delta, 15)
+                self.assertLessEqual(delta, 30)
+
+                with freeze_time(tick):
+                    check_event_reminders()
+
+                self.assertEqual(
+                    EventReminderLog.objects.filter(
+                        event=event, user=self.user, interval='20m',
+                    ).count(),
+                    1,
+                    f'event at :{minute:02d} should have one 20m reminder',
+                )
+                self.assertEqual(
+                    Notification.objects.filter(
+                        user=self.user, notification_type='event_reminder',
+                    ).filter(title__icontains=event.title).count(),
+                    1,
+                )
+
+    def test_24h_reminder_fires_for_off_minute_starts(self, mock_slack, mock_ses):
+        """Events starting 24h out at :07 and :30 each get exactly one 24h
+        reminder — minutes the hourly :00 tick's 24h window would skip."""
+        from email_app.models import EmailLog
+
+        sent_so_far = 0
+        for minute in (7, 30):
+            with self.subTest(start_minute=minute):
+                start = datetime(2026, 6, 16, 9, minute, 0, tzinfo=dt_tz.utc)
+                event = Event.objects.create(
+                    title=f'Off24 {minute}', slug=f'off-24h-{minute}',
+                    start_datetime=start, status='upcoming',
+                )
+                EventRegistration.objects.create(event=event, user=self.user)
+
+                tick = self._tick_24h(start)
+                with freeze_time(tick):
+                    check_event_reminders()
+
+                self.assertEqual(
+                    EventReminderLog.objects.filter(
+                        event=event, user=self.user, interval='24h',
+                    ).count(),
+                    1,
+                )
+                # Exactly one new reminder email was sent this iteration.
+                sent_so_far += 1
+                self.assertEqual(
+                    EmailLog.objects.filter(
+                        user=self.user, email_type='event_reminder',
+                    ).count(),
+                    sent_so_far,
+                )
+
+    def test_user_receives_both_reminders_each_once(self, mock_slack, mock_ses):
+        """For one off-minute event a registered user gets BOTH the 24h and
+        the 20m reminder, each exactly once: two EventReminderLog rows, two
+        notifications, two emails — evaluated across the two distinct ticks."""
+        from email_app.models import EmailLog
+
+        start = datetime(2026, 6, 16, 17, 38, 0, tzinfo=dt_tz.utc)
+        event = Event.objects.create(
+            title='Both Reminders', slug='both-reminders',
+            start_datetime=start, status='upcoming',
+        )
+        EventRegistration.objects.create(event=event, user=self.user)
+
+        # Run at the 24h tick, then at the 20m tick.
+        with freeze_time(self._tick_24h(start)):
+            check_event_reminders()
+        with freeze_time(self._tick_20m(start)):
+            check_event_reminders()
+
+        self.assertEqual(
+            set(
+                EventReminderLog.objects.filter(
+                    event=event, user=self.user,
+                ).values_list('interval', flat=True)
+            ),
+            {'24h', '20m'},
+        )
+        self.assertEqual(
+            Notification.objects.filter(
+                user=self.user, notification_type='event_reminder',
+            ).count(),
+            2,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=self.user, email_type='event_reminder',
+            ).count(),
+            2,
+        )
+
+    def test_no_duplicate_across_two_consecutive_overlapping_ticks(
+        self, mock_slack, mock_ses,
+    ):
+        """An event whose start is covered by TWO consecutive */15 ticks'
+        windows still yields exactly one 24h and one 20m reminder per user
+        (EventReminderLog get_or_create dedup), and the Slack announcement
+        fires at most once."""
+        # Start at :00 so both the 24h window (30 min wide) and the widened
+        # 20m window (15 min wide, issue #1001) span two consecutive */15
+        # ticks — the worst case for the EventReminderLog dedup.
+        start = datetime(2026, 6, 16, 13, 0, 0, tzinfo=dt_tz.utc)
+        event = Event.objects.create(
+            title='Overlap Event', slug='overlap-event',
+            start_datetime=start, status='upcoming',
+        )
+        EventRegistration.objects.create(event=event, user=self.user)
+
+        # 24h window (23h45m..24h15m) covered by ticks at start-24h00m and
+        # start-23h45m.
+        with freeze_time(start - timedelta(hours=24)):
+            check_event_reminders()
+        with freeze_time(start - timedelta(hours=23, minutes=45)):
+            check_event_reminders()
+        # 20m window (15m..30m wide, issue #1001) is now covered by BOTH the
+        # tick at start-30m (delta 30, inclusive end) and the tick at
+        # start-15m (delta 15, inclusive start). Both ticks see the event, so
+        # this exercises the EventReminderLog (event, user, '20m') dedup that
+        # must collapse the overlap to a single reminder.
+        with freeze_time(start - timedelta(minutes=30)):
+            check_event_reminders()
+        with freeze_time(start - timedelta(minutes=15)):
+            check_event_reminders()
+
+        self.assertEqual(
+            EventReminderLog.objects.filter(
+                event=event, user=self.user, interval='24h',
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EventReminderLog.objects.filter(
+                event=event, user=self.user, interval='20m',
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            Notification.objects.filter(
+                user=self.user, notification_type='event_reminder',
+            ).count(),
+            2,
+        )
+        # Slack announcement (24h only) fired at most once across all ticks.
+        mock_slack.assert_called_once_with('event', event)
+        self.assertEqual(
+            EventReminderLog.objects.filter(
+                event=event, interval='24h_slack',
             ).count(),
             1,
         )

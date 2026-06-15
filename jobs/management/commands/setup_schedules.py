@@ -42,16 +42,21 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: purge-user-activity (daily at 03:30 UTC)'))
 
-        # Event reminders once per hour at minute 0 (issue #919; cadence
-        # reduced from every 15 min — hourly is enough for the reminder
-        # windows). update_or_create on the schedule name means an existing
-        # row's cron is updated in place on the next setup_schedules run.
+        # Event reminders every 15 min (issue #1001; restored from the
+        # hourly '0 * * * *' set in #919). The reminder windows in
+        # event_reminders.py are a 10-min-wide 20m window and a 30-min-wide
+        # 24h window engineered for a */15 tick — at hourly cadence the
+        # 20-min reminder can never fire for events starting outside :15..:25,
+        # so #919's "hourly is enough" was wrong. A punctual "starts in 20
+        # minutes" reminder fundamentally needs a sub-20-min cadence.
+        # update_or_create on the schedule name means an existing row's cron
+        # is updated in place on the next setup_schedules run.
         schedule(
             'notifications.services.event_reminders.check_event_reminders',
-            cron='0 * * * *',
+            cron='*/15 * * * *',
             name='event-reminders',
         )
-        self.stdout.write(self.style.SUCCESS('Registered: event-reminders (hourly at minute 0)'))
+        self.stdout.write(self.style.SUCCESS('Registered: event-reminders (every 15 min)'))
 
         # Flip finished events from upcoming to completed daily at 04:00 UTC
         # (issue #573; cadence reduced from every 5 min to daily in #713 now

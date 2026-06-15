@@ -40,7 +40,11 @@ import logging
 
 from django.template.loader import render_to_string
 
-from accounts.services.timezones import format_user_datetime
+from accounts.services.timezones import (
+    build_timezone_account_url,
+    build_timezone_email_line,
+    format_user_datetime,
+)
 from content.access import (
     _resolve_required_level,
     can_access,
@@ -154,6 +158,12 @@ def _render_series_email(template_name, user, series, events, email_type):
             'registered_count_plural': '' if registered_count == 1 else 's',
             'occurrences_list': occurrences_list,
             'partial_note': partial_note,
+            # Issue #963: the "set/update your timezone" line. Only the
+            # series_registration template renders {{ timezone_help }};
+            # for series_update / series_cancellation it is inert context.
+            'timezone_help': build_timezone_email_line(
+                user, build_timezone_account_url(site_url),
+            ),
         },
     )
     full_html = render_to_string('email_app/base_email.html', {

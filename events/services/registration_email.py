@@ -8,7 +8,11 @@ import boto3
 from django.conf import settings
 from django.template.loader import render_to_string
 
-from accounts.services.timezones import format_user_datetime
+from accounts.services.timezones import (
+    build_timezone_account_url,
+    build_timezone_email_line,
+    format_user_datetime,
+)
 from email_app.services.email_classification import (
     EMAIL_KIND_TRANSACTIONAL,
     get_sender_for_kind,
@@ -55,6 +59,9 @@ def send_registration_confirmation(registration):
             # valid preference is set. Replaces ``event.formatted_start()``
             # which hardcoded UTC and forced the recipient to convert.
             'event_datetime': format_user_datetime(event.start_datetime, user),
+            'timezone_help': build_timezone_email_line(
+                user, build_timezone_account_url(site_url),
+            ),
             'join_url': join_url,
             'cancel_url': cancel_url,
             'google_calendar_url': calendar_links['google'],

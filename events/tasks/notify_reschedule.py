@@ -29,7 +29,11 @@ import logging
 from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 
-from accounts.services.timezones import format_user_datetime
+from accounts.services.timezones import (
+    build_timezone_account_url,
+    build_timezone_email_line,
+    format_user_datetime,
+)
 from events.models import Event, EventRegistration, SeriesRegistration
 from events.services.calendar_invite import generate_ics
 from events.services.cancel_token import generate_cancel_token
@@ -186,6 +190,9 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
             'old_event_datetime': format_user_datetime(old_start, user),
             'new_event_datetime': format_user_datetime(
                 event.start_datetime, user,
+            ),
+            'timezone_help': build_timezone_email_line(
+                user, build_timezone_account_url(site_url),
             ),
             'join_url': join_url,
             'cancel_url': cancel_url,

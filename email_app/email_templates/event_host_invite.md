@@ -6,6 +6,8 @@ Hi {{ user_name }},
 
 This is your host copy for **{{ event_title }}** on {{ event_datetime }}. We've attached a calendar invite so the event lands in your calendar automatically — open the attached `.ics` to add (or update) it.
 
+{{ timezone_help }}
+
 As the host, here are your management links (these are for you only — do not forward them to attendees):
 
 - Edit event details: {{ edit_url }}

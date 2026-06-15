@@ -10,6 +10,8 @@ Previous time: {{ old_event_datetime }}
 
 New time: {{ new_event_datetime }}
 
+{{ timezone_help }}
+
 Join link: {{ join_url }}
 
 We've attached an updated `.ics` file so Apple Calendar, Outlook, and other clients can overwrite the original entry automatically.

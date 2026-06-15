@@ -555,6 +555,66 @@ class CheckEventRemindersTest(TestCase):
             rendered_by_email['testuser2@example.com'],
         )
 
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_reminder_carries_timezone_line_utc_fallback(
+        self, mock_slack, mock_ses,
+    ):
+        """Issue #963: a UTC-fallback recipient's reminder body carries the
+        prominent "Set your timezone" line and the account timezone link."""
+        from integrations.config import site_base_url
+        from notifications.services.notification_service import (
+            NotificationService,
+        )
+
+        self.user.preferred_timezone = ''
+        self.user.save(update_fields=['preferred_timezone'])
+        event = Event.objects.create(
+            title='TZ Line Reminder', slug='tz-line-reminder',
+            start_datetime=FROZEN_NOW + timedelta(hours=24),
+            status='upcoming',
+        )
+        EventRegistration.objects.create(event=event, user=self.user)
+
+        NotificationService.create_event_reminder(
+            event, self.user, '24h', 'Reminder', 'Soon',
+        )
+
+        self.assertEqual(mock_ses.call_count, 1)
+        html_body = mock_ses.call_args[0][2]
+        base = site_base_url()
+        self.assertIn('Set your timezone', html_body)
+        self.assertIn(
+            f'href="{base}/account/#display-preferences-section"', html_body,
+        )
+
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_reminder_carries_timezone_line_zoned(
+        self, mock_slack, mock_ses,
+    ):
+        """Issue #963: a zoned recipient's reminder body carries the quieter
+        "Change your timezone" line, not the UTC-fallback variant."""
+        from notifications.services.notification_service import (
+            NotificationService,
+        )
+
+        self.user.preferred_timezone = 'Europe/Berlin'
+        self.user.save(update_fields=['preferred_timezone'])
+        event = Event.objects.create(
+            title='TZ Line Reminder Zoned', slug='tz-line-reminder-zoned',
+            start_datetime=FROZEN_NOW + timedelta(hours=24),
+            status='upcoming',
+        )
+        EventRegistration.objects.create(event=event, user=self.user)
+
+        NotificationService.create_event_reminder(
+            event, self.user, '24h', 'Reminder', 'Soon',
+        )
+
+        self.assertEqual(mock_ses.call_count, 1)
+        html_body = mock_ses.call_args[0][2]
+        self.assertIn('Change your timezone', html_body)
+        self.assertNotIn('Set your timezone', html_body)
+
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_unsubscribed_user_still_receives_event_reminder(

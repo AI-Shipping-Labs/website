@@ -8,6 +8,8 @@ You're registered for **{{ event_title }}**. We're looking forward to seeing you
 
 When: {{ event_datetime }}
 
+{{ timezone_help }}
+
 Join link: {{ join_url }}
 
 Add to your calendar:

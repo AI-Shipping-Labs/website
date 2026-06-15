@@ -39,6 +39,24 @@ class AccountPageAccessTest(TestCase):
         response = self.client.get("/account/")
         self.assertTemplateUsed(response, "accounts/account.html")
 
+    def test_logged_out_redirect_preserves_next(self):
+        """Issue #963: the email timezone link points at /account/. An
+        anonymous click hits Django's login redirect carrying
+        ?next=/account/ so the user lands on the page after logging in."""
+        response = self.client.get("/account/")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/accounts/login/?next=/account/")
+
+    def test_email_fragment_lands_on_timezone_control(self):
+        """Issue #963: the #display-preferences-section fragment used by the
+        event-email timezone link resolves to a real element carrying the
+        timezone preference control."""
+        user = User.objects.create_user(email="frag@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+        self.assertContains(response, 'id="display-preferences-section"')
+        self.assertContains(response, 'id="timezone-preference-input"')
+
 class AccountPageFreeUserTest(TestCase):
     """Tests for account page display for free-tier users."""
 

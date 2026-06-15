@@ -14,6 +14,7 @@ view that forgets to filter them cannot leak staff-only context.
 """
 
 import uuid
+from datetime import timedelta
 
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -122,6 +123,22 @@ class Sprint(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def end_date(self):
+        """Derived (non-stored) end of the sprint window.
+
+        ``start_date + duration_weeks`` weeks, using plain ``date``
+        arithmetic so it stays timezone-safe (sprint dates are calendar
+        ``DateField`` values, never datetimes). This is the exclusive end /
+        hand-off date: the day the next back-to-back sprint starts. There is
+        no stored ``end_date`` column -- ``start_date`` + ``duration_weeks``
+        remain the persisted source of truth and this always stays
+        consistent with them. Returns ``None`` if either input is missing.
+        """
+        if self.start_date is None or self.duration_weeks is None:
+            return None
+        return self.start_date + timedelta(weeks=self.duration_weeks)
 
     def get_studio_edit_url(self):
         return f'/studio/sprints/{self.pk}/edit'

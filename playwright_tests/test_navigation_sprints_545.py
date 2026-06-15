@@ -474,8 +474,7 @@ def test_sprints_page_lists_active_sprint(django_server, page, django_db_blocker
     text = card.inner_text()
     assert "May Shipping Sprint" in text
     assert "ACTIVE" in text
-    assert "May 15, 2026" in text
-    assert "4 weeks" in text
+    assert "May 15 – June 12, 2026 (4 weeks)" in text
     assert "Membership: Main" in text
     assert card.locator('[data-testid="sprints-sprint-cta"]').get_attribute("href") == (
         "/accounts/login/?next=/sprints/may-shipping-sprint"

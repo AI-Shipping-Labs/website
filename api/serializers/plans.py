@@ -32,6 +32,9 @@ def serialize_sprint(sprint):
         "start_date": (
             sprint.start_date.isoformat() if sprint.start_date else None
         ),
+        "end_date": (
+            sprint.end_date.isoformat() if sprint.end_date else None
+        ),
         "duration_weeks": sprint.duration_weeks,
         "status": sprint.status,
         "event_series": (

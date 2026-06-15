@@ -34,8 +34,7 @@ class SprintsIndexTest(TestCase):
         self.assertContains(response, 'data-testid="sprints-sprint-card"')
         self.assertContains(response, sprint.name)
         self.assertContains(response, 'Active')
-        self.assertContains(response, 'May 15, 2026')
-        self.assertContains(response, '4 weeks')
+        self.assertContains(response, 'May 15 – June 12, 2026 (4 weeks)')
         self.assertContains(response, 'Membership: Main')
         self.assertContains(response, 'Log in to join')
         self.assertContains(

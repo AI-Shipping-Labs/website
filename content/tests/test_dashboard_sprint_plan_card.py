@@ -51,7 +51,7 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         self.assertContains(response, f'href="{expected_href}"')
         # Sprint metadata is rendered.
         self.assertContains(response, 'August 2026')
-        self.assertContains(response, '8 weeks')
+        self.assertContains(response, 'August 1 – September 26, 2026 (8 weeks)')
 
     def test_dashboard_card_hidden_when_user_has_no_plan(self):
         User.objects.create_user(

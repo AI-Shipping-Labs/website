@@ -181,3 +181,45 @@ class SprintDetailTierBadgeTest(TestCase):
         url = reverse('sprint_detail', kwargs={'sprint_slug': sprint.slug})
         response = self.client.get(url)
         self.assertContains(response, 'Main tier required')
+
+
+class SprintDetailDateRangeTest(TestCase):
+    """The detail page renders the start--end (duration) range (#978)."""
+
+    def test_same_year_range_with_duration(self):
+        sprint = Sprint.objects.create(
+            name='June 2026', slug='june-2026',
+            start_date=datetime.date(2026, 6, 17),
+            duration_weeks=6, status='active',
+        )
+        url = reverse('sprint_detail', kwargs={'sprint_slug': sprint.slug})
+        response = self.client.get(url)
+        self.assertContains(response, 'June 17 – July 29, 2026 (6 weeks)')
+        # The old "Starts <date> · N weeks" wording is gone.
+        self.assertNotContains(response, 'Starts June 17, 2026')
+        # The status badge is untouched by this feature.
+        self.assertContains(response, 'data-testid="sprint-status-badge"')
+        self.assertContains(response, sprint.get_status_display())
+
+    def test_cross_year_range_shows_both_years(self):
+        sprint = Sprint.objects.create(
+            name='Dec 2025', slug='dec-2025',
+            start_date=datetime.date(2025, 12, 16),
+            duration_weeks=6, status='active',
+        )
+        url = reverse('sprint_detail', kwargs={'sprint_slug': sprint.slug})
+        response = self.client.get(url)
+        self.assertContains(
+            response, 'December 16, 2025 – January 27, 2026 (6 weeks)',
+        )
+
+    def test_singular_week_pluralization(self):
+        sprint = Sprint.objects.create(
+            name='One week', slug='one-week',
+            start_date=datetime.date(2026, 6, 17),
+            duration_weeks=1, status='active',
+        )
+        url = reverse('sprint_detail', kwargs={'sprint_slug': sprint.slug})
+        response = self.client.get(url)
+        self.assertContains(response, '(1 week)')
+        self.assertNotContains(response, '(1 weeks)')

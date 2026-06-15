@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load sprint_extras %}
 
 {% block title %}Activities and Community Sprints | AI Shipping Labs{% endblock %}
 {% block meta_description %}Join active community sprints, workshops, cohorts, and tier-based participation opportunities at AI Shipping Labs.{% endblock %}
@@ -44,12 +45,8 @@
                 <h2 class="text-xl font-semibold text-foreground" data-testid="activities-sprint-name">{{ item.sprint.name }}</h2>
                 <dl class="space-y-3 text-sm text-muted-foreground" data-testid="activities-sprint-facts">
                   <div>
-                    <dt class="font-medium text-foreground">Start date</dt>
-                    <dd data-testid="activities-sprint-start">{{ item.sprint.start_date|date:"F j, Y" }}</dd>
-                  </div>
-                  <div>
-                    <dt class="font-medium text-foreground">Duration</dt>
-                    <dd data-testid="activities-sprint-duration">{{ item.sprint.duration_weeks }} weeks</dd>
+                    <dt class="font-medium text-foreground">Sprint window</dt>
+                    <dd data-testid="activities-sprint-dates">{% sprint_date_range item.sprint %}</dd>
                   </div>
                 </dl>
                 <p class="text-sm leading-relaxed text-muted-foreground" data-testid="activities-sprint-guidance">

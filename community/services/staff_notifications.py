@@ -3,8 +3,10 @@
 Replaces Valeriia's hand-written "welcome + intro" email and the implicit
 internal heads-up with a single orchestrating helper:
 
-- (A) Personalised co-founder welcome to the new paid user, with the
-  configured staff mailbox put on CC.
+- (A) Personalised co-founder welcome to the new paid user, addressed
+  To the member, with the configured staff mailbox put on CC (a visible
+  copy) so the team sees the welcome went out and catches reply-all
+  replies (issue #977; reverts the #950 BCC decision).
 - (B) Structured internal heads-up to staff via email and Slack.
 
 The three sends are independent: a failure on one path NEVER blocks
@@ -120,8 +122,11 @@ def notify_paid_signup(
     )
 
     # (A) Co-founder welcome to the user. Independent try/except.
+    # Issue #977: the staff mailbox rides on CC (a visible copy), not BCC.
+    # Coordinate with #976 (welcome-back) which threads is_returning through
+    # this same call site / signature.
     try:
-        _send_cofounder_welcome(user, tier, ctx, bcc=staff_email or None)
+        _send_cofounder_welcome(user, tier, ctx, cc=staff_email or None)
     except Exception:
         # Broad catch by design: any failure inside EmailService /
         # template rendering / SES must not block the staff heads-up or
@@ -651,14 +656,15 @@ def _welcome_template_for_tier(tier):
     return "cofounder_welcome"
 
 
-def _send_cofounder_welcome(user, tier, ctx, *, bcc):
+def _send_cofounder_welcome(user, tier, ctx, *, cc):
     """Send (A) — the welcome to the new paid user.
 
     The template is selected by the purchased tier so each paid tier gets
-    exactly its own email (Basic / Main / Premium). Issue #950: the staff
-    mailbox rides on BCC (not CC) so the new member never sees the
-    internal address and can't Reply-All to it; the EmailLog write is
-    unchanged.
+    exactly its own email (Basic / Main / Premium). Issue #977: the staff
+    mailbox rides on CC (a visible copy) — reverting the #950 BCC
+    decision — so the new member sees the team is copied and can Reply-All
+    to reach both the member and the monitored welcome@/team@ inbox, and
+    the team sees the welcome went out. The EmailLog write is unchanged.
     """
     from email_app.services import EmailService
 
@@ -667,7 +673,7 @@ def _send_cofounder_welcome(user, tier, ctx, *, bcc):
         "user_first_name": ctx["first_name_raw"],
         "current_sprint_status_paragraph": _current_sprint_paragraph(),
     }
-    EmailService().send(user, template_slug, welcome_ctx, bcc=bcc)
+    EmailService().send(user, template_slug, welcome_ctx, cc=cc)
 
 
 def _send_staff_signup_notification(staff_email, ctx):

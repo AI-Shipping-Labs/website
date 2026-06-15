@@ -2298,6 +2298,11 @@
               },
               "schema": {
                 "properties": {
+                  "create_zoom": {
+                    "description": "Write-only action trigger. When true and platform is 'zoom', provisions a real Zoom meeting and populates zoom_join_url / zoom_meeting_id. Idempotent; never stored or returned. On Zoom failure the event still persists and the body carries a non-fatal zoom_error key.",
+                    "type": "boolean",
+                    "writeOnly": true
+                  },
                   "description": {
                     "type": "string"
                   },
@@ -2522,6 +2527,11 @@
               },
               "schema": {
                 "properties": {
+                  "create_zoom": {
+                    "description": "Write-only action trigger. When true and the event's platform is 'zoom' with no existing meeting, provisions a Zoom meeting and populates zoom_join_url / zoom_meeting_id. Idempotent; never stored or returned. On Zoom failure the event still persists and the body carries a non-fatal zoom_error key.",
+                    "type": "boolean",
+                    "writeOnly": true
+                  },
                   "description": {
                     "type": "string"
                   },

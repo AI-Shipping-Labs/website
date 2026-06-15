@@ -48,7 +48,11 @@ from api.views.event_series import (
     event_series_occurrences_reconcile,
     event_series_zoom_meetings,
 )
-from api.views.events import event_detail, events_collection
+from api.views.events import (
+    event_detail,
+    event_regenerate_banner,
+    events_collection,
+)
 from api.views.integration_settings import integration_settings
 from api.views.interview_notes import (
     interview_note_detail,
@@ -171,6 +175,14 @@ urlpatterns = [
         "events",
         events_collection,
         name="api_events_collection",
+    ),
+    # Register the ``regenerate-banner`` action BEFORE the bare ``<slug>``
+    # detail so the slug converter never swallows the literal suffix (issue
+    # #995). Force-enqueues a banner render; allowed for synced events.
+    path(
+        "events/<slug:slug>/regenerate-banner",
+        event_regenerate_banner,
+        name="api_event_regenerate_banner",
     ),
     path(
         "events/<slug:slug>",

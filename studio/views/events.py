@@ -754,6 +754,12 @@ def event_edit(request, event_id):
         remove_url_name='studio_event_remove_banner',
         url_kwarg='event_id',
     ))
+    # Issue #995: JSON status endpoint that the in-place banner loader polls.
+    # Only events expose it today, so the shared partial progressively
+    # enhances only when ``banner_status_url`` is present in context.
+    context['banner_status_url'] = reverse(
+        'studio_event_banner_status', kwargs={'event_id': event.pk},
+    )
     return render(request, 'studio/events/form.html', context)
 
 

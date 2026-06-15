@@ -17,6 +17,7 @@ from studio.views.banner_regenerate import (
     studio_project_regenerate_banner,
     studio_workshop_regenerate_banner,
 )
+from studio.views.banner_status import studio_event_banner_status
 from studio.views.banner_upload import (
     studio_article_remove_banner,
     studio_article_upload_banner,
@@ -415,6 +416,12 @@ urlpatterns = [
         'events/<int:event_id>/regenerate-banner',
         studio_event_regenerate_banner,
         name='studio_event_regenerate_banner',
+    ),
+    # JSON status endpoint backing the in-place banner loader (issue #995).
+    path(
+        'events/<int:event_id>/banner-status',
+        studio_event_banner_status,
+        name='studio_event_banner_status',
     ),
     path(
         'events/<int:event_id>/upload-banner',

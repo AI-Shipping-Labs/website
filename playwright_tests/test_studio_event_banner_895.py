@@ -180,14 +180,20 @@ class TestStudioEventBannerAuthorJourney:
             '[data-testid="banner-generator-placeholder"]'
         ).count() == 0
 
+        # Issue #995: the Regenerate form is progressively enhanced into an
+        # in-place loader — clicking no longer navigates. The click shows a
+        # spinner and polls the status endpoint; the worker is not running in
+        # this test, so we only assert the in-place spinner appears (no full
+        # navigation). The image-swap / failure-restore flows are covered
+        # deterministically in test_studio_event_banner_inplace_995.py.
+        page.evaluate("window.__noReload = true")
         page.locator(
             '[data-testid="banner-generator-regenerate-button"]'
         ).click()
-        page.wait_for_url(
-            re.compile(rf".*/studio/events/{event.pk}/edit$"),
-        )
-        # Success confirmation is flashed after the queue.
-        assert "Banner regeneration queued" in page.content()
+        spinner = page.locator('[data-testid="banner-generator-spinner"]')
+        spinner.wait_for(state="visible", timeout=5000)
+        # No full-page reload happened (the marker survives).
+        assert page.evaluate("window.__noReload") is True
         ctx.close()
 
     # NOTE: the "Regenerate disabled when banner-generator not configured"

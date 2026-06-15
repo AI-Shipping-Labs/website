@@ -180,6 +180,7 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "external_host",
                 "published",
                 "host_email",
+                "banner_url",
                 "origin",
                 "source_repo",
                 "source_path",

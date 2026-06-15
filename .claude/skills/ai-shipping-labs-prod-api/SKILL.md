@@ -1,13 +1,18 @@
 ---
 name: ai-shipping-labs-prod-api
-description: Use when asked to read or change something in AI Shipping Labs PRODUCTION via its HTTP API — e.g. set/inspect an integration setting or env config, create or update events/event-series, trigger a content sync, debug a background task, or look up a user. Covers auth, the OpenAPI spec, and the common endpoints.
+description: Foundational entrypoint for the AI Shipping Labs PRODUCTION HTTP API. Use to learn how to authenticate, where the token/config lives, how to discover the full endpoint surface via the OpenAPI spec, the safe-write protocol, and the cross-cutting surfaces — integration settings / env config, content sync, and background-task observability. For user/CRM endpoints use `ai-shipping-labs-users`; for events and workshops use `ai-shipping-labs-events`.
 metadata:
-  short-description: Drive the AI Shipping Labs production API
+  short-description: Auth, discovery, and cross-cutting surfaces of the AI Shipping Labs production API
 ---
 
 # AI Shipping Labs Production API
 
 The production site exposes a token-authenticated JSON API at `https://aishippinglabs.com/api/`. Use it to inspect and change prod state without prod DB or AWS access. Studio (the web UI) owns the same data; this API is the scriptable surface over it.
+
+This is the foundational skill: authentication, config, endpoint discovery, the safe-write protocol, and the cross-cutting surfaces. For specific domains, read the specialized skills:
+
+- Events and workshops — `ai-shipping-labs-events` (create/update events, event series, occurrences, Zoom meetings; workshop content sync).
+- Users and CRM — `ai-shipping-labs-users` (look up users, tags, aliases, merge, notes, bounce handling).
 
 ## Authentication
 
@@ -40,7 +45,7 @@ curl -s -H "Authorization: Token $TOKEN" https://aishippinglabs.com/api/openapi.
 
 For any mutation: `GET` the resource first to see current state, `POST`/`PATCH` the change, then `GET` again (or check a downstream effect) to confirm. Most writes are all-or-nothing and scrubbed of secret values in responses.
 
-## Common methods
+## Cross-cutting surfaces
 
 ### Integration settings / env config (`/api/integrations/settings`)
 
@@ -56,7 +61,7 @@ curl -s -H "Authorization: Token $TOKEN" https://aishippinglabs.com/api/integrat
   | python3 -c "import sys,json;[print(f\"{e['key']:38} configured={e['configured']} source={e['source']}\") for e in json.load(sys.stdin)['settings']]"
 ```
 
-Set one or more values (example — CDN base + a content key):
+Set one or more values (example — CDN base):
 
 ```bash
 curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
@@ -66,24 +71,14 @@ curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/j
 
 To set secret values (tokens, URLs) without exposing them in your shell history or the command line, read them from a source file/env into the JSON body via a small `python3` heredoc rather than inlining the literal.
 
-### Events (`/api/events`)
-
-- `GET /api/events` — list. `GET /api/events/<slug>` — detail.
-- `POST /api/events` — create. `PATCH /api/events/<slug>` — update. See the spec for the field shape (title, dates, platform, gating level, status, etc.).
-
-### Event series (`/api/event-series`)
-
-- `GET/POST /api/event-series`, `GET/PATCH /api/event-series/<id>`.
-- `POST /api/event-series/<id>/occurrences/bulk` — bulk create/manage occurrences.
-
 ### Content sync (`/api/sync/sources`)
 
 - `GET /api/sync/sources` — list registered content sources (with UUIDs).
-- `POST /api/sync/sources/<uuid>/trigger` — kick off a sync for one source (same as the Studio "Force resync" button / the GitHub push webhook). Use this to make content/banner changes take effect in prod.
+- `POST /api/sync/sources/<uuid>/trigger` — kick off a sync for one source (same as the Studio "Force resync" button / the GitHub push webhook). Use this to make content/banner/workshop changes take effect in prod.
 
 ### Background task observability (`/api/worker/tasks`)
 
-Invaluable for debugging async work (content sync, banner renders, emails):
+Invaluable for debugging async work (content sync, banner renders, emails, Zoom meeting creation):
 
 - `GET /api/worker/tasks` — recent tasks with `name`, `success`, `result`, timing.
 - `GET /api/worker/tasks/failed` — failed tasks only.
@@ -91,9 +86,16 @@ Invaluable for debugging async work (content sync, banner renders, emails):
 
 Caveat: a task that catches its own error and returns `None` shows `success=True` with `result=None` — it will NOT appear in `failed`. Inspect `result` to spot silently-swallowed failures (this is exactly how a timed-out banner render hides).
 
-### Other surfaces (see the spec for shapes)
+## Other surfaces (see the spec for shapes)
 
-Users (`/api/users`, tags, aliases, merge, mark-bounced), sprints + plans + weeks + checkpoints (`/api/sprints/...`, `/api/plans/...`), enrollments + certificates (`/api/sprints/<slug>/enrollments`, `/api/courses/<slug>/...`), contacts import/export (`/api/contacts/...`), URL redirects (`/api/redirects`), tier overrides (`/api/tier-overrides`), onboarding read API (`/api/onboarding/...`), SES events (`/api/ses-events`).
+These are not covered by a specialized skill; read the OpenAPI spec for exact request/response shapes before writing:
+
+- Sprints + plans + weeks + checkpoints (`/api/sprints/...`, `/api/plans/...`).
+- Enrollments + certificates (`/api/sprints/<slug>/enrollments`, `/api/courses/<slug>/...`).
+- URL redirects (`/api/redirects`).
+- Tier overrides (`/api/tier-overrides`).
+- Onboarding read API (`/api/onboarding/...`).
+- SES events (`/api/ses-events`, `/api/users/<email>/ses-events`).
 
 ## Notes
 

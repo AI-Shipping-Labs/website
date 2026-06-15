@@ -197,9 +197,11 @@ class SprintDetailDateRangeTest(TestCase):
         self.assertContains(response, 'June 17 – July 29, 2026 (6 weeks)')
         # The old "Starts <date> · N weeks" wording is gone.
         self.assertNotContains(response, 'Starts June 17, 2026')
-        # The status badge is untouched by this feature.
+        # The date-derived badge (#979) is untouched by the date-range
+        # feature -- its pill element is still rendered. (Its label is
+        # date-derived, not the stored status, and is covered by the
+        # sprint_badge model tests, so we do not assert the label here.)
         self.assertContains(response, 'data-testid="sprint-status-badge"')
-        self.assertContains(response, sprint.get_status_display())
 
     def test_cross_year_range_shows_both_years(self):
         sprint = Sprint.objects.create(

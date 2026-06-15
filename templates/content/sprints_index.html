@@ -31,8 +31,8 @@
             <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                  <span class="inline-flex items-center rounded-full border border-border px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="sprints-sprint-status">
-                    {{ item.sprint.get_status_display }}
+                  <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium uppercase tracking-wide {{ item.sprint.sprint_badge_current.css_class }}" data-testid="sprints-sprint-status">
+                    {{ item.sprint.sprint_badge_current.label }}
                   </span>
                   <span class="inline-flex items-center rounded-full bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent" data-testid="sprints-sprint-tier">
                     Membership: {{ item.required_tier_name }}

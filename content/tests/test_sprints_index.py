@@ -20,10 +20,14 @@ class SprintsIndexTest(TestCase):
         self.assertContains(response, 'data-testid="sprints-index-page"')
 
     def test_active_sprints_render_for_anonymous_users(self):
+        # Dates relative to today so the date-derived badge (#979) reads
+        # Active regardless of the calendar date the suite runs on: started
+        # two weeks ago, runs four weeks (ends in ~two weeks).
+        today = datetime.date.today()
         sprint = Sprint.objects.create(
             name='May Shipping Sprint',
             slug='may-shipping-sprint',
-            start_date=datetime.date(2026, 5, 15),
+            start_date=today - datetime.timedelta(days=14),
             duration_weeks=4,
             status='active',
             min_tier_level=20,
@@ -34,7 +38,7 @@ class SprintsIndexTest(TestCase):
         self.assertContains(response, 'data-testid="sprints-sprint-card"')
         self.assertContains(response, sprint.name)
         self.assertContains(response, 'Active')
-        self.assertContains(response, 'May 15 – June 12, 2026 (4 weeks)')
+        self.assertContains(response, '(4 weeks)')
         self.assertContains(response, 'Membership: Main')
         self.assertContains(response, 'Log in to join')
         self.assertContains(

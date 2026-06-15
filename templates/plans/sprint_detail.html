@@ -19,8 +19,8 @@
         <h1 class="text-3xl font-semibold tracking-tight mt-1" data-testid="sprint-detail-name">{{ sprint.name }}</h1>
         <p class="text-sm text-muted-foreground mt-2">
           <span data-testid="sprint-date-range">{% sprint_date_range sprint %}</span>
-          <span class="ml-2 inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs uppercase tracking-wide text-muted-foreground" data-testid="sprint-status-badge">
-            {{ sprint.get_status_display }}
+          <span class="ml-2 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium uppercase tracking-wide {{ sprint.sprint_badge_current.css_class }}" data-testid="sprint-status-badge">
+            {{ sprint.sprint_badge_current.label }}
           </span>
         </p>
         <p class="mt-3">

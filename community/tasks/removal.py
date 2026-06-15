@@ -15,6 +15,7 @@ import logging
 
 from accounts.models import User
 from community.services import get_community_service
+from content.access import get_user_level
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +41,19 @@ def scheduled_community_removal(user_id):
         )
         return
 
-    # Check if user re-subscribed (tier level is back to community level)
-    if user.tier and user.tier.level >= COMMUNITY_TIER_LEVEL:
+    # Check if the user still qualifies for community access by their
+    # EFFECTIVE tier level. ``get_user_level`` returns
+    # ``max(base_level, active non-expired override level)`` (and staff /
+    # superuser get LEVEL_PREMIUM), matching the membership-reconcile
+    # predicate (``slack_membership.main_plus_q``) and the email Main+
+    # audience. An active, non-expired Main+ TierOverride therefore keeps
+    # the member; an EXPIRED or deactivated override does not raise the
+    # effective level, so those users are still removed.
+    if get_user_level(user) >= COMMUNITY_TIER_LEVEL:
         logger.info(
-            "Scheduled removal: user %s re-subscribed (tier=%s), skipping removal",
-            user.email, user.tier.slug,
+            "Scheduled removal: user %s still qualifies for community "
+            "access (effective level >= %s), skipping removal",
+            user.email, COMMUNITY_TIER_LEVEL,
         )
         return
 

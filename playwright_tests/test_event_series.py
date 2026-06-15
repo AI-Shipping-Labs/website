@@ -163,11 +163,13 @@ class TestScenario2StudioEditable:
         assert "indoors" in target.description
         assert target.start_datetime.hour == 19
 
-        # Studio events list: origin badge is `studio`.
+        # Studio events list: studio-origin rows have no GitHub marker.
         page.goto(f"{django_server}/studio/events/", wait_until="domcontentloaded")
-        assert page.locator(
-            f'tr:has(a[href="/studio/events/{target.pk}/edit"]) [data-testid="origin-badge"][data-origin="studio"]'
-        ).first.is_visible()
+        row = page.locator(
+            f'tr:has(a[href="/studio/events/{target.pk}/edit"])'
+        ).first
+        assert row.is_visible()
+        assert row.locator('[data-testid="origin-github-icon"]').count() == 0
 
         # The other 5 sessions still have their original titles.
         for other in events:
@@ -223,10 +225,10 @@ class TestScenario3GitHubLocked:
         # Capacity removed (#984): no Max Participants input exists.
         assert page.locator('input[name="max_participants"]').count() == 0
 
-        # Origin badge on the list.
+        # GitHub marker on the list.
         page.goto(f"{django_server}/studio/events/", wait_until="domcontentloaded")
         assert page.locator(
-            f'tr:has(a[href="/studio/events/{gh.pk}/edit"]) [data-testid="origin-badge"][data-origin="github"]'
+            f'tr:has(a[href="/studio/events/{gh.pk}/edit"]) [data-testid="origin-github-icon"]'
         ).first.is_visible()
 
         ctx.close()

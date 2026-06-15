@@ -113,6 +113,7 @@ from studio.views.events import (
     event_create_zoom,
     event_edit,
     event_list,
+    event_list_past,
     event_registrations_csv,
     event_send_followup,
 )
@@ -380,6 +381,7 @@ urlpatterns = [
     # Events. The literal ``new`` route is registered before the
     # ``<int:event_id>`` routes so the slug is not swallowed (issue #574).
     path('events/', event_list, name='studio_event_list'),
+    path('events/past/', event_list_past, name='studio_event_list_past'),
     path('events/new', event_create, name='studio_event_new'),
     # Duplicate-event merge tool (issue #881). Literal segments, registered
     # before the ``<int:event_id>`` routes (non-int so never swallowed).

@@ -6,10 +6,25 @@
 {% block studio_content %}
 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
   <div>
-    <h1 class="text-2xl font-semibold text-foreground">Events</h1>
-    <p class="text-muted-foreground mt-1 hidden md:block">Manage event lifecycle and platform.</p>
+    <h1 class="text-2xl font-semibold text-foreground">{% if is_past_view %}Past events{% else %}Events{% endif %}</h1>
+    <p class="text-muted-foreground mt-1 hidden md:block">{% if is_past_view %}Browse finished and cancelled events.{% else %}Manage upcoming event lifecycle and platform.{% endif %}</p>
   </div>
   <div class="flex items-center gap-2">
+    {% if is_past_view %}
+    <a href="{% url 'studio_event_list' %}"
+       class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+       data-testid="event-upcoming-link">
+      <i data-lucide="calendar" class="h-4 w-4"></i>
+      <span>Upcoming events</span>
+    </a>
+    {% else %}
+    <a href="{% url 'studio_event_list_past' %}"
+       class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+       data-testid="event-past-link">
+      <i data-lucide="history" class="h-4 w-4"></i>
+      <span>Past events{% if past_count %} ({{ past_count }}){% endif %}</span>
+    </a>
+    {% endif %}
     <a href="{% url 'studio_event_duplicates' %}"
        class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
        data-testid="event-duplicates-button">
@@ -33,23 +48,40 @@
 
 {% studio_list_filter search status_filter "Search events..." "event" %}
 
-{% if has_events %}
-  {% comment %}
-    Issue #820: the list is split into an Upcoming section (soonest
-    first) and a Past section (most recent first). Each row carries a
-    single derived status label so the Status cell renders exactly one
-    badge — no overlapping stored-status + time chip.
-  {% endcomment %}
+{% if is_past_view %}
+  {% if has_events %}
+  <section class="mb-10" data-testid="event-section-past">
+    <h2 class="text-lg font-semibold text-foreground mb-3" data-testid="event-section-heading-past">Past ({{ past_count }})</h2>
+    {% include "studio/events/_list_table.html" with events=past_events %}
+    {% if show_pager %}
+      {% include "studio/events/_past_pager.html" %}
+    {% endif %}
+  </section>
+  {% elif search or status_filter %}
+  {% url 'studio_event_list_past' as events_clear_url %}
+  <div class="{% studio_list_class 'wrapper' %}">
+    <table class="{% studio_list_class 'table' %}">
+      <tbody class="{% studio_list_class 'tbody' %}">
+        {% studio_empty_state 'filter' entity_label='past event' entity_label_plural='past events' clear_url=events_clear_url colspan=6 testid_suffix='past-events' %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="bg-card border border-border rounded-lg p-12 text-center" data-testid="event-empty-state-past">
+    <i data-lucide="history" class="mx-auto h-10 w-10 text-muted-foreground/60"></i>
+    <p class="mt-4 text-sm text-muted-foreground">No past events yet.</p>
+    <a href="{% url 'studio_event_list' %}"
+       class="mt-4 inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors">
+      <i data-lucide="calendar" class="h-4 w-4"></i>
+      <span>Upcoming events</span>
+    </a>
+  </div>
+  {% endif %}
+{% elif has_events %}
   {% if upcoming_events %}
   <section class="mb-10" data-testid="event-section-upcoming">
     <h2 class="text-lg font-semibold text-foreground mb-3" data-testid="event-section-heading-upcoming">Upcoming ({{ upcoming_count }})</h2>
     {% include "studio/events/_list_table.html" with events=upcoming_events %}
-  </section>
-  {% endif %}
-  {% if past_events %}
-  <section class="mb-10" data-testid="event-section-past">
-    <h2 class="text-lg font-semibold text-foreground mb-3" data-testid="event-section-heading-past">Past ({{ past_count }})</h2>
-    {% include "studio/events/_list_table.html" with events=past_events %}
   </section>
   {% endif %}
 {% elif search or status_filter %}
@@ -57,12 +89,27 @@
   <div class="{% studio_list_class 'wrapper' %}">
     <table class="{% studio_list_class 'table' %}">
       <tbody class="{% studio_list_class 'tbody' %}">
-        {% studio_empty_state 'filter' entity_label='event' entity_label_plural='events' clear_url=events_clear_url colspan=8 %}
+        {% studio_empty_state 'filter' entity_label='upcoming event' entity_label_plural='upcoming events' clear_url=events_clear_url colspan=6 testid_suffix='upcoming-events' %}
       </tbody>
     </table>
   </div>
 {% else %}
   {% url 'studio_event_new' as events_create_url %}
-  {% studio_empty_state 'fresh' entity_label='event' entity_label_plural='events' create_url=events_create_url %}
+  <div class="bg-card border border-border rounded-lg p-12 text-center" data-testid="event-empty-state-upcoming">
+    <i data-lucide="calendar" class="mx-auto h-10 w-10 text-muted-foreground/60"></i>
+    <p class="mt-4 text-sm text-muted-foreground">No upcoming events.</p>
+    <div class="mt-4 flex flex-col sm:flex-row items-center justify-center gap-2">
+      <a href="{{ events_create_url }}"
+         class="inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        <i data-lucide="plus" class="h-4 w-4"></i>
+        <span>New event</span>
+      </a>
+      <a href="{% url 'studio_event_list_past' %}"
+         class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors">
+        <i data-lucide="history" class="h-4 w-4"></i>
+        <span>Past events{% if past_count %} ({{ past_count }}){% endif %}</span>
+      </a>
+    </div>
+  </div>
 {% endif %}
 {% endblock %}

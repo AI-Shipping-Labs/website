@@ -315,12 +315,12 @@ def test_events_list_shows_four_plus_rows_at_pixel_7(django_server, browser):
         assert h < 220, f"Event row height {h}px exceeds 220px target"
 
     first_row = page.locator("tbody tr").first
-    # Each fact (Status / Kind·Platform / Date) owns its own
+    # Each fact (Kind / Platform / Date) owns its own
     # full-width grid row so labels and values can never collide with
     # neighbouring columns. Verify that by checking each non-title cell
     # spans the full grid width (grid-column-end == "-1" or the cell is
     # blockified onto a single row by the column rule).
-    for label in ["Status", "Kind / Platform", "Date"]:
+    for label in ["Kind", "Platform", "Date"]:
         cell = first_row.locator(f'[data-label="{label}"]').first
         # The column rule sets ``grid-column: 1 / -1`` on every non-title
         # cell. The browser blockifies inline-flex items in a grid to

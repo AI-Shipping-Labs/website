@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib import messages
+from django.core.paginator import Paginator
 from django.db.models import Avg
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -18,6 +19,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.services.timezones import (
     build_timezone_options,
+    format_user_datetime,
     get_timezone_label,
     is_valid_timezone,
 )
@@ -39,6 +41,18 @@ from studio.views.form_helpers import parse_comma_separated_tags
 logger = logging.getLogger(__name__)
 
 _VALID_EXTERNAL_HOSTS = {value for value, _ in EXTERNAL_HOST_CHOICES}
+EVENT_LIST_PAST_PAGE_SIZE = 25
+
+EVENT_KIND_ICON_MAP = {
+    'standard': 'calendar',
+    'workshop': 'wrench',
+    'meetup': 'users',
+    'q_and_a': 'message-circle-question',
+}
+EVENT_PLATFORM_ICON_MAP = {
+    'zoom': 'video',
+    'custom': 'link',
+}
 
 
 def annotate_derived_status(event, now=None):
@@ -221,6 +235,122 @@ def _render_in_tz(dt, tz_name):
     return aware.astimezone(zone)
 
 
+def event_kind_icon(kind):
+    """Return the Lucide icon name for a Studio event kind."""
+    return EVENT_KIND_ICON_MAP.get(kind, 'calendar')
+
+
+def event_platform_icon(platform):
+    """Return the Lucide icon name for a Studio event platform."""
+    return EVENT_PLATFORM_ICON_MAP.get(platform, 'link')
+
+
+def _decorate_event_list_row(event, user, now=None):
+    """Attach list-only presentation metadata to an Event instance."""
+    annotate_derived_status(event, now=now)
+    event.kind_icon = event_kind_icon(event.kind)
+    event.kind_label = event.get_kind_display()
+    event.platform_icon = event_platform_icon(event.platform)
+    event.platform_label = event.get_platform_display()
+    event.start_datetime_display = format_user_datetime(
+        event.start_datetime,
+        user,
+        fmt='%b %d, %Y, %H:%M',
+    )
+    return event
+
+
+def _filtered_events_queryset(request):
+    """Return the base Studio events queryset after search/status filters."""
+    status_filter = request.GET.get('status', '')
+    search = request.GET.get('q', '')
+
+    events = Event.objects.select_related('event_series').all()
+    if status_filter:
+        events = events.filter(status=status_filter)
+    if search:
+        events = events.filter(title__icontains=search)
+    return events, status_filter, search
+
+
+def _split_events_for_studio(events, user):
+    """Partition filtered events into Upcoming and Past groups."""
+    now = djtimezone.now()
+    one_hour = timedelta(hours=1)
+    upcoming_events = []
+    past_events = []
+    for event in events:
+        effective_end = event.end_datetime or (
+            event.start_datetime + one_hour
+        )
+        is_future = now < effective_end
+
+        _decorate_event_list_row(event, user, now=now)
+
+        # Grouping: cancelled always sits in Past (consistent with
+        # ``is_past``); everything else groups by the time comparison so
+        # draft rows still land in a logical section.
+        if event.status == 'cancelled':
+            past_events.append(event)
+        elif is_future:
+            upcoming_events.append(event)
+        else:
+            past_events.append(event)
+
+    upcoming_events.sort(key=lambda e: e.start_datetime)
+    past_events.sort(key=lambda e: e.start_datetime, reverse=True)
+    return upcoming_events, past_events
+
+
+def _coerce_page_number(raw, num_pages):
+    """Clamp the ``?page=`` query param into ``[1, num_pages]``."""
+    try:
+        page_num = int(raw)
+    except (TypeError, ValueError):
+        return 1
+    if page_num < 1:
+        return 1
+    if page_num > num_pages:
+        return num_pages
+    return page_num
+
+
+def _pager_querystring(request, page_number):
+    """Build a pager querystring while preserving active filters."""
+    params = request.GET.copy()
+    params['page'] = str(page_number)
+    return '?' + params.urlencode()
+
+
+def _event_pager_context(request, page, paginator):
+    """Build template context for the past-events pager partial."""
+    if page.has_previous():
+        first_url = _pager_querystring(request, 1)
+        prev_url = _pager_querystring(request, page.previous_page_number())
+    else:
+        first_url = None
+        prev_url = None
+    if page.has_next():
+        next_url = _pager_querystring(request, page.next_page_number())
+        last_url = _pager_querystring(request, paginator.num_pages)
+    else:
+        next_url = None
+        last_url = None
+
+    return {
+        'page': page,
+        'paginator': paginator,
+        'show_pager': paginator.num_pages > 1,
+        'pager_first_url': first_url,
+        'pager_prev_url': prev_url,
+        'pager_next_url': next_url,
+        'pager_last_url': last_url,
+        'page_start_index': page.start_index(),
+        'page_end_index': page.end_index(),
+        'filtered_total': paginator.count,
+    }
+
+
 def _maybe_notify_reschedule(request, event, old_start):
     """Issue #670: enqueue rescheduling notices after a date-changing save.
 
@@ -316,57 +446,55 @@ def _maybe_notify_series_cancellation(event, old_status):
 
 @staff_required
 def event_list(request):
-    """List all events split into Upcoming and Past sections (#820).
+    """List upcoming Studio events only.
 
-    The stored-status dropdown (``draft`` / ``upcoming`` / ``completed``
-    / ``cancelled``) and the title search still narrow the rows. After
-    filtering, matched events are partitioned into an Upcoming group
-    (sorted soonest-first) and a Past group (sorted most-recent-first),
-    each row carrying a single derived status label/style so the
-    template renders exactly one badge per row.
+    Search and stored-status filters still apply. Past events live behind
+    the dedicated paginated ``event_list_past`` view so the default page
+    stays focused on actionable upcoming rows.
     """
-    status_filter = request.GET.get('status', '')
-    search = request.GET.get('q', '')
-
-    events = Event.objects.all()
-    if status_filter:
-        events = events.filter(status=status_filter)
-    if search:
-        events = events.filter(title__icontains=search)
-
-    now = djtimezone.now()
-    one_hour = timedelta(hours=1)
-    upcoming_events = []
-    past_events = []
-    for event in events:
-        effective_end = event.end_datetime or (
-            event.start_datetime + one_hour
-        )
-        is_future = now < effective_end
-
-        annotate_derived_status(event, now=now)
-
-        # Grouping: cancelled always sits in Past (consistent with
-        # ``is_past``); everything else groups by the time comparison so
-        # draft rows still land in a logical section.
-        if event.status == 'cancelled':
-            past_events.append(event)
-        elif is_future:
-            upcoming_events.append(event)
-        else:
-            past_events.append(event)
-
-    upcoming_events.sort(key=lambda e: e.start_datetime)
-    past_events.sort(key=lambda e: e.start_datetime, reverse=True)
+    events, status_filter, search = _filtered_events_queryset(request)
+    upcoming_events, past_events = _split_events_for_studio(
+        events,
+        request.user,
+    )
 
     return render(request, 'studio/events/list.html', {
         'upcoming_events': upcoming_events,
-        'past_events': past_events,
         'upcoming_count': len(upcoming_events),
         'past_count': len(past_events),
-        'has_events': bool(upcoming_events or past_events),
+        'has_events': bool(upcoming_events),
+        'has_any_events': Event.objects.exists(),
         'status_filter': status_filter,
         'search': search,
+        'is_past_view': False,
+    })
+
+
+@staff_required
+def event_list_past(request):
+    """List past Studio events with search/status filters and pagination."""
+    events, status_filter, search = _filtered_events_queryset(request)
+    _upcoming_events, past_events = _split_events_for_studio(
+        events,
+        request.user,
+    )
+    paginator = Paginator(past_events, EVENT_LIST_PAST_PAGE_SIZE)
+    page_number = _coerce_page_number(
+        request.GET.get('page'),
+        paginator.num_pages or 1,
+    )
+    page = paginator.page(page_number)
+    pager_context = _event_pager_context(request, page, paginator)
+
+    return render(request, 'studio/events/list.html', {
+        'past_events': page.object_list,
+        'past_count': paginator.count,
+        'has_events': bool(page.object_list),
+        'has_any_events': Event.objects.exists(),
+        'status_filter': status_filter,
+        'search': search,
+        'is_past_view': True,
+        **pager_context,
     })
 
 

@@ -22,9 +22,8 @@ class StudioListComponentTemplateTest(TestCase):
         'templates/studio/articles/list.html',
         'templates/studio/courses/list.html',
         'templates/studio/workshops/list.html',
-        # Issue #820: the events list owns the search filter shell but
-        # delegates each Upcoming / Past section's table to a shared
-        # partial, so the table/badge/action helpers live there.
+        # The events list owns the search filter shell but delegates both
+        # Upcoming and Past tables to a shared icon-based partial.
         ('templates/studio/events/list.html',
          'templates/studio/events/_list_table.html'),
     ]
@@ -72,11 +71,17 @@ class StudioListComponentTemplateTest(TestCase):
         self.assertIn('border-blue-500/40', studio_action_class('async'))
 
     def test_target_lists_use_shared_badges_and_actions(self):
-        for path in self.template_paths:
+        for path in self.template_paths[:3]:
             with self.subTest(path=path):
                 source = self._template_source(path)
                 self.assertIn('studio_status_badge', source)
                 self.assertIn('studio_list_action', source)
+
+        event_source = self._template_source(self.template_paths[3])
+        self.assertNotIn('studio_status_badge', event_source)
+        self.assertIn('studio_list_action', event_source)
+        self.assertIn('data-testid="event-kind-icon"', event_source)
+        self.assertIn('data-testid="event-platform-icon"', event_source)
 
         for path in self.template_paths[1:3]:
             with self.subTest(path=path):
@@ -178,20 +183,18 @@ class StudioListComponentRenderTest(TestCase):
             html=True,
         )
         self.assertContains(response, 'Shared Event')
-        self.assertContains(response, 'Kind / Platform')
-        self.assertContains(response, 'Workshop')
-        self.assertContains(response, 'Custom URL')
+        self.assertContains(response, '>Kind</th>')
+        self.assertContains(response, '>Platform</th>')
+        self.assertContains(response, 'data-testid="event-kind-icon"')
+        self.assertContains(response, 'aria-label="Workshop"')
+        self.assertContains(response, 'data-testid="event-platform-icon"')
+        self.assertContains(response, 'aria-label="Custom URL"')
 
     def test_shared_status_badges_keep_publication_and_event_colors(self):
         article_response = self.client.get('/studio/articles/')
         self.assertContains(article_response, 'data-component="studio-status-badge"')
         self.assertContains(article_response, 'bg-green-500/20 text-green-400')
         self.assertContains(article_response, 'Published')
-
-        event_response = self.client.get('/studio/events/')
-        self.assertContains(event_response, 'data-component="studio-status-badge"')
-        self.assertContains(event_response, 'bg-blue-500/20 text-blue-400')
-        self.assertContains(event_response, 'Upcoming')
 
     def test_shared_origin_badge_and_actions_preserve_list_links(self):
         response = self.client.get('/studio/courses/')
@@ -212,6 +215,16 @@ class StudioListComponentRenderTest(TestCase):
         self.assertContains(response, 'border-accent bg-accent')
         self.assertContains(response, 'border-border bg-secondary')
         self.assertContains(response, 'whitespace-nowrap')
+
+    def test_event_list_uses_compact_icons_and_actions(self):
+        response = self.client.get('/studio/events/')
+        self.assertContains(response, 'data-testid="origin-github-icon"')
+        self.assertContains(response, 'aria-label="Synced from GitHub"')
+        self.assertNotContains(response, 'data-testid="origin-badge"')
+        self.assertNotContains(response, 'data-label="Status"')
+        self.assertContains(response, 'data-label="Actions"')
+        self.assertContains(response, 'studio-actions-cell')
+        self.assertContains(response, 'studio-action-group')
 
     def test_compact_lists_render_shared_origin_badges(self):
         paths = [

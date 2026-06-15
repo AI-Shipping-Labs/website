@@ -223,7 +223,7 @@ def test_studio_core_lists_are_usable_at_phone_width(django_server, browser):
 
     page.goto(f"{django_server}/studio/events/", wait_until="domcontentloaded")
     _assert_visible_text_and_action(
-        page, "tbody tr", "Mobile Event Row", "Upcoming", "Edit"
+        page, "tbody tr", "Mobile Event Row", "UTC", "Edit"
     )
     _assert_no_horizontal_overflow(page)
     _capture_mobile_screenshot(page, "events")

@@ -198,6 +198,13 @@ def handle_checkout_completed(session_data):
         "checkout.session.completed: user=%s tier=%s", user.email, tier.slug,
     )
 
+    # Issue #970 (R1): a new non-free base tier can make an existing
+    # TierOverride redundant. Mirror ``backfill_tiers._active_matching_override``
+    # — deactivate the active, unexpired override whose ``override_tier``
+    # equals the resolved base tier. An override granting a HIGHER tier
+    # survives (Option A: effective = max(base, override)).
+    _retire_redundant_override(user, tier)
+
     # Issue #969: a completed checkout is the canonical "active on tier" signal.
     # Reconcile the stripe:* status tags so a re-subscribing user sheds a stale
     # ``stripe:churned`` tag, gains ``stripe:active``, and carries exactly the
@@ -594,7 +601,12 @@ def handle_subscription_updated(subscription_data):
         )
         return
 
-    # Update billing_period_end
+    # Update billing_period_end.
+    # Issue #970 (R3): a live ``current_period_end`` sets the field; when the
+    # payload carries none we must not LEAVE a stale prior value if the
+    # resulting state has no active paid subscription. The free-tier /
+    # no-period-end clear happens below once the resulting base tier is known
+    # (a cancel_at_period_end update keeps a paid tier and a period end).
     current_period_end = subscription_data.get("current_period_end")
     if current_period_end:
         user.billing_period_end = datetime.fromtimestamp(
@@ -633,17 +645,26 @@ def handle_subscription_updated(subscription_data):
 
     # Look up the new tier from price_id
     old_tier_level = user.tier.level if user.tier else 0
+    tier_changed_to = None
     if price_id:
         new_tier = _services._tier_for_price_id(price_id)
         if new_tier and new_tier != user.tier:
             # Check if this is an active subscription update
             if status == "active":
                 user.tier = new_tier
+                tier_changed_to = new_tier
                 _services.logger.info(
                     "customer.subscription.updated: user=%s new_tier=%s",
                     user.email,
                     new_tier.slug,
                 )
+
+    # Issue #970 (R3): if the resulting base tier is free and the payload
+    # carried no live ``current_period_end``, do not retain a stale prior
+    # billing date — the user has no active paid subscription cycle.
+    resulting_free = user.tier is None or user.tier.level == 0
+    if resulting_free and not current_period_end:
+        user.billing_period_end = None
 
     user.subscription_id = subscription_id
     user.save(
@@ -654,6 +675,13 @@ def handle_subscription_updated(subscription_data):
             "pending_tier",
         ]
     )
+
+    # Issue #970 (R1): when an active update moves the base tier UP to (or
+    # above) an existing override, the override is now redundant — retire the
+    # one whose ``override_tier`` matches the new base tier. A higher override
+    # survives (Option A).
+    if tier_changed_to is not None and tier_changed_to.level > 0:
+        _retire_redundant_override(user, tier_changed_to)
 
     # Issue #969: an active subscription update is still "active on tier",
     # so resync the stripe:* status tags — the ``stripe:plan-*`` tag follows
@@ -805,8 +833,11 @@ def handle_subscription_deleted(subscription_data):
         )
         return
 
-    # Check if user had community access before downgrade
-    had_community = user.tier and user.tier.level >= 20
+    # Whether the user held community access on their BASE paid tier before
+    # the revert. Combined below with the surviving-override check so we only
+    # call ``_community_remove`` for users who actually had access AND whose
+    # EFFECTIVE level now drops below Main (issue #970, R2).
+    had_community = bool(user.tier and user.tier.level >= 20)
 
     free_tier = Tier.objects.filter(slug="free").first()
     user.tier = free_tier
@@ -827,10 +858,20 @@ def handle_subscription_deleted(subscription_data):
 
     # Issue #969: the subscription is gone — mark the user churned. Remove
     # ``stripe:active`` and every ``stripe:plan-*`` tag, add ``stripe:churned``.
+    # This tracks the Stripe subscription, NOT the override — the tags churn
+    # even when an admin-granted override survives (issue #970, R2).
     reconcile_stripe_status_tags(user, active=False, tier=None)
 
-    # Community integration: remove if they had community access
-    if had_community:
+    # Issue #970 (R2): community access follows the EFFECTIVE tier, not just
+    # the base. A paid subscription ending does NOT revoke an admin-granted
+    # courtesy override, so the override is left active. Compute the effective
+    # level via the shared override-aware resolver and only remove the user
+    # from the community when the effective level is below Main — if a still
+    # active, unexpired Main+ override keeps them at level >= 20, they keep
+    # community/Slack access.
+    from content.access import LEVEL_MAIN, get_user_level
+
+    if had_community and get_user_level(user) < LEVEL_MAIN:
         _services._community_remove(user)
 
 
@@ -904,6 +945,50 @@ def handle_invoice_payment_failed(invoice_data):
     _services.logger.info(
         "invoice.payment_failed: notified user=%s (tier NOT revoked)",
         user.email,
+    )
+
+
+def _retire_redundant_override(user, tier):
+    """Deactivate a ``TierOverride`` made redundant by a new base ``tier``.
+
+    Issue #970 (R1, Option A: effective tier = max(base, override)). When a
+    Stripe webhook grants the user a new non-free base ``tier``, an active,
+    unexpired override whose ``override_tier`` EQUALS that tier no longer
+    grants anything extra — it is retired. An override granting a HIGHER tier
+    survives (it still grants more access).
+
+    The match semantics mirror ``backfill_tiers._active_matching_override``
+    (``override_tier == tier``, ``is_active=True``, ``expires_at > now``) so
+    the webhook and reconcile paths make identical override decisions. The
+    deactivation goes through ``override.save(update_fields=["is_active"])``
+    — the same per-row write the backfill and admin paths use — rather than a
+    bulk update, so any model-level save behaviour stays consistent.
+    """
+    from django.utils import timezone as _timezone
+
+    from accounts.models import TierOverride
+
+    override = (
+        TierOverride.objects
+        .filter(
+            user_id=user.pk,
+            override_tier=tier,
+            is_active=True,
+            expires_at__gt=_timezone.now(),
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if override is None:
+        return
+    override.is_active = False
+    override.save(update_fields=["is_active"])
+    _services.logger.info(
+        "webhook: retired redundant override id=%s for user=%s "
+        "(base tier=%s now grants >= override)",
+        override.pk,
+        user.email,
+        tier.slug,
     )
 
 

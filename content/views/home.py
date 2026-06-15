@@ -297,15 +297,19 @@ def _dashboard(request):
         }]
 
     # --- Slack community ---
-    # Slack join link is based on user.tier.level (NOT overridden level)
-    # because Slack access requires a paid subscription.
+    # Issue #971: the Join Slack card uses the effective (override-aware)
+    # level via get_user_level — an active TierOverride grants community
+    # access. Same predicate as the join redirect (community/views.py) and
+    # the membership-sync job (slack_membership.main_plus_q).
     from content.access import LEVEL_MAIN
     # Issue #953: the dashboard CTA links to the gated /community/slack
     # redirect, not the raw invite URL. The card is still only shown when
     # an invite URL is actually configured (nothing to redirect to else).
     slack_invite_configured = bool(get_config('SLACK_INVITE_URL', ''))
     slack_join_url = reverse('community_slack_join')
-    has_qualifying_tier = user.tier_id and user.tier.level >= LEVEL_MAIN
+    # Reuse the effective level computed above (which already passed the
+    # once-fetched active_override) so the card adds no extra DB query.
+    has_qualifying_tier = user_level >= LEVEL_MAIN
     # Issue #358: gate on the verified ``slack_member`` boolean rather
     # than ``slack_user_id`` (which is populated by Slack OAuth even
     # for users who never joined the workspace).

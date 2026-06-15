@@ -53,10 +53,15 @@ Required on create: `title`, `start_datetime`.
 | `status` | string | `draft` / `upcoming` / `completed` / `cancelled`. |
 | `published` | boolean | Publish flag. Setting it true stamps `published_at`. |
 | `external_host` | string | Partner host pill: `''` (community), `Maven`, `Luma`, `DataTalksClub`. |
+| `host_email` | string | Optional. Email that receives the host calendar invite with host-only management links. Blank falls back to the operator default mailbox (`EVENTS_HOST_INVITE_EMAIL`); when both are unset no invite is sent. |
 | `tags` | array of strings | Free-form, e.g. `["sprint:may-2026"]`. |
 | `create_zoom` | boolean | Write-only. When `true` and `platform` is `zoom`, provisions a real Zoom meeting and populates `zoom_join_url` / `zoom_meeting_id`. Idempotent (no-op if a meeting already exists). Not returned in responses. |
 
 `draft` and `cancelled` are hidden from public visitors; `upcoming` and `completed` are public. To make an event visible you generally set `status: upcoming` and `published: true`.
+
+### Host calendar invite
+
+Creating (or publishing) a non-draft event via the API automatically sends the host a Luma-style calendar `.ics` invite with host-only management links. The invite goes to `host_email` if set, otherwise to the operator default mailbox `EVENTS_HOST_INVITE_EMAIL` (a Studio setting). When both are unset, no invite is sent and the save still succeeds. Drafts never send. The invite is sent once per event (EmailLog-guarded), so re-saving or a no-op PATCH never re-sends; a PATCH that flips a draft to `upcoming`, or adds a `host_email` to a not-yet-invited published event, triggers the one-time invite. Invite times render in the host's timezone.
 
 Note: an older example in the code uses `status: scheduled`, but that value is NOT in the model's status choices — use `upcoming`. Verify the live enum from the spec if unsure (`GET /api/openapi.json`, path `/api/events`).
 
@@ -76,6 +81,7 @@ curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/j
     "required_level": 0,
     "status": "upcoming",
     "published": true,
+    "host_email": "host@example.com",
     "tags": ["sprint:may-2026"]
   }'
 ```

@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from accounts.models import Token
@@ -180,6 +180,7 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "series_position",
                 "external_host",
                 "published",
+                "host_email",
                 "origin",
                 "source_repo",
                 "source_path",
@@ -587,6 +588,173 @@ class EventsCreateZoomTest(EventsApiTestBase):
         self.assertEqual(Event.objects.count(), before_count)
 
 
+# _send_raw_email is imported into the host_invite module, so patch it there.
+HOST_INVITE_SEND_PATH = "events.services.host_invite._send_raw_email"
+
+
+class EventsHostInviteTest(EventsApiTestBase):
+    """The host calendar invite wired into the API create/update (issue #993)."""
+
+    def _create_payload(self, **overrides):
+        payload = {
+            "title": "Host Invite Event",
+            "platform": "zoom",
+            "start_datetime": "2026-05-05T17:00:00+02:00",
+            "status": "upcoming",
+            "published": True,
+        }
+        payload.update(overrides)
+        return payload
+
+    def _host_logs(self, slug):
+        from email_app.models import EmailLog
+
+        return EmailLog.objects.filter(
+            event__slug=slug, email_type="event_host_invite"
+        )
+
+    @override_settings(EVENTS_HOST_INVITE_EMAIL="")
+    def test_create_with_host_email_sends_invite_to_that_host(self):
+        with patch(HOST_INVITE_SEND_PATH, return_value="ses-1") as mock_send:
+            response = self._post(self._create_payload(host_email="host@test.com"))
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["host_email"], "host@test.com")
+        self.assertEqual(mock_send.call_count, 1)
+        self.assertEqual(mock_send.call_args.kwargs["to_email"], "host@test.com")
+        self.assertEqual(self._host_logs(body["slug"]).count(), 1)
+
+    @override_settings(EVENTS_HOST_INVITE_EMAIL="fallback@test.com")
+    def test_create_without_host_email_falls_back_to_operator_default(self):
+        with patch(HOST_INVITE_SEND_PATH, return_value="ses-1") as mock_send:
+            response = self._post(self._create_payload())
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["host_email"], "")
+        self.assertEqual(mock_send.call_count, 1)
+        self.assertEqual(mock_send.call_args.kwargs["to_email"], "fallback@test.com")
+
+    @override_settings(EVENTS_HOST_INVITE_EMAIL="")
+    def test_create_with_no_host_and_no_fallback_sends_nothing_but_succeeds(self):
+        with patch(HOST_INVITE_SEND_PATH) as mock_send:
+            response = self._post(self._create_payload())
+
+        self.assertEqual(response.status_code, 201)
+        mock_send.assert_not_called()
+        self.assertEqual(self._host_logs(response.json()["slug"]).count(), 0)
+
+    @override_settings(EVENTS_HOST_INVITE_EMAIL="")
+    def test_create_draft_sends_no_host_invite(self):
+        with patch(HOST_INVITE_SEND_PATH) as mock_send:
+            response = self._post(
+                self._create_payload(
+                    status="draft", published=False, host_email="host@test.com"
+                )
+            )
+
+        self.assertEqual(response.status_code, 201)
+        mock_send.assert_not_called()
+        self.assertEqual(self._host_logs(response.json()["slug"]).count(), 0)
+
+    @override_settings(EVENTS_HOST_INVITE_EMAIL="")
+    def test_patch_publishing_a_draft_triggers_one_time_invite(self):
+        draft = Event.objects.create(
+            title="Draft To Publish",
+            slug="draft-to-publish",
+            start_datetime=self.start,
+            end_datetime=self.start + timedelta(hours=1),
+            status="draft",
+            origin="studio",
+            host_email="host@test.com",
+        )
+
+        with patch(HOST_INVITE_SEND_PATH, return_value="ses-1") as mock_send:
+            first = self._patch(draft.slug, {"status": "upcoming"})
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(mock_send.call_count, 1)
+        self.assertEqual(mock_send.call_args.kwargs["to_email"], "host@test.com")
+
+        with patch(HOST_INVITE_SEND_PATH) as mock_send_again:
+            second = self._patch(draft.slug, {"published": True})
+        self.assertEqual(second.status_code, 200)
+        mock_send_again.assert_not_called()
+        self.assertEqual(self._host_logs(draft.slug).count(), 1)
+
+    @override_settings(EVENTS_HOST_INVITE_EMAIL="")
+    def test_patch_adding_host_email_to_published_event_sends_invite(self):
+        published = Event.objects.create(
+            title="Published No Host",
+            slug="published-no-host",
+            start_datetime=self.start,
+            end_datetime=self.start + timedelta(hours=1),
+            status="upcoming",
+            published=True,
+            origin="studio",
+            host_email="",
+        )
+
+        with patch(HOST_INVITE_SEND_PATH, return_value="ses-1") as mock_send:
+            response = self._patch(
+                published.slug, {"host_email": "late-host@test.com"}
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["host_email"], "late-host@test.com")
+        self.assertEqual(mock_send.call_count, 1)
+        self.assertEqual(
+            mock_send.call_args.kwargs["to_email"], "late-host@test.com"
+        )
+
+    def test_invalid_host_email_is_rejected_and_nothing_created(self):
+        before_count = Event.objects.count()
+        with patch(HOST_INVITE_SEND_PATH) as mock_send:
+            response = self._post(
+                self._create_payload(host_email="not-an-email")
+            )
+
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("host_email", body["details"])
+        mock_send.assert_not_called()
+        self.assertEqual(Event.objects.count(), before_count)
+
+    @override_settings(EVENTS_HOST_INVITE_EMAIL="")
+    def test_empty_host_email_clears_field_without_error(self):
+        event = Event.objects.create(
+            title="Has Host",
+            slug="has-host",
+            start_datetime=self.start,
+            end_datetime=self.start + timedelta(hours=1),
+            status="upcoming",
+            published=True,
+            origin="studio",
+            host_email="old@test.com",
+        )
+
+        with patch(HOST_INVITE_SEND_PATH):
+            response = self._patch(event.slug, {"host_email": ""})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["host_email"], "")
+        event.refresh_from_db()
+        self.assertEqual(event.host_email, "")
+
+    @override_settings(EVENTS_HOST_INVITE_EMAIL="")
+    def test_host_email_is_serialized_on_list_and_detail(self):
+        with patch(HOST_INVITE_SEND_PATH, return_value="ses-1"):
+            created = self._post(self._create_payload(host_email="host@test.com"))
+        slug = created.json()["slug"]
+
+        detail = self.client.get(f"/api/events/{slug}", **self._auth()).json()
+        self.assertEqual(detail["host_email"], "host@test.com")
+
+        listing = self.client.get("/api/events", **self._auth()).json()
+        match = next(e for e in listing["events"] if e["slug"] == slug)
+        self.assertEqual(match["host_email"], "host@test.com")
+
+
 class EventsSkillDocSyncTest(TestCase):
     """Keep the events skill doc in sync with the create_zoom feature."""
 
@@ -606,3 +774,7 @@ class EventsSkillDocSyncTest(TestCase):
         self.assertIn("zoom_error", text)
         # The stale "no fully-automatic per-event Zoom creation" wording is gone.
         self.assertNotIn("no fully-automatic per-event Zoom creation", text)
+        # host_email field and the automatic host invite are documented (#993).
+        self.assertIn("| `host_email` |", text)
+        self.assertIn("EVENTS_HOST_INVITE_EMAIL", text)
+        self.assertIn("Host calendar invite", text)

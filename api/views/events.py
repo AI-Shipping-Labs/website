@@ -11,6 +11,7 @@ import logging
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.utils import timezone
@@ -31,6 +32,7 @@ from events.models.event import (
     EVENT_STATUS_CHOICES,
     EXTERNAL_HOST_CHOICES,
 )
+from events.services.host_invite import maybe_send_initial_host_invite
 from integrations.services.zoom import ZoomAPIError, create_meeting
 from studio.utils import is_synced
 
@@ -66,6 +68,7 @@ WRITABLE_FIELDS = {
     "status",
     "external_host",
     "published",
+    "host_email",
 }
 
 VALID_KINDS = {value for value, _label in EVENT_KIND_CHOICES}
@@ -96,6 +99,7 @@ _EVENT_EXAMPLE = {
     "status": "scheduled",
     "external_host": "",
     "published": True,
+    "host_email": "host@example.com",
     "origin": "studio",
     "source_repo": "",
     "source_path": "",
@@ -130,6 +134,7 @@ def serialize_event(event):
         "series_position": event.series_position,
         "external_host": event.external_host,
         "published": event.published,
+        "host_email": event.host_email,
         "origin": event.origin,
         "source_repo": event.source_repo or "",
         "source_path": event.source_path or "",
@@ -214,6 +219,15 @@ def _collect_event_values(data, *, existing=None):
     for field in ("description", "timezone", "zoom_join_url", "location"):
         if field in data:
             values[field] = _coerce_optional_text(data[field])
+
+    if "host_email" in data:
+        host_email = _coerce_optional_text(data["host_email"])
+        if host_email:
+            try:
+                validate_email(host_email)
+            except ValidationError:
+                errors["host_email"] = "Must be a valid email address."
+        values["host_email"] = host_email
 
     for field, valid_values in (
         ("kind", VALID_KINDS),
@@ -449,6 +463,17 @@ def _maybe_create_zoom_meeting(event, create_zoom):
                     "status": {"type": "string"},
                     "external_host": {"type": "string"},
                     "published": {"type": "boolean"},
+                    "host_email": {
+                        "type": "string",
+                        "format": "email",
+                        "description": (
+                            "Optional. Email that receives the host "
+                            "calendar invite with host-only management "
+                            "links. Blank falls back to the operator "
+                            "EVENTS_HOST_INVITE_EMAIL default; when both "
+                            "are unset no invite is sent."
+                        ),
+                    },
                     "create_zoom": {
                         "type": "boolean",
                         "writeOnly": True,
@@ -466,6 +491,7 @@ def _maybe_create_zoom_meeting(event, create_zoom):
                 "example": {
                     "title": "Office Hours: May 5",
                     "start_datetime": "2026-05-05T17:00:00+02:00",
+                    "host_email": "host@example.com",
                 },
             },
             "responses": {
@@ -570,6 +596,11 @@ def events_collection(request):
         return save_error
 
     zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
+    # Best-effort host calendar invite (issue #993). Self-gating: skips
+    # drafts, EmailLog-idempotent, resolves recipient via host_email /
+    # EVENTS_HOST_INVITE_EMAIL, and swallows exceptions. Called after the
+    # save and the create_zoom step so the invite carries zoom_join_url.
+    maybe_send_initial_host_invite(event)
     body = serialize_event(event)
     if zoom_error is not None:
         body["zoom_error"] = zoom_error
@@ -611,6 +642,17 @@ def events_collection(request):
                     "description": {"type": "string"},
                     "status": {"type": "string"},
                     "published": {"type": "boolean"},
+                    "host_email": {
+                        "type": "string",
+                        "format": "email",
+                        "description": (
+                            "Optional. Email that receives the host "
+                            "calendar invite with host-only management "
+                            "links. Adding it to a not-yet-invited "
+                            "published event sends the one-time invite. "
+                            "Empty string clears the field."
+                        ),
+                    },
                     "create_zoom": {
                         "type": "boolean",
                         "writeOnly": True,
@@ -713,6 +755,11 @@ def event_detail(request, slug):
         return save_error
 
     zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
+    # Best-effort host calendar invite (issue #993). Self-gating and
+    # EmailLog-idempotent, so a plain re-save never re-sends. A PATCH that
+    # flips a draft to a published status, or adds a host_email to a
+    # not-yet-invited event, triggers the one-time invite.
+    maybe_send_initial_host_invite(event)
     body = serialize_event(event)
     if zoom_error is not None:
         body["zoom_error"] = zoom_error

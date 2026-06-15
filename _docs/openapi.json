@@ -2251,6 +2251,7 @@
                       "editable": true,
                       "end_datetime": "2026-05-05T18:00:00+02:00",
                       "external_host": "",
+                      "host_email": "host@example.com",
                       "id": 42,
                       "kind": "standard",
                       "location": "",
@@ -2293,11 +2294,17 @@
           "content": {
             "application/json": {
               "example": {
+                "host_email": "host@example.com",
                 "start_datetime": "2026-05-05T17:00:00+02:00",
                 "title": "Office Hours: May 5"
               },
               "schema": {
                 "properties": {
+                  "create_zoom": {
+                    "description": "Write-only action trigger. When true and platform is 'zoom', provisions a real Zoom meeting and populates zoom_join_url / zoom_meeting_id. Idempotent; never stored or returned. On Zoom failure the event still persists and the body carries a non-fatal zoom_error key.",
+                    "type": "boolean",
+                    "writeOnly": true
+                  },
                   "description": {
                     "type": "string"
                   },
@@ -2306,6 +2313,11 @@
                     "type": "string"
                   },
                   "external_host": {
+                    "type": "string"
+                  },
+                  "host_email": {
+                    "description": "Optional. Email that receives the host calendar invite with host-only management links. Blank falls back to the operator EVENTS_HOST_INVITE_EMAIL default; when both are unset no invite is sent.",
+                    "format": "email",
                     "type": "string"
                   },
                   "kind": {
@@ -2370,6 +2382,7 @@
                   "editable": true,
                   "end_datetime": "2026-05-05T18:00:00+02:00",
                   "external_host": "",
+                  "host_email": "host@example.com",
                   "id": 42,
                   "kind": "standard",
                   "location": "",
@@ -2459,6 +2472,7 @@
                   "editable": true,
                   "end_datetime": "2026-05-05T18:00:00+02:00",
                   "external_host": "",
+                  "host_email": "host@example.com",
                   "id": 42,
                   "kind": "standard",
                   "location": "",
@@ -2522,7 +2536,17 @@
               },
               "schema": {
                 "properties": {
+                  "create_zoom": {
+                    "description": "Write-only action trigger. When true and the event's platform is 'zoom' with no existing meeting, provisions a Zoom meeting and populates zoom_join_url / zoom_meeting_id. Idempotent; never stored or returned. On Zoom failure the event still persists and the body carries a non-fatal zoom_error key.",
+                    "type": "boolean",
+                    "writeOnly": true
+                  },
                   "description": {
+                    "type": "string"
+                  },
+                  "host_email": {
+                    "description": "Optional. Email that receives the host calendar invite with host-only management links. Adding it to a not-yet-invited published event sends the one-time invite. Empty string clears the field.",
+                    "format": "email",
                     "type": "string"
                   },
                   "published": {
@@ -2551,6 +2575,7 @@
                   "editable": true,
                   "end_datetime": "2026-05-05T18:00:00+02:00",
                   "external_host": "",
+                  "host_email": "host@example.com",
                   "id": 42,
                   "kind": "standard",
                   "location": "",

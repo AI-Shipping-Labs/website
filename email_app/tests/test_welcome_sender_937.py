@@ -24,6 +24,8 @@ WELCOME_TYPES = [
     'basic_welcome',
     'premium_welcome',
     'welcome_imported',
+    # Issue #976: returning-member "welcome back" email sends from welcome@.
+    'welcome_back',
     # Issue #960: Maven course welcome sends from welcome@.
     'maven_welcome',
 ]

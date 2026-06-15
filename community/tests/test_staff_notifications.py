@@ -1902,3 +1902,376 @@ class PaidWelcomeSESDestinationTest(TestCase):
         mock_staff_email.assert_called_once()
         self.assertEqual(mock_staff_email.call_args.args[0], self.STAFF_EMAIL)
         mock_slack.assert_called_once()
+
+
+@tag('core')
+class ReturningMemberWelcomeRoutingTest(TestCase):
+    """Issue #976: a returning (re-subscribing) member receives the shared
+    ``welcome_back`` template instead of the tier-specific new-member
+    welcome. The flag defaults to ``False`` so existing callers are
+    unaffected, and only the member welcome (path A) branches.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.basic_tier = Tier.objects.get(slug="basic")
+        cls.main_tier = Tier.objects.get(slug="main")
+        cls.premium_tier = Tier.objects.get(slug="premium")
+
+    def _welcome_slug_for(self, tier, *, is_returning, email):
+        """Drive ``notify_paid_signup`` with all staff/Slack paths off and
+        return the slug passed to ``EmailService.send`` for the welcome
+        (the first send call).
+        """
+        from community.services import staff_notifications
+
+        user = User.objects.create_user(email=email, first_name="Kir")
+        with patch(
+            "community.services.staff_notifications.get_config",
+            return_value="",
+        ), patch(
+            "email_app.services.email_service.EmailService.send"
+        ) as mock_send:
+            staff_notifications.notify_paid_signup(
+                user=user,
+                tier=tier,
+                previous_tier=None,
+                was_new_user=False,
+                stripe_customer_id="cus_ret",
+                session_id="cs_ret",
+                billing_period="monthly",
+                is_returning=is_returning,
+            )
+        return mock_send.call_args_list[0].args[1]
+
+    def test_returning_member_gets_welcome_back_not_tier_welcome(self):
+        slug = self._welcome_slug_for(
+            self.main_tier, is_returning=True, email="returning-main@test.com",
+        )
+        self.assertEqual(slug, "welcome_back")
+
+    def test_returning_member_basic_also_gets_welcome_back(self):
+        # Single shared template regardless of which tier they re-subscribe to.
+        slug = self._welcome_slug_for(
+            self.basic_tier, is_returning=True, email="returning-basic@test.com",
+        )
+        self.assertEqual(slug, "welcome_back")
+
+    def test_not_returning_keeps_tier_welcome(self):
+        slug = self._welcome_slug_for(
+            self.main_tier, is_returning=False, email="notreturning@test.com",
+        )
+        self.assertEqual(slug, "cofounder_welcome")
+
+    def test_is_returning_defaults_false_backward_compatible(self):
+        """A caller that omits ``is_returning`` keeps the standard tier
+        welcome — proving the new flag defaults to ``False``.
+        """
+        from community.services import staff_notifications
+
+        user = User.objects.create_user(
+            email="default-flag@test.com", first_name="Dana",
+        )
+        with patch(
+            "community.services.staff_notifications.get_config",
+            return_value="",
+        ), patch(
+            "email_app.services.email_service.EmailService.send"
+        ) as mock_send:
+            staff_notifications.notify_paid_signup(
+                user=user,
+                tier=self.basic_tier,
+                previous_tier=None,
+                was_new_user=True,
+                stripe_customer_id="cus_def",
+                session_id="cs_def",
+                billing_period="monthly",
+            )
+        self.assertEqual(mock_send.call_args_list[0].args[1], "basic_welcome")
+
+    def test_returning_send_failure_does_not_break_staff_or_slack(self):
+        """Issue #976 preserves the best-effort try/except isolation: a
+        failing welcome-back send must not block the staff email or Slack.
+        """
+        from community.services import staff_notifications
+
+        user = User.objects.create_user(
+            email="ret-fail@test.com", first_name="Kir",
+        )
+
+        def _cfg(key, default=""):
+            mapping = {
+                "STAFF_SIGNUP_NOTIFY_EMAIL": "founders@aishippinglabs.test",
+                "STAFF_SIGNUP_NOTIFY_CHANNEL_ID": "C0RETFAIL",
+                "SLACK_BOT_TOKEN": "xoxb-test",
+            }
+            return mapping.get(key, default)
+
+        with patch(
+            "community.services.staff_notifications.get_config",
+            side_effect=_cfg,
+        ), patch.object(
+            staff_notifications,
+            "_send_cofounder_welcome",
+            side_effect=RuntimeError("welcome-back SES blew up"),
+        ), patch.object(
+            staff_notifications,
+            "_send_staff_signup_notification",
+        ) as mock_staff_email, patch(
+            "community.services.staff_notifications.is_enabled",
+            return_value=True,
+        ), patch(
+            "community.services.staff_notifications.requests.post"
+        ) as mock_slack:
+            mock_slack.return_value.json.return_value = {"ok": True}
+            mock_slack.return_value.status_code = 200
+
+            # Must NOT raise.
+            staff_notifications.notify_paid_signup(
+                user=user,
+                tier=self.main_tier,
+                previous_tier=None,
+                was_new_user=False,
+                stripe_customer_id="cus_ret_fail",
+                session_id="cs_ret_fail",
+                billing_period="monthly",
+                is_returning=True,
+            )
+
+        mock_staff_email.assert_called_once()
+        mock_slack.assert_called_once()
+
+
+@tag('core')
+class WelcomeBackTemplateRenderTest(TestCase):
+    """Issue #976: the rendered ``welcome_back`` body reads as a
+    returning-member message and carries the four required links.
+    """
+
+    def _render(self, user, ctx=None):
+        from email_app.services import EmailService
+
+        service = EmailService()
+        subject, body_html, _ = service._render_template_with_footer(
+            "welcome_back",
+            user,
+            ctx or {
+                "user_first_name": user.first_name,
+                "current_sprint_status_paragraph": "",
+            },
+        )
+        return subject, body_html
+
+    def test_subject_is_welcome_back(self):
+        user = User.objects.create_user(email="wb1@test.com", first_name="Kir")
+        subject, _ = self._render(user)
+        self.assertEqual(subject, "Welcome back to AI Shipping Labs")
+
+    def test_body_renders_first_name_and_returning_framing(self):
+        user = User.objects.create_user(email="wb2@test.com", first_name="Kir")
+        _, body = self._render(user)
+        self.assertIn("Hey Kir,", body)
+        # Returning-member framing, not a first-time welcome.
+        self.assertIn("welcome back", body.lower())
+        self.assertIn("re-subscribing", body.lower())
+
+    def test_body_falls_back_to_there_without_first_name(self):
+        user = User.objects.create_user(email="wb3@test.com")
+        _, body = self._render(
+            user,
+            {"user_first_name": "", "current_sprint_status_paragraph": ""},
+        )
+        self.assertIn("Hey there,", body)
+
+    def test_body_links_sprints_slack_and_onboarding(self):
+        user = User.objects.create_user(email="wb4@test.com", first_name="Kir")
+        _, body = self._render(user)
+        self.assertRegex(body, r"https?://[^\s\"'<]+/sprints")
+        self.assertRegex(body, r"https?://[^\s\"'<]+/community/slack")
+        self.assertRegex(body, r"https?://[^\s\"'<]+/onboarding/")
+
+
+@tag('core')
+class WelcomeBackClassificationTest(TestCase):
+    """Issue #976: ``welcome_back`` is transactional and sends from the
+    welcome@ sender like the other welcome types.
+    """
+
+    def setUp(self):
+        from integrations.config import clear_config_cache
+
+        clear_config_cache()
+
+    def tearDown(self):
+        from integrations.config import clear_config_cache
+
+        clear_config_cache()
+
+    def test_welcome_back_classifies_transactional(self):
+        from email_app.services.email_classification import (
+            EMAIL_KIND_TRANSACTIONAL,
+            classify_email_type,
+        )
+
+        self.assertEqual(
+            classify_email_type("welcome_back"), EMAIL_KIND_TRANSACTIONAL,
+        )
+
+    def test_welcome_back_resolves_to_welcome_sender(self):
+        from email_app.services.email_classification import (
+            get_sender_for_email_type,
+        )
+
+        self.assertEqual(
+            get_sender_for_email_type("welcome_back"),
+            "welcome@aishippinglabs.com",
+        )
+
+
+@tag('core')
+class ReturningMemberWebhookEndToEndTest(TestCase):
+    """Issue #976: drive ``handle_checkout_completed`` end to end and assert
+    the returning signal is captured BEFORE the #969 reconcile clears
+    ``stripe:churned`` — the Kir case.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.main_tier = Tier.objects.get(slug="main")
+        cls.free_tier = Tier.objects.get(slug="free")
+        cls.basic_tier = Tier.objects.get(slug="basic")
+
+    def _cfg_quiet(self, key, default=""):
+        # All staff/Slack paths off; only the member welcome fires.
+        return default if default is not None else ""
+
+    def _session_for(self, user, *, tier_slug):
+        return {
+            "id": f"cs_{tier_slug}_{user.pk}",
+            "customer": user.stripe_customer_id or f"cus_{user.pk}",
+            "customer_details": {"email": user.email},
+            "subscription": "",
+            "client_reference_id": str(user.pk),
+            "metadata": {"tier_slug": tier_slug, "user_id": str(user.pk)},
+        }
+
+    def _run(self, user, *, tier_slug):
+        with patch(
+            "community.services.staff_notifications.get_config",
+            side_effect=self._cfg_quiet,
+        ), patch(
+            "payments.services.get_config",
+            side_effect=self._cfg_quiet,
+        ):
+            handle_checkout_completed(self._session_for(user, tier_slug=tier_slug))
+
+    def test_returning_churned_member_gets_welcome_back_kir_case(self):
+        from email_app.models import EmailLog
+
+        user = User.objects.create_user(
+            email="kir@test.com",
+            first_name="Kir",
+            tier=self.free_tier,
+            stripe_customer_id="cus_kir",
+            tags=["stripe:churned", "stripe:plan-main"],
+        )
+
+        self._run(user, tier_slug="main")
+
+        self.assertEqual(
+            EmailLog.objects.filter(
+                email_type="welcome_back", user=user,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(email_type="cofounder_welcome").count(),
+            0,
+        )
+
+        # Issue #969: after the handler, stripe:churned has been reconciled
+        # away — yet the welcome above was still welcome_back, proving the
+        # flag was snapshotted BEFORE reconciliation cleared the tag.
+        user.refresh_from_db()
+        self.assertNotIn("stripe:churned", user.tags or [])
+
+    def test_brand_new_paid_subscriber_gets_tier_welcome(self):
+        from email_app.models import EmailLog
+
+        # No user exists for this email; the checkout creates one
+        # (was_new_user=True) -> never returning.
+        session = {
+            "id": "cs_new_main",
+            "customer": "cus_new_main",
+            "customer_details": {"email": "brandnew@test.com"},
+            "subscription": "",
+            "metadata": {"tier_slug": "main"},
+        }
+        with patch(
+            "community.services.staff_notifications.get_config",
+            side_effect=self._cfg_quiet,
+        ), patch(
+            "payments.services.get_config",
+            side_effect=self._cfg_quiet,
+        ):
+            handle_checkout_completed(session)
+
+        user = User.objects.get(email="brandnew@test.com")
+        self.assertEqual(
+            EmailLog.objects.filter(
+                email_type="cofounder_welcome", user=user,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(email_type="welcome_back").count(), 0,
+        )
+
+    def test_first_time_subscriber_from_free_gets_tier_welcome(self):
+        from email_app.models import EmailLog
+
+        # Existing free user, never subscribed -> no stripe:churned.
+        user = User.objects.create_user(
+            email="firsttime@test.com",
+            first_name="Sam",
+            tier=self.free_tier,
+            stripe_customer_id="cus_ft",
+            tags=["stripe:imported"],
+        )
+
+        self._run(user, tier_slug="basic")
+
+        self.assertEqual(
+            EmailLog.objects.filter(
+                email_type="basic_welcome", user=user,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(email_type="welcome_back").count(), 0,
+        )
+
+    def test_active_member_upgrade_is_not_returning(self):
+        from email_app.models import EmailLog
+
+        # Active Basic member upgrading to Main — never carried
+        # stripe:churned -> standard Main tier welcome, not welcome_back.
+        user = User.objects.create_user(
+            email="upgrader@test.com",
+            first_name="Alex",
+            tier=self.basic_tier,
+            stripe_customer_id="cus_up",
+            tags=["stripe:active", "stripe:plan-basic"],
+        )
+
+        self._run(user, tier_slug="main")
+
+        self.assertEqual(
+            EmailLog.objects.filter(
+                email_type="cofounder_welcome", user=user,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(email_type="welcome_back").count(), 0,
+        )

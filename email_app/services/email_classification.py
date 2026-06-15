@@ -49,6 +49,10 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # an unsubscribed paid user still receives their welcome.
     "basic_welcome",
     "premium_welcome",
+    # Issue #976: "welcome back" email for a churned member re-subscribing.
+    # Transactional like the other welcomes — a re-subscribing unsubscribed
+    # paid member still receives it, with no unsubscribe footer.
+    "welcome_back",
     # Issue #680: post-event follow-up (recap + recording + notes).
     # Transactional because the recipient registered for this event;
     # an unsubscribed user still receives it, same policy as
@@ -85,6 +89,9 @@ WELCOME_EMAIL_TYPES = {
     "basic_welcome",
     "premium_welcome",
     "welcome_imported",
+    # Issue #976: the returning-member "welcome back" email sends from
+    # welcome@ like the other welcomes, keeping transactional semantics.
+    "welcome_back",
     # Issue #960: the Maven course welcome sends from welcome@ like the
     # other welcomes, keeping its transactional delivery semantics.
     "maven_welcome",

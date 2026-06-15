@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
+{% load sprint_extras %}
 {% load tz %}
 
 {% block title %}{{ sprint.name }} | {{ site_name }}{% endblock %}
@@ -17,7 +18,7 @@
         <p class="text-sm uppercase tracking-wide text-muted-foreground">Sprint</p>
         <h1 class="text-3xl font-semibold tracking-tight mt-1" data-testid="sprint-detail-name">{{ sprint.name }}</h1>
         <p class="text-sm text-muted-foreground mt-2">
-          Starts {{ sprint.start_date }} &middot; {{ sprint.duration_weeks }} weeks
+          <span data-testid="sprint-date-range">{% sprint_date_range sprint %}</span>
           <span class="ml-2 inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs uppercase tracking-wide text-muted-foreground" data-testid="sprint-status-badge">
             {{ sprint.get_status_display }}
           </span>

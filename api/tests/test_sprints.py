@@ -42,6 +42,21 @@ class SprintApiTestBase(TestCase):
         return {"HTTP_AUTHORIZATION": f"Token {token.key}"}
 
 
+class SerializeSprintEndDateTest(TestCase):
+    """``serialize_sprint`` exposes the derived ``end_date`` (issue #978)."""
+
+    def test_includes_end_date_iso_and_retains_duration_weeks(self):
+        sprint = Sprint.objects.create(
+            name="June 2026", slug="june-2026",
+            start_date=datetime.date(2026, 6, 17),
+            duration_weeks=6, status="active",
+        )
+        data = serialize_sprint(sprint)
+        self.assertEqual(data["start_date"], "2026-06-17")
+        self.assertEqual(data["end_date"], "2026-07-29")
+        self.assertEqual(data["duration_weeks"], 6)
+
+
 class SprintsListTest(SprintApiTestBase):
     def test_list_returns_canonical_shape(self):
         response = self.client.get("/api/sprints", **self._auth())
@@ -54,8 +69,9 @@ class SprintsListTest(SprintApiTestBase):
         self.assertEqual(
             set(first.keys()),
             {
-                "slug", "name", "start_date", "duration_weeks",
-                "status", "event_series", "created_at", "updated_at",
+                "slug", "name", "start_date", "end_date",
+                "duration_weeks", "status", "event_series",
+                "created_at", "updated_at",
             },
         )
 

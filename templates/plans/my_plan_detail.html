@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load accounts_extras static %}
+{% load sprint_extras %}
 
 {% block title %}Your plan &mdash; {{ sprint.name }} | {{ site_name }}{% endblock %}
 
@@ -28,7 +29,7 @@
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Sprint workspace</p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">Your sprint plan</h1>
         <p class="mt-2 text-sm text-muted-foreground">
-          {{ sprint.name }} &middot; {{ sprint.start_date|date:"M j, Y" }} &middot; {{ sprint.duration_weeks }} week{{ sprint.duration_weeks|pluralize }}
+          {{ sprint.name }} &middot; <span data-testid="my-plan-sprint-dates">{% sprint_date_range sprint %}</span>
         </p>
         <div class="mt-4 flex flex-wrap items-center gap-3 text-sm">
           <span class="text-muted-foreground" data-testid="my-plan-progress">

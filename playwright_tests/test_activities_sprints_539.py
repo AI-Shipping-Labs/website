@@ -146,16 +146,15 @@ class TestActivitiesSprintFirstLayout:
         body = page.locator("body").inner_text()
         assert "May Shipping Sprint" in body
         assert "Active" in body
-        assert "May 15, 2026" in body
-        assert "4 weeks" in body
+        assert "May 15 – June 12, 2026 (4 weeks)" in body
         assert "Membership: Main" in body
         cta = card.locator('[data-testid="activities-sprint-cta"]')
         assert "Log in to join" in cta.inner_text()
         assert "/accounts/login/?next=/sprints/may-shipping-sprint" in (
             cta.get_attribute("href")
         )
-        assert _top(card.locator('[data-testid="activities-sprint-duration"]')) > _top(
-            card.locator('[data-testid="activities-sprint-start"]')
+        assert _top(card.locator('[data-testid="activities-sprint-dates"]')) > _top(
+            card.locator('[data-testid="activities-sprint-name"]')
         )
         assert _top(cta) > _top(
             card.locator('[data-testid="activities-sprint-guidance"]')
@@ -181,8 +180,8 @@ class TestActivitiesSprintFirstLayout:
         assert _top(heading) < 220
         assert _bottom(intro) <= _top(card)
         assert _top(card) < 600
-        assert _top(card.locator('[data-testid="activities-sprint-duration"]')) > _top(
-            card.locator('[data-testid="activities-sprint-start"]')
+        assert _top(card.locator('[data-testid="activities-sprint-dates"]')) > _top(
+            card.locator('[data-testid="activities-sprint-name"]')
         )
         assert _top(card.locator('[data-testid="activities-sprint-cta"]')) > _top(
             card.locator('[data-testid="activities-sprint-guidance"]')

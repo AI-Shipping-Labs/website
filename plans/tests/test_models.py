@@ -133,6 +133,41 @@ class SprintDurationTest(TestCase):
         )
 
 
+class SprintEndDateTest(TestCase):
+    """The derived ``Sprint.end_date`` property (issue #978)."""
+
+    def test_end_date_is_start_plus_duration_weeks(self):
+        sprint = Sprint(
+            name='June 2026', slug='june-2026',
+            start_date=datetime.date(2026, 6, 17),
+            duration_weeks=6,
+        )
+        self.assertEqual(sprint.end_date, datetime.date(2026, 7, 29))
+
+    def test_end_date_crosses_year_boundary(self):
+        sprint = Sprint(
+            name='Dec 2025', slug='dec-2025',
+            start_date=datetime.date(2025, 12, 16),
+            duration_weeks=6,
+        )
+        self.assertEqual(sprint.end_date, datetime.date(2026, 1, 27))
+
+    def test_one_week_sprint_ends_exactly_seven_days_later(self):
+        sprint = Sprint(
+            name='One week', slug='one-week',
+            start_date=datetime.date(2026, 6, 17),
+            duration_weeks=1,
+        )
+        self.assertEqual(
+            sprint.end_date,
+            sprint.start_date + datetime.timedelta(days=7),
+        )
+
+    def test_end_date_is_none_when_start_date_missing(self):
+        sprint = Sprint(name='x', slug='x', start_date=None, duration_weeks=6)
+        self.assertIsNone(sprint.end_date)
+
+
 # ``test_sprint_default_min_tier_level_is_main`` and
 # ``test_existing_explicit_premium_sprint_keeps_min_tier_level``
 # previously asserted on Django ``IntegerField`` defaults and

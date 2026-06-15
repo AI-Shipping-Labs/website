@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load sprint_extras %}
 
 {% block title %}Community Sprints | AI Shipping Labs{% endblock %}
 {% block meta_description %}Discover active AI Shipping Labs community sprints, cohort windows, membership requirements, and next steps for joining.{% endblock %}
@@ -40,14 +41,10 @@
                 <h2 class="mt-4 text-xl font-semibold text-foreground" data-testid="sprints-sprint-name">
                   <a href="{% url 'sprint_detail' sprint_slug=item.sprint.slug %}" class="hover:text-accent">{{ item.sprint.name }}</a>
                 </h2>
-                <dl class="mt-4 grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
+                <dl class="mt-4 text-sm text-muted-foreground">
                   <div>
-                    <dt class="font-medium text-foreground">Start date</dt>
-                    <dd data-testid="sprints-sprint-start">{{ item.sprint.start_date|date:"F j, Y" }}</dd>
-                  </div>
-                  <div>
-                    <dt class="font-medium text-foreground">Duration</dt>
-                    <dd data-testid="sprints-sprint-duration">{{ item.sprint.duration_weeks }} weeks</dd>
+                    <dt class="font-medium text-foreground">Sprint window</dt>
+                    <dd data-testid="sprints-sprint-dates">{% sprint_date_range item.sprint %}</dd>
                   </div>
                 </dl>
                 <p class="mt-4 text-sm leading-relaxed text-muted-foreground">

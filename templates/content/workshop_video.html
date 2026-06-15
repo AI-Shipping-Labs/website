@@ -107,6 +107,18 @@
            paywall card so we don't render an empty fade-out. -->
       {% include "content/_gated_access_card.html" %}
       {% endif %}
+
+      {% comment %}
+        Issue #646/#980: workshop-level materials are not behind the
+        recording gate, so they still render in the recording-paywalled
+        branch (after the paywall card). `can_show_materials` is computed
+        by the view against the right gate so this never leaks event-only
+        materials under a looser workshop pages gate.
+      {% endcomment %}
+      {% if can_show_materials %}
+        {% include "events/_recording_materials.html" with materials=resolved_materials section_class="mt-12" materials_testid="video-materials" %}
+      {% endif %}
+
       {% else %}
 
       {% if event and event.has_recording %}
@@ -120,22 +132,23 @@
       </div>
       {% endif %}
 
+      {% comment %}
+        Issue #980: lift Materials directly under the video player and
+        above the (potentially very long) transcript so members notice
+        the slides/links. Issue #646: workshop-level materials are not
+        behind the recording gate; `can_show_materials` is computed by
+        the view against the right gate (pages for workshop-level,
+        recording for event-level) so the leak-under-looser-gate case
+        is closed.
+      {% endcomment %}
+      {% if can_show_materials %}
+        {% include "events/_recording_materials.html" with materials=resolved_materials section_class="mt-12" materials_testid="video-materials" %}
+      {% endif %}
+
       {% if event %}
         {% include "events/_recording_transcript.html" with transcript_text=event.transcript_text section_class="mt-12" transcript_testid="video-transcript" %}
       {% endif %}
 
-      {% endif %}
-
-      {% comment %}
-        Issue #646: workshop-level materials are not behind the recording
-        gate, so they render in both the recording-paywalled and
-        recording-accessible branches. The view computes
-        `can_show_materials` against the right gate (pages for
-        workshop-level, recording for event-level) so the leak-under-
-        looser-gate case is closed.
-      {% endcomment %}
-      {% if can_show_materials %}
-        {% include "events/_recording_materials.html" with materials=resolved_materials section_class="mt-12" materials_testid="video-materials" %}
       {% endif %}
 
       {% endif %}

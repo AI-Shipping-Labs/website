@@ -38,6 +38,7 @@ from payments.services.import_stripe import (
     _price_to_tier_map,
     _subscription_price_id,
 )
+from payments.services.stripe_tags import reconcile_stripe_status_tags
 
 
 def handle_checkout_completed(session_data):
@@ -186,6 +187,13 @@ def handle_checkout_completed(session_data):
     _services.logger.info(
         "checkout.session.completed: user=%s tier=%s", user.email, tier.slug,
     )
+
+    # Issue #969: a completed checkout is the canonical "active on tier" signal.
+    # Reconcile the stripe:* status tags so a re-subscribing user sheds a stale
+    # ``stripe:churned`` tag, gains ``stripe:active``, and carries exactly the
+    # current ``stripe:plan-<tier.slug>`` (this is the path that missed Kir's
+    # re-activation — there is no customer.subscription.created handler).
+    reconcile_stripe_status_tags(user, active=True, tier=tier)
 
     # Issue #768: a successful tier checkout (including upgrades on an
     # existing row that did NOT take the new-user branch above) is the
@@ -587,6 +595,10 @@ def handle_subscription_updated(subscription_data):
             "customer.subscription.updated: cancel_at_period_end for user=%s",
             user.email,
         )
+        # Issue #969: a scheduled cancellation keeps the subscription active
+        # until period end, so the user stays ``stripe:active`` on their
+        # current plan — do NOT churn the tags yet.
+        reconcile_stripe_status_tags(user, active=True, tier=user.tier)
         # Schedule community removal at billing period end
         if user.tier and user.tier.level >= 20 and user.billing_period_end:
             _services._community_schedule_removal(user)
@@ -616,6 +628,12 @@ def handle_subscription_updated(subscription_data):
             "pending_tier",
         ]
     )
+
+    # Issue #969: an active subscription update is still "active on tier",
+    # so resync the stripe:* status tags — the ``stripe:plan-*`` tag follows
+    # the (possibly changed) ``user.tier`` and a stale ``stripe:churned`` is
+    # dropped.
+    reconcile_stripe_status_tags(user, active=True, tier=user.tier)
 
     # Community integration: handle tier changes
     new_tier_level = user.tier.level if user.tier else 0
@@ -781,6 +799,10 @@ def handle_subscription_deleted(subscription_data):
         "customer.subscription.deleted: user=%s reverted to free", user.email,
     )
 
+    # Issue #969: the subscription is gone — mark the user churned. Remove
+    # ``stripe:active`` and every ``stripe:plan-*`` tag, add ``stripe:churned``.
+    reconcile_stripe_status_tags(user, active=False, tier=None)
+
     # Community integration: remove if they had community access
     if had_community:
         _services._community_remove(user)
@@ -791,6 +813,13 @@ def handle_invoice_payment_failed(invoice_data):
 
     Sends an email to the user with a payment update link.
     Does NOT revoke the tier.
+
+    Issue #969: this handler deliberately does NOT touch the ``stripe:*``
+    status tags. A failed payment is not a churn — the tier is not revoked
+    here, so ``stripe:active`` / ``stripe:churned`` / ``stripe:plan-*`` must
+    stay exactly as they are. Do not add a ``reconcile_stripe_status_tags``
+    call here; churn is signalled separately by
+    ``customer.subscription.deleted``.
     """
     customer_id = invoice_data.get("customer", "")
     customer_email = invoice_data.get("customer_email", "")

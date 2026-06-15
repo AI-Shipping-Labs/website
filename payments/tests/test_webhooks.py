@@ -1317,6 +1317,210 @@ class SubscriptionDeletedHandlerTest(TestCase):
 
 
 @tag('core')
+class StripeStatusTagReconciliationTest(QuietSubscriptionLookupMixin, TestCase):
+    """Stripe status-tag reconciliation across webhook handlers (issue #969).
+
+    Each test fires a webhook handler with a known starting tag set and asserts
+    the post-handler ``user.tags`` matches the transition table: ``stripe:active``
+    / ``stripe:churned`` flip correctly, exactly one ``stripe:plan-*`` survives,
+    ``stripe:imported`` is preserved, and non-``stripe:`` tags are untouched.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.free = Tier.objects.get(slug="free")
+        cls.basic = Tier.objects.get(slug="basic")
+        cls.main = Tier.objects.get(slug="main")
+        # Map a price id onto each tier so handle_subscription_updated can
+        # resolve a tier change via ``_tier_for_price_id``.
+        cls.basic.stripe_price_id_monthly = "price_basic_monthly"
+        cls.basic.save(update_fields=["stripe_price_id_monthly"])
+        cls.main.stripe_price_id_monthly = "price_main_monthly"
+        cls.main.save(update_fields=["stripe_price_id_monthly"])
+
+    @staticmethod
+    def _plan_tags(user):
+        return [t for t in user.tags if t.startswith("stripe:plan-")]
+
+    def _make_user(self, *, tier, tags, subscription_id="", customer_id=""):
+        user = User.objects.create_user(email=f"tags-{User.objects.count()}@test.com")
+        user.tier = tier
+        user.tags = list(tags)
+        user.subscription_id = subscription_id
+        user.stripe_customer_id = customer_id
+        user.save(update_fields=[
+            "tier", "tags", "subscription_id", "stripe_customer_id",
+        ])
+        return user
+
+    def test_resubscribe_sheds_churned_tag(self):
+        """The Kir case: a churned user who completes checkout goes active."""
+        user = self._make_user(
+            tier=self.free,
+            tags=["stripe:imported", "stripe:churned"],
+            customer_id="cus_kir",
+        )
+
+        handle_checkout_completed({
+            "id": "cs_kir",
+            "customer": "cus_kir",
+            "subscription": "sub_kir",
+            "client_reference_id": str(user.pk),
+            "customer_details": {"email": user.email},
+            "metadata": {"tier_slug": "main"},
+        })
+
+        user.refresh_from_db()
+        self.assertIn("stripe:active", user.tags)
+        self.assertNotIn("stripe:churned", user.tags)
+        self.assertEqual(self._plan_tags(user), ["stripe:plan-main"])
+        self.assertIn("stripe:imported", user.tags)
+        self.assertEqual(user.tier, self.main)
+
+    def test_deletion_churns_active_member(self):
+        """customer.subscription.deleted removes active/plan, adds churned."""
+        user = self._make_user(
+            tier=self.main,
+            tags=["stripe:imported", "stripe:active", "stripe:plan-main"],
+            subscription_id="sub_del",
+            customer_id="cus_del",
+        )
+
+        handle_subscription_deleted({"id": "sub_del", "customer": "cus_del"})
+
+        user.refresh_from_db()
+        self.assertIn("stripe:churned", user.tags)
+        self.assertNotIn("stripe:active", user.tags)
+        self.assertEqual(self._plan_tags(user), [])
+        self.assertEqual(user.tier, self.free)
+
+    def test_upgrade_swaps_plan_tag(self):
+        """An active plan change Basic -> Main swaps the plan tag."""
+        user = self._make_user(
+            tier=self.basic,
+            tags=["stripe:active", "stripe:plan-basic"],
+            subscription_id="sub_up",
+            customer_id="cus_up",
+        )
+
+        handle_subscription_updated({
+            "id": "sub_up",
+            "customer": "cus_up",
+            "status": "active",
+            "cancel_at_period_end": False,
+            "current_period_end": 1700000000,
+            "items": {"data": [{"price": {"id": "price_main_monthly"}}]},
+        })
+
+        user.refresh_from_db()
+        self.assertEqual(self._plan_tags(user), ["stripe:plan-main"])
+        self.assertIn("stripe:active", user.tags)
+        self.assertNotIn("stripe:churned", user.tags)
+
+    def test_cancel_at_period_end_does_not_churn_tag(self):
+        """cancel_at_period_end keeps active + current plan tag."""
+        user = self._make_user(
+            tier=self.main,
+            tags=["stripe:active", "stripe:plan-main"],
+            subscription_id="sub_cape",
+            customer_id="cus_cape",
+        )
+
+        handle_subscription_updated({
+            "id": "sub_cape",
+            "customer": "cus_cape",
+            "status": "active",
+            "cancel_at_period_end": True,
+            "current_period_end": 1700000000,
+            "items": {"data": [{"price": {"id": "price_main_monthly"}}]},
+        })
+
+        user.refresh_from_db()
+        self.assertIn("stripe:active", user.tags)
+        self.assertIn("stripe:plan-main", user.tags)
+        self.assertNotIn("stripe:churned", user.tags)
+
+    def test_payment_failed_leaves_status_tags_untouched(self):
+        """invoice.payment_failed must not mutate any stripe:* tag."""
+        user = self._make_user(
+            tier=self.main,
+            tags=["stripe:active", "stripe:plan-main"],
+            customer_id="cus_pf",
+        )
+        before = list(user.tags)
+
+        with patch("payments.services.send_mail"):
+            handle_invoice_payment_failed({
+                "customer": "cus_pf",
+                "customer_email": user.email,
+            })
+
+        user.refresh_from_db()
+        self.assertEqual(user.tags, before)
+        self.assertEqual(user.tier, self.main)
+
+    def test_reconciliation_never_touches_unrelated_tags(self):
+        """A non-stripe tag like slack-member is preserved on churn."""
+        user = self._make_user(
+            tier=self.main,
+            tags=["slack-member", "stripe:imported", "stripe:active", "stripe:plan-main"],
+            subscription_id="sub_unrel",
+            customer_id="cus_unrel",
+        )
+
+        handle_subscription_deleted({"id": "sub_unrel", "customer": "cus_unrel"})
+
+        user.refresh_from_db()
+        self.assertIn("slack-member", user.tags)
+        self.assertIn("stripe:imported", user.tags)
+        self.assertIn("stripe:churned", user.tags)
+        self.assertNotIn("stripe:active", user.tags)
+        self.assertEqual(self._plan_tags(user), [])
+
+    def test_replaying_webhook_is_noop_on_tags(self):
+        """Firing the same active update twice yields an identical tag set."""
+        user = self._make_user(
+            tier=self.main,
+            tags=["stripe:active", "stripe:plan-main"],
+            subscription_id="sub_replay",
+            customer_id="cus_replay",
+        )
+        event = {
+            "id": "sub_replay",
+            "customer": "cus_replay",
+            "status": "active",
+            "cancel_at_period_end": False,
+            "current_period_end": 1700000000,
+            "items": {"data": [{"price": {"id": "price_main_monthly"}}]},
+        }
+
+        handle_subscription_updated(event)
+        user.refresh_from_db()
+        after_first = list(user.tags)
+
+        handle_subscription_updated(event)
+        user.refresh_from_db()
+
+        self.assertEqual(user.tags, after_first)
+        self.assertEqual(user.tags.count("stripe:active"), 1)
+        self.assertEqual(self._plan_tags(user), ["stripe:plan-main"])
+
+    def test_imported_absent_user_does_not_gain_it(self):
+        """A user without stripe:imported never gains it on reconciliation."""
+        user = self._make_user(
+            tier=self.main,
+            tags=["stripe:active", "stripe:plan-main"],
+            subscription_id="sub_noimp",
+            customer_id="cus_noimp",
+        )
+
+        handle_subscription_deleted({"id": "sub_noimp", "customer": "cus_noimp"})
+
+        user.refresh_from_db()
+        self.assertNotIn("stripe:imported", user.tags)
+
+
+@tag('core')
 class InvoicePaymentFailedHandlerTest(TestCase):
     """Tests for the invoice.payment_failed webhook handler."""
 

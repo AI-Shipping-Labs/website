@@ -208,6 +208,146 @@ def _coerce_event_datetime(value):
     raise ValueError(f'Unsupported event datetime value: {value!r}')
 
 
+def _normalize_title_for_match(title):
+    """Normalize an event/workshop title for the dedup heuristic (issue #880).
+
+    Lowercase, collapse internal whitespace to single spaces, and strip
+    surrounding whitespace and punctuation. Deliberately conservative — it
+    only smooths over case and spacing differences ("  Take-Home  Assignment
+    Live " vs "take-home assignment live"), not semantic ones, so the
+    title+date key stays a low-false-positive match.
+
+    Lives here (rather than in ``dispatchers/workshops.py``, where it
+    originated in issue #880) so both the workshop link heuristic and the
+    standalone-event adopt heuristic (issue #998) can share it without a
+    circular import — ``workshops`` already imports from ``events`` at module
+    top, so the reverse import is unavailable. ``workshops`` re-exports this
+    name for back-compat.
+    """
+    if not title or not isinstance(title, str):
+        return ''
+    normalized = title.strip().lower()
+    # Collapse any run of whitespace to a single space.
+    normalized = re.sub(r'\s+', ' ', normalized)
+    # Strip surrounding punctuation (but keep internal punctuation such as the
+    # hyphen in "take-home" so distinct titles stay distinct).
+    normalized = normalized.strip('.,;:!?-–—"\'')
+    return normalized.strip()
+
+
+def _resolve_heuristic_studio_event(title, start_datetime):
+    """Conservative title + same-UTC-day adopt match for STANDARD events.
+
+    Issue #998 — the standalone-event analogue of
+    ``_resolve_heuristic_workshop_event``. Used by ``_dispatch_events`` just
+    before it would mint a brand-new ``origin='github'`` row: if exactly one
+    pre-existing Studio event looks like the same real session, the dispatcher
+    ADOPTS it instead of creating a duplicate.
+
+    Returns ``(matched_count, event)``:
+
+    - ``(0, None)`` when nothing matches — caller mints a new event (unchanged
+      zero-match behaviour).
+    - ``(1, <Event>)`` when EXACTLY ONE candidate matches on the same UTC
+      calendar day AND normalized title — caller adopts it.
+    - ``(n, None)`` with ``n > 1`` when ambiguous — caller refuses to guess,
+      logs a warning, and falls through to the normal new-event path.
+
+    Candidate set (conservative, false-positive guards):
+    - ``origin='studio'`` only — github-origin rows are matched by the normal
+      ``slug + source_repo`` path.
+    - ``content_id__isnull=True`` — a studio event that already carries a
+      ``content_id`` was already adopted; excluding it prevents re-adoption
+      churn.
+    - ``event_series__isnull=True`` — recurring-series occurrences share a
+      title across many dates; scoping the heuristic to non-series rows keeps
+      it conservative (a series occurrence should be linked explicitly).
+
+    Match key:
+    - Date: ``event.start_datetime`` date in UTC equals the incoming event's
+      start date in UTC (``TruncDate(..., tzinfo=utc)``). Studio rows carry
+      real local times while GitHub-authored YAML may carry a date-only /
+      00:00 UTC value, so we compare on DATE, not datetime.
+    - Title: normalized equality of ``event.title`` and the incoming title.
+    """
+    import datetime as dt
+
+    from django.db.models.functions import TruncDate
+    from events.models import Event
+
+    target_title = _normalize_title_for_match(title)
+    if not target_title or start_datetime is None:
+        return 0, None
+
+    target_date = start_datetime.astimezone(dt.timezone.utc).date()
+
+    # Narrow to non-series, content_id-less, same-UTC-day studio candidates in
+    # the DB, then apply the normalized-title equality in Python (normalization
+    # isn't expressible as a portable ORM filter). Truncate in UTC explicitly so
+    # the calendar-day comparison is independent of the connection timezone.
+    same_day = Event.objects.filter(
+        origin='studio',
+        content_id__isnull=True,
+        event_series__isnull=True,
+    ).annotate(
+        start_date=TruncDate('start_datetime', tzinfo=dt.timezone.utc),
+    ).filter(start_date=target_date)
+
+    matches = [
+        event for event in same_day
+        if _normalize_title_for_match(event.title) == target_title
+    ]
+    if len(matches) == 1:
+        return 1, matches[0]
+    return len(matches), None
+
+
+def _adopt_candidate_owns_slug(adopt_event, slug):
+    """Return True when the adopt candidate is the row that owns ``slug``.
+
+    Issue #998. ``_check_slug_collision`` skips a file when a row with the
+    same slug exists under a different ``source_repo`` (a studio row has an
+    empty ``source_repo``). When that colliding row is exactly the studio
+    event we are about to adopt, it is NOT a foreign-source collision — the
+    file must proceed to the adopt path instead of being skipped. This guard
+    is intentionally narrow: it only suppresses the collision skip when the
+    single resolved adopt candidate carries the same slug, so a genuinely
+    different same-slug event still hits the existing collision skip.
+    """
+    return adopt_event is not None and adopt_event.slug == slug
+
+
+def _ambiguous_studio_candidate_ids(title, start_datetime):
+    """List the ids of the studio events that make an adopt match ambiguous.
+
+    Issue #998. Recomputed (cheaply) only on the >1-match skip-and-warn path
+    so the logged warning and the ``stats['errors']`` entry can name the
+    colliding candidate ids for an operator to resolve manually.
+    """
+    import datetime as dt
+
+    from django.db.models.functions import TruncDate
+    from events.models import Event
+
+    target_title = _normalize_title_for_match(title)
+    if not target_title or start_datetime is None:
+        return []
+
+    target_date = start_datetime.astimezone(dt.timezone.utc).date()
+    same_day = Event.objects.filter(
+        origin='studio',
+        content_id__isnull=True,
+        event_series__isnull=True,
+    ).annotate(
+        start_date=TruncDate('start_datetime', tzinfo=dt.timezone.utc),
+    ).filter(start_date=target_date)
+
+    return sorted(
+        event.pk for event in same_day
+        if _normalize_title_for_match(event.title) == target_title
+    )
+
+
 def _maybe_create_zoom_meeting_for_synced_event(event, data):
     """Best-effort Zoom meeting creation for newly synced events."""
     if event.platform != 'zoom' or event.status in ('completed', 'cancelled'):
@@ -299,17 +439,51 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
                 stats['errors'].append({'file': rel_path, 'error': msg})
                 continue
 
-            # Slug collision check
-            if _check_slug_collision(Event, slug, source.repo_name, rel_path):
-                stats['errors'].append({
-                    'file': rel_path,
-                    'error': (
-                        f"Slug collision: '{slug}' already exists from a "
-                        f"different source. Skipped."
-                    ),
-                })
-                failed_slugs.add(slug)
-                continue
+            # Resolve the incoming event start (used by the adopt heuristic
+            # below and, on the zero-match path, by the new-event create
+            # kwargs). Compute it once here so the adopt match — which runs
+            # BEFORE the new-event branch — can compare on the same UTC day.
+            incoming_start_dt = _coerce_event_datetime(
+                data.get('start_datetime'),
+            )
+            if not incoming_start_dt:
+                incoming_start_dt = _coerce_event_datetime(
+                    data.get('published_at'),
+                )
+            if not incoming_start_dt:
+                incoming_start_dt = timezone.now()
+
+            # Issue #998: adopt-on-sync. Before the slug-collision gate, look
+            # for a pre-existing, content_id-less, non-series studio event that
+            # matches this incoming event by normalized title + same UTC day.
+            # Exactly one match -> ADOPT it (attach this content_id, flip
+            # origin) instead of minting a duplicate. >1 match -> skip-and-warn,
+            # fall through to the normal new-event path. 0 match -> unchanged.
+            #
+            # Resolving the candidate here also reconciles with the slug
+            # collision check: when the incoming YAML slug equals the matched
+            # studio event's slug, that is NOT a foreign-source collision —
+            # it is the row we are about to adopt, so we must not skip it.
+            adopt_matched_count, adopt_event = _resolve_heuristic_studio_event(
+                data.get('title', slug), incoming_start_dt,
+            )
+
+            # Slug collision check. Skip it only when the colliding row is
+            # exactly the studio event we are about to adopt (same slug, no
+            # content_id, non-series, normalized-title + same-UTC-day match).
+            # A genuinely different event that merely shares a slug still hits
+            # the collision skip.
+            if not _adopt_candidate_owns_slug(adopt_event, slug):
+                if _check_slug_collision(Event, slug, source.repo_name, rel_path):
+                    stats['errors'].append({
+                        'file': rel_path,
+                        'error': (
+                            f"Slug collision: '{slug}' already exists from a "
+                            f"different source. Skipped."
+                        ),
+                    })
+                    failed_slugs.add(slug)
+                    continue
 
             seen_slugs.add(slug)
 
@@ -393,40 +567,99 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
                 recap=rendered_recap,
             )
 
+            # Look up by slug+source_repo (back-compat) first, then by
+            # content_id+source_repo. The content_id lookup (issue #998) is
+            # what makes a re-sync of an ADOPTED event idempotent: adoption
+            # keeps the studio event's original slug, which differs from the
+            # incoming YAML slug, so the slug lookup misses on the second
+            # sync — but the content_id we attached on adopt still matches,
+            # preventing a duplicate-content_id INSERT.
             event = find_synced_object((
                 lambda: Event.objects.filter(
                     slug=slug, source_repo=source.repo_name,
                 ).first(),
+                lambda: Event.objects.filter(
+                    content_id=event_content_id,
+                    source_repo=source.repo_name,
+                ).first(),
             ))
             create_kwargs = None
-            if event is None:
-                # Content-repo events still default to recording-style rows
-                # unless operational frontmatter explicitly says otherwise.
-                start_dt_value = _coerce_event_datetime(data.get('start_datetime'))
-                if not start_dt_value:
-                    start_dt_value = _coerce_event_datetime(published_at)
-                if not start_dt_value:
-                    start_dt_value = timezone.now()
+            # The slug recorded in seen_slugs / detail. On adopt this becomes
+            # the studio event's existing slug (we never rename it), so stale
+            # cleanup never unpublishes the adopted row.
+            effective_slug = slug
+            if event is not None:
+                # A github-origin row already owns this content_id/slug. Keep
+                # its current slug for stale-cleanup/detail (it may be the
+                # studio slug retained from a prior adopt, not the YAML slug).
+                effective_slug = event.slug
+            else:
+                # Issue #998: no github-origin row exists for this slug yet.
+                # Before minting a new event, try to adopt a matching studio
+                # event so we never create a second row for one real session.
+                if adopt_matched_count > 1:
+                    # Ambiguous: refuse to guess. A wrong adopt corrupts a real
+                    # Studio event; a logged duplicate is recoverable via
+                    # events/services/event_merge.py. Skip the adopt and fall
+                    # through to the normal new-event path, recording the
+                    # ambiguity so an operator can resolve it manually.
+                    candidate_ids = _ambiguous_studio_candidate_ids(
+                        data.get('title', slug), incoming_start_dt,
+                    )
+                    msg = (
+                        f'Adopt-on-sync ambiguous for {rel_path}: '
+                        f'{adopt_matched_count} content_id-less studio events '
+                        f'match title {data.get("title", slug)!r} on '
+                        f'{incoming_start_dt.astimezone(dt.timezone.utc).date().isoformat()} '
+                        f'(candidate ids: {candidate_ids}). Not adopting — '
+                        f'creating a new event instead. Resolve manually.'
+                    )
+                    logger.warning(msg)
+                    stats['errors'].append({'file': rel_path, 'error': msg})
 
-                create_kwargs = {
-                    'slug': slug,
-                    'start_datetime': start_dt_value,
-                    'end_datetime': _coerce_event_datetime(
-                        data.get('end_datetime'),
-                    ),
-                    'status': data.get('status') or 'completed',
-                    'timezone': data.get('timezone') or settings.TIME_ZONE,
-                    'platform': data.get('platform') or 'zoom',
-                    'location': data.get('location', '') or '',
-                    'published': data.get('published', True),
-                }
+                if adopt_matched_count == 1 and adopt_event is not None:
+                    # Exactly one match -> ADOPT. Route the incoming content
+                    # defaults through the matched studio event. The defaults
+                    # carry origin='github' + source_repo + source_path +
+                    # source_commit + content_id together, so the #564 save
+                    # invariant flips atomically. Operational fields
+                    # (start_datetime, status, zoom_*, slug, registrations) are
+                    # NOT in content_defaults, so they survive on the adopted
+                    # row. Keep the studio slug as canonical.
+                    event = adopt_event
+                    effective_slug = adopt_event.slug
+                    create_kwargs = None
+                else:
+                    # Zero-match (or ambiguous fall-through): mint a new
+                    # github-origin event exactly as before. Content-repo
+                    # events default to recording-style rows unless
+                    # operational frontmatter says otherwise.
+                    create_kwargs = {
+                        'slug': slug,
+                        'start_datetime': incoming_start_dt,
+                        'end_datetime': _coerce_event_datetime(
+                            data.get('end_datetime'),
+                        ),
+                        'status': data.get('status') or 'completed',
+                        'timezone': data.get('timezone') or settings.TIME_ZONE,
+                        'platform': data.get('platform') or 'zoom',
+                        'location': data.get('location', '') or '',
+                        'published': data.get('published', True),
+                    }
+
+            # Record the effective slug (studio slug on adopt) so stale
+            # cleanup keeps the row and the detail link points at the right
+            # slug.
+            if effective_slug != slug:
+                seen_slugs.discard(slug)
+                seen_slugs.add(effective_slug)
 
             result = _upsert_synced_event_content(
                 lookup=lambda: event,
                 defaults=content_defaults,
                 stats=stats,
                 create_kwargs=create_kwargs,
-                detail_slug=slug,
+                detail_slug=effective_slug,
             )
             event = result.instance
             if result.created:

@@ -5785,6 +5785,7 @@
                     {
                       "created_at": "2026-04-15T12:00:00+00:00",
                       "duration_weeks": 6,
+                      "event_series": null,
                       "name": "May 2026",
                       "slug": "may-2026",
                       "start_date": "2026-05-01",
@@ -5816,6 +5817,7 @@
             "application/json": {
               "example": {
                 "duration_weeks": 6,
+                "event_series": "may-2026-community-sprint",
                 "name": "May 2026",
                 "slug": "may-2026",
                 "start_date": "2026-05-01",
@@ -5825,6 +5827,15 @@
                 "properties": {
                   "duration_weeks": {
                     "type": "integer"
+                  },
+                  "event_series": {
+                    "description": "Link to an event series, resolved by id (integer or numeric string) or slug (non-numeric string). ``null`` or an empty string clears the link; an unknown id/slug returns 422 ``unknown_series``.",
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "integer",
+                      "null"
+                    ]
                   },
                   "name": {
                     "type": "string"
@@ -5865,6 +5876,7 @@
                 "example": {
                   "created_at": "2026-04-15T12:00:00+00:00",
                   "duration_weeks": 6,
+                  "event_series": null,
                   "name": "May 2026",
                   "slug": "may-2026",
                   "start_date": "2026-05-01",
@@ -5890,7 +5902,18 @@
             "description": "Non-staff token attempted to create."
           },
           "422": {
-            "description": "Validation error (missing field, bad date, duplicate slug)."
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_series",
+                  "details": {
+                    "event_series": "Unknown event series"
+                  },
+                  "error": "Unknown event series"
+                }
+              }
+            },
+            "description": "Validation error (missing field, bad date, duplicate slug, or unknown ``event_series``)."
           }
         },
         "summary": "Create a sprint (staff-only)",
@@ -5949,6 +5972,7 @@
                 "example": {
                   "created_at": "2026-04-15T12:00:00+00:00",
                   "duration_weeks": 6,
+                  "event_series": null,
                   "name": "May 2026",
                   "slug": "may-2026",
                   "start_date": "2026-05-01",
@@ -5994,12 +6018,21 @@
           "content": {
             "application/json": {
               "example": {
-                "status": "active"
+                "event_series": 2
               },
               "schema": {
                 "properties": {
                   "duration_weeks": {
                     "type": "integer"
+                  },
+                  "event_series": {
+                    "description": "Link to an event series, resolved by id (integer or numeric string) or slug (non-numeric string). ``null`` or an empty string clears the link; an unknown id/slug returns 422 ``unknown_series``.",
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "integer",
+                      "null"
+                    ]
                   },
                   "name": {
                     "type": "string"
@@ -6030,6 +6063,7 @@
                 "example": {
                   "created_at": "2026-04-15T12:00:00+00:00",
                   "duration_weeks": 6,
+                  "event_series": null,
                   "name": "May 2026",
                   "slug": "may-2026",
                   "start_date": "2026-05-01",
@@ -6050,7 +6084,18 @@
             "description": "Sprint not found."
           },
           "422": {
-            "description": "Validation error."
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_series",
+                  "details": {
+                    "event_series": "Unknown event series"
+                  },
+                  "error": "Unknown event series"
+                }
+              }
+            },
+            "description": "Validation error (bad date, bad status, or unknown ``event_series``)."
           }
         },
         "summary": "Update a sprint (staff-only)",

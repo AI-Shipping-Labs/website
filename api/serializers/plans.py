@@ -25,6 +25,7 @@ def _isoformat_or_none(value):
 
 def serialize_sprint(sprint):
     """Sprint dict shape used by every sprint endpoint."""
+    series = sprint.event_series
     return {
         "slug": sprint.slug,
         "name": sprint.name,
@@ -33,6 +34,9 @@ def serialize_sprint(sprint):
         ),
         "duration_weeks": sprint.duration_weeks,
         "status": sprint.status,
+        "event_series": (
+            {"id": series.id, "slug": series.slug} if series else None
+        ),
         "created_at": _isoformat_or_none(sprint.created_at),
         "updated_at": _isoformat_or_none(sprint.updated_at),
     }

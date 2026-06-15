@@ -21,6 +21,7 @@ from api.serializers.plans import serialize_sprint
 from api.utils import parse_json_body, require_methods
 from api.views._permissions import bearer_is_admin, visible_plans_for
 from plans.models import SPRINT_STATUS_CHOICES, Sprint
+from studio.views.sprints import _parse_event_series
 
 VALID_SPRINT_STATUSES = {choice for choice, _label in SPRINT_STATUS_CHOICES}
 
@@ -49,9 +50,63 @@ _SPRINT_EXAMPLE = {
     "start_date": "2026-05-01",
     "duration_weeks": 6,
     "status": "active",
+    "event_series": None,
     "created_at": "2026-04-15T12:00:00+00:00",
     "updated_at": "2026-04-15T12:00:00+00:00",
 }
+
+# Shared request-body documentation for the ``event_series`` link.
+_EVENT_SERIES_PROPERTY = {
+    "type": ["string", "integer", "null"],
+    "nullable": True,
+    "description": (
+        "Link to an event series, resolved by id (integer or numeric "
+        "string) or slug (non-numeric string). ``null`` or an empty "
+        "string clears the link; an unknown id/slug returns 422 "
+        "``unknown_series``."
+    ),
+}
+
+# Shared 422 ``unknown_series`` response documentation.
+_UNKNOWN_SERIES_RESPONSE = {
+    "description": "Unknown ``event_series`` id or slug.",
+    "example": {
+        "error": "Unknown event series",
+        "code": "unknown_series",
+        "details": {"event_series": "Unknown event series"},
+    },
+}
+
+
+def _resolve_event_series(raw):
+    """Resolve a request-body ``event_series`` value to ``EventSeries|None``.
+
+    Returns ``(series, error)`` where ``error`` is an ``error_response`` (or
+    ``None`` on success). ``series`` is ``None`` for an explicit unlink
+    (``None`` / ``""``). Resolution by id-or-slug is shared with Studio via
+    ``_parse_event_series``.
+
+    Wrong JSON types (list, dict, bool) are a 422 ``validation_error``;
+    unknown id/slug is a 422 ``unknown_series``.
+    """
+    if raw in (None, ""):
+        return None, None
+    if not isinstance(raw, (int, str)) or isinstance(raw, bool):
+        return None, error_response(
+            "Invalid event_series",
+            "validation_error",
+            status=422,
+            details={"event_series": "Must be an event series id or slug"},
+        )
+    series, parse_error = _parse_event_series(raw)
+    if parse_error:
+        return None, error_response(
+            "Unknown event series",
+            "unknown_series",
+            status=422,
+            details={"event_series": "Unknown event series"},
+        )
+    return series, None
 
 
 def _parse_iso_date(value):
@@ -128,6 +183,7 @@ def _sprint_visible_to(user, sprint):
                         "enum": _SPRINT_STATUS_ENUM,
                         "default": "draft",
                     },
+                    "event_series": _EVENT_SERIES_PROPERTY,
                 },
                 "example": {
                     "name": "May 2026",
@@ -135,6 +191,7 @@ def _sprint_visible_to(user, sprint):
                     "start_date": "2026-05-01",
                     "duration_weeks": 6,
                     "status": "draft",
+                    "event_series": "may-2026-community-sprint",
                 },
             },
             "responses": {
@@ -152,7 +209,9 @@ def _sprint_visible_to(user, sprint):
                 },
                 422: {
                     "description": "Validation error (missing field, "
-                                   "bad date, duplicate slug).",
+                                   "bad date, duplicate slug, or unknown "
+                                   "``event_series``).",
+                    "example": _UNKNOWN_SERIES_RESPONSE["example"],
                 },
             },
         },
@@ -161,7 +220,7 @@ def _sprint_visible_to(user, sprint):
 def sprints_collection(request):
     """``GET /api/sprints/`` and ``POST /api/sprints/``."""
     if request.method == "GET":
-        qs = Sprint.objects.all()
+        qs = Sprint.objects.select_related("event_series").all()
         status_filter = request.GET.get("status")
         if status_filter:
             if status_filter not in VALID_SPRINT_STATUSES:
@@ -236,12 +295,23 @@ def sprints_collection(request):
             details={"slug": "Slug already in use"},
         )
 
+    # Resolve the linked event series (if supplied) before any write, so an
+    # unknown id/slug or wrong type fails with 422 and no sprint is created.
+    event_series = None
+    if "event_series" in data:
+        event_series, series_error = _resolve_event_series(
+            data["event_series"]
+        )
+        if series_error is not None:
+            return series_error
+
     sprint = Sprint.objects.create(
         name=data["name"],
         slug=data["slug"],
         start_date=start_date,
         duration_weeks=data["duration_weeks"],
         status=status_value,
+        event_series=event_series,
     )
     return JsonResponse(serialize_sprint(sprint), status=201)
 
@@ -287,8 +357,9 @@ def sprints_collection(request):
                         "type": "string",
                         "enum": _SPRINT_STATUS_ENUM,
                     },
+                    "event_series": _EVENT_SERIES_PROPERTY,
                 },
-                "example": {"status": "active"},
+                "example": {"event_series": 2},
             },
             "responses": {
                 200: {
@@ -298,7 +369,11 @@ def sprints_collection(request):
                 400: {"description": "Invalid JSON body."},
                 403: {"description": "Non-staff token."},
                 404: {"description": "Sprint not found."},
-                422: {"description": "Validation error."},
+                422: {
+                    "description": "Validation error (bad date, bad "
+                                   "status, or unknown ``event_series``).",
+                    "example": _UNKNOWN_SERIES_RESPONSE["example"],
+                },
             },
         },
         "DELETE": {
@@ -330,7 +405,11 @@ def sprint_detail(request, slug):
     if request.method == "DELETE":
         return _sprint_delete_not_available_response()
 
-    sprint = Sprint.objects.filter(slug=slug).first()
+    sprint = (
+        Sprint.objects.select_related("event_series")
+        .filter(slug=slug)
+        .first()
+    )
     if sprint is None:
         return error_response(
             "Sprint not found",
@@ -400,6 +479,14 @@ def sprint_detail(request, slug):
             )
         sprint.status = data["status"]
         update_fields.append("status")
+    if "event_series" in data:
+        new_series, series_error = _resolve_event_series(data["event_series"])
+        if series_error is not None:
+            return series_error
+        new_series_id = new_series.id if new_series else None
+        if new_series_id != sprint.event_series_id:
+            sprint.event_series = new_series
+            update_fields.append("event_series")
 
     if update_fields:
         sprint.save(update_fields=update_fields + ["updated_at"])

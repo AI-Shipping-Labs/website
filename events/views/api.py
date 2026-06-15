@@ -234,9 +234,6 @@ def _register_anonymous(request, event):
                 'already_registered': True,
             }, status=201)
 
-        if event.is_full:
-            return JsonResponse({'error': 'Event is full'}, status=410)
-
         registration = EventRegistration.objects.create(
             event=event, user=existing_user,
         )
@@ -269,11 +266,6 @@ def _register_anonymous(request, event):
         }, status=201)
 
     # No existing user — create a free, unverified one.
-    if event.is_full:
-        # Don't create an orphan unverified account if registration is
-        # going to fail anyway.
-        return JsonResponse({'error': 'Event is full'}, status=410)
-
     user = _create_unverified_subscriber(
         email, preferred_timezone=submitted_timezone,
     )
@@ -321,7 +313,6 @@ def register_for_event(request, slug):
         403 if tier too low (or anonymous attempt on a gated event)
         404 if event not found or draft
         409 if already registered or event not upcoming
-        410 if event is full
         400 on invalid JSON or invalid email
     """
     event = get_object_or_404(Event, slug=slug)
@@ -366,13 +357,6 @@ def register_for_event(request, slug):
         return JsonResponse(
             {'error': 'Already registered'},
             status=409,
-        )
-
-    # Check capacity
-    if event.is_full:
-        return JsonResponse(
-            {'error': 'Event is full'},
-            status=410,
         )
 
     # Register the user

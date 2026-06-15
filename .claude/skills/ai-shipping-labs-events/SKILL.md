@@ -49,7 +49,6 @@ Required on create: `title`, `start_datetime`.
 | `timezone` | string | IANA name, e.g. `Europe/Berlin`. Display timezone for the event. |
 | `zoom_join_url` | string | Join URL for Zoom or custom-platform events. |
 | `required_level` | integer | Access gate: `0` open, `5` registered, `10` basic, `20` main, `30` premium. Default `0`. |
-| `max_participants` | integer or null | Capacity cap; null means unlimited. |
 | `status` | string | `draft` / `upcoming` / `completed` / `cancelled`. |
 | `published` | boolean | Publish flag. Setting it true stamps `published_at`. |
 | `external_host` | string | Partner host pill: `''` (community), `Maven`, `Luma`, `DataTalksClub`. |

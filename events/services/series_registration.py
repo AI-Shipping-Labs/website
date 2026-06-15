@@ -3,7 +3,7 @@
 A ``SeriesRegistration`` is a standing flag. Registering for the series
 fans the flag out into real per-event ``EventRegistration`` rows for
 every eligible upcoming occurrence, so every existing per-event surface
-(dashboard, reminders, follow-ups, capacity, ``.ics``) keeps working with
+(dashboard, reminders, follow-ups, ``.ics``) keeps working with
 no changes. Occurrences added later auto-enroll existing registrants via
 ``enroll_series_registrants_in_event``.
 
@@ -13,7 +13,6 @@ these hold):
 - ``is_upcoming`` — future, non-draft, non-cancelled.
 - The user ``can_access`` it (tier). Inaccessible occurrences are counted
   in ``skipped_no_access`` rather than blocking the whole action.
-- It is not ``is_full``. Full occurrences are counted in ``skipped_full``.
 - The user is not already registered (counted in ``skipped_already``).
 """
 
@@ -42,7 +41,7 @@ def enroll_user_in_series(user, series):
     """Fan a series registration out into per-event registrations.
 
     Creates an ``EventRegistration`` for every eligible upcoming
-    occurrence the ``user`` can access and that is not full. Idempotent:
+    occurrence the ``user`` can access. Idempotent:
     occurrences the user is already registered for are skipped, not
     duplicated.
 
@@ -57,7 +56,6 @@ def enroll_user_in_series(user, series):
             'registered': int,        # new EventRegistration rows created
             'skipped_already': int,   # already registered for the occurrence
             'skipped_no_access': int, # tier too low
-            'skipped_full': int,      # at capacity
             'total_occurrences': int, # eligible upcoming occurrences seen
         }
     """
@@ -65,7 +63,6 @@ def enroll_user_in_series(user, series):
         'registered': 0,
         'skipped_already': 0,
         'skipped_no_access': 0,
-        'skipped_full': 0,
         'total_occurrences': 0,
     }
 
@@ -85,9 +82,6 @@ def enroll_user_in_series(user, series):
             continue
         if not can_access(user, event):
             summary['skipped_no_access'] += 1
-            continue
-        if event.is_full:
-            summary['skipped_full'] += 1
             continue
         EventRegistration.objects.create(event=event, user=user)
         from analytics.activity import record_event_register
@@ -117,7 +111,6 @@ def series_registration_summary(user, series):
         'registered': 0,
         'skipped_already': 0,
         'skipped_no_access': 0,
-        'skipped_full': 0,
         'total_occurrences': 0,
     }
 
@@ -135,8 +128,6 @@ def series_registration_summary(user, series):
             summary['skipped_already'] += 1
         elif not can_access(user, event):
             summary['skipped_no_access'] += 1
-        elif event.is_full:
-            summary['skipped_full'] += 1
         else:
             summary['skipped_already'] += 1
     return summary
@@ -152,7 +143,7 @@ def enroll_series_registrants_in_event(event):
 
     Respects the same eligibility rules as ``enroll_user_in_series`` for
     the single new occurrence: only enroll registrants who can access it
-    and only when it is upcoming and not full.
+    and only when it is upcoming.
     """
     series = event.event_series
     if series is None:
@@ -184,9 +175,6 @@ def enroll_series_registrants_in_event(event):
                 continue
             if not can_access(user, event):
                 continue
-            if event.is_full:
-                # Capacity can be reached mid-loop; recheck each time.
-                break
             EventRegistration.objects.create(event=event, user=user)
             from analytics.activity import record_event_register
             record_event_register(user, event)

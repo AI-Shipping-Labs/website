@@ -4,7 +4,6 @@ Covers:
 - Event model fields, defaults, and constraints
 - EventRegistration model with unique_together constraint
 - Description markdown rendering on save
-- Spots remaining and is_full properties
 - Zoom link visibility (15 min before start)
 - Events list page: Upcoming and Past sections
 - Event detail page: always visible, badges, date/time, location
@@ -49,7 +48,6 @@ class EventModelFieldsTest(TestCase):
         self.assertEqual(event.description, '')
         self.assertEqual(event.tags, [])
         self.assertEqual(event.required_level, 0)
-        self.assertIsNone(event.max_participants)
         self.assertFalse(event.has_recording)
         self.assertIsNotNone(event.created_at)
         self.assertIsNotNone(event.updated_at)
@@ -67,7 +65,6 @@ class EventModelFieldsTest(TestCase):
             location='Zoom',
             tags=['python', 'django'],
             required_level=LEVEL_MAIN,
-            max_participants=50,
             status='upcoming',
         )
         self.assertEqual(event.timezone, 'Europe/Berlin')
@@ -75,7 +72,6 @@ class EventModelFieldsTest(TestCase):
         self.assertEqual(event.location, 'Zoom')
         self.assertEqual(event.tags, ['python', 'django'])
         self.assertEqual(event.required_level, LEVEL_MAIN)
-        self.assertEqual(event.max_participants, 50)
         self.assertEqual(event.status, 'upcoming')
 
     def test_get_absolute_url(self):
@@ -137,40 +133,6 @@ class EventMarkdownRenderingTest(TestCase):
             start_datetime=timezone.now(),
         )
         self.assertEqual(event.description_html, '')
-
-
-class EventSpotsTest(TestCase):
-    """Test spots_remaining and is_full properties."""
-
-    def test_spots_remaining_with_max_participants(self):
-        event = Event.objects.create(
-            title='Capped', slug='capped',
-            start_datetime=timezone.now(),
-            max_participants=10,
-            status='upcoming',
-        )
-        self.assertEqual(event.spots_remaining, 10)
-        self.assertFalse(event.is_full)
-
-    def test_spots_remaining_none_when_unlimited(self):
-        event = Event.objects.create(
-            title='Unlimited', slug='unlimited',
-            start_datetime=timezone.now(),
-        )
-        self.assertIsNone(event.spots_remaining)
-        self.assertFalse(event.is_full)
-
-    def test_is_full_when_at_capacity(self):
-        event = Event.objects.create(
-            title='Full', slug='full-event',
-            start_datetime=timezone.now(),
-            max_participants=1,
-            status='upcoming',
-        )
-        user = User.objects.create_user(email='user@test.com', password='pass')
-        EventRegistration.objects.create(event=event, user=user)
-        self.assertTrue(event.is_full)
-        self.assertEqual(event.spots_remaining, 0)
 
 
 class EventZoomLinkTest(TestCase):
@@ -412,41 +374,28 @@ class EventsListTierBadgeTest(TierSetupMixin, TestCase):
         self.assertNotIn('data-lucide="lock"', content)
 
 
-class EventsListSpotsRemainingTest(TestCase):
-    """Test spots remaining on events list."""
+class EventsListNoCapacityTest(TestCase):
+    """Issue #984: the events list never shows capacity copy.
 
-    def test_shows_spots_remaining(self):
-        Event.objects.create(
-            title='Limited Event',
-            slug='limited-event',
-            start_datetime=timezone.now() + timedelta(days=7),
-            status='upcoming',
-            max_participants=20,
-        )
-        response = self.client.get('/events')
-        self.assertContains(response, '20 spots remaining')
+    Capacity was removed entirely; an event with many registrations must
+    still render as a normal card with no "spots remaining" / "Event is
+    full" text.
+    """
 
-    def test_shows_full_when_at_capacity(self):
+    def test_no_capacity_copy_on_list(self):
         event = Event.objects.create(
-            title='Full Event',
-            slug='full-event',
-            start_datetime=timezone.now() + timedelta(days=7),
-            status='upcoming',
-            max_participants=1,
-        )
-        user = User.objects.create_user(email='u@test.com', password='pass')
-        EventRegistration.objects.create(event=event, user=user)
-        response = self.client.get('/events')
-        self.assertContains(response, 'Event is full')
-
-    def test_no_spots_display_for_unlimited(self):
-        Event.objects.create(
-            title='Unlimited Event',
-            slug='unlimited-event',
+            title='Popular Event',
+            slug='popular-event',
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
         )
+        for i in range(3):
+            user = User.objects.create_user(
+                email=f'u{i}@test.com', password='pass',
+            )
+            EventRegistration.objects.create(event=event, user=user)
         response = self.client.get('/events')
+        self.assertContains(response, 'Popular Event')
         self.assertNotContains(response, 'spots remaining')
         self.assertNotContains(response, 'Event is full')
 
@@ -771,13 +720,14 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         # And the lock badge in the header is "Premium" (no "+").
         self.assertNotContains(response, 'Premium+')
 
-    def test_full_event_shows_full_message(self):
+    def test_event_with_registrations_never_shows_full(self):
+        """Issue #984: capacity removed, so a heavily-registered event detail
+        page never shows "Event is full" and still offers registration."""
         event = Event.objects.create(
-            title='Full Event',
-            slug='full-event-detail',
+            title='Popular Event',
+            slug='popular-event-detail',
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
-            max_participants=1,
         )
         other_user = User.objects.create_user(email='other@test.com', password='pass')
         EventRegistration.objects.create(event=event, user=other_user)
@@ -789,7 +739,8 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         )
         self.client.login(email='viewer@test.com', password='pass')
         response = self.client.get(event.get_absolute_url())
-        self.assertContains(response, 'Event is full')
+        self.assertNotContains(response, 'Event is full')
+        self.assertContains(response, 'Register for this event')
 
 
 class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
@@ -947,16 +898,22 @@ class RegisterForEventAPITest(TierSetupMixin, TestCase):
         data = response.json()
         self.assertEqual(data['error'], 'Already registered')
 
-    def test_register_full_event(self):
-        self.event.max_participants = 1
-        self.event.save()
-        other_user = User.objects.create_user(email='other@test.com', password='pass')
-        EventRegistration.objects.create(event=self.event, user=other_user)
+    def test_register_succeeds_regardless_of_existing_registrations(self):
+        """Issue #984: capacity removed — registration is never blocked by
+        how many users are already registered (no 410 "Event is full")."""
+        for i in range(3):
+            other_user = User.objects.create_user(
+                email=f'other{i}@test.com', password='pass',
+            )
+            EventRegistration.objects.create(event=self.event, user=other_user)
         self.client.login(email='apiuser@test.com', password='pass')
         response = self.client.post('/api/events/api-event/register')
-        self.assertEqual(response.status_code, 410)
-        data = response.json()
-        self.assertEqual(data['error'], 'Event is full')
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(
+            EventRegistration.objects.filter(
+                event=self.event, user=self.user,
+            ).exists()
+        )
 
     def test_register_nonexistent_event(self):
         self.client.login(email='apiuser@test.com', password='pass')
@@ -1605,24 +1562,23 @@ class AnonymousEventRegistrationAPITest(TierSetupMixin, TestCase):
 
     @patch('events.views.api._send_event_verification_email')
     @patch('events.services.registration_email.send_registration_confirmation')
-    def test_anonymous_full_event_returns_410_no_user_created(
+    def test_anonymous_registration_never_blocked_by_existing_registrations(
         self, mock_reg_email, mock_verify,
     ):
-        self.event.max_participants = 1
-        self.event.save()
-        # Saturate the event with another user.
-        other = User.objects.create_user(email='other@test.com')
-        EventRegistration.objects.create(event=self.event, user=other)
+        """Issue #984: capacity removed — an anonymous registrant is never
+        turned away (no 410) no matter how many users already registered."""
+        for i in range(3):
+            other = User.objects.create_user(email=f'other{i}@test.com')
+            EventRegistration.objects.create(event=self.event, user=other)
 
         resp = self._post('open-call', {'email': 'late@test.com'})
-        self.assertEqual(resp.status_code, 410)
+        self.assertEqual(resp.status_code, 201)
 
-        # Don't leak orphan unverified accounts when registration would
-        # have failed anyway.
-        self.assertFalse(
+        # The new unverified account is created and registered.
+        self.assertTrue(
             User.objects.filter(email__iexact='late@test.com').exists()
         )
-        mock_verify.assert_not_called()
+        mock_verify.assert_called_once()
 
     # --- Issue #672: gap 1 (claim link for existing unverified user) ---
 

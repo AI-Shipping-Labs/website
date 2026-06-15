@@ -15,7 +15,6 @@
         <th class="{% studio_list_class 'th' %}">Status</th>
         <th class="{% studio_list_class 'th' %}">Kind / Platform</th>
         <th class="{% studio_list_class 'th' %}">Date</th>
-        <th class="{% studio_list_class 'th' %}">Capacity</th>
         <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
       </tr>
     </thead>
@@ -53,7 +52,6 @@
           <p class="text-xs text-muted-foreground mt-1">{{ event.get_platform_display }}</p>
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Capacity">{% if event.max_participants %}{{ event.registration_count }}/{{ event.max_participants }}{% else %}Unlimited{% endif %}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_event_edit' event_id=event.pk as event_edit_url %}
           <div class="{% studio_list_class 'action_group' %}">

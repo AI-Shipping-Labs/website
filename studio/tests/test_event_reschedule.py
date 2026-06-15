@@ -338,7 +338,6 @@ class StudioEventRescheduleSyncedTest(StaffUserMixin, TestCase):
             f'/studio/events/{self.event.pk}/edit',
             {
                 # Synced edits only post the operational fields.
-                'max_participants': '100',
                 'status': 'upcoming',
                 'platform': 'zoom',
             },

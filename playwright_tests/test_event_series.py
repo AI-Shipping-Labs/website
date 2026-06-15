@@ -217,10 +217,11 @@ class TestScenario3GitHubLocked:
         assert page.get_by_text("This content is synced from GitHub").first.is_visible()
         # Title input is disabled.
         assert page.locator('input[name="title"]').first.is_disabled()
-        # Operational fields (status, platform, max_participants) remain editable.
+        # Operational fields (status, platform) remain editable.
         assert not page.locator('select[name="status"]').first.is_disabled()
         assert not page.locator('select[name="platform"]').first.is_disabled()
-        assert not page.locator('input[name="max_participants"]').first.is_disabled()
+        # Capacity removed (#984): no Max Participants input exists.
+        assert page.locator('input[name="max_participants"]').count() == 0
 
         # Origin badge on the list.
         page.goto(f"{django_server}/studio/events/", wait_until="domcontentloaded")

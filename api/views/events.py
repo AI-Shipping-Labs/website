@@ -64,7 +64,6 @@ WRITABLE_FIELDS = {
     "location",
     "tags",
     "required_level",
-    "max_participants",
     "status",
     "external_host",
     "published",
@@ -95,7 +94,6 @@ _EVENT_EXAMPLE = {
     "location": "",
     "tags": ["sprint:may-2026"],
     "required_level": 0,
-    "max_participants": None,
     "status": "scheduled",
     "external_host": "",
     "published": True,
@@ -129,7 +127,6 @@ def serialize_event(event):
         "location": event.location,
         "tags": event.tags or [],
         "required_level": event.required_level,
-        "max_participants": event.max_participants,
         "status": event.status,
         "series_position": event.series_position,
         "external_host": event.external_host,
@@ -249,19 +246,6 @@ def _collect_event_values(data, *, existing=None):
         if required_level not in VALID_REQUIRED_LEVELS:
             errors["required_level"] = "Unknown tier level."
         values["required_level"] = required_level
-
-    if "max_participants" in data:
-        raw = data["max_participants"]
-        if raw in (None, ""):
-            values["max_participants"] = None
-        else:
-            try:
-                max_participants = int(raw)
-            except (TypeError, ValueError):
-                max_participants = None
-            if max_participants is None or max_participants <= 0:
-                errors["max_participants"] = "Must be a positive integer or null."
-            values["max_participants"] = max_participants
 
     if "tags" in data:
         tags = data["tags"]
@@ -456,10 +440,6 @@ def _maybe_create_zoom_meeting(event, create_zoom):
                         "items": {"type": "string"},
                     },
                     "required_level": {"type": "integer"},
-                    "max_participants": {
-                        "type": "integer",
-                        "nullable": True,
-                    },
                     "status": {"type": "string"},
                     "external_host": {"type": "string"},
                     "published": {"type": "boolean"},
@@ -586,7 +566,6 @@ def events_collection(request):
         tags=[],
         location="",
         external_host="",
-        max_participants=None,
         origin="studio",
         source_repo="",
     )

@@ -659,7 +659,6 @@ class StudioEventSyncedTest(StaffUserMixin, TestCase):
             start_datetime=datetime(2026, 6, 1, 10, 0),
             end_datetime=datetime(2026, 6, 1, 11, 0),
             status='draft',
-            max_participants=100,
             origin='github',
             source_repo='AI-Shipping-Labs/content',
             source_path='my-event.md',
@@ -716,26 +715,19 @@ class StudioEventSyncedTest(StaffUserMixin, TestCase):
         self.assertIsNotNone(status_match)
         self.assertNotIn('disabled', status_match.group(0))
 
-    def test_synced_event_max_participants_is_editable(self):
-        """Max participants field remains editable for synced events."""
+    def test_synced_event_has_no_max_participants_input(self):
+        """Issue #984: the Max Participants input was removed entirely."""
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
         content = response.content.decode()
-        import re
-        mp_match = re.search(
-            r'<input[^>]*name="max_participants"[^>]*>', content
-        )
-        self.assertIsNotNone(mp_match)
-        self.assertNotIn('disabled', mp_match.group(0))
+        self.assertNotIn('name="max_participants"', content)
 
     def test_synced_event_post_updates_operational_fields(self):
-        """POST to synced event updates status and max_participants but not description."""
+        """POST to synced event updates status but not description."""
         self.client.post(f'/studio/events/{self.event.pk}/edit', {
             'status': 'upcoming',
-            'max_participants': '50',
         })
         self.event.refresh_from_db()
         self.assertEqual(self.event.status, 'upcoming')
-        self.assertEqual(self.event.max_participants, 50)
         # Description should not change
         self.assertEqual(self.event.description, 'Original description')
 

@@ -167,10 +167,6 @@ class Event(
         choices=VISIBILITY_CHOICES,
         help_text='Minimum tier level required to register.',
     )
-    max_participants = models.IntegerField(
-        null=True, blank=True,
-        help_text='Maximum number of participants. Null means unlimited.',
-    )
     status = models.CharField(
         max_length=20,
         choices=EVENT_STATUS_CHOICES,
@@ -550,20 +546,6 @@ class Event(
         if hasattr(self, '_attendee_count'):
             return self._attendee_count
         return self.registration_count
-
-    @property
-    def spots_remaining(self):
-        """Return spots remaining if max_participants is set, else None."""
-        if self.max_participants is None:
-            return None
-        return max(0, self.max_participants - self.registration_count)
-
-    @property
-    def is_full(self):
-        """Return True if event is at capacity."""
-        if self.max_participants is None:
-            return False
-        return self.registration_count >= self.max_participants
 
     @property
     def join_click_count(self):

@@ -6,7 +6,6 @@ Tests cover all 12 BDD scenarios from the issue:
 - Anonymous visitor wants to register for an event but is directed to sign in
 - Eligible member registers for an event and sees confirmation
 - Registered member cancels their event registration
-- Member tries to register for a full event and learns it is at capacity
 - Free member on a gated event sees the upgrade path
 - Registered member returns shortly before event start and sees the Zoom join link
 - Registered member checks an event that is still far away and Zoom link is hidden
@@ -65,7 +64,6 @@ def _create_event(
     location="",
     tags=None,
     required_level=0,
-    max_participants=None,
     status="upcoming",
     recording_url="",
 ):
@@ -89,7 +87,6 @@ def _create_event(
         location=location,
         tags=tags,
         required_level=required_level,
-        max_participants=max_participants,
         status=status,
         recording_url=recording_url,
     )
@@ -166,7 +163,6 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
             description="Learn prompt engineering for AI models.",
             start_datetime=now + datetime.timedelta(days=7),
             location="Zoom",
-            max_participants=20,
             tags=["python", "ai"],
             status="upcoming",
         )
@@ -199,9 +195,9 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
         assert "Live" not in upcoming_text
         assert "Async" not in upcoming_text
 
-        # Location "Zoom" and "20 spots remaining"
+        # Location "Zoom" is shown; capacity copy was removed (#984)
         assert "Zoom" in body
-        assert "20 spots remaining" in body
+        assert "spots remaining" not in body
 
         # "Intro to LLMs" appears in the Past section
         past_section = page.locator("h2:has-text('Past')").locator("..")
@@ -303,9 +299,9 @@ class TestScenario3EligibleMemberRegisters:
         self, django_server
     , browser):
         """Given a user logged in as free@test.com (Free tier). An upcoming
-        open event exists with max_participants=10. The user sees a Register
-        button and '10 spots remaining'. After clicking Register, the page
-        reloads showing 'You're registered!' and a Cancel Registration button."""
+        open event exists. The user sees a Register button (no capacity copy,
+        #984). After clicking Register, the page reloads showing 'You're
+        registered!' and a Cancel Registration button."""
         _clear_events()
         _ensure_tiers()
         _create_user("free@test.com", tier_slug="free")
@@ -314,7 +310,6 @@ class TestScenario3EligibleMemberRegisters:
             title="Coding Session",
             slug="coding-session",
             required_level=0,
-            max_participants=10,
             status="upcoming",
         )
 
@@ -328,11 +323,11 @@ class TestScenario3EligibleMemberRegisters:
         )
         body = page.content()
 
-        # Then: User sees a "Register" button and "10 spots remaining"
+        # Then: User sees a "Register" button and no capacity copy (#984)
         register_btn = page.locator("#register-btn")
         assert register_btn.count() >= 1
         assert "Register" in register_btn.inner_text()
-        assert "10 spots remaining" in body
+        assert "spots remaining" not in body
 
         # Step 2: Click the "Register" button
         register_btn.click()
@@ -355,8 +350,8 @@ class TestScenario3EligibleMemberRegisters:
         # Issue #484: button copy was lower-cased ("Cancel registration").
         assert "Cancel registration" in cancel_btn.inner_text()
 
-        # Spots count updates (9 remaining or 1/10 spots taken)
-        assert "1/10 spots taken" in body
+        # Capacity copy was removed (#984): no "spots taken" anywhere.
+        assert "spots taken" not in body
 # ---------------------------------------------------------------
 # Scenario 4: Registered member cancels their event registration
 # ---------------------------------------------------------------
@@ -423,41 +418,39 @@ class TestScenario4RegisteredMemberCancels:
         assert register_btn.count() >= 1
         assert "Register" in register_btn.inner_text()
 # ---------------------------------------------------------------
-# Scenario 5: Member tries to register for a full event and
-#              learns it is at capacity
+# Scenario 5: A high-demand event no longer turns members away (#984)
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
-class TestScenario5FullEventCapacity:
-    """Member tries to register for a full event and learns it is
-    at capacity."""
+class TestScenario5HighDemandEventNeverFull:
+    """Issue #984: capacity removed — an event with many existing
+    registrations still lets a member register and never shows a full
+    state."""
 
-    def test_full_event_shows_event_is_full(
+    def test_high_demand_event_still_offers_register(
         self, django_server
     , browser):
-        """Given a user logged in as free@test.com (Free tier). An upcoming
-        open event with max_participants=1 and one other user already
-        registered. The detail page shows 'Event is full' and 'This event
-        has reached its maximum capacity.' with no Register button."""
+        """Given a user logged in as free@test.com (Free tier) and an upcoming
+        open event that already has several registrations. The detail page
+        still offers Register and shows no "Event is full" / capacity copy."""
         _clear_events()
         _ensure_tiers()
         _create_user("free@test.com", tier_slug="free")
 
         event = _create_event(
-            title="Full Workshop",
-            slug="full-workshop",
+            title="High Demand Workshop",
+            slug="high-demand-workshop",
             required_level=0,
-            max_participants=1,
             status="upcoming",
         )
 
-        # Fill the event with another user
-        other_user = _create_user("other@test.com", tier_slug="free")
-        _register_user_for_event(other_user, event)
+        # Pre-register several other users.
+        for i in range(3):
+            other_user = _create_user(f"other{i}@test.com", tier_slug="free")
+            _register_user_for_event(other_user, event)
 
         context = _auth_context(browser, "free@test.com")
         page = context.new_page()
-        # Step 1: Navigate to the canonical event URL.
         # Issue #673: canonical URL is ``/events/<id>/<slug>``.
         page.goto(
             f"{django_server}{event.get_absolute_url()}",
@@ -465,13 +458,16 @@ class TestScenario5FullEventCapacity:
         )
         body = page.content()
 
-        # Then: Shows "Event is full" and capacity message
-        assert "Event is full" in body
-        assert "This event has reached its maximum capacity" in body
+        # Then: no full state appears anywhere on the page.
+        assert "Event is full" not in body
+        assert "reached its maximum capacity" not in body
 
-        # No Register button
+        # And the member can still register.
         register_btn = page.locator("#register-btn")
-        assert register_btn.count() == 0
+        assert register_btn.count() >= 1
+        register_btn.click()
+        page.wait_for_selector('text="You\'re registered!"', timeout=10000)
+        assert "You're registered!" in page.content()
 # ---------------------------------------------------------------
 # Scenario 6: Free member on a gated event sees the upgrade path
 # ---------------------------------------------------------------

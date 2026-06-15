@@ -94,28 +94,6 @@ def build_tier_state(tier, user, active_override):
             "action_kind": "portal",
         }
 
-    if pending_tier and pending_tier.slug != "free":
-        if tier == base_tier:
-            note = f"Your plan changes to {pending_tier.name} at period end."
-            if pending_end:
-                note = f"Your plan changes to {pending_tier.name} on {pending_end}."
-            return {
-                "badge": "Current plan",
-                "note": note,
-                "action_label": "Current plan",
-                "action_kind": "disabled",
-            }
-        if tier == pending_tier:
-            note = "Scheduled to become your plan at period end."
-            if pending_end:
-                note = f"Scheduled to become your plan on {pending_end}."
-            return {
-                "badge": "Scheduled change",
-                "note": note,
-                "action_label": "Manage Subscription",
-                "action_kind": "portal",
-            }
-
     if tier == base_tier and base_level > 0:
         note = ""
         if override_tier and override_level > base_level:

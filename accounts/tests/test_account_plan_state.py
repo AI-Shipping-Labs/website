@@ -6,8 +6,8 @@ card cannot already convey.
 
 The frame is HIDDEN when:
 
-- A pending downgrade or pending cancellation is in flight
-  (the dedicated amber/red notice already says the same thing).
+- A pending cancellation is in flight
+  (the dedicated red notice already says the same thing).
 - The user is on the steady-state Free plan with no pending change,
   no override, no stale subscription.
 - The user is on the steady-state paid Current plan with no pending
@@ -46,7 +46,6 @@ class SuppressSteadyStatePlanStateUnitTest(TestCase):
                 "action_label": "Current plan",
                 "action_kind": "disabled",
             },
-            is_pending_downgrade=False,
             is_pending_cancellation=False,
         )
         self.assertEqual(result, {})
@@ -59,20 +58,6 @@ class SuppressSteadyStatePlanStateUnitTest(TestCase):
                 "action_label": "Current plan",
                 "action_kind": "disabled",
             },
-            is_pending_downgrade=False,
-            is_pending_cancellation=False,
-        )
-        self.assertEqual(result, {})
-
-    def test_pending_downgrade_drops_frame_even_with_useful_note(self):
-        result = _suppress_steady_state_plan_state(
-            {
-                "badge": "Current plan",
-                "note": "Your plan changes to Basic on May 29, 2026.",
-                "action_label": "Current plan",
-                "action_kind": "disabled",
-            },
-            is_pending_downgrade=True,
             is_pending_cancellation=False,
         )
         self.assertEqual(result, {})
@@ -85,7 +70,6 @@ class SuppressSteadyStatePlanStateUnitTest(TestCase):
                 "action_label": "Manage Subscription",
                 "action_kind": "portal",
             },
-            is_pending_downgrade=False,
             is_pending_cancellation=True,
         )
         self.assertEqual(result, {})
@@ -99,7 +83,6 @@ class SuppressSteadyStatePlanStateUnitTest(TestCase):
         }
         result = _suppress_steady_state_plan_state(
             state,
-            is_pending_downgrade=False,
             is_pending_cancellation=False,
         )
         self.assertEqual(result, state)
@@ -115,7 +98,6 @@ class SuppressSteadyStatePlanStateUnitTest(TestCase):
         }
         result = _suppress_steady_state_plan_state(
             state,
-            is_pending_downgrade=False,
             is_pending_cancellation=False,
         )
         self.assertEqual(result, state)
@@ -124,7 +106,6 @@ class SuppressSteadyStatePlanStateUnitTest(TestCase):
         self.assertEqual(
             _suppress_steady_state_plan_state(
                 {},
-                is_pending_downgrade=False,
                 is_pending_cancellation=False,
             ),
             {},
@@ -176,7 +157,9 @@ class AccountPagePlanStateRenderingTest(TestCase):
         self.assertEqual(response.context["account_plan_state"], {})
         self.assertNotContains(response, 'id="account-plan-state"')
 
-    def test_pending_downgrade_user_no_frame_but_amber_notice_present(self):
+    def test_paid_to_paid_pending_tier_does_not_render_dead_downgrade_ui(self):
+        """A non-free ``pending_tier`` (no real producer after #968) must
+        not resurrect the removed amber downgrade notice or a frame."""
         user = User.objects.create_user(email="dg@example.com")
         user.tier = self.main_tier
         user.subscription_id = "sub_main_dg_123"
@@ -189,12 +172,9 @@ class AccountPagePlanStateRenderingTest(TestCase):
 
         response = self.client.get("/account/")
 
-        self.assertEqual(response.context["account_plan_state"], {})
-        self.assertNotContains(response, 'id="account-plan-state"')
-        # The amber pending-downgrade notice is still rendered.
-        self.assertContains(response, 'id="pending-downgrade-notice"')
-        self.assertContains(response, 'Basic')
-        self.assertContains(response, '01/04/2026')
+        self.assertNotContains(response, 'id="pending-downgrade-notice"')
+        self.assertNotContains(response, "Scheduled change")
+        self.assertNotContains(response, "at period end")
 
     def test_pending_cancellation_user_no_frame_but_red_notice_present(self):
         user = User.objects.create_user(email="cancel@example.com")
@@ -213,6 +193,10 @@ class AccountPagePlanStateRenderingTest(TestCase):
         self.assertNotContains(response, 'id="account-plan-state"')
         # The red pending-cancellation notice is still rendered.
         self.assertContains(response, 'id="pending-cancellation-notice"')
+        # Issue #968: the cancelled-but-paid user (tier still paid,
+        # subscription_id set) must NOT trip the stale-subscription banner.
+        self.assertNotContains(response, "Your subscription needs review")
+        self.assertNotContains(response, "Scheduled change")
 
     def test_active_override_keeps_frame_and_dedicated_notice(self):
         user = User.objects.create_user(email="ov@example.com")

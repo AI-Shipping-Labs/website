@@ -1188,6 +1188,75 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         self.assertEqual(user.billing_period_end.month, 3)
         self.assertEqual(user.billing_period_end.day, 25)
 
+    def test_cancel_at_period_end_sets_pending_tier_free_keeps_paid(self):
+        """Issue #968: cancel_at_period_end=True schedules the cancellation
+        by setting pending_tier=free while leaving tier and subscription_id
+        unchanged (the user keeps paid access until subscription.deleted)."""
+        basic_tier = Tier.objects.get(slug="basic")
+        free_tier = Tier.objects.get(slug="free")
+        user = User.objects.create_user(email="cancel_pending@test.com")
+        user.tier = basic_tier
+        user.subscription_id = "sub_cancel_pending"
+        user.save(update_fields=["tier", "subscription_id"])
+
+        subscription_data = {
+            "id": "sub_cancel_pending",
+            "customer": "cus_cancel_pending",
+            "status": "active",
+            "cancel_at_period_end": True,
+            "current_period_end": 1774396800,
+            "items": {
+                "data": [
+                    {"price": {"id": "price_basic_monthly"}},
+                ],
+            },
+        }
+
+        handle_subscription_updated(subscription_data)
+
+        user.refresh_from_db()
+        self.assertEqual(user.pending_tier, free_tier)
+        # tier and subscription_id are untouched -- still fully paid.
+        self.assertEqual(user.tier, basic_tier)
+        self.assertEqual(user.subscription_id, "sub_cancel_pending")
+        self.assertIsNotNone(user.billing_period_end)
+
+    def test_reactivation_clears_pending_tier(self):
+        """Issue #968: a follow-up cancel_at_period_end=False update (user
+        un-cancelled in the portal) clears pending_tier back to None."""
+        basic_tier = Tier.objects.get(slug="basic")
+        free_tier = Tier.objects.get(slug="free")
+        basic_tier.stripe_price_id_monthly = "price_basic_monthly"
+        basic_tier.save()
+
+        user = User.objects.create_user(email="reactivate@test.com")
+        user.tier = basic_tier
+        user.subscription_id = "sub_reactivate"
+        # Simulate a prior scheduled cancellation.
+        user.pending_tier = free_tier
+        user.save(update_fields=["tier", "subscription_id", "pending_tier"])
+
+        subscription_data = {
+            "id": "sub_reactivate",
+            "customer": "cus_reactivate",
+            "status": "active",
+            "cancel_at_period_end": False,
+            "current_period_end": 1774396800,
+            "items": {
+                "data": [
+                    {"price": {"id": "price_basic_monthly"}},
+                ],
+            },
+        }
+
+        handle_subscription_updated(subscription_data)
+
+        user.refresh_from_db()
+        self.assertIsNone(user.pending_tier)
+        # Re-activation keeps the user on their paid tier.
+        self.assertEqual(user.tier, basic_tier)
+        self.assertEqual(user.subscription_id, "sub_reactivate")
+
     def test_no_error_when_user_not_found(self):
         """Handler does not crash when no user matches the subscription."""
         subscription_data = {

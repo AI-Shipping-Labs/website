@@ -292,10 +292,10 @@ def test_scenario_3_premium_no_level_pill_no_steady_state_frame(
         ctx.close()
 
 
-# ----- Scenario 4: Pending downgrade keeps the amber notice -----
+# ----- Scenario 4: No dead scheduled-downgrade UI (issue #968) -----
 
 @pytest.mark.django_db(transaction=True)
-def test_scenario_4_pending_downgrade_notice_visible_no_duplicate_frame(
+def test_scenario_4_no_dead_downgrade_ui_for_non_free_pending_tier(
     django_server, browser, django_db_blocker, cleanup_581_users
 ):
     ctx = _auth_context(
@@ -305,18 +305,16 @@ def test_scenario_4_pending_downgrade_notice_visible_no_duplicate_frame(
     try:
         _go(page, django_server, "/account/")
 
-        notice = page.locator("#pending-downgrade-notice")
-        assert notice.is_visible()
-        text = notice.inner_text()
-        assert "Basic" in text
-        assert "01/04/2026" in text
+        # Issue #968: the amber scheduled-change downgrade notice was
+        # removed (no producer for a non-free pending_tier).
+        assert page.locator("#pending-downgrade-notice").count() == 0
+        body = page.locator("body").inner_text()
+        assert "Scheduled change" not in body
+        assert "at period end" not in body
 
-        # Tier name is Main with no Level pill.
+        # Tier name is still Main with no Level pill.
         assert page.locator("#tier-name").inner_text().strip() == "Main"
         assert page.locator("#tier-badge").count() == 0
-
-        # No duplicate plan-state frame.
-        assert page.locator("#account-plan-state").count() == 0
     finally:
         ctx.close()
 

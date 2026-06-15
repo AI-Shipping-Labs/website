@@ -590,7 +590,13 @@ def handle_subscription_updated(subscription_data):
     # Check if this is a scheduled change (Stripe schedule or pending items)
     # If cancel_at_period_end is True, user is cancelling - don't change tier
     if cancel_at_period_end:
-        user.save(update_fields=["billing_period_end"])
+        # Issue #968: record the scheduled cancellation by setting
+        # pending_tier=free so the "Access ending" UI fires from real data.
+        # Keep tier paid and subscription_id set until
+        # customer.subscription.deleted, which stays the authority that
+        # flips the user to free at period end.
+        user.pending_tier = Tier.objects.filter(slug="free").first()
+        user.save(update_fields=["billing_period_end", "pending_tier"])
         _services.logger.info(
             "customer.subscription.updated: cancel_at_period_end for user=%s",
             user.email,
@@ -604,6 +610,13 @@ def handle_subscription_updated(subscription_data):
             _services._community_schedule_removal(user)
         return
 
+    # Issue #968: cancel_at_period_end is False here, so any previously
+    # scheduled cancellation has been un-done (the user re-activated in the
+    # portal). Clear pending_tier back to None so the "Access ending" UI
+    # stops rendering. This also covers the no-tier-change case where the
+    # tier-update branch below would not otherwise reset pending_tier.
+    user.pending_tier = None
+
     # Look up the new tier from price_id
     old_tier_level = user.tier.level if user.tier else 0
     if price_id:
@@ -612,7 +625,6 @@ def handle_subscription_updated(subscription_data):
             # Check if this is an active subscription update
             if status == "active":
                 user.tier = new_tier
-                user.pending_tier = None
                 _services.logger.info(
                     "customer.subscription.updated: user=%s new_tier=%s",
                     user.email,

@@ -318,48 +318,6 @@ class AccountPageBasicUserTest(TestCase):
         self.assertNotIn('id="cancel-btn"', content)
 
 
-class AccountPagePendingDowngradeTest(TestCase):
-    """Tests for account page when a downgrade is pending."""
-
-    def setUp(self):
-        self.main_tier = Tier.objects.get(slug="main")
-        self.basic_tier = Tier.objects.get(slug="basic")
-        self.user = User.objects.create_user(email="downgrade@example.com")
-        self.user.tier = self.main_tier
-        self.user.pending_tier = self.basic_tier
-        self.user.subscription_id = "sub_test456"
-        self.user.billing_period_end = timezone.make_aware(
-            timezone.datetime(2026, 4, 1, 12, 0, 0)
-        )
-        self.user.save(
-            update_fields=[
-                "tier",
-                "pending_tier",
-                "subscription_id",
-                "billing_period_end",
-            ]
-        )
-        self.client.force_login(self.user)
-
-    def test_shows_pending_downgrade_notice(self):
-        """Page shows pending downgrade notice with tier name and date."""
-        response = self.client.get("/account/")
-        self.assertContains(response, 'id="pending-downgrade-notice"')
-        # Verify via context that pending_tier is Basic
-        self.assertEqual(response.context["pending_tier"].slug, "basic")
-        self.assertContains(response, "01/04/2026")
-
-    def test_pending_downgrade_message_format(self):
-        """Notice says 'Your plan will change to {tier} on {date}'."""
-        response = self.client.get("/account/")
-        self.assertContains(response, "Your plan will change to")
-
-    def test_context_is_pending_downgrade(self):
-        response = self.client.get("/account/")
-        self.assertTrue(response.context["is_pending_downgrade"])
-        self.assertFalse(response.context["is_pending_cancellation"])
-
-
 class AccountPagePendingCancellationTest(TestCase):
     """Tests for account page when a cancellation is pending."""
 
@@ -418,7 +376,6 @@ class AccountPagePendingCancellationTest(TestCase):
     def test_context_is_pending_cancellation(self):
         response = self.client.get("/account/")
         self.assertTrue(response.context["is_pending_cancellation"])
-        self.assertFalse(response.context["is_pending_downgrade"])
 
 
 @override_settings(
@@ -484,7 +441,10 @@ class AccountPageMembershipActionStateTest(TestCase):
         self.assertNotContains(response, 'id="downgrade-btn"')
         self.assertNotContains(response, 'id="cancel-btn"')
 
-    def test_pending_downgrade_uses_scheduled_change_state(self):
+    def test_non_free_pending_tier_renders_no_dead_downgrade_ui(self):
+        # Issue #968: nothing produces a non-free pending_tier anymore, so
+        # the amber "scheduled change" downgrade notice is removed. Even if
+        # such state existed, it must not render the dead UI.
         response = self._account_response(
             self._user(
                 "pending-action@example.com",
@@ -494,15 +454,10 @@ class AccountPageMembershipActionStateTest(TestCase):
             )
         )
 
-        # Issue #581: the duplicate plan-state frame is suppressed; the
-        # dedicated amber pending-downgrade notice still carries the
-        # change date and target tier.
-        self.assertNotContains(response, 'id="account-plan-state"')
-        self.assertContains(response, 'id="pending-downgrade-notice"')
-        self.assertContains(response, 'Basic')
-        self.assertContains(response, '29/05/2026')
-        self.assertNotContains(response, 'id="upgrade-btn"')
-        self.assertNotContains(response, 'id="downgrade-btn"')
+        self.assertNotContains(response, 'id="pending-downgrade-notice"')
+        self.assertNotContains(response, "Scheduled change")
+        self.assertNotContains(response, "at period end")
+        # The user keeps the Manage Subscription path to the portal.
         self.assertContains(response, 'id="manage-subscription-btn"')
 
     def test_pending_cancellation_directs_to_subscription_management(self):

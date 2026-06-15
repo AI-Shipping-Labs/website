@@ -156,6 +156,16 @@ def handle_checkout_completed(session_data):
     # apart when building the operator notification email below.
     previous_tier = user.tier
 
+    # Issue #976: snapshot whether this is a RETURNING member (a churned
+    # subscriber who is re-subscribing) so the welcome path can send the
+    # "welcome back" email instead of the new-member welcome. This MUST be
+    # captured BEFORE ``reconcile_stripe_status_tags`` (issue #969) runs
+    # below — that reconcile REMOVES ``stripe:churned`` on re-activation, so
+    # reading the tag after it would always see "not returning" and the
+    # welcome-back email would never fire. A user the checkout just created
+    # can never be returning, hence the ``not was_new_user`` guard.
+    is_returning = (not was_new_user) and ("stripe:churned" in (user.tags or []))
+
     # Update user fields
     user.tier = tier
     user.stripe_customer_id = customer_id or user.stripe_customer_id
@@ -318,6 +328,10 @@ def handle_checkout_completed(session_data):
                 currency=session_data.get("currency", "") or "",
                 payment_intent_id=session_data.get("payment_intent", "") or "",
                 subscription_id=subscription_id,
+                # Issue #976: snapshot taken above, before the #969 reconcile
+                # could clear ``stripe:churned`` — a re-subscribing churned
+                # member gets the "welcome back" email, not the new welcome.
+                is_returning=is_returning,
             )
         except Exception:
             # Defensive: notify_paid_signup wraps each send internally,

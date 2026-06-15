@@ -59,6 +59,7 @@ def notify_paid_signup(
     currency="",
     payment_intent_id="",
     subscription_id="",
+    is_returning=False,
 ):
     """Fire the welcome + staff heads-up for a paid checkout.
 
@@ -101,6 +102,10 @@ def notify_paid_signup(
             used to build the payment dashboard deep-link.
         subscription_id: ``sub_...`` for the subscription dashboard link
             and the optional interval fallback lookup.
+        is_returning: ``True`` iff this paid checkout is a churned member
+            re-subscribing (issue #976). When set, the member welcome (path
+            A) is the ``welcome_back`` template instead of the tier welcome.
+            Defaults ``False`` so any other caller keeps today's behaviour.
     """
     staff_email = (get_config("STAFF_SIGNUP_NOTIFY_EMAIL", "") or "").strip()
     slack_channel_id = (get_config("STAFF_SIGNUP_NOTIFY_CHANNEL_ID", "") or "").strip()
@@ -126,7 +131,9 @@ def notify_paid_signup(
     # Coordinate with #976 (welcome-back) which threads is_returning through
     # this same call site / signature.
     try:
-        _send_cofounder_welcome(user, tier, ctx, cc=staff_email or None)
+        _send_cofounder_welcome(
+            user, tier, ctx, cc=staff_email or None, is_returning=is_returning,
+        )
     except Exception:
         # Broad catch by design: any failure inside EmailService /
         # template rendering / SES must not block the staff heads-up or
@@ -656,8 +663,8 @@ def _welcome_template_for_tier(tier):
     return "cofounder_welcome"
 
 
-def _send_cofounder_welcome(user, tier, ctx, *, cc):
-    """Send (A) — the welcome to the new paid user.
+def _send_cofounder_welcome(user, tier, ctx, *, cc, is_returning=False):
+    """Send (A) — the welcome to the paid user.
 
     The template is selected by the purchased tier so each paid tier gets
     exactly its own email (Basic / Main / Premium). Issue #977: the staff
@@ -665,10 +672,19 @@ def _send_cofounder_welcome(user, tier, ctx, *, cc):
     decision — so the new member sees the team is copied and can Reply-All
     to reach both the member and the monitored welcome@/team@ inbox, and
     the team sees the welcome went out. The EmailLog write is unchanged.
+
+    Issue #976: when ``is_returning`` is ``True`` (a churned member is
+    re-subscribing) the member receives the shared ``welcome_back``
+    template instead of the tier-specific new-member welcome — it reads as
+    a "welcome back" message rather than a first-time onboarding email.
+    Defaults ``False`` so existing callers keep the tier welcome.
     """
     from email_app.services import EmailService
 
-    template_slug = _welcome_template_for_tier(tier)
+    if is_returning:
+        template_slug = "welcome_back"
+    else:
+        template_slug = _welcome_template_for_tier(tier)
     welcome_ctx = {
         "user_first_name": ctx["first_name_raw"],
         "current_sprint_status_paragraph": _current_sprint_paragraph(),

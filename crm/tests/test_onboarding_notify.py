@@ -5,7 +5,7 @@ Mirrors the plan-request fan-out: a member who submits onboarding (via the
 -- a best-effort Slack post OR (when Slack did not post) a staff email, and
 ALWAYS one in-app ``onboarding_submitted`` Notification per active staff
 user. The in-app notification deep-links to the member's CRM record when
-tracked, else the Django admin user-change page.
+tracked, else the Studio user-detail page (``/studio/users/<pk>/``).
 
 These tests exercise the real submission views (form path) and the shared
 ``finalize_conversation`` finalizer (chat path) so the single notification
@@ -94,15 +94,24 @@ class OnboardingFormNotifiesStaffTest(TestCase):
         ).first()
         self.assertIn('Alice', notif.title)
 
-    def test_links_to_admin_when_no_crm_record(self):
+    def test_links_to_studio_user_detail_when_no_crm_record(self):
         self._submit()
         notif = Notification.objects.filter(
             notification_type='onboarding_submitted',
         ).first()
         self.assertIn(
-            f'/admin/accounts/user/{self.member.pk}/change/',
+            f'/studio/users/{self.member.pk}/',
             notif.url,
         )
+        # Never routes staff to the Django admin.
+        self.assertNotIn('/admin/', notif.url)
+
+    def test_email_links_to_studio_not_admin_when_no_crm_record(self):
+        self._submit()
+        self.assertEqual(len(mail.outbox), 1)
+        body = mail.outbox[0].body
+        self.assertIn(f'/studio/users/{self.member.pk}/', body)
+        self.assertNotIn('/admin/', body)
 
     def test_links_to_crm_record_when_tracked(self):
         record = CRMRecord.objects.create(user=self.member)
@@ -111,6 +120,7 @@ class OnboardingFormNotifiesStaffTest(TestCase):
             notification_type='onboarding_submitted',
         ).first()
         self.assertIn(f'/studio/crm/{record.pk}/', notif.url)
+        self.assertNotIn('/admin/', notif.url)
 
     def test_emails_staff_when_slack_disabled(self):
         # SLACK_ENABLED is false by default in tests -> email fallback.

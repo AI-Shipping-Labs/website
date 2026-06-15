@@ -32,6 +32,7 @@ from integrations.services.github_sync.repo import derive_slug, extract_sort_ord
 from integrations.services.github_sync.dispatchers.instructors import _attach_instructors_to_workshop, _resolve_instructors_for_yaml
 from integrations.services.github_sync.dispatchers.events import (
     _build_synced_event_content_defaults,
+    _normalize_title_for_match,
     _upsert_synced_event_content,
 )
 from integrations.services.github_sync.dispatchers.courses import _build_workshop_page_lookup, _parse_access_value, _resolve_workshop_landing_copy
@@ -514,26 +515,6 @@ _EVENT_SOURCE_OWNERSHIP_FIELDS = (
     'source_commit',
     'content_id',
 )
-
-
-def _normalize_title_for_match(title):
-    """Normalize an event/workshop title for the dedup heuristic (issue #880).
-
-    Lowercase, collapse internal whitespace to single spaces, and strip
-    surrounding whitespace and punctuation. Deliberately conservative — it
-    only smooths over case and spacing differences ("  Take-Home  Assignment
-    Live " vs "take-home assignment live"), not semantic ones, so the
-    title+date key stays a low-false-positive match.
-    """
-    if not title or not isinstance(title, str):
-        return ''
-    normalized = title.strip().lower()
-    # Collapse any run of whitespace to a single space.
-    normalized = re.sub(r'\s+', ' ', normalized)
-    # Strip surrounding punctuation (but keep internal punctuation such as the
-    # hyphen in "take-home" so distinct titles stay distinct).
-    normalized = normalized.strip('.,;:!?-–—"\'')
-    return normalized.strip()
 
 
 def _resolve_heuristic_workshop_event(workshop, workshop_date):

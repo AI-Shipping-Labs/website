@@ -244,7 +244,7 @@
   const slug = root ? root.dataset.eventSlug : null;
   const registerBtn = document.querySelector('[data-event-register-button]');
   const unregisterBtn = document.querySelector('[data-event-unregister-button]');
-  const display = document.querySelector('[data-event-time-display]');
+  const displays = document.querySelectorAll('[data-event-time-display]');
 
   if (registerBtn && slug) {
     registerBtn.addEventListener('click', () => registerForEvent(slug, registerBtn));
@@ -254,7 +254,9 @@
   }
   bindAnonymousRegistration(slug);
 
-  if (display && window.Intl) {
-    renderEventTime(display, resolveTimeZone(display));
+  if (displays.length && window.Intl) {
+    displays.forEach((display) => {
+      renderEventTime(display, resolveTimeZone(display));
+    });
   }
 }());

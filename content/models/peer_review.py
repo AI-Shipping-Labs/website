@@ -116,6 +116,20 @@ class CourseCertificate(models.Model):
             'Surfaced as a Download PDF button on the public cert page.'
         ),
     )
+    # Soft-revoke fields (issue #949). A revoked certificate is retained
+    # (the public /certificates/<uuid> page stays reachable and renders a
+    # "revoked" state) so shared links never 404 and the audit trail is
+    # preserved. Revocation is reversible by clearing all three fields.
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+        help_text='Staff user who revoked this certificate.',
+    )
+    revoked_reason = models.CharField(max_length=200, blank=True, default='')
 
     class Meta:
         unique_together = [('user', 'course')]
@@ -125,3 +139,8 @@ class CourseCertificate(models.Model):
 
     def get_absolute_url(self):
         return f'/certificates/{self.id}'
+
+    @property
+    def is_revoked(self):
+        """True when this certificate has been revoked."""
+        return self.revoked_at is not None

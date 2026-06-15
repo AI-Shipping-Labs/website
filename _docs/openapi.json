@@ -5794,6 +5794,7 @@
               "description": "Filter to sprints with the given status.",
               "enum": [
                 "active",
+                "cancelled",
                 "completed",
                 "draft"
               ],
@@ -5876,6 +5877,7 @@
                     "default": "draft",
                     "enum": [
                       "active",
+                      "cancelled",
                       "completed",
                       "draft"
                     ],
@@ -6069,6 +6071,7 @@
                   "status": {
                     "enum": [
                       "active",
+                      "cancelled",
                       "completed",
                       "draft"
                     ],

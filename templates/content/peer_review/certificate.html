@@ -10,6 +10,27 @@
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-2xl px-6 py-16 lg:px-8 lg:py-24">
 
+  {% if certificate.is_revoked %}
+  <div class="bg-card border border-red-500/40 rounded-lg p-12 text-center" id="certificate"
+       data-testid="certificate-revoked">
+    <div class="mb-8">
+      <h1 class="text-3xl font-semibold text-foreground mb-2">Certificate Revoked</h1>
+      <div class="w-24 h-0.5 bg-red-400 mx-auto"></div>
+    </div>
+
+    <p class="text-foreground mb-4" data-testid="certificate-revoked-message">
+      This certificate has been revoked and is no longer valid.
+    </p>
+
+    <p class="text-sm text-muted-foreground mb-2">
+      Originally issued for {{ course.title }}
+      {% if user.get_full_name %}to {{ user.get_full_name }}{% else %}to {{ user.email }}{% endif %}.
+    </p>
+    <p class="text-xs text-muted-foreground">
+      Certificate ID: {{ certificate.id }}
+    </p>
+  </div>
+  {% else %}
   <div class="bg-card border border-border rounded-lg p-12 text-center" id="certificate">
     <div class="mb-8">
       <h1 class="text-3xl font-semibold text-foreground mb-2">Certificate of Completion</h1>
@@ -43,6 +64,7 @@
     </div>
     {% endif %}
   </div>
+  {% endif %}
 
     </div>
   </section>

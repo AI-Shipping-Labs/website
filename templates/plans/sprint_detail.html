@@ -107,7 +107,11 @@
       {% endif %}
 
       <div class="rounded-2xl border border-border bg-card p-6">
-        {% if not is_authenticated %}
+        {% if sprint.status == 'cancelled' and not enrolled %}
+          <p class="text-sm text-foreground" data-testid="sprint-cta-cancelled">
+            This sprint has been cancelled and is no longer open to join.
+          </p>
+        {% elif not is_authenticated %}
           <a href="/accounts/login/?next=/sprints/{{ sprint.slug }}"
              class="{% button_classes 'primary' %}"
              data-testid="sprint-cta-login">

@@ -32,7 +32,14 @@
   <dl class="grid grid-cols-2 gap-4 text-sm">
     <div>
       <dt class="text-xs text-muted-foreground uppercase">Status</dt>
-      <dd class="text-foreground mt-1">{{ sprint.get_status_display }}</dd>
+      <dd class="mt-1">
+        {% if sprint.status == 'cancelled' %}
+        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-500/15 text-red-300"
+              data-testid="sprint-status-badge">{{ sprint.get_status_display }}</span>
+        {% else %}
+        <span class="text-foreground" data-testid="sprint-status-badge">{{ sprint.get_status_display }}</span>
+        {% endif %}
+      </dd>
     </div>
     <div>
       <dt class="text-xs text-muted-foreground uppercase">Start date</dt>
@@ -438,4 +445,106 @@
   No plans in this sprint yet.
 </div>
 {% endif %}
+
+<section class="mt-8 mb-8" data-testid="sprint-enrolled-members-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">
+    Enrolled members ({{ enrollments|length }})
+  </h2>
+  {% if enrollments %}
+  <div class="{% studio_list_class 'wrapper' %}">
+    <table class="w-full" data-testid="sprint-enrolled-members-table">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Member</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Enrolled</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Enrolled by</th>
+          <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Action</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for enrollment in enrollments %}
+        <tr class="hover:bg-secondary/50 transition-colors"
+            data-testid="sprint-enrolled-member-row"
+            data-user-email="{{ enrollment.user.email }}">
+          <td class="px-6 py-4 text-sm">
+            <a href="{% url 'studio_user_detail' user_id=enrollment.user.pk %}"
+               class="text-accent hover:underline"
+               data-testid="sprint-enrolled-member-email">{{ enrollment.user.email }}</a>
+            {% if enrollment.user.get_full_name %}
+            <div class="text-xs text-muted-foreground mt-0.5">{{ enrollment.user.get_full_name }}</div>
+            {% endif %}
+          </td>
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Enrolled">{{ enrollment.enrolled_at|date:"Y-m-d" }}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Enrolled by">
+            {% if enrollment.enrolled_by %}{{ enrollment.enrolled_by.email }}{% else %}Self-joined{% endif %}
+          </td>
+          <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Action">
+            <form method="post"
+                  action="{% url 'studio_sprint_unenroll' sprint_id=sprint.pk enrollment_id=enrollment.pk %}"
+                  onsubmit="return confirm('Unenroll {{ enrollment.user.email|escapejs }} from this sprint? Their plan (if any) is kept.');"
+                  data-testid="sprint-unenroll-form">
+              {% csrf_token %}
+              <button type="submit"
+                      class="text-sm text-red-400 hover:text-red-300 hover:underline"
+                      data-testid="sprint-unenroll-button">
+                Unenroll
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm"
+       data-testid="sprint-enrolled-members-empty">
+    No enrolled members in this sprint yet.
+  </div>
+  {% endif %}
+</section>
+
+<section class="mt-8 mb-8" data-testid="sprint-danger-zone">
+  <h2 class="text-lg font-semibold text-red-400 mb-4">Danger zone</h2>
+  <div class="bg-card border border-red-500/30 rounded-lg p-6 flex flex-col gap-4 max-w-2xl">
+    {% if sprint.status != 'cancelled' %}
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <p class="text-sm font-medium text-foreground">Cancel sprint</p>
+        <p class="text-xs text-muted-foreground mt-1">
+          Members can no longer self-join. Plans and enrollments are kept; this is reversible.
+        </p>
+      </div>
+      <form method="post" action="{% url 'studio_sprint_cancel' sprint_id=sprint.pk %}"
+            onsubmit="return confirm('Cancel this sprint? Members can no longer self-join. Plans and enrollments are kept.');"
+            data-testid="sprint-cancel-form">
+        {% csrf_token %}
+        <button type="submit"
+                class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+                data-testid="sprint-cancel-button">
+          Cancel sprint
+        </button>
+      </form>
+    </div>
+    {% endif %}
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <p class="text-sm font-medium text-foreground">Delete sprint</p>
+        <p class="text-xs text-muted-foreground mt-1">
+          Permanently delete this sprint. Only allowed when it has no plans and no enrollments.
+        </p>
+      </div>
+      <form method="post" action="{% url 'studio_sprint_delete' sprint_id=sprint.pk %}"
+            onsubmit="return confirm('Permanently delete this sprint? This cannot be undone.');"
+            data-testid="sprint-delete-form">
+        {% csrf_token %}
+        <button type="submit"
+                class="bg-red-500/10 text-red-400 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500/20 transition-colors"
+                data-testid="sprint-delete-button">
+          Delete sprint
+        </button>
+      </form>
+    </div>
+  </div>
+</section>
 {% endblock %}

@@ -45,6 +45,7 @@ from studio.views.campaigns import (
     campaign_send,
     campaign_test_send,
 )
+from studio.views.certificates import certificate_revoke, certificate_unrevoke
 from studio.views.contacts_import import user_import, user_import_confirm
 from studio.views.content_sources import (
     content_source_create,
@@ -196,7 +197,9 @@ from studio.views.settings import (
 from studio.views.signup_analytics import signup_analytics_dashboard
 from studio.views.sprints import (
     sprint_add_member,
+    sprint_cancel,
     sprint_create,
+    sprint_delete,
     sprint_detail,
     sprint_edit,
     sprint_feedback_attach,
@@ -204,6 +207,7 @@ from studio.views.sprints import (
     sprint_feedback_synthesize,
     sprint_list,
     sprint_plan_request_create_plan,
+    sprint_unenroll,
 )
 from studio.views.sprints_enroll import sprint_bulk_enroll
 from studio.views.sync import (
@@ -317,6 +321,18 @@ urlpatterns = [
     path('courses/<int:course_id>/peer-reviews/form-batch', peer_review_form_batch, name='studio_peer_review_form_batch'),
     path('courses/<int:course_id>/peer-reviews/issue-certificates', peer_review_issue_certificates, name='studio_peer_review_issue_certificates'),
     path('courses/<int:course_id>/peer-reviews/extend-deadline', peer_review_extend_deadline, name='studio_peer_review_extend_deadline'),
+    # Course certificate soft-revoke controls (issue #949). UUID pk; reached
+    # from the course peer-reviews page. POST-only, staff-only.
+    path(
+        'certificates/<uuid:certificate_id>/revoke',
+        certificate_revoke,
+        name='studio_certificate_revoke',
+    ),
+    path(
+        'certificates/<uuid:certificate_id>/unrevoke',
+        certificate_unrevoke,
+        name='studio_certificate_unrevoke',
+    ),
     path('courses/<int:course_id>/access/', course_access_list, name='studio_course_access_list'),
     path('courses/<int:course_id>/access/grant/', course_access_grant, name='studio_course_access_grant'),
     path('courses/<int:course_id>/access/<int:access_id>/revoke/', course_access_revoke, name='studio_course_access_revoke'),
@@ -789,6 +805,26 @@ urlpatterns = [
     path('sprints/new', sprint_create, name='studio_sprint_create'),
     path('sprints/<int:sprint_id>/', sprint_detail, name='studio_sprint_detail'),
     path('sprints/<int:sprint_id>/edit', sprint_edit, name='studio_sprint_edit'),
+    # Destructive sprint controls (issue #949). Action verbs, no trailing
+    # slash, matching the ``sprints/<id>/edit`` convention. Cancel is a soft
+    # state change; delete is hard but guarded to empty sprints in the view.
+    path(
+        'sprints/<int:sprint_id>/cancel',
+        sprint_cancel,
+        name='studio_sprint_cancel',
+    ),
+    path(
+        'sprints/<int:sprint_id>/delete',
+        sprint_delete,
+        name='studio_sprint_delete',
+    ),
+    # Unenroll a single member from a sprint (issue #949). Cross-sprint id
+    # safety: ``enrollment_id`` must belong to ``sprint_id`` or 404.
+    path(
+        'sprints/<int:sprint_id>/enrollments/<int:enrollment_id>/unenroll',
+        sprint_unenroll,
+        name='studio_sprint_unenroll',
+    ),
     # Bulk enroll (issue #443). Staff-only; enrolls members from a
     # textarea of emails. Allows under-tier with a warning per the spec.
     path(

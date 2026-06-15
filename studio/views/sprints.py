@@ -14,6 +14,7 @@ existing plan create form (``templates/studio/plans/form.html``)
 with the sprint locked from the URL.
 """
 
+import logging
 from datetime import datetime
 from urllib.parse import urlencode
 
@@ -44,6 +45,7 @@ from plans.models import (
     Plan,
     PlanRequest,
     Sprint,
+    SprintEnrollment,
     SprintFeedbackRequest,
     SprintFeedbackSummary,
 )
@@ -52,6 +54,8 @@ from questionnaires.models import Questionnaire, Response
 from studio.decorators import staff_required
 
 User = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 # The set of tier levels accepted by the form. Mirror the values in
 # ``content.access.VISIBILITY_CHOICES`` so the dropdown stays consistent
@@ -383,7 +387,12 @@ def sprint_detail(request, sprint_id):
         .select_related('member')
         .order_by('-created_at')
     )
-    enrollment_count = sprint.enrollments.count()
+    enrollments = list(
+        sprint.enrollments
+        .select_related('user', 'enrolled_by')
+        .order_by('enrolled_at')
+    )
+    enrollment_count = len(enrollments)
     event_series = sprint.event_series
     event_series_events = (
         list(event_series.events.all().order_by('start_datetime'))
@@ -394,6 +403,7 @@ def sprint_detail(request, sprint_id):
     return render(request, 'studio/sprints/detail.html', {
         'sprint': sprint,
         'plans': plans,
+        'enrollments': enrollments,
         'enrollment_count': enrollment_count,
         'event_series': event_series,
         'event_series_events': event_series_events,
@@ -947,3 +957,97 @@ def sprint_plan_request_create_plan(request, sprint_id, member_id):
         )
 
     return redirect('studio_plan_edit', plan_id=plan.pk)
+
+
+@staff_required
+@require_POST
+def sprint_cancel(request, sprint_id):
+    """Soft-cancel a sprint (issue #949).
+
+    Sets ``status='cancelled'`` -- a reversible state change. All plans,
+    enrollments, feedback requests, and AI summaries are retained; a
+    cancelled sprint is just excluded from member-facing self-join and
+    surfaces a "Cancelled" badge. Idempotent: cancelling an
+    already-cancelled sprint is a no-op info message.
+    """
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    if sprint.status == 'cancelled':
+        messages.info(request, f'Sprint "{sprint.name}" is already cancelled.')
+        return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+    sprint.status = 'cancelled'
+    sprint.save(update_fields=['status'])
+    logger.info(
+        'studio.sprint_cancel actor=%s sprint_id=%s',
+        request.user.pk, sprint.pk,
+    )
+    messages.success(request, f'Sprint "{sprint.name}" cancelled.')
+    return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+
+@staff_required
+@require_POST
+def sprint_delete(request, sprint_id):
+    """Hard-delete a sprint, guarded to empty sprints only (issue #949).
+
+    Allowed ONLY when the sprint has zero plans AND zero enrollments (a
+    draft created by mistake). If either exists, the delete is blocked
+    and the operator is told to cancel instead. This mirrors the API's
+    409 guard semantics; ``Plan.sprint`` is also ``PROTECT`` so a
+    populated sprint cannot be deleted anyway.
+    """
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    if sprint.plans.exists() or sprint.enrollments.exists():
+        messages.error(
+            request,
+            'Cannot delete a sprint with plans or enrollments — '
+            'cancel it instead.',
+        )
+        return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+    name = sprint.name
+    sprint_pk = sprint.pk
+    sprint.delete()
+    logger.info(
+        'studio.sprint_delete actor=%s sprint_id=%s',
+        request.user.pk, sprint_pk,
+    )
+    messages.success(request, f'Sprint "{name}" deleted.')
+    return redirect('studio_sprint_list')
+
+
+@staff_required
+@require_POST
+def sprint_unenroll(request, sprint_id, enrollment_id):
+    """Hard-delete a single sprint enrollment row (issue #949).
+
+    Cross-sprint safety: the enrollment must belong to the sprint in the
+    URL. A mismatched ``enrollment_id`` returns 404 instead of
+    unenrolling someone from the wrong sprint (mirrors the course
+    ``enrollment_unenroll`` pattern). Deleting the membership row leaves
+    the user account and any plan in this sprint untouched.
+    """
+    enrollment = get_object_or_404(
+        SprintEnrollment, pk=enrollment_id, sprint_id=sprint_id,
+    )
+    sprint = enrollment.sprint
+    user = enrollment.user
+    email = user.email
+    has_plan = Plan.objects.filter(sprint=sprint, member=user).exists()
+
+    enrollment.delete()
+    logger.info(
+        'studio.sprint_unenroll actor=%s sprint_id=%s user_id=%s plan_kept=%s',
+        request.user.pk, sprint.pk, user.pk, has_plan,
+    )
+    if has_plan:
+        messages.success(
+            request,
+            f'Unenrolled {email} from "{sprint.name}". Their plan was kept.',
+        )
+    else:
+        messages.success(
+            request,
+            f'Unenrolled {email} from "{sprint.name}".',
+        )
+    return redirect('studio_sprint_detail', sprint_id=sprint.pk)

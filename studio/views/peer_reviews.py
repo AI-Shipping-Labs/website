@@ -30,16 +30,25 @@ def _friendly_status_label(status):
 
 
 def _build_submission_item(sub):
-    """Bundle a submission with its review counts for template rendering."""
+    """Bundle a submission with its review counts for template rendering.
+
+    Also surfaces the certificate (if any) so the revoke / un-revoke
+    control can be rendered inline (issue #949). A submission has at most
+    one certificate via the ``submission`` FK on :class:`CourseCertificate`.
+    """
     reviews = list(sub.reviews.select_related('reviewer').all())
     total_reviews = len(reviews)
     completed_reviews = sum(1 for r in reviews if r.is_complete)
+    # The submission -> certificate FK is nullable and back-creates the
+    # ``certificates`` related set; a certified submission carries one row.
+    certificate = sub.certificates.first()
     return {
         'submission': sub,
         'reviews': reviews,
         'total_reviews': total_reviews,
         'completed_reviews': completed_reviews,
         'status_label': _friendly_status_label(sub.status),
+        'certificate': certificate,
     }
 
 

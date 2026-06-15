@@ -304,6 +304,12 @@ def sprint_join(request, sprint_slug):
     """Self-join a sprint. Tier-gated and idempotent."""
     sprint = _resolve_sprint_or_404(sprint_slug, request.user)
 
+    # A cancelled sprint is closed to new self-join (issue #949). Existing
+    # enrollments/plans are untouched; only the join path is blocked.
+    if sprint.status == 'cancelled':
+        messages.error(request, 'This sprint has been cancelled.')
+        return redirect('sprint_detail', sprint_slug=sprint.slug)
+
     user_level = get_user_level(request.user)
     required_tier_name = LEVEL_TO_TIER_NAME.get(sprint.min_tier_level, 'Premium')
     if user_level < sprint.min_tier_level:

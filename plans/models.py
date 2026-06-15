@@ -32,6 +32,7 @@ SPRINT_STATUS_CHOICES = [
     ('draft', 'Draft'),
     ('active', 'Active'),
     ('completed', 'Completed'),
+    ('cancelled', 'Cancelled'),
 ]
 
 VISIBILITY_CHOICES = [

@@ -366,8 +366,11 @@ def test_scenario_6_temporary_override_notice_visible(
         text = notice.inner_text()
         assert "Premium" in text
 
-        # Membership shows the BASE subscription tier, not the override.
-        assert page.locator("#tier-name").inner_text().strip() == "Basic"
+        # Since #965, #tier-name renders the EFFECTIVE tier (max of base and
+        # active override). This Basic user has an active Premium override, so
+        # the effective tier shown is Premium (the override provenance line
+        # surfaces the base/override detail separately).
+        assert page.locator("#tier-name").inner_text().strip() == "Premium"
         assert page.locator("#tier-badge").count() == 0
 
         # Sprint plan card is still absent regardless of override.

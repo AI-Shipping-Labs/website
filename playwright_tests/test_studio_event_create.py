@@ -74,7 +74,7 @@ class TestScenario1CreateOneOff:
         assert page.get_by_role("heading", name="New Event").is_visible()
 
         page.fill('input[name="title"]', "Office Hours May 21")
-        page.fill('input[name="event_date"]', "21/05/2026")
+        page.fill('input[name="event_date"]', "21/06/2026")
         page.fill('input[name="event_time"]', "18:00")
         # Leave duration blank — defaults to 1 hour.
         # Issue #860: this Zoom event has no meeting/URL yet, so submit fires
@@ -96,12 +96,13 @@ class TestScenario1CreateOneOff:
             f"{django_server}/studio/events/",
             wait_until="domcontentloaded",
         )
-        # The new row is present with a Studio origin badge.
+        # The new row is present; Studio-origin rows have no GitHub marker.
         new_event = Event.objects.get(title="Office Hours May 21")
-        assert page.locator(
-            f'tr:has(a[href="/studio/events/{new_event.pk}/edit"]) '
-            f'[data-testid="origin-badge"][data-origin="studio"]'
-        ).first.is_visible()
+        row = page.locator(
+            f'tr:has(a[href="/studio/events/{new_event.pk}/edit"])'
+        ).first
+        assert row.is_visible()
+        assert row.locator('[data-testid="origin-github-icon"]').count() == 0
         connection.close()
         ctx.close()
 

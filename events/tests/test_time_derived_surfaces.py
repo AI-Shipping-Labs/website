@@ -254,10 +254,9 @@ class StudioStatusLegacyNoteTest(TestCase):
 class StudioListTimeGroupingTest(TestCase):
     """Studio events list groups rows by a single time-derived status.
 
-    Issue #820 replaced the per-row stored-status + time chip with a
-    single derived status badge and Upcoming/Past sections. A stale
-    ``upcoming`` row reads Past; a legacy ``completed`` row with a
-    future end reads Upcoming.
+    A stale ``upcoming`` row lands in the dedicated Past view; a legacy
+    ``completed`` row with a future end remains on the default Upcoming
+    view.
     """
 
     def test_stale_upcoming_grouped_into_past(self):
@@ -267,7 +266,7 @@ class StudioListTimeGroupingTest(TestCase):
         event = _stale_upcoming(slug='list-stale')
         client = Client()
         client.force_login(staff)
-        response = client.get('/studio/events/')
+        response = client.get('/studio/events/past/')
         past_pks = [e.pk for e in response.context['past_events']]
         self.assertIn(event.pk, past_pks)
         row = next(e for e in response.context['past_events'] if e.pk == event.pk)

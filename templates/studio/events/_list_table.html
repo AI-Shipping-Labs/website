@@ -1,19 +1,15 @@
 {% load studio_filters %}
 {% comment %}
-  Issue #820: shared events table body for the Upcoming / Past sections.
-  ``events`` is a pre-sorted list whose rows each carry a single derived
-  status (``derived_status`` + ``derived_status_label``) so the Status
-  cell renders exactly one badge.
+  Shared events table for the Upcoming and Past Studio list views.
 {% endcomment %}
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="{% studio_list_class 'table' %}">
     <thead class="{% studio_list_class 'thead' %}">
       <tr>
         <th class="{% studio_list_class 'th' %}">Title</th>
-        <th class="{% studio_list_class 'th' %}">Origin</th>
         <th class="{% studio_list_class 'th' %}">Series</th>
-        <th class="{% studio_list_class 'th' %}">Status</th>
-        <th class="{% studio_list_class 'th' %}">Kind / Platform</th>
+        <th class="{% studio_list_class 'th' %}">Kind</th>
+        <th class="{% studio_list_class 'th' %}">Platform</th>
         <th class="{% studio_list_class 'th' %}">Date</th>
         <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
       </tr>
@@ -22,36 +18,45 @@
       {% for event in events %}
       <tr class="{% studio_list_class 'row' %}">
         <td class="px-6 py-4">
-          <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ event.title }}</a>
-        </td>
-        <td class="px-6 py-4" data-label="Origin">
+          <div class="inline-flex items-center gap-2">
+            <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ event.title }}</a>
           {% if event.origin == 'github' %}
-          <div data-testid="origin-badge" data-origin="github">
-            <span class="inline-flex items-center rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-400">GitHub</span>
-          </div>
-          {% else %}
-          <div data-testid="origin-badge" data-origin="studio">
-            <span class="inline-flex items-center rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground">Studio</span>
-          </div>
+            <i data-lucide="github"
+               class="h-4 w-4 text-muted-foreground"
+               data-testid="origin-github-icon"
+               aria-label="Synced from GitHub"
+               title="Synced from GitHub"></i>
           {% endif %}
+          </div>
         </td>
-        <td class="px-6 py-4 text-sm" data-label="Series">
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Series">
           {% if event.event_series %}
           <a href="{% url 'studio_event_series_detail' series_id=event.event_series.pk %}"
-             class="text-accent hover:underline"
-             data-testid="event-series-link">{{ event.event_series.name }}</a>
+             class="inline-flex items-center text-accent hover:text-accent/80"
+             data-testid="event-series-link"
+             aria-label="Series: {{ event.event_series.name }}"
+             title="{{ event.event_series.name }}">
+            <i data-lucide="layers" class="h-4 w-4"></i>
+          </a>
           {% else %}
           <span class="text-xs text-muted-foreground">—</span>
           {% endif %}
         </td>
-        <td class="px-6 py-4" data-label="Status">
-          <span data-testid="event-status-badge" data-status="{{ event.derived_status }}">{% studio_status_badge event.derived_status event.derived_status_label %}</span>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Kind">
+          <i data-lucide="{{ event.kind_icon }}"
+             class="h-4 w-4 text-muted-foreground"
+             data-testid="event-kind-icon"
+             aria-label="{{ event.kind_label }}"
+             title="{{ event.kind_label }}"></i>
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Kind / Platform">
-          <span class="text-foreground">{{ event.get_kind_display }}</span>
-          <p class="text-xs text-muted-foreground mt-1">{{ event.get_platform_display }}</p>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Platform">
+          <i data-lucide="{{ event.platform_icon }}"
+             class="h-4 w-4 text-muted-foreground"
+             data-testid="event-platform-icon"
+             aria-label="{{ event.platform_label }}"
+             title="{{ event.platform_label }}"></i>
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date" data-testid="event-row-date">{{ event.start_datetime_display }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_event_edit' event_id=event.pk as event_edit_url %}
           <div class="{% studio_list_class 'action_group' %}">

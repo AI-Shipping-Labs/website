@@ -479,7 +479,7 @@ class StudioListHeaderDescriptionsHiddenOnMobileTest(TestCase):
             response,
             (
                 'mt-1 hidden md:block">'
-                "Manage event lifecycle and platform."
+                "Manage upcoming event lifecycle and platform."
             ),
         )
 

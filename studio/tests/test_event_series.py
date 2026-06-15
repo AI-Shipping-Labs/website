@@ -614,7 +614,7 @@ class StudioEventSeriesDeleteTest(StaffMixin, TestCase):
 
 
 class StudioEventListSurfacesSeriesTest(StaffMixin, TestCase):
-    """``/studio/events/`` shows origin badges, series column, new-series button."""
+    """``/studio/events/`` shows compact origin/series controls."""
 
     @classmethod
     def setUpTestData(cls):
@@ -634,13 +634,18 @@ class StudioEventListSurfacesSeriesTest(StaffMixin, TestCase):
             source_repo='AI-Shipping-Labs/content',
         )
 
-    def test_origin_badge_studio(self):
+    def test_studio_origin_has_no_github_icon(self):
         response = self.client.get('/studio/events/')
-        self.assertContains(response, 'data-origin="studio"')
+        body = response.content.decode()
+        studio_row = body[
+            body.index('Studio Member'):body.index('GitHub Event')
+        ]
+        self.assertNotIn('data-testid="origin-github-icon"', studio_row)
 
-    def test_origin_badge_github(self):
+    def test_github_origin_icon(self):
         response = self.client.get('/studio/events/')
-        self.assertContains(response, 'data-origin="github"')
+        self.assertContains(response, 'data-testid="origin-github-icon"')
+        self.assertContains(response, 'aria-label="Synced from GitHub"')
 
     def test_series_column_links_to_series(self):
         response = self.client.get('/studio/events/')
@@ -648,6 +653,9 @@ class StudioEventListSurfacesSeriesTest(StaffMixin, TestCase):
             response, f'/studio/event-series/{self.series.pk}/',
         )
         self.assertContains(response, 'data-testid="event-series-link"')
+        self.assertContains(response, 'data-lucide="layers"')
+        self.assertContains(response, 'title="Listed Series"')
+        self.assertNotContains(response, '>Listed Series<')
 
     def test_new_event_series_button_present(self):
         response = self.client.get('/studio/events/')

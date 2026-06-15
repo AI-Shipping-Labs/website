@@ -67,6 +67,36 @@ INTEGRATION_GROUPS = [
             {'key': 'ZOOM_CLIENT_SECRET', 'is_secret': True, 'description': 'Zoom OAuth client secret. Get from your Zoom app under Marketplace > Build App > S2S OAuth.', 'docs_url': '_docs/integrations/zoom.md#zoom_client_secret'},
             {'key': 'ZOOM_ACCOUNT_ID', 'is_secret': True, 'description': 'Zoom account UUID the OAuth app belongs to. Found in the Zoom Marketplace app settings.', 'docs_url': '_docs/integrations/zoom.md#zoom_account_id'},
             {'key': 'ZOOM_WEBHOOK_SECRET_TOKEN', 'is_secret': True, 'description': 'Verifies Zoom webhook callbacks (event start, recording ready). Set in the Zoom app event subscription.', 'docs_url': '_docs/integrations/zoom.md#zoom_webhook_secret_token'},
+            {
+                'key': 'ZOOM_WAITING_ROOM',
+                'is_secret': False,
+                'is_boolean': True,
+                'optional': True,
+                'default': 'false',
+                'description': (
+                    'Set true to place attendees in a Zoom waiting room until '
+                    'the host admits them (requires the host to admit each '
+                    'attendee). Off by default — keeping join-before-host off '
+                    'is enough to make cloud recording start only when the '
+                    'host starts the meeting, with no manual admitting.'
+                ),
+                'docs_url': '_docs/integrations/zoom.md#zoom_waiting_room',
+            },
+            {
+                'key': 'ZOOM_JOIN_BEFORE_HOST',
+                'is_secret': False,
+                'is_boolean': True,
+                'optional': True,
+                'default': 'false',
+                'description': (
+                    'Set true to let attendees join a Zoom meeting before the '
+                    'host arrives (recommended OFF). Off by default — early '
+                    'joiners then see Zoom\'s "waiting for the host to start" '
+                    'hold and cloud recording does not begin until the host '
+                    'joins, so it never captures pre-host waiting time.'
+                ),
+                'docs_url': '_docs/integrations/zoom.md#zoom_join_before_host',
+            },
         ],
     },
     {

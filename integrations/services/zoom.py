@@ -93,6 +93,41 @@ def clear_token_cache():
     _token_cache['expires_at'] = 0
 
 
+def _config_bool(key, default):
+    """Resolve a boolean config key, honouring a per-key default.
+
+    ``is_enabled`` reads ``get_config(key, 'false')`` and so cannot express a
+    default of ``true`` for an unset key. We resolve the raw string here with
+    the registry default and coerce it ourselves so ``ZOOM_WAITING_ROOM``
+    defaults to ``true`` and ``ZOOM_JOIN_BEFORE_HOST`` defaults to ``false``
+    when nothing is set in the DB / env.
+    """
+    val = get_config(key, 'true' if default else 'false')
+    if isinstance(val, bool):
+        return val
+    return str(val).strip().lower() in ('true', '1', 'yes')
+
+
+def _meeting_settings():
+    """Build the shared Zoom meeting ``settings`` payload.
+
+    Used by both ``create_meeting`` and ``update_meeting_settings`` so a new
+    meeting and an in-place patch always carry the same join-before-host /
+    waiting-room configuration. ``join_before_host`` defaults OFF so early
+    joiners see Zoom's "waiting for the host to start" hold and cloud recording
+    only begins once the host joins — with no manual admitting. ``waiting_room``
+    defaults OFF (it would require the host to admit each attendee); it stays
+    configurable for operators who want it (issue #1004).
+    """
+    return {
+        'auto_recording': 'cloud',
+        'join_before_host': _config_bool('ZOOM_JOIN_BEFORE_HOST', default=False),
+        'mute_upon_entry': True,
+        'waiting_room': _config_bool('ZOOM_WAITING_ROOM', default=False),
+        'auto_transcribing': True,
+    }
+
+
 def create_meeting(event):
     """Create a Zoom meeting for the given event.
 
@@ -132,13 +167,7 @@ def create_meeting(event):
         'start_time': local_start.strftime('%Y-%m-%dT%H:%M:%S'),
         'duration': duration,
         'timezone': meeting_timezone,
-        'settings': {
-            'auto_recording': 'cloud',
-            'join_before_host': True,
-            'mute_upon_entry': True,
-            'waiting_room': False,
-            'auto_transcribing': True,
-        },
+        'settings': _meeting_settings(),
     }
 
     url = urljoin(ZOOM_API_BASE_URL, 'users/me/meetings')
@@ -172,6 +201,51 @@ def create_meeting(event):
         'meeting_id': meeting_id,
         'join_url': join_url,
     }
+
+
+def update_meeting_settings(event):
+    """Patch an existing Zoom meeting's settings in place (issue #1004).
+
+    Sends ``PATCH /v2/meetings/{meeting_id}`` with a body of ONLY
+    ``{'settings': _meeting_settings()}`` so the waiting-room / join-before-host
+    configuration is applied to a meeting that already exists. It deliberately
+    does NOT send ``topic`` / ``start_time`` / ``duration`` — Zoom keeps the
+    join URL stable as long as the meeting is patched rather than recreated, so
+    every calendar invite and event page already mailed out stays valid.
+
+    A successful PATCH returns HTTP 204 with no body.
+
+    Args:
+        event: Event model instance with a non-empty ``zoom_meeting_id``.
+
+    Raises:
+        ZoomAPIError: If the Zoom API call fails (non-2xx response).
+    """
+    token = get_access_token()
+
+    url = urljoin(ZOOM_API_BASE_URL, f'meetings/{event.zoom_meeting_id}')
+    response = requests.patch(
+        url,
+        json={'settings': _meeting_settings()},
+        headers={
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json',
+        },
+        timeout=10,
+    )
+
+    # PATCH returns 204 No Content on success; accept any 2xx for safety.
+    if response.status_code not in (200, 201, 204):
+        raise ZoomAPIError(
+            f'Failed to update Zoom meeting settings: {response.status_code}',
+            status_code=response.status_code,
+            response_data=response.json() if response.content else None,
+        )
+
+    logger.info(
+        'Updated Zoom meeting %s settings for event "%s"',
+        event.zoom_meeting_id, event.title,
+    )
 
 
 def validate_webhook_signature(request):

@@ -203,3 +203,43 @@ Test vs live: n/a. Zoom does not separate test and live deliveries —
 each event subscription has one secret. Use a separate event
 subscription (or a separate S2S app on a development workspace) for
 non-prod traffic.
+
+## ZOOM_WAITING_ROOM
+
+Purpose: Boolean. Off by default. When true, every meeting created or
+patched by `integrations/services/zoom.py` places attendees in a Zoom
+waiting room until the host admits them. A waiting room requires the host
+to manually admit each attendee, which is why it is off by default —
+keeping `ZOOM_JOIN_BEFORE_HOST` off (see below) already makes cloud
+recording wait for the host without any manual admitting (issue #1004).
+The key stays configurable for operators who explicitly want a waiting
+room.
+
+Type: boolean (`true` / `false`). Default: `false`.
+
+Where it applies:
+
+- New meetings: `create_meeting` reads this when building the meeting
+  `settings`.
+- Existing upcoming meetings: run
+  `uv run python manage.py apply_zoom_meeting_settings` to PATCH the
+  settings onto meetings created before this flag existed. The patch never
+  changes the join URL.
+
+## ZOOM_JOIN_BEFORE_HOST
+
+Purpose: Boolean. When false (the default), attendees cannot start a Zoom
+meeting before the host arrives. Early joiners instead see Zoom's "waiting
+for the host to start this meeting" hold, and the meeting (with its cloud
+recording) only begins once the host joins — with no manual admitting. So
+leaving this off is what ensures the recording never captures pre-host
+waiting time.
+
+Set it true only if you deliberately want attendees to start a meeting
+without the host present (not recommended while cloud auto-recording is
+on, since the recording would then capture pre-host time).
+
+Type: boolean (`true` / `false`). Default: `false`.
+
+Where it applies: same as `ZOOM_WAITING_ROOM` — `create_meeting` for new
+meetings and `apply_zoom_meeting_settings` for existing upcoming meetings.

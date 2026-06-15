@@ -438,6 +438,269 @@ class ZoomCreateMeetingTest(TestCase):
         self.assertEqual(ctx.exception.status_code, 400)
 
 
+@override_settings(
+    ZOOM_CLIENT_ID=ZOOM_TEST_CLIENT_ID,
+    ZOOM_CLIENT_SECRET=ZOOM_TEST_CLIENT_SECRET,
+    ZOOM_ACCOUNT_ID=ZOOM_TEST_ACCOUNT_ID,
+)
+class ZoomWaitingRoomSettingsTest(TestCase):
+    """Waiting-room / join-before-host config wiring for create + patch (#1004)."""
+
+    def setUp(self):
+        from integrations.config import clear_config_cache
+        from integrations.models import IntegrationSetting
+        from integrations.services import zoom
+
+        zoom.clear_token_cache()
+        # Isolate from any leaked override rows / warmed cache for these keys.
+        IntegrationSetting.objects.filter(
+            key__in=['ZOOM_WAITING_ROOM', 'ZOOM_JOIN_BEFORE_HOST'],
+        ).delete()
+        clear_config_cache()
+        self.addCleanup(clear_config_cache)
+
+        self.event = Event.objects.create(
+            title='Waiting Room Workshop',
+            slug='waiting-room-workshop',
+            start_datetime=timezone.now() + timedelta(days=7),
+            end_datetime=timezone.now() + timedelta(days=7, hours=1),
+            timezone='Europe/Berlin',
+            zoom_meeting_id='12121212121',
+            zoom_join_url='https://zoom.us/j/12121212121',
+            status='upcoming',
+        )
+
+    def _set_override(self, key, value):
+        from integrations.config import clear_config_cache
+        from integrations.models import IntegrationSetting
+
+        IntegrationSetting.objects.update_or_create(
+            key=key, defaults={'value': value},
+        )
+        clear_config_cache()
+
+    def _create_payload(self, mock_post):
+        from integrations.services.zoom import create_meeting
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'token-abc', 'expires_in': 3600,
+        }
+        meeting_response = MagicMock()
+        meeting_response.status_code = 201
+        meeting_response.json.return_value = {
+            'id': 98765432100, 'join_url': 'https://zoom.us/j/98765432100',
+        }
+        mock_post.side_effect = [token_response, meeting_response]
+
+        create_meeting(self.event)
+        meeting_call = mock_post.call_args_list[1]
+        return meeting_call.kwargs.get('json') or meeting_call[1].get('json')
+
+    @patch('integrations.services.zoom.requests.post')
+    def test_create_meeting_defaults_join_before_host_off(self, mock_post):
+        # join_before_host OFF + waiting_room OFF by default: early joiners hit
+        # Zoom's "waiting for the host" hold and recording waits for the host,
+        # with no manual admitting (#1004 revised).
+        payload = self._create_payload(mock_post)
+        self.assertIs(payload['settings']['join_before_host'], False)
+        self.assertIs(payload['settings']['waiting_room'], False)
+
+    @patch('integrations.services.zoom.requests.post')
+    def test_create_meeting_respects_waiting_room_override(self, mock_post):
+        # The waiting-room key is still wired: flipping it to true produces
+        # waiting_room=true even though it defaults off.
+        self._set_override('ZOOM_WAITING_ROOM', 'true')
+        payload = self._create_payload(mock_post)
+        self.assertIs(payload['settings']['waiting_room'], True)
+
+    @patch('integrations.services.zoom.requests.post')
+    def test_create_meeting_respects_join_before_host_override(self, mock_post):
+        self._set_override('ZOOM_JOIN_BEFORE_HOST', 'true')
+        payload = self._create_payload(mock_post)
+        self.assertIs(payload['settings']['join_before_host'], True)
+
+    @patch('integrations.services.zoom.requests.post')
+    def test_create_meeting_keeps_auto_recording_cloud(self, mock_post):
+        payload = self._create_payload(mock_post)
+        self.assertEqual(payload['settings']['auto_recording'], 'cloud')
+        self.assertIs(payload['settings']['mute_upon_entry'], True)
+        self.assertIs(payload['settings']['auto_transcribing'], True)
+
+    @patch('integrations.services.zoom.requests.patch')
+    @patch('integrations.services.zoom.requests.post')
+    def test_update_meeting_settings_patches_settings_only(
+        self, mock_post, mock_patch,
+    ):
+        from integrations.services.zoom import update_meeting_settings
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'token-abc', 'expires_in': 3600,
+        }
+        mock_post.return_value = token_response
+
+        patch_response = MagicMock()
+        patch_response.status_code = 204
+        patch_response.content = b''
+        mock_patch.return_value = patch_response
+
+        update_meeting_settings(self.event)
+
+        mock_patch.assert_called_once()
+        called_url = mock_patch.call_args.args[0]
+        self.assertTrue(called_url.endswith('/meetings/12121212121'))
+
+        body = mock_patch.call_args.kwargs['json']
+        # Body is settings-only — recreating (topic/start_time/duration) would
+        # change the join URL, which we must not do.
+        self.assertEqual(list(body.keys()), ['settings'])
+        self.assertNotIn('topic', body)
+        self.assertNotIn('start_time', body)
+        self.assertNotIn('duration', body)
+        self.assertIs(body['settings']['waiting_room'], False)
+        self.assertIs(body['settings']['join_before_host'], False)
+
+    @patch('integrations.services.zoom.requests.patch')
+    @patch('integrations.services.zoom.requests.post')
+    def test_update_meeting_settings_204_is_success(self, mock_post, mock_patch):
+        from integrations.services.zoom import update_meeting_settings
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'token-abc', 'expires_in': 3600,
+        }
+        mock_post.return_value = token_response
+
+        patch_response = MagicMock()
+        patch_response.status_code = 204
+        patch_response.content = b''
+        mock_patch.return_value = patch_response
+
+        # No exception means 204 is treated as success.
+        update_meeting_settings(self.event)
+
+    @patch('integrations.services.zoom.requests.patch')
+    @patch('integrations.services.zoom.requests.post')
+    def test_update_meeting_settings_raises_on_error(self, mock_post, mock_patch):
+        from integrations.services.zoom import ZoomAPIError, update_meeting_settings
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'token-abc', 'expires_in': 3600,
+        }
+        mock_post.return_value = token_response
+
+        error_response = MagicMock()
+        error_response.status_code = 400
+        error_response.content = b'{"code":300,"message":"invalid"}'
+        error_response.json.return_value = {'code': 300, 'message': 'invalid'}
+        mock_patch.return_value = error_response
+
+        with self.assertRaises(ZoomAPIError) as ctx:
+            update_meeting_settings(self.event)
+        self.assertEqual(ctx.exception.status_code, 400)
+
+
+class ApplyZoomMeetingSettingsCommandTest(TestCase):
+    """apply_zoom_meeting_settings command selection + resilience (#1004)."""
+
+    def setUp(self):
+        # Upcoming event WITH a meeting id — the one target.
+        self.upcoming_with_id = Event.objects.create(
+            title='Upcoming With Id',
+            slug='upcoming-with-id',
+            start_datetime=timezone.now() + timedelta(days=3),
+            end_datetime=timezone.now() + timedelta(days=3, hours=1),
+            timezone='UTC',
+            zoom_meeting_id='10000000001',
+            zoom_join_url='https://zoom.us/j/10000000001',
+            status='upcoming',
+        )
+        # Past event with a meeting id — must be skipped.
+        self.past_with_id = Event.objects.create(
+            title='Past With Id',
+            slug='past-with-id',
+            start_datetime=timezone.now() - timedelta(days=3, hours=1),
+            end_datetime=timezone.now() - timedelta(days=3),
+            timezone='UTC',
+            zoom_meeting_id='10000000002',
+            zoom_join_url='https://zoom.us/j/10000000002',
+            status='upcoming',
+        )
+        # Upcoming event WITHOUT a meeting id — must be skipped.
+        self.upcoming_no_id = Event.objects.create(
+            title='Upcoming No Id',
+            slug='upcoming-no-id',
+            start_datetime=timezone.now() + timedelta(days=4),
+            end_datetime=timezone.now() + timedelta(days=4, hours=1),
+            timezone='UTC',
+            zoom_meeting_id='',
+            status='upcoming',
+        )
+
+    @patch('events.management.commands.apply_zoom_meeting_settings.update_meeting_settings')
+    def test_command_patches_upcoming_with_id_only(self, mock_update):
+        from django.core.management import call_command
+
+        call_command('apply_zoom_meeting_settings')
+
+        self.assertEqual(mock_update.call_count, 1)
+        patched_event = mock_update.call_args.args[0]
+        self.assertEqual(patched_event.pk, self.upcoming_with_id.pk)
+
+    @patch('events.management.commands.apply_zoom_meeting_settings.update_meeting_settings')
+    def test_dry_run_makes_no_calls(self, mock_update):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command('apply_zoom_meeting_settings', '--dry-run', stdout=out)
+
+        mock_update.assert_not_called()
+        self.assertIn('Upcoming With Id', out.getvalue())
+
+    @patch('events.management.commands.apply_zoom_meeting_settings.update_meeting_settings')
+    def test_continues_after_per_event_failure(self, mock_update):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from integrations.services.zoom import ZoomAPIError
+
+        # Second upcoming event with an id so we have two targets.
+        Event.objects.create(
+            title='Upcoming With Id Two',
+            slug='upcoming-with-id-two',
+            start_datetime=timezone.now() + timedelta(days=5),
+            end_datetime=timezone.now() + timedelta(days=5, hours=1),
+            timezone='UTC',
+            zoom_meeting_id='10000000003',
+            zoom_join_url='https://zoom.us/j/10000000003',
+            status='upcoming',
+        )
+
+        mock_update.side_effect = [
+            ZoomAPIError('boom', status_code=400),
+            None,
+        ]
+
+        out = StringIO()
+        err = StringIO()
+        call_command(
+            'apply_zoom_meeting_settings', stdout=out, stderr=err,
+        )
+
+        # Both upcoming-with-id events were attempted despite the first failing.
+        self.assertEqual(mock_update.call_count, 2)
+        self.assertIn('Patched 1 meeting(s), failed 1.', out.getvalue())
+
+
 class ZoomValidateWebhookSignatureTest(_ZoomSecretIsolationMixin, TestCase):
     """Test Zoom webhook signature validation."""
 

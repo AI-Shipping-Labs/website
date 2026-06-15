@@ -341,25 +341,22 @@ class TestMemberSeesMeetingSchedule:
             '[data-testid="sprint-meeting-schedule"]'
         ).wait_for(state="visible")
         rows = page.locator(
-            '[data-testid="sprint-meeting-schedule-row"]'
+            '[data-testid="sprint-call-entry"]'
         )
         assert rows.count() == 6
 
-        # Each row exposes a date, time and a location field.
+        # Each row exposes localized time and a location field.
         page.locator(
-            '[data-testid="sprint-meeting-schedule-date"]'
+            '[data-testid="sprint-call-time"]'
         ).first.wait_for(state="visible")
         page.locator(
-            '[data-testid="sprint-meeting-schedule-time"]'
-        ).first.wait_for(state="visible")
-        page.locator(
-            '[data-testid="sprint-meeting-schedule-location"]'
+            '[data-testid="sprint-call-location"]'
         ).first.wait_for(state="visible")
 
         # Click the first occurrence -> lands on the canonical
         # ``/events/<id>/may-oh-session-...`` URL (issue #673).
         first_link = page.locator(
-            '[data-testid="sprint-meeting-schedule-link"]'
+            '[data-testid="sprint-call-entry-link"]'
         ).first
         href = first_link.get_attribute("href")
         assert href is not None
@@ -377,13 +374,13 @@ class TestMemberSeesMeetingSchedule:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 5: No event series -> meeting schedule section hidden.
+# Scenario 5: No event series -> calls section shows an empty state.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestNoEventSeriesHidesSchedule:
-    def test_unlinked_sprint_hides_section(
+class TestNoEventSeriesShowsEmptyState:
+    def test_unlinked_sprint_shows_empty_state(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -401,10 +398,12 @@ class TestNoEventSeriesHidesSchedule:
             wait_until="domcontentloaded",
         )
 
-        # The schedule section must NOT be in the DOM at all.
-        assert page.locator(
+        page.locator(
             '[data-testid="sprint-meeting-schedule"]'
-        ).count() == 0
+        ).wait_for(state="visible")
+        page.locator('[data-testid="sprint-calls-empty"]').wait_for(
+            state="visible"
+        )
 
         # The Join CTA still resolves for an eligible member.
         page.locator(
@@ -415,13 +414,13 @@ class TestNoEventSeriesHidesSchedule:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 6: Linked but empty event series -> section also hidden.
+# Scenario 6: Linked but empty event series -> calls empty state.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestEmptyEventSeriesHidesSchedule:
-    def test_linked_but_empty_series_hides_section(
+class TestEmptyEventSeriesShowsEmptyState:
+    def test_linked_but_empty_series_shows_empty_state(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -442,11 +441,13 @@ class TestEmptyEventSeriesHidesSchedule:
             wait_until="domcontentloaded",
         )
 
-        # Schedule section is not rendered.
-        assert page.locator(
+        page.locator(
             '[data-testid="sprint-meeting-schedule"]'
-        ).count() == 0
-        # And there is no leak of staff-only "no meetings yet" copy.
+        ).wait_for(state="visible")
+        page.locator('[data-testid="sprint-calls-empty"]').wait_for(
+            state="visible"
+        )
+        # And there is no leak of old/staff-only "no meetings yet" copy.
         body_text = page.locator("body").inner_text()
         assert "no meetings yet" not in body_text.lower()
 
@@ -546,7 +547,7 @@ class TestAnonymousSeesSchedule:
             '[data-testid="sprint-meeting-schedule"]'
         ).wait_for(state="visible")
         assert page.locator(
-            '[data-testid="sprint-meeting-schedule-row"]'
+            '[data-testid="sprint-call-entry"]'
         ).count() == 6
 
         # The login CTA is preserved.
@@ -556,7 +557,7 @@ class TestAnonymousSeesSchedule:
 
         # Clicking an occurrence lands on the event detail page.
         first = page.locator(
-            '[data-testid="sprint-meeting-schedule-link"]'
+            '[data-testid="sprint-call-entry-link"]'
         ).first
         href = first.get_attribute("href")
         assert href is not None and href.startswith("/events/")

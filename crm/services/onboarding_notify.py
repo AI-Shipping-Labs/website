@@ -20,8 +20,8 @@ truth, mirroring the plan-request / payment precedent).
 
 The in-app notification's ``url`` deep-links to the member's CRM record at
 ``/studio/crm/<id>/`` when a :class:`~crm.models.CRMRecord` exists, else to
-the Django admin user-change page. A CRMRecord is NOT auto-created here --
-tracking is an explicit staff action (issue #560).
+the Studio user-detail page (``/studio/users/<pk>/``). A CRMRecord is NOT
+auto-created here -- tracking is an explicit staff action (issue #560).
 """
 
 import logging
@@ -36,7 +36,7 @@ from notifications.models import Notification
 
 # Reuse the exact active-staff query the plan-request flow uses so the two
 # fan-outs can never drift (issue #882: "do not hardcode emails").
-from plans.views.sprints import _member_admin_url, _member_display_name, _staff_users
+from plans.views.sprints import _member_display_name, _staff_users
 
 logger = logging.getLogger(__name__)
 
@@ -49,17 +49,24 @@ def _member_crm_path(member):
     return reverse('studio_crm_detail', kwargs={'crm_id': record.pk})
 
 
+def _member_studio_user_url(member):
+    """Absolute Studio user-detail URL (``/studio/users/<pk>/``) for ``member``."""
+    path = reverse('studio_user_detail', kwargs={'user_id': member.pk})
+    return f'{site_base_url()}{path}'
+
+
 def _member_target_url(member):
     """Absolute URL the staff notification should open for ``member``.
 
     The member's CRM record when one exists (``/studio/crm/<id>/``),
-    otherwise the Django admin user-change page (mirrors the plan-request
-    fallback). Never auto-creates a CRMRecord.
+    otherwise the Studio user-detail page (``/studio/users/<pk>/``).
+    Never routes staff to the Django admin and never auto-creates a
+    CRMRecord.
     """
     crm_path = _member_crm_path(member)
     if crm_path is not None:
         return f'{site_base_url()}{crm_path}'
-    return _member_admin_url(member)
+    return _member_studio_user_url(member)
 
 
 def _member_tier_name(member):
@@ -111,10 +118,10 @@ def _post_onboarding_to_slack(*, member, target_url):
                     'type': 'button',
                     'text': {
                         'type': 'plain_text',
-                        'text': 'Open member in CRM',
+                        'text': 'Open member in Studio',
                     },
                     'url': target_url,
-                    'action_id': 'open_member_crm',
+                    'action_id': 'open_member_studio',
                 },
             ],
         },

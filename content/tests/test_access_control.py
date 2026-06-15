@@ -310,6 +310,49 @@ class CanAccessEmailVerifiedTest(TierSetupMixin, TestCase):
 
 
 @tag('core')
+class OverrideGatingRegressionTest(TierSetupMixin, TestCase):
+    """Issue #965: lock the effective-tier gating for override users.
+
+    A Free-base + Main-override user must reach Main-gated content without a
+    paywall. Gating already resolves via ``get_user_level`` (which returns
+    ``max(base, override)``); this test pins that behavior so a future
+    "effective tier everywhere" refactor cannot silently regress it.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.user = User.objects.create_user(
+            email='override-gate@test.com', email_verified=True,
+        )
+        cls.user.tier = cls.free_tier
+        cls.user.save()
+        TierOverride.objects.create(
+            user=cls.user,
+            original_tier=cls.free_tier,
+            override_tier=cls.main_tier,
+            expires_at=timezone.now() + timedelta(days=7),
+            is_active=True,
+        )
+        cls.main_article = Article.objects.create(
+            title='Main gated', slug='main-gated', date=date(2025, 1, 1),
+            required_level=LEVEL_MAIN,
+        )
+
+    def test_override_user_can_access_main_gated_content(self):
+        self.assertTrue(can_access(self.user, self.main_article))
+
+    def test_override_user_sees_no_paywall_reason(self):
+        from content.access import get_gated_reason
+
+        self.assertEqual(get_gated_reason(self.user, self.main_article), '')
+
+    def test_override_user_gating_context_not_gated(self):
+        ctx = build_gating_context(self.user, self.main_article, 'article')
+        self.assertFalse(ctx['is_gated'])
+
+
+@tag('core')
 class GetRequiredTierNameTest(TestCase):
     """Test tier name mapping."""
 

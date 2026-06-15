@@ -72,22 +72,22 @@ def serialize_user_state(user, *, compact=False):
     common operator question after fetching a user is "what tags do they
     carry?" -- bouncing back to a list call would be silly.
     """
-    # Tier resolution: the user's base tier slug + level. ``user.tier_id``
-    # can legitimately be NULL for the bare "free" case.
+    # Base tier resolution: the user's actually-paid tier slug + level.
+    # ``user.tier_id`` can legitimately be NULL for the bare "free" case.
     if user.tier_id:
-        tier_payload = {
+        base_tier_payload = {
             "slug": user.tier.slug,
             "level": user.tier.level,
         }
     else:
-        tier_payload = {"slug": "free", "level": 0}
+        base_tier_payload = {"slug": "free", "level": 0}
 
     # Override resolution -- callers care about the BOOLEAN ("is there an
     # active override?") and (full payload only) the override SUMMARY
     # object. The model guarantees one active override per user, so the
     # newest active non-expired row is THE override. We fetch that single
-    # row once and derive both ``tier_override_active`` and the
-    # ``tier_override`` object from it -- no second query, no drift.
+    # row once and derive ``tier_override_active``, the ``tier_override``
+    # object, AND the effective tier from it -- no second query, no drift.
     # ``content.access.get_active_override`` is the canonical helper but
     # lives in the ``content`` app; replicating the predicate here keeps
     # the API serializer free of that dependency.
@@ -102,6 +102,30 @@ def serialize_user_state(user, *, compact=False):
         .first()
     )
     tier_override_active = active_override is not None
+
+    # Effective tier = ``max(base, override)`` by level (issue #965). An
+    # override only ever RAISES the reported tier, never lowers it, mirroring
+    # ``content.access.get_user_level``. We deliberately do NOT call
+    # ``get_user_level`` here: it short-circuits staff/superuser to
+    # ``LEVEL_PREMIUM``, which would wrongly report every admin as Premium in
+    # the API. This serializer reports the member's actual subscription /
+    # override tier, not staff escalation, so we compute the max directly.
+    base_level = base_tier_payload["level"]
+    if (
+        active_override is not None
+        and active_override.override_tier.level > base_level
+    ):
+        tier_payload = {
+            "slug": active_override.override_tier.slug,
+            "level": active_override.override_tier.level,
+            "source": "override",
+        }
+    else:
+        tier_payload = {
+            "slug": base_tier_payload["slug"],
+            "level": base_tier_payload["level"],
+            "source": "subscription" if base_level > 0 else "free",
+        }
 
     payload = {
         "email": user.email,
@@ -125,6 +149,11 @@ def serialize_user_state(user, *, compact=False):
         payload["tags"] = list(user.tags or [])
         payload["email_preferences"] = dict(user.email_preferences or {})
         payload["import_metadata"] = dict(user.import_metadata or {})
+        # ``base_tier`` (issue #965): the actually-paid tier — the old meaning
+        # of ``tier`` before the effective-tier change. Additive, so callers
+        # that genuinely need the paid tier can read it without re-deriving
+        # from ``tier_override``. Full payload only, like ``tier_override``.
+        payload["base_tier"] = base_tier_payload
         payload["tier_override"] = _serialize_tier_override(active_override)
         # Email aliases (issue #840a): the normalized alias emails routing to
         # this account, so operators see Stripe-routing at a glance. Read-only

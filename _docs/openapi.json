@@ -6813,7 +6813,8 @@
                       "subscription_id": "sub_xyz",
                       "tier": {
                         "level": 20,
-                        "slug": "main"
+                        "slug": "main",
+                        "source": "override"
                       },
                       "tier_override_active": true,
                       "unsubscribed": false
@@ -6998,6 +6999,10 @@
                   "aliases": [
                     "47-gentle.virtual@icloud.com"
                   ],
+                  "base_tier": {
+                    "level": 0,
+                    "slug": "free"
+                  },
                   "bounce_state": "none",
                   "date_joined": "2026-04-15T12:00:00+00:00",
                   "display_name": "Alice Doe",
@@ -7016,7 +7021,8 @@
                   ],
                   "tier": {
                     "level": 20,
-                    "slug": "main"
+                    "slug": "main",
+                    "source": "override"
                   },
                   "tier_override": {
                     "expires_at": "2036-05-06T00:00:00+00:00",
@@ -7090,6 +7096,10 @@
                   "aliases": [
                     "47-gentle.virtual@icloud.com"
                   ],
+                  "base_tier": {
+                    "level": 0,
+                    "slug": "free"
+                  },
                   "bounce_state": "none",
                   "date_joined": "2026-04-15T12:00:00+00:00",
                   "display_name": "Alice Doe",
@@ -7108,7 +7118,8 @@
                   ],
                   "tier": {
                     "level": 20,
-                    "slug": "main"
+                    "slug": "main",
+                    "source": "override"
                   },
                   "tier_override": {
                     "expires_at": "2036-05-06T00:00:00+00:00",
@@ -7514,6 +7525,10 @@
                   "aliases": [
                     "47-gentle.virtual@icloud.com"
                   ],
+                  "base_tier": {
+                    "level": 0,
+                    "slug": "free"
+                  },
                   "bounce_state": "none",
                   "date_joined": "2026-04-15T12:00:00+00:00",
                   "display_name": "Alice Doe",
@@ -7532,7 +7547,8 @@
                   ],
                   "tier": {
                     "level": 20,
-                    "slug": "main"
+                    "slug": "main",
+                    "source": "override"
                   },
                   "tier_override": {
                     "expires_at": "2036-05-06T00:00:00+00:00",

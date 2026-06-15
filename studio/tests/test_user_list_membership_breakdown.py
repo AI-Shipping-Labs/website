@@ -249,3 +249,21 @@ class MembershipBreakdownCountsTest(TestCase):
         with mock.patch('stripe.Subscription.retrieve') as retrieve:
             self.client.get('/studio/users/')
         retrieve.assert_not_called()
+
+    def test_free_base_main_override_counts_comped_not_paying(self):
+        # Issue #965 carve-out: the effective-tier change to the API and
+        # account page must NOT bleed into the Studio payment counters. A
+        # Free-base + Main-override user is comped, not paying — it must
+        # land in total_comped / override_main and NEVER in total_paying /
+        # paid_main, so a future "effective tier everywhere" refactor cannot
+        # silently inflate the paying count.
+        ctx = self._ctx()
+        # ov-main@test.com is exactly this user (Free base, Main override,
+        # no subscription) from the fixture.
+        self.assertEqual(ctx['override_main'], 1)
+        # Paid Main is the 2 dedicated subscribers + the "both" user only —
+        # the override user is excluded.
+        self.assertEqual(ctx['paid_main'], 3)
+        response = self.client.get('/studio/users/?filter=paid')
+        paid_emails = {row['email'] for row in response.context['user_rows']}
+        self.assertNotIn('ov-main@test.com', paid_emails)

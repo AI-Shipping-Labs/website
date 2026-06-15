@@ -125,6 +125,34 @@ def _render_account_page(
     # Check for active tier override
     active_override = get_active_override(user)
 
+    # Effective-tier resolution for the membership headline (issue #965).
+    # The "Current Plan" headline reads the EFFECTIVE tier (override applied)
+    # when an active override RAISES the tier above base; otherwise it shows
+    # the base tier exactly as before. We resolve this here (not in the
+    # template) so the headline never re-derives the ``max()`` rule inline.
+    # The base level mirrors ``content.access.get_user_level`` — an override
+    # only ever raises the reported tier, never lowers it.
+    base_level = tier.level if tier else 0
+    override_raises_tier = bool(
+        active_override is not None
+        and active_override.override_tier.level > base_level
+    )
+    if override_raises_tier:
+        effective_tier = active_override.override_tier
+        # Provenance line, e.g. "Main plan — tier override from Free until
+        # 06/05/2026". Base tier name falls back to "Free" for a NULL base.
+        # Zero-padded day to match the surrounding template's Django
+        # ``date:"d/m/Y"`` format (issue #965) — no third date format.
+        base_tier_name = tier.name if tier else "Free"
+        override_provenance = (
+            f"{effective_tier.name} plan — tier override from "
+            f"{base_tier_name} until "
+            f"{active_override.expires_at.strftime('%d/%m/%Y')}"
+        )
+    else:
+        effective_tier = tier
+        override_provenance = ""
+
     stripe_customer_portal_url = get_config("STRIPE_CUSTOMER_PORTAL_URL", "")
     has_stale_subscription = has_subscription and is_free
 
@@ -197,6 +225,9 @@ def _render_account_page(
         "timezone_options": build_timezone_options(),
         "preferred_timezone_label": get_timezone_label(user.preferred_timezone),
         "active_override": active_override,
+        # Issue #965: effective-tier headline + override provenance line.
+        "effective_tier": effective_tier,
+        "override_provenance": override_provenance,
         "account_plan_state": account_plan_state,
         "show_manage_subscription": show_manage_subscription,
         "show_upgrade_action": show_upgrade_action,

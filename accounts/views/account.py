@@ -32,7 +32,7 @@ from accounts.services.timezones import (
     is_valid_timezone,
 )
 from community.services.slack_links import build_slack_profile_url
-from content.access import LEVEL_MAIN, get_active_override
+from content.access import LEVEL_MAIN, get_active_override, get_user_level
 from integrations.config import get_config
 from payments.models import Tier
 from payments.tier_state import build_tier_state
@@ -174,17 +174,16 @@ def _render_account_page(
         and active_override is None
     )
 
-    # Slack community card (issue #700). Same gating rule as the
-    # dashboard: raw ``user.tier.level >= LEVEL_MAIN`` — admin tier
-    # overrides do NOT grant Slack workspace access.
+    # Slack community card (issue #700). Issue #971: uses the effective
+    # (override-aware) level via get_user_level — an active TierOverride
+    # grants Slack/community access. Same rule as the dashboard and the
+    # join redirect (community/views.py).
     # Issue #953: the CTA links to the gated /community/slack redirect, not
     # the raw invite URL — but the card is still only shown when an invite
     # URL is actually configured (nothing to redirect to otherwise).
     slack_invite_configured = bool(get_config("SLACK_INVITE_URL", ""))
     slack_join_url = reverse("community_slack_join")
-    has_qualifying_slack_tier = bool(
-        user.tier_id and user.tier.level >= LEVEL_MAIN
-    )
+    has_qualifying_slack_tier = get_user_level(user) >= LEVEL_MAIN
     show_slack_join = bool(
         slack_invite_configured
         and has_qualifying_slack_tier

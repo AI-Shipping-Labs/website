@@ -1424,17 +1424,31 @@ class SetupSchedulesTest(TestCase):
 # ============================================================
 
 class DashboardSlackOverrideTest(TierOverrideTestBase):
-    """Verify Slack join link is NOT affected by tier override."""
+    """Verify Slack join link uses the effective (override-aware) tier.
 
-    def test_dashboard_slack_join_uses_subscription_tier_not_override(self):
-        """show_slack_join checks user.tier.level (not overridden)."""
-        user = self._make_user(email="slack_test@example.com", password="testpass")
+    Issue #971 (policy Option A): an active, non-expired ``TierOverride``
+    grants Slack/community access. The dashboard Join Slack card resolves
+    via ``get_user_level`` — same rule as the join redirect and the
+    membership-sync job — so a Free-base member with an active Main
+    override sees the card.
+    """
+
+    def test_dashboard_slack_join_uses_effective_tier_with_override(self):
+        """Free base + active Main override -> show_slack_join is True."""
+        user = self._make_user(
+            email="slack_test@example.com",
+            tier=self.free_tier,
+            password="testpass",
+        )
         self._make_override(user, self.main_tier)
 
         self.client.login(email=user.email, password="testpass")
-        response = self.client.get("/")
+        with self.settings(
+            SLACK_INVITE_URL="https://join.slack.com/t/test/shared_invite/x"
+        ):
+            response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
 
-        # Free user with Main override: show_slack_join should be False
-        # because it checks user.tier.level (Free=0), not get_user_level()
-        self.assertFalse(response.context["show_slack_join"])
+        # Free user with an active Main override: effective level is Main,
+        # so the Join Slack card is shown (Option A).
+        self.assertTrue(response.context["show_slack_join"])

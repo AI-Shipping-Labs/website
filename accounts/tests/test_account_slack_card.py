@@ -4,17 +4,20 @@ Mirrors the dashboard's two-state card so paid users who live on
 /account/ rather than /dashboard can find the Slack invite and confirm
 their linked Slack identity.
 
-Gating matches the dashboard exactly: raw ``user.tier.level >=
-LEVEL_MAIN`` — admin tier overrides do NOT grant Slack access — and
-``SLACK_INVITE_URL`` must be set for the join CTA to appear.
+Gating matches the dashboard exactly: effective (override-aware) level
+``get_user_level(user) >= LEVEL_MAIN`` (issue #971 — an active
+``TierOverride`` grants Slack access) — and ``SLACK_INVITE_URL`` must be
+set for the join CTA to appear.
 """
 
 import os
 import re
+from datetime import timedelta
 
 from django.test import TestCase
+from django.utils import timezone
 
-from accounts.models import User
+from accounts.models import TierOverride, User
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from tests.fixtures import TierSetupMixin
@@ -341,3 +344,103 @@ class SlackProfileUrlContextKeyTest(
         self.assertFalse(ctx["slack_connected"])
         self.assertEqual(ctx["slack_user_id"], "")
         self.assertEqual(ctx["slack_profile_url"], "")
+
+
+class AccountSlackCardOverrideTest(
+    _SlackTeamIdSettingMixin, TierSetupMixin, TestCase,
+):
+    """Issue #971: the account Join Slack card uses effective tier.
+
+    An active, non-expired ``TierOverride`` grants Slack/community access
+    via ``content.access.get_user_level`` — the same rule as the dashboard
+    and the join redirect. Expired / deactivated / below-Main overrides do
+    not, and non-override users are unchanged.
+    """
+
+    def setUp(self):
+        self._reset_team_id()
+
+    def _make_user(self, email, tier, slack_member=False):
+        user = User.objects.create_user(email=email, password="pw")
+        user.tier = tier
+        user.slack_member = slack_member
+        user.save(update_fields=["tier", "slack_member"])
+        self.client.login(email=email, password="pw")
+        return user
+
+    def _make_override(self, user, override_tier, **kwargs):
+        defaults = {
+            "original_tier": user.tier,
+            "override_tier": override_tier,
+            "expires_at": timezone.now() + timedelta(days=14),
+            "is_active": True,
+        }
+        defaults.update(kwargs)
+        return TierOverride.objects.create(user=user, **defaults)
+
+    def _get_account(self):
+        with self.settings(SLACK_INVITE_URL=TEST_INVITE_URL):
+            return self.client.get("/account/")
+
+    def test_free_base_active_main_override_not_joined_shows_card(self):
+        user = self._make_user("comped@test.com", self.free_tier)
+        self._make_override(user, self.main_tier)
+        response = self._get_account()
+        self.assertTrue(response.context["show_slack_join"])
+        self.assertContains(
+            response, 'data-testid="slack-account-card-join"',
+        )
+
+    def test_free_base_active_main_override_joined_is_connected(self):
+        user = self._make_user(
+            "comped-joined@test.com", self.free_tier, slack_member=True,
+        )
+        self._make_override(user, self.main_tier)
+        ctx = self._get_account().context
+        self.assertFalse(ctx["show_slack_join"])
+        self.assertTrue(ctx["slack_connected"])
+
+    def test_free_base_expired_main_override_no_card(self):
+        user = self._make_user("expired@test.com", self.free_tier)
+        self._make_override(
+            user,
+            self.main_tier,
+            expires_at=timezone.now() - timedelta(seconds=1),
+        )
+        response = self._get_account()
+        self.assertFalse(response.context["show_slack_join"])
+        self.assertFalse(response.context["slack_connected"])
+        self.assertNotContains(
+            response, 'data-testid="slack-account-card-join"',
+        )
+
+    def test_free_base_deactivated_main_override_no_card(self):
+        user = self._make_user("deactivated@test.com", self.free_tier)
+        self._make_override(user, self.main_tier, is_active=False)
+        response = self._get_account()
+        self.assertFalse(response.context["show_slack_join"])
+        self.assertNotContains(
+            response, 'data-testid="slack-account-card-join"',
+        )
+
+    def test_free_base_active_basic_override_no_card(self):
+        user = self._make_user("basicoverride@test.com", self.free_tier)
+        self._make_override(user, self.basic_tier)
+        response = self._get_account()
+        self.assertFalse(response.context["show_slack_join"])
+        self.assertNotContains(
+            response, 'data-testid="slack-account-card-join"',
+        )
+
+    def test_paid_main_base_no_override_still_shows_card(self):
+        self._make_user("main@test.com", self.main_tier)
+        response = self._get_account()
+        self.assertTrue(response.context["show_slack_join"])
+
+    def test_free_base_no_override_no_card(self):
+        self._make_user("free@test.com", self.free_tier)
+        response = self._get_account()
+        self.assertFalse(response.context["show_slack_join"])
+        self.assertNotContains(
+            response, 'data-testid="slack-account-card-join"',
+        )

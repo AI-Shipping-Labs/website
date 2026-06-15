@@ -23,6 +23,16 @@ from questionnaires.tests.test_onboarding_ai_core import VALID_EXTRACTION
 
 User = get_user_model()
 
+
+# Issue #982: onboarding is gated to paid (effective tier >= Basic). These
+# flow tests create members on a paid (Basic) tier so they can enter the
+# flow. Free / override gating is covered in test_onboarding_gating_982.py.
+def _basic_tier():
+    from payments.models import Tier
+
+    return Tier.objects.get(slug='basic')
+
+
 PERSONA_NAMES = ['Alex', 'Priya', 'Sam', 'Taylor']
 
 # Enable the LLM service: a key + an implemented provider.
@@ -51,7 +61,7 @@ class RoutingGatingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
-            email='ai-route@test.com', password='pw',
+            email='ai-route@test.com', password='pw', tier=_basic_tier(),
         )
 
     def setUp(self):
@@ -98,7 +108,7 @@ class LlmDisabledTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
-            email='ai-disabled@test.com', password='pw',
+            email='ai-disabled@test.com', password='pw', tier=_basic_tier(),
         )
 
     def setUp(self):
@@ -123,7 +133,7 @@ class ChatTurnTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
-            email='ai-turn@test.com', password='pw',
+            email='ai-turn@test.com', password='pw', tier=_basic_tier(),
         )
 
     def setUp(self):
@@ -183,7 +193,7 @@ class AlreadyOnboardedTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
-            email='ai-done@test.com', password='pw',
+            email='ai-done@test.com', password='pw', tier=_basic_tier(),
         )
 
     def setUp(self):
@@ -227,7 +237,7 @@ class PersonaSignalNeverLeaksTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
-            email='ai-leak@test.com', password='pw',
+            email='ai-leak@test.com', password='pw', tier=_basic_tier(),
         )
 
     def test_chat_page_has_no_persona_name(self):

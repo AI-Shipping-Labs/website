@@ -28,6 +28,7 @@ from integrations.services.llm import LLMError
 from questionnaires.onboarding import (
     ai_onboarding_available,
     ai_onboarding_streaming_enabled,
+    can_access_onboarding,
     get_onboarding_response,
 )
 from questionnaires.services import build_response_questions
@@ -54,6 +55,13 @@ def onboarding_chat(request):
     submitted onboarding (mirrors #802's resume/complete behavior). Seeds
     the conversation with a deterministic greeting on first visit.
     """
+    # Issue #982: onboarding is paid-only. A Free / expired-override member
+    # is sent to the dashboard before any conversation is created or any
+    # LLM turn runs.
+    if not can_access_onboarding(request.user):
+        messages.info(request, 'Onboarding is part of a paid membership.')
+        return redirect('/')
+
     if not ai_onboarding_available():
         return redirect('onboarding_start')
 
@@ -115,6 +123,13 @@ def onboarding_chat_stream(request):
     ineligible, the client should never call this endpoint; we still guard
     here and emit a ``fallback`` so a stray call degrades cleanly.
     """
+    # Issue #982: onboarding is paid-only. A Free / expired-override member
+    # gets a ``fallback`` frame and no LLM turn runs / nothing is persisted.
+    if not can_access_onboarding(request.user):
+        return _stream_response(
+            iter([_sse('fallback', {'reason': 'not-eligible'})]),
+        )
+
     if not ai_onboarding_streaming_enabled():
         # Streaming off / LLM disabled: tell the client to use the v1 path.
         return _stream_response(
@@ -198,6 +213,12 @@ def onboarding_chat_message(request):
     is routed to the #802 form fallback for the same onboarding response
     with a friendly message and no data loss.
     """
+    # Issue #982: onboarding is paid-only. A Free / expired-override member
+    # is redirected away before any LLM turn runs.
+    if not can_access_onboarding(request.user):
+        messages.info(request, 'Onboarding is part of a paid membership.')
+        return redirect('/')
+
     if not ai_onboarding_available():
         return redirect('onboarding_start')
 

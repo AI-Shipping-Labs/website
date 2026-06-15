@@ -30,6 +30,16 @@ from questionnaires.tests.test_onboarding_ai_core import VALID_EXTRACTION
 
 User = get_user_model()
 
+
+# Issue #982: onboarding is gated to paid (effective tier >= Basic). These
+# flow tests create members on a paid (Basic) tier so they can enter the
+# flow. Free / override gating is covered in test_onboarding_gating_982.py.
+def _basic_tier():
+    from payments.models import Tier
+
+    return Tier.objects.get(slug='basic')
+
+
 PERSONA_NAMES = ['Alex', 'Priya', 'Sam', 'Taylor']
 
 LLM_ON = override_settings(
@@ -77,7 +87,7 @@ class StreamResponseShapeTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
-            email='stream-shape@test.com', password='pw',
+            email='stream-shape@test.com', password='pw', tier=_basic_tier(),
         )
 
     def setUp(self):
@@ -132,7 +142,7 @@ class StreamCompletionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
-            email='stream-complete@test.com', password='pw',
+            email='stream-complete@test.com', password='pw', tier=_basic_tier(),
         )
 
     def setUp(self):
@@ -189,7 +199,7 @@ class StreamCompletionTest(TestCase):
         streamed = Response.objects.get(respondent=self.member)
 
         other = User.objects.create_user(
-            email='stream-nonstream@test.com', password='pw',
+            email='stream-nonstream@test.com', password='pw', tier=_basic_tier(),
         )
         response, conversation = get_or_create_ai_onboarding_response(other)
         with patch(
@@ -226,7 +236,7 @@ class StreamFallbackTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
-            email='stream-fallback@test.com', password='pw',
+            email='stream-fallback@test.com', password='pw', tier=_basic_tier(),
         )
 
     def setUp(self):
@@ -308,7 +318,7 @@ class StreamGatingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
-            email='stream-gate@test.com', password='pw',
+            email='stream-gate@test.com', password='pw', tier=_basic_tier(),
         )
 
     def setUp(self):
@@ -350,7 +360,7 @@ class StreamAlreadyOnboardedTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
-            email='stream-done@test.com', password='pw',
+            email='stream-done@test.com', password='pw', tier=_basic_tier(),
         )
 
     def setUp(self):
@@ -394,8 +404,8 @@ class StreamCrossMemberIsolationTest(TestCase):
 
     @LLM_ON
     def test_stream_uses_only_the_logged_in_members_response(self):
-        member_a = User.objects.create_user(email='a@test.com', password='pw')
-        member_b = User.objects.create_user(email='b@test.com', password='pw')
+        member_a = User.objects.create_user(email='a@test.com', password='pw', tier=_basic_tier())
+        member_b = User.objects.create_user(email='b@test.com', password='pw', tier=_basic_tier())
         # B starts a conversation.
         get_or_create_ai_onboarding_response(member_b)
 

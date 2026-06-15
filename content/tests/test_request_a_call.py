@@ -47,7 +47,11 @@ class RequestACallGateTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context['onboarded'])
         self.assertContains(response, 'data-testid="request-call-onboarding-gate"')
-        self.assertContains(response, 'href="/onboarding/"')
+        # Issue #982: a Free member (no active override) cannot enter the
+        # paid-only onboarding flow, so the "Finish onboarding" CTA into
+        # /onboarding/ is NOT handed to them even though the gate copy shows.
+        self.assertNotContains(response, 'data-testid="request-call-onboarding-cta"')
+        self.assertNotContains(response, 'href="/onboarding/"')
         # No host booking links rendered for un-onboarded members.
         self.assertNotContains(response, 'data-testid="call-host-book"')
         self.assertNotContains(response, 'https://example.com/v')

@@ -10,7 +10,10 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 
 from community.models import CallHost
-from questionnaires.onboarding import has_completed_onboarding
+from questionnaires.onboarding import (
+    can_access_onboarding,
+    has_completed_onboarding,
+)
 
 
 @login_required
@@ -31,8 +34,13 @@ def request_a_call(request):
         hosts = list(CallHost.objects.filter(is_active=True))
         any_available = any(host.is_available for host in hosts)
 
+    # Issue #982: onboarding is paid-only. Only hand a "Finish onboarding"
+    # CTA to a member who can actually enter the flow (effective tier >=
+    # LEVEL_BASIC). A Free / expired-override member must never be pointed
+    # at a flow they cannot use.
     context = {
         'onboarded': onboarded,
+        'can_access_onboarding': can_access_onboarding(request.user),
         'hosts': hosts,
         'any_available': any_available,
     }

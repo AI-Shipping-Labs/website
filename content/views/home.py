@@ -325,7 +325,18 @@ def _dashboard(request):
     )
 
     # --- Onboarding prompt (issue #802) ---
-    show_onboarding_prompt = not onboarding_complete
+    # Issue #982: onboarding is a paid-member benefit. Only prompt members
+    # who can actually access the flow (effective tier >= LEVEL_BASIC) and
+    # who have not yet completed it. Free members (no active override) never
+    # see the banner. This reuses the already-resolved ``user_level`` (which
+    # was computed once with the pre-fetched ``active_override``) so it adds
+    # no extra DB query — it is the same threshold the shared
+    # ``can_access_onboarding`` predicate applies (``get_user_level >=
+    # LEVEL_BASIC``).
+    from content.access import LEVEL_BASIC
+    show_onboarding_prompt = (
+        not onboarding_complete and user_level >= LEVEL_BASIC
+    )
 
     context = {
         'tier_name': tier_name,

@@ -21,6 +21,16 @@ from questionnaires.models import Response, ResponseQuestion
 User = get_user_model()
 
 
+# Issue #982: onboarding is gated to paid (effective tier >= Basic). These
+# flow tests create members on a paid (Basic) tier so they can enter the
+# flow. Free / override gating is covered in test_onboarding_gating_982.py.
+def _basic_tier():
+    from payments.models import Tier
+
+    return Tier.objects.get(slug='basic')
+
+
+
 def _submit_onboarding(client):
     """Drive a member through the form flow to a submitted Response.
 
@@ -52,7 +62,7 @@ class OnboardingSubmitLandsOnCompletionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
-            email='complete-form@test.com', password='pw',
+            email='complete-form@test.com', password='pw', tier=_basic_tier(),
         )
 
     def setUp(self):
@@ -88,7 +98,7 @@ class CompletionScreenBookingCtasTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
-            email='ctas@test.com', password='pw',
+            email='ctas@test.com', password='pw', tier=_basic_tier(),
         )
 
     def setUp(self):

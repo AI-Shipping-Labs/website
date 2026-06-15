@@ -18,7 +18,7 @@ from django.utils.text import slugify
 
 from content.access import LEVEL_OPEN, VISIBILITY_CHOICES
 from content.models.mixins import TimestampedModelMixin
-from content.utils.markdown import render_markdown
+from content.utils.markdown import render_description_html
 from events.models.event import PUBLIC_EVENT_STATUSES
 
 EVENT_SERIES_CADENCE_CHOICES = [
@@ -143,10 +143,7 @@ class EventSeries(TimestampedModelMixin, models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)
-        if self.description:
-            self.description_html = render_markdown(self.description)
-        else:
-            self.description_html = ''
+        self.description_html = render_description_html(self.description)
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):

@@ -92,17 +92,43 @@ class SharedMarkdownRuntimeTest(TestCase):
         self.assert_rich_markdown_rendered(unit.homework_html)
         self.assertIn('href="https://example.org/rubric"', course.peer_review_criteria_html)
 
-    def test_event_uses_shared_renderer_without_content_linkify_or_h1_strip(self):
+    def test_event_uses_shared_renderer_with_linkify_and_sanitize_no_h1_strip(self):
+        # Issue #988: event/series descriptions are Studio-authored (less
+        # trusted than content-repo markdown), so they run through
+        # ``render_description_html`` = sanitize_html(linkify_urls(
+        # render_markdown(...))). Versus the course/article path this:
+        #  - linkifies bare URLs (parity with courses/articles), and
+        #  - sanitises the rendered HTML (nh3), which strips raw passthrough
+        #    HTML that ``md_in_html`` would otherwise leak unescaped — a real
+        #    stored-XSS surface on a public page. Sanitising therefore removes
+        #    ``<script>``/``<style>``, inline event handlers, and tags/attrs
+        #    outside the allowlist (e.g. a raw ``<section>`` or an attr_list
+        #    ``id``). Benign markdown (headings, lists, emphasis, code, tables,
+        #    mermaid, external links) is preserved unchanged.
+        # Events still do NOT strip a leading H1 (only courses strip the
+        # title-duplicating H1 per #227).
         event = Event.objects.create(
             title='Runtime Event',
             slug='runtime-event',
             start_datetime=timezone.now(),
             description=f'# Runtime Event\n\n{self.rich_markdown}\nBare https://example.org/plain',
         )
+        html = event.description_html
 
-        self.assertIn('<h1>Runtime Event</h1>', event.description_html)
-        self.assert_rich_markdown_rendered(event.description_html)
-        self.assertNotIn('href="https://example.org/plain"', event.description_html)
+        # Leading H1 is preserved (no course-style strip).
+        self.assertIn('<h1>Runtime Event</h1>', html)
+        # Benign rich markdown survives sanitisation.
+        self.assertIn('class="codehilite"', html)
+        self.assertIn('<table>', html)
+        self.assertIn('<div class="mermaid">', html)
+        self.assertIn('<strong>inside html</strong>', html)
+        # Bare URL is linkified (parity with courses/articles).
+        self.assertIn('href="https://example.org/plain"', html)
+        self.assertIn('target="_blank"', html)
+        # Sanitisation strips raw passthrough wrappers / attr_list ids that
+        # ``md_in_html`` would otherwise leak (no XSS surface).
+        self.assertNotIn('<section', html)
+        self.assertNotIn('id="external-docs"', html)
 
     def test_workshop_and_project_paths_use_shared_renderer(self):
         workshop = Workshop.objects.create(

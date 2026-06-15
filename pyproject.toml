@@ -16,6 +16,7 @@ dependencies = [
     "icalendar>=7.0.3",           # generates .ics calendar invites/feeds (events/services/calendar_invite.py)
     "logfire>=4.34.0",            # observability/tracing (integrations/services/observability.py)
     "markdown>=3.10.2",           # renders article/course/workshop markdown to HTML
+    "nh3>=0.3.5",
     "pillow>=12.1.1",             # image processing for banners/uploads (ImageField)
     "psycopg2-binary>=2.9.11",    # PostgreSQL driver
     "pygments>=2.19.2",           # syntax highlighting for fenced code blocks in markdown

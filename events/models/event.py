@@ -11,7 +11,10 @@ from content.models.mixins import (
     SyncedContentIdentityMixin,
     TimestampedModelMixin,
 )
-from content.utils.markdown import render_markdown
+from content.utils.markdown import (
+    render_description_html,
+    render_markdown,  # noqa: F401  re-exported: renderer-parity tests import it from here
+)
 
 EVENT_STATUS_CHOICES = [
     ('draft', 'Draft'),
@@ -411,8 +414,7 @@ class Event(
         from content.utils.tags import normalize_tags
         self.tags = normalize_tags(self.tags)
 
-        if self.description:
-            self.description_html = render_markdown(self.description)
+        self.description_html = render_description_html(self.description)
 
         # Issue #673: cap slug length so a 200-char title cannot produce
         # a giant ``/events/<id>/<200-char-slug>`` URL. Truncates on the

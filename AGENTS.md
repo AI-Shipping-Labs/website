@@ -1,5 +1,10 @@
 # Agent Notes
 
+## Development Process
+
+- Before continuing development work, read `_docs/PROCESS.md` and follow the issue pipeline documented there.
+- Treat "continue where we stopped" as a prompt to check `_docs/PROCESS.md`, inspect the current issue/worktree/process state, and resume the next pipeline step.
+
 ## Production Data Access
 
 - Production URL: `https://aishippinglabs.com`.

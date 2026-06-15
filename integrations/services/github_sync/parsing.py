@@ -254,7 +254,7 @@ def _render_event_recap_file(repo_dir, event_rel_path, data, source, rel_path):
 
     from content.utils.includes import expand_content_includes
     from content.utils.linkify import linkify_urls
-    from events.models.event import render_markdown
+    from content.utils.markdown import render_markdown
 
     event_context = {
         'title': data.get('title', ''),

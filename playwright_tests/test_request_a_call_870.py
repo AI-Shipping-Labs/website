@@ -106,7 +106,10 @@ class TestNotOnboardedMemberNudged:
         self, django_server, django_db_blocker, browser,
     ):
         with django_db_blocker.unblock():
-            create_user("bob-870@test.com", tier_slug="free")
+            # Issue #982: the "Finish onboarding" CTA is only handed to a
+            # member who can enter the paid-only onboarding flow, so this
+            # not-onboarded-nudge scenario uses a paid (Basic) member.
+            create_user("bob-870@test.com", tier_slug="basic")
             _set_host(
                 "valeria", is_active=True, capacity=5, booking_url=VALERIA_URL,
             )

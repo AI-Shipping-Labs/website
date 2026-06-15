@@ -16,6 +16,7 @@ Design notes:
   persona ``id`` as an opaque value and is labeled with the archetype.
 """
 
+from content.access import LEVEL_BASIC, get_user_level
 from integrations.config import get_config
 from integrations.services import llm
 from questionnaires.models import (
@@ -89,6 +90,25 @@ def ai_onboarding_streaming_enabled():
     if isinstance(raw, bool):
         return raw
     return str(raw).strip().lower() in ('true', '1', 'yes')
+
+
+def can_access_onboarding(user):
+    """True when ``user`` may enter the onboarding flow (issue #982).
+
+    Onboarding feeds the personalized plan and the 1:1 founder call, both
+    paid-member benefits. Access is gated to an effective tier level of
+    ``LEVEL_BASIC`` (10) or higher, resolved via the canonical
+    override-aware :func:`content.access.get_user_level` — so an active
+    (non-expired) ``TierOverride`` raising the effective tier counts as
+    paid, while a Free base tier with no active override does not.
+    Anonymous users resolve to level 0 and are denied; staff / superusers
+    resolve to ``LEVEL_PREMIUM`` and keep access.
+
+    This is the SINGLE shared predicate backing every onboarding surface
+    (dashboard prompt, ``/onboarding/...`` views, AI chat, request-a-call
+    CTA). Never read ``user.tier.level`` directly at a call site.
+    """
+    return get_user_level(user) >= LEVEL_BASIC
 
 
 def has_completed_onboarding(user):

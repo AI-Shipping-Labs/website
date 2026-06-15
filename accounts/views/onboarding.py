@@ -22,6 +22,7 @@ from crm.services.onboarding_notify import notify_staff_onboarding_submitted
 from questionnaires.models import OnboardingConversation, Persona, Response
 from questionnaires.onboarding import (
     ai_onboarding_available,
+    can_access_onboarding,
     get_generic_onboarding_questionnaire,
     get_onboarding_response,
     reroute_onboarding_response,
@@ -35,6 +36,22 @@ from questionnaires.services import (
     find_unanswered_required,
     save_response_answers,
 )
+
+
+def _onboarding_gate_redirect(request):
+    """Return a redirect to ``/`` when the member cannot access onboarding.
+
+    Issue #982: onboarding is a paid-member benefit. An authenticated user
+    whose effective tier is below ``LEVEL_BASIC`` (Free base, no active
+    override) is sent back to the dashboard with an info message rather than
+    being rendered the flow or hitting a 403/500. Returns ``None`` when the
+    member is eligible, so the caller proceeds normally. Anonymous users are
+    handled earlier by ``@login_required``.
+    """
+    if can_access_onboarding(request.user):
+        return None
+    messages.info(request, 'Onboarding is part of a paid membership.')
+    return redirect('/')
 
 
 @login_required
@@ -51,6 +68,10 @@ def onboarding_start(request):
     the completion confirmation — switching persona after submit stays a
     staff action.
     """
+    gate = _onboarding_gate_redirect(request)
+    if gate is not None:
+        return gate
+
     existing = get_onboarding_response(request.user)
 
     if existing is not None and existing.status == 'submitted':
@@ -121,6 +142,10 @@ def onboarding_identify(request):
     shared common-spine questions (matched by prompt). A SUBMITTED response
     is locked — switching persona after submit stays a staff action.
     """
+    gate = _onboarding_gate_redirect(request)
+    if gate is not None:
+        return gate
+
     existing = get_onboarding_response(request.user)
     if existing is not None and existing.status == 'submitted':
         return redirect('onboarding_start')
@@ -269,6 +294,10 @@ def onboarding_fill_current(request, response_id=None):
     rather than a 404 dead end. A ``response_id`` is accepted but ignored —
     the response is always the requester's own.
     """
+    gate = _onboarding_gate_redirect(request)
+    if gate is not None:
+        return gate
+
     response = get_onboarding_response(request.user)
     if response is None:
         return redirect('onboarding_start')
@@ -285,6 +314,10 @@ def onboarding_fill(request, response_id):
     relaxation: :func:`_get_member_onboarding_response_or_404` 404s any
     response that is not the requester's own onboarding response.
     """
+    gate = _onboarding_gate_redirect(request)
+    if gate is not None:
+        return gate
+
     response = _get_member_onboarding_response_or_404(request, response_id)
     return _render_onboarding_fill(request, response)
 
@@ -293,6 +326,10 @@ def onboarding_fill(request, response_id):
 @require_POST
 def onboarding_submit(request, response_id):
     """Validate required answers, mark submitted, redirect with thanks."""
+    gate = _onboarding_gate_redirect(request)
+    if gate is not None:
+        return gate
+
     response = _get_member_onboarding_response_or_404(request, response_id)
 
     if response.status == 'submitted':

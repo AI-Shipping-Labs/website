@@ -27,11 +27,13 @@
             <p class="text-sm text-muted-foreground mt-1">
               A few minutes of context helps us prepare the right conversation for you.
             </p>
+            {% if can_access_onboarding %}
             <a href="/onboarding/"
                class="mt-4 inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
                data-testid="request-call-onboarding-cta">
               Finish onboarding
             </a>
+            {% endif %}
           </div>
         </div>
       </div>

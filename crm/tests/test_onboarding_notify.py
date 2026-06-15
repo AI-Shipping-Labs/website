@@ -22,6 +22,7 @@ from django.urls import reverse
 
 from crm.models import CRMRecord
 from notifications.models import Notification
+from payments.models import Tier
 from questionnaires.models import Response, ResponseQuestion
 
 User = get_user_model()
@@ -31,8 +32,12 @@ User = get_user_model()
 class OnboardingFormNotifiesStaffTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        # Issue #982: onboarding is paid-gated, so the member who drives the
+        # real submission views must be on a paid (Basic) tier to enter the
+        # flow at all.
         cls.member = User.objects.create_user(
             email='alice@test.com', password='pw', first_name='Alice',
+            tier=Tier.objects.get(slug='basic'),
         )
         cls.staff1 = User.objects.create_user(
             email='staff1@test.com', password='pw', is_staff=True,
@@ -155,6 +160,7 @@ class OnboardingSlackChannelTest(TestCase):
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
             email='bob@test.com', password='pw', first_name='Bob',
+            tier=Tier.objects.get(slug='basic'),
         )
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='pw', is_staff=True,
@@ -226,6 +232,7 @@ class OnboardingNotifyBestEffortTest(TestCase):
     def setUpTestData(cls):
         cls.member = User.objects.create_user(
             email='carol@test.com', password='pw',
+            tier=Tier.objects.get(slug='basic'),
         )
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='pw', is_staff=True,

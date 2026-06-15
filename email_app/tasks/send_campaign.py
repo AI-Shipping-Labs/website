@@ -23,13 +23,13 @@ import logging
 import time
 from datetime import timedelta
 
-import markdown as md
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 
+from content.utils.markdown import render_email_markdown
 from email_app.models import EmailCampaign, EmailLog
 from email_app.services.email_service import EmailService, EmailServiceError
 from integrations.config import get_config
@@ -257,7 +257,7 @@ def send_campaign_batch(campaign_id, user_ids, send_delay=None):
     sent_count = 0
     # Pre-render markdown body once per batch — it does not change
     # across recipients within a campaign.
-    body_html = md.markdown(campaign.body, extensions=['extra'])
+    body_html = render_email_markdown(campaign.body)
 
     for user in users:
         try:

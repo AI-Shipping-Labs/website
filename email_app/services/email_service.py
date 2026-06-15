@@ -18,13 +18,13 @@ from pathlib import Path
 
 import boto3
 import frontmatter
-import markdown
 from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
 from django.template import Context, Template
 from django.template.loader import render_to_string
 
 from accounts.services.timezones import format_user_datetime
+from content.utils.markdown import render_email_markdown
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
     WELCOME_EMAIL_TYPES,
@@ -285,11 +285,9 @@ class EmailService:
         body_template = Template(body_source)
         rendered_body = body_template.render(Context(full_context))
 
-        # Convert markdown to HTML
-        body_html = markdown.markdown(
-            rendered_body,
-            extensions=["extra"],
-        )
+        # Convert markdown to HTML through the canonical renderer (issue #989)
+        # so transactional email bodies parse identically to the website.
+        body_html = render_email_markdown(rendered_body)
 
         return subject, body_html, footer_note
 
@@ -406,8 +404,13 @@ class EmailService:
         footer_note=None,
         verify_email_url=None,
     ):
-        """Convert markdown to HTML and wrap it in the shared template."""
-        body_html = markdown.markdown(body_markdown, extensions=["extra"])
+        """Convert markdown to HTML and wrap it in the shared template.
+
+        Issue #989: routes through the canonical ``render_email_markdown`` so
+        the Studio campaign preview and sent campaigns parse markdown exactly
+        like the website (only mermaid + codehilite are disabled for email).
+        """
+        body_html = render_email_markdown(body_markdown)
         return self.render_html_email(
             subject,
             body_html,

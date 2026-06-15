@@ -105,13 +105,13 @@ class EmailCampaignAdmin(admin.ModelAdmin):
             return JsonResponse({'error': 'Campaign not found'}, status=404)
 
         try:
-            import markdown as md
             from django.template.loader import render_to_string
 
+            from content.utils.markdown import render_email_markdown
             from email_app.services.email_service import EmailService, EmailServiceError
 
             service = EmailService()
-            body_html = md.markdown(campaign.body, extensions=['extra'])
+            body_html = render_email_markdown(campaign.body)
             unsubscribe_url = service._build_unsubscribe_url(request.user)
 
             full_html = render_to_string('email_app/base_email.html', {

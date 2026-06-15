@@ -20,8 +20,10 @@ def check_event_reminders():
     Runs every 15 minutes. Checks two windows:
     - Events starting in ~24 hours (23h45m to 24h15m from now): bell +
       email + Slack announcement.
-    - Events starting in ~20 minutes (15m to 25m from now): bell + email
-      only (no Slack — keeps the channel quiet).
+    - Events starting in ~20 minutes (15m to 30m from now): bell + email
+      only (no Slack — keeps the channel quiet). The window is 15 min wide
+      (== the */15 tick interval) so every start-minute is covered by
+      exactly one tick (issue #1001).
 
     Creates deduplicated notifications (and emails) for registered users
     via :func:`NotificationService.create_event_reminder`. Posts a Slack
@@ -40,10 +42,18 @@ def check_event_reminders():
     window_24h_end = now + timedelta(hours=24, minutes=15)
 
     # 20-minute reminder window (issue #706 — replaces the prior 1h window).
-    # Cron fires every 15 min; a 10-min-wide window with 5-min margins
-    # guarantees each event is caught exactly once before start.
+    # Cron fires every 15 min (issue #1001 restored */15 after #919's hourly
+    # cadence broke this window). The window must be at least as wide as the
+    # tick interval (15 min) or events whose start-minute falls BETWEEN two
+    # consecutive */15 ticks get no reminder: a 10-min-wide window left a
+    # ~5-min gap (start-minutes :11-14, :26-29, :41-44, :56-59, ~27% of all
+    # starts) uncovered. Widening to 15 min (== the tick interval) guarantees
+    # every start-minute is covered by exactly one */15 tick. Where the window
+    # happens to span two consecutive ticks (a :00-aligned start), the
+    # EventReminderLog unique (event, user, '20m') dedup collapses the overlap
+    # to a single reminder.
     window_20m_start = now + timedelta(minutes=15)
-    window_20m_end = now + timedelta(minutes=25)
+    window_20m_end = now + timedelta(minutes=30)
 
     # Events in 24h window.
     # Issue #713: drop the stored ``status='upcoming'`` clause so a

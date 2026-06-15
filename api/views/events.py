@@ -7,6 +7,7 @@ Source-of-truth contract:
   use Studio for manual deletion so ownership and sync rules stay explicit.
 """
 
+import logging
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError
@@ -30,7 +31,10 @@ from events.models.event import (
     EVENT_STATUS_CHOICES,
     EXTERNAL_HOST_CHOICES,
 )
+from integrations.services.zoom import ZoomAPIError, create_meeting
 from studio.utils import is_synced
+
+logger = logging.getLogger(__name__)
 
 DELETE_NOT_AVAILABLE_MESSAGE = (
     "Event deletion is not available through the API. "
@@ -328,6 +332,53 @@ def _save_event_or_error(event):
     return None
 
 
+def _validate_create_zoom(data, *, platform):
+    """Validate the write-only ``create_zoom`` action trigger.
+
+    Returns ``(create_zoom_bool, error_response_or_None)``. The boolean is the
+    parsed flag (defaulting to ``False`` when absent); the second item is a
+    pre-save validation error response that must abort the request before any
+    row is created/updated, or ``None`` when the request may proceed.
+    """
+    if "create_zoom" not in data:
+        return False, None
+    value = data["create_zoom"]
+    if not isinstance(value, bool):
+        return False, _validation_response({"create_zoom": "Must be a boolean."})
+    if value and platform != "zoom":
+        return value, _validation_response(
+            {"create_zoom": "create_zoom is only valid when platform is 'zoom'."}
+        )
+    return value, None
+
+
+def _maybe_create_zoom_meeting(event, create_zoom):
+    """Provision a Zoom meeting after the event row is saved (fail-soft).
+
+    Idempotent: a no-op when the event already carries a ``zoom_meeting_id``.
+    On any failure the event is kept and a non-fatal message string is
+    returned so the caller can surface it as ``zoom_error``.
+    """
+    if not create_zoom:
+        return None
+    if event.zoom_meeting_id:
+        return None
+    try:
+        result = create_meeting(event)
+    except ZoomAPIError as exc:
+        logger.exception("create_zoom: Zoom meeting creation failed for %s", event.slug)
+        return str(exc)
+    except Exception as exc:  # noqa: BLE001 - fail soft, never roll back the event
+        logger.exception(
+            "create_zoom: unexpected error creating Zoom meeting for %s", event.slug
+        )
+        return str(exc) or "Failed to create Zoom meeting."
+    event.zoom_meeting_id = result["meeting_id"]
+    event.zoom_join_url = result["join_url"]
+    event.save(update_fields=["zoom_meeting_id", "zoom_join_url"])
+    return None
+
+
 @token_required
 @csrf_exempt
 @require_methods("GET", "POST", "DELETE")
@@ -398,6 +449,19 @@ def _save_event_or_error(event):
                     "status": {"type": "string"},
                     "external_host": {"type": "string"},
                     "published": {"type": "boolean"},
+                    "create_zoom": {
+                        "type": "boolean",
+                        "writeOnly": True,
+                        "description": (
+                            "Write-only action trigger. When true and "
+                            "platform is 'zoom', provisions a real Zoom "
+                            "meeting and populates zoom_join_url / "
+                            "zoom_meeting_id. Idempotent; never stored or "
+                            "returned. On Zoom failure the event still "
+                            "persists and the body carries a non-fatal "
+                            "zoom_error key."
+                        ),
+                    },
                 },
                 "example": {
                     "title": "Office Hours: May 5",
@@ -479,6 +543,13 @@ def events_collection(request):
     if errors:
         return _validation_response(errors)
 
+    effective_platform = values.get("platform", "zoom")
+    create_zoom, zoom_error_response = _validate_create_zoom(
+        data, platform=effective_platform
+    )
+    if zoom_error_response is not None:
+        return zoom_error_response
+
     event = Event(
         kind="standard",
         platform="zoom",
@@ -497,7 +568,12 @@ def events_collection(request):
     save_error = _save_event_or_error(event)
     if save_error is not None:
         return save_error
-    return JsonResponse(serialize_event(event), status=201)
+
+    zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
+    body = serialize_event(event)
+    if zoom_error is not None:
+        body["zoom_error"] = zoom_error
+    return JsonResponse(body, status=201)
 
 
 @token_required
@@ -535,6 +611,19 @@ def events_collection(request):
                     "description": {"type": "string"},
                     "status": {"type": "string"},
                     "published": {"type": "boolean"},
+                    "create_zoom": {
+                        "type": "boolean",
+                        "writeOnly": True,
+                        "description": (
+                            "Write-only action trigger. When true and the "
+                            "event's platform is 'zoom' with no existing "
+                            "meeting, provisions a Zoom meeting and populates "
+                            "zoom_join_url / zoom_meeting_id. Idempotent; "
+                            "never stored or returned. On Zoom failure the "
+                            "event still persists and the body carries a "
+                            "non-fatal zoom_error key."
+                        ),
+                    },
                 },
                 "example": {"status": "scheduled", "published": True},
             },
@@ -611,8 +700,20 @@ def event_detail(request, slug):
     if errors:
         return _validation_response(errors)
 
+    effective_platform = values.get("platform", event.platform)
+    create_zoom, zoom_error_response = _validate_create_zoom(
+        data, platform=effective_platform
+    )
+    if zoom_error_response is not None:
+        return zoom_error_response
+
     _apply_event_values(event, values)
     save_error = _save_event_or_error(event)
     if save_error is not None:
         return save_error
-    return JsonResponse(serialize_event(event), status=200)
+
+    zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
+    body = serialize_event(event)
+    if zoom_error is not None:
+        body["zoom_error"] = zoom_error
+    return JsonResponse(body, status=200)

@@ -54,6 +54,7 @@ Required on create: `title`, `start_datetime`.
 | `published` | boolean | Publish flag. Setting it true stamps `published_at`. |
 | `external_host` | string | Partner host pill: `''` (community), `Maven`, `Luma`, `DataTalksClub`. |
 | `tags` | array of strings | Free-form, e.g. `["sprint:may-2026"]`. |
+| `create_zoom` | boolean | Write-only. When `true` and `platform` is `zoom`, provisions a real Zoom meeting and populates `zoom_join_url` / `zoom_meeting_id`. Idempotent (no-op if a meeting already exists). Not returned in responses. |
 
 `draft` and `cancelled` are hidden from public visitors; `upcoming` and `completed` are public. To make an event visible you generally set `status: upcoming` and `published: true`.
 
@@ -86,6 +87,30 @@ curl -s -X PATCH -H "Authorization: Token $TOKEN" -H "Content-Type: application/
   https://aishippinglabs.com/api/events/office-hours-2026-05-05 \
   -d '{"status": "cancelled"}'
 ```
+
+Create a Zoom event and provision a real Zoom meeting in one call by adding
+`"create_zoom": true` (only valid when `platform` is `zoom`):
+
+```bash
+curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
+  https://aishippinglabs.com/api/events \
+  -d '{
+    "title": "Office Hours: May 5",
+    "platform": "zoom",
+    "start_datetime": "2026-05-05T17:00:00+02:00",
+    "status": "upcoming",
+    "published": true,
+    "create_zoom": true
+  }'
+# -> 201 with "zoom_join_url": "https://zoom.us/j/88899900011" populated.
+```
+
+The create-event call is the primary action and never rolls back on a Zoom
+problem: if Zoom is unconfigured or its API fails, the event is still created
+(`201`/`200`) and the response carries a non-fatal `zoom_error` string instead
+of a join URL. Because `create_zoom` is idempotent, you can safely retry later
+with `PATCH /api/events/<slug> -d '{"create_zoom": true}'` once Zoom is
+working — it will not overwrite an existing meeting.
 
 ## Event series
 
@@ -133,7 +158,11 @@ Cancel one occurrence with a PATCH to that occurrence's event slug (`{"status": 
 
 ## Zoom meetings
 
-Zoom is the default `platform`. There is no fully-automatic per-event Zoom creation on plain API create at this time — the wired path is the explicit series action:
+Zoom is the default `platform`. There are two wired auto-creation paths.
+
+Single event — pass `"create_zoom": true` on `POST /api/events` or `PATCH /api/events/<slug>`. When the event's `platform` is `zoom` and it has no existing `zoom_meeting_id`, the API calls the same `create_meeting` service the series path uses and stores `zoom_meeting_id` + `zoom_join_url`. It is idempotent (re-requesting on an event that already has a meeting is a no-op, never an overwrite) and fails soft (a Zoom outage still returns the event with a `zoom_error` key — see the create example above). Passing `create_zoom: true` with `platform: custom` is rejected `422`.
+
+Series (bulk) — the explicit series action remains the path for provisioning every occurrence at once:
 
 - `POST /api/event-series/<id>/zoom-meetings` — create a Zoom meeting for every eligible occurrence in the series. Eligible = future (`is_upcoming`), `platform == "zoom"`, and no existing `zoom_meeting_id`. Past / cancelled / draft / `custom`-platform occurrences are skipped.
 - Body `{"dry_run": true}` returns a preview: `{"dry_run": true, "eligible_count": N, ...}` with no Zoom calls or enqueues.

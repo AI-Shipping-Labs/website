@@ -11,6 +11,7 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from accounts.tier_audience import effective_level_at_least_q
 from accounts.utils.tags import normalize_tags
 from email_app.models import EmailCampaign
 from email_app.services.email_service import EmailService, EmailServiceError
@@ -445,15 +446,22 @@ def campaign_detail(request, campaign_id):
 def _recipient_count_for_level(target_min_level):
     """Count users eligible for a given ``target_min_level``.
 
-    Mirrors ``EmailCampaign.get_eligible_recipients`` without needing an
-    existing campaign row — used by the Create form to show the default
-    audience size before the draft is saved.
+    Mirrors ``EmailCampaign.get_eligible_recipients`` (no tag/slack filters,
+    default verification) without needing an existing campaign row — used by
+    the Create form to show the default audience size before the draft is
+    saved. Uses the shared effective-level predicate so override holders are
+    counted, and ``.distinct()`` so a user with both a qualifying base tier
+    and an active override is counted once.
     """
-    return User.objects.filter(
-        tier__level__gte=target_min_level,
-        unsubscribed=False,
-        email_verified=True,
-    ).count()
+    return (
+        User.objects.filter(
+            effective_level_at_least_q(target_min_level),
+            unsubscribed=False,
+            email_verified=True,
+        )
+        .distinct()
+        .count()
+    )
 
 
 @staff_required

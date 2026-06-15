@@ -13,6 +13,7 @@ import logging
 
 from django.contrib.auth import get_user_model
 
+from accounts.tier_audience import effective_level_at_least_q
 from notifications.models import Notification
 
 logger = logging.getLogger(__name__)
@@ -93,17 +94,24 @@ def _get_content_object(content_type, content_id):
 
 
 def _get_eligible_users(required_level):
-    """Get users whose tier level is >= the required_level.
+    """Get users whose effective tier level is >= the required_level.
 
-    For level 0 (open), all users are eligible.
+    "Effective" means the higher of the base tier and any active, non-expired
+    ``TierOverride`` (issue #966) so override members are notified about
+    content they can open. Querysets using the shared predicate ``.distinct()``
+    because the override join can duplicate rows.
+
+    For level 0 (open), all active users are eligible (fast path, unchanged).
     """
     if required_level == 0:
         return User.objects.filter(is_active=True)
 
-    return User.objects.filter(
-        is_active=True,
-        tier__isnull=False,
-        tier__level__gte=required_level,
+    return (
+        User.objects.filter(
+            effective_level_at_least_q(required_level),
+            is_active=True,
+        )
+        .distinct()
     )
 
 

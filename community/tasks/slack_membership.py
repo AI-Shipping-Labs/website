@@ -59,6 +59,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import User
+from accounts.tier_audience import effective_level_at_least_q
 from accounts.utils.names import set_name_from_external
 from community.models import CommunityAuditLog
 from community.services import get_community_service
@@ -354,16 +355,12 @@ def main_plus_q():
     ``tier`` row OR by an active, non-expired ``TierOverride`` to Main+.
     This is the same canonical predicate used in
     ``email_app.models.email_campaign`` and mirrors
-    ``content.access.get_user_level``'s override resolution. Querysets
-    using this MUST ``.distinct()`` because the override join can
-    duplicate rows.
+    ``content.access.get_user_level``'s override resolution. Thin wrapper
+    over :func:`accounts.tier_audience.effective_level_at_least_q` so there
+    is a single definition. Querysets using this MUST ``.distinct()``
+    because the override join can duplicate rows.
     """
-    now = timezone.now()
-    return Q(tier__level__gte=LEVEL_MAIN) | Q(
-        tier_overrides__is_active=True,
-        tier_overrides__expires_at__gt=now,
-        tier_overrides__override_tier__level__gte=LEVEL_MAIN,
-    )
+    return effective_level_at_least_q(LEVEL_MAIN)
 
 
 def _backfill_name_from_slack(service, user):

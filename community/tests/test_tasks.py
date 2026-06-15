@@ -138,6 +138,103 @@ class EmailMatcherTest(TestCase):
     SLACK_COMMUNITY_CHANNEL_IDS=["C001"],
 )
 @tag('core')
+class EmailMatcherOverrideTest(TestCase):
+    """Email matcher enumerates active-override Main members (issue #966)."""
+
+    def setUp(self):
+        self.main_tier = Tier.objects.get(slug="main")
+        self.free_tier = Tier.objects.get(slug="free")
+        self.basic_tier = Tier.objects.get(slug="basic")
+
+    def _override(self, user, tier, *, is_active=True, expires_in_days=7):
+        return TierOverride.objects.create(
+            user=user,
+            original_tier=user.tier,
+            override_tier=tier,
+            expires_at=timezone.now() + timedelta(days=expires_in_days),
+            is_active=is_active,
+        )
+
+    @patch("community.tasks.email_matcher.get_community_service")
+    def test_override_only_main_member_is_matched(self, mock_get_service):
+        """Free-base + active Main override (no slack_user_id) is looked up
+        and linked; a Free-base user with no override is never looked up."""
+        override_user = User.objects.create_user(email="override@test.com")
+        override_user.tier = self.free_tier
+        override_user.save(update_fields=["tier"])
+        self._override(override_user, self.main_tier)
+
+        # No override -> must be skipped entirely.
+        User.objects.create_user(
+            email="nofree@test.com", tier=self.free_tier,
+        )
+
+        mock_service = MagicMock()
+        mock_service.lookup_user_by_email.return_value = "U_OVR"
+        mock_service.add_to_channels.return_value = [{"channel": "C001", "ok": True}]
+        mock_get_service.return_value = mock_service
+
+        result = match_community_emails()
+
+        override_user.refresh_from_db()
+        self.assertEqual(override_user.slack_user_id, "U_OVR")
+        self.assertEqual(result["matched"], 1)
+        self.assertEqual(result["total_checked"], 1)
+        # The no-override free user was never enumerated / looked up.
+        looked_up = {
+            call.args[0]
+            for call in mock_service.lookup_user_by_email.call_args_list
+        }
+        self.assertEqual(looked_up, {"override@test.com"})
+        self.assertTrue(
+            CommunityAuditLog.objects.filter(
+                user=override_user, action="link",
+            ).exists()
+        )
+
+    @patch("community.tasks.email_matcher.get_community_service")
+    def test_expired_override_member_not_enumerated(self, mock_get_service):
+        user = User.objects.create_user(email="expired@test.com")
+        user.tier = self.free_tier
+        user.save(update_fields=["tier"])
+        self._override(user, self.main_tier, expires_in_days=-1)
+
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        result = match_community_emails()
+
+        mock_service.lookup_user_by_email.assert_not_called()
+        self.assertEqual(result["total_checked"], 0)
+
+    @patch("community.tasks.email_matcher.get_community_service")
+    def test_idempotent_already_linked_skipped(self, mock_get_service):
+        """A second run does not re-look-up an already-linked override user."""
+        user = User.objects.create_user(email="idem@test.com")
+        user.tier = self.free_tier
+        user.save(update_fields=["tier"])
+        self._override(user, self.main_tier)
+
+        mock_service = MagicMock()
+        mock_service.lookup_user_by_email.return_value = "U_IDEM"
+        mock_service.add_to_channels.return_value = []
+        mock_get_service.return_value = mock_service
+
+        first = match_community_emails()
+        self.assertEqual(first["matched"], 1)
+
+        # Second run: user now has slack_user_id -> not enumerated.
+        mock_service.lookup_user_by_email.reset_mock()
+        second = match_community_emails()
+        mock_service.lookup_user_by_email.assert_not_called()
+        self.assertEqual(second["total_checked"], 0)
+
+
+@override_settings(
+    SLACK_BOT_TOKEN="xoxb-test",
+    SLACK_COMMUNITY_CHANNEL_IDS=["C001"],
+)
+@tag('core')
 class ScheduledRemovalTest(TestCase):
     """Tests for the scheduled community removal task."""
 

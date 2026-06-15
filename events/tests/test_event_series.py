@@ -694,18 +694,27 @@ class UpcomingSeriesCardCadenceTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        # All occurrences are future-dated (today is 2026-06-13) so they
-        # render in the Upcoming section as a grouped series card.
+        # All occurrences are anchored to genuinely-future dates relative to the
+        # current run so they never go stale: a hardcoded calendar fixture
+        # silently flips a session into the past once that date arrives, which
+        # drops the "· N upcoming sessions" suffix (issue #947 regression).
+        tz = zoneinfo.ZoneInfo('Europe/Berlin')
+        today = timezone.now().astimezone(tz).date()
+
         cls.regular = EventSeries.objects.create(
             name='Regular Office Hours', slug='regular-oh',
             day_of_week=2,  # Wednesday
             start_time=time(18, 0), timezone='Europe/Berlin',
         )
-        # June 17 / 24 / July 1, 2026 are consecutive Wednesdays at 18:00.
+        # First Wednesday strictly in the future, then two more weekly, all at
+        # 18:00 so the genuine weekly cadence label stays honest.
+        days_until_wed = (2 - today.weekday()) % 7 or 7
+        first_wed = today + timedelta(days=days_until_wed)
         for i in range(3):
+            wed = first_wed + timedelta(weeks=i)
             cls._occurrence(
                 cls.regular,
-                datetime(2026, 6, 17, 18, 0) + timedelta(weeks=i),
+                datetime(wed.year, wed.month, wed.day, 18, 0),
                 position=i + 1,
             )
 
@@ -714,12 +723,22 @@ class UpcomingSeriesCardCadenceTest(TestCase):
             day_of_week=2,  # Wednesday (claimed) — occurrences drift
             start_time=time(18, 0), timezone='Europe/Berlin',
         )
-        for i, dt in enumerate([
-            datetime(2026, 6, 15, 18, 0),  # Monday
-            datetime(2026, 6, 24, 18, 0),
-            datetime(2026, 6, 29, 18, 0),
-        ]):
-            cls._occurrence(cls.irregular, dt, position=i + 1)
+        # Irregular spacing (+3, +12, +17 days) so the series is not a true
+        # weekly cadence and the first session is comfortably in the future.
+        cls.irregular_dates = [
+            today + timedelta(days=offset) for offset in (3, 12, 17)
+        ]
+        for i, d in enumerate(cls.irregular_dates):
+            cls._occurrence(
+                cls.irregular,
+                datetime(d.year, d.month, d.day, 18, 0),
+                position=i + 1,
+            )
+        # Expected range label, computed from the same dates the model formats.
+        cls.irregular_range = (
+            f'{cls.irregular_dates[0].strftime("%b %d, %Y")} '
+            f'– {cls.irregular_dates[-1].strftime("%b %d, %Y")}'
+        )
 
     def _meta(self, response, series_slug):
         """Return the text inside the series-card-meta paragraph for a card."""
@@ -749,7 +768,7 @@ class UpcomingSeriesCardCadenceTest(TestCase):
         meta = self._meta(response, 'irregular-ws')
         self.assertEqual(
             meta,
-            '3 sessions · Jun 15, 2026 – Jun 29, 2026 '
+            f'3 sessions · {self.irregular_range} '
             '· 3 upcoming sessions',
         )
         self.assertNotIn('Weekly on', meta)

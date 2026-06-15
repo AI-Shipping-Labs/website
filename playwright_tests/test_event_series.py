@@ -1230,10 +1230,21 @@ class TestScenario947ListingCardCadence:
             timezone="Europe/Berlin",
         )
         series.save()
+        # Anchor occurrences to genuinely-future dates relative to the run so a
+        # hardcoded calendar date can't silently flip a session into the past
+        # and drop the "N upcoming sessions" suffix (issue #947 regression).
+        from django.utils import timezone as dj_timezone
+
+        today = dj_timezone.now().astimezone(
+            zoneinfo.ZoneInfo("Europe/Berlin")
+        ).date()
         schedule = [
-            datetime(2026, 6, 15, 18, 0),  # Monday
-            datetime(2026, 6, 24, 18, 0),  # Wednesday
-            datetime(2026, 6, 29, 18, 0),  # Monday
+            datetime(d.year, d.month, d.day, 18, 0)
+            for d in (
+                today + timedelta(days=3),
+                today + timedelta(days=12),
+                today + timedelta(days=17),
+            )
         ]
         for i, dt in enumerate(schedule, start=1):
             aware = dt.replace(tzinfo=zoneinfo.ZoneInfo("Europe/Berlin"))

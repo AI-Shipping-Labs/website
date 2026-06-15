@@ -11,6 +11,7 @@ import hmac
 import logging
 import time
 from urllib.parse import urljoin
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
@@ -113,12 +114,24 @@ def create_meeting(event):
         delta = event.end_datetime - event.start_datetime
         duration = max(1, int(delta.total_seconds() / 60))
 
+    # Zoom interprets a ``start_time`` without a ``Z``/offset as LOCAL time in
+    # the supplied ``timezone``. ``event.start_datetime`` is stored/returned in
+    # UTC, so we must convert it to the event timezone before formatting,
+    # otherwise the meeting is scheduled off by the zone's UTC offset (#996).
+    meeting_timezone = (event.timezone or '').strip()
+    try:
+        local_start = event.start_datetime.astimezone(ZoneInfo(meeting_timezone))
+    except (ZoneInfoNotFoundError, ValueError):
+        # Blank or invalid timezone: fall back to UTC rather than raising.
+        meeting_timezone = 'UTC'
+        local_start = event.start_datetime.astimezone(ZoneInfo('UTC'))
+
     payload = {
         'topic': event.title,
         'type': 2,  # Scheduled meeting
-        'start_time': event.start_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
+        'start_time': local_start.strftime('%Y-%m-%dT%H:%M:%S'),
         'duration': duration,
-        'timezone': event.timezone,
+        'timezone': meeting_timezone,
         'settings': {
             'auto_recording': 'cloud',
             'join_before_host': True,

@@ -258,6 +258,128 @@ class ZoomCreateMeetingTest(TestCase):
         ZOOM_ACCOUNT_ID=ZOOM_TEST_ACCOUNT_ID,
     )
     @patch('integrations.services.zoom.requests.post')
+    def test_start_time_is_event_local_wall_clock(self, mock_post):
+        """start_time is the event-LOCAL wall clock, not the UTC wall clock (#996).
+
+        Zoom reads a ``start_time`` without offset as local time in the given
+        ``timezone``. The event is at 15:00 UTC == 17:00 Europe/Berlin (summer),
+        so the payload must send 17:00 + timezone=Europe/Berlin, otherwise the
+        meeting lands 2 hours early.
+        """
+        from integrations.services.zoom import create_meeting
+
+        # 2026-07-01 15:00 UTC -> 17:00 Europe/Berlin (CEST, UTC+2).
+        self.event.start_datetime = datetime(
+            2026, 7, 1, 15, 0, tzinfo=dt_timezone.utc,
+        )
+        self.event.end_datetime = datetime(
+            2026, 7, 1, 16, 0, tzinfo=dt_timezone.utc,
+        )
+        self.event.timezone = 'Europe/Berlin'
+        self.event.save()
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'token-abc', 'expires_in': 3600,
+        }
+        meeting_response = MagicMock()
+        meeting_response.status_code = 201
+        meeting_response.json.return_value = {
+            'id': 55555555555, 'join_url': 'https://zoom.us/j/55555555555',
+        }
+        mock_post.side_effect = [token_response, meeting_response]
+
+        create_meeting(self.event)
+
+        meeting_call = mock_post.call_args_list[1]
+        payload = meeting_call.kwargs.get('json') or meeting_call[1].get('json')
+        self.assertEqual(payload['start_time'], '2026-07-01T17:00:00')
+        self.assertEqual(payload['timezone'], 'Europe/Berlin')
+
+    @override_settings(
+        ZOOM_CLIENT_ID=ZOOM_TEST_CLIENT_ID,
+        ZOOM_CLIENT_SECRET=ZOOM_TEST_CLIENT_SECRET,
+        ZOOM_ACCOUNT_ID=ZOOM_TEST_ACCOUNT_ID,
+    )
+    @patch('integrations.services.zoom.requests.post')
+    def test_blank_timezone_falls_back_to_utc(self, mock_post):
+        """A blank/invalid timezone falls back to UTC instead of raising (#996)."""
+        from integrations.services.zoom import create_meeting
+
+        self.event.start_datetime = datetime(
+            2026, 7, 1, 15, 0, tzinfo=dt_timezone.utc,
+        )
+        self.event.end_datetime = datetime(
+            2026, 7, 1, 16, 0, tzinfo=dt_timezone.utc,
+        )
+        self.event.timezone = ''
+        self.event.save()
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'token-abc', 'expires_in': 3600,
+        }
+        meeting_response = MagicMock()
+        meeting_response.status_code = 201
+        meeting_response.json.return_value = {
+            'id': 66666666666, 'join_url': 'https://zoom.us/j/66666666666',
+        }
+        mock_post.side_effect = [token_response, meeting_response]
+
+        create_meeting(self.event)
+
+        meeting_call = mock_post.call_args_list[1]
+        payload = meeting_call.kwargs.get('json') or meeting_call[1].get('json')
+        # UTC fallback: start_time is the UTC wall clock and timezone is UTC.
+        self.assertEqual(payload['start_time'], '2026-07-01T15:00:00')
+        self.assertEqual(payload['timezone'], 'UTC')
+
+    @override_settings(
+        ZOOM_CLIENT_ID=ZOOM_TEST_CLIENT_ID,
+        ZOOM_CLIENT_SECRET=ZOOM_TEST_CLIENT_SECRET,
+        ZOOM_ACCOUNT_ID=ZOOM_TEST_ACCOUNT_ID,
+    )
+    @patch('integrations.services.zoom.requests.post')
+    def test_invalid_timezone_falls_back_to_utc(self, mock_post):
+        """An unrecognised timezone string falls back to UTC, not an error (#996)."""
+        from integrations.services.zoom import create_meeting
+
+        self.event.start_datetime = datetime(
+            2026, 7, 1, 15, 0, tzinfo=dt_timezone.utc,
+        )
+        self.event.end_datetime = datetime(
+            2026, 7, 1, 16, 0, tzinfo=dt_timezone.utc,
+        )
+        self.event.timezone = 'Not/AZone'
+        self.event.save()
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'token-abc', 'expires_in': 3600,
+        }
+        meeting_response = MagicMock()
+        meeting_response.status_code = 201
+        meeting_response.json.return_value = {
+            'id': 77777777777, 'join_url': 'https://zoom.us/j/77777777777',
+        }
+        mock_post.side_effect = [token_response, meeting_response]
+
+        create_meeting(self.event)
+
+        meeting_call = mock_post.call_args_list[1]
+        payload = meeting_call.kwargs.get('json') or meeting_call[1].get('json')
+        self.assertEqual(payload['start_time'], '2026-07-01T15:00:00')
+        self.assertEqual(payload['timezone'], 'UTC')
+
+    @override_settings(
+        ZOOM_CLIENT_ID=ZOOM_TEST_CLIENT_ID,
+        ZOOM_CLIENT_SECRET=ZOOM_TEST_CLIENT_SECRET,
+        ZOOM_ACCOUNT_ID=ZOOM_TEST_ACCOUNT_ID,
+    )
+    @patch('integrations.services.zoom.requests.post')
     def test_create_meeting_default_duration(self, mock_post):
         """Event without end_datetime defaults to 60 minutes."""
         from integrations.services.zoom import create_meeting

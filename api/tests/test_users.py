@@ -74,7 +74,11 @@ class UserDetailGetTest(_UserApiBase):
         self.assertEqual(body["first_name"], "Alice")
         self.assertEqual(body["last_name"], "Doe")
         self.assertEqual(body["display_name"], "Alice Doe")
-        self.assertEqual(body["tier"], {"slug": "main", "level": 20})
+        self.assertEqual(
+            body["tier"],
+            {"slug": "main", "level": 20, "source": "subscription"},
+        )
+        self.assertEqual(body["base_tier"], {"slug": "main", "level": 20})
         self.assertFalse(body["tier_override_active"])
         self.assertFalse(body["unsubscribed"])
         self.assertEqual(body["soft_bounce_count"], 0)
@@ -332,7 +336,10 @@ class UserTierOverrideDetailTest(_UserApiBase):
         self.assertIsNone(body["tier_override"])
         # Guard: the new object did not displace existing fields.
         self.assertEqual(body["email"], "plain@test.com")
-        self.assertEqual(body["tier"], {"slug": "main", "level": 20})
+        self.assertEqual(
+            body["tier"],
+            {"slug": "main", "level": 20, "source": "subscription"},
+        )
 
 
 # ---------------------------------------------------------------------------

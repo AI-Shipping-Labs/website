@@ -192,8 +192,13 @@ _USER_EXAMPLE = {
     "first_name": "Alice",
     "last_name": "Doe",
     "display_name": "Alice Doe",
-    "tier": {"slug": "main", "level": 20},
+    # ``tier`` is the EFFECTIVE tier (override applied), with ``source``
+    # provenance (issue #965). This member pays for nothing (base Free) but
+    # has an active Main override, so the effective tier is Main / "override".
+    "tier": {"slug": "main", "level": 20, "source": "override"},
     "tier_override_active": True,
+    # ``base_tier`` is the actually-paid tier — the old meaning of ``tier``.
+    "base_tier": {"slug": "free", "level": 0},
     "tier_override": {
         "tier_slug": "main",
         "level": 20,
@@ -260,7 +265,7 @@ _USER_EXAMPLE = {
                     "example": {
                         "users": [
                             {k: v for k, v in _USER_EXAMPLE.items()
-                             if k not in ("tags", "tier_override")},
+                             if k not in ("tags", "tier_override", "base_tier")},
                         ],
                         "count": 1,
                         "limit": 50,

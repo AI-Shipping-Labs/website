@@ -96,6 +96,42 @@ class BuildSpecTest(TestCase):
         self.assertEqual(operations["get"]["tags"], ["Sprints"])
         self.assertEqual(operations["post"]["tags"], ["Sprints"])
 
+    def _request_body_properties(self, path, verb):
+        schema = (
+            self.document["paths"][path][verb]["requestBody"]
+            ["content"]["application/json"]["schema"]
+        )
+        return schema["properties"]
+
+    def test_sprint_create_documents_event_series_in_request_body(self):
+        props = self._request_body_properties("/api/sprints", "post")
+        self.assertIn("event_series", props)
+
+    def test_sprint_patch_documents_event_series_in_request_body(self):
+        props = self._request_body_properties("/api/sprints/{slug}", "patch")
+        self.assertIn("event_series", props)
+
+    def test_sprint_response_example_includes_event_series_key(self):
+        example = (
+            self.document["paths"]["/api/sprints/{slug}"]["get"]
+            ["responses"]["200"]["content"]["application/json"]["example"]
+        )
+        self.assertIn("event_series", example)
+
+    def test_sprint_create_documents_unknown_series_422(self):
+        example = (
+            self.document["paths"]["/api/sprints"]["post"]
+            ["responses"]["422"]["content"]["application/json"]["example"]
+        )
+        self.assertEqual(example["code"], "unknown_series")
+
+    def test_sprint_patch_documents_unknown_series_422(self):
+        example = (
+            self.document["paths"]["/api/sprints/{slug}"]["patch"]
+            ["responses"]["422"]["content"]["application/json"]["example"]
+        )
+        self.assertEqual(example["code"], "unknown_series")
+
 
 class SprintsModuleHasOpenApiSpecTest(TestCase):
     """Every public view function in ``api.views.sprints`` must be decorated."""

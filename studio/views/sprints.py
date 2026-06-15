@@ -73,20 +73,33 @@ def _parse_min_tier_level(raw):
 
 
 def _parse_event_series(raw):
-    """Parse the ``event_series`` form field. ``(EventSeries|None, error)``.
+    """Parse the ``event_series`` value. ``(EventSeries|None, error)``.
 
-    Empty string / missing -> ``(None, '')`` (sprint becomes unlinked).
-    A non-integer or unknown id -> ``(None, error_message)`` so the
-    caller re-renders the form with HTTP 400 and the sprint is NOT
-    written.
+    Empty string / missing / ``None`` -> ``(None, '')`` (sprint becomes
+    unlinked). Resolution accepts either form:
+
+    - an integer or numeric string -> resolve by ``EventSeries.pk``
+    - a non-numeric string -> resolve by ``EventSeries.slug``
+
+    An unknown id/slug -> ``(None, error_message)`` so the caller
+    re-renders the Studio form with HTTP 400 (or, in the API, returns a
+    422 ``unknown_series``) and the sprint is NOT written. The Studio
+    form only ever submits ids; the slug branch is used by the sprint
+    API, which shares this helper.
     """
     if raw in (None, ''):
         return None, ''
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
+    if isinstance(raw, bool):
         return None, 'Selected event series does not exist.'
-    series = EventSeries.objects.filter(pk=value).first()
+    # Numeric (int or numeric string) -> resolve by pk; otherwise by slug.
+    if isinstance(raw, int):
+        series = EventSeries.objects.filter(pk=raw).first()
+    elif isinstance(raw, str) and raw.lstrip('-').isdigit():
+        series = EventSeries.objects.filter(pk=int(raw)).first()
+    elif isinstance(raw, str):
+        series = EventSeries.objects.filter(slug=raw).first()
+    else:
+        return None, 'Selected event series does not exist.'
     if series is None:
         return None, 'Selected event series does not exist.'
     return series, ''

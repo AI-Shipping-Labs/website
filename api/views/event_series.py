@@ -791,7 +791,6 @@ def _create_series_occurrence(series, row, *, slug_position, index):
         tags=[],
         location="",
         external_host="",
-        max_participants=None,
         origin="studio",
         source_repo="",
         event_series=series,

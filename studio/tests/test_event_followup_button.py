@@ -242,7 +242,6 @@ class StudioEventEditPersistsPostEventSummaryTest(StaffMixin, TestCase):
             'event_time': '16:00',
             'duration_hours': '1',
             'timezone': 'UTC',
-            'max_participants': '',
             'location': '',
             'required_level': '0',
             'tags': '',

@@ -2255,7 +2255,6 @@
                       "id": 42,
                       "kind": "standard",
                       "location": "",
-                      "max_participants": null,
                       "origin": "studio",
                       "platform": "zoom",
                       "published": true,
@@ -2323,10 +2322,6 @@
                   "kind": {
                     "type": "string"
                   },
-                  "max_participants": {
-                    "nullable": true,
-                    "type": "integer"
-                  },
                   "platform": {
                     "type": "string"
                   },
@@ -2386,7 +2381,6 @@
                   "id": 42,
                   "kind": "standard",
                   "location": "",
-                  "max_participants": null,
                   "origin": "studio",
                   "platform": "zoom",
                   "published": true,
@@ -2476,7 +2470,6 @@
                   "id": 42,
                   "kind": "standard",
                   "location": "",
-                  "max_participants": null,
                   "origin": "studio",
                   "platform": "zoom",
                   "published": true,
@@ -2579,7 +2572,6 @@
                   "id": 42,
                   "kind": "standard",
                   "location": "",
-                  "max_participants": null,
                   "origin": "studio",
                   "platform": "zoom",
                   "published": true,

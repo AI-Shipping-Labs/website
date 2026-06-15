@@ -48,8 +48,7 @@ def _make_series(**kwargs):
 
 
 def _make_occurrence(series, *, offset_days, position, status='upcoming',
-                     required_level=LEVEL_OPEN, max_participants=None,
-                     slug=None):
+                     required_level=LEVEL_OPEN, slug=None):
     start = timezone.now() + timedelta(days=offset_days)
     return Event.objects.create(
         title=f'{series.name} — Session {position}',
@@ -58,7 +57,6 @@ def _make_occurrence(series, *, offset_days, position, status='upcoming',
         end_datetime=start + timedelta(hours=1),
         status=status,
         required_level=required_level,
-        max_participants=max_participants,
         event_series=series,
         series_position=position,
     )
@@ -112,22 +110,25 @@ class EnrollUserInSeriesTest(TierSetupMixin, TestCase):
         )
         self.assertEqual(registered_positions, {1})
 
-    def test_skips_full_occurrence_and_counts_it(self):
+    def test_heavily_registered_occurrence_still_enrolls(self):
+        """Issue #984: capacity removed — an occurrence with many existing
+        registrations is no longer skipped; the user enrolls in every
+        accessible upcoming occurrence and no ``skipped_full`` key exists."""
         series = _make_series()
-        full_event = _make_occurrence(
-            series, offset_days=7, position=1, max_participants=1,
+        busy_event = _make_occurrence(
+            series, offset_days=7, position=1,
         )
         other = User.objects.create_user(email='o@test.com', password='pass')
-        EventRegistration.objects.create(event=full_event, user=other)
+        EventRegistration.objects.create(event=busy_event, user=other)
         _make_occurrence(series, offset_days=14, position=2)
 
         summary = enroll_user_in_series(self.user, series)
 
-        self.assertEqual(summary['registered'], 1)
-        self.assertEqual(summary['skipped_full'], 1)
-        self.assertFalse(
+        self.assertEqual(summary['registered'], 2)
+        self.assertNotIn('skipped_full', summary)
+        self.assertTrue(
             EventRegistration.objects.filter(
-                user=self.user, event=full_event,
+                user=self.user, event=busy_event,
             ).exists()
         )
 
@@ -505,7 +506,6 @@ class StudioAddOccurrenceAutoEnrollTest(TierSetupMixin, TestCase):
                 'event_time': time_local,
                 'duration_hours': '1',
                 'location': '',
-                'max_participants': '',
                 'status': 'upcoming',
                 'required_level': '0',
                 'tags': '',

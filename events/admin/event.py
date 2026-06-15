@@ -144,8 +144,8 @@ class EventAdmin(admin.ModelAdmin):
             'fields': ('zoom_meeting_id', 'zoom_join_url'),
             'classes': ('collapse',),
         }),
-        ('Access & Capacity', {
-            'fields': ('tags', 'required_level', 'max_participants'),
+        ('Access', {
+            'fields': ('tags', 'required_level'),
         }),
         ('Status', {
             'fields': ('status',),
@@ -190,10 +190,7 @@ class EventAdmin(admin.ModelAdmin):
     has_recording_display.boolean = True
 
     def registration_count_display(self, obj):
-        count = obj.registration_count
-        if obj.max_participants:
-            return f'{count}/{obj.max_participants}'
-        return str(count)
+        return str(obj.registration_count)
 
     registration_count_display.short_description = 'Registrations'
 

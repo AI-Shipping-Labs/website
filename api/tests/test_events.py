@@ -175,7 +175,6 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "location",
                 "tags",
                 "required_level",
-                "max_participants",
                 "status",
                 "series_position",
                 "external_host",
@@ -252,7 +251,6 @@ class EventsCreateTest(EventsApiTestBase):
         self.assertEqual(body["tags"], [])
         self.assertEqual(body["location"], "")
         self.assertEqual(body["external_host"], "")
-        self.assertIsNone(body["max_participants"])
         self.assertEqual(body["origin"], "studio")
         self.assertEqual(body["source_repo"], "")
 
@@ -274,7 +272,6 @@ class EventsCreateTest(EventsApiTestBase):
             "location": "External",
             "tags": ["api", "custom"],
             "required_level": 20,
-            "max_participants": 25,
             "status": "upcoming",
             "external_host": "Luma",
             "published": False,
@@ -314,7 +311,6 @@ class EventsCreateTest(EventsApiTestBase):
             "platform": "bad-platform",
             "status": "bad-status",
             "required_level": 5,
-            "max_participants": 0,
             "tags": ["ok", 3],
             "external_host": "UnknownHost",
             "published": "yes",
@@ -331,7 +327,6 @@ class EventsCreateTest(EventsApiTestBase):
             "platform",
             "status",
             "required_level",
-            "max_participants",
             "tags",
             "external_host",
             "published",

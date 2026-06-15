@@ -110,13 +110,12 @@ def _seed_studio_mobile_data(staff_email):
         source_commit="abc1234def5678901234567890123456789abcde",
     )
     Event.objects.create(
-        title="Mobile Event Capacity",
-        slug="mobile-event-capacity",
+        title="Mobile Event Row",
+        slug="mobile-event-row",
         start_datetime=now,
         status="upcoming",
         kind="workshop",
         platform="custom",
-        max_participants=25,
     )
     actor = _create_user("mobile-member@test.com", tier_slug="main")
     ImportBatch.objects.create(
@@ -224,11 +223,8 @@ def test_studio_core_lists_are_usable_at_phone_width(django_server, browser):
 
     page.goto(f"{django_server}/studio/events/", wait_until="domcontentloaded")
     _assert_visible_text_and_action(
-        page, "tbody tr", "Mobile Event Capacity", "Upcoming", "Edit"
+        page, "tbody tr", "Mobile Event Row", "Upcoming", "Edit"
     )
-    assert "25" in page.locator("tbody tr").filter(
-        has_text="Mobile Event Capacity"
-    ).first.inner_text()
     _assert_no_horizontal_overflow(page)
     _capture_mobile_screenshot(page, "events")
 

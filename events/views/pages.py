@@ -806,7 +806,7 @@ def event_series_public(request, slug):
         )
 
     # Annotate each occurrence with the state the template renders:
-    # ``registered`` / ``register`` / ``full`` / ``past`` / ``no_access``.
+    # ``registered`` / ``register`` / ``past`` / ``no_access``.
     for event in events:
         if event.is_past:
             event.user_reg_state = 'past'
@@ -814,8 +814,6 @@ def event_series_public(request, slug):
             event.user_reg_state = 'registered'
         elif user.is_authenticated and not can_access(user, event):
             event.user_reg_state = 'no_access'
-        elif event.is_full:
-            event.user_reg_state = 'full'
         else:
             event.user_reg_state = 'register'
 

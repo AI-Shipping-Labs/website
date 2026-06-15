@@ -167,14 +167,6 @@
     </div>
     {% endif %}
 
-    <div class="grid grid-cols-2 gap-4">
-      <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Max Participants (blank = unlimited)</label>
-        <input type="number" name="max_participants" value="{% if event.max_participants %}{{ event.max_participants }}{% else %}{{ form_values.max_participants|default:'' }}{% endif %}"
-               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      </div>
-    </div>
-
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Location</label>
       <input type="text" name="location" value="{% if event %}{{ event.location|default:'' }}{% else %}{{ form_values.location|default:'' }}{% endif %}"

@@ -742,7 +742,6 @@ class StudioEventEditOriginGatingTest(StaffMixin, TestCase):
             {
                 'title': 'Hacked Title',
                 'status': 'upcoming',
-                'max_participants': '',
                 'platform': 'zoom',
             },
         )

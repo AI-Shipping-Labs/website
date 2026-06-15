@@ -398,7 +398,6 @@ def event_create(request):
         'required_level': '0',
         'location': '',
         'tags': '',
-        'max_participants': '',
         'external_host': '',
         'custom_url': '',
         'host_email': '',
@@ -449,12 +448,6 @@ def event_create(request):
         except ValueError:
             required_level = 0
 
-        max_p_raw = form_values['max_participants']
-        try:
-            max_participants = int(max_p_raw) if max_p_raw else None
-        except ValueError:
-            max_participants = None
-
         if title and slug and Event.objects.filter(slug=slug).exists():
             errors['slug'] = 'An event with this slug already exists.'
 
@@ -471,7 +464,6 @@ def event_create(request):
                 location=location,
                 tags=parse_comma_separated_tags(form_values['tags']),
                 required_level=required_level,
-                max_participants=max_participants,
                 status=status,
                 external_host=external_host,
                 host_email=form_values['host_email'],
@@ -531,8 +523,6 @@ def event_edit(request, event_id):
         old_status = Event.objects.values_list('status', flat=True).get(pk=event.pk)
         if synced:
             # Synced events: only allow operational fields
-            max_p = request.POST.get('max_participants', '')
-            event.max_participants = int(max_p) if max_p else None
             event.status = request.POST.get('status', event.status)
 
             platform = request.POST.get('platform', event.platform)
@@ -626,8 +616,6 @@ def event_edit(request, event_id):
             event.end_datetime = end_dt
             event.timezone = posted_tz
             event.location = request.POST.get('location', '')
-            max_p = request.POST.get('max_participants', '')
-            event.max_participants = int(max_p) if max_p else None
             event.status = request.POST.get('status', 'draft')
             event.required_level = int(request.POST.get('required_level', 0))
             event.tags = parse_comma_separated_tags(request.POST.get('tags', ''))

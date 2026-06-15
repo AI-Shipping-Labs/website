@@ -172,10 +172,6 @@
             <span class="inline-flex min-h-[44px] items-center rounded bg-secondary px-2 py-1 text-xs font-medium text-muted-foreground" data-testid="series-event-state-past">
               Past
             </span>
-            {% elif event.user_reg_state == 'full' %}
-            <span class="inline-flex min-h-[44px] items-center rounded-full bg-red-500/20 px-2.5 py-1 text-xs font-medium text-red-400" data-testid="series-event-state-full">
-              Full
-            </span>
             {% elif event.user_reg_state == 'no_access' %}
             <a href="{{ pricing_url }}" class="inline-flex min-h-[44px] items-center gap-1 rounded-full bg-accent/20 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/30" data-testid="series-event-state-no-access">
               <i data-lucide="lock" class="h-3 w-3"></i>

@@ -69,16 +69,6 @@ the inline card it replaced (#523 / #673 / #857 / #572).
             {{ event.location }}
           </span>
           {% endif %}
-          {% if event.spots_remaining is not None %}
-          <span class="flex items-center gap-1.5">
-            <i data-lucide="users" class="h-4 w-4"></i>
-            {% if event.is_full %}
-            <span class="text-red-400">Event is full</span>
-            {% else %}
-            {{ event.spots_remaining }} spot{{ event.spots_remaining|pluralize }} remaining
-            {% endif %}
-          </span>
-          {% endif %}
         </div>
         {% if event.tags %}
         <div class="mt-3 flex flex-wrap gap-1.5" data-testid="event-card-tags">

@@ -385,6 +385,10 @@ class NotificationService:
         """
         from django.urls import reverse
 
+        from accounts.services.timezones import (
+            build_timezone_account_url,
+            build_timezone_email_line,
+        )
         from email_app.services.email_service import EmailService
         from integrations.config import site_base_url
         from notifications.models import EventReminderLog
@@ -422,6 +426,9 @@ class NotificationService:
                     # (issue #666 guardrail).
                     'event_datetime': event.start_datetime,
                     'event_url': event_url,
+                    'timezone_help': build_timezone_email_line(
+                        user, build_timezone_account_url(base_url),
+                    ),
                 },
             )
         except Exception:

@@ -118,3 +118,55 @@ def format_user_datetime(value, user, *, fmt=None):
 
     utc_value = value.astimezone(UTC)
     return f"{utc_value.strftime(format_string)} UTC"
+
+
+# Issue #963: the account page fragment that scrolls a recipient to the
+# Display Preferences / timezone control. Appended to ``site_url`` to build
+# the in-email "set/update your timezone" link target. The account page is
+# login-gated; an anonymous click lands on the standard login redirect
+# (``/accounts/login/?next=/account/``), which is acceptable.
+TIMEZONE_PREFERENCE_FRAGMENT = "/account/#display-preferences-section"
+
+
+def build_timezone_account_url(site_url):
+    """Return the absolute link to the account timezone control.
+
+    ``site_url`` is the site base URL already present in every email
+    context. The returned URL points at the Display Preferences section of
+    the authenticated account page (issue #963).
+    """
+    return f"{(site_url or '').rstrip('/')}{TIMEZONE_PREFERENCE_FRAGMENT}"
+
+
+def build_timezone_email_line(user, link_url):
+    """Return the contextual "set/update your timezone" line for an event email.
+
+    Issue #963: event emails render future times in the recipient's
+    timezone (or UTC fallback via :func:`format_user_datetime`). This
+    helper returns a single markdown sentence, with the account-timezone
+    link already embedded, whose wording matches how the time was actually
+    rendered. The variant is chosen off the SAME ``is_valid_timezone``
+    check ``format_user_datetime`` uses, so copy can never contradict the
+    rendered time.
+
+    Args:
+        user: The recipient ``User`` (or ``None``). Read for
+            ``preferred_timezone``.
+        link_url: The absolute account-timezone link the sentence links to
+            (see :func:`build_timezone_account_url`).
+
+    Returns:
+        A markdown string. The UTC-fallback variant ("Set your timezone")
+        when the recipient has no valid ``preferred_timezone``; the quieter
+        "Change your timezone" variant when a valid IANA zone is set.
+    """
+    tz_name = getattr(user, "preferred_timezone", "") if user is not None else ""
+    if is_valid_timezone(tz_name):
+        return (
+            "Times above are shown in your timezone. Wrong zone? "
+            f"[Change your timezone]({link_url})."
+        )
+    return (
+        "Times above are shown in UTC. "
+        f"[Set your timezone]({link_url}) to see them in your local time."
+    )

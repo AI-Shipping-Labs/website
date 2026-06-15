@@ -32,7 +32,11 @@ from types import SimpleNamespace
 from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 
-from accounts.services.timezones import format_user_datetime
+from accounts.services.timezones import (
+    build_timezone_account_url,
+    build_timezone_email_line,
+    format_user_datetime,
+)
 from email_app.services.email_service import EmailService
 from events.services.calendar_invite import generate_ics
 from events.services.registration_email import _send_raw_email
@@ -104,6 +108,9 @@ def _send(event, host_email):
             'event_title': event.title,
             'event_datetime': format_user_datetime(
                 event.start_datetime, user,
+            ),
+            'timezone_help': build_timezone_email_line(
+                user, build_timezone_account_url(site_base_url()),
             ),
             **links,
         },

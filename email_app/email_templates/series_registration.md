@@ -8,6 +8,8 @@ You're registered for the **{{ series_name }}** series. We've signed you up for 
 
 {{ occurrences_list }}
 
+{{ timezone_help }}
+
 A calendar invite covering the whole series is attached to this email — open it to add every session to your calendar at once.
 
 What to expect next:

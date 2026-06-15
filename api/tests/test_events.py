@@ -10,13 +10,17 @@ stable guidance error and must use Studio for manual deletion.
 import json
 import uuid
 from datetime import timedelta
+from pathlib import Path
+from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import Token
 from events.models import Event
+from integrations.services.zoom import ZoomAPIError
 
 User = get_user_model()
 
@@ -419,3 +423,186 @@ class EventsUpdateTest(EventsApiTestBase):
         self.studio_event.refresh_from_db()
         self.assertEqual(self.studio_event.zoom_join_url, "https://example.com/custom")
         self.assertEqual(self.studio_event.zoom_meeting_id, "")
+
+
+ZOOM_RESULT = {
+    "meeting_id": "88899900011",
+    "join_url": "https://zoom.us/j/88899900011",
+}
+
+# create_meeting is imported into the view module, so patch it there.
+CREATE_MEETING_PATH = "api.views.events.create_meeting"
+
+
+class EventsCreateZoomTest(EventsApiTestBase):
+    """The write-only ``create_zoom`` action trigger (issue #986)."""
+
+    def test_create_zoom_provisions_meeting_and_populates_join_url(self):
+        with patch(CREATE_MEETING_PATH, return_value=ZOOM_RESULT) as mock_create:
+            response = self._post(
+                {
+                    "title": "Zoom Office Hours",
+                    "platform": "zoom",
+                    "start_datetime": "2026-05-05T17:00:00+02:00",
+                    "create_zoom": True,
+                }
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(mock_create.call_count, 1)
+        body = response.json()
+        self.assertEqual(body["zoom_join_url"], ZOOM_RESULT["join_url"])
+        # create_zoom is a write-only trigger, never echoed back.
+        self.assertNotIn("create_zoom", body)
+        self.assertNotIn("zoom_error", body)
+
+        # The service was called with the freshly-created event.
+        called_event = mock_create.call_args.args[0]
+        self.assertEqual(called_event.slug, body["slug"])
+
+        # Re-GET shows the persisted join URL and still no create_zoom field.
+        detail = self.client.get(
+            f"/api/events/{body['slug']}", **self._auth()
+        ).json()
+        self.assertEqual(detail["zoom_join_url"], ZOOM_RESULT["join_url"])
+        self.assertNotIn("create_zoom", detail)
+        event = Event.objects.get(slug=body["slug"])
+        self.assertEqual(event.zoom_meeting_id, ZOOM_RESULT["meeting_id"])
+
+    def test_create_without_create_zoom_does_not_call_service(self):
+        for payload_extra in ({}, {"create_zoom": False}):
+            with self.subTest(extra=payload_extra):
+                with patch(CREATE_MEETING_PATH) as mock_create:
+                    response = self._post(
+                        {
+                            "title": f"No Zoom {payload_extra}",
+                            "platform": "zoom",
+                            "start_datetime": "2026-05-05T17:00:00+02:00",
+                            **payload_extra,
+                        }
+                    )
+                self.assertEqual(response.status_code, 201)
+                mock_create.assert_not_called()
+                event = Event.objects.get(slug=response.json()["slug"])
+                self.assertEqual(event.zoom_meeting_id, "")
+
+    def test_patch_adds_zoom_meeting_to_existing_event(self):
+        with patch(CREATE_MEETING_PATH, return_value=ZOOM_RESULT) as mock_create:
+            response = self._patch("studio-event", {"create_zoom": True})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_create.call_count, 1)
+        self.assertEqual(response.json()["zoom_join_url"], ZOOM_RESULT["join_url"])
+        self.studio_event.refresh_from_db()
+        self.assertEqual(
+            self.studio_event.zoom_meeting_id, ZOOM_RESULT["meeting_id"]
+        )
+
+    def test_create_zoom_is_idempotent_when_meeting_exists(self):
+        self.studio_event.zoom_meeting_id = "123"
+        self.studio_event.zoom_join_url = "https://zoom.us/j/123"
+        self.studio_event.save()
+
+        with patch(CREATE_MEETING_PATH) as mock_create:
+            response = self._patch("studio-event", {"create_zoom": True})
+
+        self.assertEqual(response.status_code, 200)
+        mock_create.assert_not_called()
+        self.studio_event.refresh_from_db()
+        self.assertEqual(self.studio_event.zoom_meeting_id, "123")
+        self.assertEqual(self.studio_event.zoom_join_url, "https://zoom.us/j/123")
+
+    def test_create_zoom_with_custom_platform_is_rejected_before_save(self):
+        before_count = Event.objects.count()
+        with patch(CREATE_MEETING_PATH) as mock_create:
+            response = self._post(
+                {
+                    "title": "Custom No Zoom",
+                    "platform": "custom",
+                    "start_datetime": "2026-05-05T17:00:00+02:00",
+                    "create_zoom": True,
+                }
+            )
+
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("create_zoom", body["details"])
+        mock_create.assert_not_called()
+        self.assertEqual(Event.objects.count(), before_count)
+
+    def test_zoom_outage_keeps_event_and_allows_safe_retry(self):
+        with patch(
+            CREATE_MEETING_PATH,
+            side_effect=ZoomAPIError("Zoom OAuth credentials not configured. ..."),
+        ) as mock_create:
+            response = self._post(
+                {
+                    "title": "Outage Event",
+                    "platform": "zoom",
+                    "start_datetime": "2026-05-05T17:00:00+02:00",
+                    "create_zoom": True,
+                }
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(mock_create.call_count, 1)
+        body = response.json()
+        slug = body["slug"]
+        self.assertIn("zoom_error", body)
+        self.assertIn("credentials not configured", body["zoom_error"])
+        self.assertEqual(body["zoom_join_url"], "")
+
+        # Event persisted despite the Zoom failure.
+        detail = self.client.get(f"/api/events/{slug}", **self._auth())
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["zoom_join_url"], "")
+
+        # Retry with the service now succeeding populates the join URL.
+        with patch(CREATE_MEETING_PATH, return_value=ZOOM_RESULT) as mock_retry:
+            retry = self._patch(slug, {"create_zoom": True})
+
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual(mock_retry.call_count, 1)
+        self.assertEqual(retry.json()["zoom_join_url"], ZOOM_RESULT["join_url"])
+        self.assertNotIn("zoom_error", retry.json())
+
+    def test_non_boolean_create_zoom_is_rejected(self):
+        before_count = Event.objects.count()
+        with patch(CREATE_MEETING_PATH) as mock_create:
+            response = self._post(
+                {
+                    "title": "Bad Type",
+                    "platform": "zoom",
+                    "start_datetime": "2026-05-05T17:00:00+02:00",
+                    "create_zoom": "yes",
+                }
+            )
+
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("create_zoom", body["details"])
+        mock_create.assert_not_called()
+        self.assertEqual(Event.objects.count(), before_count)
+
+
+class EventsSkillDocSyncTest(TestCase):
+    """Keep the events skill doc in sync with the create_zoom feature."""
+
+    def test_skill_documents_create_zoom_and_drops_stale_note(self):
+        skill_path = (
+            Path(settings.BASE_DIR)
+            / ".claude"
+            / "skills"
+            / "ai-shipping-labs-events"
+            / "SKILL.md"
+        )
+        text = skill_path.read_text(encoding="utf-8")
+        # Fields table row.
+        self.assertIn("| `create_zoom` |", text)
+        # Zoom-meetings section mentions the new single-event trigger.
+        self.assertIn('"create_zoom": true', text)
+        self.assertIn("zoom_error", text)
+        # The stale "no fully-automatic per-event Zoom creation" wording is gone.
+        self.assertNotIn("no fully-automatic per-event Zoom creation", text)

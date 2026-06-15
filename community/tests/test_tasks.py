@@ -7,11 +7,13 @@ Tests cover:
 """
 
 import json
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings, tag
+from django.utils import timezone
 
-from accounts.models import User
+from accounts.models import TierOverride, User
 from community.models import CommunityAuditLog
 from community.services.slack import SlackAPIError
 from community.tasks.email_matcher import match_community_emails
@@ -21,6 +23,7 @@ from community.tasks.hooks import (
     community_remove_task,
 )
 from community.tasks.removal import scheduled_community_removal
+from community.tasks.slack_membership import main_plus_q
 from payments.models import Tier
 
 
@@ -134,6 +137,7 @@ class EmailMatcherTest(TestCase):
     SLACK_BOT_TOKEN="xoxb-test",
     SLACK_COMMUNITY_CHANNEL_IDS=["C001"],
 )
+@tag('core')
 class ScheduledRemovalTest(TestCase):
     """Tests for the scheduled community removal task."""
 
@@ -181,6 +185,139 @@ class ScheduledRemovalTest(TestCase):
         scheduled_community_removal(99999)
 
         mock_service.remove.assert_not_called()
+
+    @patch("community.tasks.removal.get_community_service")
+    def test_skips_with_active_main_override(self, mock_get_service):
+        """Free-base member with an active, non-expired Main override is NOT removed."""
+        user = User.objects.create_user(email="override_main@test.com")
+        user.tier = self.free_tier
+        user.slack_user_id = "U123"
+        user.save(update_fields=["tier", "slack_user_id"])
+        TierOverride.objects.create(
+            user=user,
+            original_tier=self.free_tier,
+            override_tier=self.main_tier,
+            expires_at=timezone.now() + timedelta(days=30),
+            is_active=True,
+        )
+
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        with self.assertLogs("community.tasks.removal", level="INFO") as cm:
+            scheduled_community_removal(user.pk)
+
+        mock_service.remove.assert_not_called()
+        self.assertTrue(
+            any("still qualifies" in msg for msg in cm.output),
+            cm.output,
+        )
+
+    @patch("community.tasks.removal.get_community_service")
+    def test_removes_with_expired_override(self, mock_get_service):
+        """Free-base member whose Main override has expired IS removed."""
+        user = User.objects.create_user(email="override_expired@test.com")
+        user.tier = self.free_tier
+        user.slack_user_id = "U123"
+        user.save(update_fields=["tier", "slack_user_id"])
+        TierOverride.objects.create(
+            user=user,
+            original_tier=self.free_tier,
+            override_tier=self.main_tier,
+            expires_at=timezone.now() - timedelta(days=1),
+            is_active=True,
+        )
+
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        with self.assertLogs("community.tasks.removal", level="INFO") as cm:
+            scheduled_community_removal(user.pk)
+
+        mock_service.remove.assert_called_once_with(user)
+        self.assertTrue(
+            any("removed user" in msg for msg in cm.output),
+            cm.output,
+        )
+
+    @patch("community.tasks.removal.get_community_service")
+    def test_removes_with_deactivated_override(self, mock_get_service):
+        """Free-base member with an is_active=False Main override IS removed."""
+        user = User.objects.create_user(email="override_inactive@test.com")
+        user.tier = self.free_tier
+        user.slack_user_id = "U123"
+        user.save(update_fields=["tier", "slack_user_id"])
+        TierOverride.objects.create(
+            user=user,
+            original_tier=self.free_tier,
+            override_tier=self.main_tier,
+            expires_at=timezone.now() + timedelta(days=30),
+            is_active=False,
+        )
+
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        scheduled_community_removal(user.pk)
+
+        mock_service.remove.assert_called_once_with(user)
+
+    @patch("community.tasks.removal.get_community_service")
+    def test_removes_with_below_main_override(self, mock_get_service):
+        """Active Basic override does not raise effective level to Main; IS removed."""
+        basic_tier = Tier.objects.get(slug="basic")
+        user = User.objects.create_user(email="override_basic@test.com")
+        user.tier = self.free_tier
+        user.slack_user_id = "U123"
+        user.save(update_fields=["tier", "slack_user_id"])
+        TierOverride.objects.create(
+            user=user,
+            original_tier=self.free_tier,
+            override_tier=basic_tier,
+            expires_at=timezone.now() + timedelta(days=30),
+            is_active=True,
+        )
+
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        scheduled_community_removal(user.pk)
+
+        mock_service.remove.assert_called_once_with(user)
+
+    @patch("community.tasks.removal.get_community_service")
+    def test_guard_agrees_with_main_plus_q(self, mock_get_service):
+        """The removal guard and the membership-reconcile audience agree.
+
+        A Free-base user with an active Main override must be treated as
+        community-eligible by BOTH paths: the removal job skips removal,
+        and ``slack_membership.main_plus_q`` matches the same user. No
+        cross-layer contradiction.
+        """
+        user = User.objects.create_user(email="cross_layer@test.com")
+        user.tier = self.free_tier
+        user.slack_user_id = "U123"
+        user.save(update_fields=["tier", "slack_user_id"])
+        TierOverride.objects.create(
+            user=user,
+            original_tier=self.free_tier,
+            override_tier=self.main_tier,
+            expires_at=timezone.now() + timedelta(days=30),
+            is_active=True,
+        )
+
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        # Removal guard: skips removal (treats user as eligible).
+        scheduled_community_removal(user.pk)
+        mock_service.remove.assert_not_called()
+
+        # Membership-reconcile audience: matches the same user.
+        self.assertTrue(
+            User.objects.filter(main_plus_q(), pk=user.pk).exists(),
+            "main_plus_q should treat the override-granted user as Main+",
+        )
 
 
 @override_settings(

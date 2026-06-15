@@ -54,28 +54,26 @@ _STEADY_STATE_PAIRS = frozenset({
 })
 
 
-def _suppress_steady_state_plan_state(
-    state, *, is_pending_downgrade, is_pending_cancellation
-):
+def _suppress_steady_state_plan_state(state, *, is_pending_cancellation):
     """Return ``{}`` for steady-state plan-state frames, else ``state``.
 
     The frame is suppressed when:
 
-    - There is a pending downgrade or pending cancellation -- the
-      dedicated amber/red notice below already shows the same message,
-      so echoing it in the plan-state frame is duplicate noise.
+    - There is a pending cancellation -- the dedicated red notice below
+      already shows the same message, so echoing it in the plan-state
+      frame is duplicate noise.
     - The (badge, note) pair is one of the steady-state tuples in
       :data:`_STEADY_STATE_PAIRS`. The tier name in the Membership
       section already communicates this.
 
     Override messages (badge ``"Current plan"`` with a non-empty note
-    such as ``"Base subscription. Temporary X access is active."``),
-    stale-subscription warnings, and scheduled-future-change badges all
-    fall outside the steady-state set, so they still pass through.
+    such as ``"Base subscription. Temporary X access is active."``) and
+    stale-subscription warnings fall outside the steady-state set, so
+    they still pass through.
     """
     if not state:
         return state
-    if is_pending_downgrade or is_pending_cancellation:
+    if is_pending_cancellation:
         return {}
     badge = state.get("badge", "")
     note = state.get("note", "")
@@ -113,10 +111,6 @@ def _render_account_page(
 
     # Determine display states
     # pending_tier.slug == "free" means cancellation is scheduled at period end.
-    is_pending_downgrade = (
-        pending_tier is not None
-        and pending_tier.slug != "free"
-    )
     is_pending_cancellation = (
         pending_tier is not None
         and pending_tier.slug == "free"
@@ -164,11 +158,10 @@ def _render_account_page(
         if state_tier else {}
     )
     # Issue #581: drop the frame for steady-state Free / Current-plan
-    # users and for pending downgrade / pending cancellation cases (the
-    # dedicated amber/red notice already carries that message).
+    # users and for the pending cancellation case (the dedicated red
+    # notice already carries that message).
     account_plan_state = _suppress_steady_state_plan_state(
         account_plan_state,
-        is_pending_downgrade=is_pending_downgrade,
         is_pending_cancellation=is_pending_cancellation,
     )
 
@@ -178,7 +171,6 @@ def _render_account_page(
         is_free
         and not has_stale_subscription
         and not is_pending_cancellation
-        and not is_pending_downgrade
         and active_override is None
     )
 
@@ -211,7 +203,6 @@ def _render_account_page(
         "is_premium": is_premium,
         "is_basic": is_basic,
         "has_subscription": has_subscription,
-        "is_pending_downgrade": is_pending_downgrade,
         "is_pending_cancellation": is_pending_cancellation,
         "billing_period_end": user.billing_period_end,
         "email_preferences": user.email_preferences,

@@ -515,45 +515,36 @@ class TestScenarioPremiumMemberHighestTier:
         assert page.locator("#cancel-btn").count() == 0
         ctx.close()
 # ---------------------------------------------------------------
-# Scenario: Pending downgrade notice
+# Scenario: No dead scheduled-downgrade UI (issue #968)
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
-class TestScenarioPendingDowngradeNotice:
-    """Main member with pending downgrade sees notice."""
+class TestScenarioNoDeadDowngradeUI:
+    """Issue #968: nothing produces a non-free pending_tier anymore, so the
+    amber scheduled-change downgrade notice was removed. A user who somehow
+    has a non-free pending_tier must NOT see the dead UI, and can still
+    reach the Stripe portal."""
 
-    def test_pending_downgrade_notice_visible(
+    def test_no_dead_downgrade_notice_for_non_free_pending_tier(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Notice says plan will change to Basic on April 1, 2026."""
+        """No amber downgrade notice or 'Scheduled change' text renders."""
         ctx = _auth_context(
             browser, "main-downgrade@test.com", django_db_blocker
         )
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
-        notice = page.locator("#pending-downgrade-notice")
-        assert notice.is_visible()
-        text = notice.inner_text()
-        assert "Basic" in text
-        assert "01/04/2026" in text
+        assert page.locator("#pending-downgrade-notice").count() == 0
+        body = page.locator("body").inner_text()
+        assert "Scheduled change" not in body
+        assert "at period end" not in body
         ctx.close()
-    def test_no_downgrade_action_when_pending(
-        self, django_server, test_users, django_db_blocker
-    , browser):
-        """No Downgrade action when already scheduled."""
-        ctx = _auth_context(
-            browser, "main-downgrade@test.com", django_db_blocker
-        )
-        page = ctx.new_page()
-        _go_to_account(page, django_server)
 
-        assert page.locator("#downgrade-btn").count() == 0
-        ctx.close()
-    def test_customer_portal_available_with_pending_downgrade(
+    def test_customer_portal_still_available(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Pending downgrade users manage changes in Stripe Customer Portal."""
+        """The user can still manage billing in the Stripe Customer Portal."""
         ctx = _auth_context(
             browser, "main-downgrade@test.com", django_db_blocker
         )
@@ -561,7 +552,6 @@ class TestScenarioPendingDowngradeNotice:
         _go_to_account(page, django_server)
 
         assert page.locator("#manage-subscription-btn").is_visible()
-        assert page.locator("#cancel-btn").count() == 0
         assert page.locator("#downgrade-btn").count() == 0
         ctx.close()
 # ---------------------------------------------------------------
@@ -588,6 +578,12 @@ class TestScenarioPendingCancellationNotice:
         text = notice.inner_text()
         assert "Main" in text
         assert "15/05/2026" in text
+        # Issue #968: cancelled-but-paid user keeps a paid tier, so the
+        # stale-subscription "needs review" banner must NOT show, and no
+        # dead scheduled-change text either.
+        body = page.locator("body").inner_text()
+        assert "Your subscription needs review" not in body
+        assert "Scheduled change" not in body
         ctx.close()
     def test_customer_portal_available_when_cancellation_pending(
         self, django_server, test_users, django_db_blocker

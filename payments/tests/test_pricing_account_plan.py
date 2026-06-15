@@ -94,25 +94,6 @@ class PricingAccountPlanStateTest(TestCase):
             self.assertEqual(states[slug]["action_label"], "Downgrade")
             self.assertEqual(states[slug]["action_kind"], "portal")
 
-    def test_pending_paid_downgrade_shows_scheduled_change_date(self):
-        user = self._user(
-            "main-pending-pricing@test.com",
-            self.main,
-            "sub_pending",
-            self.basic,
-        )
-        user.billing_period_end = datetime(2026, 5, 29, 12, 0, tzinfo=dt_timezone.utc)
-        user.save(update_fields=["billing_period_end"])
-        states, response = self._pricing_states(user)
-
-        self.assertEqual(states["main"]["badge"], "Current plan")
-        self.assertIn("changes to Basic on May 29, 2026", states["main"]["note"])
-        self.assertEqual(states["main"]["action_kind"], "disabled")
-        self.assertEqual(states["basic"]["badge"], "Scheduled change")
-        self.assertIn("May 29, 2026", states["basic"]["note"])
-        self.assertEqual(states["basic"]["action_kind"], "portal")
-        self.assertContains(response, "Scheduled change")
-
     def test_pending_cancellation_shows_access_ending_without_join_prompts(self):
         user = self._user(
             "canceling-pricing@test.com",
@@ -131,6 +112,8 @@ class PricingAccountPlanStateTest(TestCase):
             self.assertEqual(states[slug]["action_kind"], "portal")
             self.assertNotEqual(states[slug]["action_label"], "Join")
         self.assertContains(response, "Access ending")
+        # Issue #968: no dead paid-downgrade UI for a cancelling member.
+        self.assertNotContains(response, "Scheduled change")
 
     def test_temporary_override_distinguishes_base_from_override(self):
         user = self._user("override-pricing@test.com", self.basic, "sub_basic")

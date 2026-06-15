@@ -184,18 +184,6 @@
         </div>
         {% endif %}
 
-        <!-- Pending Downgrade Notice -->
-        {% if is_pending_downgrade %}
-        <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 mb-6" id="pending-downgrade-notice">
-          <div class="flex items-start gap-3">
-            <i data-lucide="info" class="h-5 w-5 text-amber-400 mt-0.5 shrink-0"></i>
-            <p class="text-sm text-amber-200">
-              Your plan will change to <strong>{{ pending_tier.name }}</strong> on <strong>{{ billing_period_end|date:"d/m/Y" }}</strong>.
-            </p>
-          </div>
-        </div>
-        {% endif %}
-
         <!-- Pending Cancellation Notice -->
         {% if is_pending_cancellation %}
         <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4 mb-6" id="pending-cancellation-notice">

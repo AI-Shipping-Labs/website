@@ -33,6 +33,11 @@ from events.models.event import (
     EXTERNAL_HOST_CHOICES,
 )
 from events.services.host_invite import maybe_send_initial_host_invite
+from integrations.services.banner_generator import (
+    is_enabled as banner_generator_is_enabled,
+)
+from integrations.services.banner_generator.dispatch import enqueue_force
+from integrations.services.banner_generator.resolve import effective_banner_url
 from integrations.services.zoom import ZoomAPIError, create_meeting
 from studio.utils import is_synced
 
@@ -98,6 +103,7 @@ _EVENT_EXAMPLE = {
     "external_host": "",
     "published": True,
     "host_email": "host@example.com",
+    "banner_url": "https://cdn.aishippinglabs.com/banners/event/office-hours.jpg",
     "origin": "studio",
     "source_repo": "",
     "source_path": "",
@@ -132,6 +138,7 @@ def serialize_event(event):
         "external_host": event.external_host,
         "published": event.published,
         "host_email": event.host_email,
+        "banner_url": effective_banner_url(event),
         "origin": event.origin,
         "source_repo": event.source_repo or "",
         "source_path": event.source_path or "",
@@ -377,6 +384,52 @@ def _maybe_create_zoom_meeting(event, create_zoom):
     return None
 
 
+BANNER_DISABLED_MESSAGE = (
+    "Banner generator is not configured; no banner was generated."
+)
+
+
+def _validate_generate_banner(data, *, default):
+    """Validate the write-only ``generate_banner`` action trigger (issue #995).
+
+    ``generate_banner`` is an action trigger, never a stored model field. It is
+    not in ``WRITABLE_FIELDS`` and never appears in ``serialize_event`` output.
+
+    Returns ``(generate_banner_bool, error_response_or_None)``. The boolean is
+    the parsed flag — ``default`` when the key is absent (``True`` on create so
+    the API auto-generates the social image; ``False`` on update so an unrelated
+    edit never silently re-renders). The second item is a pre-save validation
+    error response that must abort the request before any row is mutated, or
+    ``None`` when the request may proceed.
+    """
+    if "generate_banner" not in data:
+        return default, None
+    value = data["generate_banner"]
+    if not isinstance(value, bool):
+        return default, _validation_response(
+            {"generate_banner": "Must be a boolean."}
+        )
+    return value, None
+
+
+def _maybe_enqueue_banner(event, generate_banner):
+    """Force-enqueue a banner render after the event row is saved (fail-soft).
+
+    When ``generate_banner`` is true and the generator is configured, calls
+    ``enqueue_force('event', event.pk)`` exactly once and returns
+    ``(task_id, None)``. When the generator is not configured, returns
+    ``(None, BANNER_DISABLED_MESSAGE)`` so the caller can surface a non-fatal
+    ``banner_error`` key without rolling back the event. A no-op (``(None,
+    None)``) when ``generate_banner`` is false.
+    """
+    if not generate_banner:
+        return None, None
+    if not banner_generator_is_enabled():
+        return None, BANNER_DISABLED_MESSAGE
+    task_id = enqueue_force("event", event.pk)
+    return task_id, None
+
+
 @token_required
 @csrf_exempt
 @require_methods("GET", "POST", "DELETE")
@@ -465,6 +518,20 @@ def _maybe_create_zoom_meeting(event, create_zoom):
                             "returned. On Zoom failure the event still "
                             "persists and the body carries a non-fatal "
                             "zoom_error key."
+                        ),
+                    },
+                    "generate_banner": {
+                        "type": "boolean",
+                        "writeOnly": True,
+                        "description": (
+                            "Write-only action trigger. Defaults to true on "
+                            "create: the API auto-renders the 1200x630 "
+                            "social/banner image in the background. Set false "
+                            "to skip. Never stored or returned. When enqueued "
+                            "the response carries banner_task_id (poll "
+                            "/api/worker/tasks/<id>); when the generator is "
+                            "unconfigured the event still persists and the "
+                            "body carries a non-fatal banner_error key."
                         ),
                     },
                 },
@@ -556,6 +623,14 @@ def events_collection(request):
     if zoom_error_response is not None:
         return zoom_error_response
 
+    # ``generate_banner`` defaults ON for create — a missing social image is a
+    # visible defect, so the API auto-renders unless the caller opts out.
+    generate_banner, banner_error_response = _validate_generate_banner(
+        data, default=True
+    )
+    if banner_error_response is not None:
+        return banner_error_response
+
     event = Event(
         kind="standard",
         platform="zoom",
@@ -580,9 +655,17 @@ def events_collection(request):
     # EVENTS_HOST_INVITE_EMAIL, and swallows exceptions. Called after the
     # save and the create_zoom step so the invite carries zoom_join_url.
     maybe_send_initial_host_invite(event)
+    # Banner enqueue runs LAST in the compose-time chain (zoom -> host invite ->
+    # banner) so any populated state is current. Soft-fails independently with a
+    # ``banner_error`` key; never rolls back the event (issue #995).
+    banner_task_id, banner_error = _maybe_enqueue_banner(event, generate_banner)
     body = serialize_event(event)
     if zoom_error is not None:
         body["zoom_error"] = zoom_error
+    if banner_error is not None:
+        body["banner_error"] = banner_error
+    elif generate_banner:
+        body["banner_task_id"] = banner_task_id
     return JsonResponse(body, status=201)
 
 
@@ -643,6 +726,17 @@ def events_collection(request):
                             "never stored or returned. On Zoom failure the "
                             "event still persists and the body carries a "
                             "non-fatal zoom_error key."
+                        ),
+                    },
+                    "generate_banner": {
+                        "type": "boolean",
+                        "writeOnly": True,
+                        "description": (
+                            "Write-only action trigger. Explicit-only on "
+                            "PATCH (default off): only an explicit true "
+                            "re-enqueues a forced banner render after the "
+                            "update is saved, so an unrelated edit never "
+                            "silently re-renders. Never stored or returned."
                         ),
                     },
                 },
@@ -728,6 +822,14 @@ def event_detail(request, slug):
     if zoom_error_response is not None:
         return zoom_error_response
 
+    # On PATCH ``generate_banner`` is explicit-only (default off): an unrelated
+    # edit must not silently re-render. Only an explicit ``true`` re-enqueues.
+    generate_banner, banner_error_response = _validate_generate_banner(
+        data, default=False
+    )
+    if banner_error_response is not None:
+        return banner_error_response
+
     _apply_event_values(event, values)
     save_error = _save_event_or_error(event)
     if save_error is not None:
@@ -739,7 +841,102 @@ def event_detail(request, slug):
     # flips a draft to a published status, or adds a host_email to a
     # not-yet-invited event, triggers the one-time invite.
     maybe_send_initial_host_invite(event)
+    # Banner enqueue runs after the save + zoom + host-invite steps so a forced
+    # re-render reflects any populated state (issue #995). Explicit-only here.
+    banner_task_id, banner_error = _maybe_enqueue_banner(event, generate_banner)
     body = serialize_event(event)
     if zoom_error is not None:
         body["zoom_error"] = zoom_error
+    if banner_error is not None:
+        body["banner_error"] = banner_error
+    elif generate_banner:
+        body["banner_task_id"] = banner_task_id
     return JsonResponse(body, status=200)
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Events",
+    summary="Force-regenerate an event's social/banner image",
+    methods={
+        "POST": {
+            "summary": "Force-regenerate an event banner",
+            "description": (
+                "Force-enqueues a banner-generator render for an existing "
+                "event and returns the django-q task id. The render runs as a "
+                "background task; the resolved banner_url stays empty until the "
+                "worker finishes, so poll GET /api/worker/tasks/<task_id> (or "
+                "re-GET the event for banner_url). Regeneration is ALLOWED for "
+                "synced/GitHub-origin events: the PATCH read-only rule protects "
+                "content fields owned by the source repo, but the auto-banner is "
+                "derived presentation state the platform owns regardless of "
+                "origin (the sync pipeline itself enqueues renders for synced "
+                "records), so there is no 409 here. Returns 422 "
+                "banner_generator_not_configured (no enqueue) when the generator "
+                "is not configured."
+            ),
+            "responses": {
+                202: {
+                    "description": "Render queued.",
+                    "example": {
+                        "status": "queued",
+                        "event_id": 42,
+                        "slug": "office-hours-2026-05-05",
+                        "task_id": "a1b2c3d4e5f6",
+                    },
+                },
+                404: {
+                    "description": "Event not found.",
+                    "example": {
+                        "error": "Event not found",
+                        "code": "unknown_event",
+                    },
+                },
+                422: {
+                    "description": "Banner generator is not configured.",
+                    "example": {
+                        "error": (
+                            "Banner generator is not configured. Add the "
+                            "function URL and bearer token under Studio "
+                            "Settings first."
+                        ),
+                        "code": "banner_generator_not_configured",
+                    },
+                },
+            },
+        },
+    },
+)
+def event_regenerate_banner(request, slug):
+    """POST ``/api/events/<slug>/regenerate-banner`` (issue #995)."""
+    event = Event.objects.filter(slug=slug).first()
+    if event is None:
+        return error_response(
+            "Event not found",
+            "unknown_event",
+            status=404,
+        )
+
+    if not banner_generator_is_enabled():
+        return error_response(
+            "Banner generator is not configured. Add the function URL and "
+            "bearer token under Studio Settings first.",
+            "banner_generator_not_configured",
+            status=422,
+        )
+
+    # ``enqueue_force`` may return ``None`` even when enabled (e.g. a race where
+    # the row vanished). That is a swallowed enqueue, not a server error: still
+    # return 202 with ``task_id: null`` so the operator can re-check via Studio.
+    task_id = enqueue_force("event", event.pk)
+    return JsonResponse(
+        {
+            "status": "queued",
+            "event_id": event.pk,
+            "slug": event.slug,
+            "task_id": task_id,
+        },
+        status=202,
+    )

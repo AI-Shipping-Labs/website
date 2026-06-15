@@ -46,8 +46,12 @@ Required context:
   {% endif %}
 
   {# Regenerate (banner-generator Lambda) #}
+  {# Issue #995: when banner_status_url is present (events today) the form is #}
+  {# progressively enhanced into an in-place loader by the script below. The #}
+  {# plain POST -> redirect -> flash path is the no-JS fallback. #}
   <form method="post" action="{{ banner_regenerate_url }}" class="mt-3 inline-flex"
-        data-testid="banner-generator-form">
+        data-testid="banner-generator-form"
+        {% if banner_status_url %}data-banner-status-url="{{ banner_status_url }}"{% endif %}>
     {% csrf_token %}
     {% if banner_generator_enabled %}
       {% if banner_last_task.state == 'in_progress' %}
@@ -151,4 +155,161 @@ Required context:
       </p>
     {% endif %}
   {% endif %}
+
+  {# Issue #995: in-place loader live region. Hidden until the JS handler #}
+  {# flips it during an async regenerate; harmless on the no-JS path. #}
+  <p class="mt-2 text-xs text-muted-foreground hidden"
+     data-testid="banner-generator-live-status" hidden></p>
 </div>
+
+{% if banner_status_url %}
+{% comment %}
+Issue #995: progressive enhancement for the "Regenerate banner" form. Intercepts
+the submit, POSTs via fetch (with CSRF), shows a disabled spinner button, polls
+the banner-status endpoint every ~2s, and swaps the <img> src (cache-busted) on
+success or restores the button + shows the failure note on failure. The plain
+form POST -> redirect -> flash remains the no-JS fallback (this script only runs
+when JS is enabled and banner_status_url is set).
+{% endcomment %}
+<script>
+(function () {
+  var section = document.querySelector('[data-testid="banner-generator-section"]');
+  if (!section) { return; }
+  var form = section.querySelector('[data-testid="banner-generator-form"]');
+  if (!form || !form.dataset.bannerStatusUrl) { return; }
+  var statusUrl = form.dataset.bannerStatusUrl;
+  var liveStatus = section.querySelector('[data-testid="banner-generator-live-status"]');
+  var POLL_INTERVAL_MS = 2000;
+  var polling = false;
+
+  function getCsrf() {
+    var input = form.querySelector('input[name="csrfmiddlewaretoken"]');
+    return input ? input.value : '';
+  }
+
+  function showLive(text) {
+    if (!liveStatus) { return; }
+    liveStatus.textContent = text;
+    liveStatus.hidden = false;
+    liveStatus.classList.remove('hidden');
+  }
+
+  function setSpinner() {
+    // Replace whatever Regenerate control is present with a disabled spinner.
+    var existing = form.querySelector(
+      '[data-testid="banner-generator-regenerate-button"],' +
+      '[data-testid="banner-generator-regenerate-button-disabled-inflight"]'
+    );
+    if (!existing) { return null; }
+    var spinner = document.createElement('span');
+    spinner.className = existing.className + ' opacity-60 cursor-not-allowed';
+    spinner.setAttribute('data-testid', 'banner-generator-spinner');
+    spinner.setAttribute('aria-busy', 'true');
+    spinner.innerHTML =
+      '<i data-lucide="loader" class="w-3 h-3 animate-spin"></i>' +
+      '<span>Regenerating&hellip;</span>';
+    existing.replaceWith(spinner);
+    if (window.lucide && window.lucide.createIcons) { window.lucide.createIcons(); }
+    return spinner;
+  }
+
+  function restoreButton(spinner) {
+    if (!spinner) { return; }
+    var button = document.createElement('button');
+    button.type = 'submit';
+    button.className =
+      'bg-secondary border border-border text-foreground px-3 py-1.5 rounded-lg ' +
+      'text-xs font-medium hover:bg-muted transition-colors flex items-center space-x-1';
+    button.setAttribute('data-testid', 'banner-generator-regenerate-button');
+    button.innerHTML =
+      '<i data-lucide="refresh-cw" class="w-3 h-3"></i>' +
+      '<span>Regenerate banner</span>';
+    spinner.replaceWith(button);
+    if (window.lucide && window.lucide.createIcons) { window.lucide.createIcons(); }
+  }
+
+  function swapImage(bannerUrl) {
+    if (!bannerUrl) { return; }
+    var busted = bannerUrl + (bannerUrl.indexOf('?') === -1 ? '?' : '&') +
+      't=' + Date.now();
+    var img = section.querySelector('[data-testid="banner-generator-image"]');
+    if (img) {
+      img.src = busted;
+      return;
+    }
+    // Empty/placeholder state: replace the placeholder with a rendered <img>.
+    var placeholder = section.querySelector('[data-testid="banner-generator-placeholder"]');
+    if (placeholder) {
+      var wrap = document.createElement('div');
+      wrap.className = 'flex items-start space-x-3';
+      var newImg = document.createElement('img');
+      newImg.src = busted;
+      newImg.alt = 'Banner / social image';
+      newImg.style.maxWidth = '200px';
+      newImg.className = 'rounded border border-border bg-secondary';
+      newImg.setAttribute('data-testid', 'banner-generator-image');
+      wrap.appendChild(newImg);
+      placeholder.replaceWith(wrap);
+    }
+  }
+
+  function poll(spinner) {
+    fetch(statusUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.state === 'success') {
+          swapImage(data.banner_url);
+          showLive('Banner regenerated.');
+          restoreButton(spinner);
+          polling = false;
+        } else if (data.state === 'failed') {
+          var msg = 'Last attempt failed.';
+          if (data.task_detail_url) { msg += ' View task: ' + data.task_detail_url; }
+          showLive(msg);
+          restoreButton(spinner);
+          polling = false;
+        } else {
+          window.setTimeout(function () { poll(spinner); }, POLL_INTERVAL_MS);
+        }
+      })
+      .catch(function () {
+        showLive('Could not check banner status. Refresh to see the result.');
+        restoreButton(spinner);
+        polling = false;
+      });
+  }
+
+  form.addEventListener('submit', function (event) {
+    if (polling) { event.preventDefault(); return; }
+    event.preventDefault();
+    polling = true;
+    var spinner = setSpinner();
+    showLive('Regenerating banner…');
+    var body = new FormData(form);
+    fetch(form.action, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRFToken': getCsrf(),
+      },
+      body: body,
+    })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        if (!res.ok || res.body.status === 'disabled') {
+          showLive(res.body.error || 'Banner generation is not configured.');
+          restoreButton(spinner);
+          polling = false;
+          return;
+        }
+        window.setTimeout(function () { poll(spinner); }, POLL_INTERVAL_MS);
+      })
+      .catch(function () {
+        showLive('Could not queue the regeneration. Refresh and try again.');
+        restoreButton(spinner);
+        polling = false;
+      });
+  });
+})();
+</script>
+{% endif %}

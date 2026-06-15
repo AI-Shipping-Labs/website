@@ -293,3 +293,116 @@ class EventEditBannerSectionTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         self.assertNotContains(
             response, 'data-testid="banner-generator-section"',
         )
+
+    def test_edit_page_carries_status_url_for_in_place_loader(self):
+        """The shared partial gets banner_status_url so the JS enhancement
+        can poll the status endpoint (issue #995)."""
+        _set_banner_generator(enabled=True)
+        event = _make_event()
+        response = self.client.get(f'/studio/events/{event.pk}/edit')
+        self.assertContains(
+            response,
+            f'data-banner-status-url="/studio/events/{event.pk}/banner-status"',
+        )
+
+
+class EventRegenerateBannerAjaxTest(
+    _BannerGeneratorCacheCleanupMixin, TestCase,
+):
+    """The in-place loader POSTs the regenerate form via fetch and expects a
+    JSON envelope instead of a redirect (issue #995)."""
+
+    def setUp(self):
+        super().setUp()
+        self.client = Client()
+        self.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        self.client.login(email='staff@test.com', password='testpass')
+        self.event = _make_event()
+        _set_banner_generator(enabled=True)
+
+    @property
+    def url(self):
+        return f'/studio/events/{self.event.pk}/regenerate-banner'
+
+    @patch(ENQUEUE_PATCH, return_value='task-ajax')
+    def test_ajax_post_returns_json_and_enqueues_once(self, mock_enqueue):
+        response = self.client.post(
+            self.url, HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/json')
+        self.assertEqual(
+            response.json(), {'status': 'queued', 'task_id': 'task-ajax'},
+        )
+        mock_enqueue.assert_called_once_with('event', self.event.pk)
+
+    @patch(DISPATCH_ASYNC_PATCH)
+    def test_ajax_post_returns_json_422_when_disabled(self, mock_async):
+        _set_banner_generator(enabled=False)
+        response = self.client.post(
+            self.url, HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()['status'], 'disabled')
+        mock_async.assert_not_called()
+
+    @patch(ENQUEUE_PATCH, return_value='task-redirect')
+    def test_plain_post_still_redirects_and_flashes(self, mock_enqueue):
+        response = self.client.post(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, f'/studio/events/{self.event.pk}/edit')
+        mock_enqueue.assert_called_once_with('event', self.event.pk)
+
+
+class EventBannerStatusEndpointTest(
+    _BannerGeneratorCacheCleanupMixin, TestCase,
+):
+    """The Studio JSON status endpoint backing the in-place poller (#995)."""
+
+    def setUp(self):
+        super().setUp()
+        self.client = Client()
+        self.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        self.normal = User.objects.create_user(
+            email='user@test.com', password='testpass',
+        )
+        self.event = _make_event()
+        _set_banner_generator(enabled=True)
+
+    @property
+    def url(self):
+        return f'/studio/events/{self.event.pk}/banner-status'
+
+    def test_anonymous_redirects_to_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response.url)
+
+    def test_non_staff_forbidden(self):
+        self.client.login(email='user@test.com', password='testpass')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_returns_state_and_resolved_banner_url(self):
+        Event.objects.filter(pk=self.event.pk).update(
+            auto_banner_url='https://cdn.example.com/banners/event/x.jpg',
+        )
+        self.client.login(email='staff@test.com', password='testpass')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn('state', body)
+        self.assertEqual(
+            body['banner_url'],
+            'https://cdn.example.com/banners/event/x.jpg',
+        )
+        self.assertIn('task_detail_url', body)
+
+    def test_unknown_event_404s(self):
+        self.client.login(email='staff@test.com', password='testpass')
+        response = self.client.get('/studio/events/999999/banner-status')
+        self.assertEqual(response.status_code, 404)

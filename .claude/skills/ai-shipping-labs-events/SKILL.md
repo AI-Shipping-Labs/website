@@ -55,6 +55,8 @@ Required on create: `title`, `start_datetime`.
 | `host_email` | string | Optional. Email that receives the host calendar invite with host-only management links. Blank falls back to the operator default mailbox (`EVENTS_HOST_INVITE_EMAIL`); when both are unset no invite is sent. |
 | `tags` | array of strings | Free-form, e.g. `["sprint:may-2026"]`. |
 | `create_zoom` | boolean | Write-only. When `true` and `platform` is `zoom`, provisions a real Zoom meeting and populates `zoom_join_url` / `zoom_meeting_id`. Idempotent (no-op if a meeting already exists). Not returned in responses. |
+| `generate_banner` | boolean | Write-only. Defaults to `true` on create — the API auto-generates the 1200x630 social/banner image in the background. Set `false` to skip. On `PATCH` it only re-renders when explicitly `true`. Not returned in responses. |
+| `banner_url` | string | Read-only. The resolved effective banner / social image URL echoed in responses (precedence: frontmatter cover, then Studio custom upload, then generated). Empty until the async render finishes. |
 
 `draft` and `cancelled` are hidden from public visitors; `upcoming` and `completed` are public. To make an event visible you generally set `status: upcoming` and `published: true`.
 
@@ -186,6 +188,24 @@ curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/j
 curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
   "https://aishippinglabs.com/api/event-series/$SERIES_ID/zoom-meetings" -d '{}'
 ```
+
+## Banner image
+
+Every event has one 1200x630 image that serves as both the on-page banner and the social `og:image` / `twitter:image`. The API renders it through the banner-generator pipeline as a background task.
+
+Auto-generation on create. `POST /api/events` auto-generates the banner by default — `generate_banner` is treated as `true` when omitted. Pass `generate_banner: false` to opt out (e.g. when a `cover_image_url` from git already wins). The render runs async, so `banner_url` is empty in the create response and fills in once the worker finishes; the response carries a `banner_task_id` to poll.
+
+Regenerate an existing event. `POST /api/events/<slug>/regenerate-banner` force-enqueues a fresh render and returns the task id. This is allowed for synced/GitHub-origin events too (the auto-banner is derived presentation state the platform owns, so there is no `409` here).
+
+```bash
+curl -s -X POST -H "Authorization: Token $TOKEN" \
+  "https://aishippinglabs.com/api/events/$SLUG/regenerate-banner"
+# 202 {"status": "queued", "event_id": 33, "slug": "...", "task_id": "a1b2c3..."}
+```
+
+Async poll. The render is a background task, so poll `GET /api/worker/tasks/<task_id>` (using the `banner_task_id` from create or the `task_id` from regenerate) or just re-`GET` the event and read `banner_url` once it is non-empty.
+
+Soft-fail. When the banner generator is not configured, create still returns `201` (the event persists) and the body carries a non-fatal `banner_error` string instead of `banner_task_id`; the regenerate endpoint returns `422 banner_generator_not_configured` without enqueuing.
 
 ## Workshops
 

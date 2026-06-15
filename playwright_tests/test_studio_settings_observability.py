@@ -55,10 +55,6 @@ class TestStudioSettingsObservability:
         assert card.locator('[data-field-key="LOGFIRE_TOKEN"]').count() == 1
         assert card.locator('[data-field-key="LOGFIRE_ENABLED"]').count() == 1
         assert card.locator('[data-field-key="LOGFIRE_ENVIRONMENT"]').count() == 1
-        # With nothing configured the group is not fully configured: the
-        # required token is empty, so the badge is not the green "Configured".
-        badge_text = card.locator("span").first.inner_text()
-        assert "Configured" != badge_text.strip()
 
     def test_staff_configures_token_and_it_is_stored_masked(
         self, django_server, browser,

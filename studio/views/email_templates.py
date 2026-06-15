@@ -120,9 +120,10 @@ def _render_preview_html(template_name, subject, body_markdown, footer_note):
     Variables in the body are filled with placeholder values from
     ``preview_contexts.PREVIEW_CONTEXTS`` so no real user data leaks.
     """
-    import markdown as md
     from django.template import Context, Template
     from django.template.loader import render_to_string
+
+    from content.utils.markdown import render_email_markdown
 
     placeholder = get_preview_context(template_name)
     # ``user_name`` and ``user_email`` are also auto-injected by EmailService
@@ -134,7 +135,7 @@ def _render_preview_html(template_name, subject, body_markdown, footer_note):
 
     rendered_subject = Template(subject or '').render(Context(placeholder))
     rendered_body = Template(body_markdown or '').render(Context(placeholder))
-    body_html = md.markdown(rendered_body, extensions=['extra'])
+    body_html = render_email_markdown(rendered_body)
 
     return render_to_string(
         'email_app/base_email.html',

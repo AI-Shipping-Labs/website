@@ -103,13 +103,14 @@ class StudioUserSearchNameAndEmailTest(TestCase):
         self.assertEqual(main_row['tier_level'], main.level)
         self.assertTrue(main_row['has_community_access'])
 
-    def test_display_name_falls_back_to_email_when_no_name(self):
+    def test_display_name_falls_back_to_email_local_part_when_no_name(self):
         self._user('noname@test.com')
 
         response = self.client.get(reverse('studio_user_search'), {'q': 'noname'})
 
         row = response.json()['results'][0]
-        self.assertEqual(row['display_name'], 'noname@test.com')
+        self.assertEqual(row['email'], 'noname@test.com')
+        self.assertEqual(row['display_name'], 'noname')
         self.assertEqual(row['first_name'], '')
         self.assertEqual(row['last_name'], '')
 

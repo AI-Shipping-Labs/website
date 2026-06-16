@@ -17,6 +17,7 @@ from django.urls import reverse
 
 from accounts.utils.display import display_name
 from plans.models import Plan, Sprint
+from plans.views.sprints import _member_display_name
 
 User = get_user_model()
 
@@ -120,6 +121,28 @@ class DisplayNameTemplateFilterTest(TestCase):
             '{% load accounts_extras %}{{ user|display_name }}',
         ).render(Context({'user': user}))
         self.assertEqual(rendered, 'ada')
+
+
+class PlanRequestDisplayNameTest(TestCase):
+    def test_member_display_name_uses_canonical_helper(self):
+        user = User.objects.create_user(
+            email='ada@example.com',
+            password='pw',
+            first_name='Ada',
+            last_name='Lovelace',
+        )
+
+        self.assertEqual(_member_display_name(user), 'Ada Lovelace')
+
+    def test_member_display_name_uses_email_local_part_fallback(self):
+        user = User.objects.create_user(
+            email='reader@example.com',
+            password='pw',
+            first_name='  ',
+            last_name='  ',
+        )
+
+        self.assertEqual(_member_display_name(user), 'reader')
 
 
 class DisplayNameTemplateFilterRendersInCohortBoardTest(TestCase):

@@ -102,6 +102,19 @@ class EmailServiceSendTest(TestCase):
         html_body = call_args[0][2]  # full HTML
         self.assertIn('Alice', html_body)
 
+    @patch.object(EmailService, '_send_ses', return_value='ses-msg-004b')
+    def test_send_renders_full_display_name_in_body(self, mock_ses):
+        user = User.objects.create_user(
+            email='ada@example.com',
+            first_name='Ada',
+            last_name='Lovelace',
+        )
+
+        self.service.send(user, 'welcome', {'tier_name': 'Premium'})
+
+        html_body = mock_ses.call_args[0][2]
+        self.assertIn('Ada Lovelace', html_body)
+
     @patch.object(EmailService, '_send_ses', return_value='ses-msg-005')
     def test_send_renders_user_email_fallback_name(self, mock_ses):
         user = User.objects.create_user(email='bob@example.com')
@@ -110,6 +123,19 @@ class EmailServiceSendTest(TestCase):
         call_args = mock_ses.call_args
         html_body = call_args[0][2]
         self.assertIn('bob', html_body)
+
+    @patch.object(EmailService, '_send_ses', return_value='ses-msg-005b')
+    def test_send_renders_user_name_fallback_for_whitespace_name(self, mock_ses):
+        user = User.objects.create_user(
+            email='builder@example.com',
+            first_name='  ',
+            last_name='  ',
+        )
+
+        self.service.send(user, 'welcome', {'tier_name': 'Free'})
+
+        html_body = mock_ses.call_args[0][2]
+        self.assertIn('builder', html_body)
 
     def test_send_unknown_template_kind_raises_error(self):
         with self.assertRaises(EmailServiceError) as ctx:

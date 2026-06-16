@@ -40,6 +40,18 @@ class MavenWelcomeEmailContentTest(TestCase):
         context = _welcome_context(user, "Course")
         self.assertIn("/api/unsubscribe?token=", context["opt_out_url"])
 
+    def test_welcome_context_uses_canonical_display_name(self):
+        user = User.objects.create_user(
+            email="ada@example.com",
+            password="x",
+            first_name="Ada",
+            last_name="Lovelace",
+        )
+
+        context = _welcome_context(user, "Course")
+
+        self.assertEqual(context["user_name"], "Ada Lovelace")
+
     def test_sign_in_url_points_to_resolvable_login_route(self):
         """Regression for #960: the sign-in link must be /accounts/login/,
         which actually resolves. The old /login/ raised Resolver404."""

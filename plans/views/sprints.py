@@ -30,6 +30,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from accounts.utils.display import display_name
 from content.access import LEVEL_TO_TIER_NAME, get_user_level
 from events.models import Event
 from events.services.display_time import build_event_time_display
@@ -383,10 +384,7 @@ def _staff_users():
 
 def _member_display_name(user):
     """Best-effort display name for a member in plan-request messages."""
-    full = (user.get_full_name() or '').strip()
-    if full:
-        return full
-    return user.email
+    return display_name(user)
 
 
 def _member_admin_url(user):

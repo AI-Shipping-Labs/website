@@ -20,6 +20,8 @@ from django.utils import timezone
 
 from accounts.models import Token
 from events.models import Event, EventHost, Host
+from integrations.config import clear_config_cache
+from integrations.models import IntegrationSetting
 from integrations.services.zoom import ZoomAPIError
 
 User = get_user_model()
@@ -250,6 +252,26 @@ class EventsListAndDetailTest(EventsApiTestBase):
 
 
 class EventsCreateTest(EventsApiTestBase):
+    def setUp(self):
+        clear_config_cache()
+        super().setUp()
+
+    def tearDown(self):
+        clear_config_cache()
+        super().tearDown()
+
+    def _set_event_display_timezone(self, timezone_name):
+        IntegrationSetting.objects.update_or_create(
+            key="EVENT_DISPLAY_TIMEZONE",
+            defaults={
+                "value": timezone_name,
+                "group": "site",
+                "is_secret": False,
+                "description": "Default public event timezone.",
+            },
+        )
+        clear_config_cache()
+
     def test_create_with_minimal_fields_applies_studio_defaults(self):
         start = (self.start + timedelta(days=10)).isoformat()
         response = self._post({"title": "Minimal API Event", "start_datetime": start})
@@ -259,7 +281,7 @@ class EventsCreateTest(EventsApiTestBase):
         self.assertEqual(body["slug"], "minimal-api-event")
         self.assertEqual(body["kind"], "standard")
         self.assertEqual(body["platform"], "zoom")
-        self.assertEqual(body["timezone"], "Europe/Berlin")
+        self.assertEqual(body["timezone"], "UTC")
         self.assertEqual(body["status"], "draft")
         self.assertEqual(body["required_level"], 0)
         self.assertTrue(body["published"])
@@ -271,6 +293,89 @@ class EventsCreateTest(EventsApiTestBase):
 
         event = Event.objects.get(slug="minimal-api-event")
         self.assertEqual(event.end_datetime, event.start_datetime + timedelta(hours=1))
+
+    def test_create_without_timezone_uses_token_owner_preferred_timezone(self):
+        self.staff.preferred_timezone = "Europe/Berlin"
+        self.staff.save(update_fields=["preferred_timezone"])
+        start = (self.start + timedelta(days=10)).isoformat()
+
+        response = self._post({
+            "title": "Preferred Timezone API Event",
+            "start_datetime": start,
+        })
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["timezone"], "Europe/Berlin")
+        event = Event.objects.get(slug="preferred-timezone-api-event")
+        self.assertEqual(event.timezone, "Europe/Berlin")
+
+    def test_create_with_explicit_timezone_preserves_override(self):
+        self.staff.preferred_timezone = "Europe/Berlin"
+        self.staff.save(update_fields=["preferred_timezone"])
+        start = (self.start + timedelta(days=10)).isoformat()
+
+        response = self._post({
+            "title": "Explicit Timezone API Event",
+            "start_datetime": start,
+            "timezone": "America/New_York",
+        })
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["timezone"], "America/New_York")
+        event = Event.objects.get(slug="explicit-timezone-api-event")
+        self.assertEqual(event.timezone, "America/New_York")
+
+    def test_create_without_timezone_uses_site_default_when_preference_missing(self):
+        self.staff.preferred_timezone = ""
+        self.staff.save(update_fields=["preferred_timezone"])
+        self._set_event_display_timezone("Asia/Kolkata")
+        start = (self.start + timedelta(days=10)).isoformat()
+
+        response = self._post({
+            "title": "Site Default Timezone API Event",
+            "start_datetime": start,
+        })
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["timezone"], "Asia/Kolkata")
+        event = Event.objects.get(slug="site-default-timezone-api-event")
+        self.assertEqual(event.timezone, "Asia/Kolkata")
+
+    def test_create_without_timezone_falls_back_to_utc_when_config_invalid(self):
+        self.staff.preferred_timezone = "Not/AZone"
+        self.staff.save(update_fields=["preferred_timezone"])
+        self._set_event_display_timezone("Mars/Phobos")
+        start = (self.start + timedelta(days=10)).isoformat()
+
+        response = self._post({
+            "title": "UTC Fallback API Event",
+            "start_datetime": start,
+        })
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["timezone"], "UTC")
+        event = Event.objects.get(slug="utc-fallback-api-event")
+        self.assertEqual(event.timezone, "UTC")
+
+    def test_create_rejects_invalid_explicit_timezone_without_creating_event(self):
+        before = Event.objects.count()
+        start = (self.start + timedelta(days=10)).isoformat()
+
+        response = self._post({
+            "title": "Invalid Timezone API Event",
+            "start_datetime": start,
+            "timezone": "Mars/Phobos",
+        })
+
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertEqual(body["details"]["timezone"], "Unknown timezone.")
+        self.assertEqual(Event.objects.count(), before)
 
     def test_create_custom_event_persists_writable_fields(self):
         start = self.start + timedelta(days=11)

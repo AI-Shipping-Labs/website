@@ -128,6 +128,31 @@ class EventDetailTimeDisplayTest(TestCase):
         self.assertContains(response, 'data-browser-timezone-enabled="false"')
         self.assertNotContains(response, 'event-timezone-select')
 
+    def test_signed_in_attendee_sees_own_timezone_not_event_timezone_or_utc(self):
+        user = User.objects.create_user(
+            email='kolkata@example.com',
+            preferred_timezone='Asia/Kolkata',
+        )
+        self.client.force_login(user)
+        event = Event.objects.create(
+            title='Attendee Timezone Event',
+            slug='attendee-timezone-event',
+            start_datetime=datetime(2026, 4, 13, 16, 30, tzinfo=UTC),
+            end_datetime=datetime(2026, 4, 13, 18, 0, tzinfo=UTC),
+            status='upcoming',
+            timezone='Europe/Berlin',
+        )
+
+        response = self.client.get(event.get_absolute_url())
+
+        self.assertContains(
+            response,
+            'April 13, 2026, 22:00-23:30 Asia/Kolkata',
+        )
+        self.assertContains(response, 'data-default-timezone="Asia/Kolkata"')
+        self.assertContains(response, 'data-browser-timezone-enabled="false"')
+        self.assertNotContains(response, 'Europe/Berlin')
+
     def test_logged_in_without_preference_allows_browser_timezone_replacement(self):
         user = User.objects.create_user(email='browser@example.com')
         self.client.force_login(user)

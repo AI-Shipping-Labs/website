@@ -88,6 +88,7 @@ class TestNyAdminCreatesEventInLocalTime:
         tz_select = page.locator('[data-testid="dtp-event-tz"]')
         assert tz_select.is_visible()
         assert tz_select.input_value() == "America/New_York"
+        assert page.locator('[data-testid="dtp-event-tz-settings-link"]').count() == 0
 
         page.fill('input[name="title"]', "NY Office Hours 2027")
         page.fill('input[name="slug"]', "ny-office-hours-2027")
@@ -107,6 +108,97 @@ class TestNyAdminCreatesEventInLocalTime:
         assert event.start_datetime == datetime(
             2027, 6, 15, 18, 30, tzinfo=UTC,
         )
+        connection.close()
+        ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestAdminWithoutTimezoneSeesSettingsLink:
+    """Admins without a saved timezone get the account settings link."""
+
+    def test_no_tz_admin_can_open_timezone_settings(self, django_server, browser):
+        from playwright_tests.conftest import (
+            VIEWPORT,
+            create_session_for_user,
+        )
+
+        _reset_event_state()
+        _create_user("no-tz-link-999@test.com", "")
+        session_key = create_session_for_user("no-tz-link-999@test.com")
+        ctx = browser.new_context(viewport=VIEWPORT, timezone_id="UTC")
+        ctx.add_cookies([
+            {
+                "name": "sessionid",
+                "value": session_key,
+                "domain": "127.0.0.1",
+                "path": "/",
+            },
+            {
+                "name": "csrftoken",
+                "value": "e2e-test-csrf-token-value",
+                "domain": "127.0.0.1",
+                "path": "/",
+            },
+        ])
+        page = ctx.new_page()
+
+        page.goto(
+            f"{django_server}/studio/events/new",
+            wait_until="domcontentloaded",
+        )
+
+        settings_link = page.locator('[data-testid="dtp-event-tz-settings-link"] a')
+        assert settings_link.is_visible()
+        settings_link.click()
+        page.wait_for_url(re.compile(r".*/account/#display-preferences-section$"))
+        ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestAdminCanOverrideEventTimezone:
+    """An explicit event timezone wins over the creator default."""
+
+    def test_berlin_admin_creates_new_york_event(self, django_server, browser):
+        from django.db import connection
+
+        from events.models import Event
+
+        _reset_event_state()
+        _create_user("berlin-admin-override-999@test.com", "Europe/Berlin")
+        ctx = _auth_context(browser, "berlin-admin-override-999@test.com")
+        page = ctx.new_page()
+
+        page.goto(
+            f"{django_server}/studio/events/new",
+            wait_until="domcontentloaded",
+        )
+
+        tz_select = page.locator('[data-testid="dtp-event-tz"]')
+        assert tz_select.input_value() == "Europe/Berlin"
+        tz_select.select_option("America/New_York")
+        assert page.locator('[data-testid="dtp-event-tz-settings-link"]').count() == 0
+
+        page.fill('input[name="title"]', "NY Override Office Hours 2027")
+        page.fill('input[name="slug"]', "ny-override-office-hours-2027")
+        page.fill('input[name="event_date"]', "15/06/2027")
+        page.fill('input[name="event_time"]', "14:30")
+        page.fill('input[name="duration_hours"]', "1")
+        page.on("dialog", lambda d: d.accept())
+        page.locator('[data-testid="event-create-submit"]').click()
+
+        page.wait_for_url(re.compile(r".*/studio/events/\d+/edit$"))
+
+        event = Event.objects.get(slug="ny-override-office-hours-2027")
+        assert event.timezone == "America/New_York"
+        assert event.start_datetime == datetime(
+            2027, 6, 15, 18, 30, tzinfo=UTC,
+        )
+        assert page.locator('[data-testid="dtp-event-tz"]').input_value() == (
+            "America/New_York"
+        )
+        assert "America/New_York" in page.locator(
+            '[data-testid="event-resolved-local"]'
+        ).inner_text()
         connection.close()
         ctx.close()
 

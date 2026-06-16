@@ -280,6 +280,7 @@ def event_series_create(request):
         'timezone_value': tz_value,
         'timezone_label': get_timezone_label(tz_value) or tz_value,
         'timezone_options': build_timezone_options(),
+        'tz_settings_link': _should_autodetect_tz(request.user),
         # Issue #855: with no saved preference and a fresh GET, default the
         # picker to the browser zone instead of UTC. A re-rendered POST
         # carries the admin's chosen value, so don't auto-detect then.
@@ -450,6 +451,7 @@ def event_series_detail(request, series_id):
                 'timezone_value': tz_value,
                 'timezone_label': get_timezone_label(tz_value) or tz_value,
                 'timezone_options': build_timezone_options(),
+                'tz_settings_link': _should_autodetect_tz(request.user),
                 'tz_autodetect': (
                     not series.timezone
                     and _should_autodetect_tz(request.user)
@@ -488,6 +490,7 @@ def event_series_detail(request, series_id):
         'timezone_value': tz_value,
         'timezone_label': get_timezone_label(tz_value) or tz_value,
         'timezone_options': build_timezone_options(),
+        'tz_settings_link': _should_autodetect_tz(request.user),
         # Issue #855: an existing series keeps its stored timezone. Only
         # auto-detect the browser zone when the series has none and the
         # admin has no saved preference.
@@ -531,6 +534,7 @@ def _render_add_occurrence_error(request, series, add_error):
         'timezone_value': tz_value,
         'timezone_label': get_timezone_label(tz_value) or tz_value,
         'timezone_options': build_timezone_options(),
+        'tz_settings_link': _should_autodetect_tz(request.user),
         'tz_autodetect': (
             not series.timezone
             and _should_autodetect_tz(request.user)

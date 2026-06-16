@@ -6,7 +6,6 @@ import logging
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from django.conf import settings
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Avg, Q
@@ -26,6 +25,7 @@ from accounts.services.timezones import (
 from content.access import VISIBILITY_CHOICES
 from events.models import Event, EventFeedback, EventHost, EventRegistration, Host
 from events.models.event import EXTERNAL_HOST_CHOICES
+from events.services.display_time import resolve_event_creation_timezone
 from events.services.host_invite import (
     maybe_send_initial_host_invite,
     send_host_reschedule_invite,
@@ -110,18 +110,14 @@ def _parse_required_level(value, fallback):
 
 
 def _default_timezone_for(user):
-    """Return the admin's preferred TZ when valid, else ``settings.TIME_ZONE``.
+    """Return the default timezone for newly-created Studio events.
 
     Issue #665. New Studio forms default the timezone chooser to the
     logged-in admin's profile timezone; if it isn't set (or is somehow
-    invalid), fall back to the project's ``TIME_ZONE`` (UTC). Never
-    return the historical 'Europe/Berlin' fallback — the issue
-    explicitly removes that hardcode.
+    invalid), use the same site-default chain as API creation:
+    profile preference -> ``EVENT_DISPLAY_TIMEZONE`` config -> UTC.
     """
-    candidate = getattr(user, 'preferred_timezone', '') or ''
-    if candidate and is_valid_timezone(candidate):
-        return candidate
-    return settings.TIME_ZONE or 'UTC'
+    return resolve_event_creation_timezone(user)
 
 
 def _should_autodetect_tz(user):
@@ -693,6 +689,7 @@ def event_create(request):
         'timezone_value': tz_value,
         'timezone_label': get_timezone_label(tz_value) or tz_value,
         'timezone_options': build_timezone_options(),
+        'tz_settings_link': _should_autodetect_tz(request.user),
         # Issue #855: on a fresh create with no user-chosen value, let the
         # browser zone win over the bare UTC fallback. A re-rendered POST
         # carries the admin's chosen value, so don't auto-detect then.
@@ -738,6 +735,7 @@ def event_edit(request, event_id):
             tz_value = context['timezone_value']
             context['timezone_label'] = get_timezone_label(tz_value) or tz_value
             context['timezone_options'] = build_timezone_options()
+            context['tz_settings_link'] = _should_autodetect_tz(request.user)
             _apply_host_context(context, selected_host_ids)
             return render(request, 'studio/events/form.html', context)
         if synced:
@@ -831,6 +829,7 @@ def event_edit(request, event_id):
                     get_timezone_label(tz_value) or tz_value
                 )
                 context['timezone_options'] = build_timezone_options()
+                context['tz_settings_link'] = _should_autodetect_tz(request.user)
                 _apply_host_context(context, selected_host_ids)
                 return render(request, 'studio/events/form.html', context)
             start_dt, end_dt = _parse_event_datetime(request.POST, posted_tz)
@@ -926,6 +925,7 @@ def event_edit(request, event_id):
     tz_value = context['timezone_value']
     context['timezone_label'] = get_timezone_label(tz_value) or tz_value
     context['timezone_options'] = build_timezone_options()
+    context['tz_settings_link'] = _should_autodetect_tz(request.user)
     _apply_host_context(context)
     # Issue #701: surface registered attendees on the edit page so
     # operators can see and export the roster without dropping into

@@ -21,6 +21,7 @@ from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from accounts.services.timezones import is_valid_timezone
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
@@ -33,6 +34,7 @@ from events.models.event import (
     EVENT_STATUS_CHOICES,
     EXTERNAL_HOST_CHOICES,
 )
+from events.services.display_time import resolve_event_creation_timezone
 from events.services.host_invite import maybe_send_initial_host_invite
 from events.services.host_registration import maybe_register_host_as_attendee
 from integrations.services.banner_generator import (
@@ -252,6 +254,8 @@ def _collect_event_values(data, *, existing=None):
     for field in ("description", "timezone", "zoom_join_url", "location"):
         if field in data:
             values[field] = _coerce_optional_text(data[field])
+    if "timezone" in values and not is_valid_timezone(values["timezone"]):
+        errors["timezone"] = "Unknown timezone."
 
     if "host_email" in data:
         host_email = _coerce_optional_text(data["host_email"])
@@ -721,7 +725,7 @@ def events_collection(request):
         event = Event(
             kind="standard",
             platform="zoom",
-            timezone="Europe/Berlin",
+            timezone=resolve_event_creation_timezone(request.user),
             status="draft",
             required_level=0,
             published=True,

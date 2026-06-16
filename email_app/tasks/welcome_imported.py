@@ -1,16 +1,11 @@
 """Background tasks for imported-user welcome emails."""
 
-import datetime
-
-import jwt
-from django.conf import settings
 from django.contrib.auth import get_user_model
 
+from accounts.utils.tokens import generate_user_action_token
 from email_app.models import EmailLog
 from email_app.services.email_service import EmailService
 from integrations.config import site_base_url
-
-JWT_ALGORITHM = "HS256"
 
 
 def enqueue_imported_welcome_email(user_id):
@@ -68,13 +63,9 @@ def _build_context(user):
 
 def _build_password_reset_url(user):
     site_url = site_base_url().rstrip("/")
-    payload = {
-        "user_id": user.pk,
-        "action": "password_reset",
-        "exp": (
-            datetime.datetime.now(datetime.timezone.utc)
-            + datetime.timedelta(hours=1)
-        ),
-    }
-    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
+    token = generate_user_action_token(
+        user.pk,
+        "password_reset",
+        expiry_hours=1,
+    )
     return f"{site_url}/api/password-reset?token={token}"

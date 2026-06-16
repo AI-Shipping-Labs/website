@@ -1,15 +1,32 @@
 """Maven welcome email content tests (issue #960)."""
 
-from urllib.parse import urlparse
+import datetime
+from urllib.parse import parse_qs, urlparse
 
+import jwt
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import resolve, reverse
 
+from accounts.utils.tokens import JWT_ALGORITHM
 from email_app.services.email_service import EmailService
 from integrations.services.maven import _welcome_context
 
 User = get_user_model()
+
+
+def _extract_token(url):
+    return parse_qs(urlparse(url).query)["token"][0]
+
+
+def _decode_user_action_token(token):
+    return jwt.decode(
+        token,
+        settings.SECRET_KEY,
+        algorithms=[JWT_ALGORITHM],
+        options={"verify_exp": False},
+    )
 
 
 class MavenWelcomeEmailContentTest(TestCase):
@@ -39,6 +56,34 @@ class MavenWelcomeEmailContentTest(TestCase):
         user = User.objects.create_user(email="o@test.com", password="x")
         context = _welcome_context(user, "Course")
         self.assertIn("/api/unsubscribe?token=", context["opt_out_url"])
+
+        payload = _decode_user_action_token(_extract_token(context["opt_out_url"]))
+        self.assertEqual(payload["user_id"], user.pk)
+        self.assertEqual(payload["action"], "unsubscribe")
+        self.assertNotIn("exp", payload)
+
+    def test_password_reset_url_uses_password_reset_token_with_day_expiry(self):
+        started_at = datetime.datetime.now(datetime.timezone.utc)
+        user = User.objects.create_user(email="reset@test.com", password="x")
+        context = _welcome_context(user, "Course")
+        payload = _decode_user_action_token(
+            _extract_token(context["password_reset_url"])
+        )
+        expires_at = datetime.datetime.fromtimestamp(
+            payload["exp"],
+            tz=datetime.timezone.utc,
+        )
+
+        self.assertEqual(payload["user_id"], user.pk)
+        self.assertEqual(payload["action"], "password_reset")
+        self.assertGreater(
+            expires_at,
+            started_at + datetime.timedelta(hours=23, minutes=59),
+        )
+        self.assertLess(
+            expires_at,
+            started_at + datetime.timedelta(hours=24, minutes=1),
+        )
 
     def test_welcome_context_uses_canonical_display_name(self):
         user = User.objects.create_user(

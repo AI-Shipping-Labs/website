@@ -26,12 +26,11 @@ from accounts.return_context import (
 )
 from accounts.services.email_resolution import resolve_user_by_email
 from accounts.services.verification import resolve_unverified_ttl_days
+from accounts.utils.tokens import JWT_ALGORITHM, generate_user_action_token
 from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
 
-# JWT algorithm
-JWT_ALGORITHM = "HS256"
 EMAIL_PASSWORD_AUTH_BACKEND = "django.contrib.auth.backends.ModelBackend"
 EMAIL_PASSWORD_BACKEND = ModelBackend()
 INVALID_LOGIN_ERROR = "Invalid email or password"
@@ -133,15 +132,11 @@ def _generate_verification_token(user_id, expiry_hours=24):
     Returns:
         str: The encoded JWT token.
     """
-    import datetime
-
-    payload = {
-        "user_id": user_id,
-        "action": "verify_email",
-        "exp": datetime.datetime.now(datetime.timezone.utc)
-        + datetime.timedelta(hours=expiry_hours),
-    }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return generate_user_action_token(
+        user_id,
+        "verify_email",
+        expiry_hours=expiry_hours,
+    )
 
 
 def _generate_password_reset_token(user_id, expiry_hours=1):
@@ -154,15 +149,11 @@ def _generate_password_reset_token(user_id, expiry_hours=1):
     Returns:
         str: The encoded JWT token.
     """
-    import datetime
-
-    payload = {
-        "user_id": user_id,
-        "action": "password_reset",
-        "exp": datetime.datetime.now(datetime.timezone.utc)
-        + datetime.timedelta(hours=expiry_hours),
-    }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return generate_user_action_token(
+        user_id,
+        "password_reset",
+        expiry_hours=expiry_hours,
+    )
 
 
 def _send_verification_email(user):

@@ -25,6 +25,7 @@ from django.template.loader import render_to_string
 
 from accounts.services.timezones import format_user_datetime
 from accounts.utils.display import display_name
+from accounts.utils.tokens import generate_user_action_token
 from content.utils.markdown import render_email_markdown
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
@@ -317,16 +318,8 @@ class EmailService:
 
         Uses a JWT token containing the user ID that does not expire.
         """
-        import jwt
-
         site_url = site_base_url()
-        secret = settings.SECRET_KEY
-
-        token = jwt.encode(
-            {"user_id": user.pk, "action": "unsubscribe"},
-            secret,
-            algorithm="HS256",
-        )
+        token = generate_user_action_token(user.pk, "unsubscribe")
 
         return f"{site_url}/api/unsubscribe?token={token}"
 

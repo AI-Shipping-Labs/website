@@ -7,12 +7,15 @@ that the tier-overrides page (and future surfaces like #718) consumes.
 """
 
 import datetime
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
 from django.test import TestCase, tag
 from django.urls import reverse
+from django.utils import timezone
 
+from accounts.models import TierOverride
 from payments.models import Tier
 from plans.models import Plan, Sprint, SprintEnrollment
 
@@ -102,6 +105,108 @@ class StudioUserSearchNameAndEmailTest(TestCase):
         main_row = results['main@test.com']
         self.assertEqual(main_row['tier_level'], main.level)
         self.assertTrue(main_row['has_community_access'])
+
+    def test_tier_fields_use_effective_active_override_level(self):
+        free = Tier.objects.get(slug='free')
+        main = Tier.objects.get(slug='main')
+        premium = Tier.objects.get(slug='premium')
+        active_main = self._user(
+            'active-main-override@test.com',
+            first_name='Active',
+            last_name='Override',
+        )
+        active_main.tier = free
+        active_main.save(update_fields=['tier'])
+        TierOverride.objects.create(
+            user=active_main,
+            original_tier=free,
+            override_tier=main,
+            expires_at=timezone.now() + timedelta(days=7),
+            is_active=True,
+        )
+        active_premium = self._user(
+            'active-premium-override@test.com',
+            first_name='Premium',
+            last_name='Override',
+        )
+        active_premium.tier = free
+        active_premium.save(update_fields=['tier'])
+        TierOverride.objects.create(
+            user=active_premium,
+            original_tier=free,
+            override_tier=premium,
+            expires_at=timezone.now() + timedelta(days=7),
+            is_active=True,
+        )
+
+        response = self.client.get(
+            reverse('studio_user_search'), {'q': 'override@test.com'},
+        )
+
+        results = {r['email']: r for r in response.json()['results']}
+        self.assertEqual(results['active-main-override@test.com']['tier_level'], 20)
+        self.assertTrue(
+            results['active-main-override@test.com']['has_community_access'],
+        )
+        self.assertEqual(
+            results['active-premium-override@test.com']['tier_level'], 30,
+        )
+        self.assertTrue(
+            results['active-premium-override@test.com']['has_community_access'],
+        )
+
+    def test_tier_fields_ignore_missing_lapsed_and_basic_overrides(self):
+        free = Tier.objects.get(slug='free')
+        basic = Tier.objects.get(slug='basic')
+        main = Tier.objects.get(slug='main')
+        no_override = self._user('no-override@test.com')
+        no_override.tier = free
+        no_override.save(update_fields=['tier'])
+        expired = self._user('expired-override@test.com')
+        expired.tier = free
+        expired.save(update_fields=['tier'])
+        TierOverride.objects.create(
+            user=expired,
+            original_tier=free,
+            override_tier=main,
+            expires_at=timezone.now() - timedelta(days=1),
+            is_active=True,
+        )
+        inactive = self._user('inactive-override@test.com')
+        inactive.tier = free
+        inactive.save(update_fields=['tier'])
+        TierOverride.objects.create(
+            user=inactive,
+            original_tier=free,
+            override_tier=main,
+            expires_at=timezone.now() + timedelta(days=7),
+            is_active=False,
+        )
+        basic_only = self._user('basic-only-override@test.com')
+        basic_only.tier = free
+        basic_only.save(update_fields=['tier'])
+        TierOverride.objects.create(
+            user=basic_only,
+            original_tier=free,
+            override_tier=basic,
+            expires_at=timezone.now() + timedelta(days=7),
+            is_active=True,
+        )
+
+        response = self.client.get(reverse('studio_user_search'), {'q': 'override'})
+
+        results = {r['email']: r for r in response.json()['results']}
+        for email in (
+            'no-override@test.com',
+            'expired-override@test.com',
+            'inactive-override@test.com',
+        ):
+            self.assertEqual(results[email]['tier_level'], 0)
+            self.assertFalse(results[email]['has_community_access'])
+        self.assertEqual(results['basic-only-override@test.com']['tier_level'], 10)
+        self.assertFalse(
+            results['basic-only-override@test.com']['has_community_access'],
+        )
 
     def test_display_name_falls_back_to_email_local_part_when_no_name(self):
         self._user('noname@test.com')

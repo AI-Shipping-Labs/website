@@ -155,7 +155,11 @@ def _slack_status(user):
 
 
 def _base_tier_level(user):
-    """Return the user's stored subscription level, treating null as free."""
+    """Return the stored subscription/base level, treating null as free.
+
+    Used for paid-vs-comped counts and upward-only override authoring; display
+    helpers layer active overrides on top separately.
+    """
     if user.tier_id is None:
         return 0
     return user.tier.level
@@ -1072,6 +1076,9 @@ def user_detail(request, user_id):
     # offer tiers strictly above the user's stored tier level, default
     # to the lowest available one, and surface the existing five
     # DURATION_CHOICES labels.
+    # Inline override authoring follows the stored base tier, not the
+    # effective display tier, so an active comp does not block valid upgrades
+    # above the user's real subscription.
     current_level = user.tier.level if user.tier_id else 0
     available_override_tiers = list(
         Tier.objects.filter(level__gt=current_level).order_by('level')
@@ -1188,6 +1195,8 @@ def user_tier_override_create(request, user_id):
         messages.error(request, 'Invalid tier selected.')
         return redirect(redirect_url)
 
+    # Same upward-only base-tier rule as the standalone override page:
+    # compare against the stored subscription, not temporary effective access.
     current_level = user.tier.level if user.tier_id else 0
     if override_tier.level <= current_level:
         messages.error(

@@ -131,6 +131,17 @@ class ActiveOverridesContextTest(ActiveOverridesListTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context['active_overrides']), [])
 
+    def test_per_user_available_tiers_use_stored_base_not_active_override(self):
+        user = self._make_user('basic-with-premium-override@test.com', tier=self.basic)
+        self._make_override(user, self.premium, expires_in_days=10)
+
+        response = self.client.get(
+            reverse('studio_user_tier_override_page', args=[user.pk]),
+        )
+
+        slugs = [tier.slug for tier in response.context['available_tiers']]
+        self.assertEqual(slugs, ['main', 'premium'])
+
 
 class ActiveOverridesRenderTest(ActiveOverridesListTestBase):
     """Template renders the list section, count, columns, and revoke control."""

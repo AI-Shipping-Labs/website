@@ -598,7 +598,8 @@ def _reconcile_scalars(plan, canonical, secondary):
     """Reconcile canonical <- secondary scalar fields by groomed precedence."""
     rec = plan.reconciled
 
-    # tier: higher level wins.
+    # tier: higher stored subscription/base level wins. Temporary effective
+    # access from TierOverride is reconciled separately below.
     canon_level = canonical.tier.level if canonical.tier_id else 0
     sec_level = secondary.tier.level if secondary.tier_id else 0
     if sec_level > canon_level:
@@ -712,7 +713,7 @@ def _reconcile_tier_overrides(plan, canonical):
             }
         )
 
-    # Redundant-after-paid: if canonical's real tier now meets or exceeds the
+    # Redundant-after-paid: if canonical's real stored tier now meets or exceeds the
     # surviving override's level, the override is courtesy fat -- revoke it
     # (mirrors ``_apply_stripe_subscription_tier``).
     canon_level = canonical.tier.level if canonical.tier_id else 0

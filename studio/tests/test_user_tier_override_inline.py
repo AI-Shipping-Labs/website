@@ -314,6 +314,32 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(TierOverride.objects.count(), before)
 
+    def test_create_validation_uses_stored_base_not_active_override(self):
+        member = self._make_member('basic-with-premium@test.com', tier=self.basic)
+        old = self._make_override(member, override_tier=self.premium)
+
+        rejected = self.client.post(
+            f'/studio/users/{member.pk}/tier_override/create',
+            {'tier_id': self.basic.pk, 'duration': '1 month'},
+        )
+        self.assertEqual(rejected.status_code, 302)
+        self.assertEqual(
+            TierOverride.objects.filter(user=member, is_active=True).count(),
+            1,
+        )
+
+        created = self.client.post(
+            f'/studio/users/{member.pk}/tier_override/create',
+            {'tier_id': self.main.pk, 'duration': '1 month'},
+        )
+
+        self.assertEqual(created.status_code, 302)
+        old.refresh_from_db()
+        self.assertFalse(old.is_active)
+        new = TierOverride.objects.get(user=member, is_active=True)
+        self.assertEqual(new.override_tier_id, self.main.pk)
+        self.assertEqual(new.original_tier_id, self.basic.pk)
+
     def test_invalid_duration_is_rejected(self):
         member = self._make_member('bad-dur@test.com', tier=self.free)
         response = self.client.post(

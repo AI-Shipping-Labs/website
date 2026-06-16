@@ -46,7 +46,7 @@ from accounts.services.email_resolution import normalize_email, resolve_user_by_
 from accounts.utils.display import display_name
 from accounts.utils.tokens import generate_user_action_token
 from community.models import CommunityAuditLog
-from content.access import LEVEL_MAIN
+from content.access import LEVEL_MAIN, get_user_level
 from email_app.services import EmailService
 from integrations.config import site_base_url
 from integrations.maven_config import (
@@ -352,22 +352,14 @@ def _audit_override(user, tier, expiry, cohort, course, *, refreshed):
 def _is_active_community_member(user):
     """True iff the user has active access AND is in the Slack community.
 
-    Active access = a paid base tier (level >= Main) or an active, unexpired
-    tier override at Main or above. Community = ``slack_member`` is True.
+    Active access follows the canonical effective-tier resolver: a paid base
+    tier or active, unexpired Main+ override. Community = ``slack_member`` is
+    True.
     """
     if not getattr(user, "slack_member", False):
         return False
 
-    base_level = user.tier.level if user.tier_id else 0
-    if base_level >= LEVEL_MAIN:
-        return True
-
-    return TierOverride.objects.filter(
-        user=user,
-        is_active=True,
-        expires_at__gt=timezone.now(),
-        override_tier__level__gte=LEVEL_MAIN,
-    ).exists()
+    return get_user_level(user) >= LEVEL_MAIN
 
 
 def _invite_to_slack(user, actions):

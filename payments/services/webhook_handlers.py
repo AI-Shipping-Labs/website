@@ -631,7 +631,8 @@ def handle_subscription_updated(subscription_data):
         # until period end, so the user stays ``stripe:active`` on their
         # current plan — do NOT churn the tags yet.
         reconcile_stripe_status_tags(user, active=True, tier=user.tier)
-        # Schedule community removal at billing period end
+        # Schedule community removal from the stored paid subscription. A
+        # future deletion still re-checks effective access before removing.
         if user.tier and user.tier.level >= 20 and user.billing_period_end:
             _services._community_schedule_removal(user)
         return
@@ -644,6 +645,8 @@ def handle_subscription_updated(subscription_data):
     user.pending_tier = None
 
     # Look up the new tier from price_id
+    # Subscription movement compares stored Stripe tiers, not temporary
+    # effective access.
     old_tier_level = user.tier.level if user.tier else 0
     tier_changed_to = None
     if price_id:
@@ -662,6 +665,7 @@ def handle_subscription_updated(subscription_data):
     # Issue #970 (R3): if the resulting base tier is free and the payload
     # carried no live ``current_period_end``, do not retain a stale prior
     # billing date — the user has no active paid subscription cycle.
+    # ``resulting_free`` is billing/base-tier state: no paid subscription.
     resulting_free = user.tier is None or user.tier.level == 0
     if resulting_free and not current_period_end:
         user.billing_period_end = None
@@ -689,14 +693,19 @@ def handle_subscription_updated(subscription_data):
     # dropped.
     reconcile_stripe_status_tags(user, active=True, tier=user.tier)
 
-    # Community integration: handle tier changes
+    # Community integration: transition detection uses stored Stripe tiers,
+    # while removal is guarded by effective access so surviving Main+ overrides
+    # keep community access.
     new_tier_level = user.tier.level if user.tier else 0
     if new_tier_level >= 20 and old_tier_level < 20:
         # Re-subscribe: user upgraded back to community-eligible tier
         _services._community_reactivate(user)
     elif new_tier_level < 20 and old_tier_level >= 20:
         # Immediate downgrade below Main: remove from community now
-        _services._community_remove(user)
+        from content.access import LEVEL_MAIN, get_user_level
+
+        if get_user_level(user) < LEVEL_MAIN:
+            _services._community_remove(user)
 
 
 def handle_customer_updated(customer_data):

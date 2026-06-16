@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from accounts.utils.display import display_name
-from content.access import LEVEL_MAIN
+from content.access import LEVEL_MAIN, get_user_level
 from payments.models import Tier
 from plans.models import Plan, Sprint, SprintEnrollment
 from studio.decorators import staff_required
@@ -50,6 +50,8 @@ def _user_override_context(user):
         .select_related('override_tier', 'original_tier', 'granted_by')
         .order_by('-created_at')
     )
+    # Override authoring is intentionally based on the stored base tier, not
+    # effective access, so staff can grant only tiers above the real subscription.
     current_level = user.tier.level if user.tier_id else 0
     highest_tier = Tier.objects.order_by('-level').first()
     is_highest_tier = bool(highest_tier and current_level >= highest_tier.level)
@@ -205,7 +207,7 @@ def studio_user_search(request):
 
     results = []
     for user in candidates:
-        tier_level = user.tier.level if user.tier_id else 0
+        tier_level = get_user_level(user)
         row = {
             'id': user.pk,
             'email': user.email,

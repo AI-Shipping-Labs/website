@@ -80,6 +80,8 @@ def _active_tier_info(user):
     )
     if override is None:
         return base_info
+    # Local base comparison is internal to this effective display helper: only
+    # show the override source when it exceeds the stored subscription tier.
     base_level = user.tier.level if user.tier_id else 0
     if override.override_tier.level <= base_level:
         return base_info

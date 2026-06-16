@@ -23,6 +23,7 @@ from accounts.services.timezones import (
     get_timezone_label,
     is_valid_timezone,
 )
+from content.access import VISIBILITY_CHOICES
 from events.models import Event, EventFeedback, EventHost, EventRegistration, Host
 from events.models.event import EXTERNAL_HOST_CHOICES
 from events.services.host_invite import (
@@ -41,6 +42,7 @@ from studio.views.form_helpers import parse_comma_separated_tags
 logger = logging.getLogger(__name__)
 
 _VALID_EXTERNAL_HOSTS = {value for value, _ in EXTERNAL_HOST_CHOICES}
+_VALID_EVENT_REQUIRED_LEVELS = {value for value, _ in VISIBILITY_CHOICES}
 EVENT_LIST_PAST_PAGE_SIZE = 25
 
 EVENT_KIND_ICON_MAP = {
@@ -96,6 +98,14 @@ def _coerce_external_host(raw):
     """
     value = (raw or '').strip()
     return value if value in _VALID_EXTERNAL_HOSTS else ''
+
+
+def _parse_required_level(value, fallback):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return parsed if parsed in _VALID_EVENT_REQUIRED_LEVELS else fallback
 
 
 def _default_timezone_for(user):
@@ -626,10 +636,9 @@ def event_create(request):
             if not form_values['event_time']:
                 errors['event_time'] = 'Time is required (HH:MM, 24h).'
 
-        try:
-            required_level = int(form_values['required_level'] or '0')
-        except ValueError:
-            required_level = 0
+        required_level = _parse_required_level(
+            form_values['required_level'] or '0', 0,
+        )
 
         if title and slug and Event.objects.filter(slug=slug).exists():
             errors['slug'] = 'An event with this slug already exists.'
@@ -827,7 +836,9 @@ def event_edit(request, event_id):
             event.timezone = posted_tz
             event.location = request.POST.get('location', '')
             event.status = request.POST.get('status', 'draft')
-            event.required_level = int(request.POST.get('required_level', 0))
+            event.required_level = _parse_required_level(
+                request.POST.get('required_level'), event.required_level,
+            )
             event.tags = parse_comma_separated_tags(request.POST.get('tags', ''))
             # Issue #579: external_host is constrained to the canonical
             # partner list. Empty string means community-hosted; any

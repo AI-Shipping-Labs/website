@@ -1,9 +1,11 @@
 """Production-mode Playwright smokes for pricing and account billing."""
 
+import datetime as dt
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 from django.conf import settings
+from django.utils import timezone
 
 from playwright_tests.conftest import DEFAULT_PASSWORD, VIEWPORT
 
@@ -44,6 +46,53 @@ def _seed_pricing_user(email, tier_slug="free", subscription_id=""):
     user.tier = tier
     user.subscription_id = subscription_id
     user.save()
+    return user
+
+
+def _seed_override_pricing_user(email):
+    from accounts.models import TierOverride
+    from payments.models import Tier
+    from playwright_tests.conftest import ensure_tiers
+
+    ensure_tiers()
+    tiers = {tier.slug: tier for tier in Tier.objects.all()}
+    user = _seed_pricing_user(
+        email,
+        "basic",
+        subscription_id="sub_basic_override_pricing",
+    )
+    TierOverride.objects.filter(user=user).delete()
+    TierOverride.objects.create(
+        user=user,
+        original_tier=tiers["basic"],
+        override_tier=tiers["premium"],
+        expires_at=timezone.now() + dt.timedelta(days=14),
+        is_active=True,
+    )
+    return user
+
+
+def _seed_stale_subscription_user(email):
+    from accounts.models import User
+    from playwright_tests.conftest import ensure_tiers
+
+    ensure_tiers()
+    user, _created = User.objects.get_or_create(
+        email=email,
+        defaults={"email_verified": True},
+    )
+    user.set_password(DEFAULT_PASSWORD)
+    user.email_verified = True
+    user.tier = None
+    user.pending_tier = None
+    user.subscription_id = "sub_stale_pricing"
+    user.save(update_fields=[
+        "password",
+        "email_verified",
+        "tier",
+        "pending_tier",
+        "subscription_id",
+    ])
     return user
 
 
@@ -155,5 +204,86 @@ def test_paid_account_uses_customer_portal_without_local_plan_controls(
         assert page.locator("#downgrade-btn").count() == 0
         assert page.locator("#cancel-btn").count() == 0
         assert "/api/subscription/" not in page.content()
+    finally:
+        context.close()
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+def test_override_member_pricing_uses_temporary_access_and_portal_actions(
+    django_server,
+    browser,
+    django_db_blocker,
+):
+    email = "pricing-basic-override@test.com"
+    with django_db_blocker.unblock():
+        _seed_override_pricing_user(email)
+
+    context = _auth_context(browser, email, django_db_blocker)
+    page = context.new_page()
+    try:
+        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+
+        basic = _tier_card(page, "basic")
+        assert "Current plan" in basic.inner_text()
+        assert (
+            "Base subscription. Temporary Premium access is active."
+            in basic.inner_text()
+        )
+
+        main = _tier_card(page, "main")
+        assert "Temporary access" in main.inner_text()
+        assert (
+            "Included with your temporary Premium access."
+            in main.inner_text()
+        )
+
+        premium = _tier_card(page, "premium")
+        assert "Temporary access" in premium.inner_text()
+        assert "Temporary access active until" in premium.inner_text()
+
+        for tier_slug in ("main", "premium"):
+            card = _tier_card(page, tier_slug)
+            assert card.locator(".tier-cta-link").count() == 0
+            portal = card.locator('[data-action="manage-subscription"]')
+            assert portal.inner_text().strip() == "Manage Subscription"
+            assert portal.get_attribute("href") == settings.STRIPE_CUSTOMER_PORTAL_URL
+    finally:
+        context.close()
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+def test_stale_subscription_pricing_shows_review_warning_and_portal_actions(
+    django_server,
+    browser,
+    django_db_blocker,
+):
+    email = "pricing-stale-subscription@test.com"
+    with django_db_blocker.unblock():
+        _seed_stale_subscription_user(email)
+
+    context = _auth_context(browser, email, django_db_blocker)
+    page = context.new_page()
+    try:
+        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+
+        free = _tier_card(page, "free")
+        assert "Included" in free.inner_text()
+        assert "Your subscription needs review." in free.inner_text()
+
+        for tier_slug in ("basic", "main", "premium"):
+            card = _tier_card(page, tier_slug)
+            card_text = card.inner_text()
+            assert "Manage Subscription" in card_text
+            assert (
+                "Your subscription needs review before changing plans."
+                in card_text
+            )
+            assert "Join" not in card_text
+            assert card.locator(".tier-cta-link").count() == 0
+            portal = card.locator('[data-action="manage-subscription"]')
+            assert portal.inner_text().strip() == "Manage Subscription"
+            assert portal.get_attribute("href") == settings.STRIPE_CUSTOMER_PORTAL_URL
     finally:
         context.close()

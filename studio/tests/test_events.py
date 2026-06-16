@@ -17,11 +17,15 @@ Verifies:
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
+from content.access import LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from events.models import Event, EventSeries
-from tests.fixtures import StaffUserMixin
+from tests.fixtures import StaffUserMixin, TierSetupMixin
+
+User = get_user_model()
 
 
 class StudioEventListTest(StaffUserMixin, TestCase):
@@ -565,6 +569,42 @@ class StudioEventCreateTest(StaffUserMixin, TestCase):
         self.assertEqual(event.kind, 'standard')
         self.assertTrue(event.published)
 
+    def test_create_studio_event_defaults_required_level_zero(self):
+        self.client.post('/studio/events/new', {
+            'title': 'Default Level Event',
+            'event_date': '10/06/2026',
+            'event_time': '10:00',
+        })
+
+        event = Event.objects.get(title='Default Level Event')
+        self.assertEqual(event.required_level, LEVEL_OPEN)
+
+    def test_create_studio_event_persists_required_level(self):
+        self.client.post('/studio/events/new', {
+            'title': 'Premium Level Event',
+            'event_date': '10/06/2026',
+            'event_time': '10:00',
+            'required_level': str(LEVEL_PREMIUM),
+        })
+
+        event = Event.objects.get(title='Premium Level Event')
+        self.assertEqual(event.required_level, LEVEL_PREMIUM)
+
+    def test_create_studio_event_rejects_integer_invalid_required_level(self):
+        for tampered_value in ('5', '999'):
+            with self.subTest(tampered_value=tampered_value):
+                title = f'Invalid Level Event {tampered_value}'
+                response = self.client.post('/studio/events/new', {
+                    'title': title,
+                    'event_date': '10/06/2026',
+                    'event_time': '10:00',
+                    'required_level': tampered_value,
+                })
+
+                self.assertEqual(response.status_code, 302)
+                event = Event.objects.get(title=title)
+                self.assertEqual(event.required_level, LEVEL_OPEN)
+
     def test_post_blank_slug_is_derived_from_title(self):
         self.client.post('/studio/events/new', {
             'title': 'Hello World Event',
@@ -659,7 +699,7 @@ class StudioEventCreateTest(StaffUserMixin, TestCase):
         self.assertContains(response, 'Visible On List')
 
 
-class StudioEventEditTest(StaffUserMixin, TestCase):
+class StudioEventEditTest(StaffUserMixin, TierSetupMixin, TestCase):
     """Test event editing with pre-populated date/time/duration fields."""
 
     def setUp(self):
@@ -674,6 +714,21 @@ class StudioEventEditTest(StaffUserMixin, TestCase):
             status='draft',
             timezone='UTC',
         )
+
+    def _edit_payload(self, **overrides):
+        data = {
+            'title': self.event.title,
+            'slug': self.event.slug,
+            'event_date': '01/06/2026',
+            'event_time': '10:00',
+            'duration_hours': '1.5',
+            'timezone': self.event.timezone,
+            'status': self.event.status,
+            'required_level': str(self.event.required_level),
+            'tags': ', '.join(self.event.tags),
+        }
+        data.update(overrides)
+        return data
 
     def test_edit_form_returns_200(self):
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
@@ -736,6 +791,27 @@ class StudioEventEditTest(StaffUserMixin, TestCase):
         content = response.content.decode()
         self.assertIn('Resolved (UTC):', content)
 
+    def test_edit_form_shows_enabled_required_level_select_with_options(self):
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+        content = response.content.decode()
+        import re
+        select_match = re.search(
+            r'<select[^>]*name="required_level"[^>]*>', content,
+        )
+        self.assertIsNotNone(select_match)
+        self.assertNotIn('disabled', select_match.group(0))
+        self.assertContains(response, 'Free (0)')
+        self.assertContains(response, 'Basic (10)')
+        self.assertContains(response, 'Main (20)')
+        self.assertContains(response, 'Premium (30)')
+
+    def test_edit_event_get_preselects_current_level(self):
+        self.event.required_level = LEVEL_MAIN
+        self.event.save(update_fields=['required_level'])
+
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+        self.assertContains(response, '<option value="20" selected>Main (20)</option>')
+
     def test_edit_event_post(self):
         """Edit an event using the new date/time/duration fields."""
         self.client.post(f'/studio/events/{self.event.pk}/edit', {
@@ -753,6 +829,97 @@ class StudioEventEditTest(StaffUserMixin, TestCase):
         self.assertEqual(self.event.title, 'Updated Event')
         self.assertEqual(self.event.status, 'upcoming')
         self.assertEqual(self.event.tags, ['event', 'live', 'workshop'])
+
+    def test_edit_studio_event_changes_required_level(self):
+        self.client.post(
+            f'/studio/events/{self.event.pk}/edit',
+            self._edit_payload(required_level=str(LEVEL_MAIN)),
+        )
+
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.required_level, LEVEL_MAIN)
+
+    def test_bad_required_level_value_does_not_500(self):
+        self.event.required_level = LEVEL_MAIN
+        self.event.save(update_fields=['required_level'])
+
+        response = self.client.post(
+            f'/studio/events/{self.event.pk}/edit',
+            self._edit_payload(required_level='notanumber'),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.required_level, LEVEL_MAIN)
+
+    def test_integer_invalid_required_level_keeps_existing_value(self):
+        for tampered_value in ('5', '999'):
+            with self.subTest(tampered_value=tampered_value):
+                self.event.required_level = LEVEL_MAIN
+                self.event.save(update_fields=['required_level'])
+
+                response = self.client.post(
+                    f'/studio/events/{self.event.pk}/edit',
+                    self._edit_payload(required_level=tampered_value),
+                )
+
+                self.assertEqual(response.status_code, 302)
+                self.event.refresh_from_db()
+                self.assertEqual(self.event.required_level, LEVEL_MAIN)
+
+    def test_required_level_change_updates_event_access_gating(self):
+        self.event.status = 'upcoming'
+        self.event.published = True
+        self.event.save(update_fields=['status', 'published'])
+        future_date = (timezone.now() + timedelta(days=7)).strftime('%d/%m/%Y')
+
+        self.client.post(
+            f'/studio/events/{self.event.pk}/edit',
+            self._edit_payload(
+                event_date=future_date,
+                status='upcoming',
+                required_level=str(LEVEL_MAIN),
+            ),
+        )
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.required_level, LEVEL_MAIN)
+
+        free_user = User.objects.create_user(
+            email='free-event-gate@test.com',
+            password='pass',
+            email_verified=True,
+        )
+        free_user.tier = self.free_tier
+        free_user.save()
+        main_user = User.objects.create_user(
+            email='main-event-gate@test.com',
+            password='pass',
+            email_verified=True,
+        )
+        main_user.tier = self.main_tier
+        main_user.save()
+
+        self.client.logout()
+        self.client.login(email='free-event-gate@test.com', password='pass')
+        response = self.client.get(self.event.get_absolute_url())
+        self.assertFalse(response.context['has_access'])
+        self.assertContains(response, 'Upgrade to Main to attend')
+        self.assertNotContains(response, 'id="register-btn"')
+        register_response = self.client.post(
+            f'/api/events/{self.event.slug}/register',
+        )
+        self.assertEqual(register_response.status_code, 403)
+
+        self.client.logout()
+        self.client.login(email='main-event-gate@test.com', password='pass')
+        response = self.client.get(self.event.get_absolute_url())
+        self.assertTrue(response.context['has_access'])
+        self.assertContains(response, 'id="register-btn"')
+        self.assertNotContains(response, 'Upgrade to Main')
+        register_response = self.client.post(
+            f'/api/events/{self.event.slug}/register',
+        )
+        self.assertEqual(register_response.status_code, 201)
 
     def test_edit_event_saves_correct_datetimes(self):
         """Editing with time=09:00 in UTC + duration=3 stores 09:00 UTC start."""
@@ -891,6 +1058,16 @@ class StudioEventSyncedTest(StaffUserMixin, TestCase):
         self.assertIsNotNone(status_match)
         self.assertNotIn('disabled', status_match.group(0))
 
+    def test_required_level_select_disabled_for_synced_event(self):
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+        content = response.content.decode()
+        import re
+        level_match = re.search(
+            r'<select[^>]*name="required_level"[^>]*>', content,
+        )
+        self.assertIsNotNone(level_match)
+        self.assertIn('disabled', level_match.group(0))
+
     def test_synced_event_has_no_max_participants_input(self):
         """Issue #984: the Max Participants input was removed entirely."""
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
@@ -915,6 +1092,18 @@ class StudioEventSyncedTest(StaffUserMixin, TestCase):
         })
         self.event.refresh_from_db()
         self.assertEqual(self.event.title, 'Synced Event')
+
+    def test_synced_event_post_does_not_change_required_level(self):
+        self.event.required_level = LEVEL_OPEN
+        self.event.save(update_fields=['required_level'])
+
+        self.client.post(f'/studio/events/{self.event.pk}/edit', {
+            'status': 'upcoming',
+            'required_level': str(LEVEL_PREMIUM),
+        })
+
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.required_level, LEVEL_OPEN)
 
     def test_synced_event_shows_view_event_title(self):
         """Synced event page shows 'View Event' instead of 'Edit Event'."""

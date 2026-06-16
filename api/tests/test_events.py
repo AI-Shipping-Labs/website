@@ -19,7 +19,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from accounts.models import Token
-from events.models import Event
+from events.models import Event, EventHost, Host
 from integrations.services.zoom import ZoomAPIError
 
 User = get_user_model()
@@ -72,6 +72,19 @@ class EventsApiTestBase(TestCase):
             status="draft",
             origin="studio",
             tags=["studio"],
+        )
+        cls.host_1 = Host.objects.create(
+            name="Alpha Host",
+            slug="alpha-host",
+            bio="Alpha bio",
+            email="alpha@example.com",
+        )
+        cls.host_2 = Host.objects.create(
+            name="Beta Host",
+            slug="beta-host",
+            bio="Beta bio",
+            photo_url="https://cdn.example.com/beta.jpg",
+            email="beta@example.com",
         )
 
     def _auth(self, token=None):
@@ -180,6 +193,7 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "external_host",
                 "published",
                 "host_email",
+                "hosts",
                 "banner_url",
                 "origin",
                 "source_repo",
@@ -347,6 +361,55 @@ class EventsCreateTest(EventsApiTestBase):
             "Must be after start_datetime.",
         )
 
+    def test_create_with_host_ids_assigns_hosts_in_order(self):
+        response = self._post({
+            "title": "Hosted API Event",
+            "start_datetime": (self.start + timedelta(days=12)).isoformat(),
+            "host_ids": [self.host_2.id, self.host_1.id],
+        })
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(
+            [host["id"] for host in body["hosts"]],
+            [self.host_2.id, self.host_1.id],
+        )
+        self.assertEqual(
+            body["hosts"][0],
+            {
+                "id": self.host_2.id,
+                "name": "Beta Host",
+                "slug": "beta-host",
+                "photo_url": "https://cdn.example.com/beta.jpg",
+                "email": "beta@example.com",
+            },
+        )
+        event = Event.objects.get(slug=body["slug"])
+        self.assertEqual(
+            list(
+                EventHost.objects.filter(event=event).values_list(
+                    "host_id", "position"
+                )
+            ),
+            [(self.host_2.id, 0), (self.host_1.id, 1)],
+        )
+
+    def test_create_rejects_unknown_host_id_without_creating_event(self):
+        before = Event.objects.count()
+        unknown_id = Host.objects.order_by("-id").first().id + 1000
+        response = self._post({
+            "title": "Bad Host Event",
+            "start_datetime": (self.start + timedelta(days=13)).isoformat(),
+            "host_ids": [unknown_id],
+        })
+
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("host_ids", body["details"])
+        self.assertIn(str(unknown_id), body["details"]["host_ids"])
+        self.assertEqual(Event.objects.count(), before)
+
 
 class EventsUpdateTest(EventsApiTestBase):
     def test_patch_updates_studio_origin_event_and_preserves_omitted_fields(self):
@@ -420,6 +483,30 @@ class EventsUpdateTest(EventsApiTestBase):
         self.studio_event.refresh_from_db()
         self.assertEqual(self.studio_event.zoom_join_url, "https://example.com/custom")
         self.assertEqual(self.studio_event.zoom_meeting_id, "")
+
+    def test_patch_changes_and_clears_hosts(self):
+        EventHost.objects.create(
+            event=self.studio_event,
+            host=self.host_1,
+            position=0,
+        )
+        EventHost.objects.create(
+            event=self.studio_event,
+            host=self.host_2,
+            position=1,
+        )
+
+        response = self._patch("studio-event", {"host_ids": [self.host_2.id]})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [host["id"] for host in response.json()["hosts"]],
+            [self.host_2.id],
+        )
+
+        clear = self._patch("studio-event", {"host_ids": []})
+        self.assertEqual(clear.status_code, 200)
+        self.assertEqual(clear.json()["hosts"], [])
+        self.assertFalse(EventHost.objects.filter(event=self.studio_event).exists())
 
 
 ZOOM_RESULT = {

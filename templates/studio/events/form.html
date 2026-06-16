@@ -190,6 +190,21 @@
       </p>
     </div>
 
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="event-hosts-input">Event hosts</label>
+      <select name="host_ids" id="event-hosts-input" multiple size="4"
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+              data-testid="studio-event-hosts">
+        {% for host in host_options %}
+        <option value="{{ host.id }}"{% if host.id in selected_host_ids %} selected{% endif %}>{{ host.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">
+        Public event hosts shown on the event detail page. The order selected here is preserved.
+      </p>
+      {% if errors.host_ids %}<p class="text-xs text-red-400 mt-1" data-testid="error-host-ids">{{ errors.host_ids }}</p>{% endif %}
+    </div>
+
     {% if event %}
     {% include "studio/includes/forms/required_level.html" with selected=event.required_level disabled=is_synced %}
     {% else %}

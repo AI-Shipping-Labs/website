@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, Prefetch, Q
 from django.http import Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -19,6 +19,7 @@ from content.access import (
 from events.models import (
     Event,
     EventFeedback,
+    EventHost,
     EventJoinClick,
     EventRegistration,
     EventSeries,
@@ -492,7 +493,17 @@ def event_detail(request, event_id, slug):
     rename-by-slug. The 301 (not 302) lets search engines collapse the
     two URLs into one.
     """
-    event = get_object_or_404(Event, pk=event_id)
+    event = get_object_or_404(
+        Event.objects.prefetch_related(
+            Prefetch(
+                'event_host_links',
+                queryset=EventHost.objects.select_related('host').order_by(
+                    'position',
+                ),
+            ),
+        ),
+        pk=event_id,
+    )
 
     # Issue #673: redirect to canonical when the cosmetic slug doesn't
     # match the stored slug. The check runs BEFORE the draft gate so a
@@ -614,6 +625,7 @@ def event_detail(request, event_id, slug):
         # detail-page header. Pre-computed so the template can branch on
         # presence without re-querying the through-model.
         'event_instructors': event.ordered_instructors,
+        'event_hosts': event.ordered_hosts,
         # Issue #484: surface a download URL for the .ics file so
         # registered users can re-add the event to their calendar
         # independent of email delivery. Issue #673: the .ics download

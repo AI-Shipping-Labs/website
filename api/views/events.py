@@ -12,7 +12,8 @@ from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
+from django.db.models import Prefetch
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -24,7 +25,7 @@ from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from content.access import VISIBILITY_CHOICES
-from events.models import Event
+from events.models import Event, EventHost, Host
 from events.models.event import (
     EVENT_KIND_CHOICES,
     EVENT_ORIGIN_CHOICES,
@@ -103,6 +104,15 @@ _EVENT_EXAMPLE = {
     "external_host": "",
     "published": True,
     "host_email": "host@example.com",
+    "hosts": [
+        {
+            "id": 1,
+            "name": "Alexey Grigorev",
+            "slug": "alexey-grigorev",
+            "photo_url": "/static/alexey.png",
+            "email": "alexey@aishippinglabs.com",
+        }
+    ],
     "banner_url": "https://cdn.aishippinglabs.com/banners/event/office-hours.jpg",
     "origin": "studio",
     "source_repo": "",
@@ -115,6 +125,23 @@ _EVENT_EXAMPLE = {
 
 def _iso(value):
     return value.isoformat() if value is not None else None
+
+
+def _host_prefetch():
+    return Prefetch(
+        "event_host_links",
+        queryset=EventHost.objects.select_related("host").order_by("position"),
+    )
+
+
+def _serialize_host(host):
+    return {
+        "id": host.id,
+        "name": host.name,
+        "slug": host.slug,
+        "photo_url": host.display_photo_url,
+        "email": host.email,
+    }
 
 
 def serialize_event(event):
@@ -138,6 +165,7 @@ def serialize_event(event):
         "external_host": event.external_host,
         "published": event.published,
         "host_email": event.host_email,
+        "hosts": [_serialize_host(host) for host in event.ordered_hosts],
         "banner_url": effective_banner_url(event),
         "origin": event.origin,
         "source_repo": event.source_repo or "",
@@ -316,6 +344,52 @@ def _collect_event_values(data, *, existing=None):
             errors["slug"] = "Slug already in use."
 
     return values, errors
+
+
+def _validate_host_ids(data):
+    """Return ``(host_ids_or_None, errors)`` for an optional host_ids payload."""
+    if "host_ids" not in data:
+        return None, {}
+
+    raw_host_ids = data["host_ids"]
+    if not isinstance(raw_host_ids, list):
+        return None, {"host_ids": "Must be an array of host ids."}
+
+    host_ids = []
+    for value in raw_host_ids:
+        if isinstance(value, bool) or not isinstance(value, int):
+            return None, {"host_ids": "Must be an array of integer host ids."}
+        host_ids.append(value)
+
+    if len(set(host_ids)) != len(host_ids):
+        return None, {"host_ids": "Duplicate host ids are not allowed."}
+
+    existing_ids = set(
+        Host.objects.filter(id__in=host_ids).values_list("id", flat=True)
+    )
+    unknown_ids = [host_id for host_id in host_ids if host_id not in existing_ids]
+    if unknown_ids:
+        return None, {
+            "host_ids": (
+                "Unknown host id"
+                if len(unknown_ids) == 1
+                else "Unknown host ids"
+            )
+            + f": {', '.join(str(host_id) for host_id in unknown_ids)}."
+        }
+    return host_ids, {}
+
+
+def _set_event_hosts(event, host_ids):
+    """Replace event hosts with the supplied ids, preserving list order."""
+    if host_ids is None:
+        return
+    EventHost.objects.filter(event=event).delete()
+    EventHost.objects.bulk_create([
+        EventHost(event=event, host_id=host_id, position=position)
+        for position, host_id in enumerate(host_ids)
+    ])
+    event._prefetched_objects_cache = {}
 
 
 def _apply_event_values(event, values):
@@ -507,6 +581,14 @@ def _maybe_enqueue_banner(event, generate_banner):
                             "are unset no invite is sent."
                         ),
                     },
+                    "host_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": (
+                            "Optional. Ordered event host ids. Empty array "
+                            "clears all hosts."
+                        ),
+                    },
                     "create_zoom": {
                         "type": "boolean",
                         "writeOnly": True,
@@ -539,6 +621,7 @@ def _maybe_enqueue_banner(event, generate_banner):
                     "title": "Office Hours: May 5",
                     "start_datetime": "2026-05-05T17:00:00+02:00",
                     "host_email": "host@example.com",
+                    "host_ids": [1],
                 },
             },
             "responses": {
@@ -580,7 +663,7 @@ def events_collection(request):
         return _delete_not_available_response()
 
     if request.method == "GET":
-        qs = Event.objects.all()
+        qs = Event.objects.prefetch_related(_host_prefetch()).all()
         status_filter = request.GET.get("status")
         if status_filter:
             if status_filter not in VALID_STATUSES:
@@ -613,6 +696,8 @@ def events_collection(request):
             return _read_only_field_response(field)
 
     values, errors = _collect_event_values(data, existing=None)
+    host_ids, host_errors = _validate_host_ids(data)
+    errors.update(host_errors)
     if errors:
         return _validation_response(errors)
 
@@ -631,23 +716,25 @@ def events_collection(request):
     if banner_error_response is not None:
         return banner_error_response
 
-    event = Event(
-        kind="standard",
-        platform="zoom",
-        timezone="Europe/Berlin",
-        status="draft",
-        required_level=0,
-        published=True,
-        tags=[],
-        location="",
-        external_host="",
-        origin="studio",
-        source_repo="",
-    )
-    _apply_event_values(event, values)
-    save_error = _save_event_or_error(event)
-    if save_error is not None:
-        return save_error
+    with transaction.atomic():
+        event = Event(
+            kind="standard",
+            platform="zoom",
+            timezone="Europe/Berlin",
+            status="draft",
+            required_level=0,
+            published=True,
+            tags=[],
+            location="",
+            external_host="",
+            origin="studio",
+            source_repo="",
+        )
+        _apply_event_values(event, values)
+        save_error = _save_event_or_error(event)
+        if save_error is not None:
+            return save_error
+        _set_event_hosts(event, host_ids)
 
     zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
     # Best-effort host calendar invite (issue #993). Self-gating: skips
@@ -713,6 +800,14 @@ def events_collection(request):
                             "links. Adding it to a not-yet-invited "
                             "published event sends the one-time invite. "
                             "Empty string clears the field."
+                        ),
+                    },
+                    "host_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": (
+                            "Optional. Ordered event host ids. Empty array "
+                            "clears all hosts."
                         ),
                     },
                     "create_zoom": {
@@ -783,7 +878,12 @@ def event_detail(request, slug):
     if request.method == "DELETE":
         return _delete_not_available_response()
 
-    event = Event.objects.filter(slug=slug).first()
+    event = (
+        Event.objects
+        .prefetch_related(_host_prefetch())
+        .filter(slug=slug)
+        .first()
+    )
     if event is None:
         return error_response(
             "Event not found",
@@ -812,6 +912,8 @@ def event_detail(request, slug):
             return _read_only_field_response(field)
 
     values, errors = _collect_event_values(data, existing=event)
+    host_ids, host_errors = _validate_host_ids(data)
+    errors.update(host_errors)
     if errors:
         return _validation_response(errors)
 
@@ -830,10 +932,12 @@ def event_detail(request, slug):
     if banner_error_response is not None:
         return banner_error_response
 
-    _apply_event_values(event, values)
-    save_error = _save_event_or_error(event)
-    if save_error is not None:
-        return save_error
+    with transaction.atomic():
+        _apply_event_values(event, values)
+        save_error = _save_event_or_error(event)
+        if save_error is not None:
+            return save_error
+        _set_event_hosts(event, host_ids)
 
     zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
     # Best-effort host calendar invite (issue #993). Self-gating and

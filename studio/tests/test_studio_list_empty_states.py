@@ -68,6 +68,7 @@ PARTIAL_USERS = {
     'imports/list.html',
     'ses_events/list.html',
     'call_hosts/list.html',
+    'hosts/list.html',
 }
 
 

@@ -247,6 +247,14 @@ double-rendering. See issue #347.
                 <span>Event series</span>
               </a>
             </li>
+            <li>
+              <a href="{% url 'studio_host_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/hosts' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 data-testid="sidebar-hosts-link">
+                <i data-lucide="user-round-check" class="w-4 h-4"></i>
+                <span>Hosts</span>
+              </a>
+            </li>
           </ul>
         </div>
 

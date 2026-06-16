@@ -2253,6 +2253,15 @@
                       "end_datetime": "2026-05-05T18:00:00+02:00",
                       "external_host": "",
                       "host_email": "host@example.com",
+                      "hosts": [
+                        {
+                          "email": "alexey@aishippinglabs.com",
+                          "id": 1,
+                          "name": "Alexey Grigorev",
+                          "photo_url": "/static/alexey.png",
+                          "slug": "alexey-grigorev"
+                        }
+                      ],
                       "id": 42,
                       "kind": "standard",
                       "location": "",
@@ -2295,6 +2304,9 @@
             "application/json": {
               "example": {
                 "host_email": "host@example.com",
+                "host_ids": [
+                  1
+                ],
                 "start_datetime": "2026-05-05T17:00:00+02:00",
                 "title": "Office Hours: May 5"
               },
@@ -2324,6 +2336,13 @@
                     "description": "Optional. Email that receives the host calendar invite with host-only management links. Blank falls back to the operator EVENTS_HOST_INVITE_EMAIL default; when both are unset no invite is sent.",
                     "format": "email",
                     "type": "string"
+                  },
+                  "host_ids": {
+                    "description": "Optional. Ordered event host ids. Empty array clears all hosts.",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "type": "array"
                   },
                   "kind": {
                     "type": "string"
@@ -2385,6 +2404,15 @@
                   "end_datetime": "2026-05-05T18:00:00+02:00",
                   "external_host": "",
                   "host_email": "host@example.com",
+                  "hosts": [
+                    {
+                      "email": "alexey@aishippinglabs.com",
+                      "id": 1,
+                      "name": "Alexey Grigorev",
+                      "photo_url": "/static/alexey.png",
+                      "slug": "alexey-grigorev"
+                    }
+                  ],
                   "id": 42,
                   "kind": "standard",
                   "location": "",
@@ -2475,6 +2503,15 @@
                   "end_datetime": "2026-05-05T18:00:00+02:00",
                   "external_host": "",
                   "host_email": "host@example.com",
+                  "hosts": [
+                    {
+                      "email": "alexey@aishippinglabs.com",
+                      "id": 1,
+                      "name": "Alexey Grigorev",
+                      "photo_url": "/static/alexey.png",
+                      "slug": "alexey-grigorev"
+                    }
+                  ],
                   "id": 42,
                   "kind": "standard",
                   "location": "",
@@ -2555,6 +2592,13 @@
                     "format": "email",
                     "type": "string"
                   },
+                  "host_ids": {
+                    "description": "Optional. Ordered event host ids. Empty array clears all hosts.",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "type": "array"
+                  },
                   "published": {
                     "type": "boolean"
                   },
@@ -2583,6 +2627,15 @@
                   "end_datetime": "2026-05-05T18:00:00+02:00",
                   "external_host": "",
                   "host_email": "host@example.com",
+                  "hosts": [
+                    {
+                      "email": "alexey@aishippinglabs.com",
+                      "id": 1,
+                      "name": "Alexey Grigorev",
+                      "photo_url": "/static/alexey.png",
+                      "slug": "alexey-grigorev"
+                    }
+                  ],
                   "id": 42,
                   "kind": "standard",
                   "location": "",

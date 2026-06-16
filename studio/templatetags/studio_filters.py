@@ -427,6 +427,7 @@ def studio_sidebar_state(path):
         '/events/' in p
         or p == '/studio/events'
         or 'event-series' in p
+        or '/studio/hosts' in p
     )
     communication_active = (
         'notifications' in p

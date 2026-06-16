@@ -6638,6 +6638,134 @@
         ]
       }
     },
+    "/api/sprints/{slug}/progress-evidence": {
+      "get": {
+        "description": "Staff-token-only read API for next-sprint operations. The member set comes from the source sprint's enrollments. Evidence combines app-recorded source-plan done_at progress with CRM-held #plan-sprints Slack threads linked to the same source plan. The endpoint does not call Slack, enqueue ingest, parse messages, or mutate progress rows.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_sprint",
+            "required": false,
+            "schema": {
+              "description": "Optional target sprint slug. When supplied, each member row includes target enrollment and target plan state for duplicate checks.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "members": [
+                    {
+                      "app_progress": {
+                        "checkpoints_done": 1,
+                        "deliverables_done": 0,
+                        "evidence": [
+                          {
+                            "description": "Publish a working demo",
+                            "done_at": "2026-05-08T12:00:00+00:00",
+                            "id": 501,
+                            "kind": "checkpoint"
+                          }
+                        ],
+                        "latest_done_at": "2026-05-08T12:00:00+00:00",
+                        "next_steps_done": 0,
+                        "total_done": 1
+                      },
+                      "crm_progress": {
+                        "applied_changes_count": 0,
+                        "latest_event_applied_at": null,
+                        "latest_thread_posted_at": null,
+                        "parsed_events_count": 0,
+                        "threads": [],
+                        "threads_count": 0
+                      },
+                      "evidence_reasons": [
+                        "app_progress"
+                      ],
+                      "evidence_status": "app_progress",
+                      "member": {
+                        "display_name": "Member Example",
+                        "email": "member@example.com",
+                        "id": 42
+                      },
+                      "source_enrollment": {
+                        "enrolled_at": "2026-05-01T12:00:00+00:00",
+                        "id": 12
+                      },
+                      "source_plan": {
+                        "goal": "Ship the first agent workflow",
+                        "id": 88,
+                        "shared_at": "2026-05-02T12:00:00+00:00"
+                      },
+                      "target": null
+                    }
+                  ],
+                  "source_sprint": {
+                    "duration_weeks": 6,
+                    "end_date": "2026-06-12",
+                    "name": "May 2026",
+                    "slug": "may-2026",
+                    "start_date": "2026-05-01",
+                    "status": "active"
+                  },
+                  "target_sprint": null,
+                  "totals": {
+                    "app_progress": 1,
+                    "both": 0,
+                    "crm_update_progress": 0,
+                    "members": 1,
+                    "none": 0,
+                    "target_enrolled": 0,
+                    "target_plan_exists": 0
+                  }
+                }
+              }
+            },
+            "description": "Member-level progress evidence report."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_sprint",
+                  "error": "Sprint not found"
+                }
+              }
+            },
+            "description": "Source sprint not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_target_sprint",
+                  "error": "Target sprint not found"
+                }
+              }
+            },
+            "description": "Target sprint not found."
+          }
+        },
+        "summary": "Report source-sprint member progress evidence",
+        "tags": [
+          "Sprints"
+        ]
+      }
+    },
     "/api/sync/sources": {
       "delete": {
         "description": "Source deletion is intentionally unavailable through the API; use Studio.",

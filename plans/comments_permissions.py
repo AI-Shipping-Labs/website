@@ -41,6 +41,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from accounts.utils.user_checks import is_authenticated_user, is_staff_user
 from plans.models import Plan, SprintEnrollment
 
 
@@ -62,14 +63,6 @@ def resolve_plan_for_content_id(content_id) -> Optional[Plan]:
     )
 
 
-def _is_authenticated(user) -> bool:
-    return user is not None and getattr(user, 'is_authenticated', False)
-
-
-def _is_staff(user) -> bool:
-    return _is_authenticated(user) and bool(getattr(user, 'is_staff', False))
-
-
 def _viewer_can_view_plan(plan: Plan, viewer) -> bool:
     """Mirror ``Plan.objects.visible_to_member`` plus a staff bypass.
 
@@ -78,9 +71,9 @@ def _viewer_can_view_plan(plan: Plan, viewer) -> bool:
     Non-staff viewers must satisfy the member visibility predicate
     (owner or sprint-mate on a cohort plan).
     """
-    if not _is_authenticated(viewer):
+    if not is_authenticated_user(viewer):
         return False
-    if _is_staff(viewer):
+    if is_staff_user(viewer):
         return True
     if plan.member_id == viewer.id:
         return True
@@ -105,12 +98,12 @@ def viewer_can_write_plan_thread(plan: Plan, viewer) -> bool:
     already view it (owner + sprint-mates + staff). Anonymous viewers
     can never write, regardless of plan state.
     """
-    if not _is_authenticated(viewer):
+    if not is_authenticated_user(viewer):
         return False
     if not _viewer_can_view_plan(plan, viewer):
         return False
     if plan.visibility == 'private':
-        return _is_staff(viewer)
+        return is_staff_user(viewer)
     return True
 
 

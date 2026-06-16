@@ -7,6 +7,7 @@ same way.
 
 from __future__ import annotations
 
+from accounts.utils.user_checks import is_authenticated_user
 from content.models.enrollment import (
     SOURCE_AUTO_PROGRESS,
     SOURCE_MANUAL,
@@ -20,7 +21,7 @@ def get_active_enrollment(user, course):
     Treats ``unenrolled_at IS NULL`` as the active marker. Anonymous /
     None users return None.
     """
-    if user is None or not getattr(user, 'is_authenticated', False):
+    if not is_authenticated_user(user):
         return None
     return (
         Enrollment.objects
@@ -44,7 +45,7 @@ def ensure_enrollment(user, course, source: str = SOURCE_MANUAL):
     we can distinguish "user clicked Enroll" from "user marked a lesson
     complete and we backed into an enrollment".
     """
-    if user is None or not getattr(user, 'is_authenticated', False):
+    if not is_authenticated_user(user):
         return None, False
 
     existing = get_active_enrollment(user, course)

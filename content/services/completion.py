@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from django.utils import timezone
 
+from accounts.utils.user_checks import is_authenticated_user
 from content.models import (
     Unit,
     UserContentCompletion,
@@ -124,7 +125,7 @@ def is_completed(user, item) -> bool:
 
     Returns False for anonymous / None users without hitting the DB.
     """
-    if user is None or not getattr(user, 'is_authenticated', False):
+    if not is_authenticated_user(user):
         return False
     _require_supported(item)
 
@@ -148,7 +149,7 @@ def completed_ids_for(user, items) -> set[int]:
     PKs that have a completion row. Empty set for anonymous users or an
     empty input list.
     """
-    if user is None or not getattr(user, 'is_authenticated', False):
+    if not is_authenticated_user(user):
         return set()
     items = list(items)
     if not items:

@@ -14,6 +14,7 @@ from django.http import HttpResponseForbidden, JsonResponse
 from django.utils import timezone
 
 from accounts.models import Token
+from accounts.utils.user_checks import is_authenticated_user, is_staff_user
 
 
 def token_required(view_func):
@@ -53,7 +54,7 @@ def token_required(view_func):
         token = Token.objects.filter(key=key).select_related("user").first()
         if token is None:
             return JsonResponse({"error": "Invalid token"}, status=401)
-        if not token.user.is_staff:
+        if not is_staff_user(token.user):
             return JsonResponse({"error": "Invalid token"}, status=401)
 
         token.last_used_at = timezone.now()
@@ -106,9 +107,9 @@ def staff_session_or_token_required(view_func):
     """
     token_view = token_required(view_func)
 
-    @user_passes_test(lambda u: getattr(u, "is_authenticated", False))
+    @user_passes_test(is_authenticated_user)
     def _session_view(request, *args, **kwargs):
-        if not request.user.is_staff:
+        if not is_staff_user(request.user):
             return HttpResponseForbidden("Staff access required.")
         return view_func(request, *args, **kwargs)
 

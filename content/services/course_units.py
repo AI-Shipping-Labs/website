@@ -16,6 +16,7 @@ from urllib.parse import urlencode
 from django.utils import timezone
 from django.utils.html import strip_tags
 
+from accounts.utils.user_checks import is_authenticated_user
 from content.access import (
     LEVEL_MAIN,
     LEVEL_OPEN,
@@ -78,7 +79,7 @@ def decide_course_unit_access(user, unit: Unit) -> CourseUnitAccessDecision:
         )
 
     if (
-        not getattr(user, 'is_authenticated', False)
+        not is_authenticated_user(user)
         and effective_level == LEVEL_OPEN
         and unit.required_level is None
         and course.default_unit_required_level is None
@@ -116,7 +117,7 @@ def decide_course_unit_drip_lock(
 ) -> CourseUnitDripDecision:
     """Return whether cohort drip scheduling currently locks ``unit``."""
     if (
-        not getattr(user, 'is_authenticated', False)
+        not is_authenticated_user(user)
         or unit.available_after_days is None
     ):
         return CourseUnitDripDecision(is_locked=False)
@@ -163,7 +164,7 @@ def build_gated_course_unit_context(user, course, module, unit, decision):
             'This lesson is free with a sign-in. Create a free '
             'account in seconds to keep reading.'
         )
-    elif not getattr(user, 'is_authenticated', False):
+    elif not is_authenticated_user(user):
         if course.required_level == 0:
             cta_message = 'Sign in to access this lesson'
             tier_name = None
@@ -210,7 +211,7 @@ def build_gated_course_unit_context(user, course, module, unit, decision):
 
     signup_cta_url = ''
     signup_cta_label = ''
-    if not getattr(user, 'is_authenticated', False) and (
+    if not is_authenticated_user(user) and (
         course.required_level > 0 or is_auth_required_gate
     ):
         unit_url = unit.get_absolute_url()
@@ -238,7 +239,7 @@ def build_gated_course_unit_context(user, course, module, unit, decision):
         'has_video': bool(unit.video_url),
         'signup_cta_url': signup_cta_url,
         'signup_cta_label': signup_cta_label,
-        'user_authenticated': getattr(user, 'is_authenticated', False),
+        'user_authenticated': is_authenticated_user(user),
         'current_user_state': _current_access_state(user, course.required_level),
         'gated_card_testid': 'teaser-cta',
         'gated_icon': 'lock',
@@ -290,7 +291,7 @@ def build_course_unit_navigation_context(user, course, module, unit):
 
     completed_unit_ids = set()
     is_completed = False
-    if getattr(user, 'is_authenticated', False):
+    if is_authenticated_user(user):
         completed_unit_ids = set(
             UserCourseProgress.objects.filter(
                 user=user,
@@ -330,7 +331,7 @@ def build_course_unit_navigation_context(user, course, module, unit):
         'is_completed': is_completed,
         'next_unit': next_unit,
         'prev_unit': prev_unit,
-        'user_authenticated': getattr(user, 'is_authenticated', False),
+        'user_authenticated': is_authenticated_user(user),
         'unit_content_id': str(unit.content_id) if unit.content_id else '',
         'show_discussion': show_discussion,
         'prev_item_url': prev_unit.get_absolute_url() if prev_unit else '',
@@ -379,7 +380,7 @@ def get_prev_unit(course, current_unit):
 
 def _current_access_state(user, required_level):
     """Return signed-in user access copy for gated cards only."""
-    if not getattr(user, 'is_authenticated', False):
+    if not is_authenticated_user(user):
         return ''
     user_level = get_user_level(user)
     if user_level >= required_level:

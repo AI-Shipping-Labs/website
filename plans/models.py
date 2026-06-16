@@ -22,6 +22,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
+from accounts.utils.user_checks import is_authenticated_user, is_staff_user
 from content.access import LEVEL_MAIN
 from content.access import (
     VISIBILITY_CHOICES as TIER_VISIBILITY_CHOICES,
@@ -465,7 +466,7 @@ class PlanQuerySet(models.QuerySet):
           ``DELETE /api/sprints/<slug>/enrollments/<email>``) drops off
           the board even if the visibility was not auto-privated.
         """
-        if viewer is None or not getattr(viewer, 'is_authenticated', False):
+        if not is_authenticated_user(viewer):
             return self.none()
         viewer_enrolled = SprintEnrollment.objects.filter(
             sprint=sprint, user=viewer,
@@ -500,7 +501,7 @@ class PlanQuerySet(models.QuerySet):
           ``progress_total`` and ``progress_done`` checkpoint counts via
           the same ``Count`` pattern used elsewhere on the board.
         """
-        if viewer is None or not getattr(viewer, 'is_authenticated', False):
+        if not is_authenticated_user(viewer):
             return self.none()
         viewer_enrolled = SprintEnrollment.objects.filter(
             sprint=sprint, user=viewer,
@@ -529,7 +530,7 @@ class PlanQuerySet(models.QuerySet):
           for the same sprint) can see a cohort-visibility plan.
         - Anonymous / non-enrolled / not-cohort -> empty.
         """
-        if viewer is None or not getattr(viewer, 'is_authenticated', False):
+        if not is_authenticated_user(viewer):
             return self.none()
         base = self.filter(pk=plan_id)
         owner_q = models.Q(member=viewer)
@@ -845,9 +846,9 @@ class InterviewNoteQuerySet(models.QuerySet):
         ``external`` notes for plans where they are the member.
         Anonymous / ``None`` users see nothing.
         """
-        if user is None or not getattr(user, 'is_authenticated', False):
+        if not is_authenticated_user(user):
             return self.none()
-        if user.is_staff:
+        if is_staff_user(user):
             return self.all()
         return self.filter(member=user, visibility='external')
 

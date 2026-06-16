@@ -19,6 +19,7 @@ plan visibility.
 from django.db.models import Count, Q
 from django.urls import reverse
 
+from accounts.utils.user_checks import is_authenticated_user
 from plans.models import Plan, Sprint, SprintEnrollment
 
 
@@ -43,7 +44,7 @@ def build_sprint_plan_card_context(user):
     (``plan`` is ``None``); both calling templates omit the card when
     ``plan`` is falsy.
     """
-    if user is None or not getattr(user, 'is_authenticated', False):
+    if not is_authenticated_user(user):
         return {
             'plan': None,
             'plan_progress_total': 0,
@@ -99,7 +100,7 @@ def build_active_sprint_opportunities_context(user, user_level, plan=None):
     at the existing public sprint detail route. Broader discovery links use
     the shipped ``/activities`` page.
     """
-    if user is None or not getattr(user, 'is_authenticated', False):
+    if not is_authenticated_user(user):
         return {
             'active_sprint_opportunities': [],
             'active_sprint_discovery_url': '/activities',

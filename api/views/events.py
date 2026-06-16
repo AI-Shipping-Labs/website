@@ -34,6 +34,7 @@ from events.models.event import (
     EXTERNAL_HOST_CHOICES,
 )
 from events.services.host_invite import maybe_send_initial_host_invite
+from events.services.host_registration import maybe_register_host_as_attendee
 from integrations.services.banner_generator import (
     is_enabled as banner_generator_is_enabled,
 )
@@ -742,6 +743,7 @@ def events_collection(request):
     # EVENTS_HOST_INVITE_EMAIL, and swallows exceptions. Called after the
     # save and the create_zoom step so the invite carries zoom_join_url.
     maybe_send_initial_host_invite(event)
+    maybe_register_host_as_attendee(event)
     # Banner enqueue runs LAST in the compose-time chain (zoom -> host invite ->
     # banner) so any populated state is current. Soft-fails independently with a
     # ``banner_error`` key; never rolls back the event (issue #995).
@@ -945,6 +947,7 @@ def event_detail(request, slug):
     # flips a draft to a published status, or adds a host_email to a
     # not-yet-invited event, triggers the one-time invite.
     maybe_send_initial_host_invite(event)
+    maybe_register_host_as_attendee(event)
     # Banner enqueue runs after the save + zoom + host-invite steps so a forced
     # re-render reflects any populated state (issue #995). Explicit-only here.
     banner_task_id, banner_error = _maybe_enqueue_banner(event, generate_banner)

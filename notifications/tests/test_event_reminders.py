@@ -14,6 +14,7 @@ from django.test import TestCase
 from freezegun import freeze_time
 
 from events.models import Event, EventRegistration
+from events.services.host_registration import maybe_register_host_as_attendee
 from notifications.models import EventReminderLog, Notification
 from notifications.services.event_reminders import check_event_reminders
 
@@ -62,6 +63,33 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_auto_registered_host_receives_24h_reminder(
+        self, mock_slack, mock_ses,
+    ):
+        """An auto-registered host flows through the normal reminder job."""
+        event = Event.objects.create(
+            title='Host Reminder Event',
+            slug='host-reminder-event',
+            start_datetime=FROZEN_NOW + timedelta(hours=24),
+            status='upcoming',
+            host_email=self.user.email,
+        )
+        maybe_register_host_as_attendee(event)
+
+        check_event_reminders()
+
+        self.assertEqual(Notification.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(
+            EventReminderLog.objects.filter(
+                event=event,
+                user=self.user,
+                interval='24h',
+            ).count(),
+            1,
+        )
+
+    @freeze_time(FROZEN_NOW)
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_20m_reminder_for_registered_users(self, mock_slack, mock_ses):
         """Events starting in ~20 min should get reminders for registered users."""
         event = Event.objects.create(
@@ -77,6 +105,50 @@ class CheckEventRemindersTest(TestCase):
         notif = Notification.objects.first()
         self.assertIn('20 minutes', notif.title)
         self.assertEqual(notif.notification_type, 'event_reminder')
+
+    @freeze_time(FROZEN_NOW)
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_auto_registered_host_and_attendee_get_one_20m_reminder_each(
+        self, mock_slack, mock_ses,
+    ):
+        """Host auto-registration must not double-remind the host."""
+        event = Event.objects.create(
+            title='Host And Attendee 20m Event',
+            slug='host-and-attendee-20m-event',
+            start_datetime=FROZEN_NOW + timedelta(minutes=20),
+            status='upcoming',
+            host_email=self.user.email,
+        )
+        maybe_register_host_as_attendee(event)
+        EventRegistration.objects.create(event=event, user=self.user2)
+
+        check_event_reminders()
+        check_event_reminders()
+
+        self.assertEqual(Notification.objects.count(), 2)
+        self.assertEqual(
+            EventReminderLog.objects.filter(
+                event=event,
+                interval='20m',
+            ).count(),
+            2,
+        )
+        self.assertEqual(
+            EventReminderLog.objects.filter(
+                event=event,
+                user=self.user,
+                interval='20m',
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EventReminderLog.objects.filter(
+                event=event,
+                user=self.user2,
+                interval='20m',
+            ).count(),
+            1,
+        )
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')

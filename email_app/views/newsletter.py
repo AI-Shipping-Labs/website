@@ -14,13 +14,12 @@ from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from accounts.services.verification import resolve_unverified_ttl_days
+from accounts.utils.tokens import JWT_ALGORITHM, generate_user_action_token
 from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
-
-JWT_ALGORITHM = "HS256"
 
 
 def _generate_verification_token(user_id, redirect_to=None, expiry_hours=24):
@@ -34,17 +33,12 @@ def _generate_verification_token(user_id, redirect_to=None, expiry_hours=24):
     Returns:
         str: The encoded JWT token.
     """
-    import datetime
-
-    payload = {
-        "user_id": user_id,
-        "action": "verify_email",
-        "exp": datetime.datetime.now(datetime.timezone.utc)
-        + datetime.timedelta(hours=expiry_hours),
-    }
-    if redirect_to:
-        payload["redirect_to"] = redirect_to
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return generate_user_action_token(
+        user_id,
+        "verify_email",
+        expiry_hours=expiry_hours,
+        redirect_to=redirect_to,
+    )
 
 
 def _generate_unsubscribe_token(user_id):
@@ -56,11 +50,7 @@ def _generate_unsubscribe_token(user_id):
     Returns:
         str: The encoded JWT token.
     """
-    payload = {
-        "user_id": user_id,
-        "action": "unsubscribe",
-    }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return generate_user_action_token(user_id, "unsubscribe")
 
 
 def _send_subscribe_verification_email(user, redirect_to=None):

@@ -32,14 +32,11 @@ is written ONLY after the work succeeds (Stripe-webhook ordering), so a
 transient failure (signalled by raising) leaves no row and the sender retries.
 """
 
-import datetime
 import json
 import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-import jwt
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
@@ -47,6 +44,7 @@ from django.utils import timezone
 from accounts.models import TierOverride
 from accounts.services.email_resolution import normalize_email, resolve_user_by_email
 from accounts.utils.display import display_name
+from accounts.utils.tokens import generate_user_action_token
 from community.models import CommunityAuditLog
 from content.access import LEVEL_MAIN
 from email_app.services import EmailService
@@ -400,23 +398,16 @@ def _send_welcome(user, course, actions):
 def _welcome_context(user, course):
     site_url = site_base_url().rstrip("/")
 
-    reset_payload = {
-        "user_id": user.pk,
-        "action": "password_reset",
-        "exp": (
-            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)
-        ),
-    }
-    reset_token = jwt.encode(reset_payload, settings.SECRET_KEY, algorithm="HS256")
+    reset_token = generate_user_action_token(
+        user.pk,
+        "password_reset",
+        expiry_hours=24,
+    )
 
     # Welcome emails get no auto unsubscribe footer (transactional/welcome),
     # so we mint the opt-out link in-template using the same JWT mechanism the
     # promotional unsubscribe path uses.
-    opt_out_token = jwt.encode(
-        {"user_id": user.pk, "action": "unsubscribe"},
-        settings.SECRET_KEY,
-        algorithm="HS256",
-    )
+    opt_out_token = generate_user_action_token(user.pk, "unsubscribe")
 
     return {
         "user_name": display_name(user),

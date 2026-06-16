@@ -1,0 +1,70 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}{% if host %}Edit Host{% else %}New Host{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_host_list' %}" class="hover:text-foreground">Hosts</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">{% if host %}{{ host.name }}{% else %}New Host{% endif %}</span>
+  </div>
+  <h1 class="text-2xl font-semibold text-foreground">{% if host %}Edit Host{% else %}New Host{% endif %}</h1>
+</div>
+
+{% url 'studio_host_list' as host_cancel_url %}
+<form method="post" class="space-y-6 max-w-3xl" data-testid="studio-host-form">
+  {% csrf_token %}
+
+  <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="host-name">Name</label>
+      <input type="text" name="name" id="host-name" value="{{ form_values.name }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      {% if errors.name %}<p class="text-xs text-red-400 mt-1" data-testid="error-name">{{ errors.name }}</p>{% endif %}
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="host-slug">Slug</label>
+      <input type="text" name="slug" id="host-slug" value="{{ form_values.slug }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      {% if errors.slug %}<p class="text-xs text-red-400 mt-1" data-testid="error-slug">{{ errors.slug }}</p>{% endif %}
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="host-bio">Bio (Markdown)</label>
+      <textarea name="bio" id="host-bio" rows="7"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ form_values.bio }}</textarea>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="host-photo-url">Photo URL</label>
+      <input type="url" name="photo_url" id="host-photo-url" value="{{ form_values.photo_url }}"
+             placeholder="Leave blank to use the default static photo"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="host-email">Display email</label>
+      <input type="email" name="email" id="host-email" value="{{ form_values.email }}"
+             placeholder="host@example.com"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">
+        Shown as contact info only. Event calendar invites still use the event's host email setting.
+      </p>
+      {% if errors.email %}<p class="text-xs text-red-400 mt-1" data-testid="error-email">{{ errors.email }}</p>{% endif %}
+    </div>
+
+    <div>
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" name="is_active" {% if form_values.is_active %}checked{% endif %}
+               class="rounded border-border text-accent focus:ring-accent">
+        <span class="text-sm text-foreground">Active for event assignment</span>
+      </label>
+    </div>
+  </div>
+
+  {% include "studio/includes/forms/action_row.html" with submit_label="Save Host" cancel_url=host_cancel_url %}
+</form>
+{% endblock %}

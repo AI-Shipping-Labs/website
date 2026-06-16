@@ -5,7 +5,13 @@ from django.contrib import admin
 from django.utils import timezone
 
 from content.admin.widgets import TimestampEditorWidget
-from events.models import Event, EventFeedback, EventInstructor, EventRegistration
+from events.models import (
+    Event,
+    EventFeedback,
+    EventInstructor,
+    EventRegistration,
+    Host,
+)
 from studio.admin_links import studio_link
 
 
@@ -112,6 +118,18 @@ class EventInstructorInline(admin.TabularInline):
     raw_id_fields = ['instructor']
 
 
+@admin.register(Host)
+class HostAdmin(admin.ModelAdmin):
+    """Admin for event hosts."""
+
+    list_display = ['name', 'slug', 'email', 'is_active', 'updated_at']
+    list_filter = ['is_active']
+    search_fields = ['name', 'slug', 'email', 'bio']
+    prepopulated_fields = {'slug': ('name',)}
+    readonly_fields = ['bio_html', 'created_at', 'updated_at']
+    ordering = ['name']
+
+
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
     form = EventAdminForm
@@ -127,7 +145,11 @@ class EventAdmin(admin.ModelAdmin):
         make_upcoming, make_completed, make_cancelled,
         publish_recordings, unpublish_recordings,
     ]
-    inlines = [EventInstructorInline, EventRegistrationInline, EventFeedbackInline]
+    inlines = [
+        EventInstructorInline,
+        EventRegistrationInline,
+        EventFeedbackInline,
+    ]
 
     fieldsets = (
         (None, {

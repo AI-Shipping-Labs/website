@@ -117,6 +117,7 @@ from studio.views.events import (
     event_registrations_csv,
     event_send_followup,
 )
+from studio.views.hosts import host_create, host_edit, host_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
 from studio.views.member_notes import (
     member_note_create,
@@ -383,6 +384,9 @@ urlpatterns = [
     path('events/', event_list, name='studio_event_list'),
     path('events/past/', event_list_past, name='studio_event_list_past'),
     path('events/new', event_create, name='studio_event_new'),
+    path('hosts/', host_list, name='studio_host_list'),
+    path('hosts/new', host_create, name='studio_host_new'),
+    path('hosts/<int:host_id>/edit', host_edit, name='studio_host_edit'),
     # Duplicate-event merge tool (issue #881). Literal segments, registered
     # before the ``<int:event_id>`` routes (non-int so never swallowed).
     path(

@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Avg
+from django.db.models import Avg, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -23,7 +23,7 @@ from accounts.services.timezones import (
     get_timezone_label,
     is_valid_timezone,
 )
-from events.models import Event, EventFeedback, EventRegistration
+from events.models import Event, EventFeedback, EventHost, EventRegistration, Host
 from events.models.event import EXTERNAL_HOST_CHOICES
 from events.services.host_invite import (
     maybe_send_initial_host_invite,
@@ -221,6 +221,55 @@ def _event_form_context(event, default_tz):
             context['resolved_end_local'] = _render_in_tz(
                 event.end_datetime, tz_name,
             ).strftime('%d/%m/%Y %H:%M')
+    return context
+
+
+def _selected_host_ids_for_event(event):
+    if event is None:
+        return []
+    return [host.id for host in event.ordered_hosts]
+
+
+def _host_options(selected_host_ids=None):
+    selected_host_ids = selected_host_ids or []
+    return Host.objects.filter(
+        Q(is_active=True) | Q(id__in=selected_host_ids)
+    ).order_by('name')
+
+
+def _validate_host_ids(raw_values):
+    host_ids = []
+    for value in raw_values:
+        try:
+            host_id = int(value)
+        except (TypeError, ValueError):
+            return [], 'Unknown host selected.'
+        host_ids.append(host_id)
+    if len(set(host_ids)) != len(host_ids):
+        return [], 'Duplicate hosts are not allowed.'
+    existing_ids = set(
+        Host.objects.filter(id__in=host_ids).values_list('id', flat=True)
+    )
+    if any(host_id not in existing_ids for host_id in host_ids):
+        return [], 'Unknown host selected.'
+    return host_ids, ''
+
+
+def _set_event_hosts(event, host_ids):
+    EventHost.objects.filter(event=event).delete()
+    EventHost.objects.bulk_create([
+        EventHost(event=event, host_id=host_id, position=position)
+        for position, host_id in enumerate(host_ids)
+    ])
+    event._prefetched_objects_cache = {}
+
+
+def _apply_host_context(context, selected_host_ids=None):
+    selected_host_ids = selected_host_ids or _selected_host_ids_for_event(
+        context.get('event'),
+    )
+    context['host_options'] = _host_options(selected_host_ids)
+    context['selected_host_ids'] = selected_host_ids
     return context
 
 
@@ -530,10 +579,16 @@ def event_create(request):
         'custom_url': '',
         'host_email': '',
     }
+    selected_host_ids = []
 
     if request.method == 'POST':
         for key in form_values:
             form_values[key] = request.POST.get(key, form_values[key]).strip()
+        selected_host_ids, host_error = _validate_host_ids(
+            request.POST.getlist('host_ids'),
+        )
+        if host_error:
+            errors['host_ids'] = host_error
 
         title = form_values['title']
         slug = form_values['slug'] or slugify(title)
@@ -601,6 +656,7 @@ def event_create(request):
             if platform == 'custom':
                 event.zoom_join_url = custom_url
             event.save()
+            _set_event_hosts(event, selected_host_ids)
             # Issue #895: enqueue an auto-banner render for the new event
             # (fire-and-forget; no-ops when banner-generator is disabled or
             # a cover image is supplied).
@@ -634,6 +690,7 @@ def event_create(request):
             and request.method != 'POST'
         ),
     }
+    _apply_host_context(context, selected_host_ids)
     return render(request, 'studio/events/form.html', context)
 
 
@@ -649,6 +706,29 @@ def event_edit(request, event_id):
         # mutation so we can detect a transition INTO ``cancelled`` after
         # save and notify series subscribers (CANCEL their calendar entry).
         old_status = Event.objects.values_list('status', flat=True).get(pk=event.pk)
+        selected_host_ids, host_error = _validate_host_ids(
+            request.POST.getlist('host_ids'),
+        )
+        if host_error:
+            context = _event_form_context(event, default_tz)
+            context['form_action'] = 'edit'
+            context['is_synced'] = synced
+            context['github_edit_url'] = get_github_edit_url(event)
+            context['notify_url'] = reverse(
+                'studio_event_notify', kwargs={'event_id': event.pk},
+            )
+            context['announce_url'] = reverse(
+                'studio_event_announce_slack',
+                kwargs={'event_id': event.pk},
+            )
+            context['form_values'] = {}
+            context['errors'] = {'host_ids': host_error}
+            context['external_host_choices'] = EXTERNAL_HOST_CHOICES
+            tz_value = context['timezone_value']
+            context['timezone_label'] = get_timezone_label(tz_value) or tz_value
+            context['timezone_options'] = build_timezone_options()
+            _apply_host_context(context, selected_host_ids)
+            return render(request, 'studio/events/form.html', context)
         if synced:
             # Synced events: only allow operational fields
             event.status = request.POST.get('status', event.status)
@@ -682,6 +762,7 @@ def event_edit(request, event_id):
             event.host_email = request.POST.get('host_email', '').strip()
 
             event.save()
+            _set_event_hosts(event, selected_host_ids)
             # Issue #857: publishing/editing a series occurrence into a
             # registrable state auto-enrolls existing series registrants.
             # Best-effort, idempotent, gated on ``is_upcoming``.
@@ -738,6 +819,7 @@ def event_edit(request, event_id):
                     get_timezone_label(tz_value) or tz_value
                 )
                 context['timezone_options'] = build_timezone_options()
+                _apply_host_context(context, selected_host_ids)
                 return render(request, 'studio/events/form.html', context)
             start_dt, end_dt = _parse_event_datetime(request.POST, posted_tz)
             event.start_datetime = start_dt
@@ -772,6 +854,7 @@ def event_edit(request, event_id):
             event.host_email = request.POST.get('host_email', '').strip()
 
             event.save()
+            _set_event_hosts(event, selected_host_ids)
 
             # Issue #857: publishing/editing a series occurrence into a
             # registrable state auto-enrolls existing series registrants.
@@ -828,6 +911,7 @@ def event_edit(request, event_id):
     tz_value = context['timezone_value']
     context['timezone_label'] = get_timezone_label(tz_value) or tz_value
     context['timezone_options'] = build_timezone_options()
+    _apply_host_context(context)
     # Issue #701: surface registered attendees on the edit page so
     # operators can see and export the roster without dropping into
     # Django admin. ``-registered_at`` matches the model's default

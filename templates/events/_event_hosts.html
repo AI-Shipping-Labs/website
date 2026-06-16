@@ -1,0 +1,26 @@
+{% if event_hosts %}
+<section class="mb-12" data-testid="event-hosts">
+  <h2 class="mb-6 text-2xl font-semibold tracking-tight">Hosted by</h2>
+  <div class="grid gap-5 sm:grid-cols-2">
+    {% for host in event_hosts %}
+    <article class="rounded-lg border border-border bg-card p-5" data-testid="event-host">
+      <div class="flex items-start gap-4">
+        <img src="{{ host.display_photo_url }}" alt="{{ host.name }}"
+             class="h-20 w-20 flex-none rounded-lg border border-border object-cover">
+        <div class="min-w-0">
+          <h3 class="text-lg font-semibold text-foreground">{{ host.name }}</h3>
+          {% if host.email %}
+          <a href="mailto:{{ host.email }}" class="mt-1 inline-flex text-sm text-accent hover:underline">{{ host.email }}</a>
+          {% endif %}
+        </div>
+      </div>
+      {% if host.bio_html %}
+      <div class="prose mt-4 max-w-none text-sm">
+        {{ host.bio_html|safe }}
+      </div>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}

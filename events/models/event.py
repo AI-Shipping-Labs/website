@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 
@@ -99,6 +100,68 @@ EXTERNAL_HOST_CHOICES = [
     ('Luma', 'Luma'),
     ('DataTalksClub', 'DataTalksClub'),
 ]
+
+_STATIC_HOST_PHOTO_BY_SLUG = {
+    'alexey-grigorev': 'alexey.png',
+    'valeriia-kuka': 'valeriia.png',
+}
+
+
+def render_host_markdown(text):
+    """Convert event host markdown to HTML without external-link rewriting."""
+    return render_markdown(
+        text,
+        include_external_links=False,
+    )
+
+
+class Host(TimestampedModelMixin, models.Model):
+    """A person who hosts community events."""
+
+    name = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=200, unique=True)
+    bio = models.TextField(
+        blank=True, default='',
+        help_text='Markdown bio rendered to HTML on save.',
+    )
+    bio_html = models.TextField(
+        blank=True, default='', editable=False,
+        help_text='Auto-rendered HTML from bio markdown.',
+    )
+    photo_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text='Photo URL. Falls back to a static asset for seeded hosts.',
+    )
+    email = models.EmailField(
+        blank=True,
+        default='',
+        help_text='Display/contact email only; not used for calendar invites.',
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        """Render bio markdown to bio_html on save."""
+        if self.bio:
+            self.bio_html = render_host_markdown(self.bio)
+        else:
+            self.bio_html = ''
+        super().save(*args, **kwargs)
+
+    @property
+    def display_photo_url(self):
+        """The configured photo, falling back to the static asset by slug."""
+        if self.photo_url:
+            return self.photo_url
+        filename = _STATIC_HOST_PHOTO_BY_SLUG.get(self.slug, f'{self.slug}.png')
+        return static(filename)
 
 
 class Event(
@@ -235,6 +298,16 @@ class Event(
             'Instructors / speakers for this event. Order is controlled via '
             'the EventInstructor.position field; the first instructor is the '
             'primary speaker shown on listings and cards.'
+        ),
+    )
+    hosts = models.ManyToManyField(
+        'events.Host',
+        through='events.EventHost',
+        related_name='events',
+        blank=True,
+        help_text=(
+            'Hosts for this event. Order is controlled via the '
+            'EventHost.position field.'
         ),
     )
     cover_image_url = models.URLField(
@@ -448,6 +521,19 @@ class Event(
         return list(self.instructors.order_by('eventinstructor__position'))
 
     @property
+    def ordered_hosts(self):
+        """Return ``Host`` rows in ``EventHost.position`` order."""
+        prefetched = getattr(self, '_prefetched_objects_cache', {})
+        if 'event_host_links' in prefetched:
+            return [link.host for link in prefetched['event_host_links']]
+        return [
+            link.host
+            for link in self.event_host_links.select_related('host').order_by(
+                'position',
+            )
+        ]
+
+    @property
     def primary_instructor(self):
         """First instructor (speaker) by position, or ``None`` when unset."""
         return self.instructors.order_by(
@@ -597,3 +683,29 @@ class EventInstructor(models.Model):
 
     def __str__(self):
         return f'{self.event} - {self.instructor} (#{self.position})'
+
+
+class EventHost(models.Model):
+    """Through model linking Event -> Host with display order."""
+
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='event_host_links',
+    )
+    host = models.ForeignKey(
+        'events.Host',
+        on_delete=models.PROTECT,
+        related_name='event_host_links',
+    )
+    position = models.PositiveIntegerField(
+        default=0,
+        help_text='Display order; 0 is the primary host.',
+    )
+
+    class Meta:
+        ordering = ['position']
+        unique_together = [('event', 'host')]
+
+    def __str__(self):
+        return f'{self.event} - {self.host} (#{self.position})'

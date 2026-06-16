@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Avg, Count, Prefetch, Q
+from django.db.models import Avg, Count, Prefetch
 from django.http import Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -38,6 +38,11 @@ from events.services.cancel_token import (
 from events.services.display_time import (
     build_event_time_display,
     should_display_event_location,
+)
+from events.services.time_windows import (
+    past_events_queryset,
+    past_recording_events_queryset,
+    upcoming_events_queryset,
 )
 
 VALID_EVENTS_FILTERS = {'all', 'upcoming', 'past'}
@@ -239,56 +244,31 @@ def events_list(request):
     recording URL, supports tag filtering via ``?tag=``, and paginates at
     20 per page.
     """
-    # Exclude draft events from public listing
-    events = Event.objects.exclude(status='draft')
-
     filter_mode = request.GET.get('filter', 'all').strip().lower()
     if filter_mode not in VALID_EVENTS_FILTERS:
         filter_mode = 'all'
 
     selected_tags = _get_selected_tags(request)
 
-    # Issue #713: derive upcoming / past from timestamps so a stale
-    # ``status='upcoming'`` row whose effective end has passed lands
-    # in the past bucket immediately. ``effective end`` is
-    # ``end_datetime`` when set, else ``start_datetime + 1h``.
     now = timezone.now()
-    one_hour = timedelta(hours=1)
-    upcoming_filter = (
-        Q(end_datetime__gt=now)
-        | Q(end_datetime__isnull=True, start_datetime__gt=now - one_hour)
+    upcoming_events = (
+        upcoming_events_queryset(now=now)
+        .select_related('event_series')
+        .order_by('start_datetime')
     )
-    past_filter = (
-        Q(end_datetime__lte=now)
-        | Q(end_datetime__isnull=True, start_datetime__lte=now - one_hour)
-    )
-
-    upcoming_events = events.filter(upcoming_filter).exclude(
-        status='cancelled',
-    ).select_related('event_series').order_by('start_datetime')
 
     # For the "past" surface we show finished events with a recording
     # (and honor the ``published`` flag). The default "all" view does not
     # require a recording. Issue #863: cancelled occurrences are hidden from
     # every public listing, so neither bucket includes them.
-    past_with_recording_qs = events.filter(past_filter).filter(
-        published=True,
-    ).exclude(
-        status='cancelled',
-    ).exclude(
-        recording_url='',
-    ).exclude(
-        recording_url__isnull=True,
+    past_with_recording_qs = past_recording_events_queryset(
+        now=now,
     ).order_by('-start_datetime')
 
     # ``past_all_qs`` = any non-cancelled event past its effective end.
     # Issue #863: cancelled events no longer appear here (previously they were
     # added back via ``Q(status='cancelled')``).
-    past_all_qs = events.filter(
-        past_filter,
-    ).exclude(
-        status='cancelled',
-    ).order_by('-start_datetime')
+    past_all_qs = past_events_queryset(now=now).order_by('-start_datetime')
 
     # Collect all tags from past-with-recording events for the tag filter UI
     all_past_tags = set()

@@ -28,6 +28,7 @@ from content.models import (
 from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from content.tier_config import get_tiers_with_features
 from events.models import Event
+from events.services.time_windows import registered_upcoming_events
 from integrations.config import get_config
 from plans.dashboard import (
     build_active_sprint_opportunities_context,
@@ -676,15 +677,7 @@ def _get_upcoming_events(user):
     appears. Cancelled and draft events are excluded regardless of
     timestamps.
     """
-    from events.models import EventRegistration
-    now = timezone.now()
-    registrations = EventRegistration.objects.filter(
-        user=user,
-        event__start_datetime__gt=now,
-    ).exclude(
-        event__status__in=['draft', 'cancelled'],
-    ).select_related('event').order_by('event__start_datetime')[:3]
-    return [reg.event for reg in registrations]
+    return registered_upcoming_events(user)
 
 
 def _get_starting_soon_event(user):

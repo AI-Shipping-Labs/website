@@ -87,7 +87,11 @@ from api.views.redirects import (
     redirects_collection,
 )
 from api.views.ses_events_list import ses_events_dispatch
-from api.views.sprints import sprint_detail, sprints_collection
+from api.views.sprints import (
+    sprint_detail,
+    sprint_progress_evidence,
+    sprints_collection,
+)
 from api.views.sync_sources import sync_source_trigger, sync_sources_collection
 from api.views.tier_overrides import tier_overrides_grant
 from api.views.tier_reconcile import (
@@ -336,6 +340,11 @@ urlpatterns = [
         "sprints",
         sprints_collection,
         name="api_sprints_collection",
+    ),
+    path(
+        "sprints/<slug:slug>/progress-evidence",
+        sprint_progress_evidence,
+        name="api_sprint_progress_evidence",
     ),
     path(
         "sprints/<slug:slug>",

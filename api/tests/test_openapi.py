@@ -139,7 +139,11 @@ class SprintsModuleHasOpenApiSpecTest(TestCase):
     def test_every_sprints_view_has_openapi_spec_attribute(self):
         import api.views.sprints as sprints_module
 
-        view_names = ["sprints_collection", "sprint_detail"]
+        view_names = [
+            "sprints_collection",
+            "sprint_detail",
+            "sprint_progress_evidence",
+        ]
         for name in view_names:
             view = getattr(sprints_module, name)
             spec = getattr(view, OPENAPI_SPEC_ATTR, None)
@@ -169,6 +173,15 @@ class SprintsModuleHasOpenApiSpecTest(TestCase):
             set(spec["methods"].keys()),
             {"GET", "PATCH", "DELETE"},
         )
+
+    def test_methods_match_require_methods_for_sprint_progress_evidence(self):
+        import api.views.sprints as sprints_module
+
+        spec = getattr(
+            sprints_module.sprint_progress_evidence,
+            OPENAPI_SPEC_ATTR,
+        )
+        self.assertEqual(set(spec["methods"].keys()), {"GET"})
 
 
 class AllApiViewsHaveOpenApiSpecTest(TestCase):

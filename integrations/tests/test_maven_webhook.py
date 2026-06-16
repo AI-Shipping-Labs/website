@@ -281,6 +281,68 @@ class MavenEnrolledTest(TestCase):
         )
 
     @patch("integrations.services.maven.EmailService")
+    def test_lapsed_override_slack_member_is_not_already_member(self, email_service):
+        user = User.objects.create_user(
+            email="lapsed@test.com", password="x", slack_member=True,
+        )
+        TierOverride.objects.create(
+            user=user,
+            original_tier=user.tier,
+            override_tier=self.main,
+            expires_at=timezone.now() - timedelta(days=1),
+            is_active=True,
+        )
+
+        response = self._post(
+            {"event": "user_cohort.enrolled", "email": "lapsed@test.com"}
+        )
+
+        self.assertEqual(response.json(), {"status": "onboarded"})
+        email_service.return_value.send.assert_called_once()
+        active = TierOverride.objects.filter(user=user, is_active=True)
+        self.assertEqual(active.count(), 1)
+        self.assertGreater(
+            active.first().expires_at, timezone.now() + timedelta(days=3000)
+        )
+
+    @patch("integrations.services.maven.EmailService")
+    def test_inactive_or_basic_override_slack_member_is_not_already_member(
+        self, email_service,
+    ):
+        basic = Tier.objects.get(slug="basic")
+        inactive = User.objects.create_user(
+            email="inactive@test.com", password="x", slack_member=True,
+        )
+        TierOverride.objects.create(
+            user=inactive,
+            original_tier=inactive.tier,
+            override_tier=self.main,
+            expires_at=timezone.now() + timedelta(days=30),
+            is_active=False,
+        )
+        basic_only = User.objects.create_user(
+            email="basic-only@test.com", password="x", slack_member=True,
+        )
+        TierOverride.objects.create(
+            user=basic_only,
+            original_tier=basic_only.tier,
+            override_tier=basic,
+            expires_at=timezone.now() + timedelta(days=30),
+            is_active=True,
+        )
+
+        inactive_response = self._post(
+            {"event": "user_cohort.enrolled", "email": "inactive@test.com"}
+        )
+        basic_response = self._post(
+            {"event": "user_cohort.enrolled", "email": "basic-only@test.com"}
+        )
+
+        self.assertEqual(inactive_response.json(), {"status": "onboarded"})
+        self.assertEqual(basic_response.json(), {"status": "onboarded"})
+        self.assertEqual(email_service.return_value.send.call_count, 2)
+
+    @patch("integrations.services.maven.EmailService")
     def test_transient_failure_returns_500_and_writes_no_dedupe_row(self, email_service):
         with patch(
             "integrations.services.maven._grant_or_refresh_override",

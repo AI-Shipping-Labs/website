@@ -19,6 +19,9 @@ def pricing(request):
     stripe_links = settings.STRIPE_PAYMENT_LINKS
 
     user = request.user
+    # Pricing account actions are subscription/base-tier aware by design:
+    # temporary overrides are shown through ``build_tier_state`` below, but
+    # checkout-vs-portal decisions follow the stored paid subscription.
     is_paid_member = (
         user.is_authenticated
         and user.tier is not None

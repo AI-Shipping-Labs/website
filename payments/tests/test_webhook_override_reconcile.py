@@ -185,6 +185,67 @@ class SubscriptionUpdatedOverrideReconcileTest(TestCase):
         self.assertEqual(user.tier, self.free)
         self.assertIsNone(user.billing_period_end)
 
+    def test_downgrade_keeps_community_when_main_override_survives(self):
+        """Base tier downgrades below Main, but an active Main override keeps
+        effective community access and suppresses immediate removal."""
+        self.basic.stripe_price_id_monthly = "price_basic_monthly"
+        self.basic.save(update_fields=["stripe_price_id_monthly"])
+
+        user = User.objects.create_user(email="downgrade-override@test.com")
+        user.tier = self.main
+        user.subscription_id = "sub_downgrade_override"
+        user.stripe_customer_id = "cus_downgrade_override"
+        user.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+        override = _make_override(user, self.main)
+
+        subscription_data = {
+            "id": "sub_downgrade_override",
+            "customer": "cus_downgrade_override",
+            "status": "active",
+            "cancel_at_period_end": False,
+            "current_period_end": 1774396800,
+            "items": {"data": [{"price": {"id": "price_basic_monthly"}}]},
+        }
+
+        with patch("payments.services._community_remove") as mock_remove:
+            handle_subscription_updated(subscription_data)
+
+        user.refresh_from_db()
+        override.refresh_from_db()
+        self.assertEqual(user.tier, self.basic)
+        self.assertTrue(override.is_active)
+        self.assertEqual(get_user_level(user), 20)
+        mock_remove.assert_not_called()
+
+    def test_downgrade_removes_community_without_surviving_main_override(self):
+        """The effective-tier guard still removes access when no override
+        keeps the user at Main or above after a base-tier downgrade."""
+        self.basic.stripe_price_id_monthly = "price_basic_monthly"
+        self.basic.save(update_fields=["stripe_price_id_monthly"])
+
+        user = User.objects.create_user(email="downgrade-no-override@test.com")
+        user.tier = self.main
+        user.subscription_id = "sub_downgrade_no_override"
+        user.stripe_customer_id = "cus_downgrade_no_override"
+        user.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+
+        subscription_data = {
+            "id": "sub_downgrade_no_override",
+            "customer": "cus_downgrade_no_override",
+            "status": "active",
+            "cancel_at_period_end": False,
+            "current_period_end": 1774396800,
+            "items": {"data": [{"price": {"id": "price_basic_monthly"}}]},
+        }
+
+        with patch("payments.services._community_remove") as mock_remove:
+            handle_subscription_updated(subscription_data)
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier, self.basic)
+        self.assertEqual(get_user_level(user), 10)
+        mock_remove.assert_called_once()
+
     def test_reactivation_keeps_pending_tier_behaviour_no_disturbance(self):
         """Regression #968: cancel_at_period_end=False clears pending_tier on a
         same-tier no-change update; override-retirement does not disturb it."""

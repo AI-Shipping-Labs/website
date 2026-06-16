@@ -131,7 +131,23 @@ class PricingAccountPlanStateTest(TestCase):
         self.assertEqual(states["premium"]["badge"], "Temporary access")
         self.assertEqual(states["premium"]["action_kind"], "portal")
         self.assertEqual(states["main"]["action_kind"], "portal")
+        self.assertTrue(response.context["is_paid_member"])
         self.assertContains(response, "Temporary access")
+
+    def test_free_member_with_override_is_not_paid_for_subscription_state(self):
+        user = self._user("free-override-pricing@test.com", self.free)
+        TierOverride.objects.create(
+            user=user,
+            original_tier=self.free,
+            override_tier=self.premium,
+            expires_at=timezone.now() + timedelta(days=14),
+        )
+
+        states, response = self._pricing_states(user)
+
+        self.assertFalse(response.context["is_paid_member"])
+        self.assertEqual(states["free"]["badge"], "Current free plan")
+        self.assertEqual(states["premium"]["badge"], "Temporary access")
 
     def test_stale_subscription_uses_safe_management_for_paid_tiers(self):
         user = self._user("stale-pricing@test.com", self.free, "sub_stale")

@@ -30,6 +30,7 @@ from django.utils import timezone
 
 from email_app.models.ses_event import SesEvent
 from studio.decorators import staff_required
+from studio.utils import coerce_page_number
 
 # Meta filter values used by the type chips. ``TYPE_FILTER_ALL`` is the
 # no-op filter; ``TYPE_FILTER_OTHER`` maps to the bucket of event types
@@ -141,19 +142,6 @@ def _pager_querystring(request, page_number):
     return '?' + params.urlencode()
 
 
-def _coerce_page_number(raw, num_pages):
-    """Clamp the ``?page=`` query param into ``[1, num_pages]``."""
-    try:
-        page_num = int(raw)
-    except (TypeError, ValueError):
-        return 1
-    if page_num < 1:
-        return 1
-    if page_num > num_pages:
-        return num_pages
-    return page_num
-
-
 def _last_30_day_counts():
     """Compute the three small headline counters shown above the chips.
 
@@ -206,7 +194,7 @@ def ses_event_list(request):
     )
 
     paginator = Paginator(filtered, SES_EVENT_PAGE_SIZE)
-    page_number = _coerce_page_number(
+    page_number = coerce_page_number(
         request.GET.get('page'), paginator.num_pages or 1,
     )
     page = paginator.page(page_number)

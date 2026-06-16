@@ -26,6 +26,7 @@ from django.utils import timezone
 from analytics.models import SIGNUP_PATH_CHOICES, UserAttribution
 from integrations.models import UtmCampaign
 from studio.decorators import staff_required
+from studio.utils import coerce_page_number
 
 SIGNUP_PATH_VALUES = [value for value, _label in SIGNUP_PATH_CHOICES]
 SIGNUP_PATH_LABELS = dict(SIGNUP_PATH_CHOICES)
@@ -128,23 +129,6 @@ def _pager_querystring(request, page_number):
     params = request.GET.copy()
     params['page'] = str(page_number)
     return '?' + params.urlencode()
-
-
-def _coerce_page_number(raw, num_pages):
-    """Clamp the ``?page=`` query param into ``[1, num_pages]``.
-
-    Mirrors ``studio.views.ses_events._coerce_page_number``: non-integer or
-    ``<1`` -> page 1, ``> num_pages`` -> last page. Never 404 or 500.
-    """
-    try:
-        page_num = int(raw)
-    except (TypeError, ValueError):
-        return 1
-    if page_num < 1:
-        return 1
-    if page_num > num_pages:
-        return num_pages
-    return page_num
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +302,7 @@ def signup_analytics_dashboard(request):
     # into a list before paging so the COUNT stays in SQL.
     recent_qs = base_window.select_related('user').order_by('-created_at')
     paginator = Paginator(recent_qs, RECENT_PAGE_SIZE)
-    page_number = _coerce_page_number(
+    page_number = coerce_page_number(
         request.GET.get('page'), paginator.num_pages or 1,
     )
     page = paginator.page(page_number)

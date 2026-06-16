@@ -420,6 +420,11 @@ class SesEventListPagerTest(TestCase):
         row_count = body.count('data-testid="ses-event-row-')
         self.assertEqual(row_count, 10)
 
+    def test_out_of_range_page_clamps_to_last(self):
+        response = self.client.get('/studio/ses-events/?page=999')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['page'].number, 2)
+
     def test_pager_preserves_query_params(self):
         response = self.client.get(
             '/studio/ses-events/?q=bulk&type=bounce_permanent',
@@ -429,6 +434,19 @@ class SesEventListPagerTest(TestCase):
         self.assertIn('page=2', body)
         self.assertIn('q=bulk', body)
         self.assertIn('type=bounce_permanent', body)
+
+    def test_pager_preserves_bounce_filters(self):
+        response = self.client.get(
+            '/studio/ses-events/'
+            '?q=bulk&type=bounce_permanent'
+            '&bounce_type=Permanent&bounce_subtype=General',
+        )
+        next_url = response.context['pager_next_url']
+        self.assertIn('q=bulk', next_url)
+        self.assertIn('type=bounce_permanent', next_url)
+        self.assertIn('bounce_type=Permanent', next_url)
+        self.assertIn('bounce_subtype=General', next_url)
+        self.assertIn('page=2', next_url)
 
 
 class SesEventDetailAccessTest(_SesEventFixtureMixin, TestCase):

@@ -37,7 +37,7 @@ from integrations.services.banner_generator.dispatch import enqueue_if_missing
 from integrations.services.zoom import create_meeting
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
-from studio.utils import get_github_edit_url, is_synced
+from studio.utils import coerce_page_number, get_github_edit_url, is_synced
 from studio.views.form_helpers import parse_comma_separated_tags
 
 logger = logging.getLogger(__name__)
@@ -358,19 +358,6 @@ def _split_events_for_studio(events, user):
     return upcoming_events, past_events
 
 
-def _coerce_page_number(raw, num_pages):
-    """Clamp the ``?page=`` query param into ``[1, num_pages]``."""
-    try:
-        page_num = int(raw)
-    except (TypeError, ValueError):
-        return 1
-    if page_num < 1:
-        return 1
-    if page_num > num_pages:
-        return num_pages
-    return page_num
-
-
 def _pager_querystring(request, page_number):
     """Build a pager querystring while preserving active filters."""
     params = request.GET.copy()
@@ -535,7 +522,7 @@ def event_list_past(request):
         request.user,
     )
     paginator = Paginator(past_events, EVENT_LIST_PAST_PAGE_SIZE)
-    page_number = _coerce_page_number(
+    page_number = coerce_page_number(
         request.GET.get('page'),
         paginator.num_pages or 1,
     )

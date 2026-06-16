@@ -265,7 +265,8 @@ def plan_detail(request, plan_id):
     )
     resources = plan.resources.order_by('position', 'id')
     deliverables = plan.deliverables.order_by('position', 'id')
-    next_steps = plan.next_steps.order_by('position', 'id')
+    pre_sprint_actions = plan.pre_sprint_actions.order_by('position', 'id')
+    next_steps = plan.next_step_actions.order_by('position', 'id')
 
     # Visibility-aware queryset, scoped to this member. Staff see both
     # blocks, but the template renders them as separate sections so
@@ -286,6 +287,7 @@ def plan_detail(request, plan_id):
         'weeks': weeks,
         'resources': resources,
         'deliverables': deliverables,
+        'pre_sprint_actions': pre_sprint_actions,
         'next_steps': next_steps,
         'internal_notes': internal_notes,
         'external_notes': external_notes,

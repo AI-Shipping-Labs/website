@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from crm.models import CRMRecord
-from plans.models import InterviewNote, Plan, Sprint, Week
+from plans.models import InterviewNote, NextStep, Plan, Sprint, Week
 from questionnaires.models import (
     Answer,
     Questionnaire,
@@ -69,6 +69,22 @@ class PlanAccessControlTest(TestCase):
         ]:
             response = self.client.get(url)
             self.assertEqual(response.status_code, 403, msg=f'{url} -> {response.status_code}')
+
+    def test_detail_labels_prep_rows_as_pre_sprint_actions(self):
+        NextStep.objects.create(
+            plan=self.plan,
+            description='Review workshop links',
+            done_at=datetime.datetime(
+                2026, 5, 1, 12, tzinfo=datetime.UTC,
+            ),
+        )
+        self.client.login(email='staff@test.com', password='pw')
+        response = self.client.get(f'/studio/plans/{self.plan.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Pre-sprint actions')
+        self.assertContains(response, 'Review workshop links')
+        self.assertContains(response, '(done)')
+        self.assertNotContains(response, 'Facilitator follow-up')
 
 
 class PlanCreateMemberProfilePanelTest(TestCase):

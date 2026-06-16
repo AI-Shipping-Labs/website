@@ -230,6 +230,7 @@ class PlanEditorBootstrapPayloadTest(TestCase):
             self.payload['next_steps'][0]['description'],
             'Schedule check-in',
         )
+        self.assertEqual(self.payload['next_steps'][0]['kind'], 'pre_sprint')
 
     def test_payload_splits_interview_notes_by_visibility(self):
         notes = self.payload['interview_notes']
@@ -383,6 +384,8 @@ class StudioPlanParticipantNavigationTest(TestCase):
         self.assertContains(response, 'data-testid="resources-panel"')
         self.assertContains(response, 'data-testid="deliverables-panel"')
         self.assertContains(response, 'data-testid="next-steps-panel"')
+        self.assertContains(response, 'Pre-sprint actions')
+        self.assertContains(response, '+ Add pre-sprint action')
         self.assertContains(response, 'data-testid="interview-notes-panel"')
         # Both visibility tabs render.
         self.assertContains(response, 'data-testid="interview-notes-tab-internal"')

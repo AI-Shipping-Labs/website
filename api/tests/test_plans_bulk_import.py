@@ -95,6 +95,7 @@ class BulkImportHappyPathTest(BulkImportTestBase):
                     "next_steps": [
                         {
                             "description": "join channel",
+                            "kind": "pre_sprint",
                         },
                     ],
                     "interview_notes": [
@@ -121,6 +122,7 @@ class BulkImportHappyPathTest(BulkImportTestBase):
         self.assertEqual(Resource.objects.filter(plan=plan).count(), 1)
         self.assertEqual(Deliverable.objects.filter(plan=plan).count(), 1)
         self.assertEqual(NextStep.objects.filter(plan=plan).count(), 1)
+        self.assertEqual(NextStep.objects.get(plan=plan).kind, "pre_sprint")
         self.assertEqual(
             InterviewNote.objects.filter(plan=plan).count(), 1,
         )
@@ -177,6 +179,25 @@ class BulkImportFailureModesTest(BulkImportTestBase):
         self.assertEqual(body["code"], "duplicate_plan")
         self.assertEqual(body["details"]["index"], 1)
         # Atomic: m2's plan rolled back.
+        self.assertEqual(Plan.objects.count(), before)
+
+    def test_unknown_next_step_kind_rolls_back_import(self):
+        before = Plan.objects.count()
+        response = self._post({
+            "plans": [
+                {
+                    "user_email": "m1@test.com",
+                    "next_steps": [
+                        {
+                            "description": "Call Alexey",
+                            "kind": "facilitator_follow_up",
+                        },
+                    ],
+                },
+            ],
+        })
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "validation_error")
         self.assertEqual(Plan.objects.count(), before)
 
     def test_invalid_json_returns_400(self):

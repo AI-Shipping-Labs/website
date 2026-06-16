@@ -207,6 +207,7 @@ class CarryOverServiceTest(TestCase):
         self.assertEqual(
             [s.description for s in self.dest.next_steps.all()], ['follow up'],
         )
+        self.assertEqual(self.dest.next_steps.get().kind, 'pre_sprint')
 
     def test_does_not_copy_resources_or_week_notes(self):
         Resource.objects.create(

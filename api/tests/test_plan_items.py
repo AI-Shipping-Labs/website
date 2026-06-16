@@ -189,4 +189,64 @@ class NextStepCreateTest(PlanItemsTestBase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["description"], "Review thing")
+        self.assertEqual(response.json()["kind"], "pre_sprint")
         self.assertNotIn("assignee_label", response.json())
+
+    def test_next_step_create_accepts_explicit_pre_sprint_kind(self):
+        response = self.client.post(
+            f"/api/plans/{self.plan.id}/next-steps",
+            data=json.dumps({
+                "description": "Send GitHub link",
+                "kind": "pre_sprint",
+            }),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["kind"], "pre_sprint")
+        self.assertEqual(
+            NextStep.objects.get(pk=response.json()["id"]).kind,
+            "pre_sprint",
+        )
+
+    def test_next_step_create_rejects_unknown_kind(self):
+        before = NextStep.objects.filter(plan=self.plan).count()
+        response = self.client.post(
+            f"/api/plans/{self.plan.id}/next-steps",
+            data=json.dumps({
+                "description": "Call Alexey",
+                "kind": "facilitator_follow_up",
+            }),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "validation_error")
+        self.assertEqual(
+            NextStep.objects.filter(plan=self.plan).count(),
+            before,
+        )
+
+    def test_next_step_patch_accepts_kind_and_rejects_unknown_kind(self):
+        step = NextStep.objects.create(
+            plan=self.plan,
+            description="Review links",
+        )
+        response = self.client.patch(
+            f"/api/next-steps/{step.id}",
+            data=json.dumps({"kind": "pre_sprint"}),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["kind"], "pre_sprint")
+
+        response = self.client.patch(
+            f"/api/next-steps/{step.id}",
+            data=json.dumps({"kind": "facilitator_follow_up"}),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 422)
+        step.refresh_from_db()
+        self.assertEqual(step.kind, "pre_sprint")

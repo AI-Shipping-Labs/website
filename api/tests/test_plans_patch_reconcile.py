@@ -452,6 +452,69 @@ class PatchReconcileResourcesTest(PlansPatchReconcileTestBase):
         self.assertEqual(
             body["next_steps"][0]["done_at"], done_at_iso,
         )
+        self.assertEqual(body["next_steps"][0]["kind"], "pre_sprint")
+
+    def test_patch_next_steps_accepts_kind_for_update_and_create(self):
+        seed = self._seed_plan()
+        plan = seed["plan"]
+        response = self._patch(plan.id, {
+            "next_steps": [
+                {
+                    "id": seed["n1"].id,
+                    "description": "existing",
+                    "position": 0,
+                    "kind": "pre_sprint",
+                },
+                {
+                    "description": "new prep",
+                    "position": 1,
+                    "kind": "pre_sprint",
+                },
+            ],
+        })
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(
+            [row["kind"] for row in body["next_steps"]],
+            ["pre_sprint", "pre_sprint"],
+        )
+        self.assertEqual(
+            list(
+                NextStep.objects.filter(plan=plan)
+                .order_by("position")
+                .values_list("description", "kind")
+            ),
+            [("existing", "pre_sprint"), ("new prep", "pre_sprint")],
+        )
+
+    def test_patch_next_steps_rejects_unknown_kind_and_rolls_back(self):
+        seed = self._seed_plan()
+        plan = seed["plan"]
+        before = list(
+            NextStep.objects.filter(plan=plan)
+            .order_by("position")
+            .values_list("id", "description", "kind")
+        )
+        response = self._patch(plan.id, {
+            "next_steps": [
+                {
+                    "id": seed["n1"].id,
+                    "description": "changed",
+                    "position": 0,
+                    "kind": "facilitator_follow_up",
+                },
+            ],
+        })
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "validation_error")
+        self.assertEqual(
+            list(
+                NextStep.objects.filter(plan=plan)
+                .order_by("position")
+                .values_list("id", "description", "kind")
+            ),
+            before,
+        )
 
 
 @tag("core")

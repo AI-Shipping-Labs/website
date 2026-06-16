@@ -169,6 +169,23 @@
 </section>
 
 <section class="bg-card border border-border rounded-lg p-6 mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Pre-sprint actions</h2>
+  {% if pre_sprint_actions %}
+  <ul class="text-sm text-foreground space-y-1">
+    {% for ns in pre_sprint_actions %}
+    <li>
+      {{ ns.description }}
+      {% if ns.done_at %} <span class="text-xs text-muted-foreground">(done)</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No pre-sprint actions yet.</p>
+  {% endif %}
+</section>
+
+{% if next_steps %}
+<section class="bg-card border border-border rounded-lg p-6 mb-8">
   <h2 class="text-lg font-semibold text-foreground mb-4">Next steps</h2>
   {% if next_steps %}
   <ul class="text-sm text-foreground space-y-1">
@@ -183,6 +200,7 @@
   <p class="text-sm text-muted-foreground">No next steps yet.</p>
   {% endif %}
 </section>
+{% endif %}
 
 {% comment %}
 Plan comments thread (issue #499). Staff hits this Studio page to

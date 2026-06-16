@@ -30,6 +30,7 @@ from events.services.host_invite import (
     maybe_send_initial_host_invite,
     send_host_reschedule_invite,
 )
+from events.services.host_registration import maybe_register_host_as_attendee
 from events.tasks.notify_reschedule import enqueue_reschedule_notice
 from events.tasks.send_post_event_followup import enqueue_post_event_followup
 from integrations.services.banner_generator.dispatch import enqueue_if_missing
@@ -674,6 +675,7 @@ def event_create(request):
             # is created in a published (non-draft) state. Best-effort and
             # idempotent — never breaks the save.
             maybe_send_initial_host_invite(event)
+            maybe_register_host_as_attendee(event)
             return redirect('studio_event_edit', event_id=event.pk)
 
     # Determine TZ value used for the shared picker partial.
@@ -787,6 +789,7 @@ def event_edit(request, event_id):
             # gets a one-time host invite (to the default mailbox or any
             # host_email). EmailLog-guarded; best-effort.
             maybe_send_initial_host_invite(event)
+            maybe_register_host_as_attendee(event)
         else:
             # Issue #670: snapshot the persisted start time BEFORE we
             # mutate the in-memory event. The Studio form re-parses
@@ -888,6 +891,7 @@ def event_edit(request, event_id):
             # after the first publish. EmailLog-guarded so a plain re-save
             # never re-sends. Best-effort; never breaks the save.
             maybe_send_initial_host_invite(event)
+            maybe_register_host_as_attendee(event)
 
             # Issue #869: a status flip to cancelled removes the occurrence
             # from series subscribers' calendars via a METHOD:CANCEL .ics.

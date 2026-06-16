@@ -6,7 +6,7 @@ to finish -- not just when it starts. These flows verify the
 page, the ``/sprints`` list, and the ``/activities`` cards, and that the
 cross-year form shows the year on both sides.
 
-Screenshots are written to ``/tmp/aisl-issue-978-screenshots`` for tester
+Screenshots are written to ``.tmp/screenshots/issue-978`` for tester
 review.
 """
 
@@ -26,7 +26,11 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 # against the deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
 
-SCREENSHOT_DIR = Path("/tmp/aisl-issue-978-screenshots")
+SCREENSHOT_DIR = Path(".tmp/screenshots/issue-978")
+
+
+def _active_sprint_start():
+    return datetime.date.today() - datetime.timedelta(days=7)
 
 
 def _shot(page, name):
@@ -48,7 +52,7 @@ def _clear_sprints():
 def _create_sprint(
     name="June 2026",
     slug="june-2026",
-    start_date=datetime.date(2026, 6, 17),
+    start_date=None,
     duration_weeks=6,
     status="active",
     min_tier_level=20,
@@ -56,6 +60,9 @@ def _create_sprint(
     from django.db import connection
 
     from plans.models import Sprint
+
+    if start_date is None:
+        start_date = _active_sprint_start()
 
     sprint = Sprint.objects.create(
         name=name,
@@ -93,7 +100,7 @@ class TestSprintDateRange:
             ensure_tiers()
             ensure_site_config_tiers()
             _clear_sprints()
-            start_date = datetime.date.today() - datetime.timedelta(days=7)
+            start_date = _active_sprint_start()
             _create_sprint(
                 name="Current Sprint",
                 slug="current-sprint",
@@ -134,11 +141,13 @@ class TestSprintDateRange:
             ensure_tiers()
             ensure_site_config_tiers()
             _clear_sprints()
-            _create_sprint()
+            june_start = _active_sprint_start()
+            august_start = june_start + datetime.timedelta(weeks=8)
+            _create_sprint(start_date=june_start)
             _create_sprint(
                 name="August 2026",
                 slug="august-2026",
-                start_date=datetime.date(2026, 8, 1),
+                start_date=august_start,
                 duration_weeks=8,
             )
             _create_user("main@test.com", tier_slug="main")
@@ -150,8 +159,8 @@ class TestSprintDateRange:
         ranges = page.locator('[data-testid="sprints-sprint-dates"]')
         assert ranges.count() == 2
         texts = {ranges.nth(i).inner_text() for i in range(ranges.count())}
-        assert "June 17 – July 29, 2026 (6 weeks)" in texts
-        assert "August 1 – September 26, 2026 (8 weeks)" in texts
+        assert _expected_sprint_range(june_start, 6) in texts
+        assert _expected_sprint_range(august_start, 8) in texts
         _shot(page, "02-sprints-list-windows")
         ctx.close()
 
@@ -164,14 +173,15 @@ class TestSprintDateRange:
             ensure_tiers()
             ensure_site_config_tiers()
             _clear_sprints()
-            _create_sprint()
+            start_date = _active_sprint_start()
+            _create_sprint(start_date=start_date)
 
         page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
 
         card = page.locator('[data-testid="activities-sprint-card"]').first
         assert card.is_visible()
         dates = card.locator('[data-testid="activities-sprint-dates"]')
-        assert dates.inner_text() == "June 17 – July 29, 2026 (6 weeks)"
+        assert dates.inner_text() == _expected_sprint_range(start_date, 6)
         _shot(page, "03-activities-start-end")
 
     def test_cross_year_sprint_shows_year_on_both_sides(

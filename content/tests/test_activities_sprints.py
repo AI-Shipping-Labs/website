@@ -11,6 +11,25 @@ from plans.models import Plan, Sprint, SprintEnrollment
 User = get_user_model()
 
 
+def _active_sprint_start():
+    return datetime.date.today() - datetime.timedelta(days=14)
+
+
+def _expected_sprint_range(start_date, duration_weeks):
+    end_date = start_date + datetime.timedelta(weeks=duration_weeks)
+    if start_date.year == end_date.year:
+        return (
+            f'{start_date:%B} {start_date.day} – '
+            f'{end_date:%B} {end_date.day}, {end_date.year} '
+            f'({duration_weeks} weeks)'
+        )
+    return (
+        f'{start_date:%B} {start_date.day}, {start_date.year} – '
+        f'{end_date:%B} {end_date.day}, {end_date.year} '
+        f'({duration_weeks} weeks)'
+    )
+
+
 class ActivitiesSprintHubTest(TestCase):
     def test_global_nav_keeps_expected_order(self):
         response = self.client.get('/activities')
@@ -43,10 +62,11 @@ class ActivitiesSprintHubTest(TestCase):
         self.assertNotIn('>Activities</a>', header)
 
     def test_active_sprint_details_render_for_anonymous_users(self):
+        start_date = _active_sprint_start()
         sprint = Sprint.objects.create(
             name='May Shipping Sprint',
             slug='may-shipping-sprint',
-            start_date=datetime.date(2026, 5, 15),
+            start_date=start_date,
             duration_weeks=4,
             status='active',
             min_tier_level=20,
@@ -60,7 +80,7 @@ class ActivitiesSprintHubTest(TestCase):
         self.assertContains(response, 'Active community sprints')
         self.assertContains(response, 'time-bound cohorts for shipping projects')
         self.assertContains(response, sprint.name)
-        self.assertContains(response, 'May 15 – June 12, 2026 (4 weeks)')
+        self.assertContains(response, _expected_sprint_range(start_date, 4))
         self.assertContains(response, 'Active')
         self.assertContains(response, 'Membership: Main')
         self.assertContains(response, 'Joining requires Main membership')
@@ -77,7 +97,7 @@ class ActivitiesSprintHubTest(TestCase):
         Sprint.objects.create(
             name='May Shipping Sprint',
             slug='may-shipping-sprint',
-            start_date=datetime.date(2026, 5, 15),
+            start_date=_active_sprint_start(),
             duration_weeks=4,
             status='active',
             min_tier_level=20,
@@ -110,7 +130,7 @@ class ActivitiesSprintHubTest(TestCase):
         Sprint.objects.create(
             name='May Shipping Sprint',
             slug='may-shipping-sprint',
-            start_date=datetime.date(2026, 5, 15),
+            start_date=_active_sprint_start(),
             duration_weeks=4,
             status='active',
             min_tier_level=20,
@@ -194,7 +214,7 @@ class ActivitiesSprintHubTest(TestCase):
         Sprint.objects.create(
             name='Premium Sprint',
             slug='premium-sprint',
-            start_date=datetime.date(2026, 6, 1),
+            start_date=_active_sprint_start(),
             status='active',
             min_tier_level=30,
         )
@@ -212,7 +232,7 @@ class ActivitiesSprintHubTest(TestCase):
         sprint = Sprint.objects.create(
             name='Main Sprint',
             slug='main-sprint',
-            start_date=datetime.date(2026, 6, 1),
+            start_date=_active_sprint_start(),
             status='active',
             min_tier_level=20,
         )

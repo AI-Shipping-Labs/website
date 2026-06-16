@@ -20,14 +20,34 @@ from tests.fixtures import TierSetupMixin
 User = get_user_model()
 
 
+def _active_sprint_start():
+    return datetime.date.today() - datetime.timedelta(days=14)
+
+
+def _expected_sprint_range(start_date, duration_weeks):
+    end_date = start_date + datetime.timedelta(weeks=duration_weeks)
+    if start_date.year == end_date.year:
+        return (
+            f'{start_date:%B} {start_date.day} – '
+            f'{end_date:%B} {end_date.day}, {end_date.year} '
+            f'({duration_weeks} weeks)'
+        )
+    return (
+        f'{start_date:%B} {start_date.day}, {start_date.year} – '
+        f'{end_date:%B} {end_date.day}, {end_date.year} '
+        f'({duration_weeks} weeks)'
+    )
+
+
 class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
     def test_dashboard_card_shown_when_user_has_plan(self):
         user = User.objects.create_user(
             email='member@test.com', password='pw',
         )
+        start_date = _active_sprint_start()
         sprint = Sprint.objects.create(
             name='August 2026', slug='august-2026',
-            start_date=datetime.date(2026, 8, 1),
+            start_date=start_date,
             duration_weeks=8,
             status='active',
         )
@@ -51,7 +71,7 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         self.assertContains(response, f'href="{expected_href}"')
         # Sprint metadata is rendered.
         self.assertContains(response, 'August 2026')
-        self.assertContains(response, 'August 1 – September 26, 2026 (8 weeks)')
+        self.assertContains(response, _expected_sprint_range(start_date, 8))
 
     def test_dashboard_card_hidden_when_user_has_no_plan(self):
         User.objects.create_user(
@@ -83,7 +103,7 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         )
         sprint = Sprint.objects.create(
             name='Main Sprint', slug='main-sprint',
-            start_date=datetime.date(2026, 8, 1),
+            start_date=_active_sprint_start(),
             duration_weeks=6,
             status='active',
             min_tier_level=LEVEL_MAIN,
@@ -106,7 +126,7 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         )
         Sprint.objects.create(
             name='Premium Sprint', slug='premium-sprint',
-            start_date=datetime.date(2026, 8, 1),
+            start_date=_active_sprint_start(),
             duration_weeks=6,
             status='active',
             min_tier_level=LEVEL_PREMIUM,
@@ -125,7 +145,7 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         )
         sprint = Sprint.objects.create(
             name='Enrolled Sprint', slug='enrolled-sprint',
-            start_date=datetime.date(2026, 8, 1),
+            start_date=_active_sprint_start(),
             duration_weeks=6,
             status='active',
             min_tier_level=LEVEL_MAIN,
@@ -146,16 +166,17 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='planned-sprint@test.com', password='pw', tier=self.main_tier,
         )
+        current_start = _active_sprint_start()
         current = Sprint.objects.create(
             name='Current Sprint', slug='current-sprint',
-            start_date=datetime.date(2026, 8, 1),
+            start_date=current_start,
             duration_weeks=6,
             status='active',
             min_tier_level=LEVEL_MAIN,
         )
         other = Sprint.objects.create(
             name='Other Sprint', slug='other-sprint',
-            start_date=datetime.date(2026, 9, 1),
+            start_date=current_start + datetime.timedelta(weeks=8),
             duration_weeks=6,
             status='active',
             min_tier_level=LEVEL_MAIN,

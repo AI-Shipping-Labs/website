@@ -26,6 +26,7 @@ from events.models import Event, EventRegistration
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
+FROZEN_NOW = '2026-06-15T12:00:00Z'
 
 
 def _make_event(slug, start, *, title=None, status='upcoming', zoom_url='https://zoom.us/j/abc'):
@@ -38,6 +39,7 @@ def _make_event(slug, start, *, title=None, status='upcoming', zoom_url='https:/
     )
 
 
+@freeze_time(FROZEN_NOW)
 class StartingSoonHelperWindowTest(TierSetupMixin, TestCase):
     """Direct tests for ``_get_starting_soon_event`` against the time window.
 
@@ -94,7 +96,7 @@ class StartingSoonHelperWindowTest(TierSetupMixin, TestCase):
         # Within 1 sec of 8 minutes.
         self.assertGreaterEqual(result['seconds_until_start'], 8 * 60 - 1)
         self.assertLessEqual(result['seconds_until_start'], 8 * 60)
-        self.assertEqual(result['minutes_until_start'], 7)
+        self.assertEqual(result['minutes_until_start'], 8)
         # Join URL is the time-gated dashboard endpoint, never raw Zoom.
         self.assertEqual(
             result['join_url'],
@@ -140,6 +142,7 @@ class StartingSoonHelperWindowTest(TierSetupMixin, TestCase):
         self.assertIsNone(_get_starting_soon_event(self.user))
 
 
+@freeze_time(FROZEN_NOW)
 class StartingSoonExcludedStatusesTest(TierSetupMixin, TestCase):
     """Cancelled / completed / draft events never produce a card."""
 
@@ -177,6 +180,7 @@ class StartingSoonExcludedStatusesTest(TierSetupMixin, TestCase):
         self.assertIsNone(_get_starting_soon_event(self.user))
 
 
+@freeze_time(FROZEN_NOW)
 class StartingSoonSoonestWinsTest(TierSetupMixin, TestCase):
     """Two imminent registrations -> only the soonest appears in the card."""
 
@@ -197,6 +201,7 @@ class StartingSoonSoonestWinsTest(TierSetupMixin, TestCase):
         self.assertEqual(result['event'].pk, sooner.pk)
 
 
+@freeze_time(FROZEN_NOW)
 class StartingSoonNotRegisteredTest(TierSetupMixin, TestCase):
     """Unregistered users see no card even when an imminent event exists."""
 
@@ -219,6 +224,7 @@ class StartingSoonNotRegisteredTest(TierSetupMixin, TestCase):
         self.assertIsNone(_get_starting_soon_event(self.user))
 
 
+@freeze_time(FROZEN_NOW)
 class StartingSoonTimezoneTest(TierSetupMixin, TestCase):
     """Local-time formatting uses ``format_user_datetime`` with the user TZ."""
 
@@ -256,6 +262,7 @@ class StartingSoonTimezoneTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
+@freeze_time(FROZEN_NOW)
 class StartingSoonDashboardViewTest(TierSetupMixin, TestCase):
     """End-to-end: the dashboard renders the partial and meta refresh."""
 
@@ -385,7 +392,7 @@ class StartingSoonDashboardViewTest(TierSetupMixin, TestCase):
 class StartingSoonFreezeTimeTest(TierSetupMixin, TestCase):
     """Window edges with frozen time for deterministic boundaries."""
 
-    @freeze_time('2026-06-15T12:00:00Z')
+    @freeze_time(FROZEN_NOW)
     def test_event_at_t_plus_10_min_card_visible(self):
         user = User.objects.create_user(
             email='ft1@example.com', password='testpass',
@@ -403,7 +410,7 @@ class StartingSoonFreezeTimeTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Exactly Ten')
         self.assertContains(response, 'Open join page')
 
-    @freeze_time('2026-06-15T12:00:00Z')
+    @freeze_time(FROZEN_NOW)
     def test_event_at_t_plus_11_min_no_card(self):
         user = User.objects.create_user(
             email='ft2@example.com', password='testpass',
@@ -419,7 +426,7 @@ class StartingSoonFreezeTimeTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertNotContains(response, 'data-testid="starting-soon-card"')
 
-    @freeze_time('2026-06-15T12:00:00Z')
+    @freeze_time(FROZEN_NOW)
     def test_event_at_t_plus_5_min_join_now_label(self):
         # Inclusive on the Join-now side, matching #704.
         user = User.objects.create_user(
@@ -437,7 +444,7 @@ class StartingSoonFreezeTimeTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Join now')
         self.assertNotContains(response, 'Open join page')
 
-    @freeze_time('2026-06-15T12:00:00Z')
+    @freeze_time(FROZEN_NOW)
     def test_event_in_past_no_card(self):
         user = User.objects.create_user(
             email='ft4@example.com', password='testpass',

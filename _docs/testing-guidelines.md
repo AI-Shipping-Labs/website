@@ -323,8 +323,15 @@ protects content rows that have `source_repo` or `content_id` set.
 
 ## Rule 13: Freeze time for time-dependent tests
 
-Use `freezegun` or `time_machine` instead of `timezone.now() + timedelta(...)`.
-Tests that compare against wall-clock time are race-condition prone on slow CI.
+Use `freezegun` or `time_machine` for boundary, status-transition, reminder,
+join-window, countdown, or exact date-copy assertions. Tests that compare
+against wall-clock time are race-condition prone on slow CI.
+
+Relative dates such as `timezone.now() + timedelta(days=7)` are acceptable
+when the test only needs data safely in the future or past and does not assert
+an exact boundary, countdown, date-derived status, or hardcoded date label.
+When fixture dates are generated dynamically, compute expected labels from
+those same fixture dates.
 
 Bad:
 ```python

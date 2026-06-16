@@ -4,6 +4,7 @@ import datetime
 import os
 
 import pytest
+from freezegun import freeze_time
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -20,6 +21,7 @@ from playwright_tests.conftest import (
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 pytestmark = pytest.mark.local_only
+FROZEN_CALL_NOW = "2026-06-15T12:00:00Z"
 
 
 def _clear_sprint_detail_data():
@@ -82,6 +84,19 @@ def _create_sprint(slug="issue-981-sprint", *, series=None, min_tier_level=20):
     return sprint
 
 
+def _future_call_start(days=1):
+    day = datetime.date.today() + datetime.timedelta(days=days)
+    return datetime.datetime.combine(
+        day,
+        datetime.time(18, 0),
+        tzinfo=datetime.timezone.utc,
+    )
+
+
+def _utc_attr(value):
+    return value.isoformat().replace("+00:00", "Z")
+
+
 def _enroll(email, sprint):
     from django.db import connection
 
@@ -122,6 +137,7 @@ def _create_event(series, *, title, slug, start, end=None, zoom_url=""):
 
 @pytest.mark.django_db(transaction=True)
 class TestSprintDetailRedesign981:
+    @freeze_time(FROZEN_CALL_NOW)
     def test_member_opens_upcoming_call_detail_and_sees_past_call_muted(
         self, django_server, browser, django_db_blocker
     ):
@@ -168,6 +184,7 @@ class TestSprintDetailRedesign981:
         page.wait_for_url(f"**{upcoming_url}")
         ctx.close()
 
+    @freeze_time(FROZEN_CALL_NOW)
     def test_call_starting_soon_uses_tracked_join_link(
         self, django_server, browser, django_db_blocker
     ):
@@ -199,6 +216,7 @@ class TestSprintDetailRedesign981:
         assert "zoom.example.com/raw-live-link" not in page.content()
         ctx.close()
 
+    @freeze_time(FROZEN_CALL_NOW)
     def test_not_open_call_and_empty_calls_states(
         self, django_server, browser, django_db_blocker
     ):
@@ -241,7 +259,7 @@ class TestSprintDetailRedesign981:
     def test_saved_timezone_payload_uses_event_time_display_partial(
         self, django_server, browser, django_db_blocker
     ):
-        start = datetime.datetime(2026, 6, 17, 18, 0, tzinfo=datetime.timezone.utc)
+        start = _future_call_start(days=1)
         with django_db_blocker.unblock():
             ensure_tiers()
             ensure_site_config_tiers()
@@ -264,7 +282,7 @@ class TestSprintDetailRedesign981:
         page.goto(f"{django_server}/sprints/{sprint_slug}", wait_until="domcontentloaded")
 
         time_display = page.locator('[data-event-time-display]')
-        assert time_display.get_attribute("data-start-utc") == "2026-06-17T18:00:00Z"
+        assert time_display.get_attribute("data-start-utc") == _utc_attr(start)
         assert time_display.get_attribute("data-default-timezone") == "America/New_York"
         assert time_display.get_attribute("data-browser-timezone-enabled") == "false"
         assert "America/New_York" in time_display.inner_text()
@@ -273,7 +291,7 @@ class TestSprintDetailRedesign981:
     def test_browser_timezone_localizes_call_time_without_saved_timezone(
         self, django_server, browser, django_db_blocker
     ):
-        start = datetime.datetime(2026, 6, 17, 18, 0, tzinfo=datetime.timezone.utc)
+        start = _future_call_start(days=1)
         with django_db_blocker.unblock():
             ensure_tiers()
             ensure_site_config_tiers()

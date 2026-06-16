@@ -52,6 +52,14 @@ PLAN_VISIBILITY_CHOICES = [
     # 'public' is reserved for a future issue. Do NOT add it here.
 ]
 
+NEXT_STEP_KIND_PRE_SPRINT = 'pre_sprint'
+NEXT_STEP_KIND_NEXT_STEP = 'next_step'
+
+NEXT_STEP_KIND_CHOICES = [
+    (NEXT_STEP_KIND_PRE_SPRINT, 'Pre-sprint action'),
+    (NEXT_STEP_KIND_NEXT_STEP, 'Next step'),
+]
+
 KIND_CHOICES = [
     ('persona', 'Persona'),
     ('background', 'Background'),
@@ -643,6 +651,14 @@ class Plan(TimestampedModelMixin, models.Model):
         self.save(update_fields=['shared_at', 'updated_at'])
         return self
 
+    @property
+    def pre_sprint_actions(self):
+        return self.next_steps.filter(kind=NEXT_STEP_KIND_PRE_SPRINT)
+
+    @property
+    def next_step_actions(self):
+        return self.next_steps.filter(kind=NEXT_STEP_KIND_NEXT_STEP)
+
 
 class Week(TimestampedModelMixin, models.Model):
     """A weekly block within a plan.
@@ -742,10 +758,15 @@ class Deliverable(TimestampedModelMixin, models.Model):
 
 
 class NextStep(TimestampedModelMixin, models.Model):
-    """An entry in the Next Steps block."""
+    """A plan-level action item, usually completed before the sprint."""
 
     plan = models.ForeignKey(
         Plan, on_delete=models.CASCADE, related_name='next_steps',
+    )
+    kind = models.CharField(
+        max_length=20,
+        choices=NEXT_STEP_KIND_CHOICES,
+        default=NEXT_STEP_KIND_PRE_SPRINT,
     )
     description = models.TextField()
     position = models.PositiveSmallIntegerField(default=0)

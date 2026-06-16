@@ -300,11 +300,57 @@ is already copied (count == 0) we show an "all caught up" notice instead.
     </div>
     {% endif %}
 
-    {% if plan.next_steps.all %}
-    <div data-testid="plan-next-steps">
+    {% if plan.pre_sprint_actions %}
+    <div data-testid="plan-next-steps" data-section-kind="pre-sprint-actions">
+      <h2 class="text-2xl font-semibold tracking-tight text-foreground">Pre-sprint actions</h2>
+      <ul class="mt-3 divide-y divide-border text-sm">
+        {% for step in plan.pre_sprint_actions %}
+        <li class="flex min-h-[44px] items-start gap-3 py-3 {% if step.done_at %}is-complete{% endif %}"
+            data-testid="plan-next-step"
+            data-plan-item
+            data-item-type="next-step"
+            data-item-id="{{ step.pk }}">
+          {% if plan_can_edit %}
+          <input type="checkbox"
+                 class="mt-1 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent"
+                 data-testid="plan-row-done-toggle"
+                 data-done-toggle
+                 aria-label="Mark pre-sprint action done"
+                 {% if step.done_at %}checked{% endif %}>
+          {% else %}
+            {% if step.done_at %}
+            <span class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-500/15 text-xs text-green-400" aria-label="Done">&#10003;</span>
+            {% else %}
+            <span class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs text-muted-foreground" aria-label="Not done"></span>
+            {% endif %}
+          {% endif %}
+          <div class="min-w-0 flex-1">
+            <div class="plan-markdown {% if step.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
+                 data-rendered-markdown>{{ step.description|plan_markdown }}</div>
+            {% if plan_can_edit %}
+            <textarea class="mt-2 hidden w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                      rows="3"
+                      data-markdown-input
+                      data-testid="plan-item-markdown-input">{{ step.description }}</textarea>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <button type="button" class="text-accent hover:underline" data-edit-item data-testid="plan-item-edit">Edit</button>
+              <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-save-item data-testid="plan-item-save">Save</button>
+              <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-cancel-edit>Cancel</button>
+              <span class="text-muted-foreground" data-save-status data-testid="plan-item-save-status" aria-live="polite"></span>
+            </div>
+            {% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if plan.next_step_actions %}
+    <div data-testid="plan-legacy-next-steps" data-section-kind="next-steps">
       <h2 class="text-2xl font-semibold tracking-tight text-foreground">Next steps</h2>
       <ul class="mt-3 divide-y divide-border text-sm">
-        {% for step in plan.next_steps.all %}
+        {% for step in plan.next_step_actions %}
         <li class="flex min-h-[44px] items-start gap-3 py-3 {% if step.done_at %}is-complete{% endif %}"
             data-testid="plan-next-step"
             data-plan-item

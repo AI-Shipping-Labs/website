@@ -384,6 +384,7 @@ def carry_over_unfinished_tasks(*, source_plan, destination_plan):
                 continue
             NextStep.objects.create(
                 plan=destination_plan,
+                kind=step.kind,
                 description=step.description,
                 position=step.position,
                 done_at=None,

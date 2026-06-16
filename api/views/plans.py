@@ -35,6 +35,8 @@ from api.views._permissions import (
 from notifications.services.notification_service import NotificationService
 from plans.models import (
     KIND_CHOICES,
+    NEXT_STEP_KIND_CHOICES,
+    NEXT_STEP_KIND_PRE_SPRINT,
     VISIBILITY_CHOICES,
     Checkpoint,
     Deliverable,
@@ -63,6 +65,7 @@ User = get_user_model()
 
 VALID_VISIBILITIES = {choice for choice, _label in VISIBILITY_CHOICES}
 VALID_KINDS = {choice for choice, _label in KIND_CHOICES}
+VALID_NEXT_STEP_KINDS = {choice for choice, _label in NEXT_STEP_KIND_CHOICES}
 
 _PLAN_FLAT_EXAMPLE = {
     "id": 5,
@@ -278,6 +281,23 @@ def _validate_kind(value, *, index=None):
     return None
 
 
+def _validate_next_step_kind(value, field_path="kind", *, index=None):
+    if value not in VALID_NEXT_STEP_KINDS:
+        return error_response(
+            "Invalid kind",
+            "validation_error",
+            status=422,
+            details=_with_index(
+                {
+                    field_path: "Unknown kind",
+                    "allowed": sorted(VALID_NEXT_STEP_KINDS),
+                },
+                index,
+            ),
+        )
+    return None
+
+
 def _validate_focus(focus_dict, *, index=None):
     """``focus`` must be a dict and ``supporting`` must be a list."""
     if not isinstance(focus_dict, dict):
@@ -437,6 +457,16 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
             if not isinstance(row, dict):
                 continue
             kwargs = {f: (row.get(f) or "") for f in fields}
+            if collection_name == "next_steps":
+                kind = row.get("kind", NEXT_STEP_KIND_PRE_SPRINT)
+                err = _validate_next_step_kind(
+                    kind,
+                    f"{collection_name}[{row_index}].kind",
+                    index=index,
+                )
+                if err is not None:
+                    return None, err
+                kwargs["kind"] = kind
             # Issue #725: validate any ``max_length`` fields on this model
             # before insert. Only Resource currently has caps (title=300,
             # url=600); Deliverable/NextStep use TextField (no cap). The
@@ -513,6 +543,15 @@ def _reconcile_flat_collection(
 
     for row_index, row in enumerate(payload_rows):
         row_id = row.get("id")
+        next_step_kind = None
+        if model is NextStep and ("kind" in row or row_id is None):
+            next_step_kind = row.get("kind", NEXT_STEP_KIND_PRE_SPRINT)
+            err = _validate_next_step_kind(
+                next_step_kind,
+                f"{collection_name}[{row_index}].kind",
+            )
+            if err is not None:
+                return err
         if row_id is not None:
             existing = existing_by_id.get(row_id)
             if existing is None:
@@ -538,6 +577,9 @@ def _reconcile_flat_collection(
             if has_done_at and "done_at" in row:
                 existing.done_at = _coerce_datetime(row["done_at"])
                 update_fields.append("done_at")
+            if model is NextStep and next_step_kind is not None:
+                existing.kind = next_step_kind
+                update_fields.append("kind")
             if update_fields:
                 existing.save(
                     update_fields=list(set(update_fields)) + ["updated_at"],
@@ -552,6 +594,8 @@ def _reconcile_flat_collection(
             kwargs["position"] = row.get("position", row_index)
             if has_done_at and "done_at" in row:
                 kwargs["done_at"] = _coerce_datetime(row["done_at"])
+            if model is NextStep:
+                kwargs["kind"] = next_step_kind
             model.objects.create(**kwargs)
 
     # DELETE rows whose ids were not in the payload.

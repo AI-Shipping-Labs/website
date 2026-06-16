@@ -130,6 +130,7 @@ class DraftServiceTest(TestCase):
         )
         self.assertEqual(dest.deliverables.count(), 1)
         self.assertEqual(dest.next_steps.count(), 1)
+        self.assertEqual(dest.next_steps.get().kind, 'pre_sprint')
 
     def test_no_source_plan_runs_without_error_and_drafts(self):
         dest = _make_plan(self.member, self.s_may)

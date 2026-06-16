@@ -21,7 +21,13 @@ from api.serializers.plans import (
 )
 from api.utils import parse_json_body, require_methods, token_or_session_required
 from api.views._permissions import visible_plans_for
-from plans.models import Deliverable, NextStep, Resource
+from plans.models import (
+    NEXT_STEP_KIND_CHOICES,
+    NEXT_STEP_KIND_PRE_SPRINT,
+    Deliverable,
+    NextStep,
+    Resource,
+)
 
 _RESOURCE_EXAMPLE = {
     "id": 1,
@@ -47,12 +53,29 @@ _DELIVERABLE_EXAMPLE = {
 _NEXT_STEP_EXAMPLE = {
     "id": 3,
     "plan_id": 5,
+    "kind": "pre_sprint",
     "description": "Email reviewer",
     "position": 0,
     "done_at": None,
     "created_at": "2026-04-15T12:00:00+00:00",
     "updated_at": "2026-04-15T12:00:00+00:00",
 }
+
+VALID_NEXT_STEP_KINDS = {choice for choice, _label in NEXT_STEP_KIND_CHOICES}
+
+
+def _validate_next_step_kind(value):
+    if value not in VALID_NEXT_STEP_KINDS:
+        return error_response(
+            "Invalid kind",
+            "validation_error",
+            status=422,
+            details={
+                "kind": "Unknown kind",
+                "allowed": sorted(VALID_NEXT_STEP_KINDS),
+            },
+        )
+    return None
 
 
 def _coerce_datetime(value):
@@ -183,6 +206,12 @@ def _create_item(request, plan_id, item_type):
         )
 
     Model = descriptor["model"]
+    next_step_kind = None
+    if item_type == "next_step":
+        next_step_kind = data.get("kind", NEXT_STEP_KIND_PRE_SPRINT)
+        err = _validate_next_step_kind(next_step_kind)
+        if err is not None:
+            return err
 
     with transaction.atomic():
         if requested_position is None:
@@ -199,6 +228,8 @@ def _create_item(request, plan_id, item_type):
         kwargs = {field: (data.get(field) or "") for field in descriptor["writable"]}
         kwargs["plan"] = plan
         kwargs["position"] = position
+        if item_type == "next_step":
+            kwargs["kind"] = next_step_kind
         if descriptor["has_done_at"] and "done_at" in data:
             kwargs["done_at"] = _coerce_datetime(data["done_at"])
         row = Model.objects.create(**kwargs)
@@ -229,6 +260,13 @@ def _patch_item(request, item_type, item_id):
                 value = ""
             setattr(row, field, value)
             update_fields.append(field)
+
+    if item_type == "next_step" and "kind" in data:
+        err = _validate_next_step_kind(data["kind"])
+        if err is not None:
+            return err
+        row.kind = data["kind"]
+        update_fields.append("kind")
 
     if descriptor["has_done_at"] and "done_at" in data:
         row.done_at = _coerce_datetime(data["done_at"])
@@ -523,6 +561,11 @@ def deliverable_detail(request, item_id):
                 "required": ["description"],
                 "properties": {
                     "description": {"type": "string"},
+                    "kind": {
+                        "type": "string",
+                        "enum": ["pre_sprint", "next_step"],
+                        "default": "pre_sprint",
+                    },
                     "position": {"type": "integer", "minimum": 0},
                     "done_at": {
                         "type": "string",
@@ -530,7 +573,10 @@ def deliverable_detail(request, item_id):
                         "nullable": True,
                     },
                 },
-                "example": {"description": "Email reviewer"},
+                "example": {
+                    "description": "Email reviewer",
+                    "kind": "pre_sprint",
+                },
             },
             "responses": {
                 201: {
@@ -539,7 +585,7 @@ def deliverable_detail(request, item_id):
                 },
                 400: {"description": "Invalid JSON or missing field."},
                 404: {"description": "Plan not found."},
-                422: {"description": "Invalid position."},
+                422: {"description": "Invalid position or kind."},
             },
         },
     },
@@ -562,6 +608,10 @@ def plan_next_steps(request, plan_id):
             "request_body": {
                 "properties": {
                     "description": {"type": "string"},
+                    "kind": {
+                        "type": "string",
+                        "enum": ["pre_sprint", "next_step"],
+                    },
                     "position": {"type": "integer", "minimum": 0},
                     "done_at": {
                         "type": "string",
@@ -584,7 +634,7 @@ def plan_next_steps(request, plan_id):
                         "code": "unknown_next_step",
                     },
                 },
-                422: {"description": "Invalid position."},
+                422: {"description": "Invalid position or kind."},
             },
         },
         "DELETE": {

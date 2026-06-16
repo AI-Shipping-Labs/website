@@ -21,6 +21,7 @@ from django.test import TestCase
 
 from plans.models import (
     InterviewNote,
+    NextStep,
     Plan,
     Sprint,
     Week,
@@ -82,6 +83,24 @@ class WeekModelConstraintsTest(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 Week.objects.create(plan=self.plan, week_number=1)
+
+
+class NextStepModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        member = User.objects.create_user(email='m@test.com', password='pw')
+        sprint = Sprint.objects.create(
+            name='Sprint', slug='next-step-sprint',
+            start_date=datetime.date(2026, 5, 1),
+        )
+        cls.plan = Plan.objects.create(member=member, sprint=sprint)
+
+    def test_defaults_to_pre_sprint_action(self):
+        step = NextStep.objects.create(
+            plan=self.plan,
+            description='Send GitHub link',
+        )
+        self.assertEqual(step.kind, 'pre_sprint')
 
 
 class InterviewNoteModelTest(TestCase):

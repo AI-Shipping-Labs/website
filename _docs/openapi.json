@@ -3876,6 +3876,13 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "kind": {
+                    "enum": [
+                      "pre_sprint",
+                      "next_step"
+                    ],
+                    "type": "string"
+                  },
                   "position": {
                     "minimum": 0,
                     "type": "integer"
@@ -3896,6 +3903,7 @@
                   "description": "Email reviewer",
                   "done_at": null,
                   "id": 3,
+                  "kind": "pre_sprint",
                   "plan_id": 5,
                   "position": 0,
                   "updated_at": "2026-04-15T12:00:00+00:00"
@@ -3919,7 +3927,7 @@
             "description": "Next step not found."
           },
           "422": {
-            "description": "Invalid position."
+            "description": "Invalid position or kind."
           }
         },
         "summary": "Update a next step",
@@ -4864,6 +4872,7 @@
                       "description": "Email reviewer",
                       "done_at": null,
                       "id": 3,
+                      "kind": "pre_sprint",
                       "plan_id": 5,
                       "position": 0,
                       "updated_at": "2026-04-15T12:00:00+00:00"
@@ -4898,7 +4907,8 @@
           "content": {
             "application/json": {
               "example": {
-                "description": "Email reviewer"
+                "description": "Email reviewer",
+                "kind": "pre_sprint"
               },
               "schema": {
                 "properties": {
@@ -4908,6 +4918,14 @@
                   "done_at": {
                     "format": "date-time",
                     "nullable": true,
+                    "type": "string"
+                  },
+                  "kind": {
+                    "default": "pre_sprint",
+                    "enum": [
+                      "pre_sprint",
+                      "next_step"
+                    ],
                     "type": "string"
                   },
                   "position": {
@@ -4933,6 +4951,7 @@
                   "description": "Email reviewer",
                   "done_at": null,
                   "id": 3,
+                  "kind": "pre_sprint",
                   "plan_id": 5,
                   "position": 0,
                   "updated_at": "2026-04-15T12:00:00+00:00"
@@ -4948,7 +4967,7 @@
             "description": "Plan not found."
           },
           "422": {
-            "description": "Invalid position."
+            "description": "Invalid position or kind."
           }
         },
         "summary": "Create a next step",

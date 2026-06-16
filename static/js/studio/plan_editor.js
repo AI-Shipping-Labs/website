@@ -117,6 +117,15 @@
     return apiClient.writeWithRetry(method, path, body, revert, failureMessage);
   }
 
+  function escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   // ---------- text-field debounce ----------
 
   const debounceTimers = new WeakMap();
@@ -653,6 +662,131 @@
 
   // Wire every existing chip on first paint. New chips wired in addCheckpoint.
   root.querySelectorAll('[data-testid="checkpoint-chip"]').forEach(bindCheckpointChip);
+
+  // ---------- pre-sprint action rows ----------
+
+  function updateNextStepDoneVisual(row, isDone) {
+    row.dataset.done = isDone ? 'true' : 'false';
+    const text = row.querySelector('[data-testid="next-step-text"]');
+    if (!text) { return; }
+    if (isDone) {
+      text.classList.add('line-through', 'text-muted-foreground');
+    } else {
+      text.classList.remove('line-through', 'text-muted-foreground');
+    }
+  }
+
+  function enterNextStepEdit(row, textEl, id) {
+    if (row.dataset.editing === 'true') { return; }
+    row.dataset.editing = 'true';
+    const prior = textEl.textContent || '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = prior;
+    input.className = 'w-full bg-background border border-border rounded-md px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent';
+    input.setAttribute('data-testid', 'next-step-edit-input');
+    textEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    function finish(save) {
+      const value = input.value.trim();
+      const nextText = document.createElement('span');
+      nextText.className = 'text-sm text-foreground block';
+      nextText.setAttribute('data-testid', 'next-step-text');
+      nextText.textContent = save && value ? value : prior;
+      input.replaceWith(nextText);
+      row.dataset.editing = 'false';
+      bindNextStepRow(row);
+      if (save && value && value !== prior) {
+        apiCallWithRevert('PATCH', 'next-steps/' + id, {
+          description: value,
+          kind: 'pre_sprint',
+        }, function () {
+          nextText.textContent = prior;
+        });
+      }
+      row.focus();
+    }
+
+    input.addEventListener('blur', function () { finish(true); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        finish(false);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        input.blur();
+      }
+    });
+  }
+
+  function bindNextStepRow(row) {
+    const id = parseInt(row.dataset.nextStepId, 10);
+    const doneToggle = row.querySelector('[data-testid="next-step-done-toggle"]');
+    const textEl = row.querySelector('[data-testid="next-step-text"]');
+    if (doneToggle && !doneToggle.dataset.bound) {
+      doneToggle.dataset.bound = 'true';
+      doneToggle.addEventListener('change', function () {
+        const isDone = doneToggle.checked;
+        const prior = row.dataset.done === 'true';
+        updateNextStepDoneVisual(row, isDone);
+        apiCallWithRevert('PATCH', 'next-steps/' + id, {
+          done_at: isDone ? new Date().toISOString() : null,
+          kind: 'pre_sprint',
+        }, function () {
+          updateNextStepDoneVisual(row, prior);
+          doneToggle.checked = prior;
+        });
+      });
+    }
+    if (textEl && !textEl.dataset.bound) {
+      textEl.dataset.bound = 'true';
+      textEl.addEventListener('click', function () {
+        enterNextStepEdit(row, textEl, id);
+      });
+    }
+  }
+
+  root.querySelectorAll('[data-testid="next-step-row"]').forEach(bindNextStepRow);
+
+  const addNextStepButton = root.querySelector('[data-testid="add-next-step"]');
+  if (addNextStepButton) {
+    addNextStepButton.addEventListener('click', function () {
+      const list = root.querySelector('[data-testid="next-step-list"]');
+      if (!list) { return; }
+      apiCall('POST', 'plans/' + planId + '/next-steps', {
+        description: 'New pre-sprint action',
+        kind: 'pre_sprint',
+      }).then(function (result) {
+        if (!(result.ok && result.data && result.data.id)) {
+          setIndicator('failed', result.message);
+          showToast("Couldn't add pre-sprint action (" + result.code + ').');
+          return;
+        }
+        const row = document.createElement('li');
+        row.setAttribute('data-testid', 'next-step-row');
+        row.setAttribute('data-next-step-id', String(result.data.id));
+        row.setAttribute('data-kind', result.data.kind || 'pre_sprint');
+        row.setAttribute('data-done', 'false');
+        row.setAttribute('tabindex', '0');
+        row.className = 'plan-editor-next-step flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border focus:outline-none focus:ring-2 focus:ring-accent';
+        row.innerHTML =
+          '<input type="checkbox" data-testid="next-step-done-toggle" class="plan-editor-next-step-done">' +
+          '<div class="flex-1">' +
+          '<span class="text-sm text-foreground block" data-testid="next-step-text">' +
+          escapeHtml(result.data.description || 'New pre-sprint action') +
+          '</span></div>';
+        list.appendChild(row);
+        bindNextStepRow(row);
+        enterNextStepEdit(
+          row,
+          row.querySelector('[data-testid="next-step-text"]'),
+          result.data.id,
+        );
+      });
+    });
+  }
 
   // ---------- add checkpoint ----------
 

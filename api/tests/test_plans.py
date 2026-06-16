@@ -95,6 +95,37 @@ class PlansCreateTest(PlansApiTestBase):
         self.assertEqual(plan.summary_current_situation, "X")
         self.assertEqual(plan.summary_main_gap, "Z")
 
+    def test_create_plan_accepts_next_step_kind(self):
+        response = self._post({
+            "user_email": "member@test.com",
+            "next_steps": [
+                {
+                    "description": "Send GitHub link",
+                    "kind": "pre_sprint",
+                },
+            ],
+        })
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["next_steps"][0]["kind"], "pre_sprint")
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        self.assertEqual(plan.next_steps.get().kind, "pre_sprint")
+
+    def test_create_plan_rejects_unknown_next_step_kind(self):
+        before = Plan.objects.count()
+        response = self._post({
+            "user_email": "member@test.com",
+            "next_steps": [
+                {
+                    "description": "Call Alexey",
+                    "kind": "facilitator_follow_up",
+                },
+            ],
+        })
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "validation_error")
+        self.assertEqual(Plan.objects.count(), before)
+
     def test_create_plan_unknown_user_returns_422(self):
         before = Plan.objects.count()
         response = self._post({"user_email": "noone@test.com"})
@@ -185,6 +216,7 @@ class PlanDetailTest(PlansApiTestBase):
         self.assertEqual(len(body["resources"]), 2)
         self.assertEqual(len(body["deliverables"]), 1)
         self.assertEqual(len(body["next_steps"]), 1)
+        self.assertEqual(body["next_steps"][0]["kind"], "pre_sprint")
         self.assertEqual(body["summary"]["goal"], "my goal")
         self.assertEqual(body["focus"]["main"], "main focus")
         self.assertEqual(body["focus"]["supporting"], ["a", "b"])

@@ -12,6 +12,7 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 
+from payments.models import Tier
 from studio.views.users import USER_LIST_PAGE_SIZE
 
 User = get_user_model()
@@ -100,6 +101,19 @@ class StudioUserListPaginationTest(PatchedUserListPageSizeMixin, TestCase):
             [row['email'] for row in clamped.context['page'].object_list],
             [row['email'] for row in last_page.context['page'].object_list],
         )
+
+    def test_paid_filter_out_of_range_page_clamps_to_last(self):
+        paid_tier = Tier.objects.get(slug='basic')
+        for index, user in enumerate(User.objects.filter(email__startswith='user')):
+            user.tier = paid_tier
+            user.subscription_id = f'sub_{index}'
+            user.save(update_fields=['tier', 'subscription_id'])
+
+        response = self.client.get('/studio/users/?filter=paid&page=999')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['active_filter'], 'paid')
+        self.assertEqual(response.context['page'].number, 2)
 
     def test_zero_page_clamps_to_first(self):
         response = self.client.get('/studio/users/?page=0')

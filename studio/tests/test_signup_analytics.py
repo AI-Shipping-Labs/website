@@ -798,6 +798,13 @@ class SignupAnalyticsPaginationTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['page'].number, 1)
 
+    def test_malformed_page_preserves_active_range_filter(self):
+        self._seed(60)
+        response = self.client.get('/studio/signup-analytics/?range=30d&page=abc')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['page'].number, 1)
+        self.assertEqual(response.context['filters']['range_key'], '30d')
+
     def test_page_beyond_last_clamps_to_last(self):
         self._seed(60)
         response = self.client.get('/studio/signup-analytics/?page=9999')

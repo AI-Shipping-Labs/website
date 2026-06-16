@@ -5,6 +5,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def coerce_page_number(raw, num_pages):
+    """Clamp a raw ``?page=`` value to a valid 1-based page number."""
+    try:
+        page_num = int(raw)
+    except (TypeError, ValueError):
+        return 1
+
+    last_page = max(int(num_pages), 1)
+    if page_num < 1:
+        return 1
+    if page_num > last_page:
+        return last_page
+    return page_num
+
+
 def is_synced(obj):
     """Return True if the object is synced from a GitHub repo.
 

@@ -58,6 +58,7 @@ from integrations.config import get_config
 from payments.models import Tier
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from studio.decorators import staff_required, superuser_required
+from studio.utils import coerce_page_number
 from studio.views.tier_overrides import DURATION_CHOICES
 
 User = get_user_model()
@@ -546,25 +547,6 @@ def _user_status(user):
     return 'Active'
 
 
-def _coerce_page_number(raw, num_pages):
-    """Map a raw ``?page=`` value to a valid 1..num_pages page number.
-
-    The spec asks for clamping (not 404) so bookmarked links survive when
-    the underlying data changes. ``num_pages`` is always at least 1 because
-    Django's ``Paginator`` reports 1 page even for an empty list when
-    ``allow_empty_first_page=True`` (the default).
-    """
-    try:
-        page_num = int(raw)
-    except (TypeError, ValueError):
-        return 1
-    if page_num < 1:
-        return 1
-    if page_num > num_pages:
-        return num_pages
-    return page_num
-
-
 def _pager_querystring(request, page_number):
     """Build the ``?...`` part of a pager link, preserving existing params.
 
@@ -595,7 +577,7 @@ def user_list(request):
     counts = _user_listing_counts()
 
     paginator = Paginator(user_queryset, USER_LIST_PAGE_SIZE)
-    page_number = _coerce_page_number(request.GET.get('page'), paginator.num_pages)
+    page_number = coerce_page_number(request.GET.get('page'), paginator.num_pages)
     page = paginator.page(page_number)
     page.object_list = _user_rows_from_users(page.object_list)
 

@@ -75,7 +75,22 @@ class TierOverrideIssue587Test(TestCase):
         self.assertEqual(results[0]['first_name'], 'Learner')
         self.assertEqual(results[0]['last_name'], 'One')
         self.assertEqual(results[0]['display_name'], 'Learner One')
-        self.assertEqual(results[1]['display_name'], 'learner2@test.com')
+        self.assertEqual(results[1]['email'], 'learner2@test.com')
+        self.assertEqual(results[1]['display_name'], 'learner2')
+
+    def test_user_search_display_name_uses_canonical_whitespace_fallback(self):
+        self._user(
+            'reader@example.com',
+            first_name='  ',
+            last_name='  ',
+        )
+
+        response = self.client.get(reverse('studio_user_search'), {'q': 'reader'})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()['results'][0]
+        self.assertEqual(row['email'], 'reader@example.com')
+        self.assertEqual(row['display_name'], 'reader')
 
     def test_user_search_returns_empty_for_short_empty_and_no_match(self):
         self._user('alpha@test.com')

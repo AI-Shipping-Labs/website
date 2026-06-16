@@ -24,6 +24,7 @@ from django.template import Context, Template
 from django.template.loader import render_to_string
 
 from accounts.services.timezones import format_user_datetime
+from accounts.utils.display import display_name
 from content.utils.markdown import render_email_markdown
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
@@ -260,7 +261,7 @@ class EmailService:
 
         # Build full context with defaults
         full_context = {
-            "user_name": user.first_name or user.email.split("@")[0],
+            "user_name": display_name(user),
             "user_email": user.email,
             "site_url": site_base_url(),
             "site_name": getattr(settings, "SITE_NAME", "AI Shipping Labs"),

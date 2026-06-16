@@ -56,6 +56,32 @@ class ListCommentsAPITest(TestCase):
         self.assertEqual(len(data['comments'][0]['replies']), 1)
         self.assertEqual(data['comments'][0]['replies'][0]['id'], reply.id)
 
+    def test_list_uses_canonical_display_name_for_comments_and_replies(self):
+        named = User.objects.create_user(
+            email='ada@example.com',
+            password='pass',
+            first_name='Ada',
+            last_name='Lovelace',
+        )
+        whitespace = User.objects.create_user(
+            email='reader@example.com',
+            password='pass',
+            first_name='  ',
+            last_name='  ',
+        )
+        top = Comment.objects.create(
+            content_id=self.content_id, user=named, body='Q',
+        )
+        Comment.objects.create(
+            content_id=self.content_id, user=whitespace, parent=top, body='R',
+        )
+
+        response = self.client.get(f'/api/comments/{self.content_id}')
+
+        data = response.json()
+        self.assertEqual(data['comments'][0]['user_name'], 'Ada Lovelace')
+        self.assertEqual(data['comments'][0]['replies'][0]['user_name'], 'reader')
+
     def test_user_voted_flag(self):
         """The user_voted flag is True when current user has voted."""
         top = Comment.objects.create(
@@ -112,6 +138,24 @@ class CreateCommentAPITest(TestCase):
         # Verify in DB
         self.assertEqual(Comment.objects.filter(content_id=self.content_id).count(), 1)
 
+    def test_create_comment_uses_canonical_display_name(self):
+        User.objects.create_user(
+            email='ada@example.com',
+            password='pass',
+            first_name='Ada',
+            last_name='Lovelace',
+        )
+        self.client.login(email='ada@example.com', password='pass')
+
+        response = self.client.post(
+            f'/api/comments/{self.content_id}',
+            data=json.dumps({'body': 'Hello'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()['user_name'], 'Ada Lovelace')
+
     def test_empty_body_returns_400(self):
         self.client.login(email='test@test.com', password='pass')
         response = self.client.post(
@@ -154,6 +198,19 @@ class ReplyAPITest(TestCase):
         self.assertEqual(response.status_code, 201)
         data = response.json()
         self.assertEqual(data['body'], 'pip install -r requirements.txt')
+
+    def test_reply_uses_email_local_part_display_name_fallback(self):
+        User.objects.create_user(email='reader@example.com', password='pass')
+        self.client.login(email='reader@example.com', password='pass')
+
+        response = self.client.post(
+            f'/api/comments/{self.top_comment.id}/reply',
+            data=json.dumps({'body': 'fallback'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()['user_name'], 'reader')
 
     def test_reply_to_reply_returns_400(self):
         reply = Comment.objects.create(

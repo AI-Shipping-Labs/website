@@ -20,6 +20,7 @@ from django.db.models import Count
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 
+from accounts.utils.display import display_name
 from comments.models import Comment, CommentVote
 
 
@@ -97,14 +98,14 @@ def list_comments(request, content_id):
             replies_data.append({
                 'id': reply.id,
                 'body': reply.body,
-                'user_name': reply.user.first_name or reply.user.email.split('@')[0],
+                'user_name': display_name(reply.user),
                 'created_at': reply.created_at.isoformat(),
             })
 
         comments_data.append({
             'id': comment.id,
             'body': comment.body,
-            'user_name': comment.user.first_name or comment.user.email.split('@')[0],
+            'user_name': display_name(comment.user),
             'created_at': comment.created_at.isoformat(),
             'vote_count': comment.vote_count,
             'user_voted': comment.id in user_voted_ids,
@@ -156,7 +157,7 @@ def create_comment(request, content_id):
     return JsonResponse({
         'id': comment.id,
         'body': comment.body,
-        'user_name': request.user.first_name or request.user.email.split('@')[0],
+        'user_name': display_name(request.user),
         'created_at': comment.created_at.isoformat(),
         'vote_count': 0,
         'user_voted': False,
@@ -216,7 +217,7 @@ def reply_to_comment(request, comment_id):
     return JsonResponse({
         'id': reply.id,
         'body': reply.body,
-        'user_name': request.user.first_name or request.user.email.split('@')[0],
+        'user_name': display_name(request.user),
         'created_at': reply.created_at.isoformat(),
     }, status=201)
 

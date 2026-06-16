@@ -46,6 +46,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from accounts.services.email_resolution import normalize_email, resolve_user_by_email
+from accounts.utils.display import display_name
 from community.models import CommunityAuditLog
 from content.access import LEVEL_MAIN
 from email_app.services import EmailService
@@ -398,7 +399,6 @@ def _send_welcome(user, course, actions):
 
 def _welcome_context(user, course):
     site_url = site_base_url().rstrip("/")
-    display_name = user.first_name or (user.email.split("@", 1)[0] if user.email else "")
 
     reset_payload = {
         "user_id": user.pk,
@@ -419,7 +419,7 @@ def _welcome_context(user, course):
     )
 
     return {
-        "user_name": display_name,
+        "user_name": display_name(user),
         "course_name": course or "your course",
         "password_reset_url": f"{site_url}/api/password-reset?token={reset_token}",
         "sign_in_url": f"{site_url}/accounts/login/",

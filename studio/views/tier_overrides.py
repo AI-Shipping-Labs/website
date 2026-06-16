@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 
 from accounts.models import TierOverride
+from accounts.utils.display import display_name
 from content.access import LEVEL_MAIN
 from payments.models import Tier
 from plans.models import Plan, Sprint, SprintEnrollment
@@ -90,11 +91,10 @@ def _display_name_for(user):
     """Return the picker display name for a user.
 
     Prefers ``"First Last"`` (trimmed) when at least one of ``first_name`` or
-    ``last_name`` is non-empty; otherwise falls back to the email so every
-    suggestion row still has something to render.
+    ``last_name`` is non-empty; otherwise falls back to the email local-part.
+    The JSON row also includes the full ``email`` field for staff identity.
     """
-    full = (user.get_full_name() or '').strip()
-    return full or user.email
+    return display_name(user)
 
 
 def _relevance_rank(user, query_lower):

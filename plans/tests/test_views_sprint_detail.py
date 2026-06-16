@@ -11,12 +11,14 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from freezegun import freeze_time
 
 from events.models import Event, EventSeries
 from payments.models import Tier
 from plans.models import Sprint, SprintEnrollment
 
 User = get_user_model()
+FROZEN_CALL_NOW = '2026-06-15T12:00:00Z'
 
 
 def _premium_user(email):
@@ -315,6 +317,7 @@ class SprintDetailCallsTest(TestCase):
         self.assertContains(response, 'data-browser-timezone-enabled="false"')
         self.assertContains(response, 'Zoom')
 
+    @freeze_time(FROZEN_CALL_NOW)
     def test_upcoming_call_open_now_uses_tracked_join_url(self):
         start = timezone.now() + datetime.timedelta(minutes=10)
         event = _series_event(
@@ -336,6 +339,7 @@ class SprintDetailCallsTest(TestCase):
         self.assertContains(response, 'target="_blank"')
         self.assertNotContains(response, 'https://zoom.example.com/raw-live')
 
+    @freeze_time(FROZEN_CALL_NOW)
     def test_upcoming_call_not_open_yet_has_non_link_affordance(self):
         event = _series_event(
             self.series,
@@ -353,6 +357,7 @@ class SprintDetailCallsTest(TestCase):
         self.assertNotContains(response, 'data-testid="sprint-call-join"')
         self.assertNotContains(response, 'https://zoom.example.com/raw-planning')
 
+    @freeze_time(FROZEN_CALL_NOW)
     def test_past_call_is_marked_past_and_has_no_join_button(self):
         start = timezone.now() - datetime.timedelta(hours=2)
         event = _series_event(

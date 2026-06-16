@@ -10,6 +10,10 @@ from plans.models import Plan, Sprint, SprintEnrollment
 User = get_user_model()
 
 
+def _active_sprint_start():
+    return datetime.date.today() - datetime.timedelta(days=14)
+
+
 class SprintsIndexTest(TestCase):
     def test_route_returns_200_for_anonymous_users(self):
         response = self.client.get('/sprints')
@@ -23,11 +27,10 @@ class SprintsIndexTest(TestCase):
         # Dates relative to today so the date-derived badge (#979) reads
         # Active regardless of the calendar date the suite runs on: started
         # two weeks ago, runs four weeks (ends in ~two weeks).
-        today = datetime.date.today()
         sprint = Sprint.objects.create(
             name='May Shipping Sprint',
             slug='may-shipping-sprint',
-            start_date=today - datetime.timedelta(days=14),
+            start_date=_active_sprint_start(),
             duration_weeks=4,
             status='active',
             min_tier_level=20,
@@ -103,7 +106,7 @@ class SprintsIndexTest(TestCase):
         Sprint.objects.create(
             name='Premium Sprint',
             slug='premium-sprint',
-            start_date=datetime.date(2026, 6, 1),
+            start_date=_active_sprint_start(),
             status='active',
             min_tier_level=30,
         )
@@ -121,7 +124,7 @@ class SprintsIndexTest(TestCase):
         sprint = Sprint.objects.create(
             name='Main Sprint',
             slug='main-sprint',
-            start_date=datetime.date(2026, 6, 1),
+            start_date=_active_sprint_start(),
             status='active',
             min_tier_level=20,
         )
@@ -147,7 +150,7 @@ class SprintsIndexTest(TestCase):
         sprint = Sprint.objects.create(
             name='Board Sprint',
             slug='board-sprint',
-            start_date=datetime.date(2026, 6, 1),
+            start_date=_active_sprint_start(),
             status='active',
             min_tier_level=20,
         )
@@ -169,7 +172,7 @@ class SprintsIndexTest(TestCase):
         sprint = Sprint.objects.create(
             name='Detail Sprint',
             slug='detail-sprint',
-            start_date=datetime.date(2026, 6, 1),
+            start_date=_active_sprint_start(),
             status='active',
         )
 

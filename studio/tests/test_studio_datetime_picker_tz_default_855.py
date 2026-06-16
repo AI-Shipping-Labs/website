@@ -119,7 +119,7 @@ class AutodetectMarkerTest(_AdminMixin, TestCase):
 
 
 class SettingsLinkTest(_AdminMixin, TestCase):
-    """The "Set your default timezone" link shows on editable forms only."""
+    """The settings link shows only when the admin has no saved timezone."""
 
     def test_link_present_on_new_event_form(self):
         self.client.login(email='no-tz-admin-855@test.com', password='pw')
@@ -130,11 +130,54 @@ class SettingsLinkTest(_AdminMixin, TestCase):
         self.assertContains(response, 'href="/account/#display-preferences-section"')
         self.assertContains(response, 'Set your default timezone')
 
+    def test_link_absent_on_new_event_form_when_admin_has_preference(self):
+        self.client.login(email='berlin-admin-855@test.com', password='pw')
+        response = self.client.get('/studio/events/new')
+        self.assertNotContains(
+            response, 'data-testid="dtp-event-tz-settings-link"',
+        )
+        self.assertNotContains(response, 'Set your default timezone')
+
     def test_link_present_on_new_series_form(self):
         self.client.login(email='no-tz-admin-855@test.com', password='pw')
         response = self.client.get('/studio/event-series/new')
         self.assertContains(
             response, 'data-testid="dtp-series-tz-settings-link"',
+        )
+
+    def test_link_absent_on_new_series_form_when_admin_has_preference(self):
+        self.client.login(email='berlin-admin-855@test.com', password='pw')
+        response = self.client.get('/studio/event-series/new')
+        self.assertNotContains(
+            response, 'data-testid="dtp-series-tz-settings-link"',
+        )
+
+    def test_link_present_on_edit_event_form_when_admin_has_no_preference(self):
+        event = Event.objects.create(
+            title='Existing Event Link', slug='existing-event-link-855',
+            start_datetime=datetime(2027, 6, 15, 14, 0, tzinfo=UTC),
+            end_datetime=datetime(2027, 6, 15, 15, 0, tzinfo=UTC),
+            timezone='Europe/Berlin',
+            origin='studio',
+        )
+        self.client.login(email='no-tz-admin-855@test.com', password='pw')
+        response = self.client.get(f'/studio/events/{event.pk}/edit')
+        self.assertContains(
+            response, 'data-testid="dtp-event-tz-settings-link"',
+        )
+
+    def test_link_absent_on_edit_event_form_when_admin_has_preference(self):
+        event = Event.objects.create(
+            title='Existing Preferred Link', slug='existing-preferred-link-855',
+            start_datetime=datetime(2027, 6, 15, 14, 0, tzinfo=UTC),
+            end_datetime=datetime(2027, 6, 15, 15, 0, tzinfo=UTC),
+            timezone='Europe/Berlin',
+            origin='studio',
+        )
+        self.client.login(email='berlin-admin-855@test.com', password='pw')
+        response = self.client.get(f'/studio/events/{event.pk}/edit')
+        self.assertNotContains(
+            response, 'data-testid="dtp-event-tz-settings-link"',
         )
 
     def test_link_absent_on_disabled_synced_event_picker(self):

@@ -123,7 +123,7 @@
           data-testid="dtp-{{ id_suffix }}-tz-label">{{ tz_label|default:tz_value|default:'UTC' }}</span>
   </div>
   {% if error_timezone %}<p class="text-xs text-red-400 mt-1" data-testid="{{ error_timezone_testid|default:'error-timezone' }}">{{ error_timezone }}</p>{% endif %}
-  {% if not disabled %}
+  {% if not disabled and tz_settings_link %}
   <p class="text-xs text-muted-foreground mt-1" data-testid="dtp-{{ id_suffix }}-tz-settings-link">
     <a href="/account/#display-preferences-section" class="text-accent hover:underline">Set your default timezone</a>
   </p>

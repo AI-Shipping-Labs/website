@@ -71,6 +71,27 @@ def get_event_display_timezone():
     return DEFAULT_EVENT_DISPLAY_TIMEZONE
 
 
+def get_event_site_default_timezone(*, fallback='UTC'):
+    """Return the configured site event timezone, or ``fallback``.
+
+    Creation defaults should only use an operator-configured
+    ``EVENT_DISPLAY_TIMEZONE`` value. They fall back to UTC when that
+    setting is unset or invalid instead of inheriting the public display
+    helper's historical Europe/Berlin default.
+    """
+    configured_timezone = get_config(EVENT_DISPLAY_TIMEZONE_SETTING, '')
+    if is_valid_timezone(configured_timezone):
+        return configured_timezone
+    return fallback
+
+
+def resolve_event_creation_timezone(user=None):
+    """Resolve the default timezone for newly-created events."""
+    if user and is_valid_timezone(getattr(user, 'preferred_timezone', '')):
+        return user.preferred_timezone
+    return get_event_site_default_timezone(fallback='UTC')
+
+
 def resolve_event_display_timezone(user=None):
     """Resolve a server-side event display timezone.
 

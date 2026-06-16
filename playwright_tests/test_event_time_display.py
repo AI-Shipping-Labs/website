@@ -229,6 +229,29 @@ def test_logged_in_preference_wins_over_browser_timezone(
 
 
 @pytest.mark.django_db(transaction=True)
+def test_signed_in_attendee_sees_own_timezone_not_event_timezone(
+    django_server, django_db_blocker, browser
+):
+    with django_db_blocker.unblock():
+        _clear_events_settings_and_users()
+        event = _create_fixed_event()
+        _create_user('kolkata@timezone.test', preferred_timezone='Asia/Kolkata')
+
+    context = _auth_context(browser, 'kolkata@timezone.test', django_db_blocker)
+    page = context.new_page()
+    _stub_browser_timezone(page, 'Europe/Berlin')
+
+    page.goto(f'{django_server}{event.get_absolute_url()}', wait_until='domcontentloaded')
+
+    row_text = page.get_by_test_id('event-time-row').inner_text()
+    assert 'April 13, 2026, 22:00-23:30 Asia/Kolkata' in row_text
+    assert 'Europe/Berlin' not in row_text
+    assert 'UTC' not in row_text
+    assert page.get_by_test_id('event-timezone-select').count() == 0
+    context.close()
+
+
+@pytest.mark.django_db(transaction=True)
 def test_member_clears_timezone_and_uses_browser_timezone(
     django_server, django_db_blocker, browser
 ):

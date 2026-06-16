@@ -24,6 +24,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from events.models import Event, EventSeries
+from integrations.config import clear_config_cache
+from integrations.models import IntegrationSetting
 
 User = get_user_model()
 
@@ -56,6 +58,27 @@ class _AdminMixin:
             is_staff=True,
         )
         # preferred_timezone defaults to '' on the User model.
+
+    def setUp(self):
+        clear_config_cache()
+        super().setUp()
+
+    def tearDown(self):
+        clear_config_cache()
+        super().tearDown()
+
+
+def _set_event_display_timezone(timezone_name):
+    IntegrationSetting.objects.update_or_create(
+        key='EVENT_DISPLAY_TIMEZONE',
+        defaults={
+            'value': timezone_name,
+            'group': 'site',
+            'is_secret': False,
+            'description': 'Default public event timezone.',
+        },
+    )
+    clear_config_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +159,16 @@ class NewEventTzDefaultTest(_AdminMixin, TestCase):
         self.assertEqual(
             _selected_tz_value(response.content.decode()),
             'UTC',
+        )
+
+    def test_admin_without_preference_uses_site_default_when_configured(self):
+        _set_event_display_timezone('Asia/Kolkata')
+        self.client.login(email='no-tz-admin-665@test.com', password='pw')
+        response = self.client.get('/studio/events/new')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            _selected_tz_value(response.content.decode()),
+            'Asia/Kolkata',
         )
 
     def test_form_default_value_is_not_europe_berlin(self):
@@ -285,6 +318,24 @@ class CreateEventRoundTripUtcTest(_AdminMixin, TestCase):
             datetime(2027, 6, 15, 18, 30, tzinfo=UTC),
         )
 
+    def test_post_without_timezone_field_uses_admin_preferred_timezone(self):
+        self.client.login(email='berlin-admin-665@test.com', password='pw')
+        response = self.client.post('/studio/events/new', {
+            'title': 'Berlin Default Office Hours',
+            'slug': 'berlin-default-office-hours-999',
+            'event_date': '15/06/2027',
+            'event_time': '14:30',
+            'duration_hours': '1',
+            'status': 'draft',
+        })
+        self.assertEqual(response.status_code, 302)
+        event = Event.objects.get(slug='berlin-default-office-hours-999')
+        self.assertEqual(event.timezone, 'Europe/Berlin')
+        self.assertEqual(
+            event.start_datetime,
+            datetime(2027, 6, 15, 12, 30, tzinfo=UTC),
+        )
+
     def test_invalid_tz_post_is_rejected_with_field_error(self):
         self.client.login(email='ny-admin-665@test.com', password='pw')
         response = self.client.post('/studio/events/new', {
@@ -324,6 +375,16 @@ class NewEventSeriesTzDefaultTest(_AdminMixin, TestCase):
         self.assertEqual(
             _selected_tz_value(response.content.decode()),
             'UTC',
+        )
+
+    def test_admin_without_preference_uses_site_default_on_series(self):
+        _set_event_display_timezone('Asia/Kolkata')
+        self.client.login(email='no-tz-admin-665@test.com', password='pw')
+        response = self.client.get('/studio/event-series/new')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            _selected_tz_value(response.content.decode()),
+            'Asia/Kolkata',
         )
 
     def test_series_view_module_no_longer_hardcodes_europe_berlin(self):

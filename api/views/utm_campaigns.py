@@ -30,7 +30,14 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
-from api.utils import parse_json_body, require_methods
+from api.utils import (
+    body_must_be_object_response,
+    coerce_optional_text,
+    parse_bool_query,
+    parse_json_body,
+    require_methods,
+    validation_response,
+)
 from integrations.models import UtmCampaign, UtmCampaignLink
 from integrations.models.utm_campaign import (
     UTM_MEDIUM_PRESETS,
@@ -146,24 +153,6 @@ def serialize_link(link):
     }
 
 
-def _body_must_be_object_response():
-    return error_response(
-        "Body must be a JSON object",
-        "invalid_type",
-        status=422,
-        details={"field": "body", "expected": "object"},
-    )
-
-
-def _validation_response(details, message="Validation error"):
-    return error_response(
-        message,
-        "validation_error",
-        status=422,
-        details=details,
-    )
-
-
 def _unknown_campaign_response():
     return error_response(
         "Campaign not found",
@@ -180,30 +169,12 @@ def _unknown_link_response():
     )
 
 
-def _coerce_optional_text(value):
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
 def _is_valid_slug(value):
     try:
         UTM_SLUG_VALIDATOR(value)
     except ValidationError:
         return False
     return True
-
-
-def _parse_bool_query(value):
-    """Return True/False/None for an ``is_archived``-style query value."""
-    if value is None:
-        return None
-    lowered = value.strip().lower()
-    if lowered in ("true", "1", "yes", "on"):
-        return True
-    if lowered in ("false", "0", "no", "off"):
-        return False
-    return None
 
 
 def _collect_campaign_values(data, *, existing=None):
@@ -218,7 +189,7 @@ def _collect_campaign_values(data, *, existing=None):
     values = {}
 
     if "name" in data:
-        name = _coerce_optional_text(data["name"])
+        name = coerce_optional_text(data["name"])
         if not name:
             errors["name"] = "Name is required."
         elif len(name) > 200:
@@ -228,7 +199,7 @@ def _collect_campaign_values(data, *, existing=None):
         errors["name"] = "Name is required."
 
     if "slug" in data:
-        slug = _coerce_optional_text(data["slug"])
+        slug = coerce_optional_text(data["slug"])
         if not slug:
             errors["slug"] = "Slug is required."
         elif not _is_valid_slug(slug):
@@ -267,7 +238,7 @@ def _collect_campaign_values(data, *, existing=None):
 
     for field in ("default_utm_source", "default_utm_medium"):
         if field in data:
-            value = _coerce_optional_text(data[field])
+            value = coerce_optional_text(data[field])
             if not value:
                 errors[field] = "This field is required."
             elif len(value) > 100:
@@ -305,7 +276,7 @@ def _collect_link_values(data, campaign, *, existing=None):
     values = {}
 
     if "utm_content" in data:
-        utm_content = _coerce_optional_text(data["utm_content"])
+        utm_content = coerce_optional_text(data["utm_content"])
         if not utm_content:
             errors["utm_content"] = "utm_content is required."
         elif not _is_valid_slug(utm_content):
@@ -331,7 +302,7 @@ def _collect_link_values(data, campaign, *, existing=None):
         errors["utm_content"] = "utm_content is required."
 
     if "destination" in data:
-        destination = _coerce_optional_text(data["destination"])
+        destination = coerce_optional_text(data["destination"])
         if not destination:
             errors["destination"] = "destination is required."
         elif len(destination) > 1000:
@@ -343,7 +314,7 @@ def _collect_link_values(data, campaign, *, existing=None):
 
     for field in ("label", "utm_term", "utm_source", "utm_medium"):
         if field in data:
-            value = _coerce_optional_text(data[field])
+            value = coerce_optional_text(data[field])
             max_len = 200 if field == "label" else 100
             if len(value) > max_len:
                 errors[field] = f"Must be at most {max_len} characters."
@@ -477,9 +448,9 @@ def utm_campaigns_collection(request):
 
         archived_raw = request.GET.get("is_archived")
         if archived_raw is not None:
-            archived = _parse_bool_query(archived_raw)
+            archived = parse_bool_query(archived_raw)
             if archived is None:
-                return _validation_response(
+                return validation_response(
                     {"is_archived": "Must be a boolean."}
                 )
             qs = qs.filter(is_archived=archived)
@@ -498,11 +469,11 @@ def utm_campaigns_collection(request):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response(status=422)
 
     values, errors = _collect_campaign_values(data, existing=None)
     if errors:
-        return _validation_response(errors)
+        return validation_response(errors)
 
     campaign = UtmCampaign(
         created_by=request.user if request.user.is_authenticated else None,
@@ -512,7 +483,7 @@ def utm_campaigns_collection(request):
         campaign.save()
     except IntegrityError:
         # Race on slug uniqueness; surface as a validation error.
-        return _validation_response(
+        return validation_response(
             {"slug": "A campaign with this slug already exists."}
         )
     return JsonResponse(serialize_campaign(campaign), status=201)
@@ -608,7 +579,7 @@ def utm_campaign_detail(request, campaign_id):
         return _unknown_campaign_response()
 
     if request.method == "GET":
-        include_archived = _parse_bool_query(
+        include_archived = parse_bool_query(
             request.GET.get("include_archived")
         )
         links_qs = campaign.links.all()
@@ -624,17 +595,17 @@ def utm_campaign_detail(request, campaign_id):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response(status=422)
 
     values, errors = _collect_campaign_values(data, existing=campaign)
     if errors:
-        return _validation_response(errors)
+        return validation_response(errors)
 
     _apply_values(campaign, values, CAMPAIGN_WRITABLE_FIELDS)
     try:
         campaign.save()
     except IntegrityError:
-        return _validation_response(
+        return validation_response(
             {"slug": "A campaign with this slug already exists."}
         )
     return JsonResponse(serialize_campaign(campaign), status=200)
@@ -723,9 +694,9 @@ def utm_campaign_links_collection(request, campaign_id):
         qs = campaign.links.all()
         archived_raw = request.GET.get("is_archived")
         if archived_raw is not None:
-            archived = _parse_bool_query(archived_raw)
+            archived = parse_bool_query(archived_raw)
             if archived is None:
-                return _validation_response(
+                return validation_response(
                     {"is_archived": "Must be a boolean."}
                 )
             qs = qs.filter(is_archived=archived)
@@ -739,11 +710,11 @@ def utm_campaign_links_collection(request, campaign_id):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response(status=422)
 
     values, errors = _collect_link_values(data, campaign, existing=None)
     if errors:
-        return _validation_response(errors)
+        return validation_response(errors)
 
     link = UtmCampaignLink(
         campaign=campaign,
@@ -753,7 +724,7 @@ def utm_campaign_links_collection(request, campaign_id):
     try:
         link.save()
     except IntegrityError:
-        return _validation_response(
+        return validation_response(
             {
                 "utm_content": (
                     "A link with this utm_content already exists for this "
@@ -853,17 +824,17 @@ def utm_campaign_link_detail(request, campaign_id, link_id):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response(status=422)
 
     values, errors = _collect_link_values(data, campaign, existing=link)
     if errors:
-        return _validation_response(errors)
+        return validation_response(errors)
 
     _apply_values(link, values, LINK_WRITABLE_FIELDS)
     try:
         link.save()
     except IntegrityError:
-        return _validation_response(
+        return validation_response(
             {
                 "utm_content": (
                     "A link with this utm_content already exists for this "

@@ -215,6 +215,30 @@ class EventSeriesListTest(EventSeriesApiTestBase):
         self.assertNotIn("ai-eval-sprint", slugs_false)
         self.assertIn("archived-series", slugs_false)
 
+    def test_list_is_active_filter_accepts_tolerant_boolean_values(self):
+        cases = (
+            (" TRUE ", {"ai-eval-sprint", "other-series"}),
+            ("1", {"ai-eval-sprint", "other-series"}),
+            ("yes", {"ai-eval-sprint", "other-series"}),
+            ("on", {"ai-eval-sprint", "other-series"}),
+            (" FALSE ", {"archived-series"}),
+            ("0", {"archived-series"}),
+            ("no", {"archived-series"}),
+            ("off", {"archived-series"}),
+        )
+        for value, expected_slugs in cases:
+            with self.subTest(value=value):
+                response = self.client.get(
+                    "/api/event-series",
+                    {"is_active": value},
+                    **self._auth(),
+                )
+                self.assertEqual(response.status_code, 200)
+                slugs = {
+                    r["slug"] for r in response.json()["event_series"]
+                }
+                self.assertEqual(slugs, expected_slugs)
+
     def test_list_filters_by_q(self):
         response = self._get("/api/event-series?q=Eval")
         slugs = {r["slug"] for r in response.json()["event_series"]}
@@ -276,6 +300,20 @@ class EventSeriesCreateTest(EventSeriesApiTestBase):
         details = response.json()["details"]
         for field in ("name", "day_of_week", "start_time", "cadence"):
             self.assertIn(field, details)
+
+    def test_create_series_returns_400_on_non_object_body(self):
+        response = self.client.post(
+            "/api/event-series",
+            data=json.dumps([1, 2, 3]),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "invalid_type")
+        self.assertEqual(
+            response.json()["details"],
+            {"field": "body", "expected": "object"},
+        )
 
 
 class EventSeriesDetailTest(EventSeriesApiTestBase):
@@ -344,6 +382,20 @@ class EventSeriesPatchTest(EventSeriesApiTestBase):
         )
         self.assertEqual(response.status_code, 422)
         self.assertIn("is_active", response.json()["details"])
+
+    def test_patch_returns_400_on_non_object_body(self):
+        response = self.client.patch(
+            f"/api/event-series/{self.series.pk}",
+            data=json.dumps([1, 2, 3]),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "invalid_type")
+        self.assertEqual(
+            response.json()["details"],
+            {"field": "body", "expected": "object"},
+        )
 
 
 class EventSeriesDeleteTest(EventSeriesApiTestBase):

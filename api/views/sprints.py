@@ -21,7 +21,11 @@ from accounts.utils.display import display_name
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.plans import serialize_sprint
-from api.utils import parse_json_body, require_methods
+from api.utils import (
+    delete_not_available_response,
+    parse_json_body,
+    require_methods,
+)
 from api.views._permissions import bearer_is_admin, visible_plans_for
 from crm.models import SlackMessage, SlackThread
 from plans.models import (
@@ -45,13 +49,6 @@ SPRINT_DELETE_NOT_AVAILABLE_MESSAGE = (
     "Go to Studio to delete this sprint manually."
 )
 
-
-def _sprint_delete_not_available_response():
-    return error_response(
-        SPRINT_DELETE_NOT_AVAILABLE_MESSAGE,
-        "sprint_delete_not_available",
-        status=405,
-    )
 
 # Sorted list for OpenAPI ``enum`` entries (deterministic output).
 _SPRINT_STATUS_ENUM = sorted(VALID_SPRINT_STATUSES)
@@ -724,7 +721,10 @@ def sprint_detail(request, slug):
     Studio pointer before any lookup. Update sprint state via PATCH instead.
     """
     if request.method == "DELETE":
-        return _sprint_delete_not_available_response()
+        return delete_not_available_response(
+            SPRINT_DELETE_NOT_AVAILABLE_MESSAGE,
+            "sprint_delete_not_available",
+        )
 
     sprint = (
         Sprint.objects.select_related("event_series")

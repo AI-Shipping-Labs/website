@@ -24,7 +24,14 @@ from accounts.auth import token_required
 from accounts.services.timezones import is_valid_timezone
 from api.openapi import openapi_spec
 from api.safety import error_response
-from api.utils import parse_json_body, require_methods
+from api.utils import (
+    body_must_be_object_response,
+    coerce_optional_text,
+    delete_not_available_response,
+    parse_json_body,
+    require_methods,
+    validation_response,
+)
 from content.access import VISIBILITY_CHOICES
 from events.models import Event, EventHost, Host
 from events.models.event import (
@@ -179,37 +186,12 @@ def serialize_event(event):
     }
 
 
-def _delete_not_available_response():
-    return error_response(
-        DELETE_NOT_AVAILABLE_MESSAGE,
-        "event_delete_not_available",
-        status=405,
-    )
-
-
 def _read_only_field_response(field):
     return error_response(
         f"{field} is read-only",
         "read_only_field",
         status=422,
         details={"field": field},
-    )
-
-
-def _body_must_be_object_response():
-    return error_response(
-        "Body must be a JSON object",
-        "invalid_type",
-        details={"field": "body", "expected": "object"},
-    )
-
-
-def _validation_response(details, message="Validation error"):
-    return error_response(
-        message,
-        "validation_error",
-        status=422,
-        details=details,
     )
 
 
@@ -226,19 +208,13 @@ def _parse_iso_datetime(value):
     return parsed, None
 
 
-def _coerce_optional_text(value):
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
 def _collect_event_values(data, *, existing=None):
     """Validate API payload and return model field values or error details."""
     errors = {}
     values = {}
 
     if "title" in data:
-        title = _coerce_optional_text(data["title"])
+        title = coerce_optional_text(data["title"])
         if not title:
             errors["title"] = "Title is required."
         values["title"] = title
@@ -246,19 +222,19 @@ def _collect_event_values(data, *, existing=None):
         errors["title"] = "Title is required."
 
     if "slug" in data:
-        raw_slug = _coerce_optional_text(data["slug"])
+        raw_slug = coerce_optional_text(data["slug"])
         values["slug"] = raw_slug
     elif existing is None:
         values["slug"] = ""
 
     for field in ("description", "timezone", "zoom_join_url", "location"):
         if field in data:
-            values[field] = _coerce_optional_text(data[field])
+            values[field] = coerce_optional_text(data[field])
     if "timezone" in values and not is_valid_timezone(values["timezone"]):
         errors["timezone"] = "Unknown timezone."
 
     if "host_email" in data:
-        host_email = _coerce_optional_text(data["host_email"])
+        host_email = coerce_optional_text(data["host_email"])
         if host_email:
             try:
                 validate_email(host_email)
@@ -273,7 +249,7 @@ def _collect_event_values(data, *, existing=None):
         ("external_host", VALID_EXTERNAL_HOSTS),
     ):
         if field in data:
-            value = _coerce_optional_text(data[field])
+            value = coerce_optional_text(data[field])
             if value not in valid_values:
                 errors[field] = "Unknown choice."
             values[field] = value
@@ -410,9 +386,9 @@ def _save_event_or_error(event):
         event.save()
     except ValidationError as exc:
         message = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
-        return _validation_response({"event": message})
+        return validation_response({"event": message})
     except IntegrityError:
-        return _validation_response({"slug": "Slug already in use."})
+        return validation_response({"slug": "Slug already in use."})
     return None
 
 
@@ -428,9 +404,9 @@ def _validate_create_zoom(data, *, platform):
         return False, None
     value = data["create_zoom"]
     if not isinstance(value, bool):
-        return False, _validation_response({"create_zoom": "Must be a boolean."})
+        return False, validation_response({"create_zoom": "Must be a boolean."})
     if value and platform != "zoom":
-        return value, _validation_response(
+        return value, validation_response(
             {"create_zoom": "create_zoom is only valid when platform is 'zoom'."}
         )
     return value, None
@@ -485,7 +461,7 @@ def _validate_generate_banner(data, *, default):
         return default, None
     value = data["generate_banner"]
     if not isinstance(value, bool):
-        return default, _validation_response(
+        return default, validation_response(
             {"generate_banner": "Must be a boolean."}
         )
     return value, None
@@ -665,20 +641,23 @@ def _maybe_enqueue_banner(event, generate_banner):
 def events_collection(request):
     """GET/POST/DELETE ``/api/events``."""
     if request.method == "DELETE":
-        return _delete_not_available_response()
+        return delete_not_available_response(
+            DELETE_NOT_AVAILABLE_MESSAGE,
+            "event_delete_not_available",
+        )
 
     if request.method == "GET":
         qs = Event.objects.prefetch_related(_host_prefetch()).all()
         status_filter = request.GET.get("status")
         if status_filter:
             if status_filter not in VALID_STATUSES:
-                return _validation_response({"status": "Unknown status."})
+                return validation_response({"status": "Unknown status."})
             qs = qs.filter(status=status_filter)
 
         origin_filter = request.GET.get("origin")
         if origin_filter:
             if origin_filter not in VALID_ORIGINS:
-                return _validation_response({"origin": "Unknown origin."})
+                return validation_response({"origin": "Unknown origin."})
             qs = qs.filter(origin=origin_filter)
 
         query = request.GET.get("q")
@@ -694,7 +673,7 @@ def events_collection(request):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response()
 
     for field in sorted(READ_ONLY_FIELDS):
         if field in data:
@@ -704,7 +683,7 @@ def events_collection(request):
     host_ids, host_errors = _validate_host_ids(data)
     errors.update(host_errors)
     if errors:
-        return _validation_response(errors)
+        return validation_response(errors)
 
     effective_platform = values.get("platform", "zoom")
     create_zoom, zoom_error_response = _validate_create_zoom(
@@ -882,7 +861,10 @@ def events_collection(request):
 def event_detail(request, slug):
     """GET/PATCH/DELETE ``/api/events/<slug>``."""
     if request.method == "DELETE":
-        return _delete_not_available_response()
+        return delete_not_available_response(
+            DELETE_NOT_AVAILABLE_MESSAGE,
+            "event_delete_not_available",
+        )
 
     event = (
         Event.objects
@@ -911,7 +893,7 @@ def event_detail(request, slug):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response()
 
     for field in sorted(READ_ONLY_FIELDS):
         if field in data:
@@ -921,7 +903,7 @@ def event_detail(request, slug):
     host_ids, host_errors = _validate_host_ids(data)
     errors.update(host_errors)
     if errors:
-        return _validation_response(errors)
+        return validation_response(errors)
 
     effective_platform = values.get("platform", event.platform)
     create_zoom, zoom_error_response = _validate_create_zoom(

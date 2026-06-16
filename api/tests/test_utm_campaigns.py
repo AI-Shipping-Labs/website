@@ -107,6 +107,27 @@ class CampaignListTest(UtmApiTestBase):
         slugs = [c["slug"] for c in response.json()["campaigns"]]
         self.assertEqual(slugs, ["spring_launch"])
 
+    def test_filter_is_archived_accepts_tolerant_boolean_values(self):
+        cases = (
+            (" TRUE ", ["winter_recap"]),
+            ("1", ["winter_recap"]),
+            ("yes", ["winter_recap"]),
+            ("on", ["winter_recap"]),
+            (" FALSE ", ["spring_launch"]),
+            ("0", ["spring_launch"]),
+            ("no", ["spring_launch"]),
+            ("off", ["spring_launch"]),
+        )
+        for value, expected_slugs in cases:
+            with self.subTest(value=value):
+                response = self.client.get(
+                    COLLECTION,
+                    {"is_archived": value},
+                    **self._auth(),
+                )
+                slugs = [c["slug"] for c in response.json()["campaigns"]]
+                self.assertEqual(slugs, expected_slugs)
+
     def test_filter_q_name_icontains(self):
         response = self._get(COLLECTION + "?q=spring")
         slugs = [c["slug"] for c in response.json()["campaigns"]]
@@ -176,6 +197,23 @@ class CampaignCreateTest(UtmApiTestBase):
         self.assertEqual(body["default_utm_source"], "my_custom_source")
         self.assertEqual(body["default_utm_medium"], "my_custom_medium")
 
+    def test_create_coerces_optional_text_fields(self):
+        response = self._post(
+            COLLECTION,
+            self._payload(
+                name="  May Newsletter  ",
+                default_utm_source=" newsletter ",
+                default_utm_medium=" email ",
+                notes=None,
+            ),
+        )
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["name"], "May Newsletter")
+        self.assertEqual(body["default_utm_source"], "newsletter")
+        self.assertEqual(body["default_utm_medium"], "email")
+        self.assertEqual(body["notes"], "")
+
     def test_invalid_json_returns_400(self):
         response = self.client.post(
             COLLECTION,
@@ -184,6 +222,20 @@ class CampaignCreateTest(UtmApiTestBase):
             **self._auth(),
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_create_returns_422_on_non_object_body(self):
+        response = self.client.post(
+            COLLECTION,
+            data=json.dumps([1, 2, 3]),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "invalid_type")
+        self.assertEqual(
+            response.json()["details"],
+            {"field": "body", "expected": "object"},
+        )
 
 
 class CampaignDetailTest(UtmApiTestBase):
@@ -221,6 +273,27 @@ class CampaignDetailTest(UtmApiTestBase):
         )
         contents = {link["utm_content"] for link in response.json()["links"]}
         self.assertEqual(contents, {"hero", "footer"})
+
+    def test_detail_include_archived_accepts_tolerant_boolean_values(self):
+        true_response = self.client.get(
+            f"{COLLECTION}/{self.campaign.pk}",
+            {"include_archived": " YES "},
+            **self._auth(),
+        )
+        true_contents = {
+            link["utm_content"] for link in true_response.json()["links"]
+        }
+        self.assertEqual(true_contents, {"hero", "footer"})
+
+        false_response = self.client.get(
+            f"{COLLECTION}/{self.campaign.pk}",
+            {"include_archived": "off"},
+            **self._auth(),
+        )
+        false_contents = {
+            link["utm_content"] for link in false_response.json()["links"]
+        }
+        self.assertEqual(false_contents, {"hero"})
 
     def test_unknown_campaign_returns_404(self):
         response = self._get(f"{COLLECTION}/999999")
@@ -299,6 +372,20 @@ class CampaignPatchTest(UtmApiTestBase):
         self.assertEqual(response.status_code, 200)
         self.campaign.refresh_from_db()
         self.assertEqual(self.campaign.name, "Still Fine")
+
+    def test_patch_returns_422_on_non_object_body(self):
+        response = self.client.patch(
+            f"{COLLECTION}/{self.campaign.pk}",
+            data=json.dumps([1, 2, 3]),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "invalid_type")
+        self.assertEqual(
+            response.json()["details"],
+            {"field": "body", "expected": "object"},
+        )
 
 
 class LinkCollectionTest(UtmApiTestBase):
@@ -390,6 +477,37 @@ class LinkCollectionTest(UtmApiTestBase):
         response = self._get(self._links_path() + "?is_archived=false")
         contents = {link["utm_content"] for link in response.json()["links"]}
         self.assertEqual(contents, {"active_one"})
+
+    def test_list_links_filter_is_archived_accepts_tolerant_boolean_values(self):
+        UtmCampaignLink.objects.create(
+            campaign=self.campaign, utm_content="active_one", destination="/a"
+        )
+        UtmCampaignLink.objects.create(
+            campaign=self.campaign,
+            utm_content="archived_one",
+            destination="/b",
+            is_archived=True,
+        )
+
+        true_response = self.client.get(
+            self._links_path(),
+            {"is_archived": "ON"},
+            **self._auth(),
+        )
+        self.assertEqual(
+            {link["utm_content"] for link in true_response.json()["links"]},
+            {"archived_one"},
+        )
+
+        false_response = self.client.get(
+            self._links_path(),
+            {"is_archived": " off "},
+            **self._auth(),
+        )
+        self.assertEqual(
+            {link["utm_content"] for link in false_response.json()["links"]},
+            {"active_one"},
+        )
 
     def test_list_links_unknown_campaign_returns_404(self):
         response = self._get(f"{COLLECTION}/999999/links")

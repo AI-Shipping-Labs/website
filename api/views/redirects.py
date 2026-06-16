@@ -23,7 +23,11 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
-from api.utils import parse_json_body, require_methods
+from api.utils import (
+    delete_not_available_response,
+    parse_json_body,
+    require_methods,
+)
 from integrations.middleware import clear_redirect_cache
 from integrations.models import Redirect
 
@@ -221,14 +225,6 @@ def _conflict_response(source_path, *, index=None):
     )
 
 
-def _redirect_delete_not_available_response():
-    return error_response(
-        REDIRECT_DELETE_NOT_AVAILABLE_MESSAGE,
-        "redirect_delete_not_available",
-        status=405,
-    )
-
-
 @token_required
 @csrf_exempt
 @require_methods("GET", "POST")
@@ -421,7 +417,10 @@ def redirect_detail(request, redirect_id):
     Studio pointer before any lookup. Deactivate via ``PATCH is_active=false``.
     """
     if request.method == "DELETE":
-        return _redirect_delete_not_available_response()
+        return delete_not_available_response(
+            REDIRECT_DELETE_NOT_AVAILABLE_MESSAGE,
+            "redirect_delete_not_available",
+        )
 
     redirect_obj = Redirect.objects.filter(pk=redirect_id).first()
     if redirect_obj is None:

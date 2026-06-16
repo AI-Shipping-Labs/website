@@ -60,15 +60,20 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
-from api.utils import parse_json_body, require_methods
+from api.utils import (
+    body_must_be_object_response,
+    delete_not_available_response,
+    parse_bool_query,
+    parse_json_body,
+    require_methods,
+    validation_response,
+)
 from api.views.events import (
     READ_ONLY_FIELDS,
     VALID_REQUIRED_LEVELS,
     _apply_event_values,
-    _body_must_be_object_response,
     _collect_event_values,
     _save_event_or_error,
-    _validation_response,
     serialize_event,
 )
 from events.models import Event, EventSeries
@@ -163,22 +168,6 @@ def serialize_event_series(series):
     }
 
 
-def _series_delete_not_available_response():
-    return error_response(
-        SERIES_DELETE_NOT_AVAILABLE_MESSAGE,
-        "series_delete_not_available",
-        status=405,
-    )
-
-
-def _occurrence_delete_not_available_response():
-    return error_response(
-        OCCURRENCE_DELETE_NOT_AVAILABLE_MESSAGE,
-        "occurrence_delete_not_available",
-        status=405,
-    )
-
-
 def _unknown_series_response():
     return error_response(
         "Event series not found",
@@ -193,18 +182,6 @@ def _unknown_occurrence_response():
         "unknown_event",
         status=404,
     )
-
-
-def _parse_bool_query(value):
-    """Parse a query-string boolean. ``None`` means missing."""
-    if value is None:
-        return None
-    lowered = value.strip().lower()
-    if lowered in ("true", "1", "yes"):
-        return True
-    if lowered in ("false", "0", "no"):
-        return False
-    return None
 
 
 def _collect_series_values(data, *, existing=None):
@@ -373,7 +350,7 @@ def _save_series_or_error(series):
     try:
         series.save()
     except IntegrityError:
-        return _validation_response({"slug": "Slug already in use."})
+        return validation_response({"slug": "Slug already in use."})
     return None
 
 
@@ -485,11 +462,14 @@ def event_series_collection(request):
     - ``q`` -- icontains match on ``name``.
     """
     if request.method == "DELETE":
-        return _series_delete_not_available_response()
+        return delete_not_available_response(
+            SERIES_DELETE_NOT_AVAILABLE_MESSAGE,
+            "series_delete_not_available",
+        )
 
     if request.method == "GET":
         qs = EventSeries.objects.all()
-        is_active = _parse_bool_query(request.GET.get("is_active"))
+        is_active = parse_bool_query(request.GET.get("is_active"))
         if is_active is not None:
             qs = qs.filter(is_active=is_active)
         query = request.GET.get("q")
@@ -504,11 +484,11 @@ def event_series_collection(request):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response()
 
     values, errors = _collect_series_values(data, existing=None)
     if errors:
-        return _validation_response(errors)
+        return validation_response(errors)
 
     series = EventSeries(
         cadence="weekly",
@@ -622,7 +602,10 @@ def event_series_detail(request, series_id):
     ``is_active=false`` hides the series without touching its occurrences.
     """
     if request.method == "DELETE":
-        return _series_delete_not_available_response()
+        return delete_not_available_response(
+            SERIES_DELETE_NOT_AVAILABLE_MESSAGE,
+            "series_delete_not_available",
+        )
 
     series = EventSeries.objects.filter(pk=series_id).first()
     if series is None:
@@ -643,11 +626,11 @@ def event_series_detail(request, series_id):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response()
 
     values, errors = _collect_series_values(data, existing=series)
     if errors:
-        return _validation_response(errors)
+        return validation_response(errors)
 
     name_changed = "name" in values and values["name"] != series.name
 
@@ -953,7 +936,7 @@ def event_series_occurrences_bulk(request, series_id):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response()
 
     payload = data.get("occurrences")
     if payload is None:
@@ -1301,7 +1284,7 @@ def event_series_occurrences_reconcile(request, series_id):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response()
 
     payload = data.get("occurrences")
     if payload is None:
@@ -1510,7 +1493,10 @@ def event_series_occurrence_detail(request, series_id, occurrence_id):
     NO DELETE — cancel via PATCH only.
     """
     if request.method == "DELETE":
-        return _occurrence_delete_not_available_response()
+        return delete_not_available_response(
+            OCCURRENCE_DELETE_NOT_AVAILABLE_MESSAGE,
+            "occurrence_delete_not_available",
+        )
 
     series = EventSeries.objects.filter(pk=series_id).first()
     if series is None:
@@ -1530,7 +1516,7 @@ def event_series_occurrence_detail(request, series_id, occurrence_id):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response()
 
     # Read-only check matches ``api/views/events.py``.
     for field in sorted(READ_ONLY_FIELDS):
@@ -1544,7 +1530,7 @@ def event_series_occurrence_detail(request, series_id, occurrence_id):
 
     values, errors = _collect_event_values(data, existing=event)
     if errors:
-        return _validation_response(errors)
+        return validation_response(errors)
 
     # Issue #958: a PATCH that sets ``required_level`` to a value differing
     # from the series level is rejected (no ``index`` on the single PATCH).

@@ -405,6 +405,22 @@ class EventsCreateTest(EventsApiTestBase):
         self.assertEqual(body["required_level"], 20)
         self.assertFalse(body["published"])
 
+    def test_create_coerces_optional_text_fields(self):
+        response = self._post({
+            "title": "  Text Event  ",
+            "description": None,
+            "location": "  Zoom Room  ",
+            "zoom_join_url": None,
+            "start_datetime": self.start.isoformat(),
+        })
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["title"], "Text Event")
+        self.assertEqual(body["description"], "")
+        self.assertEqual(body["location"], "Zoom Room")
+        self.assertEqual(body["zoom_join_url"], "")
+
     def test_create_rejects_read_only_source_fields(self):
         before = Event.objects.count()
         for field in ("origin", "source_repo", "source_path", "source_commit", "content_id"):
@@ -453,6 +469,20 @@ class EventsCreateTest(EventsApiTestBase):
         ):
             self.assertIn(field, body["details"])
         self.assertEqual(Event.objects.count(), before)
+
+    def test_create_returns_400_on_non_object_body(self):
+        response = self.client.post(
+            "/api/events",
+            data=json.dumps([1, 2, 3]),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "invalid_type")
+        self.assertEqual(
+            response.json()["details"],
+            {"field": "body", "expected": "object"},
+        )
 
     def test_create_rejects_end_before_start(self):
         response = self._post({
@@ -559,6 +589,20 @@ class EventsUpdateTest(EventsApiTestBase):
         read_only = self._patch("studio-event", {"source_repo": "repo"})
         self.assertEqual(read_only.status_code, 422)
         self.assertEqual(read_only.json()["code"], "read_only_field")
+
+    def test_patch_returns_400_on_non_object_body(self):
+        response = self.client.patch(
+            "/api/events/studio-event",
+            data=json.dumps([1, 2, 3]),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "invalid_type")
+        self.assertEqual(
+            response.json()["details"],
+            {"field": "body", "expected": "object"},
+        )
 
     def test_patch_github_origin_event_is_read_only_and_not_mutated(self):
         before = (self.github_event.title, self.github_event.status)

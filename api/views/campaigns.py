@@ -18,7 +18,14 @@ from accounts.auth import token_required
 from accounts.utils.tags import normalize_tags
 from api.openapi import openapi_spec
 from api.safety import error_response
-from api.utils import parse_json_body, require_methods
+from api.utils import (
+    body_must_be_object_response,
+    coerce_optional_text,
+    parse_bool_query,
+    parse_json_body,
+    require_methods,
+    validation_response,
+)
 from email_app.models import EmailCampaign
 
 READ_ONLY_FIELDS = {
@@ -88,23 +95,6 @@ def _serialize_campaign(campaign):
     }
 
 
-def _body_must_be_object_response():
-    return error_response(
-        "Body must be a JSON object",
-        "invalid_type",
-        details={"field": "body", "expected": "object"},
-    )
-
-
-def _validation_response(details, message="Validation error"):
-    return error_response(
-        message,
-        "validation_error",
-        status=422,
-        details=details,
-    )
-
-
 def _read_only_field_response(field):
     return error_response(
         f"{field} is read-only",
@@ -112,12 +102,6 @@ def _read_only_field_response(field):
         status=422,
         details={"field": field},
     )
-
-
-def _coerce_optional_text(value):
-    if value is None:
-        return ""
-    return str(value).strip()
 
 
 def _collect_campaign_values(data, *, existing=None):
@@ -131,7 +115,7 @@ def _collect_campaign_values(data, *, existing=None):
     values = {}
 
     if "subject" in data:
-        subject = _coerce_optional_text(data["subject"])
+        subject = coerce_optional_text(data["subject"])
         if not subject:
             errors["subject"] = "Subject is required."
         elif len(subject) > 255:
@@ -158,13 +142,13 @@ def _collect_campaign_values(data, *, existing=None):
         values["target_min_level"] = target_min_level
 
     if "slack_filter" in data:
-        slack_filter = _coerce_optional_text(data["slack_filter"])
+        slack_filter = coerce_optional_text(data["slack_filter"])
         if slack_filter not in VALID_SLACK_FILTERS:
             errors["slack_filter"] = "Unknown slack filter."
         values["slack_filter"] = slack_filter
 
     if "audience_verification" in data:
-        audience_verification = _coerce_optional_text(
+        audience_verification = coerce_optional_text(
             data["audience_verification"]
         )
         if audience_verification not in VALID_AUDIENCE_VERIFICATIONS:
@@ -194,18 +178,6 @@ def _apply_campaign_values(campaign, values):
     for field, value in values.items():
         if field in WRITABLE_FIELDS:
             setattr(campaign, field, value)
-
-
-def _parse_bool_query(value):
-    """Return True/False/None for archived query filter values."""
-    if value is None:
-        return None
-    lowered = value.lower()
-    if lowered in {"1", "true", "yes", "on"}:
-        return True
-    if lowered in {"0", "false", "no", "off"}:
-        return False
-    return None
 
 
 @token_required
@@ -317,14 +289,14 @@ def campaigns_collection(request):
         status_filter = request.GET.get("status")
         if status_filter:
             if status_filter not in VALID_STATUSES:
-                return _validation_response({"status": "Unknown status."})
+                return validation_response({"status": "Unknown status."})
             qs = qs.filter(status=status_filter)
 
         archived_raw = request.GET.get("archived")
         if archived_raw is not None:
-            archived = _parse_bool_query(archived_raw)
+            archived = parse_bool_query(archived_raw)
             if archived is None:
-                return _validation_response({"archived": "Must be a boolean."})
+                return validation_response({"archived": "Must be a boolean."})
             qs = qs.filter(is_archived=archived)
 
         return JsonResponse(
@@ -339,7 +311,7 @@ def campaigns_collection(request):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response()
 
     for field in sorted(READ_ONLY_FIELDS):
         if field == "status":
@@ -350,7 +322,7 @@ def campaigns_collection(request):
 
     values, errors = _collect_campaign_values(data, existing=None)
     if errors:
-        return _validation_response(errors)
+        return validation_response(errors)
 
     campaign = EmailCampaign(status="draft")
     _apply_campaign_values(campaign, values)
@@ -447,14 +419,14 @@ def campaign_detail(request, campaign_id):
     if parse_error is not None:
         return parse_error
     if not isinstance(data, dict):
-        return _body_must_be_object_response()
+        return body_must_be_object_response()
 
     # ``status`` is a special-case read-only field: PATCH with the row's
     # current status is a silent no-op (so round-tripping detail JSON works);
     # any other value is rejected with the immutability error message.
     if "status" in data:
         if data["status"] != campaign.status:
-            return _validation_response({
+            return validation_response({
                 "status": (
                     "status is immutable through the API; "
                     "use Studio to send the campaign."
@@ -469,7 +441,7 @@ def campaign_detail(request, campaign_id):
 
     values, errors = _collect_campaign_values(data, existing=campaign)
     if errors:
-        return _validation_response(errors)
+        return validation_response(errors)
 
     _apply_campaign_values(campaign, values)
     campaign.save()

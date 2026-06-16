@@ -29,7 +29,11 @@ from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.plans import serialize_interview_note
-from api.utils import parse_json_body, require_methods
+from api.utils import (
+    delete_not_available_response,
+    parse_json_body,
+    require_methods,
+)
 from api.views._permissions import (
     bearer_sees_internal_notes,
     visible_interview_notes_for,
@@ -57,13 +61,6 @@ INTERVIEW_NOTE_DELETE_NOT_AVAILABLE_MESSAGE = (
     "Go to Studio to delete this note manually."
 )
 
-
-def _interview_note_delete_not_available_response():
-    return error_response(
-        INTERVIEW_NOTE_DELETE_NOT_AVAILABLE_MESSAGE,
-        "interview_note_delete_not_available",
-        status=405,
-    )
 
 _INTERVIEW_NOTE_EXAMPLE = {
     "id": 12,
@@ -349,7 +346,10 @@ def interview_note_detail(request, note_id):
     even tell whether the row exists.
     """
     if request.method == "DELETE":
-        return _interview_note_delete_not_available_response()
+        return delete_not_available_response(
+            INTERVIEW_NOTE_DELETE_NOT_AVAILABLE_MESSAGE,
+            "interview_note_delete_not_available",
+        )
 
     note = (
         visible_interview_notes_for(request.user)

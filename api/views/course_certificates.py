@@ -30,7 +30,11 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
-from api.utils import parse_json_body, require_methods
+from api.utils import (
+    delete_not_available_response,
+    parse_json_body,
+    require_methods,
+)
 from api.views._permissions import bearer_is_admin
 from content.models import Course
 from content.models.peer_review import CourseCertificate, ProjectSubmission
@@ -54,14 +58,6 @@ CERTIFICATE_DELETE_NOT_AVAILABLE_MESSAGE = (
     "Course certificate deletion is not available through the API. "
     "Go to Studio to revoke this certificate manually."
 )
-
-
-def _certificate_delete_not_available_response():
-    return error_response(
-        CERTIFICATE_DELETE_NOT_AVAILABLE_MESSAGE,
-        "certificate_delete_not_available",
-        status=405,
-    )
 
 
 def _serialize_certificate(cert):
@@ -324,4 +320,7 @@ def course_certificate_detail(request, slug, email):
     Deletion is intentionally unavailable (issue #864): returns 405 with a
     Studio pointer. Revoke a credential in Studio instead.
     """
-    return _certificate_delete_not_available_response()
+    return delete_not_available_response(
+        CERTIFICATE_DELETE_NOT_AVAILABLE_MESSAGE,
+        "certificate_delete_not_available",
+    )

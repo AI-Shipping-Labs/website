@@ -190,6 +190,32 @@ class CampaignsListTest(CampaignsApiTestBase):
             [self.sent.pk],
         )
 
+    def test_list_archived_filter_accepts_tolerant_boolean_values(self):
+        EmailCampaign.objects.filter(pk=self.draft.pk).update(is_archived=True)
+
+        cases = (
+            (" TRUE ", [self.draft.pk]),
+            ("1", [self.draft.pk]),
+            ("yes", [self.draft.pk]),
+            ("on", [self.draft.pk]),
+            (" FALSE ", [self.sent.pk]),
+            ("0", [self.sent.pk]),
+            ("no", [self.sent.pk]),
+            ("off", [self.sent.pk]),
+        )
+        for value, expected_ids in cases:
+            with self.subTest(value=value):
+                response = self.client.get(
+                    "/api/campaigns",
+                    {"archived": value},
+                    **self._auth(),
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    [c["id"] for c in response.json()["campaigns"]],
+                    expected_ids,
+                )
+
     def test_list_rejects_invalid_archived_filter(self):
         response = self.client.get(
             "/api/campaigns?archived=maybe", **self._auth()
@@ -326,6 +352,23 @@ class CampaignsCreateTest(CampaignsApiTestBase):
         ids = [c["id"] for c in listing.json()["campaigns"]]
         self.assertIn(new_id, ids)
 
+    def test_post_returns_400_on_non_object_body(self):
+        response = self.client.post(
+            "/api/campaigns",
+            data=json.dumps([1, 2, 3]),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(),
+            {
+                "error": "Body must be a JSON object",
+                "code": "invalid_type",
+                "details": {"field": "body", "expected": "object"},
+            },
+        )
+
 
 class CampaignsPatchTest(CampaignsApiTestBase):
     def test_patch_updates_writable_fields(self):
@@ -410,7 +453,7 @@ class CampaignsPatchTest(CampaignsApiTestBase):
         self.assertEqual(body["target_tags_any"], ["vip"])
         self.assertEqual(body["target_tags_none"], ["no-email"])
 
-    def test_patch_returns_422_on_non_object_body(self):
+    def test_patch_returns_400_on_non_object_body(self):
         response = self.client.patch(
             f"/api/campaigns/{self.draft.pk}",
             data=json.dumps([1, 2, 3]),
@@ -418,7 +461,14 @@ class CampaignsPatchTest(CampaignsApiTestBase):
             **self._auth(),
         )
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["code"], "invalid_type")
+        self.assertEqual(
+            response.json(),
+            {
+                "error": "Body must be a JSON object",
+                "code": "invalid_type",
+                "details": {"field": "body", "expected": "object"},
+            },
+        )
 
 
 class CampaignsSendPathSentinelTest(TestCase):

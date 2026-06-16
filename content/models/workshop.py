@@ -27,6 +27,7 @@ from content.models.mixins import (
     SyncedContentIdentityMixin,
     TimestampedModelMixin,
 )
+from content.utils.linkify import linkify_urls
 from content.utils.markdown import render_markdown
 from integrations.services.banner_generator.resolve import effective_banner_url
 
@@ -268,10 +269,17 @@ class Workshop(
             })
 
         if self.description:
-            self.description_html = render_markdown(self.description)
+            self.description_html = linkify_urls(render_markdown(self.description))
         else:
             self.description_html = ''
 
+        # Honour update_fields (some sync paths use it).
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            if 'description' in update_fields:
+                update_fields.add('description_html')
+            kwargs['update_fields'] = list(update_fields)
         super().save(*args, **kwargs)
 
     @property
@@ -478,7 +486,7 @@ class WorkshopPage(
         used by :meth:`Workshop.save`).
         """
         if self.body:
-            self.body_html = render_markdown(self.body)
+            self.body_html = linkify_urls(render_markdown(self.body))
         else:
             self.body_html = ''
 

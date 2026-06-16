@@ -105,6 +105,75 @@ class InterviewDetailDbViewTest(TestCase):
         self.assertIn('Introduction', content)
         self.assertIn('Common Mistakes', content)
 
+    def test_markdown_blocks_linkify_bare_urls(self):
+        self.theory.body_markdown = (
+            'Study guide: https://example.com/interview-guide\n\n'
+            '<!-- after-questions -->\n\n'
+            'More examples: https://example.com/examples'
+        )
+        self.theory.sections_json = [
+            {
+                'id': 'practice',
+                'title': 'Practice',
+                'intro': 'Practice set: https://example.com/practice',
+                'qa': [{'question': 'How do LLMs work?'}],
+            },
+        ]
+        self.theory.save()
+
+        response = self.client.get('/interview/theory')
+        content = response.content.decode()
+
+        self.assertIn(
+            '<a href="https://example.com/interview-guide" '
+            'target="_blank" rel="noopener noreferrer">'
+            'https://example.com/interview-guide</a>',
+            content,
+        )
+        self.assertIn(
+            '<a href="https://example.com/practice" target="_blank" '
+            'rel="noopener noreferrer">https://example.com/practice</a>',
+            content,
+        )
+        self.assertIn(
+            '<a href="https://example.com/examples" target="_blank" '
+            'rel="noopener noreferrer">https://example.com/examples</a>',
+            content,
+        )
+
+    def test_interview_markdown_keeps_intentional_renderer_options(self):
+        self.theory.body_markdown = (
+            '```mermaid\n'
+            'flowchart LR\n'
+            '    A --> B\n'
+            '```\n\n'
+            '```\n'
+            'def greet():\n'
+            '    return 1\n'
+            '```\n'
+        )
+        self.theory.sections_json = [
+            {
+                'id': 'escaping',
+                'title': 'Escaping',
+                'intro': '',
+                'qa': [{'question': 'Is <strong>raw</strong> HTML escaped?'}],
+            },
+        ]
+        self.theory.save()
+
+        response = self.client.get('/interview/theory')
+        content = response.content.decode()
+
+        self.assertNotIn('<div class="mermaid">', content)
+        self.assertIn('class="codehilite"', content)
+        self.assertIn('<span class="nv">def</span>', content)
+        self.assertIn('Is &lt;strong&gt;raw&lt;/strong&gt; HTML escaped?', content)
+        self.assertNotIn(
+            '<span class="pt-0.5">Is <strong>raw</strong> HTML escaped?</span>',
+            content,
+        )
+
     def test_coming_soon_returns_404_from_db(self):
         response = self.client.get('/interview/coding')
         self.assertEqual(response.status_code, 404)
@@ -112,3 +181,21 @@ class InterviewDetailDbViewTest(TestCase):
     def test_nonexistent_slug_returns_404_from_db(self):
         response = self.client.get('/interview/does-not-exist')
         self.assertEqual(response.status_code, 404)
+
+    def test_empty_markdown_blocks_render_empty(self):
+        self.theory.body_markdown = ''
+        self.theory.sections_json = [
+            {
+                'id': 'empty',
+                'title': 'Empty',
+                'intro': '',
+                'qa': [{'question': 'Plain question?'}],
+            },
+        ]
+        self.theory.save()
+
+        response = self.client.get('/interview/theory')
+
+        self.assertEqual(response.context['before_questions_html'], '')
+        self.assertEqual(response.context['after_questions_html'], '')
+        self.assertNotIn('intro_html', response.context['sections'][0])

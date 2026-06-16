@@ -18,15 +18,19 @@ instructor's yaml is removed.
 from django.db import models
 
 from content.models.mixins import SourceMetadataMixin, TimestampedModelMixin
+from content.utils.linkify import linkify_urls
 from content.utils.markdown import render_markdown as _render_markdown
 
 
 def render_markdown(text):
-    """Convert instructor markdown to HTML without external-link rewriting."""
-    return _render_markdown(
-        text,
-        include_external_links=False,
-    )
+    """Convert instructor markdown to HTML with bare-URL linkification.
+
+    Instructor bios intentionally keep the external-links markdown extension
+    disabled, so authored markdown links keep their historical attributes.
+    Bare http(s) URLs are linkified after rendering for parity with the
+    broader content pipeline.
+    """
+    return linkify_urls(_render_markdown(text, include_external_links=False))
 
 
 STATUS_CHOICES = [
@@ -78,6 +82,12 @@ class Instructor(SourceMetadataMixin, TimestampedModelMixin, models.Model):
             self.bio_html = render_markdown(self.bio)
         else:
             self.bio_html = ''
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            if 'bio' in update_fields:
+                update_fields.add('bio_html')
+            kwargs['update_fields'] = list(update_fields)
         super().save(*args, **kwargs)
 
 

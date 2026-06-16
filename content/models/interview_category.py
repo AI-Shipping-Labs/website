@@ -1,15 +1,19 @@
 from django.db import models
 
 from content.models.mixins import SourceMetadataMixin, TimestampedModelMixin
+from content.utils.linkify import linkify_urls
 from content.utils.markdown import render_markdown as _render_markdown
 
 
 def render_markdown(text):
-    """Convert interview category markdown to HTML with the interview subset."""
-    return _render_markdown(
-        text,
-        include_mermaid=False,
-        include_external_links=False,
+    """Convert interview category markdown to HTML with interview options."""
+    return linkify_urls(
+        _render_markdown(
+            text,
+            include_mermaid=False,
+            include_external_links=False,
+            codehilite_guess_lang=True,
+        )
     )
 
 

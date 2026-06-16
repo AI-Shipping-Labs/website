@@ -577,6 +577,29 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/detail-course')
         self.assertContains(response, 'Expert in AI.')
 
+    def test_instructor_bio_uses_rendered_bio_html(self):
+        course = Course.objects.create(
+            title='Linked Bio Course',
+            slug='linked-bio-course',
+            description='Course with linked instructor bio.',
+            status='published',
+            required_level=LEVEL_OPEN,
+        )
+        _attach_course_instructor(
+            course,
+            'Linked Instructor',
+            bio='Profile: https://example.com/instructor',
+        )
+
+        response = self.client.get('/courses/linked-bio-course')
+
+        self.assertContains(
+            response,
+            '<a href="https://example.com/instructor" target="_blank" '
+            'rel="noopener noreferrer">https://example.com/instructor</a>',
+            html=True,
+        )
+
     def test_shows_tags(self):
         response = self.client.get('/courses/detail-course')
         self.assertContains(response, 'python')

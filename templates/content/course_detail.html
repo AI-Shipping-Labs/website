@@ -41,8 +41,10 @@
           <div class="flex items-start gap-3">
             <div>
               <p class="font-medium text-foreground">{{ instructor.name }}</p>
-              {% if instructor.bio %}
-              <p class="text-sm text-muted-foreground">{{ instructor.bio }}</p>
+              {% if instructor.bio_html %}
+              <div class="prose prose-sm prose-invert mt-1 max-w-none text-muted-foreground">
+                {{ instructor.bio_html|safe }}
+              </div>
               {% endif %}
             </div>
           </div>

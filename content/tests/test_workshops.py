@@ -154,6 +154,37 @@ class WorkshopModelValidationTest(TierSetupMixin, TestCase):
         )
         self.assertIn('<strong>bold</strong>', ws.description_html)
 
+    def test_save_linkifies_bare_url_in_description_html(self):
+        ws = Workshop.objects.create(
+            slug='description-linkify',
+            title='Description Linkify',
+            date=date(2026, 4, 21),
+            description='Reference: https://example.com/workshop-notes',
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+        self.assertIn(
+            '<a href="https://example.com/workshop-notes" '
+            'target="_blank" rel="noopener noreferrer">'
+            'https://example.com/workshop-notes</a>',
+            ws.description_html,
+        )
+
+    def test_save_update_fields_description_keeps_description_html_fresh(self):
+        ws = Workshop.objects.create(
+            slug='description-update-fields',
+            title='Description Update Fields',
+            date=date(2026, 4, 21),
+            description='Original.',
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+        ws.description = 'Updated: https://example.com/updated'
+        ws.save(update_fields=['description'])
+        ws.refresh_from_db()
+        self.assertIn('href="https://example.com/updated"', ws.description_html)
+        self.assertNotIn('Original', ws.description_html)
+
     def test_save_normalizes_tags(self):
         ws = Workshop.objects.create(
             slug='tags-test',
@@ -164,6 +195,78 @@ class WorkshopModelValidationTest(TierSetupMixin, TestCase):
             recording_required_level=0,
         )
         self.assertEqual(ws.tags, ['machine-learning', 'python-312'])
+
+
+class WorkshopPageRenderedHtmlLinkifyTest(TestCase):
+    """Workshop pages linkify bare URLs without corrupting existing markup."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.workshop = Workshop.objects.create(
+            slug='page-linkify-workshop',
+            title='Page Linkify Workshop',
+            date=date(2026, 4, 21),
+            landing_required_level=0,
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+
+    def test_body_html_linkifies_bare_url(self):
+        page = WorkshopPage.objects.create(
+            workshop=self.workshop,
+            slug='setup',
+            title='Setup',
+            body='Download setup notes: https://example.com/setup',
+        )
+        self.assertIn(
+            '<a href="https://example.com/setup" target="_blank" '
+            'rel="noopener noreferrer">https://example.com/setup</a>',
+            page.body_html,
+        )
+
+    def test_markdown_link_is_not_double_linked(self):
+        page = WorkshopPage.objects.create(
+            workshop=self.workshop,
+            slug='docs',
+            title='Docs',
+            body='Read [the docs](https://example.com/docs).',
+        )
+        self.assertEqual(page.body_html.count('<a '), 1)
+        self.assertIn('href="https://example.com/docs"', page.body_html)
+
+    def test_code_block_url_is_not_linkified(self):
+        page = WorkshopPage.objects.create(
+            workshop=self.workshop,
+            slug='code',
+            title='Code',
+            body='```\nhttps://example.com/raw-code-url\n```',
+        )
+        self.assertNotIn('href="https://example.com/raw-code-url"', page.body_html)
+        self.assertNotIn('target="_blank"', page.body_html)
+        self.assertIn('https://example.com/raw-code-url', page.body_html)
+
+    def test_html_attribute_url_is_not_linkified(self):
+        page = WorkshopPage.objects.create(
+            workshop=self.workshop,
+            slug='image',
+            title='Image',
+            body='<img src="https://example.com/image.png" alt="image">',
+        )
+        self.assertNotIn('href="https://example.com/image.png"', page.body_html)
+        self.assertIn('src="https://example.com/image.png"', page.body_html)
+
+    def test_save_update_fields_body_keeps_body_html_fresh(self):
+        page = WorkshopPage.objects.create(
+            workshop=self.workshop,
+            slug='update',
+            title='Update',
+            body='Original.',
+        )
+        page.body = 'Updated: https://example.com/page-update'
+        page.save(update_fields=['body'])
+        page.refresh_from_db()
+        self.assertIn('href="https://example.com/page-update"', page.body_html)
+        self.assertNotIn('Original', page.body_html)
 
 
 class WorkshopSplitGatingTest(TierSetupMixin, TestCase):

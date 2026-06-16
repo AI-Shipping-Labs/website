@@ -7,7 +7,7 @@ Covers the BDD scenarios in the issue:
    Mermaid CDN, and the raw "flowchart LR" source no longer appears
    outside the SVG.
 2. Pages without diagrams do not pay the Mermaid download cost — the
-   browser never issues a request to ``cdn.jsdelivr.net/npm/mermaid``.
+   browser never issues a request for the vendored Mermaid runtime.
 3. Article author embeds a diagram in a blog post — same shared
    extension also works on the article surface, proving the change is
    not workshop-specific.
@@ -39,7 +39,90 @@ from playwright_tests.test_workshops import (  # noqa: E402
     _create_workshop,
 )
 
+MERMAID_RUNTIME_URL_FRAGMENT = '/static/vendor/mermaid/10/'
+MERMAID_RUNTIME_ENTRY = f'{MERMAID_RUNTIME_URL_FRAGMENT}mermaid.esm.min.mjs'
 MERMAID_CDN_HOST = 'cdn.jsdelivr.net/npm/mermaid'
+
+
+def _is_mermaid_runtime_request(url):
+    return (
+        MERMAID_RUNTIME_URL_FRAGMENT in url
+        or MERMAID_CDN_HOST in url
+    )
+
+
+def _install_mermaid_diagnostics(page):
+    diagnostics = {
+        'console': [],
+        'page_errors': [],
+        'request_failures': [],
+    }
+
+    def _on_console(msg):
+        if 'mermaid' in msg.text.lower():
+            diagnostics['console'].append(f'{msg.type}: {msg.text}')
+
+    def _on_page_error(exc):
+        diagnostics['page_errors'].append(str(exc))
+
+    def _on_request_failed(req):
+        if _is_mermaid_runtime_request(req.url):
+            failure = req.failure or 'unknown failure'
+            diagnostics['request_failures'].append(
+                f'{req.url}: {failure}'
+            )
+
+    page.on('console', _on_console)
+    page.on('pageerror', _on_page_error)
+    page.on('requestfailed', _on_request_failed)
+    return diagnostics
+
+
+def _format_mermaid_diagnostics(page, diagnostics):
+    try:
+        state = page.evaluate(
+            """() => {
+                const div = document.querySelector('div.mermaid');
+                return {
+                    status: window.__ASL_MERMAID_STATUS__ || null,
+                    mermaidCount: document.querySelectorAll('div.mermaid')
+                        .length,
+                    svgCount: document.querySelectorAll('div.mermaid svg')
+                        .length,
+                    mermaidHtml: div ? div.innerHTML.slice(0, 1000) : '',
+                };
+            }"""
+        )
+    except Exception as exc:  # pragma: no cover - only used on E2E failure
+        state = {'diagnosticReadError': str(exc)}
+
+    return (
+        f'Mermaid diagnostics: state={state!r}; '
+        f'console={diagnostics["console"]!r}; '
+        f'page_errors={diagnostics["page_errors"]!r}; '
+        f'request_failures={diagnostics["request_failures"]!r}'
+    )
+
+
+def _wait_for_mermaid_labels(page, labels, diagnostics, *, timeout=15000):
+    try:
+        page.wait_for_function(
+            """expected => {
+                const labels = document.querySelectorAll(
+                    'div.mermaid foreignObject, div.mermaid text'
+                );
+                const text = Array.from(labels)
+                    .map(n => n.textContent).join('|');
+                return expected.every(fragment => text.includes(fragment));
+            }""",
+            arg=list(labels),
+            timeout=timeout,
+        )
+    except Exception as exc:
+        raise AssertionError(
+            f'Timed out waiting for Mermaid labels {labels!r}. '
+            f'{_format_mermaid_diagnostics(page, diagnostics)}'
+        ) from exc
 
 
 def _clear_articles():
@@ -114,11 +197,12 @@ class TestWorkshopMermaidDiagramRenders:
             ],
         )
 
-        cdn_requests = []
+        diagnostics = _install_mermaid_diagnostics(page)
+        runtime_requests = []
         page.on(
             'request',
-            lambda req: cdn_requests.append(req.url)
-            if MERMAID_CDN_HOST in req.url else None,
+            lambda req: runtime_requests.append(req.url)
+            if _is_mermaid_runtime_request(req.url) else None,
         )
         page.goto(
             f'{django_server}'
@@ -133,20 +217,12 @@ class TestWorkshopMermaidDiagramRenders:
 
         # Wait until Mermaid has populated the SVG with the node labels.
         # mermaid.run sets data-processed="true" early (when it claims the
-        # node), so we cannot rely on that attribute alone — we wait for
-        # the labels to actually appear inside <foreignObject>.
-        page.wait_for_function(
-            """() => {
-                const fos = document.querySelectorAll(
-                    'div.mermaid foreignObject'
-                );
-                const text = Array.from(fos)
-                    .map(n => n.textContent).join('|');
-                return text.includes('Frontend UI')
-                    && text.includes('FastAPI app')
-                    && text.includes('Agent loop');
-            }""",
-            timeout=15000,
+        # node), so we wait for labels and include browser diagnostics on
+        # failure instead of surfacing as an opaque timeout.
+        _wait_for_mermaid_labels(
+            page,
+            ('Frontend UI', 'FastAPI app', 'Agent loop'),
+            diagnostics,
         )
 
         # Sanity check: the rendered SVG is attached.
@@ -154,10 +230,15 @@ class TestWorkshopMermaidDiagramRenders:
             state='attached', timeout=2000,
         )
 
-        # The page logged at least one request to the Mermaid CDN.
-        assert any(MERMAID_CDN_HOST in url for url in cdn_requests), (
-            f'expected a request to {MERMAID_CDN_HOST}, '
-            f'got: {cdn_requests!r}'
+        # The page logged at least one request to the vendored Mermaid
+        # runtime and never fell back to the historical CDN path.
+        assert any(MERMAID_RUNTIME_ENTRY in url for url in runtime_requests), (
+            f'expected a request to {MERMAID_RUNTIME_ENTRY}, '
+            f'got: {runtime_requests!r}'
+        )
+        assert not any(MERMAID_CDN_HOST in url for url in runtime_requests), (
+            f'unexpected request to {MERMAID_CDN_HOST}: '
+            f'{runtime_requests!r}'
         )
 
         # The original "flowchart LR" line should no longer be visible
@@ -174,7 +255,7 @@ class TestWorkshopMermaidDiagramRenders:
 
 @pytest.mark.django_db(transaction=True)
 class TestPagesWithoutDiagramsSkipMermaidDownload:
-    """Scenario 2: pages without diagrams must not fetch the CDN bundle."""
+    """Scenario 2: pages without diagrams must not fetch Mermaid."""
 
     def test_no_request_to_mermaid_cdn_on_plain_page(
         self, browser, django_server,
@@ -199,11 +280,11 @@ class TestPagesWithoutDiagramsSkipMermaidDownload:
         ctx = browser.new_context(viewport={'width': 1280, 'height': 720})
         page = ctx.new_page()
 
-        cdn_requests = []
+        runtime_requests = []
         page.on(
             'request',
-            lambda req: cdn_requests.append(req.url)
-            if MERMAID_CDN_HOST in req.url else None,
+            lambda req: runtime_requests.append(req.url)
+            if _is_mermaid_runtime_request(req.url) else None,
         )
 
         page.goto(
@@ -219,8 +300,9 @@ class TestPagesWithoutDiagramsSkipMermaidDownload:
         # Sanity check: no mermaid divs on this page.
         assert page.locator('div.mermaid').count() == 0
 
-        assert cdn_requests == [], (
-            f'expected zero mermaid CDN requests, got {cdn_requests!r}'
+        assert runtime_requests == [], (
+            f'expected zero Mermaid runtime requests, '
+            f'got {runtime_requests!r}'
         )
 
         ctx.close()
@@ -257,24 +339,16 @@ class TestArticleMermaidDiagramRenders:
         )
         connection.close()
 
+        diagnostics = _install_mermaid_diagnostics(page)
         page.goto(
             f'{django_server}/blog/mermaid-article',
             wait_until='domcontentloaded',
         )
 
-        # Sequence diagrams use SVG <text> elements (not <foreignObject>),
-        # so we sweep both possibilities.
-        page.wait_for_function(
-            """() => {
-                const labels = document.querySelectorAll(
-                    'div.mermaid foreignObject, div.mermaid text'
-                );
-                const text = Array.from(labels)
-                    .map(n => n.textContent).join('|');
-                return text.includes('Browser')
-                    && text.includes('Server');
-            }""",
-            timeout=15000,
+        _wait_for_mermaid_labels(
+            page,
+            ('Browser', 'Server'),
+            diagnostics,
         )
         page.locator('div.mermaid svg').first.wait_for(
             state='attached', timeout=2000,
@@ -389,6 +463,7 @@ class TestWorkshopMermaidBrTagInLabel:
             d.dismiss()
 
         page.on('dialog', _on_dialog)
+        diagnostics = _install_mermaid_diagnostics(page)
 
         page.goto(
             f'{django_server}/workshops/2026-04-21-br-tag-walkthrough/tutorial/arch',
@@ -400,22 +475,13 @@ class TestWorkshopMermaidBrTagInLabel:
         )
 
         # Wait until Mermaid finishes and the two label fragments are
-        # present in the rendered SVG. If the <br/> survived as literal
-        # text, the substring would be 'search tool<br/>Data Engineering
-        # Zoomcamp FAQ' inside a single label and 'Data Engineering
-        # Zoomcamp FAQ' would not appear as its own line.
-        page.wait_for_function(
-            """() => {
-                const fos = document.querySelectorAll(
-                    'div.mermaid foreignObject'
-                );
-                const text = Array.from(fos)
-                    .map(n => n.textContent).join('|');
-                return text.includes('search tool')
-                    && text.includes('Data Engineering Zoomcamp FAQ')
-                    && text.includes('Agent');
-            }""",
-            timeout=15000,
+        # present in the rendered SVG. If the runtime import or render
+        # path fails, the assertion includes browser diagnostics instead
+        # of surfacing as an opaque Playwright timeout.
+        _wait_for_mermaid_labels(
+            page,
+            ('search tool', 'Data Engineering Zoomcamp FAQ', 'Agent'),
+            diagnostics,
         )
 
         # The SVG was actually emitted (i.e. Mermaid didn't bail with a
@@ -559,24 +625,17 @@ class TestWorkshopMermaidBrTagBackfill:
             d.dismiss()
 
         page.on('dialog', _on_dialog)
+        diagnostics = _install_mermaid_diagnostics(page)
 
         page.goto(
             f'{django_server}/workshops/2026-04-21-br-backfill-walkthrough',
             wait_until='domcontentloaded',
         )
 
-        page.wait_for_function(
-            """() => {
-                const fos = document.querySelectorAll(
-                    'div.mermaid foreignObject'
-                );
-                const text = Array.from(fos)
-                    .map(n => n.textContent).join('|');
-                return text.includes('search tool')
-                    && text.includes('Data Engineering Zoomcamp FAQ')
-                    && text.includes('Agent');
-            }""",
-            timeout=15000,
+        _wait_for_mermaid_labels(
+            page,
+            ('search tool', 'Data Engineering Zoomcamp FAQ', 'Agent'),
+            diagnostics,
         )
 
         # Exactly one SVG was emitted (Mermaid did not bail).

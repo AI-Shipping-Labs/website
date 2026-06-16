@@ -3,7 +3,7 @@
 Mermaid diagram renderer (issue #300, lazy-loaded per #320). Included
 only from templates that render markdown-derived HTML which may contain
 a div.mermaid node. The shim itself self-guards on the absence of those
-nodes and only then imports the heavy Mermaid CDN bundle, so this
+nodes and only then imports the heavy vendored Mermaid runtime, so this
 partial costs ~7.5 KB on markdown pages and zero bytes everywhere else.
 
 Inline <style> block below (#359): make div.mermaid a horizontal scroll
@@ -18,4 +18,7 @@ page itself does not scroll horizontally.
   div.mermaid > svg { max-width: none; height: auto; display: block; margin: 0 auto; }
   div.mermaid:not([data-processed]) { white-space: pre; }
 </style>
+<script>
+  window.__ASL_MERMAID_MODULE_URL__ = "{% static 'vendor/mermaid/10/mermaid.esm.min.mjs' %}";
+</script>
 <script type="module" src="{% static 'js/mermaid-render.js' %}" defer></script>

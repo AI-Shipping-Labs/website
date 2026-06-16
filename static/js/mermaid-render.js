@@ -2,13 +2,15 @@
  *
  * The python-markdown side (content/markdown_extensions/mermaid.py) emits
  * <div class="mermaid">SOURCE</div> with the source HTML-escaped. This
- * script lazy-imports Mermaid 10 ESM from jsdelivr ONLY when at least one
- * such div is present on the page, then asks Mermaid to render every
+ * script lazy-imports the vendored Mermaid 10 ESM runtime ONLY when at
+ * least one such div is present on the page, then asks Mermaid to render every
  * <div class="mermaid"> in place.
  *
  * Why lazy-load? Mermaid is ~600 KB minified. Pages without diagrams must
  * not pay that cost. Loading it via a dynamic import() means the network
- * request is only kicked off when we have something to render.
+ * request is only kicked off when we have something to render. The runtime
+ * is served from this site's static files so render success never depends on
+ * a live third-party CDN request.
  *
  * Theme strategy (#306): we use Mermaid's `base` theme and feed it
  * `themeVariables` derived from the site's CSS custom properties at
@@ -26,6 +28,35 @@
  * unrelated page scripts.
  */
 (function () {
+  var status = {
+    state: 'idle',
+    moduleUrl: '',
+    error: '',
+  };
+  window.__ASL_MERMAID_STATUS__ = status;
+
+  function setStatus(state, extra) {
+    status.state = state;
+    if (extra && extra.moduleUrl !== undefined) {
+      status.moduleUrl = extra.moduleUrl;
+    }
+    if (extra && extra.error !== undefined) {
+      status.error = extra.error;
+    }
+  }
+
+  function describeError(err) {
+    if (!err) return '';
+    if (err.stack) return err.stack;
+    if (err.message) return err.message;
+    return String(err);
+  }
+
+  function getMermaidModuleUrl() {
+    return window.__ASL_MERMAID_MODULE_URL__
+      || new URL('../vendor/mermaid/10/mermaid.esm.min.mjs', import.meta.url).href;
+  }
+
   /**
    * Read a CSS custom property from <html> and wrap the raw HSL triple
    * in `hsl(...)` so Mermaid can use it as a color. The site stores the
@@ -193,15 +224,18 @@
   function renderMermaid() {
     var nodes = document.querySelectorAll('div.mermaid');
     if (nodes.length === 0) return;
+    var moduleUrl = getMermaidModuleUrl();
+    setStatus('importing', { moduleUrl: moduleUrl, error: '' });
 
     // Cache sources BEFORE Mermaid mutates the DOM, otherwise the
     // textContent we'd read after rendering is the SVG markup, not the
     // original mermaid source.
     captureSources(nodes);
 
-    import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs')
+    import(moduleUrl)
       .then(function (mod) {
         var mermaid = mod.default;
+        setStatus('rendering', { moduleUrl: moduleUrl, error: '' });
         mermaid.initialize({
           startOnLoad: false,
           theme: 'base',
@@ -218,12 +252,17 @@
           // Wire the theme observer once the first render has settled
           // so we never race the initial mermaid.run.
           watchThemeChanges(mermaid);
+          setStatus('rendered', { moduleUrl: moduleUrl, error: '' });
         });
       })
       .catch(function (err) {
+        setStatus('failed', {
+          moduleUrl: moduleUrl,
+          error: describeError(err),
+        });
         if (window.console) {
           // eslint-disable-next-line no-console
-          console.warn('[mermaid] render failed', err);
+          console.warn('[mermaid] render failed', moduleUrl, err);
         }
       });
   }

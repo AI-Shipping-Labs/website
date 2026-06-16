@@ -12,8 +12,8 @@ then stashed via ``md.htmlStash.store(...)`` so the block parser leaves
 the placeholder alone (otherwise it would be wrapped in ``<p>``).
 
 A small client-side script (``static/js/mermaid-render.js``) lazy-loads
-the Mermaid 10 ESM build from jsdelivr ONLY when at least one
-``div.mermaid`` is present on the page.
+the vendored Mermaid 10 ESM runtime ONLY when at least one ``div.mermaid``
+is present on the page.
 """
 
 import html

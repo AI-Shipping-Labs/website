@@ -1,6 +1,7 @@
 from django.http import Http404
 from django.shortcuts import render
 
+from content.utils.linkify import linkify_urls
 from content.utils.markdown import render_markdown
 
 # Canonical ordering of interview question categories
@@ -90,11 +91,13 @@ def interview_hub(request):
 
 def _render_markdown(text):
     """Render markdown text to HTML."""
-    return render_markdown(
-        text,
-        include_mermaid=False,
-        include_external_links=False,
-        codehilite_guess_lang=True,
+    return linkify_urls(
+        render_markdown(
+            text,
+            include_mermaid=False,
+            include_external_links=False,
+            codehilite_guess_lang=True,
+        )
     )
 
 

@@ -31,6 +31,27 @@ class InstructorBioRenderingTest(TestCase):
         )
         self.assertEqual(instructor.bio_html, '')
 
+    def test_bio_html_linkifies_bare_url(self):
+        instructor = Instructor.objects.create(
+            instructor_id='linked-bio',
+            name='Linked Bio',
+            bio='Profile: https://example.com/instructor',
+        )
+        self.assertIn(
+            '<a href="https://example.com/instructor" target="_blank" '
+            'rel="noopener noreferrer">https://example.com/instructor</a>',
+            instructor.bio_html,
+        )
+
+    def test_markdown_link_is_not_double_linked(self):
+        instructor = Instructor.objects.create(
+            instructor_id='markdown-link-bio',
+            name='Markdown Link Bio',
+            bio='Profile: [site](https://example.com/instructor)',
+        )
+        self.assertEqual(instructor.bio_html.count('<a '), 1)
+        self.assertIn('href="https://example.com/instructor"', instructor.bio_html)
+
     def test_bio_html_re_renders_when_bio_updated(self):
         instructor = Instructor.objects.create(
             instructor_id='change-me',
@@ -40,6 +61,18 @@ class InstructorBioRenderingTest(TestCase):
         instructor.bio = '## New heading'
         instructor.save()
         self.assertIn('<h2>New heading</h2>', instructor.bio_html)
+        self.assertNotIn('Original', instructor.bio_html)
+
+    def test_save_update_fields_bio_keeps_bio_html_fresh(self):
+        instructor = Instructor.objects.create(
+            instructor_id='update-fields-bio',
+            name='Update Fields Bio',
+            bio='Original.',
+        )
+        instructor.bio = 'Updated: https://example.com/new-profile'
+        instructor.save(update_fields=['bio'])
+        instructor.refresh_from_db()
+        self.assertIn('href="https://example.com/new-profile"', instructor.bio_html)
         self.assertNotIn('Original', instructor.bio_html)
 
 

@@ -154,25 +154,29 @@ class SharedMarkdownRuntimeTest(TestCase):
         self.assert_rich_markdown_rendered(page.body_html)
         self.assert_rich_markdown_rendered(project.content_html)
 
-    def test_instructor_renderer_keeps_mermaid_but_omits_external_links(self):
+    def test_instructor_renderer_keeps_mermaid_and_linkifies_bare_urls(self):
         instructor = Instructor.objects.create(
             instructor_id='runtime-instructor',
             name='Runtime Instructor',
-            bio=self.rich_markdown,
+            bio=f'{self.rich_markdown}\n\nBare https://example.org/instructor',
         )
 
         self.assertIn('<div class="mermaid">', instructor.bio_html)
         self.assertIn('class="codehilite"', instructor.bio_html)
         self.assertIn('href="https://example.com/docs"', instructor.bio_html)
-        self.assertNotIn('target="_blank"', instructor.bio_html)
+        self.assertIn('href="https://example.org/instructor"', instructor.bio_html)
+        self.assertEqual(instructor.bio_html.count('<a '), 2)
 
-    def test_interview_category_renderer_omits_mermaid_and_external_links(self):
-        html = render_interview_category_markdown(self.rich_markdown)
+    def test_interview_category_renderer_omits_mermaid_and_linkifies_bare_urls(self):
+        html = render_interview_category_markdown(
+            f'{self.rich_markdown}\n\nBare https://example.org/interview'
+        )
 
         self.assertIn('class="codehilite"', html)
         self.assertIn('<table>', html)
         self.assertIn('href="https://example.com/docs"', html)
-        self.assertNotIn('target="_blank"', html)
+        self.assertIn('href="https://example.org/interview"', html)
+        self.assertEqual(html.count('<a '), 2)
         self.assertNotIn('<div class="mermaid">', html)
 
     def test_shared_renderer_options_document_intentional_variants(self):

@@ -25,6 +25,7 @@ or session reset needed.
 from __future__ import annotations
 
 from accounts.models.user import SIGNUP_SOURCE_NEWSLETTER
+from accounts.utils.user_checks import is_authenticated_user
 
 
 def is_newsletter_only_user(user) -> bool:
@@ -45,9 +46,7 @@ def is_newsletter_only_user(user) -> bool:
     Safe to call with ``None`` or an anonymous user — both return
     ``False`` without touching the DB.
     """
-    if user is None:
-        return False
-    if not getattr(user, "is_authenticated", False):
+    if not is_authenticated_user(user):
         return False
     if getattr(user, "signup_source", None) != SIGNUP_SOURCE_NEWSLETTER:
         return False

@@ -19,6 +19,7 @@ import logging
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
+from accounts.utils.user_checks import is_authenticated_user
 from analytics.models import UserActivity
 from integrations.config import get_config
 
@@ -69,7 +70,7 @@ def record_activity(
     (anonymous user, or a caught error).
     """
     try:
-        if user is None or not getattr(user, 'is_authenticated', False):
+        if not is_authenticated_user(user):
             return None
         if getattr(user, 'pk', None) is None:
             return None
@@ -103,7 +104,7 @@ def record_lesson_open(user, *, unit, dedupe_minutes=30):
     never raises into the request.
     """
     try:
-        if user is None or not getattr(user, 'is_authenticated', False):
+        if not is_authenticated_user(user):
             return None
         if getattr(user, 'pk', None) is None:
             return None
@@ -197,7 +198,7 @@ def record_resource_view(
     (anonymous user, deduped, or a caught error).
     """
     try:
-        if user is None or not getattr(user, 'is_authenticated', False):
+        if not is_authenticated_user(user):
             return None
         if getattr(user, 'pk', None) is None:
             return None

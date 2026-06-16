@@ -22,7 +22,11 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
-from api.utils import parse_json_body, require_methods
+from api.utils import (
+    delete_not_available_response,
+    parse_json_body,
+    require_methods,
+)
 from api.views._permissions import bearer_is_admin
 from content.access import get_user_level
 from plans.models import Sprint, SprintEnrollment
@@ -42,14 +46,6 @@ SPRINT_ENROLLMENT_DELETE_NOT_AVAILABLE_MESSAGE = (
     "Sprint enrollment deletion is not available through the API. "
     "Go to Studio to unenroll this user manually."
 )
-
-
-def _sprint_enrollment_delete_not_available_response():
-    return error_response(
-        SPRINT_ENROLLMENT_DELETE_NOT_AVAILABLE_MESSAGE,
-        "sprint_enrollment_delete_not_available",
-        status=405,
-    )
 
 
 def _serialize_enrollment(enrollment):
@@ -281,4 +277,7 @@ def sprint_enrollment_detail(request, slug, email):
     Deletion is intentionally unavailable (issue #864): returns 405 with a
     Studio pointer. Unenroll a user in Studio instead.
     """
-    return _sprint_enrollment_delete_not_available_response()
+    return delete_not_available_response(
+        SPRINT_ENROLLMENT_DELETE_NOT_AVAILABLE_MESSAGE,
+        "sprint_enrollment_delete_not_available",
+    )

@@ -12,7 +12,11 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
-from api.utils import parse_json_body, require_methods
+from api.utils import (
+    delete_not_available_response,
+    parse_json_body,
+    require_methods,
+)
 from integrations.models import ContentSource
 from integrations.services.content_sync_queue import enqueue_content_sync
 
@@ -62,14 +66,6 @@ def _serialize_source(source):
     }
 
 
-def _delete_not_available_response():
-    return error_response(
-        DELETE_NOT_AVAILABLE_MESSAGE,
-        "sync_source_delete_not_available",
-        status=405,
-    )
-
-
 def _force_requested(request, data):
     if request.GET.get("force") in {"1", "true", "True", "yes", "on"}:
         return True
@@ -113,7 +109,10 @@ def _force_requested(request, data):
 def sync_sources_collection(request):
     """GET/DELETE ``/api/sync/sources``."""
     if request.method == "DELETE":
-        return _delete_not_available_response()
+        return delete_not_available_response(
+            DELETE_NOT_AVAILABLE_MESSAGE,
+            "sync_source_delete_not_available",
+        )
 
     sources = ContentSource.objects.order_by("repo_name")
     return JsonResponse({
@@ -204,7 +203,10 @@ def sync_sources_collection(request):
 def sync_source_trigger(request, source_id):
     """POST/DELETE ``/api/sync/sources/<uuid>/trigger``."""
     if request.method == "DELETE":
-        return _delete_not_available_response()
+        return delete_not_available_response(
+            DELETE_NOT_AVAILABLE_MESSAGE,
+            "sync_source_delete_not_available",
+        )
 
     if request.body:
         data, error = parse_json_body(request)

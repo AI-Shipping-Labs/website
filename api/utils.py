@@ -11,6 +11,55 @@ from django.http import JsonResponse
 from django.middleware.csrf import CsrfViewMiddleware
 
 from accounts.auth import token_required
+from api.safety import error_response
+
+
+def body_must_be_object_response(*, status=400):
+    """Return the canonical response for endpoints expecting object bodies."""
+    return error_response(
+        "Body must be a JSON object",
+        "invalid_type",
+        status=status,
+        details={"field": "body", "expected": "object"},
+    )
+
+
+def validation_response(details, message="Validation error"):
+    """Return the canonical 422 validation-error response."""
+    return error_response(
+        message,
+        "validation_error",
+        status=422,
+        details=details,
+    )
+
+
+def coerce_optional_text(value):
+    """Normalize optional text payload values for JSON API writes."""
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def parse_bool_query(value):
+    """Parse a tolerant boolean query-string value.
+
+    Missing or invalid values return ``None`` so callers can preserve their
+    endpoint-specific validation or default behavior.
+    """
+    if value is None:
+        return None
+    lowered = value.strip().lower()
+    if lowered in {"true", "1", "yes", "on"}:
+        return True
+    if lowered in {"false", "0", "no", "off"}:
+        return False
+    return None
+
+
+def delete_not_available_response(message, code):
+    """Return the canonical structured 405 for API resources with no DELETE."""
+    return error_response(message, code, status=405)
 
 
 def parse_json_body(request):

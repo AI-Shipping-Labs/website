@@ -11,7 +11,7 @@ import logging
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
+from django.core.validators import URLValidator, validate_email
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 from django.http import JsonResponse
@@ -83,6 +83,8 @@ WRITABLE_FIELDS = {
     "external_host",
     "published",
     "host_email",
+    "recording_url",
+    "materials",
 }
 
 VALID_KINDS = {value for value, _label in EVENT_KIND_CHOICES}
@@ -113,6 +115,18 @@ _EVENT_EXAMPLE = {
     "external_host": "",
     "published": True,
     "host_email": "host@example.com",
+    "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
+    "materials": [
+        {
+            "title": "Workshop notes",
+            "url": "https://docs.example.com/workshop-notes",
+            "type": "doc",
+        },
+        {
+            "title": "Code repository",
+            "url": "https://github.com/AI-Shipping-Labs/example",
+        },
+    ],
     "hosts": [
         {
             "id": 1,
@@ -131,6 +145,8 @@ _EVENT_EXAMPLE = {
     "created_at": "2026-04-15T12:00:00+00:00",
     "updated_at": "2026-04-15T12:00:00+00:00",
 }
+
+_url_validator = URLValidator(schemes=["http", "https"])
 
 
 def _iso(value):
@@ -176,6 +192,8 @@ def serialize_event(event):
         "external_host": event.external_host,
         "published": event.published,
         "host_email": event.host_email,
+        "recording_url": event.recording_url or "",
+        "materials": event.materials or [],
         "hosts": [_serialize_host(host) for host in event.ordered_hosts],
         "banner_url": effective_banner_url(event),
         "origin": event.origin,
@@ -207,6 +225,60 @@ def _parse_iso_datetime(value):
     if timezone.is_naive(parsed):
         parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
     return parsed, None
+
+
+def _validate_optional_url(value, *, field):
+    if value is None:
+        value = ""
+    if not isinstance(value, str):
+        return "", "Must be a string."
+    value = value.strip()
+    if value == "":
+        return "", None
+    try:
+        _url_validator(value)
+    except ValidationError:
+        return value, "Must be a valid http or https URL."
+    return value, None
+
+
+def _validate_materials(value):
+    if not isinstance(value, list):
+        return None, "Must be an array of objects."
+
+    materials = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            return None, f"Item {index} must be an object."
+
+        unexpected_keys = sorted(set(item) - {"title", "url", "type"})
+        if unexpected_keys:
+            return None, (
+                f"Item {index} has unsupported field"
+                f"{'s' if len(unexpected_keys) != 1 else ''}: "
+                f"{', '.join(unexpected_keys)}."
+            )
+
+        title = item.get("title")
+        if not isinstance(title, str) or not title.strip():
+            return None, f"Item {index} title must be a non-empty string."
+
+        url, url_error = _validate_optional_url(item.get("url"), field="materials")
+        if url_error is not None or not url:
+            return None, f"Item {index} url must be a valid http or https URL."
+
+        material = {
+            "title": title.strip(),
+            "url": url,
+        }
+        if "type" in item:
+            material_type = item["type"]
+            if not isinstance(material_type, str):
+                return None, f"Item {index} type must be a string."
+            material["type"] = material_type.strip()
+        materials.append(material)
+
+    return materials, None
 
 
 def _collect_event_values(data, *, existing=None):
@@ -242,6 +314,22 @@ def _collect_event_values(data, *, existing=None):
             except ValidationError:
                 errors["host_email"] = "Must be a valid email address."
         values["host_email"] = host_email
+
+    if "recording_url" in data:
+        recording_url, error = _validate_optional_url(
+            data["recording_url"],
+            field="recording_url",
+        )
+        if error:
+            errors["recording_url"] = error
+        values["recording_url"] = recording_url
+
+    if "materials" in data:
+        materials, error = _validate_materials(data["materials"])
+        if error:
+            errors["materials"] = error
+        else:
+            values["materials"] = materials
 
     for field, valid_values in (
         ("kind", VALID_KINDS),
@@ -562,6 +650,31 @@ def _maybe_enqueue_banner(event, generate_banner):
                             "create a host registration."
                         ),
                     },
+                    "recording_url": {
+                        "type": "string",
+                        "format": "uri",
+                        "description": (
+                            "Optional primary recording URL. Empty string "
+                            "clears the field."
+                        ),
+                    },
+                    "materials": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "url": {"type": "string", "format": "uri"},
+                                "type": {"type": "string"},
+                            },
+                            "required": ["title", "url"],
+                        },
+                        "description": (
+                            "Ordered recording materials. Each item needs a "
+                            "title and URL; type is optional. Empty array "
+                            "clears materials."
+                        ),
+                    },
                     "host_ids": {
                         "type": "array",
                         "items": {"type": "integer"},
@@ -786,6 +899,31 @@ def events_collection(request):
                             "the field."
                         ),
                     },
+                    "recording_url": {
+                        "type": "string",
+                        "format": "uri",
+                        "description": (
+                            "Optional primary recording URL. Empty string "
+                            "clears the field."
+                        ),
+                    },
+                    "materials": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "url": {"type": "string", "format": "uri"},
+                                "type": {"type": "string"},
+                            },
+                            "required": ["title", "url"],
+                        },
+                        "description": (
+                            "Ordered recording materials. Each item needs a "
+                            "title and URL; type is optional. Empty array "
+                            "clears materials."
+                        ),
+                    },
                     "host_ids": {
                         "type": "array",
                         "items": {"type": "integer"},
@@ -819,7 +957,18 @@ def events_collection(request):
                         ),
                     },
                 },
-                "example": {"status": "scheduled", "published": True},
+                "example": {
+                    "status": "completed",
+                    "published": True,
+                    "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
+                    "materials": [
+                        {
+                            "title": "Workshop notes",
+                            "url": "https://docs.example.com/workshop-notes",
+                            "type": "doc",
+                        }
+                    ],
+                },
             },
             "responses": {
                 200: {

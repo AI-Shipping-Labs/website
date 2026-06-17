@@ -2,7 +2,7 @@
 
 Covers the Studio author journey (create queues a banner; the detail page
 shows the placeholder / image and a Regenerate control) and the public
-series link-preview surface (header banner image, OG/Twitter image, site
+series link-preview surface (no body banner image, OG/Twitter image, site
 default fallback, og:title from the series name).
 
 The banner-generator Lambda is never hit: we configure the integration
@@ -204,7 +204,9 @@ class TestPublicSeriesBannerPreview:
         ).first.get_attribute("content")
 
     @pytest.mark.core
-    def test_header_banner_and_og_use_auto_banner(self, django_server, page):
+    def test_body_banner_removed_but_og_uses_auto_banner(
+        self, django_server, page,
+    ):
         _reset_state()
         _ensure_tiers()
         series = _make_series(
@@ -215,10 +217,11 @@ class TestPublicSeriesBannerPreview:
             f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
-        # Header banner image renders.
-        banner = page.locator('[data-testid="series-banner"] img')
-        assert banner.count() == 1
-        assert banner.get_attribute("src") == BANNER_URL
+        # The generated image is no longer rendered in the page body.
+        assert page.locator('[data-testid="series-banner"]').count() == 0
+        assert page.locator(f'img[src="{BANNER_URL}"]').count() == 0
+        assert page.locator('[data-testid="series-name"]').first.is_visible()
+        assert page.locator('[data-testid="series-events"]').first.is_visible()
         # OG/Twitter image point at the banner.
         assert self._og_image(page) == BANNER_URL
         assert self._twitter_image(page) == BANNER_URL

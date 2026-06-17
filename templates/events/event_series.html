@@ -30,14 +30,6 @@
 <main class="min-h-screen pt-24">
   <section class="py-8 sm:py-16 lg:py-24">
     <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-      {% if series.auto_banner_url %}
-      <div class="mb-8 overflow-hidden rounded-xl border border-border bg-card" data-testid="series-banner">
-        <img src="{{ series.auto_banner_url }}" alt="{{ series.name }}"
-             class="w-full"
-             width="1200" height="630" loading="lazy">
-      </div>
-      {% endif %}
-
       <div class="mb-10">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Event series</p>
         <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl" data-testid="series-name">{{ series.name }}</h1>

@@ -202,8 +202,9 @@ class TestPartialGatedSeriesDashboardEnrollment:
             '[data-testid="series-registered-state"]'
         ).wait_for(state="visible")
 
-        # The dashboard upcoming-events section shows only the 2 open
-        # sessions; the Premium-only session is not enrolled.
+        # The dashboard upcoming-events section collapses the 2 open
+        # registered sessions to the next occurrence; the Premium-only
+        # session is not enrolled or shown.
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
         upcoming = page.locator(
             "section", has=page.get_by_role(
@@ -213,8 +214,12 @@ class TestPartialGatedSeriesDashboardEnrollment:
         upcoming.wait_for(state="visible")
         upcoming_text = upcoming.inner_text()
         assert "Calendar Series 934 — Session 1" in upcoming_text
-        assert "Calendar Series 934 — Session 2" in upcoming_text
+        assert "Calendar Series 934 — Session 2" not in upcoming_text
         assert "Calendar Series 934 — Session 3" not in upcoming_text
+        assert "Event series" in upcoming_text
+        assert upcoming.locator(
+            '[data-testid="dashboard-event-series-see-more"]'
+        ).count() == 1
 
         from accounts.models import User
         from events.models import EventRegistration

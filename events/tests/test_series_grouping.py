@@ -1,12 +1,12 @@
 """Issue #866: series-membership grouping on the public /events listing.
 
 Part A: a series with 2+ upcoming live occurrences renders as ONE grouped
-"series card" (badge, name link, cadence + "N upcoming sessions" meta, the
-next up to 3 dates, and a "View series" CTA) instead of one card per
-occurrence. A one-occurrence series falls back to a normal single card that
-keeps the existing "Series: <name>" link. Standalone events are untouched.
-Cancelled/draft occurrences never inflate the grouped count or date list, and
-the grouped row is positioned chronologically by its earliest occurrence.
+"series card" (badge, next occurrence, count meta, and a lightweight
+"See more" link) instead of one card per occurrence. A one-occurrence series
+falls back to a normal single card that keeps the existing "Series: <name>"
+link. Standalone events are untouched. Cancelled/draft occurrences never
+inflate the grouped count or date, and the grouped row is positioned
+chronologically by its earliest occurrence.
 
 Part B coverage (compact series-page rows) lives in
 ``events.tests.test_cancelled_visibility`` (state chips) and the Playwright
@@ -89,10 +89,10 @@ class UpcomingRowsBuilderTest(TestCase):
         self.assertEqual(row['kind'], 'series')
         self.assertEqual(row['series'], self.series)
         self.assertEqual(row['count'], 3)
-        self.assertEqual(len(row['preview']), 3)
-        self.assertEqual(row['extra'], 0)
+        self.assertEqual(row['next_occurrence'].slug, 'oh-1')
+        self.assertEqual(row['remaining_count'], 2)
 
-    def test_preview_caps_at_three_with_extra_count(self):
+    def test_remaining_count_tracks_hidden_occurrences(self):
         for i in range(5):
             self._make(f'oh-{i}', 2 + i * 7, self.series, i + 1)
         upcoming = Event.objects.filter(
@@ -103,8 +103,8 @@ class UpcomingRowsBuilderTest(TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['count'], 5)
-        self.assertEqual(len(rows[0]['preview']), 3)
-        self.assertEqual(rows[0]['extra'], 2)
+        self.assertEqual(rows[0]['next_occurrence'].slug, 'oh-0')
+        self.assertEqual(rows[0]['remaining_count'], 4)
 
     def test_single_occurrence_series_stays_an_event_row(self):
         self._make('solo-1', 4, self.series, 1)
@@ -189,23 +189,25 @@ class EventsListSeriesCardRenderTest(TestCase):
         self.assertEqual(len(series_rows), 1)
         self.assertEqual(series_rows[0]['count'], 4)
 
-    def test_grouped_card_shows_badge_name_cta_and_dates(self):
+    def test_grouped_card_shows_badge_next_occurrence_and_see_more(self):
         response = self.client.get('/events')
         self.assertContains(response, 'data-testid="event-series-card"')
         self.assertContains(response, 'data-testid="series-card-badge"')
-        # Name links to the series page.
+        # The next occurrence title links to the series page.
         self.assertContains(
             response,
             '<a href="/events/groups/llm-oh"',
         )
-        # Cadence + session-count meta line.
+        self.assertContains(response, 'Office Hours Session 0')
+        # Session-count meta line.
         self.assertContains(response, '4 upcoming sessions')
-        self.assertContains(response, 'Weekly on Wednesday at 18:00')
-        # "View series" CTA.
-        self.assertContains(response, 'data-testid="series-card-cta"')
-        self.assertContains(response, 'View series')
-        # The next dates list is present.
-        self.assertContains(response, 'data-testid="series-card-dates"')
+        self.assertContains(response, 'Series: LLM Zoomcamp office hours')
+        self.assertContains(response, 'data-testid="series-card-date"')
+        self.assertContains(response, 'data-testid="series-card-see-more"')
+        self.assertContains(response, 'See more')
+        self.assertNotContains(response, 'data-testid="series-card-cta"')
+        self.assertNotContains(response, 'View series')
+        self.assertNotContains(response, 'data-testid="series-card-dates"')
 
     def test_signed_in_grouped_card_uses_viewer_preferred_timezone(self):
         user = User.objects.create_user(
@@ -218,13 +220,14 @@ class EventsListSeriesCardRenderTest(TestCase):
         response = self.client.get('/events')
 
         self.assertContains(response, 'America/New_York')
-        self.assertContains(response, 'data-testid="series-card-dates"')
+        self.assertContains(response, 'data-testid="series-card-date"')
 
     def test_individual_occurrence_titles_not_repeated_as_cards(self):
-        # The grouped card replaces the 4 per-occurrence cards: the
-        # occurrence titles do not appear as separate event-card links.
+        # The grouped card replaces the 4 per-occurrence cards: only the
+        # next occurrence title appears on the listing.
         response = self.client.get('/events')
-        self.assertNotContains(response, 'Office Hours Session 0')
+        self.assertContains(response, 'Office Hours Session 0')
+        self.assertNotContains(response, 'Office Hours Session 1')
         self.assertNotContains(response, 'Office Hours Session 3')
 
     def test_standalone_event_renders_as_its_own_card(self):

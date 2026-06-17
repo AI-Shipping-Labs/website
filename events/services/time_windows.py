@@ -77,8 +77,21 @@ def past_recording_events_queryset(queryset=None, *, now=None):
     )
 
 
+def _annotate_dashboard_series_event(event, count):
+    """Attach dashboard-only series metadata to a registered event row."""
+    event.dashboard_is_event_series = bool(event.event_series_id)
+    event.dashboard_series_total_count = count
+    event.dashboard_series_remaining_count = max(0, count - 1)
+    return event
+
+
 def registered_upcoming_events(user, *, now=None, limit=3):
-    """Return registered future events for the member dashboard."""
+    """Return registered future events for the member dashboard.
+
+    Series-linked registrations collapse to the earliest upcoming registered
+    occurrence, then the dashboard row limit is applied. Standalone events
+    remain independent rows.
+    """
     from events.models import EventRegistration
 
     now = now or timezone.now()
@@ -90,9 +103,34 @@ def registered_upcoming_events(user, *, now=None, limit=3):
         )
         .filter(upcoming_window_q(now, field_prefix='event__'))
         .exclude(event__status__in=HIDDEN_FROM_PUBLIC_STATUSES)
-        .select_related('event')
+        .select_related('event', 'event__event_series')
         .order_by('event__start_datetime')
     )
-    if limit is not None:
-        registrations = registrations[:limit]
-    return [registration.event for registration in registrations]
+    events = [registration.event for registration in registrations]
+
+    series_counts = {}
+    for event in events:
+        if event.event_series_id:
+            series_counts[event.event_series_id] = (
+                series_counts.get(event.event_series_id, 0) + 1
+            )
+
+    collapsed = []
+    seen_series = set()
+    for event in events:
+        if event.event_series_id:
+            if event.event_series_id in seen_series:
+                continue
+            seen_series.add(event.event_series_id)
+            collapsed.append(
+                _annotate_dashboard_series_event(
+                    event, series_counts[event.event_series_id],
+                )
+            )
+        else:
+            collapsed.append(_annotate_dashboard_series_event(event, 0))
+
+        if limit is not None and len(collapsed) >= limit:
+            break
+
+    return collapsed

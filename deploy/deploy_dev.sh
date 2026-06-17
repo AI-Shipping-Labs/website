@@ -163,16 +163,26 @@ deploy_service() {
         --services ${SERVICE}; then
         echo "ERROR: ${SERVICE} did not reach steady state."
 
-        # /ping fallback only makes sense for the web service.
+        # /ping fallback only makes sense for the web service. ECS can still
+        # finish target registration just after the waiter hits its fixed
+        # ceiling, so allow a short grace window before declaring failure.
         if [ "${ROLE}" != "worker" ] && [ -n "${DEPLOY_HOST}" ]; then
             local DEPLOYED_TAG
-            DEPLOYED_TAG=$(curl -fsSL --max-time 10 "${DEPLOY_HOST}/ping" 2>/dev/null || true)
-            if [ "${DEPLOYED_TAG}" = "${TAG}" ]; then
-                echo "WARNING: ECS waiter timed out, but ${DEPLOY_HOST}/ping is serving ${DEPLOYED_TAG}."
-                echo "Treating deployment as successful so post-deploy bookkeeping can continue."
-                rm -f ${FILE_IN} ${FILE_OUT}
-                return 0
-            fi
+            local GRACE_ATTEMPTS=30
+            local GRACE_SLEEP_SECONDS=10
+
+            echo "ECS waiter timed out; polling ${DEPLOY_HOST}/ping for ${TAG} for up to $((GRACE_ATTEMPTS * GRACE_SLEEP_SECONDS))s..."
+            for i in $(seq 1 ${GRACE_ATTEMPTS}); do
+                DEPLOYED_TAG=$(curl -fsSL --max-time 10 "${DEPLOY_HOST}/ping" 2>/dev/null || true)
+                if [ "${DEPLOYED_TAG}" = "${TAG}" ]; then
+                    echo "WARNING: ECS waiter timed out, but ${DEPLOY_HOST}/ping is serving ${DEPLOYED_TAG} after grace attempt ${i}."
+                    echo "Treating deployment as successful so post-deploy bookkeeping can continue."
+                    rm -f ${FILE_IN} ${FILE_OUT}
+                    return 0
+                fi
+                echo "Grace attempt ${i}/${GRACE_ATTEMPTS}: ${DEPLOY_HOST}/ping returned '${DEPLOYED_TAG:-<unreachable>}'; expected '${TAG}'."
+                sleep ${GRACE_SLEEP_SECONDS}
+            done
             echo "${DEPLOY_HOST}/ping returned '${DEPLOYED_TAG:-<unreachable>}'; expected '${TAG}'."
         fi
 

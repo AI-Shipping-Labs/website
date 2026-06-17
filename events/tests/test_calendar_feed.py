@@ -18,6 +18,7 @@ Covers:
   DTSTART, DTEND, SEQUENCE the legacy single-event invite produced.
 """
 
+import json
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 
@@ -25,6 +26,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from icalendar import Calendar
 
+from accounts.models import Token
 from events.models import Event
 from events.services.calendar_feed import (
     FEED_BACKFILL_DAYS,
@@ -37,6 +39,7 @@ from events.services.calendar_invite import (
     generate_feed_ics,
     generate_ics,
 )
+from tests.fixtures import StaffUserMixin
 
 
 def _parse(ics_bytes):
@@ -56,6 +59,10 @@ def _vevent_by_uid(cal, uid):
         if str(v.get('uid')) == uid:
             return v
     return None
+
+
+def _dt_utc(year, month, day, hour, minute=0):
+    return datetime(year, month, day, hour, minute, tzinfo=dt_timezone.utc)
 
 
 @override_settings(SITE_BASE_URL='https://aishippinglabs.com')
@@ -644,6 +651,259 @@ class EventsCalendarFeedViewTest(TestCase):
         self.assertIn(
             b'Upcoming Feed Event UPDATED', response_b.content,
         )
+
+
+@override_settings(SITE_BASE_URL='https://aishippinglabs.com')
+class EventsCalendarFeedScheduleRefreshTest(StaffUserMixin, TestCase):
+    """Issue #1030: subscribed feed updates after schedule edits."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.api_token = Token.objects.create(
+            user=cls.staff, name='calendar-feed-refresh',
+        )
+
+    def setUp(self):
+        self.client.login(**self.staff_credentials)
+
+    def _create_event(self, **overrides):
+        start = overrides.pop('start_datetime', _dt_utc(2027, 6, 15, 14))
+        defaults = {
+            'slug': 'feed-refresh-event',
+            'title': 'Feed Refresh Event',
+            'description': 'Public feed body.',
+            'start_datetime': start,
+            'end_datetime': start + timedelta(hours=1),
+            'timezone': 'UTC',
+            'status': 'upcoming',
+            'published': True,
+            'origin': 'studio',
+            'ics_sequence': 4,
+        }
+        defaults.update(overrides)
+        return Event.objects.create(**defaults)
+
+    def _feed_response(self, **headers):
+        return self.client.get('/events/calendar.ics', **headers)
+
+    def _feed_vevents(self, uid):
+        response = self._feed_response()
+        self.assertEqual(response.status_code, 200)
+        cal = _parse(response.content)
+        return [v for v in _vevents(cal) if str(v.get('uid')) == uid]
+
+    def _feed_vevent(self, uid):
+        matches = self._feed_vevents(uid)
+        self.assertEqual(len(matches), 1)
+        return matches[0]
+
+    def _post_studio_edit(self, event, *, start, duration_hours='1', **overrides):
+        data = {
+            'title': event.title,
+            'slug': event.slug,
+            'description': event.description,
+            'event_date': start.strftime('%d/%m/%Y'),
+            'event_time': start.strftime('%H:%M'),
+            'duration_hours': duration_hours,
+            'timezone': 'UTC',
+            'status': event.status,
+            'required_level': str(event.required_level),
+        }
+        data.update(overrides)
+        return self.client.post(
+            f'/studio/events/{event.pk}/edit', data, follow=True,
+        )
+
+    def test_studio_start_edit_updates_dtstart_sequence_and_stable_uid(self):
+        event = self._create_event()
+        uid = 'event-feed-refresh-event@aishippinglabs.com'
+        before = self._feed_vevent(uid)
+        before_sequence = int(before.get('sequence'))
+
+        new_start = _dt_utc(2027, 6, 22, 15, 30)
+        response = self._post_studio_edit(event, start=new_start)
+        self.assertEqual(response.status_code, 200)
+
+        after = self._feed_vevent(uid)
+        self.assertEqual(str(after.get('uid')), uid)
+        self.assertEqual(
+            after.get('dtstart').dt.astimezone(dt_timezone.utc),
+            new_start,
+        )
+        self.assertGreater(int(after.get('sequence')), before_sequence)
+
+    def test_studio_duration_only_edit_updates_dtend_and_sequence(self):
+        event = self._create_event(slug='duration-refresh-event')
+        uid = 'event-duration-refresh-event@aishippinglabs.com'
+        before = self._feed_vevent(uid)
+        before_sequence = int(before.get('sequence'))
+
+        response = self._post_studio_edit(
+            event, start=event.start_datetime, duration_hours='1.5',
+        )
+        self.assertEqual(response.status_code, 200)
+
+        after = self._feed_vevent(uid)
+        self.assertEqual(
+            after.get('dtend').dt.astimezone(dt_timezone.utc),
+            event.start_datetime + timedelta(minutes=90),
+        )
+        self.assertGreater(int(after.get('sequence')), before_sequence)
+
+    def test_noop_studio_save_does_not_bump_sequence(self):
+        event = self._create_event(slug='noop-refresh-event')
+        uid = 'event-noop-refresh-event@aishippinglabs.com'
+        before = self._feed_vevent(uid)
+        before_sequence = int(before.get('sequence'))
+
+        response = self._post_studio_edit(event, start=event.start_datetime)
+        self.assertEqual(response.status_code, 200)
+
+        after = self._feed_vevent(uid)
+        self.assertEqual(int(after.get('sequence')), before_sequence)
+        self.assertEqual(
+            after.get('dtstart').dt.astimezone(dt_timezone.utc),
+            event.start_datetime,
+        )
+
+    def test_old_if_none_match_gets_200_after_studio_schedule_edit(self):
+        event = self._create_event(slug='etag-refresh-event')
+        uid = 'event-etag-refresh-event@aishippinglabs.com'
+        response_a = self._feed_response()
+        old_etag = response_a['ETag']
+        before = _vevent_by_uid(_parse(response_a.content), uid)
+        before_sequence = int(before.get('sequence'))
+
+        new_start = _dt_utc(2027, 6, 23, 16)
+        self._post_studio_edit(event, start=new_start, duration_hours='2')
+
+        response_b = self._feed_response(HTTP_IF_NONE_MATCH=old_etag)
+        self.assertEqual(response_b.status_code, 200)
+        self.assertNotEqual(response_b['ETag'], old_etag)
+        after = _vevent_by_uid(_parse(response_b.content), uid)
+        self.assertIsNotNone(after)
+        self.assertEqual(
+            after.get('dtstart').dt.astimezone(dt_timezone.utc),
+            new_start,
+        )
+        self.assertEqual(
+            after.get('dtend').dt.astimezone(dt_timezone.utc),
+            new_start + timedelta(hours=2),
+        )
+        self.assertGreater(int(after.get('sequence')), before_sequence)
+
+    def test_old_if_modified_since_same_second_gets_updated_content(self):
+        event = self._create_event(slug='ims-refresh-event')
+        uid = 'event-ims-refresh-event@aishippinglabs.com'
+        base = _dt_utc(2027, 7, 1, 12)
+        Event.objects.filter(pk=event.pk).update(
+            updated_at=base.replace(microsecond=100000),
+        )
+        response_a = self._feed_response()
+        old_last_modified = response_a['Last-Modified']
+
+        new_start = _dt_utc(2027, 7, 8, 13)
+        event.start_datetime = new_start
+        event.end_datetime = new_start + timedelta(hours=1)
+        event.save(update_fields=['start_datetime', 'end_datetime'])
+        Event.objects.filter(pk=event.pk).update(
+            updated_at=base.replace(microsecond=500000),
+        )
+
+        response_b = self._feed_response(
+            HTTP_IF_MODIFIED_SINCE=old_last_modified,
+        )
+        self.assertEqual(response_b.status_code, 200)
+        after = _vevent_by_uid(_parse(response_b.content), uid)
+        self.assertIsNotNone(after)
+        self.assertEqual(
+            after.get('dtstart').dt.astimezone(dt_timezone.utc),
+            new_start,
+        )
+
+    def test_title_edit_refreshes_etag_without_sequence_bump(self):
+        event = self._create_event(slug='copy-refresh-event')
+        uid = 'event-copy-refresh-event@aishippinglabs.com'
+        response_a = self._feed_response()
+        old_etag = response_a['ETag']
+        before = _vevent_by_uid(_parse(response_a.content), uid)
+        before_sequence = int(before.get('sequence'))
+
+        response = self._post_studio_edit(
+            event,
+            start=event.start_datetime,
+            title='Feed Refresh Event Updated',
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response_b = self._feed_response(HTTP_IF_NONE_MATCH=old_etag)
+        self.assertEqual(response_b.status_code, 200)
+        self.assertNotEqual(response_b['ETag'], old_etag)
+        after = _vevent_by_uid(_parse(response_b.content), uid)
+        self.assertEqual(str(after.get('summary')), 'Feed Refresh Event Updated')
+        self.assertEqual(int(after.get('sequence')), before_sequence)
+
+    def test_gated_event_stays_public_safe_after_schedule_edit(self):
+        event = self._create_event(
+            slug='gated-refresh-event',
+            title='Gated Refresh Event',
+            description='SECRET gated body https://zoom.us/j/raw-secret',
+            required_level=20,
+        )
+        uid = 'event-gated-refresh-event@aishippinglabs.com'
+        before = self._feed_vevent(uid)
+        before_sequence = int(before.get('sequence'))
+
+        new_start = _dt_utc(2027, 6, 24, 17)
+        self._post_studio_edit(event, start=new_start)
+
+        after = self._feed_vevent(uid)
+        self.assertEqual(str(after.get('summary')), '[Members only] Gated Refresh Event')
+        self.assertEqual(
+            after.get('dtstart').dt.astimezone(dt_timezone.utc),
+            new_start,
+        )
+        self.assertGreater(int(after.get('sequence')), before_sequence)
+        description = str(after.get('description'))
+        self.assertIn('members-only', description)
+        self.assertNotIn('SECRET gated body', description)
+        self.assertNotIn('https://zoom.us/j/raw-secret', description)
+
+    def test_api_patch_schedule_edit_refreshes_feed(self):
+        event = self._create_event(slug='api-refresh-event')
+        uid = 'event-api-refresh-event@aishippinglabs.com'
+        response_a = self._feed_response()
+        old_etag = response_a['ETag']
+        before = _vevent_by_uid(_parse(response_a.content), uid)
+        before_sequence = int(before.get('sequence'))
+        new_start = _dt_utc(2027, 6, 25, 18)
+        new_end = new_start + timedelta(hours=2)
+
+        response = self.client.patch(
+            f'/api/events/{event.slug}',
+            data=json.dumps({
+                'start_datetime': new_start.isoformat(),
+                'end_datetime': new_end.isoformat(),
+            }),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Token {self.api_token.key}',
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response_b = self._feed_response(HTTP_IF_NONE_MATCH=old_etag)
+        self.assertEqual(response_b.status_code, 200)
+        self.assertNotEqual(response_b['ETag'], old_etag)
+        after = _vevent_by_uid(_parse(response_b.content), uid)
+        self.assertEqual(
+            after.get('dtstart').dt.astimezone(dt_timezone.utc),
+            new_start,
+        )
+        self.assertEqual(
+            after.get('dtend').dt.astimezone(dt_timezone.utc),
+            new_end,
+        )
+        self.assertGreater(int(after.get('sequence')), before_sequence)
 
 
 @override_settings(SITE_BASE_URL='https://aishippinglabs.com')

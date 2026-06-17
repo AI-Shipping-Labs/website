@@ -7,6 +7,8 @@ The non-synced edit branch must:
   - ``old_start`` is in the future, AND
   - both old and new starts are non-null.
 - End-only edits and title/description-only edits MUST NOT enqueue.
+- End-only edits still bump ``ics_sequence`` via ``Event.save()`` so
+  subscribed calendar feeds update without sending attendee reschedule email.
 - The flash message reports the pre-filter registration count.
 - The synced edit branch NEVER enqueues regardless of input.
 """
@@ -151,9 +153,16 @@ class StudioEventRescheduleTriggerTest(StaffUserMixin, TestCase):
         """No-op re-save (same wall-clock) MUST NOT enqueue."""
         # Same date+time means the parser produces a delta well under
         # 60 seconds (in fact exactly zero).
+        before_sequence = self.event.ics_sequence
+        before_start = self.event.start_datetime
+        before_end = self.event.end_datetime
         response = self._post_edit()
 
         mock_enqueue.assert_not_called()
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.ics_sequence, before_sequence)
+        self.assertEqual(self.event.start_datetime, before_start)
+        self.assertEqual(self.event.end_datetime, before_end)
         message_strings = [m.message for m in response.context['messages']]
         self.assertFalse(
             any('Rescheduling notice' in m for m in message_strings),
@@ -171,13 +180,15 @@ class StudioEventRescheduleTriggerTest(StaffUserMixin, TestCase):
 
     @patch('studio.views.events.enqueue_reschedule_notice')
     def test_duration_only_change_does_not_enqueue(self, mock_enqueue):
-        """End-only edits (duration extended) MUST NOT enqueue. v1 is
-        start-only — end-only changes are a follow-up."""
+        """End-only edits update calendars but do not enqueue email."""
         # Same date+time, longer duration. end_datetime moves; start
         # does not.
+        before_sequence = self.event.ics_sequence
         response = self._post_edit(duration_hours='3')
 
         mock_enqueue.assert_not_called()
+        self.event.refresh_from_db()
+        self.assertGreater(self.event.ics_sequence, before_sequence)
         message_strings = [m.message for m in response.context['messages']]
         self.assertFalse(
             any('Rescheduling notice' in m for m in message_strings),

@@ -169,6 +169,14 @@ def _parse_event_datetime(post_data, tz_name):
     return start_utc, end_utc
 
 
+def _same_calendar_minute(left, right):
+    if left is None or right is None:
+        return False
+    return left.replace(second=0, microsecond=0) == right.replace(
+        second=0, microsecond=0,
+    )
+
+
 def _event_form_context(event, default_tz):
     """Build template context for the event form.
 
@@ -405,10 +413,10 @@ def _maybe_notify_reschedule(request, event, old_start):
 
     When the trigger fires:
 
-    - Bumps ``event.ics_sequence`` and persists it so the re-issued
-      ``.ics`` carries a higher SEQUENCE than the original registration
-      invite — calendar clients then overwrite the existing entry
-      instead of creating a duplicate.
+    - Uses the ``ics_sequence`` bumped by ``Event.save()`` when the
+      schedule changed, so the re-issued ``.ics`` carries a higher
+      SEQUENCE than the original registration invite — calendar clients
+      then overwrite the existing entry instead of creating a duplicate.
     - Enqueues the two-stage fan-out task with the ISO-encoded
       ``old_start`` (Django-Q arguments must be JSON-serialisable).
     - Flashes a success message with the PRE-FILTER registration count
@@ -427,13 +435,6 @@ def _maybe_notify_reschedule(request, event, old_start):
     # advertise a time the recipient cannot reach.
     if event.start_datetime <= now:
         return
-
-    # Bump SEQUENCE before the fan-out so the per-user .ics already
-    # carries the new value. ics_sequence is a PositiveIntegerField
-    # so a single increment is enough; the previous registration
-    # invite carried the pre-bump value.
-    event.ics_sequence = (event.ics_sequence or 0) + 1
-    event.save(update_fields=['ics_sequence'])
 
     count = EventRegistration.objects.filter(event=event).count()
     if count > 0:
@@ -802,6 +803,17 @@ def event_edit(request, event_id):
                 _apply_host_context(context, selected_host_ids)
                 return render(request, 'studio/events/form.html', context)
             start_dt, end_dt = _parse_event_datetime(request.POST, posted_tz)
+            # The Studio picker has minute precision. Preserve stored
+            # seconds/microseconds when the displayed minute did not change
+            # so a no-op form round trip does not look like a schedule edit.
+            parsed_start_dt = start_dt
+            old_effective_end = old_event.effective_end_datetime
+            if _same_calendar_minute(start_dt, old_event.start_datetime):
+                start_dt = old_event.start_datetime
+            if _same_calendar_minute(end_dt, old_effective_end):
+                end_dt = old_event.end_datetime
+            elif start_dt != parsed_start_dt:
+                end_dt = start_dt + (end_dt - parsed_start_dt)
             event.start_datetime = start_dt
             event.end_datetime = end_dt
             event.timezone = posted_tz

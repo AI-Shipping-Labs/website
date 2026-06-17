@@ -1084,10 +1084,11 @@ def events_calendar_feed(request):
     if if_modified_since:
         client_dt = _parse_http_date(if_modified_since)
         if client_dt is not None:
-            # Compare at second granularity — HTTP-date has no
-            # sub-second component, so anything finer would loop.
-            last_modified_floor = last_modified.replace(microsecond=0)
-            if client_dt >= last_modified_floor:
+            # HTTP-date has no sub-second component. Compare against
+            # the full server timestamp so an edit made inside the
+            # same visible HTTP-date second as the client's cached
+            # value is treated as modified instead of stale-304'd.
+            if client_dt >= last_modified:
                 not_modified = HttpResponse(status=304)
                 not_modified['ETag'] = etag
                 not_modified['Last-Modified'] = _format_http_date(

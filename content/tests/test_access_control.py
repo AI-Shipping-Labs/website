@@ -530,7 +530,7 @@ class RequiredLevelFieldTest(TestCase):
     def test_curated_link_default_level(self):
         link = CuratedLink.objects.create(
             item_id='test-rl', title='Test',
-            url='https://example.com', category='tools',
+            url='https://example.com', category='workshops',
         )
         self.assertEqual(link.required_level, 0)
 
@@ -834,7 +834,7 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
             title='Free Link Gate',
             description='Free link description',
             url='https://example.com/free-link',
-            category='tools',
+            category='workshops',
             required_level=LEVEL_OPEN,
         )
         response = self.client.get(f'/resources/{link.pk}/go')
@@ -884,7 +884,7 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
             item_id='listed-free-link',
             title='Listed Free Link',
             url='https://example.com/listed-link',
-            category='tools',
+            category='workshops',
             required_level=LEVEL_OPEN,
         )
         Download.objects.create(

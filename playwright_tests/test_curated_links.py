@@ -43,7 +43,7 @@ def _create_curated_link(
     item_id=None,
     description="",
     url="https://example.com",
-    category="tools",
+    category="workshops",
     tags=None,
     required_level=0,
     sort_order=0,
@@ -162,7 +162,7 @@ class TestScenario2VisitorClicksOpenLink:
             title="Ollama",
             description="Run LLMs locally with Ollama.",
             url="https://github.com/ollama/ollama",
-            category="tools",
+            category="workshops",
             required_level=0,
             sort_order=1,
         )
@@ -214,7 +214,7 @@ class TestScenario3FreeUserSeesGatedLink:
             title="Pro CLI Toolkit",
             description="Advanced CLI tools for production workflows.",
             url="https://example.com/pro-cli-secret-url",
-            category="tools",
+            category="workshops",
             required_level=10,  # Basic tier
             sort_order=1,
         )
@@ -278,7 +278,7 @@ class TestScenario4BasicMemberAccessesBasicLink:
             title="Exclusive Toolkit",
             description="An exclusive toolkit for Basic members.",
             url="https://example.com/exclusive-toolkit",
-            category="tools",
+            category="workshops",
             required_level=10,  # Basic tier
             sort_order=1,
         )
@@ -337,7 +337,7 @@ class TestScenario5BasicMemberGatedFromMainLinks:
             title="Basic Toolkit",
             description="A toolkit accessible to Basic members.",
             url="https://example.com/basic-toolkit",
-            category="tools",
+            category="workshops",
             required_level=10,  # Basic tier
             sort_order=1,
         )
@@ -345,7 +345,7 @@ class TestScenario5BasicMemberGatedFromMainLinks:
             title="Community Dashboard",
             description="A dashboard for Main-tier community members.",
             url="https://example.com/community-dashboard-secret",
-            category="tools",
+            category="articles",
             required_level=20,  # Main tier
             sort_order=2,
         )
@@ -409,7 +409,7 @@ class TestScenario6VisitorFiltersByTag:
             title="Python CLI",
             description="A Python command-line tool.",
             url="https://example.com/python-cli",
-            category="tools",
+            category="workshops",
             tags=["python", "cli"],
             sort_order=1,
         )
@@ -417,7 +417,7 @@ class TestScenario6VisitorFiltersByTag:
             title="GPT-4 API",
             description="API access for GPT-4.",
             url="https://example.com/gpt4-api",
-            category="models",
+            category="articles",
             tags=["ai", "llm"],
             sort_order=1,
         )
@@ -481,7 +481,7 @@ class TestScenario7VisitorClearsTagFilter:
             title="Python CLI",
             description="A Python command-line tool.",
             url="https://example.com/python-cli",
-            category="tools",
+            category="workshops",
             tags=["python", "cli"],
             sort_order=1,
         )
@@ -489,7 +489,7 @@ class TestScenario7VisitorClearsTagFilter:
             title="GPT-4 API",
             description="API access for GPT-4.",
             url="https://example.com/gpt4-api",
-            category="models",
+            category="articles",
             tags=["ai", "llm"],
             sort_order=1,
         )
@@ -536,7 +536,7 @@ class TestScenario8EmptyStateNoMatchingTag:
             title="Python CLI",
             description="A Python command-line tool.",
             url="https://example.com/python-cli",
-            category="tools",
+            category="workshops",
             tags=["python"],
             sort_order=1,
         )

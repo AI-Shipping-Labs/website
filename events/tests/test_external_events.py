@@ -460,6 +460,23 @@ class SyncDispatcherExternalHostTest(TestCase):
         )
         self.assertEqual(defaults['external_host'], 'Maven')
 
+    def test_timestamps_are_normalized_to_canonical_shape(self):
+        defaults = _build_synced_event_content_defaults(
+            timestamps=[
+                {'time': '16:00', 'title': 'Setup'},
+                {'time_seconds': '125', 'label': 'Build'},
+                {'time': 'not-a-time', 'title': 'Broken'},
+            ],
+            **self._common_kwargs(),
+        )
+        self.assertEqual(
+            defaults['timestamps'],
+            [
+                {'time_seconds': 960, 'label': 'Setup'},
+                {'time_seconds': 125, 'label': 'Build'},
+            ],
+        )
+
 
 # --- Issue #579: choices constraint ------------------------------------
 

@@ -254,6 +254,7 @@ class VerifyEmailAPITest(TestCase):
             email="already@example.com",
             password="test1234",
             first_name="Already",
+            verification_expires_at=timezone.now() + datetime.timedelta(days=1),
         )
         user.email_verified = True
         user.save(update_fields=["email_verified"])
@@ -266,6 +267,7 @@ class VerifyEmailAPITest(TestCase):
         user.refresh_from_db()
         self.assertTrue(user.email_verified)
         self.assertEqual(user.first_name, "Already")
+        self.assertIsNotNone(user.verification_expires_at)
 
     def test_verify_authenticated_success_links_to_account(self):
         """Authenticated users get an account-oriented next action."""

@@ -117,9 +117,9 @@ def _create_workshop_with_full_video():
         kind='workshop',
         recording_url='https://www.youtube.com/watch?v=dQw4w9WgXcQ',
         timestamps=[
-            {'time': '0:00', 'title': 'Welcome'},
-            {'time': '5:00', 'title': 'Setup'},
-            {'time': '12:30', 'title': 'Deploy'},
+            {'time_seconds': 0, 'label': 'Welcome'},
+            {'time_seconds': 300, 'label': 'Setup'},
+            {'time_seconds': 750, 'label': 'Deploy'},
         ],
         materials=[],
         transcript_text=(

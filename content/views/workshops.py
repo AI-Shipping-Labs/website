@@ -359,9 +359,8 @@ def _build_timestamps_with_pages(event, workshop):
     plus an optional ``-> Tutorial: <title>`` sub-link without doing
     any time-parsing in Django template logic.
 
-    Both timestamp shapes are accepted:
-    - ``{time_seconds, label}`` (legacy / canonical)
-    - ``{time, title}`` (workshop YAML)
+    Timestamps are expected in the canonical ``{time_seconds, label}``
+    storage shape. Workshop YAML timestamps are normalized at sync time.
 
     Pages are matched by exact-second equality. Duplicate ``video_start``
     values resolve to the page with the lowest ``sort_order`` (i.e. the
@@ -387,26 +386,15 @@ def _build_timestamps_with_pages(event, workshop):
     for ts in raw:
         if not isinstance(ts, dict):
             continue
-        # Resolve the integer seconds. Same logic as
-        # video_utils.normalize_timestamps but also returns the matched
-        # page so the template can render the sub-link.
-        if 'time_seconds' in ts:
-            try:
-                seconds = int(ts.get('time_seconds') or 0)
-            except (TypeError, ValueError):
-                continue
-        elif 'time' in ts:
-            try:
-                seconds = parse_video_timestamp(ts.get('time'))
-            except ValueError:
-                continue
-        else:
+        try:
+            seconds = int(ts.get('time_seconds') or 0)
+        except (TypeError, ValueError):
             continue
 
         if seconds < 0:
             continue
 
-        label = ts.get('label') or ts.get('title') or ''
+        label = ts.get('label') or ''
         annotated.append({
             'time_seconds': seconds,
             'formatted_time': format_timestamp(seconds),
@@ -562,15 +550,14 @@ def _build_video_gated_context(request, workshop, event):
             workshop.description_html, TEASER_WORD_LIMIT,
         )
 
-    # First three timestamp labels as a teaser list (no clickable links
-    # — teaser only). The legacy timestamps may be ``{time, label}`` or
-    # ``{time_seconds, label}``; tolerate both shapes.
+    # First three canonical timestamp labels as a teaser list (no clickable
+    # links — teaser only).
     teaser_timestamps = []
     if event and event.timestamps:
         for ts in event.timestamps[:3]:
             if not isinstance(ts, dict):
                 continue
-            label = ts.get('label') or ts.get('title') or ''
+            label = ts.get('label') or ''
             if label:
                 teaser_timestamps.append(label)
 

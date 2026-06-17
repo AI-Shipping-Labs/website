@@ -308,7 +308,11 @@ def collection_list(request):
     Links are grouped by category and sorted by sort_order within each group.
     Gated links have their URL hidden from anonymous/insufficient-tier users.
     """
-    links = CuratedLink.objects.filter(published=True)
+    category_order = ['workshops', 'courses', 'articles', 'other']
+    links = CuratedLink.objects.filter(
+        published=True,
+        category__in=category_order,
+    )
     selected_tags = _get_selected_tags(request)
 
     # Collect all tags from published links for the tag filter UI
@@ -339,10 +343,8 @@ def collection_list(request):
             ),
         })
 
-    # Map visible section keys to icon names. Keys here drive both the
-    # rendered section order and the badge icon shown on each card. The
-    # legacy `tools` and `models` categories are intentionally absent —
-    # rows with those categories fold into `other` (issue #524).
+    # Map visible canonical section keys to icon names. Keys here drive
+    # both the rendered section order and the badge icon shown on each card.
     category_icons = {
         'workshops': 'graduation-cap',
         'courses': 'book-open',
@@ -350,24 +352,13 @@ def collection_list(request):
         'other': 'folder-open',
     }
 
-    # Group by display category, preserving the canonical visible order.
-    # Existing rows with category in {'tools', 'models'} render under the
-    # `other` section without mutating the stored value (issue #524).
-    category_order = ['workshops', 'courses', 'articles', 'other']
-    legacy_other_categories = {'tools', 'models'}
+    # Group by canonical category, preserving the canonical visible order.
     grouped = []
     for cat_key in category_order:
-        if cat_key == 'other':
-            cat_links = [
-                a for a in annotated_links
-                if a['link'].category == 'other'
-                or a['link'].category in legacy_other_categories
-            ]
-        else:
-            cat_links = [
-                a for a in annotated_links
-                if a['link'].category == cat_key
-            ]
+        cat_links = [
+            a for a in annotated_links
+            if a['link'].category == cat_key
+        ]
         if cat_links:
             grouped.append({
                 'key': cat_key,

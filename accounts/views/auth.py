@@ -448,12 +448,6 @@ def verify_email_api(request):
 
         if user.signup_source == SIGNUP_SOURCE_SIGNUP:
             mark_activated(user)
-    elif user.verification_expires_at is not None:
-        # Defensive: if a user is already verified but still has an
-        # expiry hanging around (e.g. legacy data), clear it.
-        user.verification_expires_at = None
-        user.save(update_fields=["verification_expires_at"])
-
     # Check for redirect_to (lead magnet flow from newsletter subscribe)
     redirect_to = payload.get("redirect_to")
     if redirect_to:

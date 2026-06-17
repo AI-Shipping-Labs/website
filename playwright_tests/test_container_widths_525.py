@@ -189,11 +189,11 @@ def _seed_listings():
 
     # Curated link for /resources
     CuratedLink.objects.create(
-        item_id='sample-tool',
-        title='Sample Tool',
-        description='Sample tool.',
+        item_id='sample-workshop',
+        title='Sample Workshop Resource',
+        description='Sample workshop resource.',
         url='https://example.com/tool',
-        category='tools',
+        category='workshops',
         sort_order=1,
         published=True,
     )

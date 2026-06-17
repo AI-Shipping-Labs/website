@@ -6,7 +6,7 @@ Covers the eight scenarios from the groomed issue:
 1. Visitor sees the new section order on /resources
 2. Visitor finds a curated workshop in the Workshops section
 3. Visitor finds a curated article in the Articles section
-4. Legacy tools and models curated links still appear, folded under Other
+4. Legacy tools and models curated links do not appear in /resources
 5. Empty categories do not render headings
 6. Free user hits the upgrade CTA on a gated curated workshop
 7. Tag filter works across the new section grouping
@@ -223,16 +223,15 @@ class TestScenario3ArticleInArticlesSection:
 
 
 # ---------------------------------------------------------------
-# Scenario 4: Legacy tools and models fold under Other
+# Scenario 4: Legacy tools and models do not render
 # ---------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestScenario4LegacyToolsModelsFoldIntoOther:
-    """Legacy tools and models curated links still appear, folded
-    under Other."""
+class TestScenario4LegacyToolsModelsIgnored:
+    """Legacy tools and models curated links are ignored by /resources."""
 
-    def test_legacy_links_appear_in_other_section_only(
+    def test_legacy_links_do_not_appear_in_resources(
         self, django_server, page
     ):
         _clear_curated_links()
@@ -268,10 +267,10 @@ class TestScenario4LegacyToolsModelsFoldIntoOther:
         rendered = [headings.nth(i).inner_text() for i in range(headings.count())]
         assert rendered == ["Other"]
 
-        # All three cards are present
+        # Only the canonical Other card is present.
         body = page.content()
-        assert "ripgrep" in body
-        assert "Llama 3" in body
+        assert "ripgrep" not in body
+        assert "Llama 3" not in body
         assert "Common Crawl" in body
 
 

@@ -81,7 +81,7 @@ def _seed_catalog_content():
         title="Agent Evaluation Resource",
         url="https://example.com/resource",
         description="A curated external resource for evaluation workflows.",
-        category="tools",
+        category="workshops",
         source="Example",
         required_level=0,
         tags=many_tags,

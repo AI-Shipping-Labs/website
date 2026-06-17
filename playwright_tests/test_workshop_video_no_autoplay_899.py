@@ -80,8 +80,8 @@ def _create_workshop(recording_url):
         kind='workshop',
         recording_url=recording_url,
         timestamps=[
-            {'time': '0:00', 'title': 'Welcome'},
-            {'time': '16:00', 'title': 'Setup chapter'},
+            {'time_seconds': 0, 'label': 'Welcome'},
+            {'time_seconds': 960, 'label': 'Setup chapter'},
         ],
         materials=[],
         published=True,

@@ -72,11 +72,11 @@ class RecordingListMinWidth0Test(TestCase):
 
 
 class RecordingDetailMaterialTapTargetTest(TestCase):
-    """Issue #426: event detail page does not render the materials list.
+    """Issue #1037: event detail renders structured material resource links.
 
-    Materials live on the linked Workshop's video page now; mobile
-    tap-target coverage for the materials list is in
-    ``content/tests/test_workshops_public.py``.
+    The legacy inline recording materials list remains retired, but
+    standalone past events can show explicit materials as external resource
+    links with stable tap targets.
     """
 
     @classmethod
@@ -89,13 +89,17 @@ class RecordingDetailMaterialTapTargetTest(TestCase):
             ],
         )
 
-    def test_event_detail_omits_materials_list(self):
+    def test_event_detail_renders_structured_material_links(self):
         response = self.client.get(self.recording.get_absolute_url())
         content = response.content.decode()
-        # No Materials heading or material URLs on the announcement page.
+        self.assertIn('data-testid="event-post-resources"', content)
+        self.assertIn('data-testid="event-material-resource"', content)
+        self.assertIn('min-h-[52px]', content)
+        self.assertIn('https://github.com/test', content)
+        self.assertIn('https://example.com/slides', content)
+        # The old recording materials partial remains absent.
+        self.assertNotIn('data-testid="recording-materials"', content)
         self.assertNotIn('Materials</h2>', content)
-        self.assertNotIn('https://github.com/test', content)
-        self.assertNotIn('https://example.com/slides', content)
 
 
 class RecordingPaginationMobileTest(TestCase):

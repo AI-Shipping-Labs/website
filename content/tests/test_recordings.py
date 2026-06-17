@@ -9,10 +9,11 @@ Covers:
 - Title tag format on detail page
 
 Issue #426 retired the inline recording playback UI on the event detail page.
-Recording playback (video player, materials, transcript, chapters, gating CTA)
-lives on the linked Workshop's landing/video pages and is covered by
-``content/tests/test_workshops_public.py``. Detail-page tests here assert that
-the legacy inline UI is no longer rendered.
+Recording playback (video player, transcript, chapters, gating CTA) lives on
+the linked Workshop's landing/video pages and is covered by
+``content/tests/test_workshops_public.py``. Issue #1037 allows standalone
+events to render explicit recording/material fields as structured resource
+links, without restoring legacy inline playback UI.
 """
 
 from datetime import timedelta
@@ -431,8 +432,16 @@ class RecordingDetailDisplayTest(TestCase):
     def test_omits_inline_recording_block(self):
         response = self.client.get(self.recording.get_absolute_url())
         # No inline recording UI: no embed wrapper, no chapters, no
-        # materials, no transcript, no core tools / learning objectives /
-        # outcome sections.
+        # transcript, no core tools / learning objectives / outcome sections.
+        # Structured external resource links are allowed for standalone
+        # events after issue #1037.
+        self.assertContains(response, 'data-testid="event-post-resources"')
+        self.assertContains(response, 'data-testid="event-recording-resource"')
+        self.assertContains(response, 'Watch recording')
+        self.assertContains(response, 'https://youtube.com/watch?v=test123')
+        self.assertContains(response, 'data-testid="event-material-resource"')
+        self.assertContains(response, 'https://example.com/slides.pdf')
+        self.assertContains(response, 'GitHub Repo')
         self.assertNotContains(
             response, 'data-testid="event-recording-block"',
         )
@@ -442,8 +451,6 @@ class RecordingDetailDisplayTest(TestCase):
             response, 'data-testid="recording-materials"',
         )
         self.assertNotContains(response, 'Materials</h2>')
-        self.assertNotContains(response, 'https://example.com/slides.pdf')
-        self.assertNotContains(response, 'GitHub Repo')
         self.assertNotContains(response, 'Core Tools')
         self.assertNotContains(response, "What You'll Learn")
         self.assertNotContains(response, 'Build an API')
@@ -514,9 +521,12 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
     def test_anonymous_gated_recording_no_paywall_on_event_page(self):
         response = self.client.get(self.gated_recording.get_absolute_url())
         self.assertEqual(response.status_code, 200)
-        # No recording, no materials, no recording-specific paywall copy.
+        # No recording resources for users below the event tier, and no
+        # recording-specific paywall copy.
+        self.assertNotContains(response, 'data-testid="event-post-resources"')
         self.assertNotContains(response, 'youtube.com/embed')
         self.assertNotContains(response, 'Secret Slides')
+        self.assertNotContains(response, 'https://youtube.com/watch?v=gated')
         self.assertNotContains(
             response, 'Upgrade to Main to watch this recording',
         )
@@ -527,10 +537,12 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get(self.gated_recording.get_absolute_url())
-        # Even an authorized member sees no inline recording on the event
-        # detail page; they reach the recording via the workshop CTA.
+        # Authorized members can see structured resource links, but no inline
+        # recording player on the event detail page.
+        self.assertContains(response, 'data-testid="event-post-resources"')
+        self.assertContains(response, 'Secret Slides')
+        self.assertContains(response, 'https://example.com/secret')
         self.assertNotContains(response, 'youtube.com/embed')
-        self.assertNotContains(response, 'Secret Slides')
         self.assertNotContains(
             response, 'data-testid="event-recording-block"',
         )

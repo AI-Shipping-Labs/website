@@ -33,12 +33,13 @@
       {% include "events/_event_registration_card.html" %}
 
       {% comment %}
-        Recording playback for completed events lives on the linked Workshop's
-        landing/video surface (issue #426). Event detail pages remain
-        announcement / description pages only.
+        Issue #1037: standalone completed events can expose explicit
+        recording/material links as structured resources. Playback for linked
+        workshops remains on the Workshop landing/video surface (issue #426).
       {% endcomment %}
       {% include "events/_event_description.html" %}
       {% include "events/_event_hosts.html" %}
+      {% include "events/_event_post_resources.html" %}
 
       {% comment %}
         Issue #679: post-event feedback surface (aggregate badge + form).

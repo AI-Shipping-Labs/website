@@ -199,3 +199,17 @@ class CohortProgressRowsAnnotationTest(TestCase):
             .get(pk=self.plan.pk)
         )
         self.assertEqual(plan.progress_done, 3)
+
+    def test_progress_annotations_do_not_issue_per_plan_queries(self):
+        with self.assertNumQueries(2):
+            plans = list(
+                Plan.objects.cohort_progress_rows(
+                    sprint=self.sprint, viewer=self.viewer,
+                )
+            )
+            counts_by_pk = {
+                plan.pk: (plan.progress_done, plan.progress_total)
+                for plan in plans
+            }
+
+        self.assertEqual(counts_by_pk[self.plan.pk], (3, 5))

@@ -16,11 +16,11 @@ ANY other enrolled member -- so the renamed flag
 plan visibility.
 """
 
-from django.db.models import Count, Q
 from django.urls import reverse
 
 from accounts.utils.user_checks import is_authenticated_user
 from plans.models import Plan, Sprint, SprintEnrollment
+from plans.services import annotate_plan_progress
 
 
 def build_sprint_plan_card_context(user):
@@ -53,17 +53,8 @@ def build_sprint_plan_card_context(user):
         }
 
     plan = (
-        Plan.objects
-        .filter(member=user)
+        annotate_plan_progress(Plan.objects.filter(member=user))
         .select_related('sprint')
-        .annotate(
-            progress_total=Count('weeks__checkpoints', distinct=True),
-            progress_done=Count(
-                'weeks__checkpoints',
-                filter=Q(weeks__checkpoints__done_at__isnull=False),
-                distinct=True,
-            ),
-        )
         .order_by('-created_at')
         .first()
     )

@@ -34,6 +34,7 @@ from plans.services.plan_lifecycle import (
     distribute_sprint_feedback,
     find_carry_over_source_plan,
 )
+from plans.services.progress import annotate_plan_progress
 
 __all__ = [
     'Checkpoint',
@@ -42,6 +43,7 @@ __all__ = [
     'Plan',
     'SprintEnrollment',
     'Week',
+    'annotate_plan_progress',
     'carry_over_unfinished_tasks',
     'count_total_unfinished',
     'count_unfinished_carry_over_items',

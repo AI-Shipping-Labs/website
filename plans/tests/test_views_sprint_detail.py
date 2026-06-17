@@ -319,7 +319,7 @@ class SprintDetailCallsTest(TestCase):
 
     @freeze_time(FROZEN_CALL_NOW)
     def test_upcoming_call_open_now_uses_tracked_join_url(self):
-        start = timezone.now() + datetime.timedelta(minutes=10)
+        start = timezone.now() + datetime.timedelta(minutes=4)
         event = _series_event(
             self.series,
             title='Live call',
@@ -352,7 +352,7 @@ class SprintDetailCallsTest(TestCase):
         response = self._get()
 
         self.assertContains(response, 'data-testid="sprint-call-join-not-open"')
-        self.assertContains(response, 'Join link opens ~15 min before start')
+        self.assertContains(response, 'Join link opens ~5 min before start')
         self.assertContains(response, event.get_absolute_url())
         self.assertNotContains(response, 'data-testid="sprint-call-join"')
         self.assertNotContains(response, 'https://zoom.example.com/raw-planning')

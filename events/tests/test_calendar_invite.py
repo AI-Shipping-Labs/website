@@ -378,6 +378,8 @@ class SendRegistrationConfirmationTest(TestCase):
 
         html_body = parts.get('text/html', '')
         self.assertIn('/events/test-event/join', html_body)
+        self.assertIn('about 5 minutes before the start time', html_body)
+        self.assertNotIn('15 minutes', html_body)
 
     @patch('events.services.registration_email.boto3')
     def test_send_email_html_body_contains_three_calendar_links(self, mock_boto3):

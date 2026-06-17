@@ -682,12 +682,14 @@ class Event(
         return self.join_clicks.count()
 
     def can_show_zoom_link(self):
-        """Return True if the join link should be shown within 15 minutes of start."""
-        if not self.zoom_join_url:
+        """Return True during the 5-minute pre-start/live join window."""
+        if not self.zoom_join_url or self.status in ('draft', 'cancelled'):
+            return False
+        if not self.start_datetime or not self.effective_end_datetime:
             return False
         now = timezone.now()
-        minutes_until_start = (self.start_datetime - now).total_seconds() / 60
-        return minutes_until_start <= 15
+        join_window_opens = self.start_datetime - timedelta(minutes=5)
+        return join_window_opens <= now <= self.effective_end_datetime
 
     def formatted_start(self):
         """Return a formatted start datetime string."""

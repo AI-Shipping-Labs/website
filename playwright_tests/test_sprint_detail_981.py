@@ -201,7 +201,7 @@ class TestSprintDetailRedesign981:
                 series,
                 title="Live sprint call",
                 slug="live-sprint-call",
-                start=now + datetime.timedelta(minutes=10),
+                start=now + datetime.timedelta(minutes=4),
                 zoom_url="https://zoom.example.com/raw-live-link",
             )
             sprint_slug = sprint.slug
@@ -245,7 +245,7 @@ class TestSprintDetailRedesign981:
         page = ctx.new_page()
         page.goto(f"{django_server}/sprints/{sprint_slug}", wait_until="domcontentloaded")
         assert page.locator('[data-testid="sprint-call-join-not-open"]').is_visible()
-        assert "Join link opens ~15 min before start" in page.locator(
+        assert "Join link opens ~5 min before start" in page.locator(
             '[data-testid="sprint-call-join-not-open"]'
         ).inner_text()
         assert page.locator('[data-testid="sprint-call-join"]').count() == 0

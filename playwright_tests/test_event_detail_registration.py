@@ -8,7 +8,7 @@ Covers the user-visible improvements:
 2. Authenticated unregistered users see the standard register button.
 3. After registering, the page reloads with the post-registration
    confirmation surface: "You're registered!", an "Add to calendar" button
-   linking to the .ics download, the explicit "check email" / "join 15 min
+   linking to the .ics download, the explicit "check email" / "join 5 min
    before" next-step list, and the cancel-registration affordance.
 4. The .ics download URL responds with a valid VCALENDAR file.
 
@@ -171,12 +171,13 @@ class TestPostRegistrationConfirmation:
         assert href == f"/events/{event.slug}/calendar.ics"
         assert "Add to calendar" in add_to_cal.inner_text()
 
-        # 3. Next-step list mentions email + 15 minutes before start
+        # 3. Next-step list mentions email + 5 minutes before start
         next_steps = page.locator('[data-testid="event-next-steps"]')
         assert next_steps.count() == 1
         steps_text = next_steps.inner_text()
         assert "email" in steps_text.lower()
-        assert "15 minutes" in steps_text
+        assert "5 minutes" in steps_text
+        assert "15 minutes" not in steps_text
 
         # 4. Cancel registration is still available, but moved below the
         #    next-step block.

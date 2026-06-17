@@ -211,6 +211,9 @@ class SendSeriesRegistrationInviteTest(TierSetupMixin, TestCase):
             str(by_uid['event-woh-b@aishippinglabs.com'].get('location')),
             'https://aishippinglabs.com/events/woh-b/join',
         )
+        html = _html_from_raw(raw)
+        self.assertIn('about 5 minutes before the start time', html)
+        self.assertNotIn('15 minutes', html)
 
 
 @tag('core')

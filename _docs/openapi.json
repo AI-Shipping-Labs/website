@@ -2266,9 +2266,21 @@
                       "id": 42,
                       "kind": "standard",
                       "location": "",
+                      "materials": [
+                        {
+                          "title": "Workshop notes",
+                          "type": "doc",
+                          "url": "https://docs.example.com/workshop-notes"
+                        },
+                        {
+                          "title": "Code repository",
+                          "url": "https://github.com/AI-Shipping-Labs/example"
+                        }
+                      ],
                       "origin": "studio",
                       "platform": "zoom",
                       "published": true,
+                      "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
                       "required_level": 0,
                       "slug": "office-hours-2026-05-05",
                       "source_path": "",
@@ -2348,11 +2360,39 @@
                   "kind": {
                     "type": "string"
                   },
+                  "materials": {
+                    "description": "Ordered recording materials. Each item needs a title and URL; type is optional. Empty array clears materials.",
+                    "items": {
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "format": "uri",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "url"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
                   "platform": {
                     "type": "string"
                   },
                   "published": {
                     "type": "boolean"
+                  },
+                  "recording_url": {
+                    "description": "Optional primary recording URL. Empty string clears the field.",
+                    "format": "uri",
+                    "type": "string"
                   },
                   "required_level": {
                     "type": "integer"
@@ -2418,9 +2458,21 @@
                   "id": 42,
                   "kind": "standard",
                   "location": "",
+                  "materials": [
+                    {
+                      "title": "Workshop notes",
+                      "type": "doc",
+                      "url": "https://docs.example.com/workshop-notes"
+                    },
+                    {
+                      "title": "Code repository",
+                      "url": "https://github.com/AI-Shipping-Labs/example"
+                    }
+                  ],
                   "origin": "studio",
                   "platform": "zoom",
                   "published": true,
+                  "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
                   "required_level": 0,
                   "slug": "office-hours-2026-05-05",
                   "source_path": "",
@@ -2518,9 +2570,21 @@
                   "id": 42,
                   "kind": "standard",
                   "location": "",
+                  "materials": [
+                    {
+                      "title": "Workshop notes",
+                      "type": "doc",
+                      "url": "https://docs.example.com/workshop-notes"
+                    },
+                    {
+                      "title": "Code repository",
+                      "url": "https://github.com/AI-Shipping-Labs/example"
+                    }
+                  ],
                   "origin": "studio",
                   "platform": "zoom",
                   "published": true,
+                  "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
                   "required_level": 0,
                   "slug": "office-hours-2026-05-05",
                   "source_path": "",
@@ -2572,8 +2636,16 @@
           "content": {
             "application/json": {
               "example": {
+                "materials": [
+                  {
+                    "title": "Workshop notes",
+                    "type": "doc",
+                    "url": "https://docs.example.com/workshop-notes"
+                  }
+                ],
                 "published": true,
-                "status": "scheduled"
+                "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
+                "status": "completed"
               },
               "schema": {
                 "properties": {
@@ -2602,8 +2674,36 @@
                     },
                     "type": "array"
                   },
+                  "materials": {
+                    "description": "Ordered recording materials. Each item needs a title and URL; type is optional. Empty array clears materials.",
+                    "items": {
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "format": "uri",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "url"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
                   "published": {
                     "type": "boolean"
+                  },
+                  "recording_url": {
+                    "description": "Optional primary recording URL. Empty string clears the field.",
+                    "format": "uri",
+                    "type": "string"
                   },
                   "status": {
                     "type": "string"
@@ -2643,9 +2743,21 @@
                   "id": 42,
                   "kind": "standard",
                   "location": "",
+                  "materials": [
+                    {
+                      "title": "Workshop notes",
+                      "type": "doc",
+                      "url": "https://docs.example.com/workshop-notes"
+                    },
+                    {
+                      "title": "Code repository",
+                      "url": "https://github.com/AI-Shipping-Labs/example"
+                    }
+                  ],
                   "origin": "studio",
                   "platform": "zoom",
                   "published": true,
+                  "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
                   "required_level": 0,
                   "slug": "office-hours-2026-05-05",
                   "source_path": "",

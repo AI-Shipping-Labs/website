@@ -197,6 +197,8 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "external_host",
                 "published",
                 "host_email",
+                "recording_url",
+                "materials",
                 "hosts",
                 "banner_url",
                 "origin",
@@ -207,6 +209,8 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "updated_at",
             },
         )
+        self.assertEqual(by_slug["studio-event"]["recording_url"], "")
+        self.assertEqual(by_slug["studio-event"]["materials"], [])
 
     def test_list_filters_by_status_origin_and_title_search(self):
         Event.objects.create(
@@ -246,6 +250,8 @@ class EventsListAndDetailTest(EventsApiTestBase):
         body = response.json()
         self.assertEqual(body["source_repo"], "AI-Shipping-Labs/content")
         self.assertEqual(body["source_path"], "events/github.md")
+        self.assertEqual(body["recording_url"], "")
+        self.assertEqual(body["materials"], [])
         self.assertFalse(body["editable"])
 
         missing = self.client.get("/api/events/nope", **self._auth())
@@ -328,6 +334,8 @@ class EventsCreateTest(EventsApiTestBase):
         self.assertEqual(body["tags"], [])
         self.assertEqual(body["location"], "")
         self.assertEqual(body["external_host"], "")
+        self.assertEqual(body["recording_url"], "")
+        self.assertEqual(body["materials"], [])
         self.assertEqual(body["origin"], "studio")
         self.assertEqual(body["source_repo"], "")
 
@@ -697,6 +705,192 @@ class EventsUpdateTest(EventsApiTestBase):
         self.assertEqual(clear.status_code, 200)
         self.assertEqual(clear.json()["hosts"], [])
         self.assertFalse(EventHost.objects.filter(event=self.studio_event).exists())
+
+    def test_patch_recording_url_persists_and_is_serialized_without_triggers(self):
+        event = Event.objects.get(pk=self.studio_event.pk)
+        before_updated_at = event.updated_at
+        recording_url = "https://www.youtube.com/watch?v=16EUIZQTiAo"
+
+        with patch(CREATE_MEETING_PATH) as mock_create_zoom, patch(
+            "api.views.events.enqueue_force"
+        ) as mock_enqueue_banner:
+            response = self._patch(
+                "studio-event",
+                {"recording_url": recording_url},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["recording_url"], recording_url)
+        self.assertEqual(body["materials"], [])
+        self.assertNotIn("create_zoom", body)
+        self.assertNotIn("generate_banner", body)
+        self.assertNotIn("zoom_error", body)
+        self.assertNotIn("banner_task_id", body)
+        mock_create_zoom.assert_not_called()
+        mock_enqueue_banner.assert_not_called()
+
+        event.refresh_from_db()
+        self.assertEqual(event.recording_url, recording_url)
+        self.assertGreater(event.updated_at, before_updated_at)
+
+        detail = self.client.get("/api/events/studio-event", **self._auth())
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["recording_url"], recording_url)
+
+    def test_patch_recording_url_empty_string_clears_field(self):
+        self.studio_event.recording_url = "https://www.youtube.com/watch?v=old"
+        self.studio_event.save()
+
+        response = self._patch("studio-event", {"recording_url": ""})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["recording_url"], "")
+        self.studio_event.refresh_from_db()
+        self.assertEqual(self.studio_event.recording_url, "")
+
+    def test_patch_materials_persists_order_and_list_detail_serialize_values(self):
+        materials = [
+            {
+                "title": "  Slides  ",
+                "url": " https://docs.example.com/slides ",
+                "type": "doc",
+            },
+            {
+                "title": "Repository",
+                "url": "https://github.com/AI-Shipping-Labs/materials",
+            },
+        ]
+        expected = [
+            {
+                "title": "Slides",
+                "url": "https://docs.example.com/slides",
+                "type": "doc",
+            },
+            {
+                "title": "Repository",
+                "url": "https://github.com/AI-Shipping-Labs/materials",
+            },
+        ]
+
+        response = self._patch("studio-event", {"materials": materials})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["materials"], expected)
+        self.studio_event.refresh_from_db()
+        self.assertEqual(self.studio_event.materials, expected)
+
+        detail = self.client.get("/api/events/studio-event", **self._auth())
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["materials"], expected)
+
+        listing = self.client.get(
+            "/api/events?origin=studio&q=Studio",
+            **self._auth(),
+        )
+        self.assertEqual(listing.status_code, 200)
+        match = next(
+            event for event in listing.json()["events"]
+            if event["slug"] == "studio-event"
+        )
+        self.assertEqual(match["materials"], expected)
+
+    def test_patch_materials_empty_array_clears_field(self):
+        self.studio_event.materials = [
+            {"title": "Slides", "url": "https://docs.example.com/slides"}
+        ]
+        self.studio_event.save()
+
+        response = self._patch("studio-event", {"materials": []})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["materials"], [])
+        self.studio_event.refresh_from_db()
+        self.assertEqual(self.studio_event.materials, [])
+
+    def test_invalid_recording_url_returns_422_without_mutating_event(self):
+        self.studio_event.recording_url = "https://www.youtube.com/watch?v=old"
+        self.studio_event.materials = [
+            {"title": "Slides", "url": "https://docs.example.com/slides"}
+        ]
+        self.studio_event.save()
+
+        response = self._patch("studio-event", {"recording_url": "not a url"})
+
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("recording_url", body["details"])
+        self.studio_event.refresh_from_db()
+        self.assertEqual(
+            self.studio_event.recording_url,
+            "https://www.youtube.com/watch?v=old",
+        )
+        self.assertEqual(
+            self.studio_event.materials,
+            [{"title": "Slides", "url": "https://docs.example.com/slides"}],
+        )
+
+    def test_invalid_materials_return_422_without_mutating_event(self):
+        original_materials = [
+            {"title": "Slides", "url": "https://docs.example.com/slides"}
+        ]
+
+        cases = (
+            "not-an-array",
+            [{"title": "", "url": "https://docs.example.com/slides"}],
+            [{"title": "Slides", "url": "not-a-url"}],
+            [{"title": "Slides", "url": "https://docs.example.com/slides", "type": 3}],
+        )
+        for materials in cases:
+            with self.subTest(materials=materials):
+                self.studio_event.recording_url = (
+                    "https://www.youtube.com/watch?v=old"
+                )
+                self.studio_event.materials = original_materials
+                self.studio_event.save()
+
+                response = self._patch("studio-event", {"materials": materials})
+
+                self.assertEqual(response.status_code, 422)
+                body = response.json()
+                self.assertEqual(body["code"], "validation_error")
+                self.assertIn("materials", body["details"])
+                self.studio_event.refresh_from_db()
+                self.assertEqual(
+                    self.studio_event.recording_url,
+                    "https://www.youtube.com/watch?v=old",
+                )
+                self.assertEqual(self.studio_event.materials, original_materials)
+
+    def test_patch_github_origin_recording_fields_return_409_without_mutating(self):
+        self.github_event.recording_url = "https://www.youtube.com/watch?v=old"
+        self.github_event.materials = [
+            {"title": "Old", "url": "https://docs.example.com/old"}
+        ]
+        self.github_event.save()
+
+        response = self._patch(
+            "github-synced-event",
+            {
+                "recording_url": "https://www.youtube.com/watch?v=new",
+                "materials": [
+                    {"title": "New", "url": "https://docs.example.com/new"}
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "synced_event_read_only")
+        self.github_event.refresh_from_db()
+        self.assertEqual(
+            self.github_event.recording_url,
+            "https://www.youtube.com/watch?v=old",
+        )
+        self.assertEqual(
+            self.github_event.materials,
+            [{"title": "Old", "url": "https://docs.example.com/old"}],
+        )
 
 
 ZOOM_RESULT = {

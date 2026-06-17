@@ -507,22 +507,30 @@ class TestScenario3EmptyStatesGuideNextSteps:
         # Then: Empty state messages
         assert "No courses or workshops in progress yet" in body
         assert "No upcoming events" in body
+        assert "No content available yet" in body
         assert "No new notifications" not in body
+        assert page.locator('[data-testid="member-empty-state"]').count() >= 3
 
         # CTA links present
         browse_courses_link = page.locator(
             'a:has-text("Browse Courses")'
         )
         assert browse_courses_link.count() >= 1
+        assert browse_courses_link.first.get_attribute("href") == "/courses"
         browse_workshops_link = page.locator(
             'a:has-text("Browse Workshops")'
         )
         assert browse_workshops_link.count() >= 1
+        assert browse_workshops_link.first.get_attribute("href") == "/workshops"
 
         browse_events_link = page.locator(
             'a:has-text("Browse Events")'
         )
         assert browse_events_link.count() >= 1
+        assert browse_events_link.first.get_attribute("href") == "/events"
+        browse_blog_link = page.locator('a:has-text("Browse Blog")')
+        assert browse_blog_link.count() >= 1
+        assert browse_blog_link.first.get_attribute("href") == "/blog"
 
         # Step 2: Click "Browse Courses" in the empty
         # continue learning section

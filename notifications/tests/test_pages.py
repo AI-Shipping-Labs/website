@@ -69,6 +69,10 @@ class NotificationListPageTest(TestCase):
         self.client.login(email='testuser@example.com', password='testpass123')
         response = self.client.get('/notifications')
         self.assertContains(response, 'No notifications yet')
+        self.assertContains(response, 'When there is something new for your account')
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="fresh"')
+        self.assertNotContains(response, 'bg-accent/5')
 
     def test_mark_all_as_read_button_present(self):
         self.client.login(email='testuser@example.com', password='testpass123')

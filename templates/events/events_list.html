@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load member_empty_state %}
 
 {% block title %}Events | AI Shipping Labs{% endblock %}
 {% block meta_description %}Upcoming and past events - live workshops, coding sessions, and community activities.{% endblock %}
@@ -252,20 +253,13 @@
         {% endif %}
 
         {% else %}
-        <div class="rounded-lg border border-border bg-card p-8 text-center">
-          {% if filter_mode == 'past' and selected_tags %}
-          <i data-lucide="video" class="mx-auto h-12 w-12 text-muted-foreground"></i>
-          <p class="mt-4 text-muted-foreground">
-            No events match this filter.
-            <a href="/events?filter=past" class="text-accent hover:underline">View all recordings</a>
-          </p>
-          {% elif filter_mode == 'past' %}
-          <i data-lucide="video" class="mx-auto h-12 w-12 text-muted-foreground"></i>
-          <p class="mt-4 text-muted-foreground">No recordings yet. Check back soon!</p>
-          {% else %}
-          <p class="text-muted-foreground">No past events yet.</p>
-          {% endif %}
-        </div>
+        {% if filter_mode == 'past' and selected_tags %}
+        {% member_empty_state title='No events match this filter' body='No events match this filter.' icon='video' kind='filter' primary_cta_label='View all recordings' primary_cta_url='/events?filter=past' %}
+        {% elif filter_mode == 'past' %}
+        {% member_empty_state title='No recordings yet' body='Check back soon!' icon='video' kind='fresh' %}
+        {% else %}
+        {% member_empty_state title='No past events yet' body='Past events will appear here after they finish.' icon='archive' kind='fresh' %}
+        {% endif %}
         {% endif %}
       </div>
       {% endif %}

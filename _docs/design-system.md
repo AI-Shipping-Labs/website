@@ -156,6 +156,7 @@ Reach for these before writing a new inline component.
 - `templates/includes/testimonial_cards.html`: testimonial grid/mobile carousel with quote icon, `line-clamp-10`, author block, and responsive card width.
 - `templates/content/_content_preview.html`: reusable course/workshop preview media with cover image or fallback, label pill, access label, title, and meta row.
 - `templates/includes/_icon_github.html`: inline GitHub SVG replacement for missing Lucide brand icons; inherits color through `currentColor`.
+- `templates/includes/member_empty_state.html`: standardized member/public empty-state card. Render through `{% member_empty_state %}` with `title`, `body`, Lucide `icon`, `kind="fresh"` or `kind="filter"`, optional primary/secondary CTA label/url/icon/class, and optional `testid` for page-specific selector continuity.
 - `templates/studio/includes/empty_state.html`: standardized Studio list-page empty state. Use `kind="filter"` (inline `<tr>` with `Clear filters` link) when a filter is active and produced zero rows. Use `kind="fresh"` (separate `bg-card` empty card with a `New <noun>` CTA) when no rows exist at all. Render through the `{% studio_empty_state %}` inclusion tag — never hand-roll either branch.
 
 ## Buttons
@@ -294,6 +295,15 @@ List-page empty states have two flavours, and both ship from the shared `templat
 Distinguish the two cases in the view by exposing the search / status / tag filter variables to the template (most list views already do) or by adding a `filters_active` boolean to the context. The pattern is: when the queryset is empty AND filters are active, the table chrome stays visible with the filter-row; when the queryset is empty AND no filter is active, the table is omitted entirely in favour of the fresh card.
 
 Sync-managed entities (workshops, courses, articles, projects, downloads, recordings) call the partial with `create_url` omitted so the fresh-zero card renders without a CTA — content for those tables comes from the GitHub content sync, not from a Studio create form.
+
+#### Member/public empty states
+
+Member-facing pages use `templates/includes/member_empty_state.html` via the `{% member_empty_state %}` inclusion tag from `content.templatetags.member_empty_state`. This component is intentionally separate from Studio empty states: it always renders member-page card chrome (`bg-card border border-border rounded-lg`), uses Lucide icons with consistent sizing, and exposes `data-testid="member-empty-state"` for regression tests. If an existing page has a page-specific selector, pass `testid="..."`; the outer card keeps that selector and the component still emits the canonical marker inside it.
+
+- Fresh-empty — no content exists for the section or catalog yet. Use `kind="fresh"` and copy that does not mention filters or user error, for example `No tutorials yet` with `Check back soon for step-by-step guides.` CTAs are optional and should point to the next useful member journey when one exists.
+- Filter-empty — active filters produced zero results. Use `kind="filter"`, keep the user's context in the message, and include a clear CTA back to the unfiltered list such as `View all articles`, `View all courses`, `View all workshops`, or `View all recordings`.
+
+Pass CTAs as explicit parameters: `primary_cta_label`, `primary_cta_url`, optional `primary_cta_icon`, plus the matching `secondary_*` values when a second action is needed. For dashboard/account/plan surfaces that already load `accounts_extras`, compute classes with `{% button_classes ... as ... %}` and pass `primary_cta_class` / `secondary_cta_class`. Public catalog pages that use inline text links can omit classes and keep the default `text-accent hover:underline` style.
 
 ## Form Controls
 

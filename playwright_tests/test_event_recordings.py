@@ -738,7 +738,11 @@ class TestScenario8EmptyStateNoRecordings:
 
         # Helpful empty state message (post-unification copy on
         # /events?filter=past).
-        assert "No recordings yet. Check back soon!" in body
+        assert "No recordings yet" in body
+        assert "Check back soon!" in body
+        empty_state = page.locator('[data-testid="member-empty-state"]')
+        assert empty_state.count() == 1
+        assert empty_state.get_attribute("data-empty-kind") == "fresh"
 
         # No recording cards (empty state)
         recording_cards = page.locator("article")
@@ -780,6 +784,9 @@ class TestScenario9EmptyStateNoMatchingTag:
 
         # Empty state message (post-unification copy on /events?filter=past).
         assert "No events match this filter." in body
+        empty_state = page.locator('[data-testid="member-empty-state"]')
+        assert empty_state.count() == 1
+        assert empty_state.get_attribute("data-empty-kind") == "filter"
 
         # "View all recordings" link points back to /events?filter=past.
         view_all_link = page.locator(

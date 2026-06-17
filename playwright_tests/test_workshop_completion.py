@@ -244,7 +244,11 @@ class TestFinishingLastPageRemovesFromContinueLearning:
         assert 'data-testid="continue-learning-workshop"' not in body
         # The empty-state copy renders since this user has no other
         # in-progress items.
-        assert 'No courses or workshops in progress yet.' in body
+        empty_state = page.locator('[data-testid="member-empty-state"]').filter(
+            has_text='No courses or workshops in progress yet',
+        )
+        assert empty_state.count() == 1
+        assert empty_state.first.get_attribute('data-empty-kind') == 'fresh'
 
         ctx.close()
 

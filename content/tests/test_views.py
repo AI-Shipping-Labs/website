@@ -134,8 +134,11 @@ class BlogListViewTest(TestCase):
     def test_blog_list_empty(self):
         Article.objects.all().delete()
         response = self.client.get('/blog')
-        # Post-launch empty-state copy (issue #319).
-        self.assertContains(response, 'No articles match this filter yet')
+        self.assertContains(response, 'No articles yet')
+        self.assertContains(response, 'Browse all articles as the archive grows.')
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="fresh"')
+        self.assertNotContains(response, 'No articles match this filter yet')
 
 
 class BlogDetailViewTest(TestCase):
@@ -340,6 +343,8 @@ class TutorialsListViewTest(TestCase):
     def test_tutorials_list_empty(self):
         response = self.client.get('/tutorials')
         self.assertContains(response, 'No tutorials yet')
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="fresh"')
 
     def test_tutorials_list_with_content(self):
         Tutorial.objects.create(

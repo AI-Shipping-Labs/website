@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load member_empty_state %}
 {% load tag_filters %}
 
 {% block title %}Workshops | AI Shipping Labs{% endblock %}
@@ -84,17 +85,11 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="rounded-lg border border-border bg-card p-12 text-center" data-testid="workshops-empty-state">
-        <i data-lucide="graduation-cap" class="mx-auto h-12 w-12 text-muted-foreground"></i>
-        <p class="mt-4 text-lg text-muted-foreground">
-          {% if selected_tags %}
-          No workshops found with the selected tags.
-          <a href="/workshops" class="text-accent hover:underline">View all workshops</a>
-          {% else %}
-          No workshops published yet. Check back soon.
-          {% endif %}
-        </p>
-      </div>
+      {% if selected_tags %}
+      {% member_empty_state title='No workshops found' body='No workshops found with the selected tags.' icon='graduation-cap' kind='filter' primary_cta_label='View all workshops' primary_cta_url='/workshops' testid='workshops-empty-state' %}
+      {% else %}
+      {% member_empty_state title='No workshops published yet' body='Check back soon.' icon='graduation-cap' kind='fresh' testid='workshops-empty-state' %}
+      {% endif %}
       {% endif %}
     </div>
   </section>

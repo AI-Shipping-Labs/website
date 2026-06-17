@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
+{% load member_empty_state %}
 {% load teaser_tags %}
 {% load sprint_extras %}
 
@@ -215,20 +216,9 @@
           </div>
           {% endif %}
           {% else %}
-          <div class="rounded-lg border border-border bg-card p-8 text-center">
-            <i data-lucide="book-open" class="mx-auto h-10 w-10 text-muted-foreground"></i>
-            <p class="mt-3 text-muted-foreground">No courses or workshops in progress yet.</p>
-            <div class="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
-              <a href="/courses" class="{% button_classes 'primary' %}">
-                Browse Courses
-                <i data-lucide="arrow-right" class="h-4 w-4"></i>
-              </a>
-              <a href="/workshops" class="{% button_classes 'secondary' %}">
-                Browse Workshops
-                <i data-lucide="arrow-right" class="h-4 w-4"></i>
-              </a>
-            </div>
-          </div>
+          {% button_classes 'primary' as primary_cta_classes %}
+          {% button_classes 'secondary' as secondary_cta_classes %}
+          {% member_empty_state title='No courses or workshops in progress yet' body='Start a course or workshop and it will appear here when you make progress.' icon='book-open' kind='fresh' primary_cta_label='Browse Courses' primary_cta_url='/courses' primary_cta_icon='arrow-right' primary_cta_class=primary_cta_classes secondary_cta_label='Browse Workshops' secondary_cta_url='/workshops' secondary_cta_icon='arrow-right' secondary_cta_class=secondary_cta_classes %}
           {% endif %}
         </section>
 
@@ -264,14 +254,8 @@
             {% endfor %}
           </div>
           {% else %}
-          <div class="rounded-lg border border-border bg-card p-8 text-center">
-            <i data-lucide="calendar" class="mx-auto h-10 w-10 text-muted-foreground"></i>
-            <p class="mt-3 text-muted-foreground">No upcoming events</p>
-            <a href="/events" class="{% button_classes 'secondary' 'mt-4' %}">
-              Browse Events
-              <i data-lucide="arrow-right" class="h-4 w-4"></i>
-            </a>
-          </div>
+          {% button_classes 'secondary' as secondary_cta_classes %}
+          {% member_empty_state title='No upcoming events' body='Register for an event and it will appear here.' icon='calendar' kind='fresh' primary_cta_label='Browse Events' primary_cta_url='/events' primary_cta_icon='arrow-right' primary_cta_class=secondary_cta_classes %}
           {% endif %}
         </section>
 
@@ -300,14 +284,8 @@
             {% endfor %}
           </div>
           {% else %}
-          <div class="rounded-lg border border-border bg-card p-8 text-center">
-            <i data-lucide="file-text" class="mx-auto h-10 w-10 text-muted-foreground"></i>
-            <p class="mt-3 text-muted-foreground">No content available yet</p>
-            <a href="/blog" class="{% button_classes 'secondary' 'mt-4' %}">
-              Browse Blog
-              <i data-lucide="arrow-right" class="h-4 w-4"></i>
-            </a>
-          </div>
+          {% button_classes 'secondary' as secondary_cta_classes %}
+          {% member_empty_state title='No content available yet' body='Browse the blog while the content library grows.' icon='file-text' kind='fresh' primary_cta_label='Browse Blog' primary_cta_url='/blog' primary_cta_icon='arrow-right' primary_cta_class=secondary_cta_classes %}
           {% endif %}
         </section>
       </div>

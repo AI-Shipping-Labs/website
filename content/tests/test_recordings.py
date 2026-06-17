@@ -210,6 +210,11 @@ class RecordingsListTagFilteringTest(TestCase):
         self.assertNotContains(response, 'Agent Workshop')
         self.assertNotContains(response, 'Django Workshop')
         self.assertNotContains(response, 'MCP Workshop')
+        self.assertContains(response, 'No events match this filter.')
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="filter"')
+        self.assertContains(response, 'href="/events?filter=past"')
+        self.assertContains(response, 'View all recordings')
 
     def test_tag_links_in_listing(self):
         response = self.client.get('/events?filter=past')

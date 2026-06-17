@@ -1,11 +1,15 @@
 """Calendar invite (.ics) generation for events.
 
-Three surfaces share the same per-event payload:
+Three surfaces share the same per-event payload builder with explicit
+audience-specific URL rules:
 
-- ``generate_ics(event)`` builds a single-event ``VCALENDAR`` with
-  ``METHOD:REQUEST`` — used for the per-event ``.ics`` attachment in
-  registration emails and the per-event download at
-  ``/events/<slug>/calendar.ics`` (issue #484).
+- ``generate_ics(event, audience='attendee')`` builds a single-event
+  ``VCALENDAR`` with ``METHOD:REQUEST`` — used for attendee ``.ics``
+  attachments and the per-event download at
+  ``/events/<slug>/calendar.ics`` (issue #484). Attendee community
+  events use the slug-keyed ``/events/<slug>/join`` redirect in
+  DESCRIPTION, URL, and LOCATION so raw Zoom links stay hidden behind
+  the gated join flow.
 - ``generate_series_ics(events, method)`` builds a multi-event
   ``VCALENDAR`` WITH a ``METHOD`` property — used for the series
   subscriber invite (issue #869) so a whole series lands in the
@@ -13,12 +17,13 @@ Three surfaces share the same per-event payload:
   occurrences change. The multi-VEVENT sibling of ``generate_ics``.
 - ``generate_feed_ics(events_qs)`` builds a multi-event ``VCALENDAR``
   with NO ``METHOD`` property — used for the subscribable platform-wide
-  feed at ``/events/calendar.ics`` (issue #578). Subscribed clients
-  treat a ``METHOD`` header as a republish, so we deliberately omit it.
+  feed at ``/events/calendar.ics`` (issue #578). It explicitly uses the
+  ``public_feed`` audience, keeping public detail URLs and anonymous-safe
+  gated descriptions because feed subscribers are unauthenticated.
 
-All surfaces consume ``build_vevent(event)`` so the per-event payload
-(UID, DTSTART/DTEND, DESCRIPTION truncation, SUMMARY prefix for external
-events, URL/LOCATION shape) stays consistent.
+Host-only invites explicitly use the ``host`` audience: they share the
+same UID/SEQUENCE as attendee invites but keep non-attendee public detail
+URLs rather than switching to the attendee join flow.
 """
 
 from datetime import timedelta
@@ -39,23 +44,51 @@ from integrations.config import site_base_url
 # ``events/services/calendar_links.py`` (issue #577).
 MAX_DESCRIPTION_CHARS = 2000
 
+AUDIENCE_ATTENDEE = 'attendee'
+AUDIENCE_PUBLIC_FEED = 'public_feed'
+AUDIENCE_HOST = 'host'
+VALID_AUDIENCES = {
+    AUDIENCE_ATTENDEE,
+    AUDIENCE_PUBLIC_FEED,
+    AUDIENCE_HOST,
+}
 
-def build_vevent(event):
+
+def _event_urls(event):
+    """Return absolute public detail and attendee join URLs for ``event``."""
+    site_url = site_base_url()
+    absolute_url = getattr(event, 'get_absolute_url', lambda: '')()
+    if absolute_url:
+        detail_url = f'{site_url}{absolute_url}'
+    else:
+        # Defensive fallback for stub events (e.g. a SimpleNamespace
+        # without ``id``) used in some integration tests.
+        detail_url = f'{site_url}/events/{event.slug}'
+    join_url = f'{site_url}/events/{event.slug}/join'
+    return detail_url, join_url
+
+
+def build_vevent(event, audience=AUDIENCE_ATTENDEE):
     """Build a single ``VEVENT`` component for ``event``.
 
-    Shared between ``generate_ics`` (single-event invite) and
-    ``generate_feed_ics`` (platform-wide subscribable feed). Both
-    surfaces need the same UID, DTSTART/DTEND, SEQUENCE, organizer,
-    description, and URL/LOCATION shape so a calendar that subscribes
-    to the feed AND received the invite email from the same event
-    sees them as the same entry (de-duped by UID).
+    Shared between attendee invites, host invites, and the public feed.
+    All audiences keep the same UID, DTSTART/DTEND, SEQUENCE, organizer,
+    and summary shape so calendar clients update one entry by UID. URL,
+    LOCATION, and gated DESCRIPTION behavior vary by audience:
+    attendee community events use ``/events/<slug>/join``; public feed
+    events use public detail URLs and anonymous-safe gated stubs; host
+    invites use the non-attendee public detail URL.
 
     Args:
         event: ``events.models.Event`` instance.
+        audience: One of ``attendee``, ``public_feed``, or ``host``.
 
     Returns:
         ``icalendar.Event`` ready to be added to a calendar.
     """
+    if audience not in VALID_AUDIENCES:
+        raise ValueError(f'Unknown calendar invite audience: {audience}')
+
     vevent = ICalEvent()
 
     # SUMMARY — prefix external events with ``[Hosted on X]`` so a
@@ -108,30 +141,22 @@ def build_vevent(event):
     # as a different event instead of an update.
     vevent.add('uid', f'event-{event.slug}@aishippinglabs.com')
 
-    site_url = site_base_url()
-    # Issue #673: route the canonical detail URL through
-    # ``Event.get_absolute_url`` so the .ics ``URL`` field follows the
-    # new ``/events/<id>/<slug>`` shape automatically. The ``UID``
-    # above intentionally keeps the slug-only form — UIDs are stable
-    # globally-unique identifiers and changing them would break
-    # already-issued calendar invites.
-    absolute_url = getattr(event, 'get_absolute_url', lambda: '')()
-    if absolute_url:
-        detail_url = f'{site_url}{absolute_url}'
+    detail_url, join_url = _event_urls(event)
+    if audience == AUDIENCE_ATTENDEE:
+        community_url = join_url
     else:
-        # Defensive fallback for stub events (e.g. a SimpleNamespace
-        # without ``id``) used in some integration tests.
-        detail_url = f'{site_url}/events/{event.slug}'
+        community_url = detail_url
+    description_url = detail_url if is_external else community_url
 
     # DESCRIPTION — plain text body plus a final ``Join:`` line so the
     # URL is visible in clients that hide ``URL`` / ``LOCATION``.
     #
     # Issue #726: for tier-gated events we REPLACE the body with a
-    # short stub (title + "members-only" sentence + detail URL). The
-    # anonymous feed is cacheable by third-party services and we
-    # treat its contents as public; gated event bodies stay behind
-    # the auth gate on the detail page.
-    if is_gated:
+    # short stub in the public feed only (title + "members-only"
+    # sentence + detail URL). The anonymous feed is cacheable by
+    # third-party services and we treat its contents as public; gated
+    # event bodies stay behind the auth gate on the detail page.
+    if audience == AUDIENCE_PUBLIC_FEED and is_gated:
         body = (
             f'{event.title}\n\n'
             'This is a members-only event. Membership required to '
@@ -143,24 +168,27 @@ def build_vevent(event):
         if len(description) > MAX_DESCRIPTION_CHARS:
             description = description[:MAX_DESCRIPTION_CHARS]
         if description:
-            body = f'{description}\n\nJoin: {detail_url}'
+            body = f'{description}\n\nJoin: {description_url}'
         else:
-            body = f'Join: {detail_url}'
+            body = f'Join: {description_url}'
     vevent.add('description', body)
 
-    # URL points to the public detail page (announcement landing). The
-    # ``/join`` redirect requires login, so it would 302 a subscriber
-    # client and many feed consumers refuse to follow redirects.
-    vevent.add('url', detail_url)
+    # Attendee community invites point at the gated/tracked join redirect.
+    # Public feed and host invites keep the public detail URL because they
+    # are non-attendee surfaces. External events keep existing public
+    # detail/external-host behavior unless a real attendee path exists.
+    if is_external:
+        vevent.add('url', detail_url)
+    else:
+        vevent.add('url', community_url)
 
     # LOCATION mirrors the partner platform for external events (the
-    # actual surface the user joins on) and the detail URL for
-    # community events (parity with ``URL`` for clients that hide
-    # ``URL``).
+    # actual surface the user joins on) and the audience-specific URL for
+    # community events (parity with ``URL`` for clients that hide ``URL``).
     if is_external:
         vevent.add('location', vText(external_host))
     else:
-        vevent.add('location', vText(detail_url))
+        vevent.add('location', vText(community_url))
 
     # Organizer — pulled from the transactional sender so the
     # subscribed entry shows the same "AI Shipping Labs" identity as
@@ -173,7 +201,7 @@ def build_vevent(event):
     return vevent
 
 
-def generate_ics(event, method='REQUEST'):
+def generate_ics(event, method='REQUEST', audience=AUDIENCE_ATTENDEE):
     """Generate a single-event ``.ics`` calendar file.
 
     Used for the per-event invite attachment in registration emails and
@@ -183,6 +211,8 @@ def generate_ics(event, method='REQUEST'):
         event: ``Event`` model instance.
         method: iCalendar method (``REQUEST`` for new/update,
             ``CANCEL`` for cancellation).
+        audience: ``attendee`` by default. Use ``host`` for host-only
+            invites that should not switch to the attendee join flow.
 
     Returns:
         bytes: The ``.ics`` file content.
@@ -191,11 +221,11 @@ def generate_ics(event, method='REQUEST'):
     cal.add('prodid', '-//AI Shipping Labs//Events//EN')
     cal.add('version', '2.0')
     cal.add('method', method)
-    cal.add_component(build_vevent(event))
+    cal.add_component(build_vevent(event, audience=audience))
     return cal.to_ical()
 
 
-def generate_series_ics(events, method='REQUEST'):
+def generate_series_ics(events, method='REQUEST', audience=AUDIENCE_ATTENDEE):
     """Generate a multi-event ``.ics`` invite covering several occurrences.
 
     Used by the series subscriber invite (issue #869): when a member
@@ -224,6 +254,7 @@ def generate_series_ics(events, method='REQUEST'):
             inclusion query — accessibility, upcoming, etc.).
         method: iCalendar method (``REQUEST`` for new/update,
             ``CANCEL`` for cancellation).
+        audience: ``attendee`` by default for subscriber invites.
 
     Returns:
         bytes: The ``.ics`` file content.
@@ -233,7 +264,7 @@ def generate_series_ics(events, method='REQUEST'):
     cal.add('version', '2.0')
     cal.add('method', method)
     for event in events:
-        cal.add_component(build_vevent(event))
+        cal.add_component(build_vevent(event, audience=audience))
     return cal.to_ical()
 
 
@@ -279,6 +310,6 @@ def generate_feed_ics(events_qs):
     cal.add('x-published-ttl', 'PT1H')
 
     for event in events_qs:
-        cal.add_component(build_vevent(event))
+        cal.add_component(build_vevent(event, audience=AUDIENCE_PUBLIC_FEED))
 
     return cal.to_ical()

@@ -7,6 +7,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
+from icalendar import Calendar
 
 from accounts.models import EmailAlias, Token
 from accounts.services.email_resolution import normalize_email
@@ -241,6 +242,17 @@ class HostAutoRegistrationServiceTest(TestCase):
         ics = mock_send.call_args.kwargs['ics_content'].decode()
         self.assertIn('VCALENDAR', ics)
         self.assertIn('METHOD:REQUEST', ics)
+        cal = Calendar.from_ical(ics)
+        vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
+        detail_url = f'https://aishippinglabs.com{event.get_absolute_url()}'
+        self.assertEqual(
+            str(vevent.get('uid')),
+            'event-host-auto-registration@aishippinglabs.com',
+        )
+        self.assertEqual(int(vevent.get('sequence')), event.ics_sequence)
+        self.assertEqual(str(vevent.get('url')), detail_url)
+        self.assertEqual(str(vevent.get('location')), detail_url)
+        self.assertNotIn('/events/host-auto-registration/join', ics)
         self.assertEqual(
             EmailLog.objects.filter(
                 user=self.host,

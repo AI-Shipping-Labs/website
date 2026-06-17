@@ -32,6 +32,7 @@ from events.services.calendar_feed import (
     feed_events_queryset,
 )
 from events.services.calendar_invite import (
+    AUDIENCE_PUBLIC_FEED,
     build_vevent,
     generate_feed_ics,
     generate_ics,
@@ -86,25 +87,27 @@ class BuildVeventTest(TestCase):
         )
 
     def test_uid_is_stable_and_slug_based(self):
-        v1 = build_vevent(self.community)
-        v2 = build_vevent(self.community)
+        v1 = build_vevent(self.community, audience=AUDIENCE_PUBLIC_FEED)
+        v2 = build_vevent(self.community, audience=AUDIENCE_PUBLIC_FEED)
         self.assertEqual(str(v1.get('uid')), str(v2.get('uid')))
         self.assertEqual(
             str(v1.get('uid')), 'event-community-evt@aishippinglabs.com',
         )
 
     def test_summary_prefix_for_external_events(self):
+        community = build_vevent(self.community, audience=AUDIENCE_PUBLIC_FEED)
+        external = build_vevent(self.external, audience=AUDIENCE_PUBLIC_FEED)
         self.assertEqual(
-            str(build_vevent(self.community).get('summary')),
+            str(community.get('summary')),
             'Community Workshop',
         )
         self.assertEqual(
-            str(build_vevent(self.external).get('summary')),
+            str(external.get('summary')),
             '[Hosted on Maven] LLM Cohort',
         )
 
     def test_dtstart_dtend_serialize_to_utc(self):
-        vevent = build_vevent(self.community)
+        vevent = build_vevent(self.community, audience=AUDIENCE_PUBLIC_FEED)
         dtstart = vevent.get('dtstart').dt
         dtend = vevent.get('dtend').dt
         self.assertEqual(
@@ -123,19 +126,21 @@ class BuildVeventTest(TestCase):
             end_datetime=None,
             status='upcoming',
         )
-        vevent = build_vevent(event)
+        vevent = build_vevent(event, audience=AUDIENCE_PUBLIC_FEED)
         self.assertEqual(
             vevent.get('dtend').dt.astimezone(dt_timezone.utc),
             self.start + timedelta(hours=1),
         )
 
     def test_sequence_matches_event_ics_sequence(self):
-        self.assertEqual(build_vevent(self.community).get('sequence'), 4)
-        self.assertEqual(build_vevent(self.external).get('sequence'), 2)
+        community = build_vevent(self.community, audience=AUDIENCE_PUBLIC_FEED)
+        external = build_vevent(self.external, audience=AUDIENCE_PUBLIC_FEED)
+        self.assertEqual(community.get('sequence'), 4)
+        self.assertEqual(external.get('sequence'), 2)
 
     def test_url_points_at_public_detail_page_not_join(self):
         # Issue #673: detail URL is ``/events/<id>/<slug>``.
-        vevent = build_vevent(self.community)
+        vevent = build_vevent(self.community, audience=AUDIENCE_PUBLIC_FEED)
         self.assertEqual(
             str(vevent.get('url')),
             f'https://aishippinglabs.com{self.community.get_absolute_url()}',
@@ -143,19 +148,19 @@ class BuildVeventTest(TestCase):
 
     def test_location_is_detail_url_for_community_events(self):
         # Issue #673: detail URL is ``/events/<id>/<slug>``.
-        vevent = build_vevent(self.community)
+        vevent = build_vevent(self.community, audience=AUDIENCE_PUBLIC_FEED)
         self.assertEqual(
             str(vevent.get('location')),
             f'https://aishippinglabs.com{self.community.get_absolute_url()}',
         )
 
     def test_location_is_external_host_for_external_events(self):
-        vevent = build_vevent(self.external)
+        vevent = build_vevent(self.external, audience=AUDIENCE_PUBLIC_FEED)
         self.assertEqual(str(vevent.get('location')), 'Maven')
 
     def test_description_includes_join_line(self):
         # Issue #673: join line links to canonical ``/events/<id>/<slug>``.
-        vevent = build_vevent(self.community)
+        vevent = build_vevent(self.community, audience=AUDIENCE_PUBLIC_FEED)
         description = str(vevent.get('description'))
         self.assertIn('A normal community session.', description)
         self.assertIn(
@@ -172,7 +177,7 @@ class BuildVeventTest(TestCase):
             start_datetime=self.start,
             status='upcoming',
         )
-        vevent = build_vevent(event)
+        vevent = build_vevent(event, audience=AUDIENCE_PUBLIC_FEED)
         description = str(vevent.get('description'))
         # 2000 chars of body + the "\n\nJoin: ..." suffix.
         self.assertIn('a' * 2000, description)
@@ -193,8 +198,9 @@ class BuildVeventTest(TestCase):
             status='upcoming',
             required_level=20,
         )
+        vevent = build_vevent(gated, audience=AUDIENCE_PUBLIC_FEED)
         self.assertEqual(
-            str(build_vevent(gated).get('summary')),
+            str(vevent.get('summary')),
             '[Members only] Members Workshop',
         )
 
@@ -210,15 +216,17 @@ class BuildVeventTest(TestCase):
             external_host='Maven',
             zoom_join_url='https://maven.com/aisl/llm',
         )
+        vevent = build_vevent(gated_external, audience=AUDIENCE_PUBLIC_FEED)
         self.assertEqual(
-            str(build_vevent(gated_external).get('summary')),
+            str(vevent.get('summary')),
             '[Members only] [Hosted on Maven] LLM Cohort',
         )
 
     def test_summary_unchanged_for_open_events(self):
         """Issue #726: open (level 0) events get no ``[Members only]`` prefix."""
+        vevent = build_vevent(self.community, audience=AUDIENCE_PUBLIC_FEED)
         self.assertEqual(
-            str(build_vevent(self.community).get('summary')),
+            str(vevent.get('summary')),
             'Community Workshop',
         )
 
@@ -232,7 +240,7 @@ class BuildVeventTest(TestCase):
             status='upcoming',
             required_level=20,
         )
-        vevent = build_vevent(gated)
+        vevent = build_vevent(gated, audience=AUDIENCE_PUBLIC_FEED)
         description = str(vevent.get('description'))
         # The original gated body MUST NOT appear in the public feed.
         self.assertNotIn('SECRET-MEMBERS-ONLY-BODY-DETAILS', description)
@@ -248,7 +256,7 @@ class BuildVeventTest(TestCase):
 
     def test_description_full_body_for_open_events(self):
         """Issue #726: open (level 0) events keep the full body + Join line."""
-        vevent = build_vevent(self.community)
+        vevent = build_vevent(self.community, audience=AUDIENCE_PUBLIC_FEED)
         description = str(vevent.get('description'))
         self.assertIn('A normal community session.', description)
         self.assertIn(
@@ -550,6 +558,8 @@ class EventsCalendarFeedViewTest(TestCase):
 
     def test_gated_event_description_is_stubbed(self):
         """Issue #726: gated event DESCRIPTION does not leak the body."""
+        self.gated.description = 'SECRET-GATED-FEED-BODY'
+        self.gated.save(update_fields=['description'])
         response = self.client.get('/events/calendar.ics')
         cal = _parse(response.content)
         gated = _vevent_by_uid(
@@ -564,6 +574,22 @@ class EventsCalendarFeedViewTest(TestCase):
             f'https://aishippinglabs.com{self.gated.get_absolute_url()}',
             description,
         )
+        self.assertNotIn('SECRET-GATED-FEED-BODY', description)
+
+    def test_community_event_url_and_location_are_public_detail_not_join(self):
+        response = self.client.get('/events/calendar.ics')
+        cal = _parse(response.content)
+        event = _vevent_by_uid(
+            cal, 'event-upcoming-feed@aishippinglabs.com',
+        )
+        self.assertIsNotNone(event)
+        detail_url = (
+            f'https://aishippinglabs.com{self.upcoming.get_absolute_url()}'
+        )
+        self.assertEqual(str(event.get('url')), detail_url)
+        self.assertEqual(str(event.get('location')), detail_url)
+        self.assertNotIn('/join', str(event.get('url')))
+        self.assertNotIn('/join', str(event.get('location')))
 
     def test_external_event_has_hosted_on_prefix(self):
         response = self.client.get('/events/calendar.ics')

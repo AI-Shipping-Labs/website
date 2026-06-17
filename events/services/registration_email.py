@@ -18,7 +18,11 @@ from email_app.services.email_classification import (
     get_sender_for_kind,
 )
 from email_app.services.email_service import EmailService
-from events.services.calendar_invite import generate_ics
+from events.services.calendar_invite import (
+    AUDIENCE_ATTENDEE,
+    AUDIENCE_HOST,
+    generate_ics,
+)
 from events.services.calendar_links import build_calendar_links
 from events.services.cancel_token import generate_cancel_token
 from events.services.host_registration import (
@@ -84,8 +88,13 @@ def send_registration_confirmation(registration):
         'body_html': body_html,
     })
 
-    # Generate .ics
-    ics_content = generate_ics(event)
+    # Generate .ics. Host auto-registration emails are host-only surfaces
+    # with Studio management links, so they explicitly opt out of the
+    # attendee /join URL as their primary calendar location/details link.
+    ics_content = generate_ics(
+        event,
+        audience=AUDIENCE_HOST if is_host else AUDIENCE_ATTENDEE,
+    )
 
     # Send raw email with attachment
     ses_message_id = _send_raw_email(

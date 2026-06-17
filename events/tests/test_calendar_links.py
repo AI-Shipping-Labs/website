@@ -211,6 +211,26 @@ class BuildCalendarLinksTest(TestCase):
         self.assertEqual(params['startdt'], ['2026-06-15T18:00:00Z'])
         self.assertEqual(params['enddt'], ['2026-06-15T19:30:00Z'])
 
+    def test_all_provider_links_use_join_url_and_never_zoom(self):
+        self.event.zoom_join_url = 'https://zoom.us/j/raw-provider-secret'
+        self.event.save(update_fields=['zoom_join_url'])
+
+        links = build_calendar_links(self.event)
+        join_url = (
+            'https://aishippinglabs.com/events/ai-agents-workshop/join'
+        )
+
+        google = _qs(links['google'])
+        self.assertEqual(google['location'], [join_url])
+        self.assertIn(f'Join: {join_url}', google['details'][0])
+
+        for provider in ('outlook', 'office365'):
+            params = _qs(links[provider])
+            self.assertEqual(params['location'], [join_url])
+            self.assertIn(f'Join: {join_url}', params['body'][0])
+            self.assertNotIn('zoom.us', links[provider])
+        self.assertNotIn('zoom.us', links['google'])
+
 
 @override_settings(SITE_BASE_URL='https://env.example.com')
 class CalendarLinksJoinUrlOverrideTest(TestCase):

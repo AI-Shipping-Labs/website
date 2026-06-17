@@ -69,7 +69,11 @@
       {% if not can_access_landing %}
       <!-- Landing-level paywall: every section is gated. Show only the
            upgrade card so the visitor sees a single, clear CTA. -->
+      {% if landing_gated_reason == "unverified_email" %}
+      {% include "content/_verify_email_required.html" %}
+      {% else %}
       {% include "content/_gated_access_card.html" with gated_card_testid="workshop-landing-paywall" gated_icon="lock" gated_heading=landing_cta_message gated_description="The public metadata stays visible; membership unlocks the workshop details." required_tier_name=landing_tier_name gated_cta_url=landing_cta_url gated_cta_label=landing_cta_label gated_cta_testid="workshop-landing-upgrade-cta" %}
+      {% endif %}
       {% else %}
 
       <!-- Description (always shown when landing is accessible) -->
@@ -183,7 +187,11 @@
         signup_inline=True. The view populates next_url + oauth_* in
         the same branch.
       {% endcomment %}
+      {% if pages_gated_reason == "unverified_email" %}
+      {% include "content/_verify_email_required.html" %}
+      {% else %}
       {% include "content/_gated_access_card.html" with gated_card_testid="workshop-pages-paywall" gated_icon="book-open" gated_heading=pages_cta_message gated_description=pages_gated_description required_tier_name=pages_required_tier_name gated_cta_url=pages_cta_url gated_cta_label=pages_cta_label gated_cta_testid="workshop-pages-upgrade-cta" signup_cta_url=pages_signup_cta_url signup_cta_label=pages_signup_cta_label signup_inline=True %}
+      {% endif %}
       {% endif %}
 
       {% endif %}

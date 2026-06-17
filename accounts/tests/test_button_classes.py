@@ -222,7 +222,8 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(PRODUCT_BUTTON_CLASSES['secondary'], button_class)
         self.assertIn('!border-amber-500/40', button_class)
-        self.assertIn('!text-amber-200', button_class)
+        self.assertIn('!text-amber-900', button_class)
+        self.assertIn('dark:!text-amber-100', button_class)
         self.assertIn('hover:!bg-amber-500/20', button_class)
 
     def test_my_plan_nav_uses_canonical_secondary_classes(self):

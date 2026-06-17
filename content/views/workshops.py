@@ -203,6 +203,7 @@ def _build_landing_context(workshop, user):
     pages_required_tier_name = pages_tier_name
     pages_signup_cta_url = ''
     pages_signup_cta_label = ''
+    pages_gated_reason = ''
     if not can_access_pages:
         pages_gated_reason = _gated_reason_for_level(
             user, workshop.pages_required_level,
@@ -238,22 +239,33 @@ def _build_landing_context(workshop, user):
 
     landing_cta_message = ''
     landing_cta_url = ''
+    landing_gated_reason = ''
     if not can_access_landing:
-        landing_cta_message = (
-            f'Upgrade to {landing_tier_name} to view this workshop'
+        landing_gated_reason = _gated_reason_for_level(
+            user, workshop.landing_required_level,
         )
-        landing_cta_url = '/pricing'
+        if landing_gated_reason != 'unverified_email':
+            landing_cta_message = (
+                f'Upgrade to {landing_tier_name} to view this workshop'
+            )
+            landing_cta_url = '/pricing'
+
+    verify_email_context = {}
+    if 'unverified_email' in {landing_gated_reason, pages_gated_reason}:
+        verify_email_context = build_verify_email_context(user)
 
     return {
         'workshop': workshop,
         'can_access_landing': can_access_landing,
         'can_access_pages': can_access_pages,
         'can_access_recording': can_access_recording,
+        'landing_gated_reason': landing_gated_reason,
         'landing_tier_name': landing_tier_name,
         'pages_tier_name': pages_tier_name,
         'recording_tier_name': recording_tier_name,
         'landing_cta_message': landing_cta_message,
         'landing_cta_url': landing_cta_url,
+        'pages_gated_reason': pages_gated_reason,
         'pages_cta_message': pages_cta_message,
         'pages_cta_url': pages_cta_url,
         'pages_cta_label': pages_cta_label,
@@ -266,6 +278,7 @@ def _build_landing_context(workshop, user):
         'current_user_state': current_user_state,
         'landing_cta_label': 'View Pricing',
         'recording_cta_label': f'Upgrade to {recording_tier_name}',
+        **verify_email_context,
     }
 
 

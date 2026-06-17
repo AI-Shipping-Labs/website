@@ -6,29 +6,26 @@ Expected context:
   verify_resend_label, pricing_url
 {% endcomment %}
 <div class="relative mt-8">
-  <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-8 text-center" data-testid="verify-email-required-card">
+  <div class="rounded-lg border border-amber-500/30 bg-amber-50/80 p-6 text-center text-amber-950 dark:bg-amber-950/30 dark:text-amber-100 sm:p-8" data-testid="verify-email-required-card">
     <div class="mb-4">
-      <i data-lucide="mail-warning" class="mx-auto h-10 w-10 text-amber-400"></i>
+      <i data-lucide="mail-warning" class="mx-auto h-10 w-10 text-amber-600 dark:text-amber-300"></i>
     </div>
-    <p class="text-lg font-semibold text-foreground">Verify your email to read this</p>
-    <p class="mt-2 text-sm text-muted-foreground">
-      We sent a verification link to {{ verify_email_address }}. Click the link to unlock free content. Didn't get it?
+    <p class="text-lg font-semibold">Verify your email to unlock this</p>
+    <p class="mx-auto mt-2 max-w-xl text-sm leading-6 text-amber-900/80 dark:text-amber-100/80">
+      This content is included with your Free account. Verify {{ verify_email_address }} to open it.
     </p>
     <form method="post" action="{{ verify_resend_url }}" class="mt-6" data-verification-resend-form>
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
       <button type="submit"
               data-verification-resend-button
-              class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+              class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
         <i data-lucide="mail" class="h-4 w-4"></i>
         <span data-verification-resend-label>{{ verify_resend_label|default:"Resend verification email" }}</span>
       </button>
     </form>
-    <p class="mt-4 text-sm text-muted-foreground">Already verified? Refresh the page.</p>
-    <a href="{{ pricing_url|default:'/pricing' }}"
-       class="mt-3 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline">
-      Or upgrade to a paid tier — verification is not required for paid members.
-      <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-    </a>
+    <p class="mx-auto mt-4 max-w-xl text-sm text-amber-900/75 dark:text-amber-100/75">
+      Already clicked the verification link? Refresh this page or sign out and back in.
+    </p>
   </div>
 </div>

@@ -340,6 +340,66 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
             response, 'data-testid="gated-required-tier"',
         )
 
+    def test_landing_free_unverified_pages_gate_uses_verify_email_gate(self):
+        ws = _make_workshop(
+            slug='free-unverified-pages',
+            title='Free Unverified Pages Workshop',
+            landing=0,
+            pages=0,
+            recording=20,
+        )
+        _make_page(ws, 'intro', 'Intro', 1)
+        user = User.objects.create_user(
+            email='free-unverified-pages@example.com',
+            password='pw',
+            tier=self.free_tier,
+            email_verified=False,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(ws.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="verify-email-required-card"')
+        self.assertContains(response, 'free-unverified-pages@example.com')
+        self.assertContains(
+            response,
+            'This content is included with your Free account.',
+        )
+        self.assertContains(response, 'Resend verification email')
+        self.assertNotContains(response, 'data-testid="workshop-pages-paywall"')
+        self.assertNotContains(response, 'data-testid="gated-required-tier"')
+        self.assertNotContains(response, 'Upgrade to Free')
+        self.assertNotContains(response, 'Free required')
+        self.assertNotContains(response, 'Free or above required')
+        self.assertNotContains(response, 'public metadata')
+        self.assertNotContains(response, 'View Pricing')
+
+    def test_landing_free_unverified_landing_gate_uses_verify_email_gate(self):
+        ws = _make_workshop(
+            slug='free-unverified-landing',
+            title='Free Unverified Landing Workshop',
+            landing=0,
+            pages=10,
+            recording=20,
+        )
+        user = User.objects.create_user(
+            email='free-unverified-landing@example.com',
+            password='pw',
+            tier=self.free_tier,
+            email_verified=False,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(ws.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="verify-email-required-card"')
+        self.assertContains(response, 'free-unverified-landing@example.com')
+        self.assertNotContains(response, 'data-testid="workshop-landing-paywall"')
+        self.assertNotContains(response, 'public metadata')
+        self.assertNotContains(response, 'Upgrade to Free')
+
     def test_landing_basic_user_does_not_see_pages_paywall(self):
         self.client.force_login(self.user_basic)
         response = self.client.get('/workshops/2026-04-21-ws')

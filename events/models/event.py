@@ -89,6 +89,15 @@ def _truncate_event_slug(slug):
         return slug
     return truncated
 
+
+def _effective_end_datetime(start_datetime, end_datetime):
+    if end_datetime is not None:
+        return end_datetime
+    if start_datetime is None:
+        return None
+    return start_datetime + timedelta(hours=1)
+
+
 # Issue #579: canonical list of supported third-party hosts for the
 # "Hosted on X" pill. Adding a new partner is a one-line code change
 # here plus a Studio dropdown re-render. The display label is what
@@ -477,6 +486,25 @@ class Event(
         return self.get_absolute_url()
 
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        update_field_names = None
+        if update_fields is not None:
+            update_field_names = set(update_fields)
+
+        old_schedule = None
+        should_check_schedule = not self._state.adding and self.pk is not None
+        if should_check_schedule and update_field_names is not None:
+            should_check_schedule = bool(
+                {'start_datetime', 'end_datetime'} & update_field_names
+            )
+        if should_check_schedule:
+            old_schedule = (
+                type(self).objects
+                .filter(pk=self.pk)
+                .values('start_datetime', 'end_datetime', 'ics_sequence')
+                .first()
+            )
+
         from content.utils.tags import normalize_tags
         self.tags = normalize_tags(self.tags)
 
@@ -509,6 +537,26 @@ class Event(
                 "Event.origin='studio' must have an empty source_repo. "
                 "Clear source_repo or change origin to 'github'."
             )
+
+        if old_schedule is not None:
+            old_effective_end = _effective_end_datetime(
+                old_schedule['start_datetime'],
+                old_schedule['end_datetime'],
+            )
+            new_effective_end = _effective_end_datetime(
+                self.start_datetime,
+                self.end_datetime,
+            )
+            schedule_changed = (
+                self.start_datetime != old_schedule['start_datetime']
+                or new_effective_end != old_effective_end
+            )
+            if schedule_changed:
+                old_sequence = old_schedule['ics_sequence'] or 0
+                self.ics_sequence = max(self.ics_sequence or 0, old_sequence) + 1
+                if update_field_names is not None:
+                    update_field_names.update({'ics_sequence', 'updated_at'})
+                    kwargs['update_fields'] = update_field_names
 
         super().save(*args, **kwargs)
 
@@ -577,9 +625,7 @@ class Event(
         ``events/services/calendar_invite.py`` and the cron logic in
         ``events/tasks/complete_finished_events.py``).
         """
-        if self.end_datetime is not None:
-            return self.end_datetime
-        return self.start_datetime + timedelta(hours=1)
+        return _effective_end_datetime(self.start_datetime, self.end_datetime)
 
     @property
     def is_upcoming(self):

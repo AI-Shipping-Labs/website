@@ -29,7 +29,7 @@ class CuratedLinkModelFieldsTest(TestCase):
     def test_tags_normalized_on_save(self):
         link = CuratedLink.objects.create(
             item_id='test-tags', title='Test',
-            url='https://example.com', category='tools',
+            url='https://example.com', category='workshops',
             tags=[' Python ', 'AI', 'python'],
         )
         self.assertEqual(link.tags, ['python', 'ai'])
@@ -65,18 +65,18 @@ class ResourcesPageBasicTest(TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.tool_link = CuratedLink.objects.create(
-            item_id='tool-1', title='Cool CLI Tool',
-            description='A great CLI tool',
+        self.workshop_link = CuratedLink.objects.create(
+            item_id='workshop-1', title='Cool Workshop',
+            description='A great workshop',
             url='https://github.com/test/cli',
-            category='tools', tags=['python', 'cli'],
+            category='workshops', tags=['python', 'cli'],
             sort_order=1, published=True,
         )
-        self.model_link = CuratedLink.objects.create(
-            item_id='model-1', title='Model Hub',
-            description='Browse AI models',
+        self.article_link = CuratedLink.objects.create(
+            item_id='article-1', title='Article Hub',
+            description='Browse AI articles',
             url='https://huggingface.co',
-            category='models', tags=['ai', 'models'],
+            category='articles', tags=['ai', 'articles'],
             sort_order=1, published=True,
         )
 
@@ -86,27 +86,20 @@ class ResourcesPageBasicTest(TestCase):
 
     def test_shows_link_titles(self):
         response = self.client.get('/resources')
-        self.assertContains(response, 'Cool CLI Tool')
-        self.assertContains(response, 'Model Hub')
+        self.assertContains(response, 'Cool Workshop')
+        self.assertContains(response, 'Article Hub')
 
     def test_shows_link_descriptions(self):
         response = self.client.get('/resources')
-        self.assertContains(response, 'A great CLI tool')
-        self.assertContains(response, 'Browse AI models')
+        self.assertContains(response, 'A great workshop')
+        self.assertContains(response, 'Browse AI articles')
 
-    def test_legacy_tools_and_models_fold_into_other(self):
-        """Issue #524: legacy tools/models rows render under the Other
-        section without a Tools or Models heading appearing on the page.
-        """
+    def test_canonical_category_headings_render(self):
         response = self.client.get('/resources')
         content = response.content.decode()
-        # Both legacy links visible on the page
-        self.assertContains(response, 'Cool CLI Tool')
-        self.assertContains(response, 'Model Hub')
-        # Other section heading is rendered (match exact <h2>)
         h2_class = 'class="text-xl font-semibold text-foreground"'
-        self.assertIn(f'<h2 {h2_class}>Other</h2>', content)
-        # No Tools or Models <h2> section heading is rendered
+        self.assertIn(f'<h2 {h2_class}>Workshops</h2>', content)
+        self.assertIn(f'<h2 {h2_class}>Articles</h2>', content)
         self.assertNotIn(f'<h2 {h2_class}>Tools</h2>', content)
         self.assertNotIn(f'<h2 {h2_class}>Models</h2>', content)
 
@@ -125,7 +118,7 @@ class ResourcesPageBasicTest(TestCase):
     def test_unpublished_link_not_shown(self):
         CuratedLink.objects.create(
             item_id='unpub', title='Unpublished Link',
-            url='https://example.com', category='tools',
+            url='https://example.com', category='workshops',
             published=False,
         )
         response = self.client.get('/resources')
@@ -142,8 +135,8 @@ class ResourcesCategoryGroupingTest(TestCase):
         self.client = Client()
         # Create links in different categories
         CuratedLink.objects.create(
-            item_id='tool-g', title='Tool Link',
-            url='https://example.com/tool', category='tools',
+            item_id='other-g', title='Other Link',
+            url='https://example.com/other', category='other',
             sort_order=1, published=True,
         )
         CuratedLink.objects.create(
@@ -152,16 +145,13 @@ class ResourcesCategoryGroupingTest(TestCase):
             sort_order=1, published=True,
         )
 
-    def test_legacy_tools_link_renders_under_other(self):
-        """Issue #524: legacy `tools` rows show up in the Other section,
-        not under a Tools heading."""
+    def test_other_category_header_shown(self):
         response = self.client.get('/resources')
         content = response.content.decode()
         h2_class = 'class="text-xl font-semibold text-foreground"'
         self.assertIn(f'<h2 {h2_class}>Other</h2>', content)
         self.assertNotIn(f'<h2 {h2_class}>Tools</h2>', content)
-        # The tool link is still visible to the user
-        self.assertContains(response, 'Tool Link')
+        self.assertContains(response, 'Other Link')
 
     def test_courses_category_header_shown(self):
         response = self.client.get('/resources')
@@ -170,17 +160,15 @@ class ResourcesCategoryGroupingTest(TestCase):
         self.assertIn(f'<h2 {h2_class}>Courses</h2>', content)
 
     def test_empty_category_not_shown(self):
-        """If no links in 'models' category, its header should not appear."""
+        """If no links in a canonical category, its header should not appear."""
         response = self.client.get('/resources')
         content = response.content.decode()
-        # 'Models' should NOT appear as a section header since there are no model links
-        # We check that 'Models' doesn't appear as a category label in an h2
-        # (it may appear in other places like nav, so check specifically)
-        self.assertNotIn('Model Hub', content)
+        h2_class = 'class="text-xl font-semibold text-foreground"'
+        self.assertNotIn(f'<h2 {h2_class}>Workshops</h2>', content)
+        self.assertNotIn(f'<h2 {h2_class}>Articles</h2>', content)
 
     def test_grouped_categories_in_context(self):
-        """Issue #524: legacy `tools` rows are grouped under the `other`
-        section key. `courses` keeps its own section."""
+        """Canonical categories render as their own section keys."""
         response = self.client.get('/resources')
         grouped = response.context['grouped_categories']
         keys = [g['key'] for g in grouped]
@@ -199,27 +187,27 @@ class ResourcesSortOrderTest(TestCase):
     def setUp(self):
         self.client = Client()
         CuratedLink.objects.create(
-            item_id='sort-3', title='Third Tool',
-            url='https://example.com/3', category='tools',
+            item_id='sort-3', title='Third Resource',
+            url='https://example.com/3', category='other',
             sort_order=3, published=True,
         )
         CuratedLink.objects.create(
-            item_id='sort-1', title='First Tool',
-            url='https://example.com/1', category='tools',
+            item_id='sort-1', title='First Resource',
+            url='https://example.com/1', category='other',
             sort_order=1, published=True,
         )
         CuratedLink.objects.create(
-            item_id='sort-2', title='Second Tool',
-            url='https://example.com/2', category='tools',
+            item_id='sort-2', title='Second Resource',
+            url='https://example.com/2', category='other',
             sort_order=2, published=True,
         )
 
     def test_links_sorted_by_sort_order(self):
         response = self.client.get('/resources')
         content = response.content.decode()
-        first_pos = content.index('First Tool')
-        second_pos = content.index('Second Tool')
-        third_pos = content.index('Third Tool')
+        first_pos = content.index('First Resource')
+        second_pos = content.index('Second Resource')
+        third_pos = content.index('Third Resource')
         self.assertLess(first_pos, second_pos)
         self.assertLess(second_pos, third_pos)
 
@@ -233,47 +221,47 @@ class ResourcesTagFilteringTest(TestCase):
     def setUp(self):
         self.client = Client()
         self.python_link = CuratedLink.objects.create(
-            item_id='tag-py', title='Python Tool',
+            item_id='tag-py', title='Python Workshop',
             url='https://example.com/python',
-            category='tools', tags=['python', 'cli'],
+            category='workshops', tags=['python', 'cli'],
             published=True,
         )
         self.ai_link = CuratedLink.objects.create(
-            item_id='tag-ai', title='AI Model',
+            item_id='tag-ai', title='AI Article',
             url='https://example.com/ai',
-            category='models', tags=['ai', 'llm'],
+            category='articles', tags=['ai', 'llm'],
             published=True,
         )
         self.both_link = CuratedLink.objects.create(
-            item_id='tag-both', title='Python AI Tool',
+            item_id='tag-both', title='Python AI Course',
             url='https://example.com/both',
-            category='tools', tags=['python', 'ai'],
+            category='courses', tags=['python', 'ai'],
             published=True,
         )
 
     def test_no_filter_shows_all_links(self):
         response = self.client.get('/resources')
-        self.assertContains(response, 'Python Tool')
-        self.assertContains(response, 'AI Model')
-        self.assertContains(response, 'Python AI Tool')
+        self.assertContains(response, 'Python Workshop')
+        self.assertContains(response, 'AI Article')
+        self.assertContains(response, 'Python AI Course')
 
     def test_filter_by_python_tag(self):
         response = self.client.get('/resources?tag=python')
-        self.assertContains(response, 'Python Tool')
-        self.assertContains(response, 'Python AI Tool')
-        self.assertNotContains(response, 'AI Model')
+        self.assertContains(response, 'Python Workshop')
+        self.assertContains(response, 'Python AI Course')
+        self.assertNotContains(response, 'AI Article')
 
     def test_filter_by_ai_tag(self):
         response = self.client.get('/resources?tag=ai')
-        self.assertContains(response, 'AI Model')
-        self.assertContains(response, 'Python AI Tool')
-        self.assertNotContains(response, 'Python Tool')
+        self.assertContains(response, 'AI Article')
+        self.assertContains(response, 'Python AI Course')
+        self.assertNotContains(response, 'Python Workshop')
 
     def test_filter_by_nonexistent_tag(self):
         response = self.client.get('/resources?tag=nonexistent')
-        self.assertNotContains(response, 'Python Tool')
-        self.assertNotContains(response, 'AI Model')
-        self.assertNotContains(response, 'Python AI Tool')
+        self.assertNotContains(response, 'Python Workshop')
+        self.assertNotContains(response, 'AI Article')
+        self.assertNotContains(response, 'Python AI Course')
 
     def test_all_tags_in_context(self):
         response = self.client.get('/resources')
@@ -300,14 +288,14 @@ class ResourcesGatingTest(TierSetupMixin, TestCase):
             item_id='open-link', title='Open Link',
             description='Freely accessible',
             url='https://example.com/open-resource',
-            category='tools', published=True,
+            category='workshops', published=True,
             required_level=LEVEL_OPEN,
         )
         self.gated_link = CuratedLink.objects.create(
             item_id='gated-link', title='Gated Link',
             description='Requires Basic tier',
             url='https://example.com/secret-resource',
-            category='tools', published=True,
+            category='workshops', published=True,
             required_level=LEVEL_BASIC,
         )
 
@@ -383,7 +371,7 @@ class ResourcesGatingMainTierTest(TierSetupMixin, TestCase):
             item_id='main-link', title='Main Tier Link',
             description='Requires Main tier',
             url='https://example.com/main-only',
-            category='models', published=True,
+            category='articles', published=True,
             required_level=LEVEL_MAIN,
         )
 
@@ -512,7 +500,7 @@ class ResourcesEmptyStateTest(TestCase):
         # Add one link but filter by a tag it doesn't have
         CuratedLink.objects.create(
             item_id='only-link', title='Only Link',
-            url='https://example.com', category='tools',
+            url='https://example.com', category='workshops',
             tags=['python'], published=True,
         )
         response = self.client.get('/resources?tag=nonexistent')
@@ -531,12 +519,12 @@ class CuratedLinksTagFilterTest(TestCase):
         # Replaces playwright_tests/test_seo_tags.py::TestScenario6TagFiltersAcrossPages::test_tag_filter_on_resources
         CuratedLink.objects.create(
             item_id='python-cli', title='Python CLI',
-            url='https://example.com/python', category='tools',
+            url='https://example.com/python', category='workshops',
             tags=['python'], sort_order=1, published=True,
         )
         CuratedLink.objects.create(
             item_id='go-toolkit', title='Go Toolkit',
-            url='https://example.com/go', category='tools',
+            url='https://example.com/go', category='workshops',
             tags=['go'], sort_order=2, published=True,
         )
 
@@ -546,7 +534,7 @@ class CuratedLinksTagFilterTest(TestCase):
         self.assertNotContains(response, 'Go Toolkit')
 
 
-# --- Issue #524: reorder + workshops/articles + tools/models -> other ---
+# --- Issue #524/#1015: canonical resources categories ---
 
 
 class CuratedLinkCategoryChoicesIssue524Test(TestCase):
@@ -653,8 +641,8 @@ class ResourcesSectionOrderIssue524Test(TestCase):
         self.assertNotIn(f'<h2 {h2_class}>Models</h2>', content)
 
 
-class ResourcesLegacyFoldIntoOtherIssue524Test(TestCase):
-    """Existing `tools` and `models` rows render in the Other section."""
+class ResourcesLegacyCategoriesIgnoredIssue1015Test(TestCase):
+    """Legacy `tools` and `models` rows no longer render on /resources."""
 
     def setUp(self):
         self.client = Client()
@@ -674,13 +662,13 @@ class ResourcesLegacyFoldIntoOtherIssue524Test(TestCase):
             sort_order=3, published=True,
         )
 
-    def test_other_section_contains_all_three_links(self):
+    def test_other_section_contains_only_canonical_other_links(self):
         response = self.client.get('/resources')
         grouped = response.context['grouped_categories']
         other_section = next(g for g in grouped if g['key'] == 'other')
         titles = [a['link'].title for a in other_section['links']]
-        self.assertIn('ripgrep', titles)
-        self.assertIn('Llama 3', titles)
+        self.assertNotIn('ripgrep', titles)
+        self.assertNotIn('Llama 3', titles)
         self.assertIn('Common Crawl', titles)
 
     def test_only_other_section_present(self):
@@ -688,17 +676,10 @@ class ResourcesLegacyFoldIntoOtherIssue524Test(TestCase):
         keys = [g['key'] for g in response.context['grouped_categories']]
         self.assertEqual(keys, ['other'])
 
-    def test_legacy_links_not_outside_other(self):
-        """Issue #524: the legacy rows must not slip into other sections."""
+    def test_legacy_links_not_rendered(self):
         response = self.client.get('/resources')
-        grouped = response.context['grouped_categories']
-        # No section other than `other` should contain these titles.
-        for section in grouped:
-            if section['key'] == 'other':
-                continue
-            titles = [a['link'].title for a in section['links']]
-            self.assertNotIn('ripgrep', titles)
-            self.assertNotIn('Llama 3', titles)
+        self.assertNotContains(response, 'ripgrep')
+        self.assertNotContains(response, 'Llama 3')
 
 
 class ResourcesEmptySectionsHiddenIssue524Test(TestCase):

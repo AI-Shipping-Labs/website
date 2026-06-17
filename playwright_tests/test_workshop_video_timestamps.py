@@ -68,9 +68,9 @@ def _create_workshop_with_timestamps():
         kind='workshop',
         recording_url='https://www.youtube.com/watch?v=dQw4w9WgXcQ',
         timestamps=[
-            {'time': '0:00', 'title': 'Welcome'},
-            {'time': '8:30', 'title': 'No matching page'},
-            {'time': '16:00', 'title': 'Setup chapter'},
+            {'time_seconds': 0, 'label': 'Welcome'},
+            {'time_seconds': 510, 'label': 'No matching page'},
+            {'time_seconds': 960, 'label': 'Setup chapter'},
         ],
         materials=[],
         published=True,

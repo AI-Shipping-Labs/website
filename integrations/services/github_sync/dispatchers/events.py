@@ -36,6 +36,42 @@ from integrations.services.github_sync.dispatchers.instructors import _attach_in
 _UNSET = object()
 
 
+def _normalize_event_timestamps_for_sync(timestamps):
+    """Store synced event timestamps in the canonical ``time_seconds/label`` shape."""
+    from content.templatetags.video_utils import parse_video_timestamp
+
+    if not timestamps:
+        return []
+
+    normalized = []
+    for ts in timestamps:
+        if not isinstance(ts, dict):
+            continue
+
+        if 'time_seconds' in ts:
+            try:
+                time_seconds = int(ts.get('time_seconds') or 0)
+            except (TypeError, ValueError):
+                continue
+        elif 'time' in ts:
+            try:
+                time_seconds = parse_video_timestamp(ts.get('time'))
+            except ValueError:
+                continue
+        else:
+            continue
+
+        if time_seconds < 0:
+            continue
+
+        normalized.append({
+            'time_seconds': time_seconds,
+            'label': ts.get('label') or ts.get('title') or '',
+        })
+
+    return normalized
+
+
 def _coerce_external_host_for_sync(raw, *, slug=''):
     """Issue #579. ``Event.save()`` skips field validators, so a
     content-repo author who types ``DataTalks Club`` in frontmatter
@@ -95,7 +131,7 @@ def _build_synced_event_content_defaults(
         'recording_url': recording_url,
         'recording_embed_url': recording_embed_url,
         'transcript_url': transcript_url,
-        'timestamps': timestamps or [],
+        'timestamps': _normalize_event_timestamps_for_sync(timestamps),
         'materials': materials or [],
         'core_tools': core_tools or [],
         'learning_objectives': learning_objectives or [],

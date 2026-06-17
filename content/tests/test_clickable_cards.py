@@ -323,7 +323,7 @@ class CatalogTagDensityTest(TestCase):
             title='Many Resource Tags',
             url='https://example.com',
             description='Tag cap test.',
-            category='tools',
+            category='workshops',
             required_level=0,
             published=True,
             tags=['one', 'two', 'three', 'four'],
@@ -493,7 +493,7 @@ class CatalogFocusRingRegressionTest(TestCase):
             title='Link X',
             url='https://example.com',
             description='x',
-            category='tools',
+            category='workshops',
             required_level=0,
             published=True,
         )

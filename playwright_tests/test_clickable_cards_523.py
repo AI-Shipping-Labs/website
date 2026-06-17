@@ -452,7 +452,7 @@ class TestCuratedLinkRegression:
             title='Example Tool',
             description='An external tool.',
             url='https://example.com/tool',
-            category='tools',
+            category='workshops',
             required_level=0,
             published=True,
         )

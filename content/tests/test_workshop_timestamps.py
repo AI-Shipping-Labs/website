@@ -4,7 +4,7 @@ Covers:
 - ``parse_video_timestamp`` strict parser (valid + malformed inputs).
 - ``append_query_param`` URL helper.
 - ``normalize_timestamps`` handling both ``{time, title}`` (workshop YAML)
-  and ``{time_seconds, label}`` (legacy / canonical) shapes.
+  and ``{time_seconds, label}`` (canonical) shapes.
 - ``WorkshopPage.video_start`` field default + persistence.
 - ``workshop_page_detail`` watch-bar visibility rules (gating + empty
   video_start + recording access).
@@ -206,7 +206,7 @@ class NormalizeTimestampsTest(TestCase):
         self.assertEqual(result[1]['time_seconds'], 960)
         self.assertEqual(result[1]['label'], 'Setup')
 
-    def test_legacy_recording_shape(self):
+    def test_canonical_recording_shape(self):
         result = normalize_timestamps([
             {'time_seconds': 0, 'label': 'Intro'},
             {'time_seconds': 125, 'label': 'Build'},
@@ -274,8 +274,8 @@ class WatchBarVisibilityTest(TierSetupMixin, TestCase):
             title='WB',
             recording_url='https://www.youtube.com/watch?v=abc',
             timestamps=[
-                {'time': '0:00', 'title': 'Start'},
-                {'time': '16:00', 'title': 'Setup'},
+                {'time_seconds': 0, 'label': 'Start'},
+                {'time_seconds': 960, 'label': 'Setup'},
             ],
         )
         cls.workshop = _make_workshop(slug='wb', event=cls.event)
@@ -342,9 +342,9 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
             title='Video Links',
             recording_url='https://www.youtube.com/watch?v=dQw4w9WgXcQ',
             timestamps=[
-                {'time': '0:00', 'title': 'Welcome'},
-                {'time': '8:30', 'title': 'No matching page'},
-                {'time': '16:00', 'title': 'Setup'},
+                {'time_seconds': 0, 'label': 'Welcome'},
+                {'time_seconds': 510, 'label': 'No matching page'},
+                {'time_seconds': 960, 'label': 'Setup'},
             ],
         )
         cls.workshop = _make_workshop(slug='vl', event=cls.event)
@@ -450,7 +450,7 @@ class WorkshopVideoDuplicateVideoStartTest(TierSetupMixin, TestCase):
         cls.event = _make_event(
             slug='dup-event',
             recording_url='https://www.youtube.com/watch?v=abc',
-            timestamps=[{'time': '0:00', 'title': 'Start'}],
+            timestamps=[{'time_seconds': 0, 'label': 'Start'}],
         )
         cls.workshop = _make_workshop(slug='dup', event=cls.event)
         # Both pages claim "0:00" — we expect the sort_order=1 page to
@@ -480,8 +480,8 @@ class WorkshopVideoDuplicateVideoStartTest(TierSetupMixin, TestCase):
         )
 
 
-class WorkshopVideoLegacyTimestampShapeTest(TierSetupMixin, TestCase):
-    """Legacy ``{time_seconds, label}`` events still render correctly."""
+class WorkshopVideoCanonicalTimestampShapeTest(TierSetupMixin, TestCase):
+    """Canonical ``{time_seconds, label}`` events render correctly."""
 
     @classmethod
     def setUpTestData(cls):
@@ -489,7 +489,6 @@ class WorkshopVideoLegacyTimestampShapeTest(TierSetupMixin, TestCase):
         cls.event = _make_event(
             slug='leg-event',
             recording_url='https://www.youtube.com/watch?v=abc',
-            # Legacy shape used by classic event recordings.
             timestamps=[
                 {'time_seconds': 0, 'label': 'Welcome'},
                 {'time_seconds': 960, 'label': 'Setup'},
@@ -504,10 +503,10 @@ class WorkshopVideoLegacyTimestampShapeTest(TierSetupMixin, TestCase):
             email='main@x.com', password='pw', tier=cls.main_tier,
         )
 
-    def test_legacy_shape_links_to_tutorial(self):
+    def test_canonical_shape_links_to_tutorial(self):
         self.client.force_login(self.user_main)
         response = self.client.get('/workshops/2026-04-21-leg/video')
-        # The 960s legacy timestamp matches video_start="16:00".
+        # The 960s timestamp matches video_start="16:00".
         self.assertContains(
             response, 'href="/workshops/2026-04-21-leg/tutorial/setup"',
         )
@@ -578,8 +577,8 @@ class WorkshopVideoSelfHostedCueTest(TierSetupMixin, TestCase):
             slug='sh-event',
             recording_url='https://cdn.example.com/recordings/ws.mp4',
             timestamps=[
-                {'time': '0:00', 'title': 'Welcome'},
-                {'time': '16:00', 'title': 'Setup'},
+                {'time_seconds': 0, 'label': 'Welcome'},
+                {'time_seconds': 960, 'label': 'Setup'},
             ],
         )
         cls.workshop = _make_workshop(slug='sh', event=cls.event)

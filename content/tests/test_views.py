@@ -38,7 +38,7 @@ class HomeViewTest(TestCase):
             title='Test Link',
             description='Link desc',
             url='https://example.com',
-            category='tools',
+            category='workshops',
             published=True,
         )
 
@@ -222,7 +222,7 @@ class RecordingDetailViewTest(TestCase):
             status='completed',
             tags=['ai'],
             recording_url='https://youtube.com/watch?v=test',
-            timestamps=[{'time': '00:00', 'title': 'Intro', 'description': 'Introduction'}],
+            timestamps=[{'time_seconds': 0, 'label': 'Intro'}],
             materials=[{'title': 'Slides', 'url': 'https://example.com/slides', 'type': 'slides'}],
             core_tools=['Python'],
             learning_objectives=['Learn basics'],
@@ -316,7 +316,7 @@ class CollectionListViewTest(TestCase):
             title='Test Tool',
             description='A tool',
             url='https://example.com/tool',
-            category='tools',
+            category='workshops',
             source='GitHub',
             published=True,
         )

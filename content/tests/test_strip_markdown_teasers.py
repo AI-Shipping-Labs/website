@@ -143,7 +143,7 @@ class ListingTeaserTest(TierSetupMixin, TestCase):
     def test_resources_listing(self):
         CuratedLink.objects.create(
             item_id='link-917', title='Link Item',
-            url='https://example.com', category='tools',
+            url='https://example.com', category='workshops',
             description=LINK_MD, published=True,
         )
         self._assert_clean_teaser('/resources')

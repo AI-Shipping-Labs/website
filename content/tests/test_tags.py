@@ -162,7 +162,7 @@ class CuratedLinkTagNormalizationTest(TestCase):
     def test_tags_normalized_on_save(self):
         link = CuratedLink.objects.create(
             item_id='test-link-norm', title='Test',
-            url='https://example.com', category='tools',
+            url='https://example.com', category='workshops',
             tags=['Machine Learning'],
             published=True,
         )
@@ -492,12 +492,12 @@ class MultiTagFilteringResourcesTest(TestCase):
     def setUpTestData(cls):
         CuratedLink.objects.create(
             item_id='both-l', title='Both L',
-            url='https://example.com', category='tools',
+            url='https://example.com', category='workshops',
             tags=['python', 'ai'], published=True,
         )
         CuratedLink.objects.create(
             item_id='python-l', title='Python L',
-            url='https://example.com', category='tools',
+            url='https://example.com', category='workshops',
             tags=['python'], published=True,
         )
 

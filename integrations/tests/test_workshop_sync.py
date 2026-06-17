@@ -162,7 +162,10 @@ class WorkshopSyncHappyPathTest(_WorkshopSyncFixtureBase):
             'https://www.youtube.com/embed/h84rcRezNM4',
         )
         self.assertEqual(event.required_level, 20)
-        self.assertEqual(len(event.timestamps), 1)
+        self.assertEqual(
+            event.timestamps,
+            [{'time_seconds': 0, 'label': 'Intro'}],
+        )
         self.assertEqual(len(event.materials), 1)
         self.assertTrue(event.published)
 
@@ -522,7 +525,10 @@ class WorkshopSyncReusesExistingEventTest(_WorkshopSyncFixtureBase):
             event.recording_url,
             'https://www.youtube.com/watch?v=updated',
         )
-        self.assertEqual(len(event.timestamps), 1)
+        self.assertEqual(
+            event.timestamps,
+            [{'time_seconds': 0, 'label': 'Intro'}],
+        )
         self.assertEqual(event.start_datetime, existing_start)
         self.assertEqual(event.status, 'upcoming')
         self.assertEqual(event.zoom_join_url, 'https://zoom.us/j/kept')
@@ -2331,7 +2337,10 @@ class WorkshopSyncExplicitEventLinkTest(_WorkshopSyncFixtureBase):
         self.assertEqual(
             event.recording_url, 'https://www.youtube.com/watch?v=linked',
         )
-        self.assertEqual(len(event.timestamps), 1)
+        self.assertEqual(
+            event.timestamps,
+            [{'time_seconds': 0, 'label': 'Intro'}],
+        )
 
     def test_links_to_existing_studio_event_by_slug(self):
         event = self._make_studio_event(slug='take-home-live')

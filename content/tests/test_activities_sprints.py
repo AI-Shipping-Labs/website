@@ -262,7 +262,7 @@ class ResourcesSprintIsolationTest(TestCase):
             title='Useful Tool',
             description='A durable reference link',
             url='https://example.com/tool',
-            category='tools',
+            category='workshops',
             published=True,
         )
         Sprint.objects.create(

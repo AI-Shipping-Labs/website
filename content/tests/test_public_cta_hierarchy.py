@@ -40,7 +40,7 @@ class PublicCtaHierarchyTest(TierSetupMixin, TestCase):
             title="Gated Resource",
             description="A gated resource for CTA hierarchy coverage.",
             url="https://example.com/resource",
-            category="tools",
+            category="workshops",
             required_level=1,
             published=True,
         )

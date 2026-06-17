@@ -96,12 +96,20 @@ def notification_log(request):
     })
 
 
-def _notify_content(request, content_type, content_id):
+def _notify_content(
+    request,
+    content_type,
+    content_id,
+    *,
+    post_to_slack=True,
+    include_emailed=True,
+):
     """Handle the notify subscribers POST for any content type.
 
-    Returns JSON ``{"notified": N, "emailed": M}`` (issue #655). ``M`` is
-    always ``0`` for content types without an ``email_template`` so the
-    response shape is uniform across types.
+    Returns JSON ``{"notified": N, "emailed": M}`` (issue #655) unless
+    ``include_emailed`` is false. ``M`` is always ``0`` for content types
+    without an ``email_template`` so the response shape stays uniform
+    across generic notification actions.
     """
     model_class = CONTENT_TYPE_MAP[content_type][0]
     content = get_object_or_404(model_class, pk=content_id)
@@ -113,11 +121,17 @@ def _notify_content(request, content_type, content_id):
             status=409,
         )
 
-    result = NotificationService.notify(content_type, content_id)
-    return JsonResponse({
+    result = NotificationService.notify(
+        content_type,
+        content_id,
+        post_to_slack=post_to_slack,
+    )
+    payload = {
         'notified': result.get('notified', 0),
-        'emailed': result.get('emailed', 0),
-    })
+    }
+    if include_emailed:
+        payload['emailed'] = result.get('emailed', 0)
+    return JsonResponse(payload)
 
 
 def _announce_slack(request, content_type, content_id):
@@ -172,7 +186,13 @@ def recording_announce_slack(request, recording_id):
 @staff_required
 @require_POST
 def event_notify(request, event_id):
-    return _notify_content(request, 'event', event_id)
+    return _notify_content(
+        request,
+        'event',
+        event_id,
+        post_to_slack=False,
+        include_emailed=False,
+    )
 
 
 @staff_required

@@ -154,6 +154,25 @@ class NotificationServiceNotifyTest(TestCase):
         NotificationService.notify('article', article.pk)
         mock_slack.assert_called_once_with('article', article)
 
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_notify_can_skip_slack_announcement(self, mock_slack):
+        event = Event.objects.create(
+            title='In App Only Event',
+            slug='in-app-only-event',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            required_level=0,
+        )
+
+        result = NotificationService.notify(
+            'event',
+            event.pk,
+            post_to_slack=False,
+        )
+
+        self.assertEqual(result['notified'], 3)
+        mock_slack.assert_not_called()
+
     # --- Workshop notification tests (issue #647) ---
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')

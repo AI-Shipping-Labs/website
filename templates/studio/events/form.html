@@ -327,7 +327,7 @@
               </div>
             </td>
             <td class="px-3 py-2 align-top text-muted-foreground whitespace-nowrap">
-              {{ reg.registered_at|date:"d M Y, H:i" }}
+              {{ reg.registered_at|operator_datetime }}
             </td>
             <td class="px-3 py-2 align-top text-foreground">
               {{ reg.user.tier.name|default:"Free" }}
@@ -336,7 +336,7 @@
               {% if reg.joined_at %}
               <span class="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400"
                     data-testid="registration-joined-badge">Joined</span>
-              <span class="ml-2 text-xs text-muted-foreground">{{ reg.joined_at|date:"d M Y, H:i" }}</span>
+              <span class="ml-2 text-xs text-muted-foreground">{{ reg.joined_at|operator_datetime }}</span>
               {% else %}
               <span class="text-muted-foreground" data-testid="registration-not-joined">Not joined</span>
               {% endif %}
@@ -451,7 +451,7 @@
               {% endif %}
             </td>
             <td class="px-3 py-2 align-top text-muted-foreground whitespace-nowrap">
-              {{ entry.created_at|date:"d M Y, H:i" }}
+              {{ entry.created_at|operator_datetime }}
             </td>
           </tr>
           {% endfor %}

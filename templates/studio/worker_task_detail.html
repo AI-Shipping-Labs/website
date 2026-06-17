@@ -51,11 +51,11 @@
       </div>
       <div>
         <p class="text-xs text-muted-foreground uppercase">Started</p>
-        <p class="text-foreground">{{ task.started|date:"Y-m-d H:i:s"|default:"—" }}</p>
+        <p class="text-foreground">{{ task.started|operator_datetime_seconds|default:"—" }}</p>
       </div>
       <div>
         <p class="text-xs text-muted-foreground uppercase">Stopped</p>
-        <p class="text-foreground">{{ task.stopped|date:"Y-m-d H:i:s"|default:"—" }}</p>
+        <p class="text-foreground">{{ task.stopped|operator_datetime_seconds|default:"—" }}</p>
       </div>
       <div>
         <p class="text-xs text-muted-foreground uppercase">Duration</p>

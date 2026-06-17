@@ -28,7 +28,7 @@
       <li class="border border-border rounded-lg p-4">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between text-xs text-muted-foreground mb-2">
           <div class="min-w-0">
-            <span>{{ note.get_kind_display }} &middot; {{ note.created_at|date:"Y-m-d H:i" }}{% if note.created_by %} &middot; {{ note.created_by.email }}{% endif %}</span>
+            <span>{{ note.get_kind_display }} &middot; {{ note.created_at|operator_datetime }}{% if note.created_by %} &middot; {{ note.created_by.email }}{% endif %}</span>
             {% include "studio/users/_member_note_plan_badge.html" %}
           </div>
           <span class="flex items-center gap-3 whitespace-nowrap">
@@ -61,7 +61,7 @@
       <li class="border border-border rounded-lg p-4">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between text-xs text-muted-foreground mb-2">
           <div class="min-w-0">
-            <span>{{ note.get_kind_display }} &middot; {{ note.created_at|date:"Y-m-d H:i" }}{% if note.created_by %} &middot; {{ note.created_by.email }}{% endif %}</span>
+            <span>{{ note.get_kind_display }} &middot; {{ note.created_at|operator_datetime }}{% if note.created_by %} &middot; {{ note.created_by.email }}{% endif %}</span>
             {% include "studio/users/_member_note_plan_badge.html" %}
           </div>
           <span class="flex items-center gap-3 whitespace-nowrap">

@@ -188,7 +188,7 @@
               <span class="text-muted-foreground/60" data-testid="event-zoom-indicator" data-zoom="no">—</span>
               {% endif %}
             </td>
-            <td class="px-4 py-3 text-sm text-muted-foreground" data-testid="event-start" data-label="Start">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
+            <td class="px-4 py-3 text-sm text-muted-foreground" data-testid="event-start" data-label="Start">{{ event.start_datetime|operator_datetime }}</td>
             <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Registrations">{{ event.registration_count }}</td>
             <td class="px-4 py-3 text-sm space-x-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
               {% if event.status == 'draft' %}

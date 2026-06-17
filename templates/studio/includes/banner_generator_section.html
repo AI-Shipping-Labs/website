@@ -134,13 +134,13 @@ Required context:
   {% if banner_generator_enabled and banner_last_task %}
     {% if banner_last_task.state == 'success' %}
       <p class="mt-2 text-xs text-muted-foreground"
-         title="{{ banner_last_task.started_at|date:'Y-m-d H:i:s T' }}"
+         title="{{ banner_last_task.started_at|operator_datetime_tz }}"
          data-testid="banner-generator-last-success">
         Last regenerated {{ banner_last_task.started_at|timesince }} ago.
       </p>
     {% elif banner_last_task.state == 'failed' %}
       <p class="mt-2 text-xs text-muted-foreground"
-         title="{{ banner_last_task.started_at|date:'Y-m-d H:i:s T' }}"
+         title="{{ banner_last_task.started_at|operator_datetime_tz }}"
          data-testid="banner-generator-last-failure">
         Last attempt failed {{ banner_last_task.started_at|timesince }} ago.
         <a href="{{ banner_last_task.task_detail_url }}" class="text-foreground underline">View task.</a>

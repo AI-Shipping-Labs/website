@@ -51,7 +51,7 @@
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.get_target_min_level_display }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.sent_count }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.created_at|date:"M d, Y" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.created_at|operator_date }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">
             {% if campaign.status == 'draft' %}

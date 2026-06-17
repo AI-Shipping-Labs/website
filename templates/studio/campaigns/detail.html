@@ -94,12 +94,12 @@
       {% if campaign.sent_at %}
       <div>
         <p class="text-sm text-muted-foreground">Sent At</p>
-        <p class="text-sm text-foreground mt-1">{{ campaign.sent_at|date:"M d, Y H:i" }}</p>
+        <p class="text-sm text-foreground mt-1">{{ campaign.sent_at|operator_datetime }}</p>
       </div>
       {% endif %}
       <div>
         <p class="text-sm text-muted-foreground">Created</p>
-        <p class="text-sm text-foreground mt-1">{{ campaign.created_at|date:"M d, Y H:i" }}</p>
+        <p class="text-sm text-foreground mt-1">{{ campaign.created_at|operator_datetime }}</p>
       </div>
     </div>
   </div>

@@ -65,7 +65,7 @@
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ plan.sprint.name }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">
-          {% if plan.shared_at %}{{ plan.shared_at|date:"Y-m-d" }}{% else %}-{% endif %}
+          {% if plan.shared_at %}{{ plan.shared_at|operator_date }}{% else %}-{% endif %}
         </td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">

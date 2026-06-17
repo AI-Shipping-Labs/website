@@ -136,7 +136,7 @@
         {% for user in recent_users %}
           <li class="py-2 flex items-center justify-between gap-3">
             <a href="{% url 'studio_user_detail' user_id=user.pk %}" class="text-sm text-foreground hover:text-accent min-w-0 truncate">{{ user.email }}</a>
-            <span class="text-xs text-muted-foreground shrink-0">{{ user.date_joined|date:"M j" }}</span>
+            <span class="text-xs text-muted-foreground shrink-0">{{ user.date_joined|operator_date }}</span>
           </li>
         {% endfor %}
       </ul>
@@ -155,7 +155,7 @@
               <a href="{{ item.url }}" class="block text-sm text-foreground hover:text-accent truncate">{{ item.title }}</a>
               <span class="block text-xs text-muted-foreground">{{ item.kind }} &middot; {{ item.status }}</span>
             </span>
-            <span class="text-xs text-muted-foreground shrink-0">{{ item.updated_at|date:"M j" }}</span>
+            <span class="text-xs text-muted-foreground shrink-0">{{ item.updated_at|operator_date }}</span>
           </li>
         {% endfor %}
       </ul>

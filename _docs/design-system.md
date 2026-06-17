@@ -60,6 +60,32 @@ Use `tracking-tight` on `text-2xl` and larger headings. Many hero and section he
 
 Markdown content is styled by `.prose` in `templates/base.html`. Workshop/tutorial contexts can add `.prose-tight` when list rhythm needs to match compact rows.
 
+## Date and Time Vocabulary
+
+Templates use semantic date/time helpers from `accounts.templatetags.date_formatting`, registered as template builtins. Do not add raw `|date:"..."` display filters in templates; `accounts.tests.test_template_date_vocabulary.TemplateDateVocabularyGuardTest` fails when a new raw template date filter appears.
+
+| Context | Helper | Format | Example | Use |
+|---|---|---|---|---|
+| Member full date | `member_full_date` | `F j, Y` | `March 21, 2026` | Detail pages, certificates, cohort starts, and prominent prose dates. |
+| Member short date | `member_short_date` | `M j, Y` | `Mar 21, 2026` | Public/member cards and list rows. |
+| Member compact date | `member_compact_date` | `M j` | `Mar 21` | Dense dashboard/list chips where the year is clear from context. |
+| Member short datetime | `member_short_datetime` | `M j, Y H:i` | `Mar 21, 2026 16:00` | Non-event member timestamps where recipient timezone conversion is not meaningful. |
+| Operator date | `operator_date` | `Y-m-d` | `2026-03-21` | Studio tables, CRM rows, plan metadata, imports, logs, and machine-readable admin views. |
+| Operator datetime | `operator_datetime` | `Y-m-d H:i` | `2026-03-21 16:00` | Studio/admin timestamps where minute precision is enough. |
+| Operator datetime with seconds | `operator_datetime_seconds` | `Y-m-d H:i:s` | `2026-03-21 16:00:07` | Worker/import/debug surfaces that need second precision. |
+| Operator datetime with timezone | `operator_datetime_tz` | `Y-m-d H:i:s T` | `2026-03-21 16:00:07 UTC` | Debug tooltips/titles where the timezone token is intentionally shown. |
+| Form date value | `form_date_value` | `Y-m-d` | `2026-03-21` | HTML `<input type="date">` values and browser/form-control payloads. This is value serialization, not display copy. |
+| Split operator time | `operator_time` | `H:i` | `16:00` | Time-only value in a documented split date/time cell or form-control value. Do not use as a standalone display format. |
+
+Event and session start times are not ordinary date formatting. Visible event/session datetimes that depend on the signed-in viewer or registered recipient must call `accounts.services.timezones.format_user_datetime` directly or use the `user_event_datetime` template tag, which delegates to it and appends an unambiguous timezone token.
+
+Documented event/session exceptions:
+
+- Anonymous public event detail/list surfaces use `events.services.display_time.build_event_time_display`, which renders a site fallback timezone server-side and lets browser JavaScript replace it with the visitor's detected timezone when allowed.
+- Public event series cards and rows use `event_source_short_datetime` / `event_source_full_datetime` for anonymous source-timezone display. Signed-in viewer-specific series/session rows use `user_event_datetime`.
+- Multi-zone broadcast strings use `events.services.display_time.format_event_tz_strip`; they intentionally show a fixed broadcast strip rather than a recipient timezone.
+- Studio/operator event rows use operator helpers because staff tables are operational records, not member-local event reminders.
+
 ## Spacing and Layout
 
 Tailwind's default 4px scale is the baseline. Bare classes are mobile values; `sm:`, `md:`, and `lg:` progressively enhance wider screens.

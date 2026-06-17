@@ -236,7 +236,7 @@
           {% if recent_has_referrer %}
           <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.first_touch_referrer_source|default:"—" }}</td>
           {% endif %}
-          <td class="px-4 py-3 text-sm text-muted-foreground text-right" title="{{ row.created_at|date:'Y-m-d H:i:s T' }}">{{ row.created_at|timesince }} ago</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground text-right" title="{{ row.created_at|operator_datetime_tz }}">{{ row.created_at|timesince }} ago</td>
         </tr>
         {% endfor %}
       </tbody>

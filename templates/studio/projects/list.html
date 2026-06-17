@@ -54,7 +54,7 @@
           {% studio_status_badge project.status project.get_status_display %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Author">{{ project.author|default:"-" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ project.date|date:"M d, Y" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ project.date|operator_date }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_project_review' project_id=project.pk as project_review_url %}
           <div class="{% studio_list_class 'action_group' %}">

@@ -31,8 +31,8 @@
       <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Status</dt><dd>{{ batch.get_status_display }}</dd></div>
       <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Dry-run</dt><dd>{{ batch.dry_run|yesno:"Yes,No" }}</dd></div>
       <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Actor</dt><dd>{% if batch.actor %}{{ batch.actor.email }}{% else %}System{% endif %}</dd></div>
-      <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Started</dt><dd>{{ batch.started_at|date:"Y-m-d H:i:s" }}</dd></div>
-      <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Finished</dt><dd>{% if batch.finished_at %}{{ batch.finished_at|date:"Y-m-d H:i:s" }}{% else %}running{% endif %}</dd></div>
+      <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Started</dt><dd>{{ batch.started_at|operator_datetime_seconds }}</dd></div>
+      <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Finished</dt><dd>{% if batch.finished_at %}{{ batch.finished_at|operator_datetime_seconds }}{% else %}running{% endif %}</dd></div>
     </dl>
   </div>
   <div class="bg-card border border-border rounded-lg p-5 lg:col-span-2">

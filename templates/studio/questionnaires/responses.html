@@ -32,7 +32,7 @@
           {% studio_status_badge response.status response.get_status_display %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Submitted" data-testid="questionnaire-response-submitted">
-          {% if response.submitted_at %}{{ response.submitted_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}
+          {% if response.submitted_at %}{{ response.submitted_at|operator_datetime }}{% else %}—{% endif %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Answered">{{ response.answered_count }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">

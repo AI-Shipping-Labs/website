@@ -63,7 +63,7 @@
     </div>
     <div>
       <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Expires At</p>
-      <p class="text-sm text-foreground mt-1">{{ active_override.expires_at|date:"M d, Y H:i" }} UTC</p>
+      <p class="text-sm text-foreground mt-1">{{ active_override.expires_at|operator_datetime }} UTC</p>
     </div>
     <div>
       <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Granted By</p>
@@ -71,7 +71,7 @@
     </div>
     <div>
       <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</p>
-      <p class="text-sm text-foreground mt-1">{{ active_override.created_at|date:"M d, Y H:i" }}</p>
+      <p class="text-sm text-foreground mt-1">{{ active_override.created_at|operator_datetime }}</p>
     </div>
   </div>
   <form method="post" action="{% url 'studio_user_tier_override_revoke' detail_user.pk %}"
@@ -164,8 +164,8 @@
           {% endif %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Granted By">{% if override.granted_by %}{{ override.granted_by.email }}{% else %}-{% endif %}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Created">{{ override.created_at|date:"M d, Y H:i" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Expires">{{ override.expires_at|date:"M d, Y H:i" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Created">{{ override.created_at|operator_datetime }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Expires">{{ override.expires_at|operator_datetime }}</td>
         <td class="px-6 py-4" data-label="Status">
           {% if override.is_active %}
           <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Active</span>

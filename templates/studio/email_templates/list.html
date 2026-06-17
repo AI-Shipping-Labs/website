@@ -46,7 +46,7 @@
           {% endif %}
         </td>
         <td class="px-4 py-3 text-muted-foreground" data-label="Last edited">
-          {% if row.updated_at %}{{ row.updated_at|date:"Y-m-d H:i" }}{% else %}&mdash;{% endif %}
+          {% if row.updated_at %}{{ row.updated_at|operator_datetime }}{% else %}&mdash;{% endif %}
         </td>
         <td class="px-4 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">

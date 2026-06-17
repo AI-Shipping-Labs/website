@@ -207,6 +207,19 @@ class EventsListSeriesCardRenderTest(TestCase):
         # The next dates list is present.
         self.assertContains(response, 'data-testid="series-card-dates"')
 
+    def test_signed_in_grouped_card_uses_viewer_preferred_timezone(self):
+        user = User.objects.create_user(
+            email='ny-list@example.com',
+            password='pass',
+            preferred_timezone='America/New_York',
+        )
+        self.client.force_login(user)
+
+        response = self.client.get('/events')
+
+        self.assertContains(response, 'America/New_York')
+        self.assertContains(response, 'data-testid="series-card-dates"')
+
     def test_individual_occurrence_titles_not_repeated_as_cards(self):
         # The grouped card replaces the 4 per-occurrence cards: the
         # occurrence titles do not appear as separate event-card links.

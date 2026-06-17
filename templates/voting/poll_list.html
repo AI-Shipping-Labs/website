@@ -60,7 +60,7 @@
                   {% if item.poll.closes_at %}
                   <span class="flex items-center gap-1.5">
                     <i data-lucide="clock" class="h-4 w-4"></i>
-                    Closes {{ item.poll.closes_at|date:"M d, Y" }}
+                    Closes {{ item.poll.closes_at|member_short_date }}
                   </span>
                   {% endif %}
                 </div>

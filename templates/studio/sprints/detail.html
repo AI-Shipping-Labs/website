@@ -43,7 +43,7 @@
     </div>
     <div>
       <dt class="text-xs text-muted-foreground uppercase">Start date</dt>
-      <dd class="text-foreground mt-1">{{ sprint.start_date|date:"Y-m-d" }}</dd>
+      <dd class="text-foreground mt-1">{{ sprint.start_date|operator_date }}</dd>
     </div>
     <div>
       <dt class="text-xs text-muted-foreground uppercase">Duration</dt>
@@ -51,7 +51,7 @@
     </div>
     <div>
       <dt class="text-xs text-muted-foreground uppercase">Created</dt>
-      <dd class="text-foreground mt-1">{{ sprint.created_at|date:"Y-m-d" }}</dd>
+      <dd class="text-foreground mt-1">{{ sprint.created_at|operator_date }}</dd>
     </div>
     <div>
       <dt class="text-xs text-muted-foreground uppercase">Min tier level</dt>
@@ -90,7 +90,7 @@
       <tbody class="divide-y divide-border">
         {% for ev in event_series_events %}
         <tr data-testid="sprint-event-series-row">
-          <td class="py-2 pr-4 text-muted-foreground whitespace-nowrap">{{ ev.start_datetime|date:"Y-m-d H:i" }}</td>
+          <td class="py-2 pr-4 text-muted-foreground whitespace-nowrap">{{ ev.start_datetime|operator_datetime }}</td>
           <td class="py-2 pr-4" data-label="Title">
             <a href="{% url 'studio_event_edit' event_id=ev.pk %}"
                class="text-accent hover:underline">{{ ev.title }}</a>
@@ -142,7 +142,7 @@
             <div class="text-xs text-muted-foreground" data-testid="sprint-pending-request-email">{{ row.member.email }}</div>
           </td>
           <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="sprint-pending-request-meta" data-label="Requests">
-            Requested {{ row.request_count }} time{{ row.request_count|pluralize }}, last at {{ row.last_requested_at|date:"Y-m-d H:i" }}
+            Requested {{ row.request_count }} time{{ row.request_count|pluralize }}, last at {{ row.last_requested_at|operator_datetime }}
           </td>
           <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Action">
             <form method="post"
@@ -236,7 +236,7 @@
              data-testid="sprint-feedback-questionnaire-link">{{ feedback_request.questionnaire.title }}</a>
           {% if feedback_request.distributed_at %}
           <p class="text-sm text-muted-foreground mt-1" data-testid="sprint-feedback-distributed-at">
-            Distributed {{ feedback_request.distributed_at|date:"Y-m-d H:i" }}
+            Distributed {{ feedback_request.distributed_at|operator_datetime }}
           </p>
           {% else %}
           <p class="text-sm text-muted-foreground mt-1" data-testid="sprint-feedback-not-distributed">
@@ -282,7 +282,7 @@
               </td>
               <td class="py-2 px-4 text-muted-foreground" data-label="Submitted">
                 {% if row.status_key == 'submitted' %}
-                  {{ row.submitted_at|date:"Y-m-d" }}
+                  {{ row.submitted_at|operator_date }}
                   &middot;
                   <a href="{% url 'studio_questionnaire_response_detail' questionnaire_id=feedback_request.questionnaire.pk response_id=row.response_id %}"
                      class="text-accent hover:underline" data-testid="sprint-feedback-response-link">Read response</a>
@@ -314,7 +314,7 @@
         {% elif ai_summary %}
           <div data-testid="ai-summary-result">
             <p class="text-xs text-muted-foreground mb-3" data-testid="ai-summary-provenance">
-              Generated {{ ai_summary.generated_at|date:"Y-m-d" }} from
+              Generated {{ ai_summary.generated_at|operator_date }} from
               {{ ai_summary.response_count }} response{{ ai_summary.response_count|pluralize }}
               {% if ai_summary.generated_by %}by {{ ai_summary.generated_by.email }}{% endif %},
               model {{ ai_summary.model_name }}.
@@ -434,7 +434,7 @@
           <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="ml-3 text-xs text-muted-foreground hover:text-accent hover:underline">View plan</a>
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Status">{{ plan.get_status_display }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Created">{{ plan.created_at|date:"Y-m-d" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Created">{{ plan.created_at|operator_date }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -474,7 +474,7 @@
             <div class="text-xs text-muted-foreground mt-0.5">{{ enrollment.user.get_full_name }}</div>
             {% endif %}
           </td>
-          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Enrolled">{{ enrollment.enrolled_at|date:"Y-m-d" }}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Enrolled">{{ enrollment.enrolled_at|operator_date }}</td>
           <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Enrolled by">
             {% if enrollment.enrolled_by %}{{ enrollment.enrolled_by.email }}{% else %}Self-joined{% endif %}
           </td>

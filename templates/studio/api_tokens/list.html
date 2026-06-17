@@ -48,10 +48,10 @@
           {{ token.key_prefix }}
         </td>
         <td class="px-4 py-2.5 align-top text-xs text-muted-foreground" data-label="Created">
-          {{ token.created_at|date:"M d, Y" }}
+          {{ token.created_at|operator_date }}
         </td>
         <td class="px-4 py-2.5 align-top text-xs text-muted-foreground" data-label="Last used">
-          {% if token.last_used_at %}{{ token.last_used_at|date:"M d, Y H:i" }}{% else %}Never{% endif %}
+          {% if token.last_used_at %}{{ token.last_used_at|operator_datetime }}{% else %}Never{% endif %}
         </td>
         <td class="px-4 py-2.5 align-top {% studio_list_class 'action_cell' %}" data-label="Actions">
           <form method="post"

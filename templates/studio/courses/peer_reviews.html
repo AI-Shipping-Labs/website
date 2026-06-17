@@ -167,8 +167,8 @@ studio/base.html (issue #347), so we deliberately do not render them here.
             <span data-testid="cohort-self-paced-tag">No fixed schedule</span>
             {% else %}
             <span data-testid="cohort-window">
-              {{ group.start_date|date:"M d, Y" }}
-              {% if group.end_date %}- {{ group.end_date|date:"M d, Y" }}{% endif %}
+              {{ group.start_date|operator_date }}
+              {% if group.end_date %}- {{ group.end_date|operator_date }}{% endif %}
             </span>
             {% if group.is_active %}
             <span data-testid="cohort-active-state"
@@ -208,7 +208,7 @@ studio/base.html (issue #347), so we deliberately do not render them here.
               Reviews: {{ item.completed_reviews }}/{{ item.total_reviews }}
             </span>
           </div>
-          <span class="text-xs text-muted-foreground">{{ item.submission.submitted_at|date:"M d, Y" }}</span>
+          <span class="text-xs text-muted-foreground">{{ item.submission.submitted_at|operator_date }}</span>
         </summary>
         <div class="px-4 sm:px-6 pb-4 sm:pb-5 border-t border-border bg-background/40">
           <div class="mt-3 mb-2">

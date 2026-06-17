@@ -193,7 +193,7 @@
                      class="hover:underline"
                      onclick="event.stopPropagation();">{{ item.display_name|default:"—" }}</a>
                 </td>
-                <td class="px-4 py-3 text-muted-foreground" data-label="Started">{{ item.task.started|date:"Y-m-d H:i:s" }}</td>
+                <td class="px-4 py-3 text-muted-foreground" data-label="Started">{{ item.task.started|operator_datetime_seconds }}</td>
                 <td class="px-4 py-3 text-muted-foreground" data-label="Duration">
                   {% if item.duration %}
                     {{ item.duration.total_seconds|floatformat:1 }}s
@@ -280,7 +280,7 @@
                 <div class="min-w-0 flex-1">
                   <div class="flex items-baseline flex-wrap gap-x-2">
                     <span class="font-medium text-foreground">{{ item.display_name|default:"—" }}</span>
-                    <span class="text-xs text-muted-foreground">{{ item.task.started|date:"Y-m-d H:i:s" }}</span>
+                    <span class="text-xs text-muted-foreground">{{ item.task.started|operator_datetime_seconds }}</span>
                   </div>
                   <p class="text-xs text-red-500 dark:text-red-400 font-mono mt-1 truncate">
                     {{ item.error_summary }}

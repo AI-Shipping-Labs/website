@@ -60,7 +60,7 @@
       <tbody class="divide-y divide-border">
         {% for v in visits_page.object_list %}
         <tr class="hover:bg-secondary/50 transition-colors">
-          <td class="px-4 py-3 text-sm text-foreground whitespace-nowrap">{{ v.ts|date:"Y-m-d H:i" }}</td>
+          <td class="px-4 py-3 text-sm text-foreground whitespace-nowrap">{{ v.ts|operator_datetime }}</td>
           <td class="px-4 py-3 text-xs font-mono text-muted-foreground">{{ v.anonymous_id|truncatechars:12 }}</td>
           <td class="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">
             {% if v.user %}
@@ -118,7 +118,7 @@
         {% for c in conversion_rows %}
         <tr class="hover:bg-secondary/50 transition-colors">
           <td class="px-4 py-3 text-sm text-foreground break-all">{{ c.email }}</td>
-          <td class="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{% if c.signup_ts %}{{ c.signup_ts|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{% if c.signup_ts %}{{ c.signup_ts|operator_datetime }}{% else %}—{% endif %}</td>
           <td class="px-4 py-3 text-sm text-muted-foreground">{{ c.tier.name|default:"—" }}</td>
           {% if has_conversion_data %}
           <td class="px-4 py-3 text-sm">

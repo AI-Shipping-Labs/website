@@ -126,7 +126,11 @@
             </a>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span data-testid="series-event-date">
-                {% timezone event.timezone %}{{ event.start_datetime|date:"l, M d, Y · H:i" }}{% endtimezone %} {{ event.timezone }}
+                {% if user.is_authenticated %}
+                  {% user_event_datetime event.start_datetime user %}
+                {% else %}
+                  {{ event|event_source_full_datetime }}
+                {% endif %}
               </span>
               {# Issue #668: per-occurrence social-proof chip. View annotates #}
               {# _attendee_count so this renders in a single SQL pass. #}

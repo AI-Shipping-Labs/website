@@ -372,6 +372,29 @@ class PublicEventSeriesViewTest(TestCase):
         # The raw UTC clock time labeled Berlin must NOT appear.
         self.assertNotContains(response, '16:00 Europe/Berlin')
 
+    def test_signed_in_event_time_uses_viewer_preferred_timezone(self):
+        user = User.objects.create_user(
+            email='ny-series@example.com',
+            password='pass',
+            preferred_timezone='America/New_York',
+        )
+        self.client.force_login(user)
+        Event.objects.create(
+            title='Viewer Local Session', slug='viewer-local-session',
+            start_datetime=datetime(2026, 6, 15, 16, 0, tzinfo=UTC),
+            timezone='Europe/Berlin',
+            status='upcoming',
+            event_series=self.series, series_position=3, origin='studio',
+        )
+
+        response = self.client.get(f'/events/groups/{self.series.slug}')
+
+        self.assertContains(
+            response,
+            'June 15, 2026, 12:00 America/New_York',
+        )
+        self.assertNotContains(response, 'Monday, Jun 15, 2026 · 18:00 Europe/Berlin')
+
     def test_event_detail_url_still_resolves_after_groups_route(self):
         """The ``/events/groups/<slug>`` route must not swallow event ids.
 

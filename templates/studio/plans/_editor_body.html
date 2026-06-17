@@ -33,7 +33,7 @@
       {% endif %}
       <p class="text-xs text-muted-foreground" data-testid="plan-share-indicator">
         {% if plan.shared_at %}
-          Shared <time datetime="{{ plan.shared_at.isoformat }}">{{ plan.shared_at|date:"Y-m-d H:i" }}</time>
+          Shared <time datetime="{{ plan.shared_at.isoformat }}">{{ plan.shared_at|operator_datetime }}</time>
         {% else %}
           Not yet shared
         {% endif %}
@@ -397,8 +397,8 @@
   {# Activity line below the grid. #}
   <p class="text-xs text-muted-foreground mt-6"
      data-testid="plan-editor-activity">
-    Created <time datetime="{{ plan.created_at.isoformat }}">{{ plan.created_at|date:"Y-m-d" }}</time>
-    &middot; Last updated <time datetime="{{ plan.updated_at.isoformat }}">{{ plan.updated_at|date:"Y-m-d" }}</time>
+    Created <time datetime="{{ plan.created_at.isoformat }}">{{ plan.created_at|operator_date }}</time>
+    &middot; Last updated <time datetime="{{ plan.updated_at.isoformat }}">{{ plan.updated_at|operator_date }}</time>
     &middot; <span data-testid="plan-editor-counts">{{ checkpoints_count }} checkpoint{{ checkpoints_count|pluralize }} across {{ weeks_count }} week{{ weeks_count|pluralize }}</span>.
   </p>
 </div>

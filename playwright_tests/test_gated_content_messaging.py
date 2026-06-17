@@ -20,7 +20,7 @@ from django.db import connection  # noqa: E402
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
 
-SCREENSHOT_DIR = Path("/tmp/aisl-issue-402")
+SCREENSHOT_DIR = Path(".tmp/screenshots/gated-content-messaging")
 
 
 def _reset_content():
@@ -103,6 +103,64 @@ def _create_workshop_fixture():
     connection.close()
 
 
+def _create_landing_gated_workshop_fixture():
+    import datetime
+
+    from django.utils import timezone
+
+    from content.models import (
+        Instructor,
+        Workshop,
+        WorkshopInstructor,
+        WorkshopPage,
+    )
+    from events.models import Event
+
+    event = Event.objects.create(
+        slug="landing-gated-workshop-event",
+        title="Landing Gated Workshop",
+        start_datetime=timezone.now(),
+        status="completed",
+        kind="workshop",
+        recording_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        materials=[{"title": "Slides", "url": "https://example.com/slides.pdf"}],
+        published=True,
+    )
+    workshop = Workshop.objects.create(
+        slug="landing-gated-workshop",
+        title="Landing Gated Workshop",
+        status="published",
+        date=datetime.date(2026, 4, 21),
+        landing_required_level=10,
+        pages_required_level=10,
+        recording_required_level=20,
+        description="Hidden workshop overview for landing gate tests.",
+        code_repo_url="https://github.com/example/private-workshop",
+        tags=["guardrails"],
+        event=event,
+    )
+    instructor, _ = Instructor.objects.get_or_create(
+        instructor_id="landing-gate-instructor",
+        defaults={
+            "name": "Landing Gate Instructor",
+            "status": "published",
+        },
+    )
+    WorkshopInstructor.objects.create(
+        workshop=workshop,
+        instructor=instructor,
+        position=0,
+    )
+    WorkshopPage.objects.create(
+        workshop=workshop,
+        slug="intro",
+        title="Landing Gate Tutorial",
+        sort_order=1,
+        body="# Tutorial body\n\nOnly Basic members can read this page.",
+    )
+    connection.close()
+
+
 def _capture_responsive(page, basename):
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
     page.set_viewport_size({"width": 1280, "height": 900})
@@ -114,6 +172,48 @@ def _capture_responsive(page, basename):
 
 @pytest.mark.django_db(transaction=True)
 class TestGatedContentMessaging:
+    def test_workshop_landing_gate_uses_plain_membership_copy(
+        self, browser, django_server,
+    ):
+        _reset_content()
+        _create_landing_gated_workshop_fixture()
+
+        page = browser.new_page()
+        page.goto(
+            f"{django_server}/workshops/2026-04-21-landing-gated-workshop",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+
+        assert "Landing Gated Workshop" in body
+        assert "Landing Gate Instructor" in body
+        assert "guardrails" in body
+        assert 'data-testid="workshop-landing-paywall"' in body
+        assert "Upgrade to Basic to view this workshop" in body
+        assert (
+            "Membership unlocks the workshop description, tutorial pages, "
+            "recording details, and materials when available."
+        ) in body
+        assert "Basic or above required" in body
+        assert "public metadata" not in body.lower()
+        assert 'data-testid="workshop-description"' not in body
+        assert 'data-testid="workshop-materials"' not in body
+        assert 'data-testid="workshop-pages-list"' not in body
+        assert 'data-testid="workshop-video-link"' not in body
+        assert 'data-testid="workshop-code-repo-link"' not in body
+
+        _capture_responsive(page, "workshop_landing_gate")
+        for viewport in (
+            {"width": 1280, "height": 900},
+            {"width": 390, "height": 844},
+        ):
+            page.set_viewport_size(viewport)
+            assert page.evaluate(
+                "() => document.documentElement.scrollWidth <= "
+                "document.documentElement.clientWidth"
+            )
+        page.close()
+
     def test_course_gate_and_sufficient_tier(self, browser, django_server):
         _reset_content()
         _create_course_fixture()

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
+{% load member_badges %}
 {% load sprint_extras %}
 {% load static %}
 
@@ -19,14 +20,12 @@
         <h1 class="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl" data-testid="sprint-detail-name">{{ sprint.name }}</h1>
         <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span data-testid="sprint-date-range">{% sprint_date_range sprint %}</span>
-          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium uppercase tracking-wide {{ sprint.sprint_badge_current.css_class }}" data-testid="sprint-status-badge">
-            {{ sprint.sprint_badge_current.label }}
-          </span>
+          {% member_status_badge sprint.sprint_badge_current.label size="sm" extra_class=sprint.sprint_badge_current.css_class uppercase=True testid="sprint-status-badge" %}
         </div>
         <p class="mt-3">
-          <span class="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-medium text-accent" data-testid="sprint-tier-badge">
-            {{ required_tier_name }} tier required
-          </span>
+          {% with tier_label=required_tier_name|add:" tier required" %}
+          {% member_label_badge tier_label tone="accent_outline" size="sm" testid="sprint-tier-badge" %}
+          {% endwith %}
         </p>
       </header>
 

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
+{% load member_badges %}
 
 {% block title %}Account | {{ site_name }}{% endblock %}
 
@@ -71,12 +72,7 @@
         </h2>
         {% if user.is_staff or user.is_superuser %}
         <div class="mb-4">
-          <span class="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent"
-                id="account-admin-role-badge"
-                data-testid="account-admin-role-badge">
-            <i data-lucide="shield" class="h-3.5 w-3.5"></i>
-            Admin
-          </span>
+          {% member_label_badge "Admin" tone="accent_outline" size="sm" icon="shield" element_id="account-admin-role-badge" testid="account-admin-role-badge" %}
         </div>
         {% endif %}
         {% if user.first_name or user.last_name %}

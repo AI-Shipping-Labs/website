@@ -1,4 +1,5 @@
 {% load access_tags %}
+{% load member_badges %}
 {% comment %}
 Issue #866: single upcoming event card, extracted from events_list.html so
 the Upcoming loop can render either an event row or a grouped series row.
@@ -33,23 +34,16 @@ the inline card it replaced (#523 / #673 / #857 / #572).
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 mb-2 flex-wrap">
           {% if event.required_level > 0 %}
-          <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent">
-            <i data-lucide="lock" class="h-3 w-3"></i>
-            {{ event.required_level|required_tier_label }}
-          </span>
+          {% member_tier_badge event.required_level tone="accent_strong" icon="lock" %}
           {% endif %}
           {% if event.id in registered_event_ids %}
-          <span class="inline-flex items-center gap-1 rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">
-            <i data-lucide="check" class="h-3 w-3"></i>
-            Registered
-          </span>
+          {% member_status_badge "Registered" status="registered" icon="check" %}
           {% endif %}
           {% if event.is_external %}
           {# Issue #572 — pill marking a third-party-hosted event so the user knows registration happens off-platform. #}
-          <span class="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="event-card-external-badge">
-            <i data-lucide="external-link" class="h-3 w-3"></i>
-            Hosted on {{ event.external_host }}
-          </span>
+          {% with external_host_label="Hosted on "|add:event.external_host %}
+          {% member_label_badge external_host_label tone="accent_outline_strong" icon="external-link" testid="event-card-external-badge" %}
+          {% endwith %}
           {% endif %}
         </div>
         <h3 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">

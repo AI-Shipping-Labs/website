@@ -1,4 +1,5 @@
 {% load access_tags %}
+{% load member_badges %}
 
 <header class="mb-12">
   <div class="mb-4 flex flex-wrap items-center gap-2">
@@ -9,33 +10,21 @@
       muted style (staff-only view).
     {% endcomment %}
     {% if event.status == 'cancelled' %}
-    <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground" data-testid="event-status-pill">
-      Cancelled
-    </span>
+    {% member_status_badge "Cancelled" status="cancelled" tone="muted" size="sm" testid="event-status-pill" %}
     {% elif event.is_upcoming %}
-    <span class="inline-flex items-center gap-1.5 rounded-full bg-blue-500/20 px-3 py-1 text-xs font-medium text-blue-400" data-testid="event-status-pill">
-      Upcoming
-    </span>
+    {% member_status_badge "Upcoming" status="upcoming" size="sm" testid="event-status-pill" %}
     {% elif event.is_past %}
-    <span class="inline-flex items-center gap-1.5 rounded-full bg-green-500/20 px-3 py-1 text-xs font-medium text-green-400" data-testid="event-status-pill">
-      Past
-    </span>
+    {% member_status_badge "Past" status="past" size="sm" testid="event-status-pill" %}
     {% else %}
-    <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground" data-testid="event-status-pill">
-      {{ event.get_status_display }}
-    </span>
+    {% member_status_badge event.get_status_display size="sm" testid="event-status-pill" %}
     {% endif %}
     {% if event.required_level > 0 %}
-    <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">
-      <i data-lucide="lock" class="h-3 w-3"></i>
-      {{ event.required_level|required_tier_label }}
-    </span>
+    {% member_tier_badge event.required_level tone="accent_strong" size="sm" icon="lock" %}
     {% endif %}
     {% if event.is_external %}
-    <span class="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs font-medium text-accent" data-testid="event-detail-external-badge">
-      <i data-lucide="external-link" class="h-3 w-3"></i>
-      Hosted on {{ event.external_host }}
-    </span>
+    {% with external_host_label="Hosted on "|add:event.external_host %}
+    {% member_label_badge external_host_label tone="accent_outline_strong" size="sm" icon="external-link" testid="event-detail-external-badge" %}
+    {% endwith %}
     {% endif %}
   </div>
 

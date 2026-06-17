@@ -57,15 +57,16 @@ class EventDetailHeaderTest(TestCase):
         response = self.client.get(event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="event-status-pill"')
-        self.assertContains(response, '>\n      Past\n    <')
-        self.assertNotContains(response, '>\n      Upcoming\n    <')
+        self.assertContains(response, 'Past')
+        self.assertNotContains(response, 'Upcoming')
 
     def test_legacy_completed_with_future_end_renders_upcoming_pill(self):
         event = _legacy_completed_future()
         response = self.client.get(event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '>\n      Upcoming\n    <')
-        self.assertNotContains(response, '>\n      Past\n    <')
+        self.assertContains(response, 'data-testid="event-status-pill"')
+        self.assertContains(response, 'Upcoming')
+        self.assertNotContains(response, 'Past')
 
 
 class EventDetailRegistrationCardTest(TestCase):

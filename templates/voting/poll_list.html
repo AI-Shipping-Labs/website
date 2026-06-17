@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load member_badges %}
 
 {% block title %}Vote | AI Shipping Labs{% endblock %}
 {% block meta_description %}Vote on upcoming topics and mini-courses for the AI Shipping Labs community.{% endblock %}
@@ -26,20 +27,13 @@
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div class="flex-1">
                 <div class="flex items-center gap-2 mb-2 flex-wrap">
-                  <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium {% if item.poll.poll_type == 'topic' %}bg-blue-500/20 text-blue-400{% else %}bg-purple-500/20 text-purple-400{% endif %}">
-                    {% if item.poll.poll_type == 'topic' %}
-                    <i data-lucide="message-circle" class="h-3 w-3"></i>
-                    Topic Poll
-                    {% else %}
-                    <i data-lucide="graduation-cap" class="h-3 w-3"></i>
-                    Course Poll
-                    {% endif %}
-                  </span>
+                  {% if item.poll.poll_type == 'topic' %}
+                  {% member_label_badge "Topic Poll" tone="info" icon="message-circle" %}
+                  {% else %}
+                  {% member_label_badge "Course Poll" tone="purple" icon="graduation-cap" %}
+                  {% endif %}
                   {% if item.poll.allow_proposals %}
-                  <span class="inline-flex items-center gap-1 rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">
-                    <i data-lucide="plus" class="h-3 w-3"></i>
-                    Proposals Open
-                  </span>
+                  {% member_status_badge "Proposals Open" status="proposals_open" icon="plus" %}
                   {% endif %}
                 </div>
                 <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">

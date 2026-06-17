@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load member_badges %}
 {% load member_empty_state %}
 {% load tag_filters %}
 {% load teaser_tags %}
@@ -45,7 +46,7 @@
                 <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
                   {% if article.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ article.title }}
                   {% if article.required_level > 0 %}
-                  <span class="ml-2 inline-block rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground align-middle">{{ article.required_level|required_tier_label }}</span>
+                  {% member_tier_badge article.required_level tone="neutral" size="xs" extra_class="ml-2 inline-flex align-middle" %}
                   {% endif %}
                 </h2>
                 <p class="mt-2 text-sm sm:text-base text-muted-foreground line-clamp-2">{{ article.description|strip_markdown }}</p>

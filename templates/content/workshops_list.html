@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load member_badges %}
 {% load member_empty_state %}
 {% load tag_filters %}
 
@@ -34,20 +35,11 @@
             {% endif %}
             <div class="min-w-0 p-4 sm:p-5">
               <div class="mb-3 flex flex-wrap items-center gap-2">
-                <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
-                  <i data-lucide="graduation-cap" class="h-3 w-3"></i>
-                  Workshop
-                </span>
+                {% member_label_badge "Workshop" tone="accent" icon="graduation-cap" %}
                 {% if workshop.pages_required_level >= 10 %}
-                <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="workshop-tier-badge">
-                  <i data-lucide="lock" class="h-3 w-3"></i>
-                  {{ workshop.pages_required_level|required_tier_label }}
-                </span>
+                {% member_tier_badge workshop.pages_required_level tone="accent" icon="lock" testid="workshop-tier-badge" %}
                 {% else %}
-                <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="workshop-free-badge">
-                  <i data-lucide="badge-check" class="h-3 w-3"></i>
-                  Free
-                </span>
+                {% member_tier_badge workshop.pages_required_level tone="accent" icon="badge-check" testid="workshop-free-badge" %}
                 {% endif %}
               </div>
               <h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">

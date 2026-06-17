@@ -1,0 +1,4 @@
+<span{% if element_id %} id="{{ element_id }}"{% endif %} class="{{ classes }}"{% if testid %} data-testid="{{ testid }}"{% endif %} data-component="member-badge">{% if icon %}
+  <i data-lucide="{{ icon }}" class="{{ icon_classes }}"></i>{% endif %}
+  {{ label }}
+</span>

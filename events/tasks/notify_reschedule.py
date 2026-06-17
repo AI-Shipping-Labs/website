@@ -37,6 +37,10 @@ from accounts.services.timezones import (
 from events.models import Event, EventRegistration, SeriesRegistration
 from events.services.calendar_invite import generate_ics
 from events.services.cancel_token import generate_cancel_token
+from events.services.host_registration import (
+    build_host_management_links,
+    is_host_registration,
+)
 from events.services.registration_email import _send_raw_email
 from integrations.config import site_base_url
 
@@ -173,6 +177,8 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
     cancel_url = (
         f'{site_url}/events/{event.slug}/cancel-registration?token={cancel_token}'
     )
+    is_host = is_host_registration(registration)
+    host_links = build_host_management_links(event) if is_host else {}
 
     # Lazy import to avoid pulling the full EmailService at module load.
     from email_app.services.email_service import EmailService
@@ -196,6 +202,8 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
             ),
             'join_url': join_url,
             'cancel_url': cancel_url,
+            'is_host_registration': is_host,
+            **host_links,
         },
     )
 

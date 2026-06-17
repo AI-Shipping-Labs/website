@@ -2333,7 +2333,7 @@
                     "writeOnly": true
                   },
                   "host_email": {
-                    "description": "Optional. Email that receives the host calendar invite with host-only management links. Blank falls back to the operator EVENTS_HOST_INVITE_EMAIL default; when both are unset no invite is sent.",
+                    "description": "Optional. Email address of a platform user who should be auto-registered as the event host attendee. Blank or non-resolvable emails do not create a host registration.",
                     "format": "email",
                     "type": "string"
                   },
@@ -2588,7 +2588,7 @@
                     "writeOnly": true
                   },
                   "host_email": {
-                    "description": "Optional. Email that receives the host calendar invite with host-only management links. Adding it to a not-yet-invited published event sends the one-time invite. Empty string clears the field.",
+                    "description": "Optional. Email address of a platform user who should be auto-registered as the event host attendee. Adding a resolvable host to a published upcoming event sends the normal registration confirmation. Empty string clears the field.",
                     "format": "email",
                     "type": "string"
                   },

@@ -42,7 +42,6 @@ from events.models.event import (
     EXTERNAL_HOST_CHOICES,
 )
 from events.services.display_time import resolve_event_creation_timezone
-from events.services.host_invite import maybe_send_initial_host_invite
 from events.services.host_registration import maybe_register_host_as_attendee
 from integrations.services.banner_generator import (
     is_enabled as banner_generator_is_enabled,
@@ -555,11 +554,10 @@ def _maybe_enqueue_banner(event, generate_banner):
                         "type": "string",
                         "format": "email",
                         "description": (
-                            "Optional. Email that receives the host "
-                            "calendar invite with host-only management "
-                            "links. Blank falls back to the operator "
-                            "EVENTS_HOST_INVITE_EMAIL default; when both "
-                            "are unset no invite is sent."
+                            "Optional. Email address of a platform user who "
+                            "should be auto-registered as the event host "
+                            "attendee. Blank or non-resolvable emails do not "
+                            "create a host registration."
                         ),
                     },
                     "host_ids": {
@@ -721,15 +719,13 @@ def events_collection(request):
         _set_event_hosts(event, host_ids)
 
     zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
-    # Best-effort host calendar invite (issue #993). Self-gating: skips
-    # drafts, EmailLog-idempotent, resolves recipient via host_email /
-    # EVENTS_HOST_INVITE_EMAIL, and swallows exceptions. Called after the
-    # save and the create_zoom step so the invite carries zoom_join_url.
-    maybe_send_initial_host_invite(event)
+    # Best-effort host auto-registration. Called after the save and the
+    # create_zoom step so the host's normal registration email can carry
+    # zoom_join_url when available.
     maybe_register_host_as_attendee(event)
-    # Banner enqueue runs LAST in the compose-time chain (zoom -> host invite ->
-    # banner) so any populated state is current. Soft-fails independently with a
-    # ``banner_error`` key; never rolls back the event (issue #995).
+    # Banner enqueue runs LAST in the compose-time chain (zoom -> host
+    # registration -> banner) so any populated state is current. Soft-fails
+    # independently with a ``banner_error`` key; never rolls back the event.
     banner_task_id, banner_error = _maybe_enqueue_banner(event, generate_banner)
     body = serialize_event(event)
     if zoom_error is not None:
@@ -780,11 +776,12 @@ def events_collection(request):
                         "type": "string",
                         "format": "email",
                         "description": (
-                            "Optional. Email that receives the host "
-                            "calendar invite with host-only management "
-                            "links. Adding it to a not-yet-invited "
-                            "published event sends the one-time invite. "
-                            "Empty string clears the field."
+                            "Optional. Email address of a platform user who "
+                            "should be auto-registered as the event host "
+                            "attendee. Adding a resolvable host to a "
+                            "published upcoming event sends the normal "
+                            "registration confirmation. Empty string clears "
+                            "the field."
                         ),
                     },
                     "host_ids": {
@@ -928,14 +925,12 @@ def event_detail(request, slug):
         _set_event_hosts(event, host_ids)
 
     zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
-    # Best-effort host calendar invite (issue #993). Self-gating and
-    # EmailLog-idempotent, so a plain re-save never re-sends. A PATCH that
-    # flips a draft to a published status, or adds a host_email to a
-    # not-yet-invited event, triggers the one-time invite.
-    maybe_send_initial_host_invite(event)
+    # Best-effort host auto-registration. A PATCH that flips a draft to a
+    # published status, or adds a platform-user host_email to a published
+    # event, creates the host registration and sends the normal confirmation.
     maybe_register_host_as_attendee(event)
-    # Banner enqueue runs after the save + zoom + host-invite steps so a forced
-    # re-render reflects any populated state (issue #995). Explicit-only here.
+    # Banner enqueue runs after the save + zoom + host-registration steps so a
+    # forced re-render reflects any populated state. Explicit-only here.
     banner_task_id, banner_error = _maybe_enqueue_banner(event, generate_banner)
     body = serialize_event(event)
     if zoom_error is not None:

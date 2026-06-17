@@ -52,7 +52,7 @@ Required on create: `title`, `start_datetime`.
 | `status` | string | `draft` / `upcoming` / `completed` / `cancelled`. |
 | `published` | boolean | Publish flag. Setting it true stamps `published_at`. |
 | `external_host` | string | Partner host pill: `''` (community), `Maven`, `Luma`, `DataTalksClub`. |
-| `host_email` | string | Optional. Email that receives the host calendar invite with host-only management links. Blank falls back to the operator default mailbox (`EVENTS_HOST_INVITE_EMAIL`); when both are unset no invite is sent. |
+| `host_email` | string | Optional. Email address of a platform user who should be auto-registered as the event host attendee. Blank or non-resolvable emails do not create a host registration. |
 | `host_ids` | array of integers | Optional on create/update. Ordered event-host ids shown on the public event detail page. Empty array clears all event hosts. Host contact emails are display-only and do not receive calendar invites. |
 | `tags` | array of strings | Free-form, e.g. `["sprint:may-2026"]`. |
 | `create_zoom` | boolean | Write-only. When `true` and `platform` is `zoom`, provisions a real Zoom meeting and populates `zoom_join_url` / `zoom_meeting_id`. Idempotent (no-op if a meeting already exists). Not returned in responses. |
@@ -61,9 +61,9 @@ Required on create: `title`, `start_datetime`.
 
 `draft` and `cancelled` are hidden from public visitors; `upcoming` and `completed` are public. To make an event visible you generally set `status: upcoming` and `published: true`.
 
-### Host calendar invite
+### Host auto-registration
 
-Creating (or publishing) a non-draft event via the API automatically sends the host a Luma-style calendar `.ics` invite with host-only management links. The invite goes to `host_email` if set, otherwise to the operator default mailbox `EVENTS_HOST_INVITE_EMAIL` (a Studio setting). `host_ids` and `Host.email` are only for public event-host display/contact info and are never used for the calendar invite recipient. When both `host_email` and the default mailbox are unset, no invite is sent and the save still succeeds. Drafts never send. The invite is sent once per event (EmailLog-guarded), so re-saving or a no-op PATCH never re-sends; a PATCH that flips a draft to `upcoming`, or adds a `host_email` to a not-yet-invited published event, triggers the one-time invite. Invite times render in the host's timezone.
+Creating (or publishing) a non-draft upcoming event via the API auto-registers the platform user resolved from `host_email` as a normal event attendee. That host receives the normal `event_registration` email, `.ics` attachment, reminders, and reschedule notices through the same registration paths as attendees; the registration and reschedule emails include host-only management links for the resolved host registration. `host_ids` and `Host.email` are only for public event-host display/contact info and are never used for email delivery. Blank or non-resolvable `host_email` values do not create a registration or send email; the save still succeeds.
 
 Note: an older example in the code uses `status: scheduled`, but that value is NOT in the model's status choices — use `upcoming`. Verify the live enum from the spec if unsure (`GET /api/openapi.json`, path `/api/events`).
 

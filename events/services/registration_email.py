@@ -21,6 +21,10 @@ from email_app.services.email_service import EmailService
 from events.services.calendar_invite import generate_ics
 from events.services.calendar_links import build_calendar_links
 from events.services.cancel_token import generate_cancel_token
+from events.services.host_registration import (
+    build_host_management_links,
+    is_host_registration,
+)
 from integrations.config import get_config, site_base_url
 
 logger = logging.getLogger(__name__)
@@ -46,6 +50,8 @@ def send_registration_confirmation(registration):
     )
 
     calendar_links = build_calendar_links(event)
+    is_host = is_host_registration(registration)
+    host_links = build_host_management_links(event) if is_host else {}
 
     # Render the email template
     email_service = EmailService()
@@ -67,6 +73,8 @@ def send_registration_confirmation(registration):
             'google_calendar_url': calendar_links['google'],
             'outlook_calendar_url': calendar_links['outlook'],
             'office365_calendar_url': calendar_links['office365'],
+            'is_host_registration': is_host,
+            **host_links,
         },
     )
 

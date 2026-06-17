@@ -26,10 +26,6 @@ from content.access import VISIBILITY_CHOICES
 from events.models import Event, EventFeedback, EventHost, EventRegistration, Host
 from events.models.event import EXTERNAL_HOST_CHOICES
 from events.services.display_time import resolve_event_creation_timezone
-from events.services.host_invite import (
-    maybe_send_initial_host_invite,
-    send_host_reschedule_invite,
-)
 from events.services.host_registration import maybe_register_host_as_attendee
 from events.tasks.notify_reschedule import enqueue_reschedule_notice
 from events.tasks.send_post_event_followup import enqueue_post_event_followup
@@ -439,11 +435,6 @@ def _maybe_notify_reschedule(request, event, old_start):
     event.ics_sequence = (event.ics_sequence or 0) + 1
     event.save(update_fields=['ics_sequence'])
 
-    # Issue #861: re-issue the host's calendar invite with the bumped
-    # SEQUENCE so their entry moves to the new time (UID unchanged →
-    # UPDATE, not duplicate). Best-effort; never breaks the save.
-    send_host_reschedule_invite(event)
-
     count = EventRegistration.objects.filter(event=event).count()
     if count > 0:
         enqueue_reschedule_notice(event.pk, old_start.isoformat())
@@ -654,10 +645,6 @@ def event_create(request):
             # (fire-and-forget; no-ops when banner-generator is disabled or
             # a cover image is supplied).
             enqueue_if_missing('event', event.pk)
-            # Issue #861: send the host their calendar invite when the event
-            # is created in a published (non-draft) state. Best-effort and
-            # idempotent — never breaks the save.
-            maybe_send_initial_host_invite(event)
             maybe_register_host_as_attendee(event)
             return redirect('studio_event_edit', event_id=event.pk)
 
@@ -752,9 +739,8 @@ def event_edit(request, event_id):
                 'post_event_summary', '',
             )
 
-            # Issue #861: host mailbox for the host calendar invite is
-            # operational metadata (not synced content), so it is editable
-            # even on synced rows.
+            # Platform host user email is operational metadata (not synced
+            # content), so it is editable even on synced rows.
             event.host_email = request.POST.get('host_email', '').strip()
 
             event.save()
@@ -770,10 +756,6 @@ def event_edit(request, event_id):
             # Issue #869: a status flip to cancelled removes the occurrence
             # from series subscribers' calendars via a METHOD:CANCEL .ics.
             _maybe_notify_series_cancellation(event, old_status)
-            # Issue #861: a synced event flipping to a published state still
-            # gets a one-time host invite (to the default mailbox or any
-            # host_email). EmailLog-guarded; best-effort.
-            maybe_send_initial_host_invite(event)
             maybe_register_host_as_attendee(event)
         else:
             # Issue #670: snapshot the persisted start time BEFORE we
@@ -850,7 +832,7 @@ def event_edit(request, event_id):
                 'post_event_summary', '',
             )
 
-            # Issue #861: host mailbox for the host calendar invite.
+            # Platform user email for host attendee auto-registration.
             event.host_email = request.POST.get('host_email', '').strip()
 
             event.save()
@@ -871,12 +853,6 @@ def event_edit(request, event_id):
             # past-event edits stay silent.
             _maybe_notify_reschedule(request, event, old_start)
 
-            # Issue #861: send the host their initial calendar invite when
-            # the event is (now) published and they have not been invited
-            # yet — e.g. a draft being published, or a host_email added
-            # after the first publish. EmailLog-guarded so a plain re-save
-            # never re-sends. Best-effort; never breaks the save.
-            maybe_send_initial_host_invite(event)
             maybe_register_host_as_attendee(event)
 
             # Issue #869: a status flip to cancelled removes the occurrence

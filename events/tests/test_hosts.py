@@ -1,14 +1,13 @@
 """Tests for event hosts (#994)."""
 
 from datetime import timedelta
-from unittest.mock import patch
 
-from django.test import TestCase, override_settings, tag
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from email_app.models import EmailLog
-from events.models import Event, EventHost, Host
-from events.services.host_invite import maybe_send_initial_host_invite
+from events.models import Event, EventHost, EventRegistration, Host
+from events.services.host_registration import maybe_register_host_as_attendee
 
 
 @tag('core')
@@ -113,13 +112,12 @@ class EventHostsDetailTest(TestCase):
         self.assertNotContains(response, 'Hosted by')
 
 
-@override_settings(EVENTS_HOST_INVITE_EMAIL='alexey.s.grigoriev@gmail.com')
 @tag('core')
-class HostEmailInviteGuardTest(TestCase):
-    def test_host_email_is_display_only_not_calendar_invite_recipient(self):
+class HostEmailDeliveryGuardTest(TestCase):
+    def test_host_email_is_display_only_not_registration_recipient(self):
         event = Event.objects.create(
-            title='Invite Guard Event',
-            slug='invite-guard-event',
+            title='Host Delivery Guard Event',
+            slug='host-delivery-guard-event',
             start_datetime=timezone.now() + timedelta(days=3),
             end_datetime=timezone.now() + timedelta(days=3, hours=1),
             status='upcoming',
@@ -132,24 +130,16 @@ class HostEmailInviteGuardTest(TestCase):
         )
         EventHost.objects.create(event=event, host=host, position=0)
 
-        with patch(
-            'events.services.host_invite._send_raw_email',
-            return_value='ses-1',
-        ) as mock_send:
-            log = maybe_send_initial_host_invite(event)
+        with self.assertLogs(
+            'events.services.host_registration',
+            level='WARNING',
+        ) as logs:
+            result = maybe_register_host_as_attendee(event)
 
-        self.assertIsNotNone(log)
-        self.assertEqual(
-            mock_send.call_args.kwargs['to_email'],
-            'alexey.s.grigoriev@gmail.com',
-        )
-        self.assertNotEqual(
-            mock_send.call_args.kwargs['to_email'],
-            'valeriia@aishippinglabs.com',
-        )
+        self.assertIsNone(result)
+        self.assertFalse(EventRegistration.objects.filter(event=event).exists())
+        self.assertFalse(EmailLog.objects.filter(email_type='event_registration').exists())
         self.assertTrue(
-            EmailLog.objects.filter(
-                event=event,
-                recipient_email='alexey.s.grigoriev@gmail.com',
-            ).exists(),
+            any('host_email is blank' in line for line in logs.output),
+            logs.output,
         )

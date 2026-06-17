@@ -389,18 +389,15 @@ class Event(
             'in Studio and never touched by sync.'
         ),
     )
-    # Issue #861: explicit host mailbox for the host calendar-invite email.
-    # The Event model has no host/owner user FK and Instructor rows (speakers)
-    # have no email, so staff set this address in the Studio event form. When
-    # blank, the host invite falls back to the Studio-configurable default
-    # mailbox (``EVENTS_HOST_INVITE_EMAIL``). The host receives a Luma-style
-    # ``.ics`` invite with host-only management links — not the public join URL.
+    # Platform user email for the event host attendee. When it resolves to a
+    # user, the save path auto-registers that user so normal attendee
+    # confirmation, reminder, and reschedule emails apply.
     host_email = models.EmailField(
         blank=True, default='',
         help_text=(
-            'Email address that receives the host calendar invite (with '
-            'host-only management links). Leave blank to use the default '
-            'host mailbox configured in Studio settings.'
+            'Email address of a platform user who should be auto-registered '
+            'as the event host attendee. Leave blank to skip host '
+            'auto-registration.'
         ),
     )
     event_series = models.ForeignKey(

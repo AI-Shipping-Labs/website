@@ -67,7 +67,7 @@ def _clear_dashboard_data():
         Workshop,
         WorkshopPage,
     )
-    from events.models import Event, EventRegistration
+    from events.models import Event, EventRegistration, EventSeries
     from notifications.models import Notification
     from plans.models import Plan, Sprint, SprintEnrollment
     from voting.models import Poll, PollOption, PollVote
@@ -78,6 +78,7 @@ def _clear_dashboard_data():
     Poll.objects.all().delete()
     EventRegistration.objects.all().delete()
     Event.objects.all().delete()
+    EventSeries.objects.all().delete()
     Enrollment.objects.all().delete()
     UserCourseProgress.objects.all().delete()
     UserContentCompletion.objects.all().delete()
@@ -91,6 +92,7 @@ def _clear_dashboard_data():
     Sprint.objects.all().delete()
     Article.objects.all().delete()
     Event.objects.all().delete()
+    EventSeries.objects.all().delete()
     connection.close()
 
 
@@ -707,6 +709,69 @@ class TestScenario5MainMemberSeesUpcomingEvents:
         assert event1.get_absolute_url() in page.url
         event_body = page.content()
         assert "AI Workshop: Prompt Engineering" in event_body
+
+
+@pytest.mark.django_db(transaction=True)
+class TestScenario1028DashboardSeriesCollapse:
+    @pytest.mark.core
+    def test_registered_series_collapses_to_next_occurrence(
+        self, django_server, browser
+    ):
+        from events.models import Event, EventRegistration, EventSeries
+
+        _clear_dashboard_data()
+        user = _create_user("series-main@test.com", tier_slug="main")
+        now = timezone.now()
+        series = EventSeries.objects.create(
+            name="LLM Zoomcamp 2026 office hours",
+            slug="llm-zoomcamp-2026-office-hours",
+            start_time=datetime.time(18, 0),
+            timezone="UTC",
+        )
+        for i in range(3):
+            event = Event.objects.create(
+                title=f"LLM Zoomcamp Office Hours Session {i + 1}",
+                slug=f"llm-zoomcamp-office-hours-{i + 1}",
+                start_datetime=now + datetime.timedelta(days=i + 1),
+                status="upcoming",
+                origin="studio",
+                timezone="UTC",
+                event_series=series,
+                series_position=i + 1,
+            )
+            EventRegistration.objects.create(user=user, event=event)
+        standalone = Event.objects.create(
+            title="Standalone Implementation Clinic",
+            slug="standalone-implementation-clinic",
+            start_datetime=now + datetime.timedelta(days=4),
+            status="upcoming",
+            origin="studio",
+            timezone="UTC",
+        )
+        EventRegistration.objects.create(user=user, event=standalone)
+        connection.close()
+
+        context = _auth_context(browser, "series-main@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+        body = page.locator("body").inner_text()
+
+        assert "LLM Zoomcamp Office Hours Session 1" in body
+        assert "LLM Zoomcamp Office Hours Session 2" not in body
+        assert "LLM Zoomcamp Office Hours Session 3" not in body
+        assert "Standalone Implementation Clinic" in body
+        assert page.locator(
+            '[data-testid="dashboard-event-series-badge"]'
+        ).count() == 1
+        see_more = page.locator(
+            '[data-testid="dashboard-event-series-see-more"]'
+        )
+        assert see_more.count() == 1
+        assert see_more.first.get_attribute("href") == (
+            "/events/groups/llm-zoomcamp-2026-office-hours"
+        )
+
+        context.close()
 # -------------------------------------------------------------------
 # Scenario 6: Members see valid high-value quick actions
 # -------------------------------------------------------------------

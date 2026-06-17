@@ -12,7 +12,7 @@ Covers:
 """
 
 import re
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from urllib.parse import urlparse
 
 from django.contrib.auth import get_user_model
@@ -34,7 +34,7 @@ from content.models import (
     WorkshopPage,
 )
 from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
-from events.models import Event, EventRegistration
+from events.models import Event, EventRegistration, EventSeries
 from notifications.models import Notification
 from tests.fixtures import TierSetupMixin
 from voting.models import Poll
@@ -636,6 +636,118 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         self.assertIn('Event 2', content)
         self.assertNotIn('Event 3', content)
         self.assertNotIn('Event 4', content)
+
+    def test_collapses_registered_series_to_earliest_occurrence(self):
+        now = timezone.now()
+        series = EventSeries.objects.create(
+            name='LLM Zoomcamp 2026 office hours',
+            slug='llm-zoomcamp-2026-office-hours',
+            start_time=time(18, 0),
+        )
+        occurrences = []
+        for i in range(3):
+            event = Event.objects.create(
+                slug=f'llm-office-hours-{i + 1}',
+                title=f'LLM Office Hours Session {i + 1}',
+                start_datetime=now + timedelta(days=i + 1),
+                status='upcoming',
+                event_series=series,
+                series_position=i + 1,
+            )
+            EventRegistration.objects.create(user=self.user, event=event)
+            occurrences.append(event)
+
+        response = self.client.get('/')
+
+        rows = response.context['upcoming_events']
+        self.assertEqual([event.pk for event in rows], [occurrences[0].pk])
+        self.assertContains(response, 'LLM Office Hours Session 1')
+        self.assertNotContains(response, 'LLM Office Hours Session 2')
+        self.assertNotContains(response, 'LLM Office Hours Session 3')
+        self.assertContains(response, 'data-testid="dashboard-event-series-badge"')
+        self.assertContains(
+            response,
+            'data-testid="dashboard-event-series-see-more"',
+        )
+        self.assertContains(
+            response,
+            'href="/events/groups/llm-zoomcamp-2026-office-hours"',
+        )
+
+    def test_applies_limit_after_collapsing_series(self):
+        now = timezone.now()
+        series = EventSeries.objects.create(
+            name='Dashboard Series', slug='dashboard-series',
+            start_time=time(18, 0),
+        )
+        for i in range(3):
+            event = Event.objects.create(
+                slug=f'dashboard-series-{i + 1}',
+                title=f'Dashboard Series Session {i + 1}',
+                start_datetime=now + timedelta(days=i + 1),
+                status='upcoming',
+                event_series=series,
+                series_position=i + 1,
+            )
+            EventRegistration.objects.create(user=self.user, event=event)
+        standalone_1 = Event.objects.create(
+            slug='standalone-after-series-1',
+            title='Standalone After Series 1',
+            start_datetime=now + timedelta(days=4),
+            status='upcoming',
+        )
+        standalone_2 = Event.objects.create(
+            slug='standalone-after-series-2',
+            title='Standalone After Series 2',
+            start_datetime=now + timedelta(days=5),
+            status='upcoming',
+        )
+        standalone_3 = Event.objects.create(
+            slug='standalone-after-series-3',
+            title='Standalone After Series 3',
+            start_datetime=now + timedelta(days=6),
+            status='upcoming',
+        )
+        for event in [standalone_1, standalone_2, standalone_3]:
+            EventRegistration.objects.create(user=self.user, event=event)
+
+        response = self.client.get('/')
+        titles = [event.title for event in response.context['upcoming_events']]
+
+        self.assertEqual(
+            titles,
+            [
+                'Dashboard Series Session 1',
+                'Standalone After Series 1',
+                'Standalone After Series 2',
+            ],
+        )
+        self.assertNotContains(response, 'Dashboard Series Session 2')
+        self.assertNotContains(response, 'Standalone After Series 3')
+
+    def test_single_registered_series_occurrence_has_marker_without_see_more(self):
+        series = EventSeries.objects.create(
+            name='One Session Series', slug='one-session-series',
+            start_time=time(18, 0),
+        )
+        event = Event.objects.create(
+            slug='one-session-series-event',
+            title='One Session Series Event',
+            start_datetime=timezone.now() + timedelta(days=3),
+            status='upcoming',
+            event_series=series,
+            series_position=1,
+        )
+        EventRegistration.objects.create(user=self.user, event=event)
+
+        response = self.client.get('/')
+
+        self.assertContains(response, 'One Session Series Event')
+        self.assertContains(response, 'data-testid="dashboard-event-series-badge"')
+        self.assertNotContains(
+            response,
+            'data-testid="dashboard-event-series-see-more"',
+        )
 
 
 # ============================================================

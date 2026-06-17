@@ -794,11 +794,93 @@ class TestScenario9ListingShowsSeriesLink:
             wait_until="domcontentloaded",
         )
         # The series-linked event shows the series link, the standalone does not.
+        assert page.locator('[data-testid="event-series-card"]').count() == 0
+        assert page.locator('[data-testid="series-card-see-more"]').count() == 0
+        assert "Standalone Event" in page.locator("body").inner_text()
         series_link = page.locator('[data-testid="event-card-series-link"]')
         assert series_link.count() == 1
         assert "Listed Public Series" in series_link.first.inner_text()
         series_link.first.locator("a").click()
         page.wait_for_url(re.compile(r".*/events/groups/listed-public-series"))
+
+        ctx.close()
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestScenario1028UpcomingListingSeriesCollapse:
+    def test_listing_shows_next_occurrence_with_see_more(
+        self, django_server, browser
+    ):
+        from django.db import connection
+        from django.utils import timezone
+
+        from events.models import Event, EventSeries
+
+        _reset_event_state()
+        series = EventSeries(
+            name="LLM Zoomcamp 2026 office hours",
+            slug="llm-zoomcamp-2026-office-hours",
+            start_time=datetime(2026, 1, 1, 18, 0).time(),
+            timezone="UTC",
+        )
+        series.save()
+        for i in range(4):
+            Event(
+                title=f"LLM Zoomcamp Office Hours Session {i + 1}",
+                slug=f"llm-zoomcamp-office-hours-{i + 1}",
+                start_datetime=timezone.now() + timedelta(days=i + 1),
+                status="upcoming",
+                origin="studio",
+                timezone="UTC",
+                event_series=series,
+                series_position=i + 1,
+            ).save()
+        Event(
+            title="Standalone Future Clinic",
+            slug="standalone-future-clinic",
+            start_datetime=timezone.now() + timedelta(days=10),
+            status="upcoming",
+            origin="studio",
+            timezone="UTC",
+        ).save()
+        connection.close()
+
+        ctx = browser.new_context(viewport={"width": 1280, "height": 720})
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/events?filter=upcoming",
+            wait_until="domcontentloaded",
+        )
+
+        card = page.locator(
+            '[data-testid="event-series-card"]'
+            '[data-series-slug="llm-zoomcamp-2026-office-hours"]'
+        )
+        assert card.count() == 1
+        text = card.inner_text()
+        assert "Event series" in text
+        assert "LLM Zoomcamp Office Hours Session 1" in text
+        assert "LLM Zoomcamp Office Hours Session 2" not in text
+        assert "LLM Zoomcamp Office Hours Session 4" not in text
+        assert card.locator('[data-testid="series-card-date"]').count() == 1
+        assert card.locator('[data-testid="series-card-see-more"]').count() == 1
+        assert card.locator('[data-testid="series-card-cta"]').count() == 0
+        assert "View series" not in text
+        body = page.locator("body").inner_text()
+        assert "LLM Zoomcamp Office Hours Session 2" not in body
+        assert "LLM Zoomcamp Office Hours Session 4" not in body
+        assert "Standalone Future Clinic" in body
+
+        card.locator('[data-testid="series-card-see-more"]').click()
+        page.wait_for_url(
+            re.compile(r".*/events/groups/llm-zoomcamp-2026-office-hours$")
+        )
+        rows = page.locator('[data-testid="series-event"]')
+        assert rows.count() == 4
+        series_text = page.locator("body").inner_text()
+        assert "LLM Zoomcamp Office Hours Session 1" in series_text
+        assert "LLM Zoomcamp Office Hours Session 4" in series_text
 
         ctx.close()
 

@@ -1,54 +1,54 @@
+{% load date_formatting %}
 {% comment %}
-Issue #866: grouped "series card" shown in the Upcoming section when a
-series has 2+ upcoming live occurrences. ``row`` carries ``series``,
-``count``, ``preview`` (first up to 3 occurrences) and ``extra`` (N - 3).
-Every link routes to the series page (consistent with #857: land where you
-can register for the whole series or any single session).
+Issue #1028: grouped "series card" shown in the Upcoming section when a
+series has 2+ upcoming live occurrences. ``row`` carries the ``series``, the
+``next_occurrence`` to display, and remaining/count metadata. Links route to
+the series page, where visitors can inspect and register for all sessions.
 {% endcomment %}
 <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50" data-testid="event-series-card" data-series-slug="{{ row.series.slug }}">
-  <a href="{{ row.series.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="series-card-link">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2 mb-2 flex-wrap">
-          <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="series-card-badge">
-            <i data-lucide="repeat" class="h-3 w-3"></i>
-            Event series
-          </span>
-        </div>
-        <h3 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors" data-testid="series-card-title">
-          {{ row.series.name }}
-        </h3>
-        {% comment %}
-        Issue #947: cadence is the honest ``schedule_label`` derived from the
-        real occurrences (#877), not the old first-occurrence weekly claim.
-        It can be empty for a 0-occurrence series, but a grouped series card
-        only renders for 2+ upcoming occurrences so the label is non-empty
-        here; the {% if %} still guards the leading separator defensively.
-        {% endcomment %}
-        <p class="mt-2 text-sm text-muted-foreground" data-testid="series-card-meta">
-          {% if row.series.schedule_label %}{{ row.series.schedule_label }} · {% endif %}{{ row.count }} upcoming session{{ row.count|pluralize }}
-        </p>
-        <ul class="mt-4 flex flex-col gap-1.5 text-sm text-muted-foreground" data-testid="series-card-dates">
-          {% for occ in row.preview %}
-          <li class="flex items-center gap-1.5">
-            <i data-lucide="calendar" class="h-4 w-4"></i>
-            {% if user.is_authenticated %}
-              {% user_event_datetime occ.start_datetime user %}
-            {% else %}
-              {{ occ|event_source_short_datetime }}
-            {% endif %}
-          </li>
-          {% endfor %}
-          {% if row.extra > 0 %}
-          <li class="text-xs font-medium text-muted-foreground" data-testid="series-card-extra">+{{ row.extra }} more</li>
-          {% endif %}
-        </ul>
-        <span class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-colors group-hover:bg-accent/90 min-h-[44px]" data-testid="series-card-cta">
-          View series
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="min-w-0 flex-1">
+      <div class="mb-2 flex flex-wrap items-center gap-2">
+        <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="series-card-badge">
+          <i data-lucide="repeat" class="h-3 w-3"></i>
+          Event series
         </span>
       </div>
-      <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+      <h3 class="text-xl font-semibold text-foreground transition-colors group-hover:text-accent" data-testid="series-card-title">
+        <a href="{{ row.series.get_absolute_url }}" class="focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background" data-testid="series-card-link">
+          {{ row.next_occurrence.title }}
+        </a>
+      </h3>
+      <p class="mt-2 text-sm text-muted-foreground" data-testid="series-card-series-name">
+        Series: {{ row.series.name }}
+      </p>
+      <p class="mt-2 text-sm text-muted-foreground" data-testid="series-card-meta">
+        {% if row.series.schedule_label %}{{ row.series.schedule_label }} · {% endif %}{{ row.count }} upcoming session{{ row.count|pluralize }}
+      </p>
+      <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground" data-testid="series-card-date">
+        <span class="flex items-center gap-1.5">
+          <i data-lucide="calendar" class="h-4 w-4"></i>
+          {% if user.is_authenticated %}
+            {% user_event_datetime row.next_occurrence.start_datetime user %}
+          {% else %}
+            {{ row.next_occurrence|event_source_short_datetime }}
+          {% endif %}
+        </span>
+        {% if row.next_occurrence.location %}
+        <span class="flex items-center gap-1.5">
+          <i data-lucide="map-pin" class="h-4 w-4"></i>
+          {{ row.next_occurrence.location }}
+        </span>
+        {% endif %}
+      </div>
+      {% if row.remaining_count > 0 %}
+      <a href="{{ row.series.get_absolute_url }}" class="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline" data-testid="series-card-see-more">
+        See more
+        <span class="text-muted-foreground">({{ row.remaining_count }} more)</span>
+        <i data-lucide="arrow-right" class="h-4 w-4"></i>
+      </a>
+      {% endif %}
     </div>
-  </a>
+    <i data-lucide="arrow-right" class="hidden h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent sm:block"></i>
+  </div>
 </article>

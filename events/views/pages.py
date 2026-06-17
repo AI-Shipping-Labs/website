@@ -85,15 +85,16 @@ def _build_upcoming_rows(upcoming_events):
 
     A series with 2+ upcoming occurrences becomes ONE grouped row; a series
     with exactly 1 falls back to a normal single-event row (no benefit to a
-    one-item group). Each row is sorted by its earliest upcoming
+    one-item group). A grouped row exposes only the next occurrence plus
+    remaining/count metadata, so listing pages do not preview several dates.
+    Each row is sorted by its earliest upcoming
     ``start_datetime`` so the overall list stays chronological.
 
     Returns a list of dicts, each either::
 
         {'kind': 'event', 'event': <Event>, 'sort_dt': <datetime>}
         {'kind': 'series', 'series': <EventSeries>,
-         'occurrences': [<Event>, ...], 'count': N,
-         'preview': [<first up to 3 Events>], 'extra': max(0, N - 3),
+         'next_occurrence': <Event>, 'count': N, 'remaining_count': N - 1,
          'sort_dt': <earliest datetime>}
     """
     series_buckets = {}
@@ -134,10 +135,9 @@ def _build_upcoming_rows(upcoming_events):
         rows.append({
             'kind': 'series',
             'series': occurrences[0].event_series,
-            'occurrences': occurrences,
+            'next_occurrence': occurrences[0],
             'count': count,
-            'preview': occurrences[:3],
-            'extra': max(0, count - 3),
+            'remaining_count': count - 1,
             'sort_dt': occurrences[0].start_datetime,
         })
 

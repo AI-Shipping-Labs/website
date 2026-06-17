@@ -156,11 +156,20 @@ end_datetime: "2026-04-13T18:00:00Z"
 location: Zoom
 required_level: 0
 speaker_name: Alexey Grigorev
+hosts:
+  - alexey-grigorev
+  - valeriia-kuka
 recording_embed_url: https://www.youtube.com/embed/...
 recap_file: example-event/recap.md
 description: |
   multi-line markdown
 ```
+
+`hosts:` is the canonical host-display field for events. It is an ordered
+list of existing `Host.slug` strings; do not use numeric database ids in
+source files. If `hosts:` is omitted, sync falls back to `speaker_name` by
+slugifying the name and matching an existing `Host.slug`. Use `hosts: []` to
+intentionally clear synced hosts.
 
 Example recap file:
 
@@ -180,6 +189,33 @@ cta_label: Join now
 If the event file is `events/example-event.yaml`, the include above is
 resolved relative to the recap file directory, for example
 `events/example-event/recording.html`.
+
+### Workshop
+
+`<date>-<slug>/workshop.yaml`. A recording-backed workshop can create or link
+an event row for the recording. Use `hosts:` to control the linked event's host
+display metadata.
+
+```yaml
+content_id: <UUID>
+slug: example-workshop
+title: Example Workshop
+date: "2026-04-28"
+pages_required_level: 0
+instructor_name: Alexey Grigorev
+hosts:
+  - alexey-grigorev
+recording:
+  url: https://www.youtube.com/watch?v=...
+  required_level: 0
+```
+
+`hosts:` is an ordered list of existing `Host.slug` strings. It updates
+`EventHost` rows on GitHub-origin generated/linked workshop events only; a
+workshop explicitly linked to a Studio-origin event keeps the hosts managed in
+Studio/API. If `hosts:` is omitted, sync falls back to `instructor_name` by
+slugifying the name and matching an existing `Host.slug`. Use `hosts: []` to
+intentionally clear synced hosts.
 
 ### Recording
 

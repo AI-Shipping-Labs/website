@@ -241,12 +241,21 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 self.assertIn(field, response.json()["details"])
 
     def test_detail_returns_event_or_unknown_event_404(self):
+        EventHost.objects.create(
+            event=self.github_event,
+            host=self.host_1,
+            position=0,
+        )
         response = self.client.get("/api/events/github-synced-event", **self._auth())
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["source_repo"], "AI-Shipping-Labs/content")
         self.assertEqual(body["source_path"], "events/github.md")
         self.assertFalse(body["editable"])
+        self.assertEqual(
+            [(host["slug"], host["title"]) for host in body["hosts"]],
+            [("alpha-host", "Alpha Facilitator")],
+        )
 
         missing = self.client.get("/api/events/nope", **self._auth())
         self.assertEqual(missing.status_code, 404)
@@ -646,16 +655,33 @@ class EventsUpdateTest(EventsApiTestBase):
         )
 
     def test_patch_github_origin_event_is_read_only_and_not_mutated(self):
+        EventHost.objects.create(
+            event=self.github_event,
+            host=self.host_1,
+            position=0,
+        )
         before = (self.github_event.title, self.github_event.status)
         response = self._patch(
             "github-synced-event",
-            {"title": "Changed", "status": "cancelled"},
+            {
+                "title": "Changed",
+                "status": "cancelled",
+                "host_ids": [self.host_2.id],
+            },
         )
 
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["code"], "synced_event_read_only")
         self.github_event.refresh_from_db()
         self.assertEqual((self.github_event.title, self.github_event.status), before)
+        self.assertEqual(
+            list(
+                EventHost.objects.filter(event=self.github_event)
+                .order_by("position")
+                .values_list("host_id", flat=True)
+            ),
+            [self.host_1.id],
+        )
 
     def test_patch_custom_platform_clears_zoom_meeting_id(self):
         self.studio_event.zoom_meeting_id = "123456"

@@ -32,6 +32,7 @@ from integrations.services.github_sync.parsing import (
 from integrations.services.github_sync.repo import derive_slug, extract_sort_order, _matches_ignore_patterns
 
 from integrations.services.github_sync.dispatchers.instructors import _attach_instructors_to_event, _resolve_instructors_for_yaml
+from integrations.services.github_sync.dispatchers.hosts import _attach_hosts_to_event, _resolve_hosts_for_event_yaml
 
 _UNSET = object()
 
@@ -726,6 +727,11 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
             _attach_instructors_to_event(
                 event, resolved_instructors, stats,
             )
+
+            resolved_hosts = _resolve_hosts_for_event_yaml(
+                data, rel_path, stats, legacy_name_field='speaker_name',
+            )
+            _attach_hosts_to_event(event, resolved_hosts)
 
         except Exception as e:
             # Intentional broad catch: a single malformed event file must

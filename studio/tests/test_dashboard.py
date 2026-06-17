@@ -30,6 +30,26 @@ class StudioDashboardTest(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
 
+    def _create_event(self, **overrides):
+        defaults = {
+            'title': 'Studio Event',
+            'slug': 'studio-event',
+            'status': 'upcoming',
+            'platform': 'zoom',
+            'start_datetime': timezone.now() + timezone.timedelta(days=1),
+        }
+        defaults.update(overrides)
+        return Event.objects.create(**defaults)
+
+    def _attention_item(self, response, label):
+        return next(
+            (
+                item for item in response.context['attention_items']
+                if item['label'] == label
+            ),
+            None,
+        )
+
     def test_dashboard_returns_200(self):
         response = self.client.get('/studio/')
         self.assertEqual(response.status_code, 200)
@@ -80,11 +100,11 @@ class StudioDashboardTest(TestCase):
         self.assertEqual(stats['total_subscribers'], 3)
 
     def test_dashboard_counts_upcoming_events(self):
-        Event.objects.create(
+        self._create_event(
             title='E1', slug='e1', status='upcoming',
-            start_datetime=timezone.now() + timezone.timedelta(days=1),
+            zoom_join_url='https://zoom.us/j/123',
         )
-        Event.objects.create(
+        self._create_event(
             title='E2', slug='e2', status='completed',
             start_datetime=timezone.now() - timezone.timedelta(days=1),
         )
@@ -190,11 +210,12 @@ class StudioDashboardTest(TestCase):
             date=timezone.now().date(),
             published=False,
         )
-        Event.objects.create(
+        self._create_event(
             title='Launch Session',
             slug='launch-session',
             status='upcoming',
             start_datetime=timezone.now() + timezone.timedelta(days=3),
+            zoom_join_url='https://zoom.us/j/launch',
         )
 
         response = self.client.get('/studio/')
@@ -204,7 +225,8 @@ class StudioDashboardTest(TestCase):
         ]
         self.assertIn('Pending project reviews', attention_labels)
         self.assertIn('Draft content', attention_labels)
-        self.assertIn('Upcoming events', attention_labels)
+        self.assertNotIn('Upcoming events', attention_labels)
+        self.assertNotIn('Missing Zoom links', attention_labels)
         self.assertContains(response, 'Attention')
         self.assertContains(response, 'Recent activity')
         self.assertContains(response, 'Quick actions')
@@ -212,6 +234,104 @@ class StudioDashboardTest(TestCase):
             response,
             f'{reverse("studio_project_list")}?status=pending_review',
         )
+
+    def test_dashboard_missing_zoom_link_attention_counts_one(self):
+        self._create_event(slug='missing-zoom-link', zoom_join_url='')
+
+        response = self.client.get('/studio/')
+
+        item = self._attention_item(response, 'Missing Zoom links')
+        self.assertIsNotNone(item)
+        self.assertEqual(item['count'], 1)
+        self.assertEqual(item['url'], reverse('studio_event_list'))
+        self.assertIn('Add or check missing Zoom join links', item['description'])
+        self.assertContains(response, 'Missing Zoom links')
+        self.assertContains(response, 'Add or check missing Zoom join links')
+
+    def test_dashboard_missing_zoom_link_attention_counts_multiple(self):
+        self._create_event(slug='missing-zoom-link-1', zoom_join_url='')
+        self._create_event(slug='missing-zoom-link-2', zoom_join_url='   ')
+
+        response = self.client.get('/studio/')
+
+        item = self._attention_item(response, 'Missing Zoom links')
+        self.assertIsNotNone(item)
+        self.assertEqual(item['count'], 2)
+
+    def test_dashboard_missing_zoom_link_attention_excludes_non_qualifying_events(self):
+        self._create_event(
+            slug='zoom-with-link',
+            zoom_join_url='https://zoom.us/j/123456',
+        )
+        self._create_event(
+            slug='custom-platform',
+            platform='custom',
+            zoom_join_url='https://example.com/live',
+        )
+        self._create_event(
+            slug='external-host',
+            external_host='Maven',
+            zoom_join_url='',
+        )
+        self._create_event(
+            slug='past-zoom',
+            start_datetime=timezone.now() - timezone.timedelta(days=1),
+            zoom_join_url='',
+        )
+        self._create_event(slug='draft-zoom', status='draft', zoom_join_url='')
+        self._create_event(
+            slug='cancelled-zoom',
+            status='cancelled',
+            zoom_join_url='',
+        )
+
+        response = self.client.get('/studio/')
+
+        attention_labels = [
+            item['label'] for item in response.context['attention_items']
+        ]
+        self.assertNotIn('Missing Zoom links', attention_labels)
+        self.assertNotIn('Upcoming events', attention_labels)
+        self.assertNotContains(response, 'Check Zoom links')
+        self.assertNotContains(response, 'Missing Zoom links')
+
+    def test_dashboard_preserves_upcoming_event_summary_and_context(self):
+        first = self._create_event(
+            slug='future-zoom-linked',
+            start_datetime=timezone.now() + timezone.timedelta(days=1),
+            zoom_join_url='https://zoom.us/j/first',
+        )
+        second = self._create_event(
+            slug='future-custom',
+            platform='custom',
+            start_datetime=timezone.now() + timezone.timedelta(days=2),
+            zoom_join_url='https://example.com/live',
+        )
+        self._create_event(
+            slug='past-linked',
+            start_datetime=timezone.now() - timezone.timedelta(days=1),
+            zoom_join_url='https://zoom.us/j/past',
+        )
+        self._create_event(
+            slug='draft-linked',
+            status='draft',
+            zoom_join_url='https://zoom.us/j/draft',
+        )
+        self._create_event(
+            slug='cancelled-linked',
+            status='cancelled',
+            zoom_join_url='https://zoom.us/j/cancelled',
+        )
+
+        response = self.client.get('/studio/')
+
+        self.assertEqual(response.context['stats']['upcoming_events'], 2)
+        events_metric = next(
+            metric for metric in response.context['summary_metrics']
+            if metric['label'] == 'Events'
+        )
+        self.assertEqual(events_metric['value'], 2)
+        self.assertEqual(list(response.context['upcoming_events']), [first, second])
 
     @patch('studio.views.dashboard.OrmQ.objects.count', return_value=0)
     def test_worker_down_attention_item_uses_health_value(self, mock_queue_count):

@@ -63,6 +63,22 @@ def _seed_dashboard_data():
     connection.close()
 
 
+def _create_event(**overrides):
+    from events.models import Event
+
+    defaults = {
+        "title": "Studio Zoom Session",
+        "slug": "studio-zoom-session",
+        "status": "upcoming",
+        "platform": "zoom",
+        "start_datetime": timezone.now() + datetime.timedelta(days=2),
+    }
+    defaults.update(overrides)
+    event = Event.objects.create(**defaults)
+    connection.close()
+    return event
+
+
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.core
 def test_studio_dashboard_operational_sections_and_links(django_server, browser):
@@ -91,6 +107,67 @@ def test_studio_dashboard_operational_sections_and_links(django_server, browser)
         assert response is not None
         assert response.status != 404
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+    context.close()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.core
+def test_studio_dashboard_warns_for_missing_zoom_join_url(django_server, browser):
+    _reset_dashboard_data()
+    _create_staff_user("studio-dashboard-zoom-missing@test.com")
+    _create_event(slug="studio-zoom-missing", zoom_join_url="")
+
+    context = _auth_context(browser, "studio-dashboard-zoom-missing@test.com")
+    page = context.new_page()
+
+    page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+    attention = page.locator('[data-testid="studio-dashboard-attention"]')
+    item = attention.locator(
+        '[data-testid="studio-dashboard-attention-item"]',
+    ).filter(has_text="Missing Zoom links")
+    assert item.count() == 1
+    assert item.get_by_text("1", exact=True).is_visible()
+    assert item.get_by_text("Add or check missing Zoom join links").is_visible()
+
+    item.click()
+    assert page.url.startswith(f"{django_server}/studio/events/")
+
+    context.close()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.core
+def test_studio_dashboard_no_zoom_warning_when_zoom_event_has_link(
+    django_server,
+    browser,
+):
+    _reset_dashboard_data()
+    _create_staff_user("studio-dashboard-zoom-linked@test.com")
+    _create_event(
+        slug="studio-zoom-linked",
+        zoom_join_url="https://zoom.us/j/123456",
+    )
+
+    context = _auth_context(browser, "studio-dashboard-zoom-linked@test.com")
+    page = context.new_page()
+
+    page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+    attention_text = page.locator(
+        '[data-testid="studio-dashboard-attention"]',
+    ).inner_text()
+    assert "Missing Zoom links" not in attention_text
+    assert "Check Zoom links" not in attention_text
+
+    events_card_text = page.locator(
+        'section[aria-labelledby="summary-heading"] .bg-card',
+    ).filter(has_text="Events").first.inner_text()
+    events_card_text = "\n".join(
+        line.strip() for line in events_card_text.splitlines() if line.strip()
+    )
+    assert events_card_text == "Events\n1\n1 total"
 
     context.close()
 

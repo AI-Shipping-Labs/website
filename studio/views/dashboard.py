@@ -1,6 +1,7 @@
 """Studio dashboard view."""
 
 from django.contrib.auth import get_user_model
+from django.db.models.functions import Trim
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
@@ -38,6 +39,30 @@ def _attention_item(label, count, url, icon, tone='warning', description=''):
     }
 
 
+def _upcoming_event_queryset(now):
+    """Events that count as upcoming for Studio dashboard summary surfaces."""
+    return Event.objects.filter(
+        start_datetime__gte=now,
+    ).exclude(status__in=['draft', 'cancelled'])
+
+
+def _missing_zoom_join_url_count(now):
+    """Count future community-hosted Zoom events missing a join URL."""
+    return (
+        _upcoming_event_queryset(now)
+        .filter(platform='zoom')
+        .annotate(
+            trimmed_external_host=Trim('external_host'),
+            trimmed_zoom_join_url=Trim('zoom_join_url'),
+        )
+        .filter(
+            trimmed_external_host='',
+            trimmed_zoom_join_url='',
+        )
+        .count()
+    )
+
+
 @staff_required
 def dashboard(request):
     """Studio dashboard focused on daily operational work."""
@@ -53,9 +78,7 @@ def dashboard(request):
         # legacy ``status='completed'`` row scheduled in the future
         # still counts. Exclude draft + cancelled — those should never
         # appear in the upcoming bucket regardless of timestamps.
-        'upcoming_events': Event.objects.filter(
-            start_datetime__gte=timezone.now(),
-        ).exclude(status__in=['draft', 'cancelled']).count(),
+        'upcoming_events': _upcoming_event_queryset(now).count(),
         'total_events': Event.objects.count(),
         'total_recordings': Event.objects.filter(
             recording_url__isnull=False,
@@ -85,15 +108,14 @@ def dashboard(request):
         Course.objects.filter(status='draft').count()
         + Article.objects.filter(published=False).count()
     )
+    missing_zoom_join_url_count = _missing_zoom_join_url_count(now)
 
     pending_projects = Project.objects.filter(
         status='pending_review',
     ).order_by('-created_at')[:5]
     # Issue #713: same translation as the ``stats['upcoming_events']``
     # count above — time-driven, exclude draft + cancelled.
-    upcoming_events = Event.objects.filter(
-        start_datetime__gte=now,
-    ).exclude(status__in=['draft', 'cancelled']).order_by('start_datetime')[:5]
+    upcoming_events = _upcoming_event_queryset(now).order_by('start_datetime')[:5]
     recent_users = User.objects.filter(is_staff=False).order_by('-date_joined')[:5]
     recent_articles = Article.objects.order_by('-updated_at')[:5]
     recent_content = [
@@ -184,14 +206,14 @@ def dashboard(request):
             tone='neutral',
             description='Draft courses and articles may need review.',
         ))
-    if stats['upcoming_events']:
+    if missing_zoom_join_url_count:
         attention_items.append(_attention_item(
-            'Upcoming events',
-            stats['upcoming_events'],
+            'Missing Zoom links',
+            missing_zoom_join_url_count,
             reverse('studio_event_list'),
             'calendar-clock',
             tone='neutral',
-            description='Check Zoom links, details, and readiness.',
+            description='Add or check missing Zoom join links before the sessions.',
         ))
 
     quick_actions = [

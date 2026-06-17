@@ -33,6 +33,13 @@
     </div>
 
     <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="host-title">Title</label>
+      <input type="text" name="title" id="host-title" value="{{ form_values.title }}" maxlength="200"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      {% if errors.title %}<p class="text-xs text-red-400 mt-1" data-testid="error-title">{{ errors.title }}</p>{% endif %}
+    </div>
+
+    <div>
       <label class="block text-sm font-medium text-foreground mb-1" for="host-bio">Bio (Markdown)</label>
       <textarea name="bio" id="host-bio" rows="7"
                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ form_values.bio }}</textarea>

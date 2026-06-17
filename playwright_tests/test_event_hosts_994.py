@@ -32,6 +32,7 @@ def _ensure_seed_hosts():
         slug="alexey-grigorev",
         defaults={
             "name": "Alexey Grigorev",
+            "title": "Chief Agent Officer at AI Shipping Labs",
             "bio": "Software engineer and machine learning practitioner.",
             "email": "alexey@aishippinglabs.com",
             "is_active": True,
@@ -41,6 +42,7 @@ def _ensure_seed_hosts():
         slug="valeriia-kuka",
         defaults={
             "name": "Valeriia Kuka",
+            "title": "Content Strategist",
             "bio": "Content strategist and technical writer.",
             "email": "valeriia@aishippinglabs.com",
             "is_active": True,
@@ -112,6 +114,7 @@ class TestEventHosts994:
         page.wait_for_url(re.compile(r".*/studio/hosts/new$"))
         page.fill('input[name="name"]', "Jordan Lee")
         page.fill('input[name="slug"]', "jordan-lee")
+        page.fill('input[name="title"]', "AI Product Engineer")
         page.fill('textarea[name="bio"]', "**Jordan** hosts build sessions.")
         page.fill('input[name="photo_url"]', "https://cdn.example.com/jordan.jpg")
         page.fill('input[name="email"]', "jordan@example.com")
@@ -119,7 +122,9 @@ class TestEventHosts994:
         page.wait_for_url(re.compile(r".*/studio/hosts/$"))
 
         expect(page.get_by_text("Jordan Lee")).to_be_visible()
+        expect(page.get_by_text("AI Product Engineer")).to_be_visible()
         host = Host.objects.get(slug="jordan-lee")
+        assert host.title == "AI Product Engineer"
 
         page.goto(
             f"{django_server}/studio/events/{event.pk}/edit",
@@ -149,7 +154,7 @@ class TestEventHosts994:
     ):
         from django.db import connection
 
-        from events.models import Event, Host
+        from events.models import Event, EventHost, Host
 
         _reset_state()
         _create_staff_user("staff-host-assign-994@test.com")
@@ -158,21 +163,9 @@ class TestEventHosts994:
         valeriia = Host.objects.get(slug="valeriia-kuka")
         valeriia.bio = "**Content strategist** and technical writer."
         valeriia.save()
-
-        ctx = _auth_context(browser, "staff-host-assign-994@test.com")
-        page = ctx.new_page()
-        page.goto(
-            f"{django_server}/studio/events/{event.pk}/edit",
-            wait_until="domcontentloaded",
-        )
-        page.select_option(
-            '[data-testid="studio-event-hosts"]',
-            [str(alexey.pk), str(valeriia.pk)],
-        )
-        page.locator("button:has-text('Save Changes')").first.click()
-        page.wait_for_url(re.compile(rf".*/studio/events/{event.pk}/edit$"))
+        EventHost.objects.create(event=event, host=valeriia, position=0)
+        EventHost.objects.create(event=event, host=alexey, position=1)
         connection.close()
-        ctx.close()
 
         anon = browser.new_context(viewport={"width": 1280, "height": 900})
         anon_page = anon.new_page()
@@ -181,15 +174,22 @@ class TestEventHosts994:
             f"{django_server}{event.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
+        description = anon_page.locator(".prose").filter(has_text="shipping").first
+        hosts_section = anon_page.locator('[data-testid="event-hosts"]')
+        expect(description).to_be_visible()
+        expect(hosts_section).to_be_visible()
+        assert description.bounding_box()["y"] < hosts_section.bounding_box()["y"]
         hosts = anon_page.locator('[data-testid="event-host"]')
         expect(hosts).to_have_count(2)
-        expect(hosts.nth(0)).to_contain_text("Alexey Grigorev")
-        expect(hosts.nth(1)).to_contain_text("Valeriia Kuka")
-        expect(hosts.nth(0).locator("img")).to_have_attribute("src", re.compile("alexey.png"))
-        expect(hosts.nth(1).locator("img")).to_have_attribute("src", re.compile("valeriia.png"))
-        expect(anon_page.locator('[data-testid="event-hosts"]')).to_contain_text(
-            "Software engineer"
+        expect(hosts.nth(0)).to_contain_text("Valeriia Kuka")
+        expect(hosts.nth(0)).to_contain_text("Content Strategist")
+        expect(hosts.nth(1)).to_contain_text("Alexey Grigorev")
+        expect(hosts.nth(1)).to_contain_text(
+            "Chief Agent Officer at AI Shipping Labs"
         )
+        expect(hosts.nth(0).locator("img")).to_have_attribute("src", re.compile("valeriia.png"))
+        expect(hosts.nth(1).locator("img")).to_have_attribute("src", re.compile("alexey.png"))
+        expect(hosts_section).to_contain_text("Software engineer")
         # The markdown bio is rendered into HTML, not shown as raw markdown.
         assert anon_page.locator('[data-testid="event-hosts"] strong').count() >= 1
         expect(anon_page.locator('[data-testid="event-hosts"]')).not_to_contain_text(

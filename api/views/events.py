@@ -118,6 +118,7 @@ _EVENT_EXAMPLE = {
             "id": 1,
             "name": "Alexey Grigorev",
             "slug": "alexey-grigorev",
+            "title": "Chief Agent Officer at AI Shipping Labs",
             "photo_url": "/static/alexey.png",
             "email": "alexey@aishippinglabs.com",
         }
@@ -148,6 +149,7 @@ def _serialize_host(host):
         "id": host.id,
         "name": host.name,
         "slug": host.slug,
+        "title": host.title,
         "photo_url": host.display_photo_url,
         "email": host.email,
     }

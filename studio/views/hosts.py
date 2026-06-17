@@ -14,6 +14,7 @@ def _host_form_values(host=None):
         return {
             'name': '',
             'slug': '',
+            'title': '',
             'bio': '',
             'photo_url': '',
             'email': '',
@@ -22,6 +23,7 @@ def _host_form_values(host=None):
     return {
         'name': host.name,
         'slug': host.slug,
+        'title': host.title,
         'bio': host.bio,
         'photo_url': host.photo_url,
         'email': host.email,
@@ -33,6 +35,7 @@ def _collect_host_values(request, *, host=None):
     values = {
         'name': request.POST.get('name', '').strip(),
         'slug': request.POST.get('slug', '').strip(),
+        'title': request.POST.get('title', '').strip(),
         'bio': request.POST.get('bio', ''),
         'photo_url': request.POST.get('photo_url', '').strip(),
         'email': request.POST.get('email', '').strip(),
@@ -45,6 +48,8 @@ def _collect_host_values(request, *, host=None):
         errors['name'] = 'Name is required.'
     if not values['slug']:
         errors['slug'] = 'Slug is required.'
+    if len(values['title']) > Host._meta.get_field('title').max_length:
+        errors['title'] = 'Title must be 200 characters or fewer.'
     duplicate_qs = Host.objects.filter(slug=values['slug'])
     if host is not None:
         duplicate_qs = duplicate_qs.exclude(pk=host.pk)

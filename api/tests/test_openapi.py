@@ -51,6 +51,26 @@ class BuildSpecTest(TestCase):
         self.assertIn("get", operations)
         self.assertIn("post", operations)
 
+    def test_host_profile_paths_present(self):
+        self.assertIn("/api/hosts", self.document["paths"])
+        self.assertIn("/api/hosts/{slug}", self.document["paths"])
+        self.assertIn("get", self.document["paths"]["/api/hosts"])
+        self.assertEqual(
+            set(self.document["paths"]["/api/hosts/{slug}"]),
+            {"get", "patch"},
+        )
+
+    def test_event_host_summary_example_includes_title(self):
+        example = (
+            self.document["paths"]["/api/events"]["get"]
+            ["responses"]["200"]["content"]["application/json"]["example"]
+        )
+        self.assertIn("title", example["events"][0]["hosts"][0])
+
+    def test_host_patch_documents_title_request_field(self):
+        props = self._request_body_properties("/api/hosts/{slug}", "patch")
+        self.assertIn("title", props)
+
     def test_sprint_detail_path_uses_slug_template(self):
         # Builder converts ``<slug:slug>`` to ``{slug}``.
         self.assertIn("/api/sprints/{slug}", self.document["paths"])

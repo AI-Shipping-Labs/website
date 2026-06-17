@@ -35,6 +35,9 @@
             <img src="{{ host.display_photo_url }}" alt="" class="h-10 w-10 rounded-md border border-border object-cover">
             <div class="min-w-0">
               <a href="{% url 'studio_host_edit' host_id=host.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ host.name }}</a>
+              {% if host.title %}
+              <p class="text-xs text-foreground/80">{{ host.title }}</p>
+              {% endif %}
               <p class="text-xs text-muted-foreground">{{ host.slug }}</p>
             </div>
           </div>

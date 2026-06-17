@@ -129,6 +129,7 @@ class Host(TimestampedModelMixin, models.Model):
 
     name = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, unique=True)
+    title = models.CharField(max_length=200, blank=True, default='')
     bio = models.TextField(
         blank=True, default='',
         help_text='Markdown bio rendered to HTML on save.',

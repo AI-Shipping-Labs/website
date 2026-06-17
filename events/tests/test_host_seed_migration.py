@@ -11,6 +11,8 @@ from django.test import TransactionTestCase
 
 PRE_MIGRATION = ('events', '0035_remove_event_max_participants')
 POST_MIGRATION = ('events', '0036_host_eventhost_seed')
+PRE_TITLE_MIGRATION = ('events', '0037_alter_event_host_email')
+POST_TITLE_MIGRATION = ('events', '0038_host_title')
 
 
 def _migrate_to(*targets):
@@ -52,3 +54,46 @@ class HostSeedMigrationTest(TransactionTestCase):
         self.assertTrue(Host.objects.filter(slug='alexey-grigorev').exists())
         self.assertTrue(Host.objects.filter(slug='valeriia-kuka').exists())
         self.assertFalse(EventHost.objects.exists())
+
+    def test_title_backfill_updates_only_seeded_host_titles(self):
+        apps_pre = _migrate_to(PRE_TITLE_MIGRATION)
+        Host = apps_pre.get_model('events', 'Host')
+        Host.objects.update_or_create(
+            slug='alexey-grigorev',
+            defaults={
+                'name': 'Alexey Grigorev',
+                'email': 'alexey-custom@example.com',
+                'bio': 'Custom Alexey bio',
+                'bio_html': '<p>Custom Alexey bio</p>',
+                'photo_url': 'https://cdn.example.com/alexey.jpg',
+                'is_active': False,
+            },
+        )
+        Host.objects.update_or_create(
+            slug='valeriia-kuka',
+            defaults={
+                'name': 'Valeriia Kuka',
+                'email': 'valeriia-custom@example.com',
+                'bio': 'Custom Valeriia bio',
+                'bio_html': '<p>Custom Valeriia bio</p>',
+                'photo_url': 'https://cdn.example.com/valeriia.jpg',
+                'is_active': False,
+            },
+        )
+
+        apps_post = _migrate_to(POST_TITLE_MIGRATION)
+        Host = apps_post.get_model('events', 'Host')
+
+        alexey = Host.objects.get(slug='alexey-grigorev')
+        self.assertEqual(alexey.title, 'Chief Agent Officer at AI Shipping Labs')
+        self.assertEqual(alexey.email, 'alexey-custom@example.com')
+        self.assertEqual(alexey.bio, 'Custom Alexey bio')
+        self.assertEqual(alexey.photo_url, 'https://cdn.example.com/alexey.jpg')
+        self.assertFalse(alexey.is_active)
+
+        valeriia = Host.objects.get(slug='valeriia-kuka')
+        self.assertEqual(valeriia.title, 'Content Strategist')
+        self.assertEqual(valeriia.email, 'valeriia-custom@example.com')
+        self.assertEqual(valeriia.bio, 'Custom Valeriia bio')
+        self.assertEqual(valeriia.photo_url, 'https://cdn.example.com/valeriia.jpg')
+        self.assertFalse(valeriia.is_active)

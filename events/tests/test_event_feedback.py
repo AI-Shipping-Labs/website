@@ -16,9 +16,9 @@ Covers:
 - Public template:
     - Upcoming event renders no feedback section at all.
     - Past event with 0 ratings shows no aggregate badge but still
-      renders the form for a registered attendee.
-    - Past event with >=1 ratings shows badge + form for a registered
-      attendee; anonymous sees only the badge.
+      renders the collapsed feedback disclosure for a registered attendee.
+    - Past event with >=1 ratings shows badge + collapsed disclosure for a
+      registered attendee; anonymous sees only the badge.
 - Slug-mismatch on the feedback URL 301-redirects to the canonical
   ``/feedback`` URL.
 """
@@ -405,11 +405,16 @@ class EventDetailFeedbackTemplateTest(TestCase):
         self.assertNotContains(
             response, 'data-testid="event-feedback-aggregate"',
         )
-        # Form renders.
+        # Form is present for native disclosure/no-JS fallback, but closed.
+        self.assertContains(response, 'data-testid="event-feedback-disclosure"')
+        self.assertContains(response, 'data-testid="event-feedback-reveal"')
+        self.assertContains(response, 'aria-controls="event-feedback-form"')
+        self.assertContains(response, 'aria-expanded="false"')
         self.assertContains(response, 'data-testid="event-feedback-form"')
         self.assertContains(response, 'Submit feedback')
+        self.assertNotContains(response, '<details open')
 
-    def test_past_event_with_ratings_shows_badge_and_form(self):
+    def test_past_event_with_ratings_shows_badge_and_collapsed_form(self):
         event = _make_past_event()
         EventRegistration.objects.create(event=event, user=self.attendee)
         EventFeedback.objects.create(
@@ -421,7 +426,10 @@ class EventDetailFeedbackTemplateTest(TestCase):
         response = self.client.get(event.get_absolute_url())
         self.assertContains(response, 'data-testid="event-feedback-aggregate"')
         self.assertContains(response, 'data-testid="event-feedback-avg"')
+        self.assertContains(response, 'data-testid="event-feedback-disclosure"')
+        self.assertContains(response, 'aria-expanded="false"')
         self.assertContains(response, 'data-testid="event-feedback-form"')
+        self.assertNotContains(response, '<details open')
 
     def test_anonymous_on_past_event_sees_badge_not_form(self):
         event = _make_past_event()
@@ -432,6 +440,10 @@ class EventDetailFeedbackTemplateTest(TestCase):
         )
         response = self.client.get(event.get_absolute_url())
         self.assertContains(response, 'data-testid="event-feedback-aggregate"')
+        self.assertNotContains(
+            response, 'data-testid="event-feedback-disclosure"',
+        )
+        self.assertNotContains(response, 'data-testid="event-feedback-reveal"')
         self.assertNotContains(response, 'data-testid="event-feedback-form"')
 
     def test_non_registered_authenticated_sees_badge_not_form(self):
@@ -445,28 +457,47 @@ class EventDetailFeedbackTemplateTest(TestCase):
         self.client.login(email='att@test.com', password='pw')
         response = self.client.get(event.get_absolute_url())
         self.assertContains(response, 'data-testid="event-feedback-aggregate"')
+        self.assertNotContains(
+            response, 'data-testid="event-feedback-disclosure"',
+        )
+        self.assertNotContains(response, 'data-testid="event-feedback-reveal"')
         self.assertNotContains(response, 'data-testid="event-feedback-form"')
 
-    def test_update_button_label_when_already_submitted(self):
+    def test_update_action_label_and_prefilled_values_when_already_submitted(self):
         event = _make_past_event()
         EventRegistration.objects.create(event=event, user=self.attendee)
         EventFeedback.objects.create(
             event=event, user=self.attendee,
-            rating=3, comment='ok',
+            rating=3, comment='ok', would_change='More demos',
         )
         self.client.login(email='att@test.com', password='pw')
         response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, 'data-testid="event-feedback-reveal"')
+        self.assertContains(response, 'aria-expanded="false"')
         self.assertContains(response, 'Update feedback')
         self.assertNotContains(response, '>Submit feedback<')
+        self.assertContains(response, 'data-testid="event-feedback-rating-3"')
+        self.assertContains(response, 'checked')
+        self.assertContains(response, 'ok')
+        self.assertContains(response, 'More demos')
+        self.assertNotContains(response, '<details open')
 
     def test_thanks_block_on_redirect_query(self):
         event = _make_past_event()
         EventRegistration.objects.create(event=event, user=self.attendee)
+        EventFeedback.objects.create(
+            event=event, user=self.attendee,
+            rating=5, comment='Great',
+        )
         self.client.login(email='att@test.com', password='pw')
         response = self.client.get(
             event.get_absolute_url() + '?feedback=thanks',
         )
         self.assertContains(response, 'data-testid="event-feedback-thanks"')
+        self.assertContains(response, 'Update feedback')
+        self.assertContains(response, 'aria-expanded="false"')
+        self.assertContains(response, 'data-testid="event-feedback-form"')
+        self.assertNotContains(response, '<details open')
 
     def test_pluralized_rating_label(self):
         """Aggregate label uses singular/plural correctly."""

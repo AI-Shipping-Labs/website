@@ -240,6 +240,53 @@
     }
   }
 
+  function bindFeedbackDisclosure() {
+    const disclosure = document.querySelector('[data-event-feedback-disclosure]');
+    if (!disclosure) return;
+
+    const toggle = disclosure.querySelector('[data-event-feedback-toggle]');
+    const form = disclosure.querySelector('[data-testid="event-feedback-form"]');
+    if (!toggle || !form) return;
+
+    let shouldMoveFocus = false;
+
+    function syncExpandedState() {
+      toggle.setAttribute('aria-expanded', disclosure.open ? 'true' : 'false');
+    }
+
+    function focusFirstField() {
+      const firstField = form.querySelector(
+        'input:not([type="hidden"]), textarea, select, button'
+      );
+      if (firstField && typeof firstField.focus === 'function') {
+        firstField.focus({ preventScroll: true });
+      } else {
+        form.setAttribute('tabindex', '-1');
+        form.focus({ preventScroll: true });
+      }
+    }
+
+    toggle.addEventListener('click', () => {
+      shouldMoveFocus = true;
+    });
+    toggle.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        shouldMoveFocus = true;
+      }
+    });
+    disclosure.addEventListener('toggle', () => {
+      syncExpandedState();
+      if (!disclosure.open || !shouldMoveFocus) {
+        shouldMoveFocus = false;
+        return;
+      }
+      shouldMoveFocus = false;
+      window.requestAnimationFrame(focusFirstField);
+    });
+
+    syncExpandedState();
+  }
+
   const root = document.querySelector('[data-event-detail]');
   const slug = root ? root.dataset.eventSlug : null;
   const registerBtn = document.querySelector('[data-event-register-button]');
@@ -253,6 +300,7 @@
     unregisterBtn.addEventListener('click', () => unregisterFromEvent(slug, unregisterBtn));
   }
   bindAnonymousRegistration(slug);
+  bindFeedbackDisclosure();
 
   if (displays.length && window.Intl) {
     displays.forEach((display) => {

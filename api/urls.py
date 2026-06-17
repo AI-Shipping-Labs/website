@@ -53,6 +53,7 @@ from api.views.events import (
     event_regenerate_banner,
     events_collection,
 )
+from api.views.hosts import host_detail, hosts_collection
 from api.views.integration_settings import integration_settings
 from api.views.interview_notes import (
     interview_note_detail,
@@ -192,6 +193,17 @@ urlpatterns = [
         "events/<slug:slug>",
         event_detail,
         name="api_event_detail",
+    ),
+    # ---- Host profiles (issue #1031) ----------------------------------
+    path(
+        "hosts",
+        hosts_collection,
+        name="api_hosts_collection",
+    ),
+    path(
+        "hosts/<slug:slug>",
+        host_detail,
+        name="api_host_detail",
     ),
     # ---- Event series + bulk occurrences (issue #678) -----------------
     # Register the bulk literal BEFORE the per-occurrence id capture so

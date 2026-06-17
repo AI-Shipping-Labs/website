@@ -78,12 +78,14 @@ class EventsApiTestBase(TestCase):
         cls.host_1 = Host.objects.create(
             name="Alpha Host",
             slug="alpha-host",
+            title="Alpha Facilitator",
             bio="Alpha bio",
             email="alpha@example.com",
         )
         cls.host_2 = Host.objects.create(
             name="Beta Host",
             slug="beta-host",
+            title="Beta Instructor",
             bio="Beta bio",
             photo_url="https://cdn.example.com/beta.jpg",
             email="beta@example.com",
@@ -249,6 +251,44 @@ class EventsListAndDetailTest(EventsApiTestBase):
         missing = self.client.get("/api/events/nope", **self._auth())
         self.assertEqual(missing.status_code, 404)
         self.assertEqual(missing.json()["code"], "unknown_event")
+
+    def test_event_host_summaries_include_title_in_list_and_detail_order(self):
+        EventHost.objects.create(
+            event=self.studio_event,
+            host=self.host_2,
+            position=0,
+        )
+        EventHost.objects.create(
+            event=self.studio_event,
+            host=self.host_1,
+            position=1,
+        )
+
+        detail = self.client.get("/api/events/studio-event", **self._auth())
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(
+            [
+                (host["slug"], host["title"])
+                for host in detail.json()["hosts"]
+            ],
+            [
+                ("beta-host", "Beta Instructor"),
+                ("alpha-host", "Alpha Facilitator"),
+            ],
+        )
+
+        listing = self.client.get("/api/events", **self._auth())
+        by_slug = {event["slug"]: event for event in listing.json()["events"]}
+        self.assertEqual(
+            [
+                (host["slug"], host["title"])
+                for host in by_slug["studio-event"]["hosts"]
+            ],
+            [
+                ("beta-host", "Beta Instructor"),
+                ("alpha-host", "Alpha Facilitator"),
+            ],
+        )
 
 
 class EventsCreateTest(EventsApiTestBase):
@@ -515,6 +555,7 @@ class EventsCreateTest(EventsApiTestBase):
                 "id": self.host_2.id,
                 "name": "Beta Host",
                 "slug": "beta-host",
+                "title": "Beta Instructor",
                 "photo_url": "https://cdn.example.com/beta.jpg",
                 "email": "beta@example.com",
             },

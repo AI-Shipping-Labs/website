@@ -2,10 +2,12 @@
 
 from datetime import timedelta
 
+from django.contrib.admin.sites import AdminSite
 from django.test import TestCase, tag
 from django.utils import timezone
 
 from email_app.models import EmailLog
+from events.admin.event import HostAdmin
 from events.models import Event, EventHost, EventRegistration, Host
 from events.services.host_registration import maybe_register_host_as_attendee
 
@@ -33,6 +35,15 @@ class HostModelTest(TestCase):
         self.assertTrue(alexey.display_photo_url.endswith('alexey.png'))
         self.assertTrue(valeriia.display_photo_url.endswith('valeriia.png'))
 
+    def test_title_is_blank_allowed_profile_field(self):
+        host = Host.objects.create(
+            name='Untitled Host',
+            slug='untitled-host',
+            title='',
+        )
+
+        self.assertEqual(host.title, '')
+
     def test_ordered_hosts_returns_eventhost_position_order(self):
         event = Event.objects.create(
             title='Ordered Host Event',
@@ -49,18 +60,29 @@ class HostModelTest(TestCase):
 
 
 @tag('core')
+class HostAdminConfigTest(TestCase):
+    def test_admin_surfaces_title(self):
+        admin = HostAdmin(Host, AdminSite())
+
+        self.assertIn('title', admin.list_display)
+        self.assertIn('title', admin.search_fields)
+
+
+@tag('core')
 class SeededHostTest(TestCase):
     def test_seeded_founders_have_about_page_identity(self):
         alexey = Host.objects.get(slug='alexey-grigorev')
         valeriia = Host.objects.get(slug='valeriia-kuka')
 
         self.assertEqual(alexey.name, 'Alexey Grigorev')
+        self.assertEqual(alexey.title, 'Chief Agent Officer at AI Shipping Labs')
         self.assertEqual(alexey.email, 'alexey@aishippinglabs.com')
         self.assertIn('DataTalks.Club', alexey.bio)
         self.assertTrue(alexey.bio_html)
         self.assertTrue(alexey.display_photo_url.endswith('alexey.png'))
 
         self.assertEqual(valeriia.name, 'Valeriia Kuka')
+        self.assertEqual(valeriia.title, 'Content Strategist')
         self.assertEqual(valeriia.email, 'valeriia@aishippinglabs.com')
         self.assertIn('Content strategist', valeriia.bio)
         self.assertTrue(valeriia.bio_html)
@@ -73,6 +95,7 @@ class EventHostsDetailTest(TestCase):
         event = Event.objects.create(
             title='Public Hosted Event',
             slug='public-hosted-event',
+            description='Read the description before host credentials.',
             start_datetime=timezone.now() + timedelta(days=3),
             status='upcoming',
         )
@@ -88,11 +111,17 @@ class EventHostsDetailTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="event-hosts"')
         body = response.content.decode()
+        self.assertLess(
+            body.index('Read the description before host credentials.'),
+            body.index('data-testid="event-hosts"'),
+        )
         hosts_section = body[body.index('data-testid="event-hosts"'):]
         self.assertLess(
             hosts_section.index('Valeriia Kuka'),
             hosts_section.index('Alexey Grigorev'),
         )
+        self.assertIn('Content Strategist', hosts_section)
+        self.assertIn('Chief Agent Officer at AI Shipping Labs', hosts_section)
         self.assertIn('<strong>Host bio</strong>', body)
         self.assertIn('valeriia.png', body)
         self.assertIn('alexey.png', body)
@@ -126,6 +155,7 @@ class HostEmailDeliveryGuardTest(TestCase):
         host = Host.objects.create(
             name='Valeriia Display',
             slug='valeriia-display',
+            title='Content Strategist',
             email='valeriia@aishippinglabs.com',
         )
         EventHost.objects.create(event=event, host=host, position=0)

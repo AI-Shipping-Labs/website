@@ -43,15 +43,18 @@ class StudioHostCrudTest(StaffUserMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'studio/hosts/list.html')
         self.assertContains(response, 'Alexey Grigorev')
+        self.assertContains(response, 'Chief Agent Officer at AI Shipping Labs')
         self.assertContains(response, 'Valeriia Kuka')
+        self.assertContains(response, 'Content Strategist')
         self.assertContains(response, 'href="/studio/hosts/new"')
 
-    def test_create_host_saves_markdown_bio_and_email(self):
+    def test_create_host_saves_title_markdown_bio_and_email(self):
         response = self.client.post(
             '/studio/hosts/new',
             {
                 'name': 'Jordan Lee',
                 'slug': 'jordan-lee',
+                'title': 'AI Product Engineer',
                 'bio': '**Builder** bio',
                 'photo_url': 'https://cdn.example.com/jordan.jpg',
                 'email': 'jordan@example.com',
@@ -62,13 +65,15 @@ class StudioHostCrudTest(StaffUserMixin, TestCase):
         self.assertEqual(response.status_code, 302)
         host = Host.objects.get(slug='jordan-lee')
         self.assertEqual(host.name, 'Jordan Lee')
+        self.assertEqual(host.title, 'AI Product Engineer')
         self.assertEqual(host.email, 'jordan@example.com')
         self.assertIn('<strong>Builder</strong>', host.bio_html)
 
         list_response = self.client.get('/studio/hosts/')
         self.assertContains(list_response, 'Jordan Lee')
+        self.assertContains(list_response, 'AI Product Engineer')
 
-    def test_edit_host_updates_active_state(self):
+    def test_edit_host_updates_title_and_active_state(self):
         host = Host.objects.get(slug='alexey-grigorev')
 
         response = self.client.post(
@@ -76,6 +81,7 @@ class StudioHostCrudTest(StaffUserMixin, TestCase):
             {
                 'name': 'Alexey Grigorev',
                 'slug': 'alexey-grigorev',
+                'title': 'Chief Agent Officer at AI Shipping Labs',
                 'bio': 'Updated bio',
                 'photo_url': '',
                 'email': 'alexey@aishippinglabs.com',
@@ -85,13 +91,47 @@ class StudioHostCrudTest(StaffUserMixin, TestCase):
 
         self.assertEqual(response.status_code, 302)
         host.refresh_from_db()
+        self.assertEqual(host.title, 'Chief Agent Officer at AI Shipping Labs')
         self.assertEqual(host.bio, 'Updated bio')
         self.assertFalse(host.is_active)
+
+    def test_blank_title_is_valid_and_overlong_title_errors(self):
+        blank = self.client.post(
+            '/studio/hosts/new',
+            {
+                'name': 'Blank Title',
+                'slug': 'blank-title',
+                'title': '',
+                'bio': '',
+                'photo_url': '',
+                'email': '',
+                'is_active': 'on',
+            },
+        )
+        self.assertEqual(blank.status_code, 302)
+        self.assertEqual(Host.objects.get(slug='blank-title').title, '')
+
+        response = self.client.post(
+            '/studio/hosts/new',
+            {
+                'name': 'Too Long Title',
+                'slug': 'too-long-title',
+                'title': 'x' * 201,
+                'bio': '',
+                'photo_url': '',
+                'email': '',
+                'is_active': 'on',
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="error-title"')
+        self.assertFalse(Host.objects.filter(slug='too-long-title').exists())
 
     def test_new_host_is_available_on_event_edit_form(self):
         host = Host.objects.create(
             name='Jordan Lee',
             slug='jordan-edit-option',
+            title='AI Product Engineer',
             email='jordan@example.com',
         )
         event = Event.objects.create(

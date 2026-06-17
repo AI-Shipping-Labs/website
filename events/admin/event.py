@@ -122,9 +122,9 @@ class EventInstructorInline(admin.TabularInline):
 class HostAdmin(admin.ModelAdmin):
     """Admin for event hosts."""
 
-    list_display = ['name', 'slug', 'email', 'is_active', 'updated_at']
+    list_display = ['name', 'title', 'slug', 'email', 'is_active', 'updated_at']
     list_filter = ['is_active']
-    search_fields = ['name', 'slug', 'email', 'bio']
+    search_fields = ['name', 'title', 'slug', 'email', 'bio']
     prepopulated_fields = {'slug': ('name',)}
     readonly_fields = ['bio_html', 'created_at', 'updated_at']
     ordering = ['name']

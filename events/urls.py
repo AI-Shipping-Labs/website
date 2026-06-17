@@ -13,6 +13,7 @@ from events.views.pages import (
     event_detail_no_slug_redirect,
     event_feedback_submit,
     event_join_redirect,
+    event_series_no_slug_redirect,
     event_series_public,
     events_calendar,
     events_calendar_feed,
@@ -24,7 +25,7 @@ urlpatterns = [
     # Issue #578: ``events/calendar.ics`` is registered BEFORE the
     # ``events/<slug>`` join/calendar.ics/cancel routes below so the
     # literal ``calendar.ics`` isn't swallowed by the slug converter.
-    # Same pattern as ``events/groups/<slug>``.
+    # Same pattern as ``events/series/<id>/<slug>``.
     path(
         'events/calendar.ics',
         events_calendar_feed,
@@ -36,19 +37,17 @@ urlpatterns = [
         events_calendar,
         name='events_calendar_month',
     ),
-    # Issue #564: ``events/groups/<slug>`` is registered BEFORE the
-    # other slug routes so the literal ``groups`` prefix isn't swallowed
-    # by the slug converter. Same pattern as ``workshops/resync/``.
-    #
-    # TODO(#575): the public URL still uses ``/events/groups/<slug>`` to
-    # avoid breaking external bookmarks during the EventGroup ->
-    # EventSeries rename. A follow-up issue can flip this to
-    # ``/events/series/<slug>`` once we have data on whether external
-    # links to the old path exist.
+    # Issue #1035: canonical event-series detail. ``series_id`` is the
+    # lookup key; ``slug`` is cosmetic, mirroring event detail URLs.
     path(
-        'events/groups/<slug:slug>',
+        'events/series/<int:series_id>/<slug:slug>',
         event_series_public,
         name='event_series_public',
+    ),
+    path(
+        'events/series/<int:series_id>',
+        event_series_no_slug_redirect,
+        name='event_series_no_slug',
     ),
     # Issue #673: slug-keyed sibling routes for join, .ics download, and
     # cancel-registration intentionally stay on ``events/<slug>/<verb>``.

@@ -147,10 +147,7 @@ class EventSeries(TimestampedModelMixin, models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        # Note: the public URL path stays ``/events/groups/<slug>`` even
-        # after the rename (issue #575) so external bookmarks keep working.
-        # A follow-up issue may flip the public path to ``/events/series/``.
-        return f'/events/groups/{self.slug}'
+        return f'/events/series/{self.pk}/{self.slug}'
 
     def get_studio_edit_url(self):
         return f'/studio/event-series/{self.pk}/'

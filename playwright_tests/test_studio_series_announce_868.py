@@ -203,9 +203,10 @@ class TestScenarioNotifySubscribers:
         )
         assert "New event series: Build Club B" in dropdown.inner_text()
         link = user_page.locator(
-            '#notification-list a[href="/events/groups/series-868b"]',
+            f'#notification-list a[href="{series.get_absolute_url()}"]',
         )
         assert link.count() >= 1
+        assert "/events/groups/" not in dropdown.inner_html()
         user_ctx.close()
 
 

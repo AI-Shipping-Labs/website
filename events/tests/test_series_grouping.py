@@ -196,8 +196,9 @@ class EventsListSeriesCardRenderTest(TestCase):
         # The next occurrence title links to the series page.
         self.assertContains(
             response,
-            '<a href="/events/groups/llm-oh"',
+            f'<a href="{self.series.get_absolute_url()}"',
         )
+        self.assertNotContains(response, '/events/groups/llm-oh')
         self.assertContains(response, 'Office Hours Session 0')
         # Session-count meta line.
         self.assertContains(response, '4 upcoming sessions')
@@ -399,7 +400,7 @@ class CompactSeriesPageRowsTest(TestCase):
         )
 
     def test_rows_use_single_divided_container_not_per_row_cards(self):
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         # The list wrapper is a single divided bordered container.
         self.assertContains(response, 'divide-y divide-border')
@@ -409,13 +410,13 @@ class CompactSeriesPageRowsTest(TestCase):
         self.assertContains(response, 'data-testid="series-event-date"')
 
     def test_state_chips_render_per_occurrence_for_anon(self):
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         # Open future session -> Register chip; past session -> Past chip.
         self.assertContains(response, 'data-testid="series-event-state-register"')
         self.assertContains(response, 'data-testid="series-event-state-past"')
 
     def test_cancelled_excluded_for_public(self):
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertNotContains(response, 'Scrapped Session')
         self.assertNotContains(
             response, 'data-testid="series-event-state-cancelled"',
@@ -426,7 +427,7 @@ class CompactSeriesPageRowsTest(TestCase):
             email='staff866@test.com', password='pass', is_staff=True,
         )
         self.client.force_login(staff)
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertContains(response, 'Scrapped Session')
         self.assertContains(
             response, 'data-testid="series-event-state-cancelled"',
@@ -442,6 +443,6 @@ class CompactSeriesPageRowsTest(TestCase):
             email='staff866b@test.com', password='pass', is_staff=True,
         )
         self.client.force_login(staff)
-        response = self.client.get(f'/events/groups/{empty_series.slug}')
+        response = self.client.get(empty_series.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'No published events in this series yet.')

@@ -158,13 +158,13 @@ class TestScenarioSeriesBareUrl:
         _clear()
         _ensure_tiers()
         url = "https://github.com/DataTalksClub/llm-zoomcamp"
-        _create_public_series(
+        series = _create_public_series(
             slug="md988-llm-office-hours",
             name="LLM Zoomcamp Office Hours",
             description=f"Course content: {url}",
         )
         resp = page.goto(
-            f"{django_server}/events/groups/md988-llm-office-hours",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         assert resp.status == 200
@@ -183,7 +183,7 @@ class TestScenarioSeriesMarkdownFormatting:
     def test_series_heading_emphasis_list(self, django_server, page):
         _clear()
         _ensure_tiers()
-        _create_public_series(
+        series = _create_public_series(
             slug="md988-formatted",
             name="Formatted Series",
             description=(
@@ -193,7 +193,7 @@ class TestScenarioSeriesMarkdownFormatting:
             ),
         )
         resp = page.goto(
-            f"{django_server}/events/groups/md988-formatted",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         assert resp.status == 200

@@ -3,6 +3,7 @@
 
 {% block title %}{{ series.name }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}Series page for {{ series.name }} — listing every upcoming and past occurrence.{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ series.get_absolute_url }}">{% endblock %}
 
 {% block og_tags %}
 {% comment %}Issue #896: the series uses its auto-generated banner as the OG/Twitter

@@ -322,7 +322,7 @@ class NotificationService:
 
         Issue #868. Unlike :meth:`notify`, this creates ONE notification
         per eligible user deep-linking to the public series page
-        (``/events/groups/<slug>``), not N per-occurrence notifications.
+        (``/events/series/<id>/<slug>``), not N per-occurrence notifications.
 
         Audience = users whose tier level clears the LOWEST
         ``required_level`` among the series' upcoming sessions, so anyone

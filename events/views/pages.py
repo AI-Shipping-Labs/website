@@ -733,13 +733,16 @@ def event_detail_no_slug_redirect(request, event_id):
 
 
 @ensure_csrf_cookie
-def event_series_public(request, slug):
+def event_series_public(request, series_id, slug):
     """Public series index page.
 
     Issue #564 (renamed from ``event_group_public`` in #575). Shows the
     series' metadata and every published member event. Anonymous visitors
     see the page; per-event tier gating happens on the individual event
     detail / registration as today.
+
+    Issue #1035: ``series_id`` is the lookup key and ``slug`` is cosmetic.
+    Stale shared links with the right id 301 to the current id+slug URL.
 
     Issue #857: sets the ``csrftoken`` cookie so the inline series-register
     fetch can POST with a valid token, and surfaces per-occurrence
@@ -749,7 +752,10 @@ def event_series_public(request, slug):
     and non-staff visitors. Staff see every member event so the page is
     useful for previewing a series and managing cancelled occurrences.
     """
-    series = get_object_or_404(EventSeries, slug=slug)
+    series = get_object_or_404(EventSeries, pk=series_id)
+    if slug != series.slug:
+        return redirect(series.get_absolute_url(), permanent=True)
+
     # Issue #858: an empty / hidden series 404s for the public so visitors
     # never land on a "no published events yet" placeholder or a series the
     # staff explicitly hid (``is_active=False``). Staff bypass this so they
@@ -842,6 +848,12 @@ def event_series_public(request, slug):
         'login_next': series.get_absolute_url(),
         'pricing_url': '/pricing',
     })
+
+
+def event_series_no_slug_redirect(request, series_id):
+    """Permanent redirect from ``/events/series/<id>`` to id+slug URL."""
+    series = get_object_or_404(EventSeries, pk=series_id)
+    return redirect(series.get_absolute_url(), permanent=True)
 
 
 def _resolve_cancel_state(slug, token):

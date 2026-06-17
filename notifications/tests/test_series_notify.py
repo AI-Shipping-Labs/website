@@ -75,7 +75,7 @@ class NotifySeriesTest(TestCase):
         n = Notification.objects.filter(user=self.free_user).first()
         self.assertEqual(n.title, series_notification_title(self.series))
         self.assertEqual(n.title, 'New event series: Build Club')
-        self.assertEqual(n.url, '/events/groups/build-club')
+        self.assertEqual(n.url, self.series.get_absolute_url())
         self.assertEqual(n.notification_type, 'new_content')
         self.assertEqual(n.body, 'Weekly shipping.')
 

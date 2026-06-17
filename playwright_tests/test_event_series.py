@@ -583,7 +583,7 @@ class TestScenario8PublicSeriesPage:
         ctx = browser.new_context(viewport={"width": 1280, "height": 720})
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/events/groups/public-series",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         assert page.locator('[data-testid="series-name"]').inner_text() == "Public Series"
@@ -644,7 +644,7 @@ def _seed_shuffled_office_hours():
             series_position=position,
         ).save()
     connection.close()
-    return series.slug
+    return series
 
 
 @pytest.mark.core
@@ -654,12 +654,12 @@ class TestScenario957ChronologicalOrder:
         self, django_server, browser
     ):
         _reset_event_state()
-        slug = _seed_shuffled_office_hours()
+        series = _seed_shuffled_office_hours()
 
         ctx = browser.new_context(viewport={"width": 1280, "height": 720})
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/events/groups/{slug}",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
@@ -695,11 +695,10 @@ class TestScenario957ChronologicalOrder:
         from django.db import connection
         from django.utils import timezone
 
-        from events.models import Event, EventSeries
+        from events.models import Event
 
         _reset_event_state()
-        slug = _seed_shuffled_office_hours()
-        series = EventSeries.objects.get(slug=slug)
+        series = _seed_shuffled_office_hours()
         now = timezone.now()
         Event(
             title="Rebuilt Office Hours — Draft",
@@ -726,7 +725,7 @@ class TestScenario957ChronologicalOrder:
         ctx = browser.new_context(viewport={"width": 1280, "height": 720})
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/events/groups/{slug}",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
@@ -801,7 +800,9 @@ class TestScenario9ListingShowsSeriesLink:
         assert series_link.count() == 1
         assert "Listed Public Series" in series_link.first.inner_text()
         series_link.first.locator("a").click()
-        page.wait_for_url(re.compile(r".*/events/groups/listed-public-series"))
+        page.wait_for_url(
+            re.compile(r".*/events/series/\d+/listed-public-series$")
+        )
 
         ctx.close()
 
@@ -874,7 +875,7 @@ class TestScenario1028UpcomingListingSeriesCollapse:
 
         card.locator('[data-testid="series-card-see-more"]').click()
         page.wait_for_url(
-            re.compile(r".*/events/groups/llm-zoomcamp-2026-office-hours$")
+            re.compile(r".*/events/series/\d+/llm-zoomcamp-2026-office-hours$")
         )
         rows = page.locator('[data-testid="series-event"]')
         assert rows.count() == 4
@@ -1038,7 +1039,7 @@ class TestScenario10CancelledHiddenFromPublic:
         anon = browser.new_context(viewport={"width": 1280, "height": 720})
         anon_page = anon.new_page()
         anon_page.goto(
-            f"{django_server}/events/groups/cancellation-series",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         rows = anon_page.locator('[data-testid="series-event"]')
@@ -1053,7 +1054,7 @@ class TestScenario10CancelledHiddenFromPublic:
         staff_ctx = _auth_context(browser, "staff-eg10@test.com")
         staff_page = staff_ctx.new_page()
         staff_page.goto(
-            f"{django_server}/events/groups/cancellation-series",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         staff_rows = staff_page.locator('[data-testid="series-event"]')
@@ -1117,7 +1118,7 @@ class TestScenario956PerSessionTierBadge:
         anon = browser.new_context(viewport={"width": 1280, "height": 720})
         page = anon.new_page()
         page.goto(
-            f"{django_server}/events/groups/tier-split-series",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
@@ -1200,7 +1201,7 @@ class TestScenario877ScheduleLabel:
         ctx = browser.new_context(viewport={"width": 1280, "height": 720})
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/events/groups/drifted-series",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         cadence = page.locator('[data-testid="series-cadence"]')
@@ -1252,7 +1253,7 @@ class TestScenario877ScheduleLabel:
         ctx = browser.new_context(viewport={"width": 1280, "height": 720})
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/events/groups/weekly-series",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         label = page.locator(
@@ -1270,12 +1271,13 @@ class TestScenario877ScheduleLabel:
         _create_staff_user("staff-eg877@test.com")
         # All-draft series: zero publicly-visible occurrences, so the label is
         # empty and the cadence paragraph must be omitted entirely.
-        _seed_office_hours_series()
+        series_pk = _seed_office_hours_series()
+        series_url = _series_public_url(series_pk)
 
         ctx = _auth_context(browser, "staff-eg877@test.com")
         page = ctx.new_page()
         resp = page.goto(
-            f"{django_server}/events/groups/office-hours",
+            f"{django_server}{series_url}",
             wait_until="domcontentloaded",
         )
         assert resp.status == 200
@@ -1363,7 +1365,7 @@ class TestScenario947ListingCardCadence:
         # Click through to the series page; its header agrees with the card.
         card.locator('[data-testid="series-card-link"]').click()
         page.wait_for_url(
-            re.compile(r".*/events/groups/listing-drifted-series$")
+            re.compile(r".*/events/series/\d+/listing-drifted-series$")
         )
         page_label = page.locator(
             '[data-testid="series-cadence"]'
@@ -1408,6 +1410,12 @@ def _seed_office_hours_series():
     pk = series.pk
     connection.close()
     return pk
+
+
+def _series_public_url(series_pk):
+    from events.models import EventSeries
+
+    return EventSeries.objects.get(pk=series_pk).get_absolute_url()
 
 
 @pytest.mark.core
@@ -1617,6 +1625,7 @@ class TestScenario858PublishAndVisibility:
         _create_staff_user("staff-eg858a@test.com")
         # All occurrences start as draft (default status).
         series_pk = _seed_office_hours_series()
+        series_url = _series_public_url(series_pk)
 
         ctx = _auth_context(browser, "staff-eg858a@test.com")
         page = ctx.new_page()
@@ -1661,7 +1670,7 @@ class TestScenario858PublishAndVisibility:
         anon = browser.new_context(viewport={"width": 1280, "height": 720})
         anon_page = anon.new_page()
         resp = anon_page.goto(
-            f"{django_server}/events/groups/office-hours",
+            f"{django_server}{series_url}",
             wait_until="domcontentloaded",
         )
         assert resp.status == 200
@@ -1688,7 +1697,7 @@ class TestScenario858PublishAndVisibility:
         anon2 = browser.new_context(viewport={"width": 1280, "height": 720})
         anon2_page = anon2.new_page()
         resp2 = anon2_page.goto(
-            f"{django_server}/events/groups/office-hours",
+            f"{django_server}{series_url}",
             wait_until="domcontentloaded",
         )
         assert resp2.status == 404
@@ -1702,13 +1711,14 @@ class TestScenario858PublishAndVisibility:
         _reset_event_state()
         _create_staff_user("staff-eg858b@test.com")
         # All-draft series: zero published occurrences.
-        _seed_office_hours_series()
+        series_pk = _seed_office_hours_series()
+        series_url = _series_public_url(series_pk)
 
         # Anonymous visitor 404s and never sees the placeholder or "Draft".
         anon = browser.new_context(viewport={"width": 1280, "height": 720})
         anon_page = anon.new_page()
         resp = anon_page.goto(
-            f"{django_server}/events/groups/office-hours",
+            f"{django_server}{series_url}",
             wait_until="domcontentloaded",
         )
         assert resp.status == 404
@@ -1721,7 +1731,7 @@ class TestScenario858PublishAndVisibility:
         ctx = _auth_context(browser, "staff-eg858b@test.com")
         page = ctx.new_page()
         resp_staff = page.goto(
-            f"{django_server}/events/groups/office-hours",
+            f"{django_server}{series_url}",
             wait_until="domcontentloaded",
         )
         assert resp_staff.status == 200
@@ -1736,6 +1746,7 @@ class TestScenario858PublishAndVisibility:
         _reset_event_state()
         _create_staff_user("staff-eg858c@test.com")
         series_pk = _seed_office_hours_series()
+        series_url = _series_public_url(series_pk)
         # Publish one occurrence so the series has published events.
         Event.objects.filter(event_series_id=series_pk).update(
             status="upcoming"
@@ -1745,7 +1756,7 @@ class TestScenario858PublishAndVisibility:
         anon = browser.new_context(viewport={"width": 1280, "height": 720})
         anon_page = anon.new_page()
         assert anon_page.goto(
-            f"{django_server}/events/groups/office-hours",
+            f"{django_server}{series_url}",
             wait_until="domcontentloaded",
         ).status == 200
         anon.close()
@@ -1767,7 +1778,7 @@ class TestScenario858PublishAndVisibility:
         anon2 = browser.new_context(viewport={"width": 1280, "height": 720})
         anon2_page = anon2.new_page()
         assert anon2_page.goto(
-            f"{django_server}/events/groups/office-hours",
+            f"{django_server}{series_url}",
             wait_until="domcontentloaded",
         ).status == 404
         anon2.close()
@@ -1786,7 +1797,7 @@ class TestScenario858PublishAndVisibility:
         anon3 = browser.new_context(viewport={"width": 1280, "height": 720})
         anon3_page = anon3.new_page()
         assert anon3_page.goto(
-            f"{django_server}/events/groups/office-hours",
+            f"{django_server}{series_url}",
             wait_until="domcontentloaded",
         ).status == 200
         anon3.close()

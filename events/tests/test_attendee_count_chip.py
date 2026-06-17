@@ -155,7 +155,7 @@ class EventSeriesAttendeeChipTest(TestCase):
         self._add_event('weekly-2', 2, count=1)
         self._add_event('weekly-3', 3, count=5)
 
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
         # Three chip elements, one per card.
@@ -184,7 +184,7 @@ class EventSeriesAttendeeChipTest(TestCase):
             self._add_event(f'baseline-{i}', i, count=2)
         with CaptureQueriesContext(connection) as cap_3:
             response = self.client.get(
-                f'/events/groups/{self.series.slug}'
+                self.series.get_absolute_url()
             )
             self.assertEqual(response.status_code, 200)
         baseline = len(cap_3.captured_queries)
@@ -194,7 +194,7 @@ class EventSeriesAttendeeChipTest(TestCase):
             self._add_event(f'extra-{i}', i, count=2)
         with CaptureQueriesContext(connection) as cap_10:
             response = self.client.get(
-                f'/events/groups/{self.series.slug}'
+                self.series.get_absolute_url()
             )
             self.assertEqual(response.status_code, 200)
         scaled = len(cap_10.captured_queries)

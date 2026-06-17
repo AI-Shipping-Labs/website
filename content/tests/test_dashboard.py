@@ -713,7 +713,7 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         )
         self.assertContains(
             response,
-            'href="/events/groups/llm-zoomcamp-2026-office-hours"',
+            f'href="{series.get_absolute_url()}"',
         )
 
     @freeze_time('2026-06-17T12:00:00Z')

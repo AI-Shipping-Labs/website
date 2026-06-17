@@ -92,7 +92,7 @@ class StudioEditButtonEventSeriesTest(TestCase):
     def test_staff_sees_button(self):
         _staff_user()
         self.client.login(email='staff@test.com', password='pw')
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, STUDIO_BUTTON_TESTID, count=1)
         self.assertContains(
@@ -100,7 +100,7 @@ class StudioEditButtonEventSeriesTest(TestCase):
         )
 
     def test_anonymous_does_not_see_button(self):
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, STUDIO_BUTTON_TESTID)
         self.assertNotContains(response, '/studio/')

@@ -54,6 +54,11 @@ class UnverifiedEmailBannerGlobalTest(TestCase):
         # Banner ID is the canonical hook used by Playwright tests.
         self.assertIn('id="email-verification-banner"', content)
         self.assertIn("Verify your email", content)
+        banner_start = content.index('id="email-verification-banner"')
+        banner_tag_start = content.rfind("<", 0, banner_start)
+        banner_tag_end = content.find(">", banner_start)
+        banner_tag = content[banner_tag_start:banner_tag_end + 1]
+        self.assertNotIn("mb-8", banner_tag)
         # Exactly one banner on the page.
         self.assertEqual(content.count('id="email-verification-banner"'), 1)
 

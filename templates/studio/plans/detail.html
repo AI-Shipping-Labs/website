@@ -14,7 +14,7 @@
       </h1>
       <p class="text-sm text-muted-foreground mt-1">
         Sprint: <a href="{% url 'studio_sprint_detail' sprint_id=plan.sprint.pk %}" class="text-accent hover:underline">{{ plan.sprint.name }}</a>
-        {% if plan.shared_at %}· Shared {{ plan.shared_at|date:"Y-m-d" }}{% endif %}
+        {% if plan.shared_at %}· Shared {{ plan.shared_at|operator_date }}{% endif %}
       </p>
     </div>
     <div class="flex items-center gap-2" data-testid="studio-header-actions">
@@ -96,7 +96,7 @@
       {% if week.checkpoints.all %}
       <ul class="list-disc list-inside text-sm text-foreground mt-2 space-y-1">
         {% for cp in week.checkpoints.all %}
-        <li>{{ cp.description }}{% if cp.done_at %} <span class="text-xs text-muted-foreground">(done {{ cp.done_at|date:"Y-m-d" }})</span>{% endif %}</li>
+        <li>{{ cp.description }}{% if cp.done_at %} <span class="text-xs text-muted-foreground">(done {{ cp.done_at|operator_date }})</span>{% endif %}</li>
         {% endfor %}
       </ul>
       {% else %}
@@ -116,7 +116,7 @@
           {% for note in week.notes.all %}
           <li class="rounded-md border border-border bg-card p-2" data-testid="studio-plan-week-note">
             <p class="text-xs text-muted-foreground">
-              {% if note.author %}{{ note.author.email }}{% else %}-{% endif %} &middot; {{ note.created_at|date:"Y-m-d H:i" }}
+              {% if note.author %}{{ note.author.email }}{% else %}-{% endif %} &middot; {{ note.created_at|operator_datetime }}
             </p>
             <p class="mt-1 whitespace-pre-line text-sm text-foreground">{{ note.body }}</p>
           </li>
@@ -155,7 +155,7 @@
   {% if deliverables %}
   <ul class="list-disc list-inside text-sm text-foreground space-y-1">
     {% for d in deliverables %}
-    <li>{{ d.description }}{% if d.done_at %} <span class="text-xs text-muted-foreground">(done {{ d.done_at|date:"Y-m-d" }})</span>{% endif %}</li>
+    <li>{{ d.description }}{% if d.done_at %} <span class="text-xs text-muted-foreground">(done {{ d.done_at|operator_date }})</span>{% endif %}</li>
     {% endfor %}
   </ul>
   {% else %}

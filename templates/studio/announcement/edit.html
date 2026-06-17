@@ -116,7 +116,7 @@
   </form>
 
   <div class="mt-6 pt-4 border-t border-border text-xs text-muted-foreground space-y-1">
-    <p>Last updated: <span class="text-foreground">{{ banner.updated_at|date:"Y-m-d H:i" }}</span></p>
+    <p>Last updated: <span class="text-foreground">{{ banner.updated_at|operator_datetime }}</span></p>
     <p>Current version: <span class="text-foreground">{{ banner.version }}</span></p>
   </div>
 </div>

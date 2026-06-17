@@ -70,12 +70,12 @@
     {% endif %}
     <div class="flex justify-between gap-4">
       <dt class="text-muted-foreground">Joined</dt>
-      <dd class="text-foreground">{{ detail_user.date_joined|date:"M d, Y" }}</dd>
+      <dd class="text-foreground">{{ detail_user.date_joined|operator_date }}</dd>
     </div>
     {% if detail_user.last_login %}
     <div class="flex justify-between gap-4">
       <dt class="text-muted-foreground">Last login</dt>
-      <dd class="text-foreground">{{ detail_user.last_login|date:"M d, Y" }}</dd>
+      <dd class="text-foreground">{{ detail_user.last_login|operator_date }}</dd>
     </div>
     {% endif %}
     {% if detail_user.stripe_customer_id %}
@@ -171,7 +171,7 @@
         {% if has_override and active_override %}
         <p class="text-xs text-muted-foreground mt-1" data-testid="user-detail-tier-base">
           Base: {% if detail_user.tier %}{{ detail_user.tier.name }}{% else %}Free{% endif %}
-          &middot; expires {{ active_override.expires_at|date:"M d, Y H:i" }} UTC
+          &middot; expires {{ active_override.expires_at|operator_datetime }} UTC
         </p>
         {% endif %}
       </dd>
@@ -332,7 +332,7 @@
     {% if has_override and active_override %}
     <p class="text-sm text-foreground mb-3">
       Active override to <span class="font-medium">{{ active_override.override_tier.name }}</span>
-      until {{ active_override.expires_at|date:"M d, Y H:i" }} UTC.
+      until {{ active_override.expires_at|operator_datetime }} UTC.
     </p>
     <p class="mb-3">
       <a href="{% url 'studio_user_tier_override_page' detail_user.pk %}"
@@ -439,7 +439,7 @@
     <div class="flex justify-between gap-4">
       <dt class="text-muted-foreground">Recorded</dt>
       <dd class="text-foreground" data-testid="user-detail-bounce-recorded-at">
-        {{ bounce_recorded_at|date:"Y-m-d H:i" }} UTC
+        {{ bounce_recorded_at|operator_datetime }} UTC
       </dd>
     </div>
     {% endif %}
@@ -683,8 +683,8 @@
               {{ enrollment.status }}
             </span>
           </td>
-          <td class="py-3 px-4 font-mono text-foreground tabular-nums">{{ enrollment.enrolled_at|date:"Y-m-d" }}</td>
-          <td class="py-3 pl-4 font-mono text-foreground tabular-nums">{{ enrollment.last_activity_at|date:"Y-m-d" }}</td>
+          <td class="py-3 px-4 font-mono text-foreground tabular-nums">{{ enrollment.enrolled_at|operator_date }}</td>
+          <td class="py-3 pl-4 font-mono text-foreground tabular-nums">{{ enrollment.last_activity_at|operator_date }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -726,7 +726,7 @@
       </div>
       <span class="text-xs text-muted-foreground font-mono tabular-nums shrink-0"
             data-testid="user-activity-time">
-        {{ activity.occurred_at|date:"Y-m-d H:i" }}
+        {{ activity.occurred_at|operator_datetime }}
       </span>
     </li>
     {% if activity.is_upgrade_marker %}
@@ -761,7 +761,7 @@
   <h2 class="text-lg font-semibold text-foreground mb-2">CRM</h2>
   {% if crm_record %}
   <p class="text-sm text-muted-foreground mb-4" data-testid="user-crm-tracked-since">
-    Tracked since {{ crm_record.created_at|date:"Y-m-d" }}. View plans, notes, and engagement context on the CRM record.
+    Tracked since {{ crm_record.created_at|operator_date }}. View plans, notes, and engagement context on the CRM record.
   </p>
   <a href="{% url 'studio_crm_detail' crm_id=crm_record.pk %}"
      data-testid="user-crm-cta-open"

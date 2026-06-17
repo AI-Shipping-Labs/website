@@ -295,7 +295,7 @@
                 <p class="font-medium text-foreground truncate">{{ item.title }}</p>
                 <p class="text-sm text-muted-foreground truncate">{{ item.description|strip_markdown|truncatechars:80 }}</p>
               </div>
-              <span class="hidden sm:block shrink-0 text-xs text-muted-foreground">{{ item.date|date:"M j" }}</span>
+              <span class="hidden sm:block shrink-0 text-xs text-muted-foreground">{{ item.date|member_compact_date }}</span>
             </a>
             {% endfor %}
           </div>

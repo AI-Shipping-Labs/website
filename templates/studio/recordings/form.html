@@ -66,7 +66,7 @@
       </div>
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Date</label>
-        <input type="date" name="date" value="{% if recording %}{{ recording.start_datetime|date:'Y-m-d' }}{% endif %}"
+        <input type="date" name="date" value="{% if recording %}{{ recording.start_datetime|form_date_value }}{% endif %}"
                {% if is_synced %}disabled{% endif %}
                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
       </div>

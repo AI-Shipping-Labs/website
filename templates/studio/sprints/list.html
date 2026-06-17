@@ -40,7 +40,7 @@
         <td class="px-6 py-4">
           {% studio_status_badge sprint.status sprint.get_status_display %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.start_date|date:"Y-m-d" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.start_date|operator_date }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.duration_weeks }} weeks</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.plan_count }}</td>
         <td class="px-6 py-4 text-sm" data-testid="sprint-list-pending-count">

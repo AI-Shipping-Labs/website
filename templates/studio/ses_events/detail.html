@@ -50,8 +50,8 @@
         <div>
           <p class="text-xs text-muted-foreground uppercase">Received (UTC)</p>
           <p class="text-foreground"
-             title="{{ event.received_at|date:'Y-m-d H:i:s' }} UTC"
-             data-testid="ses-event-detail-received">{{ event.received_at|date:'Y-m-d H:i' }}</p>
+             title="{{ event.received_at|operator_datetime_seconds }} UTC"
+             data-testid="ses-event-detail-received">{{ event.received_at|operator_datetime }}</p>
         </div>
         <div>
           <p class="text-xs text-muted-foreground uppercase">Event type</p>
@@ -179,7 +179,7 @@
             </div>
             <div>
               <span class="text-xs text-muted-foreground uppercase mr-2">Sent at</span>
-              <span class="text-foreground">{{ event.email_log.sent_at|date:'Y-m-d H:i' }} UTC</span>
+              <span class="text-foreground">{{ event.email_log.sent_at|operator_datetime }} UTC</span>
             </div>
           </div>
         {% else %}

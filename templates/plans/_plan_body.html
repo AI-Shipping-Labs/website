@@ -147,7 +147,7 @@ is already copied (count == 0) we show an "all caught up" notice instead.
             <div class="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
               <span>
                 {% if note.author %}{{ note.author|display_name }}{% else %}Member{% endif %}
-                &middot; {{ note.created_at|date:"M j, Y H:i" }}
+                &middot; {{ note.created_at|member_short_datetime }}
                 {% if note.updated_at and note.updated_at != note.created_at %}
                 <span data-testid="plan-week-note-edited">(edited)</span>
                 {% endif %}

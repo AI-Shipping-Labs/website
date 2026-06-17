@@ -77,11 +77,11 @@
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground"
             data-testid="active-override-set-at"
-            data-label="Set at">{{ override.created_at|date:"M d, Y H:i" }}</td>
+            data-label="Set at">{{ override.created_at|operator_datetime }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground"
             data-testid="active-override-expires-at"
             data-label="Expires">
-          <div>{{ override.expires_at|date:"M d, Y H:i" }}</div>
+          <div>{{ override.expires_at|operator_datetime }}</div>
           <div class="text-xs">in {{ override.expires_at|timeuntil }}</div>
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground"

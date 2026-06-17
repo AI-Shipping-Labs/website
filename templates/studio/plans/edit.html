@@ -87,7 +87,7 @@
   <p class="mt-4 text-xs text-amber-800/70 dark:text-amber-200/60" data-testid="next-sprint-draft-provenance">
     Drafted from {{ next_sprint_draft.update_count }} recent #plan-sprints update{{ next_sprint_draft.update_count|pluralize }}
     {% if next_sprint_draft.model_name %}· model {{ next_sprint_draft.model_name }}{% endif %}
-    · {{ next_sprint_draft.generated_at|date:"Y-m-d" }}
+    · {{ next_sprint_draft.generated_at|operator_date }}
   </p>
 </section>
 {% endif %}

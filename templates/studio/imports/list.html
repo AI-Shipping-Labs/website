@@ -107,8 +107,8 @@
         <td class="px-4 py-3 text-sm" data-label="Status">
           {% studio_status_badge batch.status batch.get_status_display %}
         </td>
-        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Started">{{ batch.started_at|date:"Y-m-d H:i" }}</td>
-        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Finished">{% if batch.finished_at %}{{ batch.finished_at|date:"Y-m-d H:i" }}{% else %}running{% endif %}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Started">{{ batch.started_at|operator_datetime }}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Finished">{% if batch.finished_at %}{{ batch.finished_at|operator_datetime }}{% else %}running{% endif %}</td>
         <td class="px-4 py-3 text-sm" data-label="Mode">{% if batch.dry_run %}<span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">dry-run</span>{% else %}<span class="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-400">live</span>{% endif %}</td>
         <td class="px-4 py-3 text-sm text-right" data-label="Created">{{ batch.users_created }}</td>
         <td class="px-4 py-3 text-sm text-right" data-label="Updated">{{ batch.users_updated }}</td>

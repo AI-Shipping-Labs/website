@@ -47,7 +47,7 @@
         <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
           <span class="flex min-w-0 max-w-full items-center gap-1.5">
             <i data-lucide="calendar" class="h-4 w-4"></i>
-            {{ workshop.date|date:"F j, Y" }}
+            {{ workshop.date|member_full_date }}
           </span>
           {% for instructor in workshop.ordered_instructors %}
           <span class="flex min-w-0 max-w-full items-center gap-1.5" data-testid="workshop-instructor">

@@ -46,7 +46,7 @@
     <h3 class="text-xl font-semibold text-accent mb-8">{{ course.title }}</h3>
 
     <p class="text-sm text-muted-foreground mb-2">
-      Issued on {{ certificate.issued_at|date:"F j, Y" }}
+      Issued on {{ certificate.issued_at|member_full_date }}
     </p>
     <p class="text-xs text-muted-foreground">
       Certificate ID: {{ certificate.id }}

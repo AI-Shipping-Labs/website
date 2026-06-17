@@ -75,7 +75,7 @@
           <td class="px-6 py-4 text-sm text-muted-foreground">
             {% if access.granted_by %}{{ access.granted_by.email }}{% else %}-{% endif %}
           </td>
-          <td class="px-6 py-4 text-sm text-muted-foreground">{{ access.created_at|date:"M d, Y H:i" }}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground">{{ access.created_at|operator_datetime }}</td>
           <td class="px-6 py-4 text-right">
             {% if access.access_type == 'granted' %}
             <form method="post" action="{% url 'studio_course_access_revoke' course_id=course.pk access_id=access.pk %}" class="inline"
@@ -119,7 +119,7 @@
         </div>
         <div class="flex gap-2">
           <dt class="w-20 shrink-0">Date</dt>
-          <dd>{{ access.created_at|date:"M d, Y H:i" }}</dd>
+          <dd>{{ access.created_at|operator_datetime }}</dd>
         </div>
       </dl>
       <div class="pt-2">

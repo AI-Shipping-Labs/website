@@ -17,7 +17,7 @@ this partial.
         <summary class="cursor-pointer flex flex-wrap items-center justify-between gap-2">
           <span class="min-w-0">
             <span class="text-xs text-muted-foreground" data-testid="crm-slack-thread-date">
-              {{ thread.posted_at|date:"Y-m-d H:i" }}
+              {{ thread.posted_at|operator_datetime }}
             </span>
             <span class="text-sm text-foreground ml-2" data-testid="crm-slack-thread-snippet">
               {{ thread.root_message.text|truncatechars:120|default:"(no text)" }}
@@ -88,7 +88,7 @@ this partial.
                 {{ message.author_display|default:message.slack_user_id|default:"Unknown" }}
               </span>
               <span class="text-xs text-muted-foreground" data-testid="crm-slack-message-time">
-                {{ message.posted_at|date:"Y-m-d H:i" }}
+                {{ message.posted_at|operator_datetime }}
               </span>
               {% if message.is_root %}
               <span class="text-xs text-muted-foreground/70">(root)</span>

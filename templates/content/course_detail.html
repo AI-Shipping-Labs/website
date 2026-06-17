@@ -140,7 +140,7 @@
               <p class="text-sm text-muted-foreground">Next cohort</p>
               <p class="text-lg font-semibold text-foreground">{{ cohort.name }}</p>
               <p class="text-sm text-muted-foreground mt-1">
-                Starts {{ cohort.start_date|date:"F j, Y" }}
+                Starts {{ cohort.start_date|member_full_date }}
                 {% if cohort.max_participants %}
                 <span class="ml-2">{{ cohort.spots_remaining }} of {{ cohort.max_participants }} spots remaining</span>
                 {% endif %}

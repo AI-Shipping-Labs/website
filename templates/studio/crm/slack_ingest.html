@@ -30,7 +30,7 @@
     <tbody>
       {% for run in recent_runs %}
       <tr class="border-b border-border/50" data-testid="slack-ingest-run-row">
-        <td class="py-2 pr-4 text-muted-foreground">{{ run.started_at|date:"Y-m-d H:i" }}</td>
+        <td class="py-2 pr-4 text-muted-foreground">{{ run.started_at|operator_datetime }}</td>
         <td class="py-2 pr-4">{{ run.get_status_display }}</td>
         <td class="py-2 pr-4">{{ run.messages_seen }}</td>
         <td class="py-2 pr-4">{{ run.threads_persisted }}</td>
@@ -62,7 +62,7 @@
           <span class="text-xs text-muted-foreground ml-2" data-testid="slack-ingest-unmatched-author">
             {{ thread.root_message.author_display|default:thread.slack_user_id|default:"Unknown author" }}
           </span>
-          <span class="text-xs text-muted-foreground ml-2">{{ thread.posted_at|date:"Y-m-d H:i" }}</span>
+          <span class="text-xs text-muted-foreground ml-2">{{ thread.posted_at|operator_datetime }}</span>
         </span>
         {% if thread.permalink %}
         <a href="{{ thread.permalink }}" target="_blank" rel="noopener"

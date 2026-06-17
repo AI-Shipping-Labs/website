@@ -70,13 +70,13 @@
     {% if obj.created_at %}
     <div>
       <dt class="text-muted-foreground">Created</dt>
-      <dd class="text-foreground">{{ obj.created_at|date:"M d, Y H:i" }}</dd>
+      <dd class="text-foreground">{{ obj.created_at|operator_datetime }}</dd>
     </div>
     {% endif %}
     {% if obj.updated_at %}
     <div>
       <dt class="text-muted-foreground">Updated</dt>
-      <dd class="text-foreground">{{ obj.updated_at|date:"M d, Y H:i" }}</dd>
+      <dd class="text-foreground">{{ obj.updated_at|operator_datetime }}</dd>
     </div>
     {% endif %}
   </dl>

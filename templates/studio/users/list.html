@@ -304,8 +304,8 @@
         </td>
         <td class="px-3 py-1.5 align-top" data-label="Last login" data-testid="user-last-login">
           {% if row.last_login %}
-          <div class="text-xs text-foreground">{{ row.last_login|date:"Y-m-d" }}</div>
-          <div class="text-[11px] leading-4 text-muted-foreground">{{ row.last_login|date:"H:i" }}</div>
+          <div class="text-xs text-foreground">{{ row.last_login|operator_date }}</div>
+          <div class="text-[11px] leading-4 text-muted-foreground">{{ row.last_login|operator_time }}</div>
           {% else %}
           <span class="text-xs text-muted-foreground">-- never --</span>
           {% endif %}

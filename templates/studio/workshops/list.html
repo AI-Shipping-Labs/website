@@ -52,7 +52,7 @@
         <td class="px-6 py-4" data-label="Status">
           {% studio_status_badge workshop.status workshop.get_status_display %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ workshop.date|date:"M d, Y" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ workshop.date|operator_date }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Landing gate">{{ workshop.get_landing_required_level_display }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Pages gate">{{ workshop.get_pages_required_level_display }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Recording gate">{{ workshop.get_recording_required_level_display }}</td>

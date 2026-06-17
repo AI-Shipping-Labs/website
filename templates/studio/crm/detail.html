@@ -145,7 +145,7 @@
            data-testid="crm-plan-sprint-link"
            class="text-sm font-medium text-accent hover:underline">{{ member_plan.sprint.name }}</a>
         <p class="text-xs text-muted-foreground">
-          {% if member_plan.shared_at %}Shared {{ member_plan.shared_at|date:"Y-m-d" }}{% else %}Not yet shared{% endif %}
+          {% if member_plan.shared_at %}Shared {{ member_plan.shared_at|operator_date }}{% else %}Not yet shared{% endif %}
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -176,7 +176,7 @@
           With {{ call.host.name }}
         </p>
         <p class="text-xs text-muted-foreground" data-testid="crm-booked-call-time">
-          {% if call.scheduled_at %}{{ call.scheduled_at|date:"Y-m-d H:i" }}{% else %}Time not set{% endif %}
+          {% if call.scheduled_at %}{{ call.scheduled_at|operator_datetime }}{% else %}Time not set{% endif %}
         </p>
       </div>
     </li>
@@ -197,7 +197,7 @@
     {% if onboarding_response %}
       {% if onboarding_submitted %}
       <span class="text-xs text-muted-foreground" data-testid="crm-onboarding-submitted">
-        Submitted {{ onboarding_response.submitted_at|date:"Y-m-d" }}
+        Submitted {{ onboarding_response.submitted_at|operator_date }}
       </span>
       {% else %}
       <span class="inline-flex items-center rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-300 border border-amber-500/30"

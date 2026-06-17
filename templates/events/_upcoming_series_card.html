@@ -1,4 +1,3 @@
-{% load tz %}
 {% comment %}
 Issue #866: grouped "series card" shown in the Upcoming section when a
 series has 2+ upcoming live occurrences. ``row`` carries ``series``,
@@ -33,7 +32,11 @@ can register for the whole series or any single session).
           {% for occ in row.preview %}
           <li class="flex items-center gap-1.5">
             <i data-lucide="calendar" class="h-4 w-4"></i>
-            {% timezone occ.timezone %}{{ occ.start_datetime|date:"D, M d, Y · H:i" }}{% endtimezone %}
+            {% if user.is_authenticated %}
+              {% user_event_datetime occ.start_datetime user %}
+            {% else %}
+              {{ occ|event_source_short_datetime }}
+            {% endif %}
           </li>
           {% endfor %}
           {% if row.extra > 0 %}

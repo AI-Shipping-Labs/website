@@ -133,7 +133,7 @@
       <tr class="{% studio_list_class 'row' %}"
           data-testid="ses-event-row-{{ row.event.pk }}">
         <td class="px-6 py-3 text-sm text-foreground" data-label="Received">
-          <span title="{{ row.event.received_at|date:'Y-m-d H:i:s' }} UTC">{{ row.event.received_at|date:'Y-m-d H:i' }}</span>
+          <span title="{{ row.event.received_at|operator_datetime_seconds }} UTC">{{ row.event.received_at|operator_datetime }}</span>
         </td>
         <td class="px-6 py-3" data-label="Type">
           {% ses_severity row.event as row_severity %}

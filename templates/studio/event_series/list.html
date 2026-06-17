@@ -45,7 +45,7 @@
           {{ series.schedule_label }}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Events">{{ series.event_count }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Created">{{ series.created_at|date:"M d, Y" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Created">{{ series.created_at|operator_date }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_event_series_detail' series_id=series.pk as detail_url %}

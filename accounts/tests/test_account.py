@@ -217,7 +217,7 @@ class AccountPagePaidUserTest(TestCase):
         self.assertIn("Billing Period Ends", content)
 
     def test_billing_period_end_formatted(self):
-        """Billing period end is formatted as dd/mm/yyyy."""
+        """Billing period end is formatted as a member full date."""
         from datetime import datetime
 
         self.user.billing_period_end = timezone.make_aware(
@@ -226,7 +226,7 @@ class AccountPagePaidUserTest(TestCase):
         self.user.save(update_fields=["billing_period_end"])
         response = self.client.get("/account/")
         content = response.content.decode()
-        self.assertIn("15/03/2026", content)
+        self.assertIn("March 15, 2026", content)
 
     def test_paid_user_sees_customer_portal_management(self):
         """Paid users manage billing through the Customer Portal."""
@@ -353,7 +353,7 @@ class AccountPagePendingCancellationTest(TestCase):
         # Verify the current tier is Main via context
         self.assertEqual(response.context["tier"].slug, "main")
         self.assertContains(response, "access ends on")
-        self.assertContains(response, "15/05/2026")
+        self.assertContains(response, "May 15, 2026")
 
     def test_no_cancel_button_when_already_cancelled(self):
         """No cancel button when cancellation is already pending."""
@@ -476,7 +476,7 @@ class AccountPageMembershipActionStateTest(TestCase):
         self.assertNotContains(response, 'id="account-plan-state"')
         self.assertContains(response, 'id="pending-cancellation-notice"')
         self.assertContains(response, 'Basic')
-        self.assertContains(response, '29/05/2026')
+        self.assertContains(response, 'May 29, 2026')
         self.assertNotContains(response, 'id="cancel-btn"')
         self.assertNotContains(response, 'id="upgrade-btn"')
         self.assertContains(response, 'id="manage-subscription-btn"')

@@ -300,8 +300,9 @@ jobs:
     name: Playwright Core E2E
     runs-on: ubuntu-latest
     # The core partition is the deploy-critical Playwright smoke set. The
-    # scheduled workflow owns the full long-tail suite.
-    timeout-minutes: 15
+    # scheduled workflow owns the full long-tail suite. Keep this above the
+    # current ~20m CI runtime so deploys are not cancelled mid-pass.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code

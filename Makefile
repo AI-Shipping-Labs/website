@@ -78,8 +78,7 @@ test-playwright:
 
 # Run only the core subset of Playwright tests (auth, access control, payments,
 # one happy path each for events/courses/sprints/plans, notifications, and
-# minimal Studio operator coverage). Targeted at <8 min locally and <15 min on
-# CI; runs on every push to main via Deploy Dev.
+# minimal Studio operator coverage). Runs on every push to main via Deploy Dev.
 # See _docs/testing-guidelines.md ("Core Playwright subset") for the tagging policy.
 test-playwright-core:
 	uv run pytest -m "core and not visual_regression" playwright_tests/ -v

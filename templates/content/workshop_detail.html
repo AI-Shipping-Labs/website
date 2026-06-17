@@ -64,7 +64,7 @@
       {% if landing_gated_reason == "unverified_email" %}
       {% include "content/_verify_email_required.html" %}
       {% else %}
-      {% include "content/_gated_access_card.html" with gated_card_testid="workshop-landing-paywall" gated_icon="lock" gated_heading=landing_cta_message gated_description="The public metadata stays visible; membership unlocks the workshop details." required_tier_name=landing_tier_name gated_cta_url=landing_cta_url gated_cta_label=landing_cta_label gated_cta_testid="workshop-landing-upgrade-cta" %}
+      {% include "content/_gated_access_card.html" with gated_card_testid="workshop-landing-paywall" gated_icon="lock" gated_heading=landing_cta_message gated_description="Membership unlocks the workshop description, tutorial pages, recording details, and materials when available." required_tier_name=landing_tier_name gated_cta_url=landing_cta_url gated_cta_label=landing_cta_label gated_cta_testid="workshop-landing-upgrade-cta" %}
       {% endif %}
       {% else %}
 

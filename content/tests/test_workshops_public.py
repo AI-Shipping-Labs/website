@@ -17,9 +17,10 @@ Covers:
 """
 
 from datetime import date
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from content.models import (
@@ -276,6 +277,11 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/2026-04-21-ws')
         self.assertContains(response, 'data-testid="workshop-pages-paywall"')
         self.assertContains(response, 'Upgrade to Basic to access this workshop')
+        self.assertContains(
+            response,
+            'membership unlocks the step-by-step tutorial.',
+        )
+        self.assertNotContains(response, 'public metadata')
         # Issue #481: paywall pill reads "Basic or above required".
         self.assertContains(response, 'Basic or above required')
         self.assertNotContains(response, 'Basic+ required')
@@ -534,18 +540,39 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         ws = _make_workshop(
             slug='lg', title='Landing-gated',
             landing=10, pages=10, recording=20,
+            with_event=True,
+            materials=[
+                {'title': 'Slides', 'url': 'https://x/slides.pdf'},
+            ],
+            code_repo_url='https://github.com/org/private-repo',
+            tags=['agents'],
         )
         _make_page(ws, 'one', 'One', 1)
         # Anon user fails landing gate
         response = self.client.get(ws.get_absolute_url())
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Landing-gated')
+        self.assertContains(response, 'April 21, 2026')
+        self.assertContains(response, 'Alice')
+        self.assertContains(response, 'agents')
         self.assertContains(response, 'data-testid="workshop-landing-paywall"')
+        self.assertContains(response, 'Upgrade to Basic to view this workshop')
+        self.assertContains(
+            response,
+            'Membership unlocks the workshop description, tutorial pages, '
+            'recording details, and materials when available.',
+        )
+        self.assertNotContains(response, 'public metadata')
         # Issue #481: paywall pill uses "Basic or above required".
         self.assertContains(response, 'Basic or above required')
         # Description body is hidden
         self.assertNotContains(response, 'data-testid="workshop-description"')
+        self.assertNotContains(response, 'data-testid="workshop-materials"')
         # Pages list is hidden
         self.assertNotContains(response, 'data-testid="workshop-pages-list"')
+        self.assertNotContains(response, 'data-testid="workshop-actions"')
+        self.assertNotContains(response, 'data-testid="workshop-video-link"')
+        self.assertNotContains(response, 'data-testid="workshop-code-repo-link"')
 
     def test_landing_premium_pages_paywall_drops_or_above(self):
         """Issue #481 AC: Premium-only paywall says "Premium required".
@@ -632,6 +659,15 @@ class WorkshopVideoTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response, 'data-testid="video-paywall"', status_code=403,
+        )
+        self.assertContains(
+            response,
+            'Unlock the full recording, timestamps, and downloadable '
+            'materials with a membership.',
+            status_code=403,
+        )
+        self.assertNotContains(
+            response, 'public metadata', status_code=403,
         )
         # Issue #481: pill reads "Main or above required".
         self.assertContains(
@@ -734,6 +770,14 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
             response, 'Upgrade to Basic to access this workshop',
             status_code=403,
         )
+        self.assertContains(
+            response,
+            'membership unlocks the tutorial body.',
+            status_code=403,
+        )
+        self.assertNotContains(
+            response, 'public metadata', status_code=403,
+        )
         # Issue #481: paywall pill reads "Basic or above required".
         self.assertContains(
             response, 'Basic or above required', status_code=403,
@@ -799,6 +843,24 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-testid="sidebar-current-page"')
         # The 'aria-current="page"' attribute is rendered on the active row
         self.assertContains(response, 'aria-current="page"')
+
+
+class PublicGatedContentCopyRegressionTest(SimpleTestCase):
+    def test_public_gated_templates_do_not_use_public_metadata_jargon(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        template_paths = [
+            repo_root / 'templates' / 'includes' / 'content_gated.html',
+            *(repo_root / 'templates' / 'content').glob('*.html'),
+            *(repo_root / 'templates' / 'content').glob('*/*.html'),
+        ]
+
+        offenders = [
+            str(path.relative_to(repo_root))
+            for path in template_paths
+            if 'public metadata' in path.read_text().lower()
+        ]
+
+        self.assertEqual(offenders, [])
 
 
 class LegacyWorkshopUrlNow404sTest(TierSetupMixin, TestCase):

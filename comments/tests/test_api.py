@@ -1,10 +1,13 @@
 import json
 import uuid
+from datetime import date
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
+from django.urls import reverse
 
 from comments.models import Comment, CommentVote
+from plans.models import Plan, Sprint
 
 User = get_user_model()
 
@@ -166,6 +169,107 @@ class CreateCommentAPITest(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+@tag('core')
+class CreateCommentActivationAPITest(TestCase):
+    def setUp(self):
+        self.content_id = uuid.uuid4()
+        self.user = User.objects.create_user(
+            email='comment-activation@test.com',
+            password='pass',
+            account_activated=False,
+        )
+
+    def test_success_activates_user_and_preserves_payload_shape(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('comments_endpoint', kwargs={'content_id': self.content_id}),
+            data=json.dumps({'body': '  How do I ship this?  '}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(
+            set(data),
+            {
+                'id',
+                'body',
+                'user_name',
+                'created_at',
+                'vote_count',
+                'user_voted',
+                'replies',
+            },
+        )
+        self.assertEqual(data['body'], 'How do I ship this?')
+        self.assertEqual(data['vote_count'], 0)
+        self.assertFalse(data['user_voted'])
+        self.assertEqual(data['replies'], [])
+        self.assertTrue(data['created_at'])
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.account_activated)
+
+    def test_invalid_json_does_not_activate_user(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('comments_endpoint', kwargs={'content_id': self.content_id}),
+            data='not json',
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {'error': 'Invalid JSON'})
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.account_activated)
+
+    def test_blank_body_does_not_activate_user(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('comments_endpoint', kwargs={'content_id': self.content_id}),
+            data=json.dumps({'body': '   '}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {'error': 'Body is required'})
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.account_activated)
+
+    def test_plan_permission_failure_does_not_activate_user(self):
+        owner = User.objects.create_user(
+            email='comment-plan-owner@test.com',
+            password='pass',
+        )
+        sprint = Sprint.objects.create(
+            name='Comment Activation Sprint',
+            slug='comment-activation-sprint',
+            start_date=date(2026, 6, 1),
+        )
+        plan = Plan.objects.create(
+            member=owner,
+            sprint=sprint,
+            visibility='cohort',
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse(
+                'comments_endpoint',
+                kwargs={'content_id': plan.comment_content_id},
+            ),
+            data=json.dumps({'body': 'Forbidden'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {'error': 'Not allowed'})
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.account_activated)
+
+
 class ReplyAPITest(TestCase):
     """Test POST /api/comments/<comment_id>/reply."""
 
@@ -235,6 +339,104 @@ class ReplyAPITest(TestCase):
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 404)
+
+
+@tag('core')
+class ReplyActivationAPITest(TestCase):
+    def setUp(self):
+        self.author = User.objects.create_user(
+            email='reply-parent@test.com',
+            password='pass',
+        )
+        self.user = User.objects.create_user(
+            email='reply-activation@test.com',
+            password='pass',
+            account_activated=False,
+        )
+        self.parent = Comment.objects.create(
+            content_id=uuid.uuid4(),
+            user=self.author,
+            body='Parent comment',
+        )
+
+    def test_success_activates_user_and_preserves_payload_shape(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('comments_reply', kwargs={'comment_id': self.parent.pk}),
+            data=json.dumps({'body': '  Reply body  '}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(set(data), {'id', 'body', 'user_name', 'created_at'})
+        self.assertEqual(data['body'], 'Reply body')
+        self.assertTrue(data['created_at'])
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.account_activated)
+
+    def test_missing_parent_does_not_activate_user(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('comments_reply', kwargs={'comment_id': 99999}),
+            data=json.dumps({'body': 'No parent'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {'error': 'Comment not found'})
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.account_activated)
+
+    def test_nested_reply_does_not_activate_user(self):
+        reply = Comment.objects.create(
+            content_id=self.parent.content_id,
+            user=self.author,
+            parent=self.parent,
+            body='Existing reply',
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('comments_reply', kwargs={'comment_id': reply.pk}),
+            data=json.dumps({'body': 'Nested reply'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {'error': 'Cannot reply to a reply'})
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.account_activated)
+
+    def test_invalid_json_does_not_activate_user(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('comments_reply', kwargs={'comment_id': self.parent.pk}),
+            data='not json',
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {'error': 'Invalid JSON'})
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.account_activated)
+
+    def test_blank_body_does_not_activate_user(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('comments_reply', kwargs={'comment_id': self.parent.pk}),
+            data=json.dumps({'body': '   '}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {'error': 'Body is required'})
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.account_activated)
 
 
 class VoteAPITest(TestCase):

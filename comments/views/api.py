@@ -21,6 +21,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 
 from accounts.utils.display import display_name
+from comments import services as comment_services
 from comments.models import Comment, CommentVote
 
 
@@ -143,16 +144,11 @@ def create_comment(request, content_id):
     if not body:
         return JsonResponse({'error': 'Body is required'}, status=400)
 
-    comment = Comment.objects.create(
+    comment = comment_services.create_comment(
         content_id=content_id,
         user=request.user,
         body=body,
     )
-
-    # Issue #768: posting a comment is a real platform action. Flip
-    # ``account_activated`` if not already set. Idempotent.
-    from accounts.utils.activation import mark_activated
-    mark_activated(request.user)
 
     return JsonResponse({
         'id': comment.id,
@@ -202,17 +198,12 @@ def reply_to_comment(request, comment_id):
     if not body:
         return JsonResponse({'error': 'Body is required'}, status=400)
 
-    reply = Comment.objects.create(
+    reply = comment_services.create_comment(
         content_id=parent.content_id,
         user=request.user,
         parent=parent,
         body=body,
     )
-
-    # Issue #768: posting a reply is a real platform action. Flip
-    # ``account_activated`` if not already set. Idempotent.
-    from accounts.utils.activation import mark_activated
-    mark_activated(request.user)
 
     return JsonResponse({
         'id': reply.id,

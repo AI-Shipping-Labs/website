@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load member_badges %}
 {% load sprint_extras %}
 
 {% block title %}Community Sprints | AI Shipping Labs{% endblock %}
@@ -31,12 +32,10 @@
             <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                  <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium uppercase tracking-wide {{ item.sprint.sprint_badge_current.css_class }}" data-testid="sprints-sprint-status">
-                    {{ item.sprint.sprint_badge_current.label }}
-                  </span>
-                  <span class="inline-flex items-center rounded-full bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent" data-testid="sprints-sprint-tier">
-                    Membership: {{ item.required_tier_name }}
-                  </span>
+                  {% member_status_badge item.sprint.sprint_badge_current.label size="sm" extra_class=item.sprint.sprint_badge_current.css_class uppercase=True testid="sprints-sprint-status" %}
+                  {% with tier_label="Membership: "|add:item.required_tier_name %}
+                  {% member_label_badge tier_label tone="accent_strong" size="sm" testid="sprints-sprint-tier" %}
+                  {% endwith %}
                 </div>
                 <h2 class="mt-4 text-xl font-semibold text-foreground" data-testid="sprints-sprint-name">
                   <a href="{% url 'sprint_detail' sprint_slug=item.sprint.slug %}" class="hover:text-accent">{{ item.sprint.name }}</a>

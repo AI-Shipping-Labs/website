@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load member_badges %}
 {% load seo_tags %}
 {% load teaser_tags %}
 
@@ -23,20 +24,11 @@
       {% with workshop_primary_instructor=workshop.primary_instructor %}
       <header class="mb-12">
         <div class="mb-4 flex flex-wrap items-center gap-2">
-          <span class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
-            <i data-lucide="graduation-cap" class="h-4 w-4"></i>
-            Workshop
-          </span>
+          {% member_label_badge "Workshop" tone="accent_outline" size="md" icon="graduation-cap" %}
           {% if workshop.pages_required_level >= 10 %}
-          <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent" data-testid="workshop-tier-badge">
-            <i data-lucide="lock" class="h-3 w-3"></i>
-            {{ workshop.pages_required_level|required_tier_label }}
-          </span>
+          {% member_tier_badge workshop.pages_required_level tone="accent_strong" size="sm" icon="lock" testid="workshop-tier-badge" %}
           {% else %}
-          <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent" data-testid="workshop-free-badge">
-            <i data-lucide="badge-check" class="h-3 w-3"></i>
-            Free
-          </span>
+          {% member_tier_badge workshop.pages_required_level tone="accent_strong" size="sm" icon="badge-check" testid="workshop-free-badge" %}
           {% endif %}
         </div>
 

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load member_badges %}
 {% load member_empty_state %}
 {% load tag_filters %}
 
@@ -37,15 +38,12 @@
             <div class="min-w-0 p-4 sm:p-5">
               <div class="mb-3 flex flex-wrap items-center gap-2">
                 {% if course.is_free %}
-                <span class="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-0.5 text-xs font-medium text-green-400">Free</span>
+                {% member_tier_badge course.required_level tone="success_soft" %}
                 {% elif course.required_level > 0 %}
-                <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">{{ course.required_level|required_tier_label }}</span>
+                {% member_tier_badge course.required_level tone="accent" %}
                 {% endif %}
                 {% if course.pk in enrolled_course_ids %}
-                <span class="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-0.5 text-xs font-medium text-green-400" data-testid="enrolled-badge">
-                  <i data-lucide="check-circle-2" class="h-3 w-3"></i>
-                  Enrolled
-                </span>
+                {% member_status_badge "Enrolled" status="enrolled" icon="check-circle-2" testid="enrolled-badge" %}
                 {% endif %}
               </div>
               <h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">

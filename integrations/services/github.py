@@ -45,6 +45,11 @@ from integrations.services.github_sync.dispatchers.events import (
     _event_requests_zoom_meeting,
     _maybe_create_zoom_meeting_for_synced_event,
 )
+from integrations.services.github_sync.dispatchers.hosts import (
+    ResolvedEventHosts,
+    _attach_hosts_to_event,
+    _resolve_hosts_for_event_yaml,
+)
 from integrations.services.github_sync.dispatchers.instructors import (
     _attach_instructors_to_course,
     _attach_instructors_to_event,

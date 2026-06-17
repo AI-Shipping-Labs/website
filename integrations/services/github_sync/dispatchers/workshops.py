@@ -30,6 +30,7 @@ from integrations.services.github_sync.parsing import (
 from integrations.services.github_sync.repo import derive_slug, extract_sort_order, _matches_ignore_patterns
 
 from integrations.services.github_sync.dispatchers.instructors import _attach_instructors_to_workshop, _resolve_instructors_for_yaml
+from integrations.services.github_sync.dispatchers.hosts import _attach_hosts_to_event, _resolve_hosts_for_event_yaml
 from integrations.services.github_sync.dispatchers.events import (
     _build_synced_event_content_defaults,
     _normalize_title_for_match,
@@ -446,6 +447,10 @@ def _sync_single_workshop(
             workshop, resolved_instructors, stats,
         )
 
+        resolved_event_hosts = _resolve_hosts_for_event_yaml(
+            data, yaml_rel_path, stats, legacy_name_field='instructor_name',
+        )
+
         if recording_url:
             # Link or create the Event only for recording-backed workshops.
             # Shared slug — ``/events/<slug>`` and ``/workshops/<slug>`` live
@@ -463,6 +468,7 @@ def _sync_single_workshop(
                 workshop_date, source, rel_path, yaml_rel_path, commit_sha, stats,
                 event_id=data.get('event_id'),
                 event_slug=data.get('event_slug'),
+                resolved_hosts=resolved_event_hosts,
             )
         else:
             _cleanup_generated_empty_workshop_event(
@@ -598,7 +604,7 @@ def _resolve_explicit_workshop_event(event_id, event_slug):
 def _link_or_create_workshop_event(
     workshop, data, recording, recording_required_level, workshop_date,
     source, rel_path, yaml_rel_path, commit_sha, stats,
-    event_id=None, event_slug=None,
+    event_id=None, event_slug=None, resolved_hosts=None,
 ):
     """Attach a matching ``Event`` to ``workshop``, creating one if missing.
 
@@ -765,6 +771,8 @@ def _link_or_create_workshop_event(
     if workshop.event_id != event.pk:
         Workshop.objects.filter(pk=workshop.pk).update(event=event)
         workshop.event_id = event.pk
+
+    _attach_hosts_to_event(event, resolved_hosts)
 
 
 def _cleanup_generated_empty_workshop_event(workshop, source, stats):

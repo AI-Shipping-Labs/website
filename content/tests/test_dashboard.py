@@ -186,6 +186,9 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         self.assertIn('No courses or workshops in progress yet', content)
         self.assertIn('Browse Courses', content)
         self.assertIn('Browse Workshops', content)
+        self.assertIn('data-testid="member-empty-state"', content)
+        self.assertIn('href="/courses"', content)
+        self.assertIn('href="/workshops"', content)
 
     def test_shows_in_progress_course(self):
         # Enroll + complete 2 of 4 units
@@ -569,6 +572,8 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         content = response.content.decode()
         self.assertIn('No upcoming events', content)
         self.assertIn('Browse Events', content)
+        self.assertIn('data-testid="member-empty-state"', content)
+        self.assertIn('href="/events"', content)
 
     def test_shows_registered_upcoming_events(self):
         future = timezone.now() + timedelta(days=3)
@@ -652,6 +657,8 @@ class RecentContentTest(TierSetupMixin, TestCase):
         content = response.content.decode()
         self.assertIn('No content available yet', content)
         self.assertIn('Browse Blog', content)
+        self.assertIn('data-testid="member-empty-state"', content)
+        self.assertIn('href="/blog"', content)
 
     def test_shows_published_articles(self):
         Article.objects.create(

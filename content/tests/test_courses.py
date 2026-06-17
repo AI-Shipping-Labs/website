@@ -472,6 +472,18 @@ class CoursesListViewTest(TestCase):
         Course.objects.all().delete()
         response = self.client.get('/courses')
         self.assertContains(response, 'No courses available yet')
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="fresh"')
+
+    def test_tag_filter_no_match_shows_shared_empty_state_and_reset_link(self):
+        response = self.client.get('/courses?tag=missing-topic')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No courses found with the selected tags')
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="filter"')
+        self.assertContains(response, 'href="/courses"')
+        self.assertContains(response, 'View all courses')
+        self.assertNotContains(response, 'Published Course')
 
     def test_shows_cover_image(self):
         self.published.cover_image_url = 'https://example.com/cover.jpg'

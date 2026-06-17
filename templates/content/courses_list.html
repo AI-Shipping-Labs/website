@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load member_empty_state %}
 {% load tag_filters %}
 
 {% block title %}Courses | AI Shipping Labs{% endblock %}
@@ -73,17 +74,11 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="rounded-lg border border-border bg-card p-12 text-center">
-        <i data-lucide="book-open" class="mx-auto h-12 w-12 text-muted-foreground"></i>
-        <p class="mt-4 text-lg text-muted-foreground">
-          {% if selected_tags %}
-          No courses found with the selected tags.
-          <a href="/courses" class="text-accent hover:underline">View all courses</a>
-          {% else %}
-          No courses available yet. Check back soon for structured learning paths.
-          {% endif %}
-        </p>
-      </div>
+      {% if selected_tags %}
+      {% member_empty_state title='No courses found' body='No courses found with the selected tags.' icon='book-open' kind='filter' primary_cta_label='View all courses' primary_cta_url='/courses' %}
+      {% else %}
+      {% member_empty_state title='No courses available yet' body='Check back soon for structured learning paths.' icon='book-open' kind='fresh' %}
+      {% endif %}
       {% endif %}
     </div>
   </section>

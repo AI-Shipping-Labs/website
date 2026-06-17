@@ -99,10 +99,11 @@ class BlogEmptyStateSubscribeTest(TierSetupMixin, TestCase):
 
     def test_anonymous_user_sees_browse_first_empty_blog_copy(self):
         response = self.client.get("/blog")
-        self.assertContains(
-            response,
-            "No articles match this filter yet. Browse all articles as the archive grows.",
-        )
+        self.assertContains(response, "No articles yet")
+        self.assertContains(response, "Browse all articles as the archive grows.")
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="fresh"')
+        self.assertNotContains(response, "No articles match this filter yet")
         self.assertNotContains(response, "Get articles in the Friday newsletter")
 
     def test_authenticated_user_does_not_see_subscribe_link_in_empty_blog(self):
@@ -115,7 +116,7 @@ class BlogEmptyStateSubscribeTest(TierSetupMixin, TestCase):
     def test_authenticated_user_still_sees_empty_state_text(self):
         self.client.login(email="member@test.com", password="testpass123")
         response = self.client.get("/blog")
-        # Post-launch empty-state copy (issue #319).
-        self.assertContains(
-            response, "No articles match this filter yet"
-        )
+        self.assertContains(response, "No articles yet")
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="fresh"')
+        self.assertNotContains(response, "No articles match this filter yet")

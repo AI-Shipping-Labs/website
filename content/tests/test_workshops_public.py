@@ -149,6 +149,8 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         Workshop.objects.all().delete()
         response = self.client.get('/workshops')
         self.assertContains(response, 'data-testid="workshops-empty-state"')
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="fresh"')
         self.assertContains(response, 'No workshops published yet')
 
     def test_catalog_filter_by_tag(self):
@@ -160,6 +162,11 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
     def test_catalog_filter_no_match_shows_empty_state(self):
         response = self.client.get('/workshops?tag=does-not-exist')
         self.assertContains(response, 'No workshops found')
+        self.assertContains(response, 'data-testid="workshops-empty-state"')
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="filter"')
+        self.assertContains(response, 'href="/workshops"')
+        self.assertContains(response, 'View all workshops')
 
     def test_catalog_missing_cover_uses_decorative_fallback_preview(self):
         response = self.client.get('/workshops')

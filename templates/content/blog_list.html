@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load member_empty_state %}
 {% load tag_filters %}
 {% load teaser_tags %}
 
@@ -90,16 +91,11 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="rounded-lg border border-border bg-card p-12 text-center">
-        <p class="text-lg text-muted-foreground">
-          {% if selected_tags %}
-          No articles found with the selected tags.
-          <a href="/blog" class="text-accent hover:underline">View all articles</a>
-          {% else %}
-          No articles match this filter yet. Browse all articles as the archive grows.
-          {% endif %}
-        </p>
-      </div>
+      {% if selected_tags %}
+      {% member_empty_state title='No articles found' body='No articles found with the selected tags.' icon='file-text' kind='filter' primary_cta_label='View all articles' primary_cta_url='/blog' %}
+      {% else %}
+      {% member_empty_state title='No articles yet' body='Browse all articles as the archive grows.' icon='file-text' kind='fresh' %}
+      {% endif %}
       {% endif %}
     </div>
   </section>

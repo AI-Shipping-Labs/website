@@ -130,11 +130,11 @@ class BlogEmptyStateCopyTest(TierSetupMixin, TestCase):
 
     def test_empty_state_copy_is_browse_first(self):
         response = self.client.get("/blog")
-        self.assertContains(
-            response,
-            "No articles match this filter yet. Browse all articles as "
-            "the archive grows.",
-        )
+        self.assertContains(response, "No articles yet")
+        self.assertContains(response, "Browse all articles as the archive grows.")
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="fresh"')
+        self.assertNotContains(response, "No articles match this filter yet")
         self.assertNotContains(response, "Get articles in the Friday newsletter")
         # The old short CTA text must be gone.
         self.assertNotContains(response, "Subscribe to get notified")

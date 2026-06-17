@@ -1,0 +1,42 @@
+{% comment %}
+  Shared member/public empty-state card.
+
+  Context:
+    title, body          -- user-facing heading and support copy.
+    icon                 -- Lucide icon name. Defaults to ``inbox``.
+    kind                 -- "fresh" | "filter"; exposed as data-empty-kind.
+    primary/secondary_*  -- optional CTA label, url, icon, and class.
+    testid               -- optional page-specific selector. The component
+                            always exposes ``data-testid="member-empty-state"``
+                            on an inner marker for canonical regression tests.
+{% endcomment %}
+<div class="rounded-lg border border-border bg-card p-8 text-center sm:p-10"
+     data-testid="{% if testid %}{{ testid }}{% else %}member-empty-state{% endif %}"
+     data-empty-kind="{{ kind|default:'fresh' }}">
+  {% if testid %}
+  <span class="sr-only"
+        data-testid="member-empty-state"
+        data-empty-kind="{{ kind|default:'fresh' }}">Empty state</span>
+  {% endif %}
+  <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-secondary">
+    <i data-lucide="{{ icon|default:'inbox' }}" class="h-6 w-6 text-muted-foreground"></i>
+  </div>
+  <h2 class="mt-4 text-base font-semibold leading-snug text-foreground">{{ title }}</h2>
+  <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">{{ body }}</p>
+  {% if primary_cta_label and primary_cta_url or secondary_cta_label and secondary_cta_url %}
+  <div class="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
+    {% if primary_cta_label and primary_cta_url %}
+    <a href="{{ primary_cta_url }}" class="{{ primary_cta_class }}">
+      {{ primary_cta_label }}
+      {% if primary_cta_icon %}<i data-lucide="{{ primary_cta_icon }}" class="h-4 w-4"></i>{% endif %}
+    </a>
+    {% endif %}
+    {% if secondary_cta_label and secondary_cta_url %}
+    <a href="{{ secondary_cta_url }}" class="{{ secondary_cta_class }}">
+      {{ secondary_cta_label }}
+      {% if secondary_cta_icon %}<i data-lucide="{{ secondary_cta_icon }}" class="h-4 w-4"></i>{% endif %}
+    </a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>

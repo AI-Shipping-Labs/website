@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load member_empty_state %}
 {% load teaser_tags %}
 
 {% block title %}Tutorials | AI Shipping Labs{% endblock %}
@@ -59,12 +60,7 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="rounded-lg border border-border bg-card p-12 text-center">
-        <i data-lucide="book-open" class="mx-auto h-12 w-12 text-muted-foreground"></i>
-        <p class="mt-4 text-lg text-muted-foreground">
-          No tutorials yet. Check back soon for step-by-step guides.
-        </p>
-      </div>
+      {% member_empty_state title='No tutorials yet' body='Check back soon for step-by-step guides.' icon='book-open' kind='fresh' %}
       {% endif %}
     </div>
   </section>

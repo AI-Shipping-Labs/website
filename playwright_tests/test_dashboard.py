@@ -22,6 +22,7 @@ import os
 
 import pytest
 from django.utils import timezone
+from freezegun import freeze_time
 
 from playwright_tests.conftest import (
     VIEWPORT,
@@ -769,6 +770,139 @@ class TestScenario1028DashboardSeriesCollapse:
         assert see_more.count() == 1
         assert see_more.first.get_attribute("href") == (
             "/events/groups/llm-zoomcamp-2026-office-hours"
+        )
+
+        context.close()
+
+    @pytest.mark.core
+    @freeze_time("2026-06-17T12:00:00Z")
+    def test_visible_dashboard_event_dates_use_member_timezone(
+        self, django_server, browser
+    ):
+        from events.models import Event, EventRegistration, EventSeries
+
+        _clear_dashboard_data()
+        user = _create_user("dashboard-local-time@test.com", tier_slug="main")
+        user.preferred_timezone = "Europe/Berlin"
+        user.save(update_fields=["preferred_timezone"])
+
+        standalone = Event.objects.create(
+            title="Standalone Local Time Clinic",
+            slug="standalone-local-time-clinic",
+            start_datetime=datetime.datetime(
+                2026, 6, 24, 16, 0, tzinfo=datetime.timezone.utc
+            ),
+            status="upcoming",
+            origin="studio",
+            timezone="UTC",
+        )
+        EventRegistration.objects.create(user=user, event=standalone)
+
+        series = EventSeries.objects.create(
+            name="LLM Zoomcamp 2026 office hours",
+            slug="llm-zoomcamp-local-time",
+            start_time=datetime.time(18, 0),
+            timezone="UTC",
+        )
+        for i, start_datetime in enumerate(
+            [
+                datetime.datetime(
+                    2026, 6, 25, 16, 0, tzinfo=datetime.timezone.utc
+                ),
+                datetime.datetime(
+                    2026, 7, 2, 16, 0, tzinfo=datetime.timezone.utc
+                ),
+            ],
+            start=1,
+        ):
+            event = Event.objects.create(
+                title=f"LLM Local Time Session {i}",
+                slug=f"llm-local-time-session-{i}",
+                start_datetime=start_datetime,
+                status="upcoming",
+                origin="studio",
+                timezone="UTC",
+                event_series=series,
+                series_position=i,
+            )
+            EventRegistration.objects.create(user=user, event=event)
+        connection.close()
+
+        context = _auth_context(browser, "dashboard-local-time@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        body = page.locator("body").inner_text()
+        assert "Standalone Local Time Clinic" in body
+        assert "LLM Local Time Session 1" in body
+        assert "LLM Local Time Session 2" not in body
+        assert "Wed, Jun 24, 2026, 18:00 Europe/Berlin" in body
+        assert "Thu, Jun 25, 2026, 18:00 Europe/Berlin" in body
+        assert "June 24, 2026 at 16:00 UTC" not in body
+
+        row = page.locator('[data-testid="dashboard-upcoming-event-row"]').filter(
+            has_text="Standalone Local Time Clinic"
+        )
+        row.locator('[data-testid="dashboard-event-action"]').click()
+        page.wait_for_load_state("domcontentloaded")
+        assert standalone.get_absolute_url() in page.url
+
+        context.close()
+
+    @pytest.mark.core
+    @freeze_time("2026-06-17T12:00:00Z")
+    def test_dashboard_event_dates_fit_390px_mobile(
+        self, django_server, browser
+    ):
+        from events.models import Event, EventRegistration
+
+        _clear_dashboard_data()
+        user = _create_user("dashboard-mobile-time@test.com", tier_slug="main")
+        user.preferred_timezone = "Europe/Berlin"
+        user.save(update_fields=["preferred_timezone"])
+        event = Event.objects.create(
+            title=(
+                "Very Long Dashboard Implementation Clinic With Local Time"
+            ),
+            slug="very-long-dashboard-local-time",
+            start_datetime=datetime.datetime(
+                2026, 6, 24, 16, 0, tzinfo=datetime.timezone.utc
+            ),
+            status="upcoming",
+            origin="studio",
+            timezone="UTC",
+        )
+        EventRegistration.objects.create(user=user, event=event)
+        connection.close()
+
+        context = _auth_context(browser, "dashboard-mobile-time@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        assert page.locator('[data-testid="dashboard-event-date"]').inner_text() == (
+            "Wed, Jun 24, 2026, 18:00 Europe/Berlin"
+        )
+        assert page.evaluate(
+            "() => document.documentElement.scrollWidth <= "
+            "document.documentElement.clientWidth"
+        )
+        assert not page.evaluate(
+            """() => {
+                const row = document.querySelector(
+                  '[data-testid="dashboard-upcoming-event-row"]'
+                );
+                const date = row.querySelector(
+                  '[data-testid="dashboard-event-date"]'
+                );
+                const action = row.querySelector(
+                  '[data-testid="dashboard-event-action"]'
+                );
+                const d = date.getBoundingClientRect();
+                const a = action.getBoundingClientRect();
+                return !(d.right <= a.left || d.left >= a.right ||
+                         d.bottom <= a.top || d.top >= a.bottom);
+            }"""
         )
 
         context.close()

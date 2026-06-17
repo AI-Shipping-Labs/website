@@ -36,6 +36,8 @@ from plans.dashboard import (
 )
 from questionnaires.onboarding import has_completed_onboarding
 
+DASHBOARD_EVENT_DATETIME_FORMAT = '%a, %b %d, %Y, %H:%M'
+
 TESTIMONIALS = [
     {
         'quote': 'This course helped me understand how to implement a RAG system in Python. From basic system-design of a RAG, to evaluating responses and implementing guardrails, the course gave me a great overview of the necessary skills for implementing and managing my own agent.',
@@ -677,7 +679,14 @@ def _get_upcoming_events(user):
     appears. Cancelled and draft events are excluded regardless of
     timestamps.
     """
-    return registered_upcoming_events(user)
+    events = registered_upcoming_events(user)
+    for event in events:
+        event.dashboard_formatted_start = format_user_datetime(
+            event.start_datetime,
+            user,
+            fmt=DASHBOARD_EVENT_DATETIME_FORMAT,
+        )
+    return events
 
 
 def _get_starting_soon_event(user):

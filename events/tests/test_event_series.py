@@ -667,7 +667,7 @@ class PublicEventSeriesVisibilityTest(TestCase):
 
 
 class PublicEventSeriesBannerTest(TestCase):
-    """Issue #896: the public series page surfaces ``auto_banner_url``."""
+    """Public series pages keep banner URLs in metadata, not the body."""
 
     BANNER = 'https://cdn.example.com/banners/event_series/7-abc.jpg'
 
@@ -676,6 +676,7 @@ class PublicEventSeriesBannerTest(TestCase):
         cls.with_banner = EventSeries.objects.create(
             name='Banner Series', slug='banner-series',
             start_time=time(18, 0),
+            description='Weekly office hours for shipping AI agents.',
             auto_banner_url=cls.BANNER,
         )
         cls.no_banner = EventSeries.objects.create(
@@ -693,15 +694,37 @@ class PublicEventSeriesBannerTest(TestCase):
                 event_series=series, series_position=1, origin='studio',
             )
 
-    def test_header_banner_image_rendered_when_set(self):
+    def test_body_banner_image_not_rendered_when_set(self):
         response = self.client.get(self.with_banner.get_absolute_url())
-        self.assertContains(response, 'data-testid="series-banner"')
-        self.assertContains(response, self.BANNER)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-testid="series-banner"')
+        self.assertNotRegex(
+            response.content.decode(),
+            rf'<img[^>]+src="{re.escape(self.BANNER)}"',
+        )
 
     def test_no_header_banner_box_when_unset(self):
         response = self.client.get(self.no_banner.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="series-banner"')
+
+    def test_text_header_registration_and_events_keep_order(self):
+        response = self.client.get(self.with_banner.get_absolute_url())
+        html = response.content.decode()
+        self.assertContains(response, 'data-testid="series-name"')
+        self.assertContains(response, 'data-testid="series-cadence"')
+        self.assertContains(response, 'Weekly office hours')
+        self.assertContains(response, 'data-testid="series-register-panel"')
+        self.assertContains(response, 'data-testid="series-events"')
+        header_idx = html.index('data-testid="series-name"')
+        cadence_idx = html.index('data-testid="series-cadence"')
+        description_idx = html.index('Weekly office hours')
+        registration_idx = html.index('data-testid="series-register-panel"')
+        events_idx = html.index('data-testid="series-events"')
+        self.assertLess(header_idx, cadence_idx)
+        self.assertLess(cadence_idx, description_idx)
+        self.assertLess(description_idx, registration_idx)
+        self.assertLess(registration_idx, events_idx)
 
     def test_og_image_uses_banner_when_set(self):
         response = self.client.get(self.with_banner.get_absolute_url())

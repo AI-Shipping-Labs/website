@@ -516,17 +516,12 @@ class PlanQuerySet(models.QuerySet):
         ).exists()
         if not viewer_enrolled:
             return self.none()
-        return self.filter(
+        from plans.services.progress import annotate_plan_progress  # noqa: PLC0415
+
+        return annotate_plan_progress(self.filter(
             sprint=sprint,
             member__sprint_enrollments__sprint=sprint,
-        ).annotate(
-            progress_total=models.Count('weeks__checkpoints', distinct=True),
-            progress_done=models.Count(
-                'weeks__checkpoints',
-                filter=models.Q(weeks__checkpoints__done_at__isnull=False),
-                distinct=True,
-            ),
-        ).distinct()
+        )).distinct()
 
     def visible_to_member(self, *, plan_id, viewer):
         """Single plan visible to ``viewer`` for the read-only individual view.

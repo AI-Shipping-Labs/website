@@ -42,6 +42,7 @@ from plans.models import (
     SprintEnrollment,
 )
 from plans.services import (
+    annotate_plan_progress,
     carry_over_unfinished_tasks,
     count_total_unfinished,
     count_unfinished_carry_over_items,
@@ -63,21 +64,8 @@ _VALID_VISIBILITY_VALUES = frozenset(
 
 
 def _annotated_plans(queryset):
-    """Annotate plans with checkpoint progress counts for cohort cards.
-
-    ``progress_total`` is the count of all checkpoints across all weeks
-    on the plan; ``progress_done`` is the subset where ``done_at`` is
-    set. Both are computed in a single SQL query via ``Count`` so the
-    cohort board does not N+1 over weeks/checkpoints.
-    """
-    return queryset.annotate(
-        progress_total=Count('weeks__checkpoints', distinct=True),
-        progress_done=Count(
-            'weeks__checkpoints',
-            filter=Q(weeks__checkpoints__done_at__isnull=False),
-            distinct=True,
-        ),
-    )
+    """Annotate plans with checkpoint progress counts for cohort cards."""
+    return annotate_plan_progress(queryset)
 
 
 def _viewer_plan_for_sprint(sprint, user):

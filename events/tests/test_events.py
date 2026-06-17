@@ -23,7 +23,7 @@ from django.test import Client, TestCase
 from django.utils import timezone
 
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
-from content.models import Instructor
+from content.models import Instructor, Workshop
 from events.models import Event, EventInstructor, EventRegistration
 from tests.fixtures import TierSetupMixin
 
@@ -579,43 +579,243 @@ class EventDetailPageTest(TestCase):
 
 
 class EventDetailRecordingRemovedTest(TestCase):
-    """Issue #426: event detail no longer renders inline recording UI.
+    """Issues #426/#1037: event detail renders links, not playback UI.
 
-    Completed events with recording fields populated must not embed a
-    video player, materials list, transcript, or chapters on the event
-    detail page. Recording playback lives on the linked Workshop's
-    landing/video pages.
+    Standalone completed events can render structured external recording
+    and material resources, but they must not embed a video player,
+    transcript, chapters, or other workshop recording surfaces.
     """
 
-    def test_completed_with_recording_omits_inline_block(self):
+    def _create_completed_event(self, **overrides):
+        defaults = {
+            'title': 'Completed Event',
+            'slug': 'completed-event',
+            'description': 'A short completed-event description.',
+            'start_datetime': timezone.now() - timedelta(days=7),
+            'end_datetime': timezone.now() - timedelta(days=7, hours=-1),
+            'status': 'completed',
+        }
+        defaults.update(overrides)
+        return Event.objects.create(**defaults)
+
+    def test_completed_standalone_recording_and_materials_render_as_resources(self):
         event = Event.objects.create(
             title='Completed Event',
             slug='completed-event',
+            description='A short completed-event description.',
             start_datetime=timezone.now() - timedelta(days=7),
+            end_datetime=timezone.now() - timedelta(days=7, hours=-1),
             status='completed',
             recording_url='https://youtube.com/watch?v=test',
             timestamps=[{'time_seconds': 0, 'label': 'Welcome'}],
             materials=[
-                {'title': 'Slides', 'url': 'https://example.com/slides.pdf'}
+                {
+                    'title': 'Slides',
+                    'url': 'https://example.com/slides.pdf',
+                    'type': 'PDF',
+                },
             ],
             transcript_text='Event transcript text.',
+            core_tools=['NotebookLM'],
+            learning_objectives=['Build a prototype'],
+            outcome='Expected outcome text.',
         )
         response = self.client.get(event.get_absolute_url())
+        self.assertTemplateUsed(response, 'events/_event_post_resources.html')
+        self.assertContains(response, 'data-testid="event-post-resources"')
+        self.assertContains(response, 'data-testid="event-recording-resource"')
+        self.assertContains(response, 'Watch recording')
+        self.assertContains(response, 'href="https://youtube.com/watch?v=test"')
+        self.assertContains(response, 'youtube.com')
+        self.assertContains(response, 'data-testid="event-materials-resources"')
+        self.assertContains(response, 'data-testid="event-material-resource"')
+        self.assertContains(response, 'Slides')
+        self.assertContains(response, 'PDF')
+        self.assertContains(response, 'href="https://example.com/slides.pdf"')
         # No inline recording block markers anywhere on the page.
         self.assertNotContains(response, 'data-testid="event-recording-block"')
         self.assertNotContains(response, 'data-testid="video-chapters"')
         self.assertNotContains(response, 'class="video-timestamp')
+        self.assertNotContains(response, '<iframe')
         self.assertNotContains(response, 'data-source="youtube"')
         self.assertNotContains(
             response, 'data-testid="recording-materials"',
         )
-        self.assertNotContains(response, 'https://example.com/slides.pdf')
         self.assertNotContains(
             response, 'data-testid="recording-transcript"',
         )
         self.assertNotContains(response, 'Event transcript text.')
+        self.assertNotContains(response, 'NotebookLM')
+        self.assertNotContains(response, 'Build a prototype')
+        self.assertNotContains(response, 'Expected outcome text.')
         # No link out to the retired standalone recording surface either.
         self.assertNotContains(response, '/event-recordings/')
+
+    def test_completed_standalone_only_recording_has_no_empty_materials(self):
+        event = self._create_completed_event(
+            slug='recording-only-event',
+            recording_url='https://video.example.com/replay',
+            materials=[],
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, 'data-testid="event-post-resources"')
+        self.assertContains(response, 'data-testid="event-recording-resource"')
+        self.assertContains(response, 'Watch recording')
+        self.assertNotContains(
+            response, 'data-testid="event-materials-resources"',
+        )
+        self.assertNotContains(response, 'Materials</h2>')
+
+    def test_completed_standalone_only_materials_has_no_empty_recording(self):
+        event = self._create_completed_event(
+            slug='materials-only-event',
+            recording_url='',
+            materials=[
+                {
+                    'title': 'Session notes',
+                    'url': 'https://docs.example.com/session-notes',
+                    'type': 'notes',
+                },
+            ],
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, 'data-testid="event-post-resources"')
+        self.assertContains(response, 'data-testid="event-materials-resources"')
+        self.assertContains(response, 'Session notes')
+        self.assertContains(response, 'notes')
+        self.assertNotContains(response, 'Watch recording')
+        self.assertNotContains(
+            response, 'data-testid="event-recording-resource"',
+        )
+
+    def test_malformed_materials_are_skipped_without_empty_section(self):
+        event = self._create_completed_event(
+            slug='malformed-materials-event',
+            recording_url='',
+            materials=[
+                {'title': 'Missing URL'},
+                {'url': 'https://docs.example.com/missing-title'},
+                {'title': 'Invalid URL', 'url': 'not-a-url'},
+                'not-a-dict',
+            ],
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertNotContains(response, 'data-testid="event-post-resources"')
+        self.assertNotContains(response, 'Missing URL')
+        self.assertNotContains(response, 'Invalid URL')
+        self.assertNotContains(response, 'missing-title')
+
+    def test_valid_materials_render_and_malformed_entries_are_skipped(self):
+        event = self._create_completed_event(
+            slug='mixed-materials-event',
+            recording_url='',
+            materials=[
+                {
+                    'title': 'Session notes',
+                    'url': 'https://docs.example.com/session-notes',
+                },
+                {'title': 'Missing URL'},
+            ],
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, 'Session notes')
+        self.assertContains(response, 'https://docs.example.com/session-notes')
+        self.assertNotContains(response, 'Missing URL')
+
+    def test_description_links_are_not_scraped_into_resources(self):
+        event = self._create_completed_event(
+            slug='description-link-event',
+            description=(
+                'Watch [the raw link](https://youtube.com/watch?v=raw) '
+                'and read [notes](https://docs.example.com/raw-notes).'
+            ),
+            recording_url='',
+            materials=[],
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, 'https://youtube.com/watch?v=raw')
+        self.assertContains(response, 'https://docs.example.com/raw-notes')
+        self.assertNotContains(response, 'data-testid="event-post-resources"')
+        self.assertNotContains(response, 'Watch recording')
+
+    def test_linked_workshop_suppresses_event_level_resources(self):
+        event = self._create_completed_event(
+            slug='linked-workshop-event',
+            kind='workshop',
+            recording_url='https://youtube.com/watch?v=linked',
+            materials=[
+                {
+                    'title': 'Event-level notes',
+                    'url': 'https://docs.example.com/event-level',
+                },
+            ],
+        )
+        Workshop.objects.create(
+            slug='linked-workshop',
+            title='Linked Workshop',
+            date=timezone.localdate(),
+            status='published',
+            event=event,
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, 'data-testid="event-workshop-writeup"')
+        self.assertContains(response, 'View workshop writeup')
+        self.assertNotContains(response, 'data-testid="event-post-resources"')
+        self.assertNotContains(response, 'https://youtube.com/watch?v=linked')
+        self.assertNotContains(response, 'Event-level notes')
+
+    def test_upcoming_event_suppresses_prepopulated_resources(self):
+        event = Event.objects.create(
+            title='Upcoming Event',
+            slug='upcoming-event',
+            start_datetime=timezone.now() + timedelta(days=7),
+            end_datetime=timezone.now() + timedelta(days=7, hours=1),
+            status='upcoming',
+            recording_url='https://youtube.com/watch?v=early',
+            materials=[
+                {
+                    'title': 'Early notes',
+                    'url': 'https://docs.example.com/early',
+                },
+            ],
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertNotContains(response, 'data-testid="event-post-resources"')
+        self.assertNotContains(response, 'Watch recording')
+        self.assertNotContains(response, 'Early notes')
+
+    def test_insufficient_tier_suppresses_event_level_resources(self):
+        event = self._create_completed_event(
+            slug='gated-completed-event',
+            required_level=LEVEL_MAIN,
+            recording_url='https://youtube.com/watch?v=gated',
+            materials=[
+                {
+                    'title': 'Main notes',
+                    'url': 'https://docs.example.com/main-notes',
+                },
+            ],
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertNotContains(response, 'data-testid="event-post-resources"')
+        self.assertNotContains(response, 'https://youtube.com/watch?v=gated')
+        self.assertNotContains(response, 'Main notes')
+
+    def test_feedback_has_intentional_top_gap_after_short_description(self):
+        event = self._create_completed_event(
+            slug='short-description-feedback-event',
+            recording_url='',
+            materials=[],
+            description='Short.',
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, 'Short.')
+        self.assertNotContains(response, 'data-testid="event-post-resources"')
+        self.assertContains(
+            response,
+            'class="mt-12 mb-12 rounded-lg border border-border bg-card p-6"',
+        )
+        self.assertContains(response, 'data-testid="event-feedback-section"')
 
     def test_completed_without_recording_no_block(self):
         event = Event.objects.create(

@@ -238,14 +238,13 @@ class RecordingDetailViewTest(TestCase):
         self.assertTemplateUsed(response, 'events/event_detail.html')
 
     def test_recording_detail_contains_content(self):
-        # Issue #426: event detail is announcement-only. Title and
-        # description still render; recording-only fields (Core Tools,
-        # learning objectives, expected outcome, materials, timestamps)
-        # are not rendered here — they live on the linked Workshop's
-        # video page.
+        # Issue #426: event detail does not render inline playback. Title and
+        # description still render. This fixture starts "now", so issue #1037
+        # post-event resources remain suppressed by the time-derived past gate.
         response = self.client.get(self.recording.get_absolute_url())
         self.assertEqual(response.context['event'], self.recording)
         self.assertContains(response, 'Workshop description')
+        self.assertNotContains(response, 'data-testid="event-post-resources"')
         self.assertNotContains(response, 'Core Tools')
         self.assertNotContains(response, 'Python')
         self.assertNotContains(response, 'Learn basics')

@@ -912,10 +912,163 @@ class TestWorkshopMaterialsUnification:
         body = page.content()
         assert 'data-testid="event-workshop-writeup"' in body
         assert '/workshops/2026-04-21-linked-mat-workshop' in body
-        # No Materials heading + no material URL on the event detail page.
+        # No event-level resource section or material URL on the detail page.
+        assert 'data-testid="event-post-resources"' not in body
+        assert 'data-testid="event-recording-resource"' not in body
         assert 'Materials</h2>' not in body
         assert 'https://example.com/event-doc' not in body
         assert 'https://example.com/ws-doc' not in body
+
+    def test_standalone_event_detail_renders_structured_resources_before_feedback(
+        self, django_server, page,
+    ):
+        """Issue #1037: standalone past events expose explicit recording and
+        materials as structured external resource links, not playback UI."""
+        from django.utils import timezone
+
+        from events.models import Event
+
+        _clear_workshops()
+        event = Event.objects.create(
+            slug='standalone-resources-event',
+            title='Standalone Resources Event',
+            description='A standalone event with follow-up resources.',
+            start_datetime=timezone.now() - datetime.timedelta(days=4),
+            end_datetime=timezone.now() - datetime.timedelta(days=4, hours=-1),
+            status='completed',
+            recording_url='https://youtube.com/watch?v=standalone',
+            materials=[
+                {
+                    'title': 'Session notes',
+                    'url': 'https://docs.example.com/session-notes',
+                    'type': 'notes',
+                },
+                {'title': 'Broken material'},
+            ],
+            timestamps=[{'time_seconds': 30, 'label': 'Intro'}],
+            transcript_text='Hidden transcript text',
+            core_tools=['Hidden Tool'],
+            learning_objectives=['Hidden objective'],
+            outcome='Hidden outcome',
+        )
+        connection.close()
+
+        page.goto(
+            f'{django_server}{event.get_absolute_url()}',
+            wait_until='domcontentloaded',
+        )
+        resources = page.locator('[data-testid="event-post-resources"]')
+        feedback = page.locator('[data-testid="event-feedback-section"]')
+        resources.wait_for(state='visible')
+        feedback.wait_for(state='visible')
+
+        body = page.content()
+        assert 'Post-event resources' in body
+        assert 'Watch recording' in body
+        assert 'Session notes' in body
+        assert 'notes' in body
+        assert 'Broken material' not in body
+        assert 'data-testid="event-recording-block"' not in body
+        assert 'data-testid="video-chapters"' not in body
+        assert 'class="video-timestamp' not in body
+        assert '<iframe' not in body.lower()
+        assert 'Hidden transcript text' not in body
+        assert 'Hidden Tool' not in body
+        assert 'Hidden objective' not in body
+        assert 'Hidden outcome' not in body
+        assert '/event-recordings/' not in body
+
+        recording = page.locator('[data-testid="event-recording-resource"]')
+        assert recording.get_attribute('href') == 'https://youtube.com/watch?v=standalone'
+        assert recording.get_attribute('target') == '_blank'
+        assert 'noopener' in (recording.get_attribute('rel') or '')
+
+        material = page.locator('[data-testid="event-material-resource"]')
+        assert material.count() == 1
+        assert material.first.get_attribute('href') == 'https://docs.example.com/session-notes'
+        assert material.first.get_attribute('target') == '_blank'
+        assert 'noopener' in (material.first.get_attribute('rel') or '')
+
+        resources_box = resources.bounding_box()
+        feedback_box = feedback.bounding_box()
+        assert resources_box is not None
+        assert feedback_box is not None
+        assert resources_box['y'] + resources_box['height'] < feedback_box['y']
+
+    def test_upcoming_event_detail_suppresses_prepopulated_resources(
+        self, django_server, page,
+    ):
+        """Issue #1037: prefilled links stay hidden until the event is past."""
+        from django.utils import timezone
+
+        from events.models import Event
+
+        _clear_workshops()
+        event = Event.objects.create(
+            slug='upcoming-prefilled-resources-event',
+            title='Upcoming Prefilled Resources Event',
+            description='Register before the live session.',
+            start_datetime=timezone.now() + datetime.timedelta(days=4),
+            end_datetime=timezone.now() + datetime.timedelta(days=4, hours=1),
+            status='upcoming',
+            recording_url='https://youtube.com/watch?v=early',
+            materials=[
+                {
+                    'title': 'Early notes',
+                    'url': 'https://docs.example.com/early-notes',
+                },
+            ],
+        )
+        connection.close()
+
+        page.goto(
+            f'{django_server}{event.get_absolute_url()}',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        assert 'Upcoming Prefilled Resources Event' in body
+        assert 'data-testid="event-post-resources"' not in body
+        assert 'Watch recording' not in body
+        assert 'Early notes' not in body
+        assert 'data-testid="event-feedback-section"' not in body
+
+    def test_standalone_event_without_resources_keeps_gap_before_feedback(
+        self, django_server, page,
+    ):
+        """Issue #1037: short description-only past events do not crowd the
+        feedback card."""
+        from django.utils import timezone
+
+        from events.models import Event
+
+        _clear_workshops()
+        event = Event.objects.create(
+            slug='short-description-no-resources-event',
+            title='Short Description No Resources Event',
+            description='Short description.',
+            start_datetime=timezone.now() - datetime.timedelta(days=4),
+            end_datetime=timezone.now() - datetime.timedelta(days=4, hours=-1),
+            status='completed',
+        )
+        connection.close()
+
+        page.goto(
+            f'{django_server}{event.get_absolute_url()}',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        assert 'Short description.' in body
+        assert 'data-testid="event-post-resources"' not in body
+
+        description = page.locator('article .prose').first
+        feedback = page.locator('[data-testid="event-feedback-section"]')
+        feedback.wait_for(state='visible')
+        description_box = description.bounding_box()
+        feedback_box = feedback.bounding_box()
+        assert description_box is not None
+        assert feedback_box is not None
+        gap = feedback_box['y'] - (description_box['y'] + description_box['height'])
+        assert gap >= 32
 
     def test_staff_audits_resolved_materials_in_studio(
         self, django_server, browser,

@@ -5,9 +5,10 @@ populates ``event.workshop``), the event detail page surfaces the
 "Full workshop writeup" CTA pointing at ``/workshops/<slug>``. The recording
 playback experience itself lives on the workshop landing/video pages.
 
-Issue #426 retired the inline recording branch entirely, so completed events
-without a linked workshop are announcement pages too — they no longer render
-inline embeds, timestamps, materials, transcript, or recording paywalls.
+Issue #426 retired the inline recording branch entirely. Issue #1037 allows
+completed standalone events to show explicit recording/material links as
+structured resources, while still forbidding inline embeds, timestamps,
+transcripts, and workshop-only recording surfaces.
 """
 
 import datetime
@@ -100,7 +101,8 @@ class EventDetailWorkshopHandoffTest(TestCase):
 
     def test_linked_event_omits_materials_section(self):
         response = self.client.get(self.linked_event.get_absolute_url())
-        # The Materials heading and the slide link must both be absent.
+        # The event-level resources section and the slide link must be absent.
+        self.assertNotContains(response, 'data-testid="event-post-resources"')
         self.assertNotContains(response, 'Materials</h2>')
         self.assertNotContains(response, 'https://example.com/slides.pdf')
 
@@ -150,11 +152,11 @@ class EventDetailWorkshopHandoffTest(TestCase):
 
 
 class EventDetailNoWorkshopRecordingRemovedTest(TestCase):
-    """Completed events without a linked workshop are announcement-only.
+    """Completed events without a linked workshop show only resource links.
 
-    Issue #426 removed the inline recording fallback. A completed event with
-    recording fields populated and no linked Workshop must NOT render any
-    inline player, materials, transcript, timestamps, or recording paywall.
+    Issue #1037 allows explicit recording/material fields to render as
+    structured external links. Issue #426 still forbids inline players,
+    transcripts, timestamps, and recording paywalls.
     """
 
     @classmethod
@@ -199,10 +201,19 @@ class EventDetailNoWorkshopRecordingRemovedTest(TestCase):
         self.assertNotContains(response, "What You'll Learn")
         self.assertNotContains(response, 'Understand RAG')
 
-    def test_orphan_event_omits_materials(self):
+    def test_orphan_event_renders_structured_resources_without_old_materials_ui(self):
         response = self.client.get(self.orphan_event.get_absolute_url())
+        self.assertContains(response, 'data-testid="event-post-resources"')
+        self.assertContains(response, 'data-testid="event-recording-resource"')
+        self.assertContains(response, 'Watch recording')
+        self.assertContains(
+            response, 'https://www.youtube.com/watch?v=ORPHAN',
+        )
+        self.assertContains(response, 'data-testid="event-material-resource"')
+        self.assertContains(response, 'Notes')
+        self.assertContains(response, 'https://example.com/notes.pdf')
+        self.assertNotContains(response, 'data-testid="recording-materials"')
         self.assertNotContains(response, 'Materials</h2>')
-        self.assertNotContains(response, 'https://example.com/notes.pdf')
 
     def test_orphan_event_omits_transcript(self):
         response = self.client.get(self.orphan_event.get_absolute_url())

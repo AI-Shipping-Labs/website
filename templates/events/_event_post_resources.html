@@ -1,0 +1,58 @@
+{% if post_event_resources.has_resources %}
+<section class="mt-10 mb-12 rounded-lg border border-border bg-card/70 p-5 sm:p-6"
+         data-testid="event-post-resources">
+  <div class="mb-5 flex items-center gap-3">
+    <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/15 text-accent">
+      <i data-lucide="folder-open" class="h-5 w-5"></i>
+    </div>
+    <div>
+      <h2 class="text-xl font-semibold tracking-tight text-foreground">Post-event resources</h2>
+      <p class="text-sm text-muted-foreground">Recording and notes from this session.</p>
+    </div>
+  </div>
+
+  <div class="space-y-3">
+    {% if post_event_resources.recording_url %}
+    <a href="{{ post_event_resources.recording_url }}"
+       target="_blank"
+       rel="noopener noreferrer"
+       class="group flex min-h-[52px] items-center gap-3 rounded-lg border border-border bg-background p-4 transition-colors hover:border-accent/50 hover:bg-card"
+       data-testid="event-recording-resource">
+      <div class="flex-shrink-0 rounded-lg bg-accent/15 p-2">
+        <i data-lucide="play-circle" class="h-5 w-5 text-accent"></i>
+      </div>
+      <div class="min-w-0 flex-1">
+        <h3 class="font-semibold text-foreground transition-colors group-hover:text-accent">Watch recording</h3>
+        {% if post_event_resources.recording_host %}
+        <p class="mt-1 break-all text-sm text-muted-foreground">{{ post_event_resources.recording_host }}</p>
+        {% endif %}
+      </div>
+      <i data-lucide="external-link" class="hidden h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-accent sm:block"></i>
+    </a>
+    {% endif %}
+
+    {% if post_event_resources.materials %}
+    <div class="space-y-3" data-testid="event-materials-resources">
+      {% for material in post_event_resources.materials %}
+      <a href="{{ material.url }}"
+         target="_blank"
+         rel="noopener noreferrer"
+         class="group flex min-h-[52px] items-center gap-3 rounded-lg border border-border bg-background p-4 transition-colors hover:border-accent/50 hover:bg-card"
+         data-testid="event-material-resource">
+        <div class="flex-shrink-0 rounded-lg bg-accent/15 p-2">
+          <i data-lucide="file-text" class="h-5 w-5 text-accent"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <h3 class="font-semibold text-foreground transition-colors group-hover:text-accent">{{ material.title }}</h3>
+          {% if material.type %}
+          <p class="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{{ material.type }}</p>
+          {% endif %}
+        </div>
+        <i data-lucide="external-link" class="hidden h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-accent sm:block"></i>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}

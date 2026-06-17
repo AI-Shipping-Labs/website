@@ -1,8 +1,11 @@
 import calendar as cal_module
 from datetime import date, timedelta
+from urllib.parse import urlparse
 
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.paginator import Paginator
+from django.core.validators import URLValidator
 from django.db.models import Avg, Count, Prefetch
 from django.http import Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
@@ -46,6 +49,7 @@ from events.services.time_windows import (
 )
 
 VALID_EVENTS_FILTERS = {'all', 'upcoming', 'past'}
+_validate_resource_url = URLValidator(schemes=['http', 'https'])
 
 
 def _get_selected_tags(request):
@@ -66,6 +70,73 @@ def _filter_by_tags(queryset, selected_tags):
         if all(tag in obj_tags for tag in selected_tags):
             matching_ids.append(obj.pk)
     return queryset.filter(pk__in=matching_ids)
+
+
+def _clean_event_materials(materials):
+    """Return display-safe material dicts from Event.materials JSON."""
+    clean_materials = []
+    if not isinstance(materials, list):
+        return clean_materials
+
+    for material in materials:
+        if not isinstance(material, dict):
+            continue
+        title = str(material.get('title') or '').strip()
+        url = str(material.get('url') or '').strip()
+        material_type = str(material.get('type') or '').strip()
+        if not title or not url:
+            continue
+        try:
+            _validate_resource_url(url)
+        except ValidationError:
+            continue
+        clean_materials.append({
+            'title': title,
+            'url': url,
+            'type': material_type,
+        })
+    return clean_materials
+
+
+def _event_has_linked_workshop(event):
+    try:
+        return event.workshop is not None
+    except ObjectDoesNotExist:
+        return False
+
+
+def _build_event_post_resources(event, *, has_access):
+    """Structured resources for standalone past event detail pages.
+
+    Linked workshops stay canonical for their recording/material surfaces.
+    Upcoming events suppress these post-event resources even when operators
+    pre-populate fields before the session.
+    """
+    if not has_access or not event.is_past or _event_has_linked_workshop(event):
+        return {
+            'recording_url': '',
+            'recording_host': '',
+            'materials': [],
+            'has_resources': False,
+        }
+
+    recording_url = (event.recording_url or '').strip()
+    recording_host = ''
+    if recording_url:
+        try:
+            _validate_resource_url(recording_url)
+        except ValidationError:
+            recording_url = ''
+        else:
+            recording_host = urlparse(recording_url).netloc
+
+    materials = _clean_event_materials(event.materials)
+    return {
+        'recording_url': recording_url,
+        'recording_host': recording_host,
+        'materials': materials,
+        'has_resources': bool(recording_url or materials),
+    }
 
 
 def _build_upcoming_rows(upcoming_events):
@@ -474,7 +545,7 @@ def event_detail(request, event_id, slug):
     two URLs into one.
     """
     event = get_object_or_404(
-        Event.objects.prefetch_related(
+        Event.objects.select_related('workshop').prefetch_related(
             Prefetch(
                 'event_host_links',
                 queryset=EventHost.objects.select_related('host').order_by(
@@ -592,6 +663,10 @@ def event_detail(request, event_id, slug):
         user_feedback = feedback_qs.filter(user=user).first()
     can_submit_feedback = is_registered and event_is_past
     feedback_thanks = request.GET.get('feedback') == 'thanks'
+    post_event_resources = _build_event_post_resources(
+        event,
+        has_access=has_access,
+    )
 
     context = {
         'event': event,
@@ -631,6 +706,9 @@ def event_detail(request, event_id, slug):
         'user_feedback': user_feedback,
         'can_submit_feedback': can_submit_feedback,
         'feedback_thanks': feedback_thanks,
+        # Issue #1037: structured post-event resource links for standalone
+        # completed events. No description scraping, no inline playback UI.
+        'post_event_resources': post_event_resources,
     }
     context.update(gating)
     return render(request, 'events/event_detail.html', context)

@@ -531,11 +531,47 @@ class TestScenario7ZoomLinkVisibleBeforeEvent:
     """Registered member returns shortly before event start and sees
     the Zoom join link."""
 
-    def test_zoom_link_shown_within_15_minutes_of_start(
+    def test_zoom_link_hidden_6_minutes_before_start(
+        self, django_server
+    , browser):
+        """A registered user 6 minutes before start still sees the
+        confirmation state and 5-minute copy, but not the join card."""
+        _clear_events()
+        _ensure_tiers()
+        user = _create_user("six-min@test.com", tier_slug="free")
+
+        now = timezone.now()
+        event = _create_event(
+            title="Nearly Imminent Workshop",
+            slug="nearly-imminent-workshop",
+            zoom_join_url="https://zoom.us/j/654321",
+            start_datetime=now + datetime.timedelta(minutes=6),
+            required_level=0,
+            status="upcoming",
+        )
+        _register_user_for_event(user, event)
+
+        context = _auth_context(browser, "six-min@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}{event.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+        next_steps = page.locator('[data-testid="event-next-steps"]').inner_text()
+
+        assert "You're registered!" in body
+        assert "5 minutes" in next_steps
+        assert "15 minutes" not in next_steps
+        assert "Join the event" not in body
+        assert "/events/nearly-imminent-workshop/join" not in body
+        assert "https://zoom.us/j/654321" not in body
+
+    def test_zoom_link_shown_within_5_minutes_of_start(
         self, django_server
     , browser):
         """Given a user logged in as free@test.com who is registered for
-        an upcoming Zoom event starting 10 minutes from now. The detail
+        an upcoming Zoom event starting 4 minutes from now. The detail
         page shows 'You're registered!' and a 'Join the event' section
         with the internal join redirect link."""
         _clear_events()
@@ -547,7 +583,7 @@ class TestScenario7ZoomLinkVisibleBeforeEvent:
             title="Imminent Workshop",
             slug="imminent-workshop",
             zoom_join_url="https://zoom.us/j/123456",
-            start_datetime=now + datetime.timedelta(minutes=10),
+            start_datetime=now + datetime.timedelta(minutes=4),
             required_level=0,
             status="upcoming",
         )

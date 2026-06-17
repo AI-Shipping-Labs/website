@@ -4,7 +4,7 @@ Covers:
 - Event model fields, defaults, and constraints
 - EventRegistration model with unique_together constraint
 - Description markdown rendering on save
-- Zoom link visibility (15 min before start)
+- Zoom link visibility (5 min before start)
 - Events list page: Upcoming and Past sections
 - Event detail page: always visible, badges, date/time, location
 - Registration gating: authorized user can register, tier check, full event
@@ -138,17 +138,19 @@ class EventMarkdownRenderingTest(TestCase):
 class EventZoomLinkTest(TestCase):
     """Test can_show_zoom_link method."""
 
-    def test_zoom_link_visible_within_15_minutes(self):
+    def test_zoom_link_visible_within_5_minutes(self):
         event = Event(
             zoom_join_url='https://zoom.us/j/123',
-            start_datetime=timezone.now() + timedelta(minutes=10),
+            start_datetime=timezone.now() + timedelta(minutes=4),
+            status='upcoming',
         )
         self.assertTrue(event.can_show_zoom_link())
 
-    def test_zoom_link_not_visible_more_than_15_min_before(self):
+    def test_zoom_link_not_visible_more_than_5_min_before(self):
         event = Event(
             zoom_join_url='https://zoom.us/j/123',
-            start_datetime=timezone.now() + timedelta(minutes=30),
+            start_datetime=timezone.now() + timedelta(minutes=6),
+            status='upcoming',
         )
         self.assertFalse(event.can_show_zoom_link())
 
@@ -156,8 +158,25 @@ class EventZoomLinkTest(TestCase):
         event = Event(
             zoom_join_url='https://zoom.us/j/123',
             start_datetime=timezone.now() - timedelta(minutes=5),
+            status='upcoming',
         )
         self.assertTrue(event.can_show_zoom_link())
+
+    def test_zoom_link_not_visible_after_live_window(self):
+        event = Event(
+            zoom_join_url='https://zoom.us/j/123',
+            start_datetime=timezone.now() - timedelta(hours=2),
+            status='upcoming',
+        )
+        self.assertFalse(event.can_show_zoom_link())
+
+    def test_zoom_link_not_visible_for_cancelled_event(self):
+        event = Event(
+            zoom_join_url='https://zoom.us/j/123',
+            start_datetime=timezone.now() + timedelta(minutes=4),
+            status='cancelled',
+        )
+        self.assertFalse(event.can_show_zoom_link())
 
     def test_zoom_link_not_visible_without_url(self):
         event = Event(
@@ -746,11 +765,11 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
 class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
     """Test Zoom join link display on event detail."""
 
-    def test_zoom_link_shown_when_registered_and_within_15_min(self):
+    def test_zoom_link_shown_when_registered_and_within_5_min(self):
         event = Event.objects.create(
             title='Soon Event',
             slug='soon-event',
-            start_datetime=timezone.now() + timedelta(minutes=10),
+            start_datetime=timezone.now() + timedelta(minutes=4),
             status='upcoming',
             zoom_join_url='https://zoom.us/j/123456',
         )
@@ -765,6 +784,30 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
         # Issue #673: the /join route still keys on slug (slug-keyed
         # sibling routes were intentionally left unchanged).
         self.assertContains(response, '/events/soon-event/join')
+        self.assertContains(response, 'data-testid="event-join-now"')
+        self.assertNotContains(response, 'https://zoom.us/j/123456')
+
+    def test_zoom_link_not_shown_6_minutes_before_start(self):
+        event = Event.objects.create(
+            title='Six Minute Event',
+            slug='six-minute-event',
+            start_datetime=timezone.now() + timedelta(minutes=6),
+            status='upcoming',
+            zoom_join_url='https://zoom.us/j/654321',
+        )
+        user = User.objects.create_user(
+            email='six@test.com',
+            password='pass',
+            email_verified=True,
+        )
+        EventRegistration.objects.create(event=event, user=user)
+        self.client.login(email='six@test.com', password='pass')
+        response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, "You're registered!")
+        self.assertContains(response, '5 minutes before')
+        self.assertNotContains(response, 'data-testid="event-join-now"')
+        self.assertNotContains(response, '/events/six-minute-event/join')
+        self.assertNotContains(response, 'https://zoom.us/j/654321')
 
     def test_zoom_link_not_shown_when_far_from_start(self):
         event = Event.objects.create(
@@ -788,7 +831,7 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
         event = Event.objects.create(
             title='Not Reg Event',
             slug='not-reg-event',
-            start_datetime=timezone.now() + timedelta(minutes=10),
+            start_datetime=timezone.now() + timedelta(minutes=4),
             status='upcoming',
             zoom_join_url='https://zoom.us/j/111111',
         )
@@ -1299,7 +1342,8 @@ class EventDetailRegisteredConfirmationTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-testid="event-next-steps"')
         self.assertContains(response, 'confirmation to your email')
         self.assertContains(response, 'spam folder')
-        self.assertContains(response, '15 minutes before')
+        self.assertContains(response, '5 minutes before')
+        self.assertNotContains(response, '15 minutes before')
 
     def test_add_to_calendar_button_links_to_ics(self):
         response = self.client.get(self.event.get_absolute_url())

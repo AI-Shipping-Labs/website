@@ -311,6 +311,19 @@ class EventJoinTimeWindowTest(TierSetupMixin, TestCase):
         # delta_to_open = 8 min - 5 min = 3 min 0 sec.
         self.assertContains(response, '>3 min 0 sec</span>')
 
+    @freeze_time('2026-03-01T14:54:00Z')  # 6 min before start
+    def test_six_minutes_before_start_does_not_record_or_redirect(self):
+        self._login()
+        response = self.client.get('/events/window-event/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/join_countdown.html')
+        self.assertNotIn('Location', response)
+        self.assertEqual(EventJoinClick.objects.count(), 0)
+        registration = EventRegistration.objects.get(
+            event=self.event, user=self.user,
+        )
+        self.assertIsNone(registration.joined_at)
+
     @freeze_time('2026-03-01T14:56:00Z')  # 4 min before start
     def test_redirect_to_zoom_within_5_min(self):
         self._login()
@@ -323,6 +336,10 @@ class EventJoinTimeWindowTest(TierSetupMixin, TestCase):
             ).count(),
             1,
         )
+        registration = EventRegistration.objects.get(
+            event=self.event, user=self.user,
+        )
+        self.assertIsNotNone(registration.joined_at)
 
     @freeze_time('2026-03-01T15:30:00Z')  # 30 min after start, no end_datetime
     def test_redirect_during_live_event_with_no_end_datetime(self):

@@ -244,7 +244,7 @@ class CustomURLPublicEventDetailTest(TestCase):
         event = Event.objects.create(
             title='YouTube Event', slug='youtube-event',
             description='A YouTube live event.',
-            start_datetime=timezone.now() + timedelta(minutes=10),
+            start_datetime=timezone.now() + timedelta(minutes=4),
             status='upcoming',
             platform='custom',
             zoom_join_url='https://youtube.com/live/abc123',
@@ -290,7 +290,7 @@ class CustomURLPublicEventDetailTest(TestCase):
         """Standard Zoom events still display correctly."""
         event = Event.objects.create(
             title='Zoom Detail Event', slug='zoom-detail-event',
-            start_datetime=timezone.now() + timedelta(minutes=10),
+            start_datetime=timezone.now() + timedelta(minutes=4),
             status='upcoming',
             platform='zoom',
             zoom_join_url='https://zoom.us/j/99999',

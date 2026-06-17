@@ -14,7 +14,7 @@ A calendar invite covering the whole series is attached to this email — open i
 
 What to expect next:
 
-- Each session appears under Upcoming Events on your dashboard with its own join link, which unlocks about 15 minutes before the start time.
+- Each session appears under Upcoming Events on your dashboard with its own join link, which unlocks about 5 minutes before the start time.
 - We'll send a short reminder closer to each session.
 - If a session moves or is added, we'll send you an updated calendar invite so your calendar stays in sync.
 - New sessions added to this series later will be added to your calendar automatically.

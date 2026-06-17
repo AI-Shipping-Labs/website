@@ -46,7 +46,7 @@ When staff creates a Zoom meeting for an event:
    - `timezone`: event timezone
    - `settings.auto_recording`: `"cloud"` (so recording is automatically saved)
 2. Store returned `meeting_id` and `join_url` on the event record
-3. Registered users see the join URL on the event detail page starting 15 minutes before `start_datetime`
+3. Registered users see the join URL on the event detail page starting 5 minutes before `start_datetime`
 
 After the event ends:
 
@@ -75,7 +75,7 @@ After the event ends:
 - If user has access and event is upcoming:
   - "Register" button. Clicking calls `POST /api/events/{slug}/register`. Button changes to "Registered ✓" (with option to unregister).
   - If `max_participants` is set and reached, show "Event is full" instead of Register button.
-  - Starting 15 min before event: show the event join link
+  - Starting 5 min before event: show the event join link
 - If user does not have access: show CTA "Upgrade to {tier_name} to join this event" instead of Register button
 - If event is completed and has a recording: show "Watch recording" link to `/recordings/{recording_slug}`
 
@@ -87,5 +87,5 @@ After the event ends:
 - R-EVT-4: `GET /api/events` returns all non-draft events. Accepts `?status=upcoming` or `?status=past` filter. Each event includes `is_locked`, `is_registered` (for authenticated users), `spots_remaining` (if `max_participants` set).
 - R-EVT-5: `POST /api/events/{slug}/register` registers the authenticated user if they have access and spots are available. Returns 403 if tier too low, 409 if already registered, 410 if event is full.
 - R-EVT-6: `DELETE /api/events/{slug}/register` unregisters the user.
-- R-EVT-7: `GET /api/events/{slug}` returns event detail. If user is registered and event starts within 15 minutes, include `zoom_join_url`. Otherwise omit it.
+- R-EVT-7: `GET /api/events/{slug}` returns event detail. If user is registered and event starts within 5 minutes, include `zoom_join_url`. Otherwise omit it.
 - R-EVT-8: Admin CRUD: `POST /api/admin/events`, `PUT /api/admin/events/{id}`, `DELETE /api/admin/events/{id}`. Status transitions: draft → upcoming → completed. Admin can also manually set to cancelled.

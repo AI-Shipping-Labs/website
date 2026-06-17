@@ -29,7 +29,7 @@ Host management links (for hosts only; do not forward them to attendees):
 {% endif %}
 What to expect next:
 
-- The join link above unlocks on the event page about 15 minutes before the start time.
+- The join link above unlocks on the event page about 5 minutes before the start time.
 - We'll send a short reminder closer to the event.
 - Need to cancel? Use this one-click link: [Cancel my registration]({{ cancel_url }})
   (or open the event page and use the cancel button there).

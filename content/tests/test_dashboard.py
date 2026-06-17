@@ -12,13 +12,14 @@ Covers:
 """
 
 import re
-from datetime import date, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from urllib.parse import urlparse
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import Resolver404, resolve
 from django.utils import timezone
+from freezegun import freeze_time
 
 from content.access import LEVEL_PREMIUM
 from content.models import (
@@ -595,8 +596,49 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(user=self.user, event=event)
 
         response = self.client.get('/')
-        # formatted_start returns something like "March 15, 2026 at 14:00 UTC"
+        # The dashboard fallback keeps UTC explicit when no preference exists.
         self.assertContains(response, 'UTC')
+
+    @freeze_time('2026-06-17T12:00:00Z')
+    def test_event_date_uses_valid_preferred_timezone_with_weekday(self):
+        self.user.preferred_timezone = 'Europe/Berlin'
+        self.user.save(update_fields=['preferred_timezone'])
+        event = Event.objects.create(
+            slug='berlin-dashboard-event',
+            title='Berlin Dashboard Event',
+            start_datetime=datetime(2026, 6, 24, 16, 0, tzinfo=UTC),
+            status='upcoming',
+        )
+        EventRegistration.objects.create(user=self.user, event=event)
+
+        response = self.client.get('/')
+
+        self.assertContains(
+            response,
+            'Wed, Jun 24, 2026, 18:00 Europe/Berlin',
+        )
+        self.assertEqual(
+            response.context['upcoming_events'][0].dashboard_formatted_start,
+            'Wed, Jun 24, 2026, 18:00 Europe/Berlin',
+        )
+        self.assertNotContains(response, 'June 24, 2026 at 16:00 UTC')
+
+    @freeze_time('2026-06-17T12:00:00Z')
+    def test_event_date_falls_back_to_explicit_utc_without_valid_timezone(self):
+        self.user.preferred_timezone = 'Not/AZone'
+        self.user.save(update_fields=['preferred_timezone'])
+        event = Event.objects.create(
+            slug='utc-dashboard-event',
+            title='UTC Dashboard Event',
+            start_datetime=datetime(2026, 6, 24, 16, 0, tzinfo=UTC),
+            status='upcoming',
+        )
+        EventRegistration.objects.create(user=self.user, event=event)
+
+        response = self.client.get('/')
+
+        self.assertContains(response, 'Wed, Jun 24, 2026, 16:00 UTC')
+        self.assertNotContains(response, 'Europe/Berlin')
 
     def test_does_not_show_past_events(self):
         past = timezone.now() - timedelta(days=3)
@@ -672,6 +714,39 @@ class UpcomingEventsTest(TierSetupMixin, TestCase):
         self.assertContains(
             response,
             'href="/events/groups/llm-zoomcamp-2026-office-hours"',
+        )
+
+    @freeze_time('2026-06-17T12:00:00Z')
+    def test_collapsed_series_date_uses_preferred_timezone_with_weekday(self):
+        self.user.preferred_timezone = 'Europe/Berlin'
+        self.user.save(update_fields=['preferred_timezone'])
+        series = EventSeries.objects.create(
+            name='LLM Zoomcamp 2026 office hours',
+            slug='llm-zoomcamp-series-timezone',
+            start_time=time(18, 0),
+        )
+        starts = [
+            datetime(2026, 6, 24, 16, 0, tzinfo=UTC),
+            datetime(2026, 7, 1, 16, 0, tzinfo=UTC),
+        ]
+        for index, start_datetime in enumerate(starts, start=1):
+            event = Event.objects.create(
+                slug=f'llm-series-timezone-{index}',
+                title=f'LLM Series Timezone Session {index}',
+                start_datetime=start_datetime,
+                status='upcoming',
+                event_series=series,
+                series_position=index,
+            )
+            EventRegistration.objects.create(user=self.user, event=event)
+
+        response = self.client.get('/')
+
+        self.assertContains(response, 'LLM Series Timezone Session 1')
+        self.assertNotContains(response, 'LLM Series Timezone Session 2')
+        self.assertContains(
+            response,
+            'Wed, Jun 24, 2026, 18:00 Europe/Berlin',
         )
 
     def test_applies_limit_after_collapsing_series(self):

@@ -281,6 +281,27 @@ class SendRescheduleNoticeOneTest(TestCase):
 
         self.assertGreater(new_seq, original_seq)
 
+    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-6')
+    def test_resent_ics_uses_attendee_join_url_with_bumped_sequence(
+        self, mock_send,
+    ):
+        send_reschedule_notice_one(
+            self.event.pk,
+            self.berlin_user.pk,
+            '2026-06-08T16:00:00+00:00',
+        )
+
+        ics_bytes = mock_send.call_args.kwargs['ics_content']
+        cal = _parse_ics(ics_bytes)
+        vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
+        join_url = 'https://aishippinglabs.com/events/live-qa/join'
+
+        self.assertEqual(int(vevent.get('sequence')), 1)
+        self.assertEqual(str(vevent.get('url')), join_url)
+        self.assertEqual(str(vevent.get('location')), join_url)
+        self.assertIn(f'Join: {join_url}', str(vevent.get('description')))
+        self.assertNotIn(self.event.get_absolute_url(), str(vevent.get('url')))
+
     @patch('events.tasks.notify_reschedule._send_raw_email')
     def test_send_skips_cancelled_registration(self, mock_send):
         """A user who cancelled between fan-out and send is not emailed."""

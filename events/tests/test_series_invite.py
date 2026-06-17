@@ -82,6 +82,10 @@ def _vevents(cal):
     return [c for c in cal.walk() if c.name == 'VEVENT']
 
 
+def _vevents_by_uid(cal):
+    return {str(v.get('uid')): v for v in _vevents(cal)}
+
+
 def _ics_from_raw(raw):
     """Extract and decode the text/calendar attachment from a raw SES message.
 
@@ -142,6 +146,20 @@ class GenerateSeriesIcsTest(TestCase):
         cal = _parse(generate_series_ics([self.e1], method='CANCEL'))
         self.assertEqual(str(cal.get('method')), 'CANCEL')
 
+    def test_each_vevent_uses_occurrence_attendee_join_url(self):
+        cal = _parse(generate_series_ics([self.e1, self.e2], method='REQUEST'))
+        by_uid = _vevents_by_uid(cal)
+
+        for event in (self.e1, self.e2):
+            vevent = by_uid[f'event-{event.slug}@aishippinglabs.com']
+            join_url = f'https://aishippinglabs.com/events/{event.slug}/join'
+            self.assertEqual(str(vevent.get('url')), join_url)
+            self.assertEqual(str(vevent.get('location')), join_url)
+            self.assertIn(
+                f'Join: {join_url}',
+                str(vevent.get('description')),
+            )
+
 
 @tag('core')
 @override_settings(SES_ENABLED=True)
@@ -184,6 +202,15 @@ class SendSeriesRegistrationInviteTest(TierSetupMixin, TestCase):
             'event-woh-a@aishippinglabs.com',
             'event-woh-b@aishippinglabs.com',
         })
+        by_uid = _vevents_by_uid(cal)
+        self.assertEqual(
+            str(by_uid['event-woh-a@aishippinglabs.com'].get('url')),
+            'https://aishippinglabs.com/events/woh-a/join',
+        )
+        self.assertEqual(
+            str(by_uid['event-woh-b@aishippinglabs.com'].get('location')),
+            'https://aishippinglabs.com/events/woh-b/join',
+        )
 
 
 @tag('core')
@@ -268,6 +295,15 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
             for v in _vevents(cal)
         }
         self.assertEqual(by_uid['event-woh-u1@aishippinglabs.com'], 2)
+        vevent = _vevents_by_uid(cal)['event-woh-u1@aishippinglabs.com']
+        self.assertEqual(
+            str(vevent.get('url')),
+            'https://aishippinglabs.com/events/woh-u1/join',
+        )
+        self.assertEqual(
+            str(vevent.get('location')),
+            'https://aishippinglabs.com/events/woh-u1/join',
+        )
         self.assertEqual(
             EmailLog.objects.filter(email_type='series_update').count(), 2,
         )
@@ -380,6 +416,14 @@ class SendSeriesCancellationTest(TierSetupMixin, TestCase):
         self.assertEqual(int(vevents[0].get('sequence')), 5)
         self.assertEqual(
             str(vevents[0].get('uid')), 'event-woh-c1@aishippinglabs.com',
+        )
+        self.assertEqual(
+            str(vevents[0].get('url')),
+            'https://aishippinglabs.com/events/woh-c1/join',
+        )
+        self.assertEqual(
+            str(vevents[0].get('location')),
+            'https://aishippinglabs.com/events/woh-c1/join',
         )
 
     @patch('events.services.registration_email.boto3')

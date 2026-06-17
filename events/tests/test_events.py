@@ -1351,6 +1351,22 @@ class EventCalendarIcsViewTest(TestCase):
         self.assertIn('END:VCALENDAR', body)
         self.assertIn('SUMMARY:ICS Download Event', body)
 
+    def test_response_uses_attendee_join_url(self):
+        from icalendar import Calendar
+
+        self.event.zoom_join_url = 'https://zoom.us/j/raw-download'
+        self.event.save(update_fields=['zoom_join_url'])
+
+        response = self.client.get('/events/ics-download-event/calendar.ics')
+        cal = Calendar.from_ical(response.content)
+        vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
+        join_url = 'https://aishippinglabs.com/events/ics-download-event/join'
+
+        self.assertEqual(str(vevent.get('url')), join_url)
+        self.assertEqual(str(vevent.get('location')), join_url)
+        self.assertIn(f'Join: {join_url}', str(vevent.get('description')))
+        self.assertNotIn('zoom.us', response.content.decode('utf-8'))
+
     def test_draft_event_returns_404_for_anonymous(self):
         Event.objects.create(
             title='Draft ICS',

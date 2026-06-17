@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from icalendar import Calendar
 
 from accounts.models import User
 from email_app.tests.test_email_service import assert_no_internal_footer_text
@@ -42,35 +43,24 @@ class GenerateIcsTest(TestCase):
         from icalendar import Calendar
         return Calendar.from_ical(ics_bytes)
 
+    def _vevent(self, ics_bytes):
+        cal = self._parse_ics(ics_bytes)
+        return [c for c in cal.walk() if c.name == 'VEVENT'][0]
+
     def test_generate_ics_contains_event_details(self):
         ics_bytes = generate_ics(self.event)
         cal = self._parse_ics(ics_bytes)
-
         vevents = [c for c in cal.walk() if c.name == 'VEVENT']
         self.assertEqual(len(vevents), 1)
 
         vevent = vevents[0]
         self.assertEqual(str(vevent.get('summary')), 'AI Agents Workshop')
-        # Issue #578: DESCRIPTION now includes a trailing "Join: <url>"
-        # line so the join URL survives clients that hide URL/LOCATION.
-        # Issue #673: that URL is the canonical ``/events/<id>/<slug>``.
+        join_url = 'https://aishippinglabs.com/events/ai-workshop/join'
         description = str(vevent.get('description'))
         self.assertIn('Learn about AI agents.', description)
-        self.assertIn(
-            f'Join: https://aishippinglabs.com{self.event.get_absolute_url()}',
-            description,
-        )
-        # Issue #578: URL/LOCATION now point at the public detail page,
-        # not the /join redirect (which requires login and would 302
-        # subscriber clients). Issue #673: that URL is id+slug.
-        self.assertEqual(
-            str(vevent.get('url')),
-            f'https://aishippinglabs.com{self.event.get_absolute_url()}',
-        )
-        self.assertEqual(
-            str(vevent.get('location')),
-            f'https://aishippinglabs.com{self.event.get_absolute_url()}',
-        )
+        self.assertIn(f'Join: {join_url}', description)
+        self.assertEqual(str(vevent.get('url')), join_url)
+        self.assertEqual(str(vevent.get('location')), join_url)
 
     def test_generate_ics_has_correct_start_end(self):
         ics_bytes = generate_ics(self.event)
@@ -147,12 +137,7 @@ class GenerateIcsTest(TestCase):
         self.assertIn('noreply@aishippinglabs.com', str(organizer))
 
     def test_generate_ics_join_url_not_zoom(self):
-        """URL/LOCATION point at the public detail page, not Zoom.
-
-        Issue #578: the per-event invite now uses the detail page URL
-        (matching the feed). The raw Zoom URL must never end up in the
-        .ics file regardless.
-        """
+        """Attendee community invites point at /join, not raw Zoom."""
         event = Event.objects.create(
             slug='zoom-event',
             title='Zoom Workshop',
@@ -161,12 +146,38 @@ class GenerateIcsTest(TestCase):
             zoom_join_url='https://zoom.us/j/123456',
         )
         ics_bytes = generate_ics(event)
-        ics_str = ics_bytes.decode('utf-8')
+        vevent = self._vevent(ics_bytes)
+        join_url = 'https://aishippinglabs.com/events/zoom-event/join'
 
-        # Issue #673: the .ics ``URL`` field follows the canonical
-        # ``/events/<id>/<slug>`` shape via ``get_absolute_url``.
-        self.assertIn(event.get_absolute_url(), ics_str)
-        self.assertNotIn('zoom.us', ics_str)
+        self.assertIn(f'Join: {join_url}', str(vevent.get('description')))
+        self.assertEqual(str(vevent.get('url')), join_url)
+        self.assertEqual(str(vevent.get('location')), join_url)
+        self.assertNotIn('zoom.us', ics_bytes.decode('utf-8'))
+
+    def test_external_attendee_ics_does_not_invent_internal_join_url(self):
+        event = Event.objects.create(
+            slug='partner-cohort',
+            title='Partner Cohort',
+            description='Hosted off-platform.',
+            start_datetime=self.start,
+            status='upcoming',
+            external_host='Maven',
+            zoom_join_url='https://maven.com/aisl/cohort',
+        )
+
+        ics_bytes = generate_ics(event)
+        vevent = self._vevent(ics_bytes)
+        detail_url = f'https://aishippinglabs.com{event.get_absolute_url()}'
+        internal_join_url = (
+            'https://aishippinglabs.com/events/partner-cohort/join'
+        )
+
+        self.assertIn(f'Join: {detail_url}', str(vevent.get('description')))
+        self.assertEqual(str(vevent.get('url')), detail_url)
+        self.assertEqual(str(vevent.get('location')), 'Maven')
+        self.assertNotIn(internal_join_url, str(vevent.get('description')))
+        self.assertNotEqual(str(vevent.get('url')), internal_join_url)
+        self.assertNotEqual(str(vevent.get('location')), internal_join_url)
 
 
 @override_settings(
@@ -247,6 +258,12 @@ class SendRegistrationConfirmationTest(TestCase):
                 parts[ct] = payload.decode('utf-8')
         return parts
 
+    def _get_calendar_part(self, msg):
+        for part in msg.walk():
+            if part.get_content_type() == 'text/calendar':
+                return part.get_payload(decode=True)
+        raise AssertionError('No text/calendar part found in email')
+
     @patch('events.services.registration_email.boto3')
     def test_send_email_contains_ics_attachment(self, mock_boto3):
         mock_client = MagicMock()
@@ -275,6 +292,32 @@ class SendRegistrationConfirmationTest(TestCase):
 
         # Check filename in raw headers
         self.assertIn('event.ics', raw_data)
+
+    @patch('events.services.registration_email.boto3')
+    def test_send_email_ics_attachment_uses_attendee_join_url(self, mock_boto3):
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'msg-join-ics'}
+        mock_boto3.client.return_value = mock_client
+        self.event.zoom_join_url = 'https://zoom.us/j/raw-secret'
+        self.event.save(update_fields=['zoom_join_url'])
+
+        registration = EventRegistration.objects.create(
+            event=self.event, user=self.user,
+        )
+        send_registration_confirmation(registration)
+
+        raw_data = mock_client.send_email.call_args.kwargs['Content']['Raw']['Data']
+        msg = self._parse_raw_email(raw_data)
+        ics_bytes = self._get_calendar_part(msg)
+        cal = Calendar.from_ical(ics_bytes)
+        vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
+        join_url = 'https://aishippinglabs.com/events/test-event/join'
+
+        self.assertIn(f'Join: {join_url}', str(vevent.get('description')))
+        self.assertEqual(str(vevent.get('url')), join_url)
+        self.assertEqual(str(vevent.get('location')), join_url)
+        self.assertEqual(str(vevent.get('uid')), 'event-test-event@aishippinglabs.com')
+        self.assertNotIn('zoom.us', ics_bytes.decode('utf-8'))
 
     @patch('events.services.registration_email.boto3')
     def test_send_email_html_footer_has_no_unsubscribe_link(self, mock_boto3):

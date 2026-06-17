@@ -17,9 +17,11 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
+from accounts.models import TierOverride
 from content.models import Article, Course, Download, Workshop
 from events.models import Event
 from notifications.models import Notification
+from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
 
@@ -305,7 +307,7 @@ class StudioRecordingNotifyTest(TestCase):
         self.assertNotContains(response, 'Post to Slack')
 
 
-class StudioEventNotifyTest(TestCase):
+class StudioEventNotifyTest(TierSetupMixin, TestCase):
     """Test notify and announce for events."""
 
     def setUp(self):
@@ -323,29 +325,124 @@ class StudioEventNotifyTest(TestCase):
             required_level=0,
         )
 
-    def test_notify_creates_notifications(self):
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_notify_creates_in_app_notifications_without_slack(self, mock_slack):
         User.objects.create_user(email='u1@test.com', password='p', is_active=True)
         response = self.client.post(f'/studio/events/{self.event.pk}/notify')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn('notified', data)
-        self.assertEqual(data['emailed'], 0)
+        self.assertNotIn('emailed', data)
+        self.assertGreaterEqual(data['notified'], 1)
+        mock_slack.assert_not_called()
+
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_notify_filters_to_active_eligible_effective_tier_users(
+        self,
+        mock_slack,
+    ):
+        self.event.required_level = 20
+        self.event.save(update_fields=['required_level'])
+
+        eligible = User.objects.create_user(
+            email='eligible@test.com',
+            password='p',
+            tier=self.main_tier,
+            is_active=True,
+        )
+        inactive = User.objects.create_user(
+            email='inactive@test.com',
+            password='p',
+            tier=self.main_tier,
+            is_active=False,
+        )
+        below_tier = User.objects.create_user(
+            email='below@test.com',
+            password='p',
+            tier=self.free_tier,
+            is_active=True,
+        )
+        override_user = User.objects.create_user(
+            email='override@test.com',
+            password='p',
+            tier=self.free_tier,
+            is_active=True,
+        )
+        TierOverride.objects.create(
+            user=override_user,
+            original_tier=self.free_tier,
+            override_tier=self.main_tier,
+            expires_at=timezone.now() + timedelta(days=7),
+            is_active=True,
+        )
+
+        response = self.client.post(f'/studio/events/{self.event.pk}/notify')
+
+        self.assertEqual(response.status_code, 200)
+        notified = set(
+            Notification.objects.values_list('user__email', flat=True),
+        )
+        self.assertIn(eligible.email, notified)
+        self.assertIn(override_user.email, notified)
+        self.assertNotIn(inactive.email, notified)
+        self.assertNotIn(below_tier.email, notified)
+        mock_slack.assert_not_called()
+
+    def test_duplicate_notify_returns_409_without_extra_rows(self):
+        User.objects.create_user(email='u1@test.com', password='p', is_active=True)
+        first = self.client.post(f'/studio/events/{self.event.pk}/notify')
+        self.assertEqual(first.status_code, 200)
+        first_count = Notification.objects.count()
+
+        response = self.client.post(f'/studio/events/{self.event.pk}/notify')
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(Notification.objects.count(), first_count)
+        self.assertIn('Already notified', response.json()['error'])
 
     def test_notify_requires_post(self):
         response = self.client.get(f'/studio/events/{self.event.pk}/notify')
         self.assertEqual(response.status_code, 405)
 
+    def test_notify_requires_staff(self):
+        self.client.logout()
+        User.objects.create_user(
+            email='regular-event@test.com',
+            password='testpass',
+            is_staff=False,
+        )
+        self.client.login(email='regular-event@test.com', password='testpass')
+        response = self.client.post(f'/studio/events/{self.event.pk}/notify')
+        self.assertEqual(response.status_code, 403)
+
     def test_buttons_visible_on_upcoming_event(self):
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
-        self.assertContains(response, 'Notify subscribers')
+        self.assertContains(response, 'Notify eligible members in app')
+        self.assertNotContains(response, 'Notify subscribers')
+        self.assertContains(response, 'in-app notifications for eligible members')
+        self.assertNotContains(response, 'subscribers and emailed')
+        self.assertNotContains(response, 'emailed 0')
         self.assertContains(response, 'Post to Slack')
 
     def test_buttons_hidden_on_draft_event(self):
         self.event.status = 'draft'
         self.event.save()
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
-        self.assertNotContains(response, 'Notify subscribers')
+        self.assertNotContains(response, 'Notify eligible members in app')
         self.assertNotContains(response, 'Post to Slack')
+
+    @patch('studio.views.notifications.post_slack_announcement')
+    def test_announce_slack_calls_slack_without_notifications(self, mock_slack):
+        mock_slack.return_value = True
+
+        response = self.client.post(
+            f'/studio/events/{self.event.pk}/announce-slack',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'posted': True})
+        mock_slack.assert_called_once_with('event', self.event)
+        self.assertEqual(Notification.objects.count(), 0)
 
 
 class StudioDownloadNotifyTest(TestCase):

@@ -518,7 +518,7 @@
   </div>
 
   {% if event.status != 'draft' %}
-  {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True %}
+  {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True notify_button_label="Notify eligible members in app" notify_sending_label="Creating..." notify_status_mode="in_app_eligible_members" %}
   {% endif %}
 
   {% comment %}

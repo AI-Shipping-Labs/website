@@ -231,7 +231,7 @@ class NotificationService:
     """Service for creating notifications and dispatching to channels."""
 
     @staticmethod
-    def notify(content_type, content_id):
+    def notify(content_type, content_id, *, post_to_slack=True):
         """Create on-platform notifications for eligible users and post to Slack.
 
         For content types with an ``email_template`` configured (workshops
@@ -242,6 +242,9 @@ class NotificationService:
             content_type: One of 'article', 'course', 'event', 'recording',
                          'download', 'poll', 'workshop'.
             content_id: Primary key of the content object.
+            post_to_slack: Whether to also post a Slack announcement. Defaults
+                           to ``True`` to preserve the existing generic
+                           notification behavior.
 
         Returns:
             ``{"notified": int, "emailed": int}`` -- ``emailed`` is always
@@ -290,15 +293,15 @@ class NotificationService:
             )
         result["notified"] = len(notifications)
 
-        # Post to Slack #announcements
-        try:
-            from notifications.services.slack_announcements import post_slack_announcement
-            post_slack_announcement(content_type, content)
-        except Exception:
-            logger.exception(
-                'Failed to post Slack announcement for %s/%s',
-                content_type, content_id,
-            )
+        if post_to_slack:
+            try:
+                from notifications.services.slack_announcements import post_slack_announcement
+                post_slack_announcement(content_type, content)
+            except Exception:
+                logger.exception(
+                    'Failed to post Slack announcement for %s/%s',
+                    content_type, content_id,
+                )
 
         # Issue #655: direct-email channel for content types that opt in
         # via the ``email_template`` config key. Failures on a single

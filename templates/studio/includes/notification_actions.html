@@ -1,4 +1,4 @@
-<!-- Notification Actions: Notify Subscribers and Post to Slack -->
+<!-- Notification Actions: in-app notifications and Post to Slack -->
 <!-- Requires: notify_url, announce_url variables to be set before including -->
 <div class="{% if compact %}space-y-3{% else %}mt-8 max-w-3xl{% endif %}" data-testid="notification-actions">
   <div class="bg-card border border-border rounded-lg {% if compact %}p-4{% else %}p-6{% endif %}">
@@ -7,7 +7,7 @@
       <button type="button" id="notify-subscribers-btn"
               onclick="notifySubscribers()"
               class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity{% if compact %} w-full{% endif %}">
-        Notify subscribers
+        {{ notify_button_label|default:"Notify subscribers" }}
       </button>
       <button type="button" id="post-to-slack-btn"
               onclick="postToSlack()"
@@ -24,8 +24,10 @@
 function notifySubscribers() {
   var btn = document.getElementById('notify-subscribers-btn');
   var status = document.getElementById('notify-status');
+  var notifyButtonLabel = '{{ notify_button_label|default:"Notify subscribers"|escapejs }}';
+  var notifySendingLabel = '{{ notify_sending_label|default:"Sending..."|escapejs }}';
   btn.disabled = true;
-  btn.textContent = 'Sending...';
+  btn.textContent = notifySendingLabel;
   status.style.display = 'none';
 
   fetch('{{ notify_url }}', {
@@ -38,25 +40,33 @@ function notifySubscribers() {
   .then(function(res) {
     status.style.display = 'block';
     if (res.ok) {
+      {% if notify_status_mode == "in_app_eligible_members" %}
+      status.textContent = 'Created ' + res.data.notified + ' in-app notifications for eligible members';
+      {% else %}
       var emailedCount = (typeof res.data.emailed === 'number') ? res.data.emailed : 0;
       status.textContent = 'Notified ' + res.data.notified + ' subscribers and emailed ' + emailedCount;
+      {% endif %}
       status.className = 'mt-3 text-sm text-green-500';
     } else if (res.status === 409) {
-      status.textContent = 'Already notified in the last 24 hours \u2014 sending again would duplicate notifications';
+      {% if notify_status_mode == "in_app_eligible_members" %}
+      status.textContent = 'Already notified in the last 24 hours - sending again would duplicate in-app notifications';
+      {% else %}
+      status.textContent = 'Already notified in the last 24 hours - sending again would duplicate notifications';
+      {% endif %}
       status.className = 'mt-3 text-sm text-yellow-500';
     } else {
       status.textContent = 'Error: ' + (res.data.error || 'Unknown error');
       status.className = 'mt-3 text-sm text-red-500';
     }
     btn.disabled = false;
-    btn.textContent = 'Notify subscribers';
+    btn.textContent = notifyButtonLabel;
   })
   .catch(function(err) {
     status.style.display = 'block';
     status.textContent = 'Network error: ' + err.message;
     status.className = 'mt-3 text-sm text-red-500';
     btn.disabled = false;
-    btn.textContent = 'Notify subscribers';
+    btn.textContent = notifyButtonLabel;
   });
 }
 

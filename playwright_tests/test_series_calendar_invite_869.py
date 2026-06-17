@@ -100,7 +100,7 @@ class TestSeriesRegistrationLogsInvite:
         ctx = _auth_context(browser, "member-869a@test.com")
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/events/groups/{series.slug}",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
@@ -145,7 +145,7 @@ class TestPartialAccessLogsInvite:
         ctx = _auth_context(browser, "member-869c@test.com")
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/events/groups/{series.slug}",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         page.locator('[data-testid="series-register-button"]').click()
@@ -194,7 +194,7 @@ class TestPartialGatedSeriesDashboardEnrollment:
         ctx = _auth_context(browser, "member-934@test.com")
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/events/groups/{series.slug}",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         page.locator('[data-testid="series-register-button"]').click()

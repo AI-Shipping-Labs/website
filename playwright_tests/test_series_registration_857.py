@@ -91,7 +91,7 @@ class TestScenarioFullSeriesRegister:
         ctx = _auth_context(browser, "member-857a@test.com")
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/events/groups/{series.slug}",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
@@ -131,7 +131,7 @@ class TestScenarioMixedTier:
         ctx = _auth_context(browser, "member-857b@test.com")
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/events/groups/{series.slug}",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
@@ -167,7 +167,7 @@ class TestScenarioCancelKeepsPast:
         ctx = _auth_context(browser, "member-857c@test.com")
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/events/groups/{series.slug}",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         page.locator('[data-testid="series-register-button"]').click()
@@ -203,14 +203,14 @@ class TestScenarioAnonymousLoginRedirect:
         ctx = browser.new_context(viewport={"width": 1280, "height": 720})
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/events/groups/{series.slug}",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
 
         page.locator('[data-testid="series-register-login-cta"]').click()
         page.wait_for_url(lambda url: "/accounts/login" in url)
         # The next param routes back to the series page.
-        assert f"groups/{series.slug}" in page.url
+        assert series.get_absolute_url() in page.url
 
         ctx.close()
 
@@ -232,7 +232,7 @@ class TestScenarioEntryPointFromListing:
         page.locator(
             '[data-testid="event-series-card"] [data-testid="series-card-link"]'
         ).first.click()
-        page.wait_for_url(lambda url: f"groups/{series.slug}" in url)
+        page.wait_for_url(lambda url: series.get_absolute_url() in url)
         assert page.locator('[data-testid="series-name"]').is_visible()
 
         ctx.close()

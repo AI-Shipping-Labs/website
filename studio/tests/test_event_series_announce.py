@@ -88,7 +88,7 @@ class SeriesNotifyEndpointTest(SeriesActionMixin, TestCase):
         self.assertEqual(resp.json()['notified'], Notification.objects.count())
         n = Notification.objects.filter(user=self.member).first()
         self.assertIsNotNone(n)
-        self.assertEqual(n.url, '/events/groups/build-club')
+        self.assertEqual(n.url, self.series.get_absolute_url())
         self.assertEqual(n.title, 'New event series: Build Club')
 
     def test_re_notify_within_24h_returns_409_and_no_duplicates(self):

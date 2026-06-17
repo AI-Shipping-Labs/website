@@ -768,9 +768,7 @@ class TestScenario1028DashboardSeriesCollapse:
             '[data-testid="dashboard-event-series-see-more"]'
         )
         assert see_more.count() == 1
-        assert see_more.first.get_attribute("href") == (
-            "/events/groups/llm-zoomcamp-2026-office-hours"
-        )
+        assert see_more.first.get_attribute("href") == series.get_absolute_url()
 
         context.close()
 

@@ -52,7 +52,8 @@ class BuildSeriesSlackBlocksTest(TestCase):
         self.assertIn('Weekly Build Club', text)
         section = blocks[0]['text']['text']
         self.assertIn('*New event series:*', section)
-        self.assertIn('/events/groups/weekly-build-club', section)
+        self.assertIn(series.get_absolute_url(), section)
+        self.assertNotIn('/events/groups/weekly-build-club', section)
 
     def test_description_markdown_link_rendered_as_mrkdwn(self):
         """Issue #887: a markdown link in the series description must render
@@ -85,7 +86,8 @@ class BuildSeriesSlackBlocksTest(TestCase):
         button = blocks[1]['elements'][0]
         self.assertEqual(button['type'], 'button')
         self.assertEqual(button['text']['text'], 'View series')
-        self.assertIn('/events/groups/weekly-build-club', button['url'])
+        self.assertIn(series.get_absolute_url(), button['url'])
+        self.assertNotIn('/events/groups/weekly-build-club', button['url'])
 
     def test_session_list_is_capped_with_overflow_line(self):
         series = _make_series()

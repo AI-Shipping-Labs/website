@@ -212,7 +212,7 @@ class TestRenameEmitsNewSlug:
         )
         public = public_ctx.new_page()
         public.goto(
-            f"{django_server}/events/groups/q-and-a-series",
+            f"{django_server}{series.get_absolute_url()}",
             wait_until="domcontentloaded",
         )
         link = public.locator('[data-testid="series-event-link"]').first

@@ -205,13 +205,13 @@ class CancelledHiddenFromSeriesPageTest(TestCase):
         )
 
     def test_anonymous_does_not_see_cancelled(self):
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Visible Live Occurrence')
         self.assertNotContains(response, 'Hidden Cancelled Occurrence')
 
     def test_anonymous_sees_no_cancelled_label(self):
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         # The cancelled occurrence title is absent (hidden, not badged).
         self.assertNotContains(response, 'Hidden Cancelled Occurrence')
 
@@ -220,7 +220,7 @@ class CancelledHiddenFromSeriesPageTest(TestCase):
             email='member@test.com', password='pass',
         )
         self.client.force_login(member)
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertNotContains(response, 'Hidden Cancelled Occurrence')
 
     def test_staff_still_sees_cancelled(self):
@@ -228,7 +228,7 @@ class CancelledHiddenFromSeriesPageTest(TestCase):
             email='staff863@test.com', password='pass', is_staff=True,
         )
         self.client.force_login(staff)
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertContains(response, 'Hidden Cancelled Occurrence')
 
 
@@ -254,7 +254,7 @@ class CancellingDropsFromAllSurfacesRegressionTest(TestCase):
         )
 
     def _series_page_shows_target(self):
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         return b'Regression Target Occurrence' in response.content
 
     def _calendar_shows_target(self):

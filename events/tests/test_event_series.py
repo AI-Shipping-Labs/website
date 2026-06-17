@@ -6,7 +6,7 @@ Covers:
 - ``EventSeries`` model: slug auto-derivation, description markdown.
 - ``Event.origin`` invariant: github iff source_repo is set.
 - ``studio.utils.is_synced`` branching on ``origin``.
-- Public ``/events/groups/<slug>`` view (URL kept for back-compat).
+- Public ``/events/series/<id>/<slug>`` view.
 - Public events list shows series link when an event belongs to a series.
 """
 
@@ -60,6 +60,17 @@ class EventSeriesModelTest(TestCase):
             event_series=series, series_position=1, origin='studio',
         )
         self.assertEqual(series.event_count, 1)
+
+    def test_get_absolute_url_uses_id_and_slug(self):
+        series = EventSeries.objects.create(
+            name='Canonical Series',
+            slug='canonical-series',
+            start_time=time(18, 0),
+        )
+        self.assertEqual(
+            series.get_absolute_url(),
+            f'/events/series/{series.pk}/canonical-series',
+        )
 
 
 class ScheduleLabelTest(TestCase):
@@ -315,7 +326,7 @@ class IsSyncedHelperTest(TestCase):
 
 
 class PublicEventSeriesViewTest(TestCase):
-    """Public ``/events/groups/<slug>`` page."""
+    """Public ``/events/series/<id>/<slug>`` page."""
 
     @classmethod
     def setUpTestData(cls):
@@ -336,16 +347,34 @@ class PublicEventSeriesViewTest(TestCase):
         )
 
     def test_anonymous_visitor_sees_published_events(self):
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Series Session 1')
 
     def test_anonymous_visitor_does_not_see_drafts(self):
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertNotContains(response, 'Series Session 2')
 
-    def test_unknown_slug_returns_404(self):
-        response = self.client.get('/events/groups/does-not-exist')
+    def test_unknown_id_returns_404(self):
+        response = self.client.get('/events/series/999999/does-not-exist')
+        self.assertEqual(response.status_code, 404)
+
+    def test_wrong_slug_redirects_to_current_canonical_url(self):
+        response = self.client.get(f'/events/series/{self.series.pk}/stale')
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], self.series.get_absolute_url())
+
+    def test_missing_slug_redirects_to_current_canonical_url(self):
+        response = self.client.get(f'/events/series/{self.series.pk}')
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], self.series.get_absolute_url())
+
+    def test_old_groups_url_is_unsupported(self):
+        response = self.client.get(f'/events/groups/{self.series.slug}')
+        self.assertEqual(response.status_code, 404)
+
+    def test_slug_only_series_url_is_unsupported(self):
+        response = self.client.get(f'/events/series/{self.series.slug}')
         self.assertEqual(response.status_code, 404)
 
     def test_staff_sees_drafts(self):
@@ -353,7 +382,7 @@ class PublicEventSeriesViewTest(TestCase):
             email='staff@test.com', password='pass', is_staff=True,
         )
         self.client.force_login(staff)
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertContains(response, 'Series Session 2')
 
     def test_event_time_localized_to_event_timezone(self):
@@ -367,10 +396,26 @@ class PublicEventSeriesViewTest(TestCase):
             status='upcoming',
             event_series=self.series, series_position=3, origin='studio',
         )
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertContains(response, 'Monday, Jun 15, 2026 · 18:00 Europe/Berlin')
         # The raw UTC clock time labeled Berlin must NOT appear.
         self.assertNotContains(response, '16:00 Europe/Berlin')
+
+    def test_canonical_and_og_url_use_absolute_series_url(self):
+        response = self.client.get(self.series.get_absolute_url())
+        absolute_url = (
+            f'{response.context["site_url"]}{self.series.get_absolute_url()}'
+        )
+        self.assertContains(
+            response,
+            f'<link rel="canonical" href="{absolute_url}">',
+            html=False,
+        )
+        self.assertContains(
+            response,
+            f'<meta property="og:url" content="{absolute_url}">',
+            html=False,
+        )
 
     def test_signed_in_event_time_uses_viewer_preferred_timezone(self):
         user = User.objects.create_user(
@@ -387,7 +432,7 @@ class PublicEventSeriesViewTest(TestCase):
             event_series=self.series, series_position=3, origin='studio',
         )
 
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
 
         self.assertContains(
             response,
@@ -395,28 +440,28 @@ class PublicEventSeriesViewTest(TestCase):
         )
         self.assertNotContains(response, 'Monday, Jun 15, 2026 · 18:00 Europe/Berlin')
 
-    def test_event_detail_url_still_resolves_after_groups_route(self):
-        """The ``/events/groups/<slug>`` route must not swallow event ids.
+    def test_event_detail_url_still_resolves_after_series_route(self):
+        """The ``/events/series/<id>/<slug>`` route must not swallow event ids.
 
         Issue #673: event detail is now keyed on id+slug; the assertion
-        is that ``Event.get_absolute_url`` resolves to a 200 alongside
-        the existing groups route.
+        is that ``Event.get_absolute_url`` resolves to a 200 alongside the
+        series route.
         """
         response = self.client.get(self.published_event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
 
     def test_trailing_slash_301s_to_canonical_no_slash_form(self):
-        """Issue #909: ``/events/groups/<slug>/`` (trailing slash) is
+        """Issue #909: ``/events/series/<id>/<slug>/`` (trailing slash) is
         normalised by the site-wide ``RemoveTrailingSlashMiddleware``
         with a 301 to the no-slash form *before* URL routing runs —
         ``events`` is not in ``SKIP_PREFIXES``. This locks in that
         behaviour so the canonical no-slash route is the only reachable
         one (the dedicated trailing-slash url pattern was dead code).
         """
-        response = self.client.get(f'/events/groups/{self.series.slug}/')
+        response = self.client.get(f'{self.series.get_absolute_url()}/')
         self.assertEqual(response.status_code, 301)
         self.assertEqual(
-            response['Location'], f'/events/groups/{self.series.slug}'
+            response['Location'], self.series.get_absolute_url()
         )
 
 
@@ -462,7 +507,7 @@ class PublicEventSeriesChronologicalOrderTest(TestCase):
         )
 
     def test_sessions_render_in_start_datetime_order(self):
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         rendered = list(response.context['events'])
         # All four published occurrences present (none dropped by the new sort).
@@ -488,7 +533,7 @@ class PublicEventSeriesChronologicalOrderTest(TestCase):
             status='cancelled',
             event_series=self.series, series_position=8, origin='studio',
         )
-        response = self.client.get(f'/events/groups/{self.series.slug}')
+        response = self.client.get(self.series.get_absolute_url())
         rendered = list(response.context['events'])
         # Only the four published occurrences appear; draft + cancelled gone.
         self.assertEqual(len(rendered), 4)
@@ -558,13 +603,13 @@ class PublicEventSeriesVisibilityTest(TestCase):
 
     def test_anonymous_404s_on_empty_series(self):
         response = self.client.get(
-            f'/events/groups/{self.empty_series.slug}',
+            self.empty_series.get_absolute_url(),
         )
         self.assertEqual(response.status_code, 404)
 
     def test_anonymous_never_sees_no_published_placeholder_or_draft(self):
         response = self.client.get(
-            f'/events/groups/{self.empty_series.slug}',
+            self.empty_series.get_absolute_url(),
         )
         self.assertNotContains(
             response, 'No published events', status_code=404,
@@ -574,7 +619,7 @@ class PublicEventSeriesVisibilityTest(TestCase):
     def test_staff_previews_empty_series(self):
         self.client.force_login(self.staff)
         response = self.client.get(
-            f'/events/groups/{self.empty_series.slug}',
+            self.empty_series.get_absolute_url(),
         )
         self.assertEqual(response.status_code, 200)
 
@@ -582,7 +627,7 @@ class PublicEventSeriesVisibilityTest(TestCase):
         self.draft_only.status = 'upcoming'
         self.draft_only.save()
         response = self.client.get(
-            f'/events/groups/{self.empty_series.slug}',
+            self.empty_series.get_absolute_url(),
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Hidden Session')
@@ -591,7 +636,7 @@ class PublicEventSeriesVisibilityTest(TestCase):
         self.live_series.is_active = False
         self.live_series.save()
         response = self.client.get(
-            f'/events/groups/{self.live_series.slug}',
+            self.live_series.get_absolute_url(),
         )
         self.assertEqual(response.status_code, 404)
 
@@ -600,7 +645,7 @@ class PublicEventSeriesVisibilityTest(TestCase):
         self.live_series.save()
         self.client.force_login(self.staff)
         response = self.client.get(
-            f'/events/groups/{self.live_series.slug}',
+            self.live_series.get_absolute_url(),
         )
         self.assertEqual(response.status_code, 200)
 
@@ -613,7 +658,7 @@ class PublicEventSeriesVisibilityTest(TestCase):
             event_series=self.live_series, series_position=2, origin='studio',
         )
         response = self.client.get(
-            f'/events/groups/{self.live_series.slug}',
+            self.live_series.get_absolute_url(),
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Open Session')
@@ -649,17 +694,17 @@ class PublicEventSeriesBannerTest(TestCase):
             )
 
     def test_header_banner_image_rendered_when_set(self):
-        response = self.client.get(f'/events/groups/{self.with_banner.slug}')
+        response = self.client.get(self.with_banner.get_absolute_url())
         self.assertContains(response, 'data-testid="series-banner"')
         self.assertContains(response, self.BANNER)
 
     def test_no_header_banner_box_when_unset(self):
-        response = self.client.get(f'/events/groups/{self.no_banner.slug}')
+        response = self.client.get(self.no_banner.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="series-banner"')
 
     def test_og_image_uses_banner_when_set(self):
-        response = self.client.get(f'/events/groups/{self.with_banner.slug}')
+        response = self.client.get(self.with_banner.get_absolute_url())
         self.assertContains(
             response,
             f'<meta property="og:image" content="{self.BANNER}">',
@@ -672,7 +717,7 @@ class PublicEventSeriesBannerTest(TestCase):
         )
 
     def test_og_title_reflects_series_name(self):
-        response = self.client.get(f'/events/groups/{self.with_banner.slug}')
+        response = self.client.get(self.with_banner.get_absolute_url())
         self.assertContains(
             response,
             '<meta property="og:title" content="Banner Series">',
@@ -680,7 +725,7 @@ class PublicEventSeriesBannerTest(TestCase):
         )
 
     def test_og_image_falls_back_to_site_default_when_unset(self):
-        response = self.client.get(f'/events/groups/{self.no_banner.slug}')
+        response = self.client.get(self.no_banner.get_absolute_url())
         self.assertContains(response, 'ai-shipping-labs.jpg')
         self.assertNotContains(response, '/banners/event_series/')
 
@@ -689,7 +734,7 @@ class PublicEventSeriesBannerTest(TestCase):
         # which Django treats as single-line — leaking lines 2+ as literal
         # text into <head>. It is now a {% comment %} block; the distinctive
         # phrase must not appear in the rendered page.
-        response = self.client.get(f'/events/groups/{self.with_banner.slug}')
+        response = self.client.get(self.with_banner.get_absolute_url())
         self.assertNotContains(response, 'falling back to the site default')
 
 
@@ -827,7 +872,8 @@ class PublicEventsListSeriesLinkTest(TestCase):
     def test_grouped_event_has_series_link(self):
         response = self.client.get('/events?filter=upcoming')
         self.assertContains(response, 'Series: Grouped Series')
-        self.assertContains(response, '/events/groups/grouped-series')
+        self.assertContains(response, self.series.get_absolute_url())
+        self.assertNotContains(response, '/events/groups/grouped-series')
 
     def test_standalone_event_has_no_series_link(self):
         response = self.client.get('/events?filter=upcoming')

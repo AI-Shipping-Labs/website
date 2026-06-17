@@ -29,12 +29,8 @@ class EmailLog(models.Model):
             'see ``recipient_email`` in that case.'
         ),
     )
-    # Issue #861: the host calendar-invite goes to ``Event.host_email`` (or a
-    # configured default), which may be an address with no platform account.
-    # ``recipient_email`` records the actual destination so the send is
-    # auditable even when ``user`` is null. ``event`` lets the host-invite
-    # EmailLog guard ("has this event already invited its host?") query by
-    # (event, email_type) without a user FK.
+    # ``recipient_email`` records non-user destinations for legacy or
+    # integration sends. Most event emails attach directly to ``user``.
     event = models.ForeignKey(
         'events.Event',
         on_delete=models.CASCADE,

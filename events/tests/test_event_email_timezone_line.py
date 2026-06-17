@@ -22,7 +22,6 @@ from django.utils import timezone
 
 from email_app.services.email_service import EmailService
 from events.models import Event, EventRegistration, EventSeries
-from events.services.host_invite import _send as send_host_invite
 from events.services.registration_email import send_registration_confirmation
 from events.services.series_invite import send_series_registration_invite
 from events.tasks.notify_reschedule import send_reschedule_notice_one
@@ -169,7 +168,7 @@ class RescheduleEmailTimezoneLineTest(TestCase):
     AWS_SECRET_ACCESS_KEY="test-secret",
     SES_ENABLED=True,
 )
-class HostInviteTimezoneLineTest(TestCase):
+class HostRegistrationTimezoneLineTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         Tier.objects.get_or_create(
@@ -190,19 +189,25 @@ class HostInviteTimezoneLineTest(TestCase):
         clear_config_cache()
 
     def test_utc_fallback_host_sees_set_variant_and_link(self):
-        # Host is a registered platform user with no timezone preference.
-        User.objects.create_user(
+        host = User.objects.create_user(
             email="host@example.com", preferred_timezone="",
+        )
+        self.event.host_email = host.email
+        self.event.save(update_fields=["host_email"])
+        registration = EventRegistration.objects.create(
+            event=self.event,
+            user=host,
         )
         with patch("events.services.registration_email.boto3") as mock_boto3:
             client = mock_boto3.client.return_value
             client.send_email.return_value = {"MessageId": "tz-host-1"}
-            send_host_invite(self.event, "host@example.com")
+            send_registration_confirmation(registration)
             raw = client.send_email.call_args.kwargs["Content"]["Raw"]["Data"]
         html = _html_from_raw(raw)
 
         self.assertIn("Set your timezone", html)
         self.assertIn(f'href="https://env.example.com{ACCOUNT_FRAGMENT}"', html)
+        self.assertIn("Host management links", html)
 
 
 @override_settings(

@@ -5,7 +5,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings, tag
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from accounts.models import EmailAlias, Token
@@ -13,11 +13,10 @@ from accounts.services.email_resolution import normalize_email
 from email_app.models import EmailLog
 from events.models import Event, EventRegistration
 from events.services.host_registration import maybe_register_host_as_attendee
+from events.services.registration_email import send_registration_confirmation
 from tests.fixtures import StaffUserMixin
 
 User = get_user_model()
-
-HOST_INVITE_SEND_PATH = 'events.services.host_invite._send_raw_email'
 
 
 def _future_start():
@@ -38,7 +37,6 @@ def _make_event(**kwargs):
     return Event.objects.create(**defaults)
 
 
-@override_settings(EVENTS_HOST_INVITE_EMAIL='')
 @tag('core')
 class HostAutoRegistrationServiceTest(TestCase):
     def setUp(self):
@@ -58,6 +56,13 @@ class HostAutoRegistrationServiceTest(TestCase):
                 event=event,
                 user=self.host,
             ).exists(),
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=self.host,
+                email_type='event_registration',
+            ).count(),
+            1,
         )
 
     def test_alias_resolves_to_canonical_user(self):
@@ -84,6 +89,13 @@ class HostAutoRegistrationServiceTest(TestCase):
                 event=event,
                 user=self.host,
             ).exists(),
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=alias_user,
+                email_type='event_registration',
+            ).count(),
+            1,
         )
 
     def test_non_user_host_email_skips_and_logs_warning(self):
@@ -117,6 +129,13 @@ class HostAutoRegistrationServiceTest(TestCase):
             ).count(),
             1,
         )
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=self.host,
+                email_type='event_registration',
+            ).count(),
+            1,
+        )
 
     def test_self_registered_host_is_not_duplicated(self):
         event = _make_event()
@@ -129,6 +148,12 @@ class HostAutoRegistrationServiceTest(TestCase):
 
         self.assertEqual(registration.pk, existing.pk)
         self.assertEqual(EventRegistration.objects.filter(event=event).count(), 1)
+        self.assertFalse(
+            EmailLog.objects.filter(
+                user=self.host,
+                email_type='event_registration',
+            ).exists(),
+        )
 
     def test_draft_event_skips(self):
         event = _make_event(status='draft')
@@ -197,25 +222,72 @@ class HostAutoRegistrationServiceTest(TestCase):
             logs.output,
         )
 
-    def test_no_registration_confirmation_email_or_second_ics(self):
+    def test_new_host_registration_sends_normal_email_with_host_links(self):
         event = _make_event()
 
         with patch(
+            'events.services.registration_email._send_raw_email',
+            return_value='ses-host-registration',
+        ) as mock_send:
+            registration = maybe_register_host_as_attendee(event)
+
+        self.assertIsNotNone(registration)
+        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_args.kwargs['to_email'], self.host.email)
+        html = mock_send.call_args.kwargs['html_body']
+        self.assertIn(f'/studio/events/{event.pk}/edit', html)
+        self.assertIn(f'/studio/events/{event.pk}/create-zoom', html)
+        self.assertIn('Host management links', html)
+        ics = mock_send.call_args.kwargs['ics_content'].decode()
+        self.assertIn('VCALENDAR', ics)
+        self.assertIn('METHOD:REQUEST', ics)
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=self.host,
+                email_type='event_registration',
+                ses_message_id='ses-host-registration',
+            ).count(),
+            1,
+        )
+
+    def test_existing_host_registration_does_not_resend_confirmation(self):
+        event = _make_event()
+        EventRegistration.objects.create(event=event, user=self.host)
+
+        with patch(
             'events.services.registration_email.send_registration_confirmation',
-        ) as mock_confirmation, patch(
-            'events.services.registration_email.generate_ics',
-        ) as mock_registration_ics:
+        ) as mock_confirmation:
             maybe_register_host_as_attendee(event)
 
         mock_confirmation.assert_not_called()
-        mock_registration_ics.assert_not_called()
         self.assertEqual(
             EmailLog.objects.filter(email_type='event_registration').count(),
             0,
         )
 
+    def test_non_host_registration_email_has_no_host_links(self):
+        attendee = User.objects.create_user(
+            email='attendee@test.com',
+            password='pw',
+        )
+        event = _make_event()
+        registration = EventRegistration.objects.create(
+            event=event,
+            user=attendee,
+        )
 
-@override_settings(EVENTS_HOST_INVITE_EMAIL='')
+        with patch(
+            'events.services.registration_email._send_raw_email',
+            return_value='ses-attendee',
+        ) as mock_send:
+            send_registration_confirmation(registration)
+
+        html = mock_send.call_args.kwargs['html_body']
+        self.assertNotIn('Host management links', html)
+        self.assertNotIn(f'/studio/events/{event.pk}/edit', html)
+        self.assertNotIn(f'/studio/events/{event.pk}/create-zoom', html)
+
+
 @tag('core')
 class HostAutoRegistrationStudioTest(StaffUserMixin, TestCase):
     def setUp(self):
@@ -241,11 +313,10 @@ class HostAutoRegistrationStudioTest(StaffUserMixin, TestCase):
         return payload
 
     def test_studio_create_auto_registers_host(self):
-        with patch(HOST_INVITE_SEND_PATH, return_value='ses-host'):
-            response = self.client.post(
-                '/studio/events/new',
-                self._create_payload(),
-            )
+        response = self.client.post(
+            '/studio/events/new',
+            self._create_payload(),
+        )
 
         event = Event.objects.get(title='Studio Host Auto Registration')
         self.assertEqual(response.status_code, 302)
@@ -255,6 +326,13 @@ class HostAutoRegistrationStudioTest(StaffUserMixin, TestCase):
                 user=self.host,
             ).exists(),
         )
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=self.host,
+                email_type='event_registration',
+            ).count(),
+            1,
+        )
 
     def test_studio_edit_auto_registers_host(self):
         event = _make_event(
@@ -263,15 +341,14 @@ class HostAutoRegistrationStudioTest(StaffUserMixin, TestCase):
             host_email='',
         )
 
-        with patch(HOST_INVITE_SEND_PATH, return_value='ses-host'):
-            response = self.client.post(
-                f'/studio/events/{event.pk}/edit',
-                self._create_payload(
-                    title=event.title,
-                    slug=event.slug,
-                    host_email=self.host.email,
-                ),
-            )
+        response = self.client.post(
+            f'/studio/events/{event.pk}/edit',
+            self._create_payload(
+                title=event.title,
+                slug=event.slug,
+                host_email=self.host.email,
+            ),
+        )
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(
@@ -280,9 +357,15 @@ class HostAutoRegistrationStudioTest(StaffUserMixin, TestCase):
                 user=self.host,
             ).exists(),
         )
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=self.host,
+                email_type='event_registration',
+            ).count(),
+            1,
+        )
 
 
-@override_settings(EVENTS_HOST_INVITE_EMAIL='')
 @tag('core')
 class HostAutoRegistrationApiTest(TestCase):
     def setUp(self):
@@ -315,15 +398,12 @@ class HostAutoRegistrationApiTest(TestCase):
         return payload
 
     def test_api_create_auto_registers_host(self):
-        with patch(HOST_INVITE_SEND_PATH, return_value='ses-host'), patch(
-            'events.services.registration_email.send_registration_confirmation',
-        ) as mock_confirmation:
-            response = self.client.post(
-                '/api/events',
-                data=json.dumps(self._create_payload()),
-                content_type='application/json',
-                **self._auth(),
-            )
+        response = self.client.post(
+            '/api/events',
+            data=json.dumps(self._create_payload()),
+            content_type='application/json',
+            **self._auth(),
+        )
 
         self.assertEqual(response.status_code, 201)
         event = Event.objects.get(slug=response.json()['slug'])
@@ -333,7 +413,13 @@ class HostAutoRegistrationApiTest(TestCase):
                 user=self.host,
             ).exists(),
         )
-        mock_confirmation.assert_not_called()
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=self.host,
+                email_type='event_registration',
+            ).count(),
+            1,
+        )
 
     def test_api_update_auto_registers_host(self):
         start = _future_start()
@@ -348,17 +434,16 @@ class HostAutoRegistrationApiTest(TestCase):
             host_email='',
         )
 
-        with patch(HOST_INVITE_SEND_PATH, return_value='ses-host'):
-            response = self.client.patch(
-                f'/api/events/{event.slug}',
-                data=json.dumps({
-                    'status': 'upcoming',
-                    'published': True,
-                    'host_email': self.host.email,
-                }),
-                content_type='application/json',
-                **self._auth(),
-            )
+        response = self.client.patch(
+            f'/api/events/{event.slug}',
+            data=json.dumps({
+                'status': 'upcoming',
+                'published': True,
+                'host_email': self.host.email,
+            }),
+            content_type='application/json',
+            **self._auth(),
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(
@@ -366,4 +451,11 @@ class HostAutoRegistrationApiTest(TestCase):
                 event=event,
                 user=self.host,
             ).exists(),
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=self.host,
+                email_type='event_registration',
+            ).count(),
+            1,
         )

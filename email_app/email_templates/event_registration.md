@@ -17,6 +17,16 @@ Add to your calendar:
 
 Or use the attached `.ics` file for Apple Calendar and other clients.
 
+{% if is_host_registration %}
+Host management links (for hosts only; do not forward them to attendees):
+
+- Edit event details: {{ edit_url }}
+- Manage registrations and notify attendees: {{ manage_url }}
+- Create or set up the Zoom meeting: {{ create_zoom_url }}
+{% if zoom_join_url %}- Host Zoom join link: {{ zoom_join_url }}
+{% endif %}- Open the event in Studio: {{ studio_url }}
+
+{% endif %}
 What to expect next:
 
 - The join link above unlocks on the event page about 15 minutes before the start time.

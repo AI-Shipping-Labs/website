@@ -175,18 +175,17 @@
     </div>
 
     {% comment %}
-      Issue #861: host mailbox for the host calendar invite (with host-only
-      management links). Operational metadata, so editable even on synced
-      rows. Blank falls back to the EVENTS_HOST_INVITE_EMAIL default.
+      Platform user email for host attendee auto-registration. Operational
+      metadata, so editable even on synced rows.
     {% endcomment %}
     <div>
-      <label class="block text-sm font-medium text-foreground mb-1" for="host-email-input">Host email (calendar invite)</label>
+      <label class="block text-sm font-medium text-foreground mb-1" for="host-email-input">Host platform user email</label>
       <input type="email" name="host_email" id="host-email-input"
              value="{% if event %}{{ event.host_email|default:'' }}{% else %}{{ form_values.host_email|default:'' }}{% endif %}"
              placeholder="host@example.com"
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       <p class="text-xs text-muted-foreground mt-1">
-        Receives a calendar invite with host-only management links when the event is published. Leave blank to use the default host mailbox from Studio settings.
+        Platform user to auto-register as the host attendee when the event is published. Leave blank to skip host auto-registration.
       </p>
     </div>
 

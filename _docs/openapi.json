@@ -7055,6 +7055,122 @@
         ]
       }
     },
+    "/api/sprints/{slug}/plans/send-ready-emails": {
+      "post": {
+        "description": "Staff-token-only. Uses the same idempotent bulk service as Studio. ``dry_run=true`` returns the preview audience without sending email, creating notifications, creating EmailLog rows, stamping ``shared_at``, or writing ready-email logs.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "dry_run": true
+              },
+              "schema": {
+                "properties": {
+                  "dry_run": {
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "already_sent_count": 1,
+                  "dry_run": true,
+                  "eligible": [
+                    {
+                      "member_email": "alice@example.com",
+                      "plan_id": 5,
+                      "sprint_slug": "may-2026"
+                    }
+                  ],
+                  "eligible_count": 1,
+                  "failed": [],
+                  "failed_count": 0,
+                  "sent": [],
+                  "sent_count": 0,
+                  "skipped_already_sent": [
+                    {
+                      "member_email": "bob@example.com",
+                      "plan_id": 4,
+                      "sent_at": "2026-05-01T12:00:00+00:00",
+                      "sprint_slug": "may-2026"
+                    }
+                  ],
+                  "skipped_already_sent_count": 1,
+                  "total_plans": 2
+                }
+              }
+            },
+            "description": "Preview or send summary."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_type",
+                  "error": "Body must be a JSON object"
+                }
+              }
+            },
+            "description": "Invalid JSON body or non-object JSON body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_staff_only",
+                  "error": "Plan-ready email send is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_sprint",
+                  "error": "Sprint not found"
+                }
+              }
+            },
+            "description": "Sprint not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "error": "dry_run must be a boolean"
+                }
+              }
+            },
+            "description": "Invalid dry_run value."
+          }
+        },
+        "summary": "Send plan-ready emails (staff-only)",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
     "/api/sprints/{slug}/progress-evidence": {
       "get": {
         "description": "Staff-token-only read API for next-sprint operations. The member set comes from the source sprint's enrollments. Evidence combines app-recorded source-plan done_at progress with CRM-held #plan-sprints Slack threads linked to the same source plan. The endpoint does not call Slack, enqueue ingest, parse messages, or mutate progress rows.",

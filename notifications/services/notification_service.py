@@ -10,6 +10,7 @@ Usage:
 """
 
 import logging
+from dataclasses import dataclass
 
 from django.contrib.auth import get_user_model
 
@@ -19,6 +20,13 @@ from notifications.models import Notification
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
+
+
+@dataclass
+class PlanSharedDelivery:
+    notification: Notification
+    email_log: object | None = None
+    email_error: str = ''
 
 
 # Maps content_type to (model_import_path, title_template, body_field, url_method)
@@ -451,7 +459,7 @@ class NotificationService:
         return notification
 
     @staticmethod
-    def create_plan_shared(plan):
+    def create_plan_shared_delivery(plan, *, swallow_email_errors=True):
         """Fire the bell + transactional email when staff shares a plan.
 
         Issue #732. Modelled on :meth:`create_event_reminder` but with
@@ -476,9 +484,14 @@ class NotificationService:
             plan: Plan model instance. Must have ``.member`` (the
                 recipient), ``.sprint`` (for the title + URL), and
                 ``.pk`` (for the URL).
+            swallow_email_errors: preserve the original single-plan share
+                contract when true. Bulk ready-email sends pass false so
+                they can mark the per-plan send log failed while continuing
+                with the rest of the sprint.
 
         Returns:
-            The created ``Notification`` instance.
+            PlanSharedDelivery containing the created ``Notification`` and,
+            when SES succeeds, the created transactional ``EmailLog``.
         """
         from django.urls import reverse
 
@@ -512,7 +525,7 @@ class NotificationService:
         # on both surfaces (in-app + the ``shared_at`` timestamp). Log
         # loudly so ops can chase the SES failure.
         try:
-            EmailService().send(
+            email_log = EmailService().send(
                 plan.member,
                 'plan_shared',
                 {
@@ -520,10 +533,32 @@ class NotificationService:
                     'plan_url': plan_url,
                 },
             )
-        except Exception:
+        except Exception as exc:
             logger.exception(
                 'Failed to send plan_shared email to %s for plan %s',
                 plan.member.email, plan.pk,
             )
+            if not swallow_email_errors:
+                raise
+            email_log = None
+            email_error = str(exc)
+        else:
+            email_error = ''
 
-        return notification
+        return PlanSharedDelivery(
+            notification=notification,
+            email_log=email_log,
+            email_error=email_error,
+        )
+
+    @staticmethod
+    def create_plan_shared(plan):
+        """Fire the bell + transactional email when staff shares a plan.
+
+        Preserves the issue #732 public helper contract: SES failures are
+        logged and swallowed, and the created ``Notification`` is returned.
+        """
+        return NotificationService.create_plan_shared_delivery(
+            plan,
+            swallow_email_errors=True,
+        ).notification

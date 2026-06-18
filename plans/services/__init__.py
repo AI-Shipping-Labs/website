@@ -38,6 +38,10 @@ from plans.services.plan_lifecycle import (
     move_unfinished_items_to_sprint,
     unfinished_plan_item_counts,
 )
+from plans.services.plan_ready_emails import (
+    preview_plan_ready_emails,
+    send_plan_ready_emails,
+)
 from plans.services.progress import annotate_plan_progress
 
 __all__ = [
@@ -58,5 +62,7 @@ __all__ = [
     'eligible_move_target_sprints',
     'find_carry_over_source_plan',
     'move_unfinished_items_to_sprint',
+    'preview_plan_ready_emails',
+    'send_plan_ready_emails',
     'unfinished_plan_item_counts',
 ]

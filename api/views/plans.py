@@ -21,7 +21,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 
-from accounts.auth import token_required
+from accounts.auth import token_required, token_required_any_user
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.plans import (
@@ -52,6 +52,7 @@ from plans.services import (
     MoveUnfinishedItemsError,
     draft_next_sprint_plan,
     move_unfinished_items_to_sprint,
+    send_plan_ready_emails,
 )
 
 
@@ -1216,6 +1217,139 @@ def sprint_plans_bulk_import(request, slug):
         {"created": len(plan_ids), "plan_ids": plan_ids},
         status=201,
     )
+
+
+@token_required_any_user
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Plans",
+    summary="Send plan-ready emails for a sprint",
+    methods={
+        "POST": {
+            "summary": "Send plan-ready emails (staff-only)",
+            "description": (
+                "Staff-token-only. Uses the same idempotent bulk service "
+                "as Studio. ``dry_run=true`` returns the preview audience "
+                "without sending email, creating notifications, creating "
+                "EmailLog rows, stamping ``shared_at``, or writing ready-email "
+                "logs."
+            ),
+            "request_body": {
+                "properties": {
+                    "dry_run": {"type": "boolean"},
+                },
+                "example": {"dry_run": True},
+            },
+            "responses": {
+                200: {
+                    "description": "Preview or send summary.",
+                    "example": {
+                        "dry_run": True,
+                        "total_plans": 2,
+                        "eligible_count": 1,
+                        "already_sent_count": 1,
+                        "sent_count": 0,
+                        "skipped_already_sent_count": 1,
+                        "failed_count": 0,
+                        "eligible": [
+                            {
+                                "plan_id": 5,
+                                "member_email": "alice@example.com",
+                                "sprint_slug": "may-2026",
+                            },
+                        ],
+                        "sent": [],
+                        "skipped_already_sent": [
+                            {
+                                "plan_id": 4,
+                                "member_email": "bob@example.com",
+                                "sprint_slug": "may-2026",
+                                "sent_at": "2026-05-01T12:00:00+00:00",
+                            },
+                        ],
+                        "failed": [],
+                    },
+                },
+                400: {
+                    "description": (
+                        "Invalid JSON body or non-object JSON body."
+                    ),
+                    "example": {
+                        "error": "Body must be a JSON object",
+                        "code": "invalid_type",
+                    },
+                },
+                403: {
+                    "description": "Non-staff bearer token.",
+                    "example": {
+                        "error": "Plan-ready email send is staff-only",
+                        "code": "forbidden_staff_only",
+                    },
+                },
+                404: {
+                    "description": "Sprint not found.",
+                    "example": {
+                        "error": "Sprint not found",
+                        "code": "unknown_sprint",
+                    },
+                },
+                422: {
+                    "description": "Invalid dry_run value.",
+                    "example": {
+                        "error": "dry_run must be a boolean",
+                        "code": "validation_error",
+                    },
+                },
+            },
+        },
+    },
+)
+def sprint_plans_send_ready_emails(request, slug):
+    """``POST /api/sprints/<slug>/plans/send-ready-emails``."""
+    sprint = Sprint.objects.filter(slug=slug).first()
+    if sprint is None:
+        return error_response(
+            "Sprint not found",
+            "unknown_sprint",
+            status=404,
+        )
+
+    if not bearer_is_admin(request.user):
+        return error_response(
+            "Plan-ready email send is staff-only",
+            "forbidden_staff_only",
+            status=403,
+        )
+
+    if request.body:
+        data, parse_error = parse_json_body(request)
+        if parse_error is not None:
+            return parse_error
+    else:
+        data = {}
+    if not isinstance(data, dict):
+        return error_response(
+            "Body must be a JSON object",
+            "invalid_type",
+            details={"field": "body", "expected": "object"},
+        )
+
+    dry_run = data.get("dry_run", False)
+    if not isinstance(dry_run, bool):
+        return error_response(
+            "dry_run must be a boolean",
+            "validation_error",
+            status=422,
+            details={"field": "dry_run", "expected": "boolean"},
+        )
+
+    summary = send_plan_ready_emails(
+        sprint=sprint,
+        actor=request.user,
+        dry_run=dry_run,
+    )
+    return JsonResponse(summary, status=200)
 
 
 def _refetch_plan_detail(plan_id):

@@ -66,6 +66,22 @@ class CreatePlanSharedTest(TestCase):
         log = EmailLog.objects.get(user=self.member, email_type='plan_shared')
         self.assertEqual(log.email_type, 'plan_shared')
 
+    def test_plan_shared_email_copy_mentions_review_and_edit(self):
+        from email_app.services.email_service import EmailService
+
+        _subject, body_html = EmailService()._render_template(
+            'plan_shared',
+            self.member,
+            {
+                'sprint_name': self.sprint.name,
+                'plan_url': f'https://example.test/sprints/may-2026/plan/{self.plan.pk}',
+            },
+        )
+
+        self.assertIn('ready for you to review and edit', body_html)
+        self.assertIn(f'/sprints/may-2026/plan/{self.plan.pk}', body_html)
+        self.assertIn('Review and edit your plan', body_html)
+
     @patch('email_app.services.email_service.EmailService._send_ses')
     def test_reshare_creates_second_notification_and_email(self, mock_ses):
         """Re-share is allowed: each call creates a NEW bell + a NEW email

@@ -41,15 +41,24 @@ from integrations.services.feedback_synthesis import (
     synthesize_feedback,
 )
 from plans.models import (
+    PLAN_READY_EMAIL_STATUS_FAILED,
+    PLAN_READY_EMAIL_STATUS_SENDING,
+    PLAN_READY_EMAIL_STATUS_SENT,
     SPRINT_STATUS_CHOICES,
     Plan,
+    PlanReadyEmailLog,
     PlanRequest,
     Sprint,
     SprintEnrollment,
     SprintFeedbackRequest,
     SprintFeedbackSummary,
 )
-from plans.services import create_plan_for_enrollment, distribute_sprint_feedback
+from plans.services import (
+    create_plan_for_enrollment,
+    distribute_sprint_feedback,
+    preview_plan_ready_emails,
+    send_plan_ready_emails,
+)
 from questionnaires.models import Questionnaire, Response
 from studio.decorators import staff_required
 
@@ -382,11 +391,12 @@ def sprint_detail(request, sprint_id):
         Sprint.objects.select_related('event_series'),
         pk=sprint_id,
     )
-    plans = (
+    plans = list(
         Plan.objects.filter(sprint=sprint)
         .select_related('member')
         .order_by('-created_at')
     )
+    _attach_plan_ready_email_state(plans)
     enrollments = list(
         sprint.enrollments
         .select_related('user', 'enrolled_by')
@@ -400,6 +410,7 @@ def sprint_detail(request, sprint_id):
     )
     pending_plan_requests = _build_pending_plan_requests(sprint)
     feedback_context = _build_sprint_feedback_context(sprint)
+    plan_ready_email_preview = preview_plan_ready_emails(sprint)
     return render(request, 'studio/sprints/detail.html', {
         'sprint': sprint,
         'plans': plans,
@@ -408,8 +419,85 @@ def sprint_detail(request, sprint_id):
         'event_series': event_series,
         'event_series_events': event_series_events,
         'pending_plan_requests': pending_plan_requests,
+        'plan_ready_email_preview': plan_ready_email_preview,
         **feedback_context,
     })
+
+
+def _attach_plan_ready_email_state(plans):
+    logs = PlanReadyEmailLog.objects.filter(
+        plan_id__in=[plan.pk for plan in plans],
+    )
+    logs_by_plan_id = {log.plan_id: log for log in logs}
+    for plan in plans:
+        log = logs_by_plan_id.get(plan.pk)
+        plan.ready_email_log = log
+        if log is None:
+            plan.ready_email_state = 'not_emailed'
+            plan.ready_email_state_label = 'Not emailed'
+            plan.ready_email_sent_at = None
+            plan.ready_email_last_error = ''
+        elif log.status == PLAN_READY_EMAIL_STATUS_SENT:
+            plan.ready_email_state = 'sent'
+            plan.ready_email_state_label = 'Emailed'
+            plan.ready_email_sent_at = log.sent_at
+            plan.ready_email_last_error = ''
+        elif log.status == PLAN_READY_EMAIL_STATUS_FAILED:
+            plan.ready_email_state = 'failed'
+            plan.ready_email_state_label = 'Failed'
+            plan.ready_email_sent_at = None
+            plan.ready_email_last_error = log.last_error
+        elif log.status == PLAN_READY_EMAIL_STATUS_SENDING:
+            plan.ready_email_state = 'sending'
+            plan.ready_email_state_label = 'Sending'
+            plan.ready_email_sent_at = None
+            plan.ready_email_last_error = ''
+        else:
+            plan.ready_email_state = 'not_emailed'
+            plan.ready_email_state_label = 'Not emailed'
+            plan.ready_email_sent_at = None
+            plan.ready_email_last_error = ''
+
+
+@staff_required
+@require_POST
+def sprint_send_plan_ready_emails(request, sprint_id):
+    """Send idempotent bulk plan-ready emails for one sprint."""
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    summary = send_plan_ready_emails(
+        sprint=sprint,
+        actor=request.user,
+        dry_run=False,
+    )
+    if summary['failed_count']:
+        messages.warning(
+            request,
+            (
+                'Plan-ready emails sent: '
+                f'{summary["sent_count"]} sent, '
+                f'{summary["skipped_already_sent_count"]} skipped, '
+                f'{summary["failed_count"]} failed.'
+            ),
+        )
+    elif summary['sent_count']:
+        messages.success(
+            request,
+            (
+                'Plan-ready emails sent: '
+                f'{summary["sent_count"]} sent, '
+                f'{summary["skipped_already_sent_count"]} skipped, '
+                '0 failed.'
+            ),
+        )
+    else:
+        messages.info(
+            request,
+            (
+                'All plan-ready emails have already been sent. '
+                f'{summary["skipped_already_sent_count"]} skipped.'
+            ),
+        )
+    return redirect('studio_sprint_detail', sprint_id=sprint.pk)
 
 
 def _build_sprint_feedback_context(sprint):

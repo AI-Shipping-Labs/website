@@ -220,3 +220,92 @@ class SprintDetailEditAccessTest(TestCase):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 302, msg=f'{url} -> {response.status_code}')
             self.assertIn('/accounts/login/', response['Location'])
+
+    def test_studio_sprint_detail_access_does_not_expose_public_link(self):
+        url = f'/studio/sprints/{self.sprint.pk}/'
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+        self.assertNotContains(response, 'data-testid="view-on-site"', status_code=302)
+
+        self.client.login(email='member@test.com', password='pw')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 403)
+        self.assertNotContains(response, 'data-testid="view-on-site"', status_code=403)
+
+
+class SprintDetailViewOnSiteTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff-view-on-site@test.com',
+            password='pw',
+            is_staff=True,
+        )
+
+    def setUp(self):
+        self.client.login(email='staff-view-on-site@test.com', password='pw')
+
+    def _header_actions(self, response):
+        body = response.content.decode()
+        row_marker = 'data-testid="studio-header-actions"'
+        self.assertIn(row_marker, body)
+        row_start = body.index(row_marker)
+        row_open = body.rfind('<div', 0, row_start)
+        row_end = body.index('</div>', row_start) + len('</div>')
+        return body[row_open:row_end]
+
+    def test_header_renders_one_view_on_site_link_with_public_sprint_url(self):
+        sprint = Sprint.objects.create(
+            name='June 2026',
+            slug='june-2026',
+            start_date=datetime.date(2026, 6, 1),
+            status='active',
+        )
+
+        response = self.client.get(f'/studio/sprints/{sprint.pk}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="view-on-site"', count=1)
+        self.assertContains(response, 'View on site', count=1)
+        self.assertNotContains(response, 'data-testid="panel-view-on-site"')
+        self.assertNotContains(response, 'data-testid="sticky-view-on-site"')
+
+        header = self._header_actions(response)
+        self.assertEqual(header.count('data-testid="view-on-site"'), 1)
+        self.assertIn('href="/sprints/june-2026"', header)
+        self.assertIn('target="_blank"', header)
+        self.assertIn('rel="noopener noreferrer"', header)
+        self.assertIn('View on site', header)
+        self.assertIn('Open in Django admin', header)
+        self.assertIn('Enroll members', header)
+        self.assertIn('Edit sprint', header)
+        self.assertIn('border border-border', header)
+
+        testid_start = header.index('data-testid="view-on-site"')
+        link_start = header.rfind('<a ', 0, testid_start)
+        link_end = header.index('</a>', testid_start) + len('</a>')
+        view_on_site_link = header[link_start:link_end]
+        self.assertIn('href="/sprints/june-2026"', view_on_site_link)
+        self.assertIn('bg-secondary border border-border', view_on_site_link)
+        self.assertNotIn('/studio/sprints/', view_on_site_link)
+        self.assertNotIn('/board', view_on_site_link)
+        self.assertNotIn('/api/', view_on_site_link)
+
+    def test_header_link_renders_for_all_sprint_statuses(self):
+        for status in ('draft', 'active', 'completed', 'cancelled'):
+            with self.subTest(status=status):
+                sprint = Sprint.objects.create(
+                    name=f'{status.title()} sprint',
+                    slug=f'{status}-sprint',
+                    start_date=datetime.date(2026, 6, 1),
+                    status=status,
+                )
+
+                response = self.client.get(f'/studio/sprints/{sprint.pk}/')
+
+                self.assertEqual(response.status_code, 200)
+                header = self._header_actions(response)
+                self.assertEqual(header.count('data-testid="view-on-site"'), 1)
+                self.assertIn(f'href="/sprints/{status}-sprint"', header)

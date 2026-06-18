@@ -184,6 +184,49 @@ def _dedupe_key(description):
     return (description or '').strip().lower()
 
 
+def _checkpoint_carry_over_target_weeks(*, source_plan, destination_plan, dest_weeks=None):
+    """Map unfinished source week numbers to compacted destination weeks.
+
+    Only source weeks with at least one unfinished checkpoint participate.
+    The first such source week maps to destination Week 1, the second to
+    Week 2, and so on. When the compacted index exceeds the destination's
+    available weeks, the remaining source-week groups overflow into the
+    destination's last week.
+    """
+    if dest_weeks is None:
+        dest_weeks = list(destination_plan.weeks.order_by('week_number'))
+    if not dest_weeks:
+        return {}
+
+    weeks_by_number = {week.week_number: week for week in dest_weeks}
+    last_week = max(dest_weeks, key=lambda week: week.week_number)
+
+    source_week_numbers = []
+    seen = set()
+    unfinished_week_numbers = (
+        Checkpoint.objects
+        .filter(week__plan=source_plan, done_at__isnull=True)
+        .order_by('week__week_number', 'position', 'id')
+        .values_list('week__week_number', flat=True)
+    )
+    for week_number in unfinished_week_numbers:
+        if week_number in seen:
+            continue
+        source_week_numbers.append(week_number)
+        seen.add(week_number)
+
+    target_weeks = {}
+    for compacted_week_number, source_week_number in enumerate(
+        source_week_numbers,
+        start=1,
+    ):
+        target_weeks[source_week_number] = weeks_by_number.get(
+            compacted_week_number,
+            last_week,
+        )
+    return target_weeks
+
+
 def find_carry_over_source_plan(*, destination_plan):
     """Return the member's most-recent prior plan, or ``None`` (issue #808).
 
@@ -432,11 +475,12 @@ def count_unfinished_carry_over_items(*, source_plan, destination_plan):
     """Count source items still needing carry-over (issue #808).
 
     Counts unfinished (``done_at IS NULL``) ``Checkpoint`` rows across all
-    weeks plus plan-level unfinished ``Deliverable`` and ``NextStep`` rows
-    on ``source_plan`` that are NOT already present in ``destination_plan``
-    under the same dedupe rule used by :func:`carry_over_unfinished_tasks`
-    (trimmed, case-insensitive ``description``; checkpoints scoped to the
-    destination week they would land in).
+    compacted source-week groups plus plan-level unfinished ``Deliverable``
+    and ``NextStep`` rows on ``source_plan`` that are NOT already present in
+    ``destination_plan`` under the same dedupe rule used by
+    :func:`carry_over_unfinished_tasks` (trimmed, case-insensitive
+    ``description``; checkpoints scoped to the compacted destination week
+    they would land in).
 
     This is the "N tasks available to carry over" number the panel shows.
     It returns the count of rows a carry-over run would actually create, so
@@ -444,10 +488,11 @@ def count_unfinished_carry_over_items(*, source_plan, destination_plan):
     to the "all caught up" state.
     """
     dest_weeks = list(destination_plan.weeks.all())
-    weeks_by_number = {week.week_number: week for week in dest_weeks}
-    last_week = max(
-        dest_weeks, key=lambda w: w.week_number,
-    ) if dest_weeks else None
+    checkpoint_target_weeks = _checkpoint_carry_over_target_weeks(
+        source_plan=source_plan,
+        destination_plan=destination_plan,
+        dest_weeks=dest_weeks,
+    )
 
     existing_checkpoints = {}
     for week in dest_weeks:
@@ -462,7 +507,7 @@ def count_unfinished_carry_over_items(*, source_plan, destination_plan):
     }
 
     remaining = 0
-    if last_week is not None:
+    if checkpoint_target_weeks:
         source_checkpoints = (
             Checkpoint.objects.filter(
                 week__plan=source_plan, done_at__isnull=True,
@@ -471,9 +516,7 @@ def count_unfinished_carry_over_items(*, source_plan, destination_plan):
             .order_by('week__week_number', 'position', 'id')
         )
         for checkpoint in source_checkpoints:
-            target_week = weeks_by_number.get(
-                checkpoint.week.week_number, last_week,
-            )
+            target_week = checkpoint_target_weeks[checkpoint.week.week_number]
             key = _dedupe_key(checkpoint.description)
             bucket = existing_checkpoints.setdefault(target_week.pk, set())
             if key in bucket:
@@ -504,9 +547,11 @@ def carry_over_unfinished_tasks(*, source_plan, destination_plan):
     Copies only rows whose ``done_at IS NULL`` — finished tasks stay on the
     source plan. Three task types are carried:
 
-    - ``Checkpoint`` (per-week): mapped into the destination plan's ``Week``
-      with the same ``week_number``; if the destination has no such week
-      (shorter sprint) the checkpoint lands in the destination's last week.
+    - ``Checkpoint`` (per-week): unfinished source weeks are compacted to
+      the front of the destination plan. The first unfinished source week
+      maps to destination Week 1, the second to Week 2, and so on. If the
+      destination sprint is shorter than the compacted source-week groups,
+      remaining groups land in the destination's last week.
     - ``Deliverable`` (plan-level).
     - ``NextStep`` (plan-level).
 
@@ -527,14 +572,15 @@ def carry_over_unfinished_tasks(*, source_plan, destination_plan):
     """
     copied = 0
     with transaction.atomic():
-        # Destination weeks keyed by ``week_number`` for the week mapping,
-        # plus the last week (highest ``week_number``) as the overflow
-        # bucket for a shorter destination sprint.
+        # Destination weeks are used by the compacted source-week mapping;
+        # the highest numbered destination week is the overflow bucket for
+        # shorter destination sprints.
         dest_weeks = list(destination_plan.weeks.all())
-        weeks_by_number = {week.week_number: week for week in dest_weeks}
-        last_week = None
-        if dest_weeks:
-            last_week = max(dest_weeks, key=lambda w: w.week_number)
+        checkpoint_target_weeks = _checkpoint_carry_over_target_weeks(
+            source_plan=source_plan,
+            destination_plan=destination_plan,
+            dest_weeks=dest_weeks,
+        )
 
         # Existing destination dedupe sets. Checkpoints are scoped per
         # destination week id; deliverables / next steps are plan-level.
@@ -553,7 +599,7 @@ def carry_over_unfinished_tasks(*, source_plan, destination_plan):
             for s in destination_plan.next_steps.all()
         }
 
-        if last_week is not None:
+        if checkpoint_target_weeks:
             source_checkpoints = (
                 Checkpoint.objects.filter(
                     week__plan=source_plan, done_at__isnull=True,
@@ -562,9 +608,7 @@ def carry_over_unfinished_tasks(*, source_plan, destination_plan):
                 .order_by('week__week_number', 'position', 'id')
             )
             for checkpoint in source_checkpoints:
-                target_week = weeks_by_number.get(
-                    checkpoint.week.week_number, last_week,
-                )
+                target_week = checkpoint_target_weeks[checkpoint.week.week_number]
                 key = _dedupe_key(checkpoint.description)
                 bucket = existing_checkpoints.setdefault(target_week.pk, set())
                 if key in bucket:

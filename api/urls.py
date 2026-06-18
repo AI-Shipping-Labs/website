@@ -82,6 +82,7 @@ from api.views.plans import (
     plan_move_unfinished,
     sprint_plans_bulk_import,
     sprint_plans_collection,
+    sprint_plans_send_ready_emails,
 )
 from api.views.redirects import (
     redirect_detail,
@@ -404,12 +405,17 @@ urlpatterns = [
         name="api_course_certificate_detail",
     ),
     # ---- Plans (issue #433) -------------------------------------------
-    # Bulk-import comes BEFORE the generic plans collection so the
-    # ``bulk-import`` literal does not collide with the slug captures.
+    # Plan action literals come BEFORE the generic plans collection so
+    # they do not collide with the slug captures.
     path(
         "sprints/<slug:slug>/plans/bulk-import",
         sprint_plans_bulk_import,
         name="api_sprint_plans_bulk_import",
+    ),
+    path(
+        "sprints/<slug:slug>/plans/send-ready-emails",
+        sprint_plans_send_ready_emails,
+        name="api_sprint_plans_send_ready_emails",
     ),
     path(
         "sprints/<slug:slug>/plans",

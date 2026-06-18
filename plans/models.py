@@ -61,6 +61,16 @@ NEXT_STEP_KIND_CHOICES = [
     (NEXT_STEP_KIND_NEXT_STEP, 'Next step'),
 ]
 
+PLAN_READY_EMAIL_STATUS_SENDING = 'sending'
+PLAN_READY_EMAIL_STATUS_SENT = 'sent'
+PLAN_READY_EMAIL_STATUS_FAILED = 'failed'
+
+PLAN_READY_EMAIL_STATUS_CHOICES = [
+    (PLAN_READY_EMAIL_STATUS_SENDING, 'Sending'),
+    (PLAN_READY_EMAIL_STATUS_SENT, 'Sent'),
+    (PLAN_READY_EMAIL_STATUS_FAILED, 'Failed'),
+]
+
 KIND_CHOICES = [
     ('persona', 'Persona'),
     ('background', 'Background'),
@@ -657,6 +667,71 @@ class Plan(TimestampedModelMixin, models.Model):
     @property
     def next_step_actions(self):
         return self.next_steps.filter(kind=NEXT_STEP_KIND_NEXT_STEP)
+
+
+class PlanReadyEmailLog(TimestampedModelMixin, models.Model):
+    """Durable per-plan guard for bulk plan-ready email sends.
+
+    The single-plan Share/Re-share action intentionally remains reusable.
+    This row only guards the sprint-level bulk ready-email action so browser
+    retries, double-clicks, and repeated API calls cannot create duplicate
+    successful default sends for the same plan.
+    """
+
+    plan = models.OneToOneField(
+        Plan,
+        on_delete=models.CASCADE,
+        related_name='ready_email_log',
+    )
+    sprint = models.ForeignKey(
+        Sprint,
+        on_delete=models.CASCADE,
+        related_name='plan_ready_email_logs',
+    )
+    member = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='plan_ready_email_logs',
+    )
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    notification = models.ForeignKey(
+        'notifications.Notification',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    email_log = models.ForeignKey(
+        'email_app.EmailLog',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=PLAN_READY_EMAIL_STATUS_CHOICES,
+        default=PLAN_READY_EMAIL_STATUS_SENDING,
+        db_index=True,
+    )
+    sent_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['sprint', 'status']),
+            models.Index(fields=['member', 'status']),
+        ]
+
+    def __str__(self):
+        return f'PlanReadyEmailLog(plan={self.plan_id}, status={self.status})'
 
 
 class Week(TimestampedModelMixin, models.Model):

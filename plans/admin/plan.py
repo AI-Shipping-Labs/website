@@ -9,6 +9,7 @@ from django.contrib import admin
 
 from plans.models import (
     Plan,
+    PlanReadyEmailLog,
     PlanRequest,
     Sprint,
     SprintEnrollment,
@@ -65,6 +66,21 @@ class PlanAdmin(admin.ModelAdmin):
             'studio_plan_detail',
             lambda o: {'plan_id': o.pk},
         )
+
+
+@admin.register(PlanReadyEmailLog)
+class PlanReadyEmailLogAdmin(admin.ModelAdmin):
+    list_display = [
+        'plan', 'sprint', 'member', 'status', 'sent_at', 'triggered_by',
+        'updated_at',
+    ]
+    list_filter = ['status', 'sprint']
+    search_fields = ['member__email', 'sprint__name', 'sprint__slug']
+    raw_id_fields = [
+        'plan', 'sprint', 'member', 'triggered_by', 'notification',
+        'email_log',
+    ]
+    readonly_fields = ['created_at', 'updated_at']
 
 
 @admin.register(PlanRequest)

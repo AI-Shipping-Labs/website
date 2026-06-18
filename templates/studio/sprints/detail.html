@@ -422,6 +422,55 @@
   </div>
 </section>
 
+<section class="mb-6" data-testid="plan-ready-email-panel">
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+      <div>
+        <h2 class="text-lg font-semibold text-foreground">Send plan-ready emails</h2>
+        <p class="text-sm text-muted-foreground mt-1" data-testid="plan-ready-email-helper">
+          {% if plan_ready_email_preview.total_plans == 0 %}
+            No plans in this sprint yet.
+          {% elif plan_ready_email_preview.eligible_count == 0 %}
+            All plan-ready emails have already been sent.
+          {% else %}
+            Emails go to members with unsent sprint plans.
+          {% endif %}
+        </p>
+      </div>
+      <form method="post"
+            action="{% url 'studio_sprint_send_plan_ready_emails' sprint_id=sprint.pk %}"
+            {% if plan_ready_email_preview.eligible_count %}onsubmit="return confirm('Send plan-ready emails to {{ plan_ready_email_preview.eligible_count }} eligible member{{ plan_ready_email_preview.eligible_count|pluralize }}?');"{% endif %}
+            data-testid="plan-ready-email-form">
+        {% csrf_token %}
+        <button type="submit"
+                class="{% if plan_ready_email_preview.eligible_count %}bg-accent text-accent-foreground hover:opacity-90{% else %}bg-secondary text-muted-foreground cursor-not-allowed{% endif %} px-4 py-2 rounded-lg text-sm font-medium transition-opacity"
+                data-testid="plan-ready-email-button"
+                {% if not plan_ready_email_preview.eligible_count %}disabled{% endif %}>
+          Send plan-ready emails
+        </button>
+      </form>
+    </div>
+    <dl class="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+      <div>
+        <dt class="text-xs uppercase text-muted-foreground">Total plans</dt>
+        <dd class="mt-1 text-2xl font-semibold text-foreground" data-testid="plan-ready-total-count">{{ plan_ready_email_preview.total_plans }}</dd>
+      </div>
+      <div>
+        <dt class="text-xs uppercase text-muted-foreground">Eligible recipients</dt>
+        <dd class="mt-1 text-2xl font-semibold text-foreground" data-testid="plan-ready-eligible-count">{{ plan_ready_email_preview.eligible_count }}</dd>
+      </div>
+      <div>
+        <dt class="text-xs uppercase text-muted-foreground">Already emailed</dt>
+        <dd class="mt-1 text-2xl font-semibold text-foreground" data-testid="plan-ready-already-count">{{ plan_ready_email_preview.already_sent_count }}</dd>
+      </div>
+      <div>
+        <dt class="text-xs uppercase text-muted-foreground">Failed attempts</dt>
+        <dd class="mt-1 text-2xl font-semibold text-foreground" data-testid="plan-ready-failed-count">{{ plan_ready_email_preview.failed_previous_attempts_count }}</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
 <h2 class="text-lg font-semibold text-foreground mb-4">Plans in this sprint</h2>
 {% if plans %}
 <div class="{% studio_list_class 'wrapper' %}">
@@ -430,6 +479,7 @@
       <tr>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Member</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Plan-ready email</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</th>
       </tr>
     </thead>
@@ -441,6 +491,20 @@
           <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="ml-3 text-xs text-muted-foreground hover:text-accent hover:underline">View plan</a>
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Status">{{ plan.get_status_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Plan-ready email" data-testid="plan-ready-email-state">
+          {% if plan.ready_email_state == 'sent' %}
+            Emailed <time datetime="{{ plan.ready_email_sent_at.isoformat }}">{{ plan.ready_email_sent_at|operator_datetime }}</time>
+          {% elif plan.ready_email_state == 'failed' %}
+            <span class="text-red-300">Failed</span>
+            {% if plan.ready_email_last_error %}
+            <div class="text-xs text-muted-foreground mt-1">{{ plan.ready_email_last_error|truncatechars:120 }}</div>
+            {% endif %}
+          {% elif plan.ready_email_state == 'sending' %}
+            Sending
+          {% else %}
+            Not emailed
+          {% endif %}
+        </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Created">{{ plan.created_at|operator_date }}</td>
       </tr>
       {% endfor %}

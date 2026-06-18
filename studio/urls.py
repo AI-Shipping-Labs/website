@@ -170,6 +170,7 @@ from studio.views.plans import (
     plan_list,
     plan_move_unfinished,
     plan_share,
+    plan_view_as_member,
 )
 from studio.views.projects import project_list, project_review
 from studio.views.questionnaires import (
@@ -969,6 +970,11 @@ urlpatterns = [
     path('plans/', plan_list, name='studio_plan_list'),
     path('plans/new', plan_create, name='studio_plan_create'),
     path('plans/<int:plan_id>/', plan_detail, name='studio_plan_detail'),
+    path(
+        'plans/<int:plan_id>/view-as-member/',
+        plan_view_as_member,
+        name='studio_plan_view_as_member',
+    ),
     path('plans/<int:plan_id>/edit/', plan_edit, name='studio_plan_edit'),
     # Issue #732: explicit share / re-share trigger from the plan
     # editor header. POST-only; staff-only. Fires bell + transactional

@@ -666,6 +666,96 @@ class PlanDetailRenderTest(TestCase):
         # No phantom Week 9 placeholder.
         self.assertNotContains(response, 'data-week-number="9"')
 
+    def test_plan_detail_renders_view_as_member_post_form(self):
+        plan = Plan.objects.create(member=self.member, sprint=self.sprint)
+
+        response = self.client.get(f'/studio/plans/{plan.pk}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="studio-plan-view-as-member"')
+        self.assertContains(
+            response,
+            f'action="/studio/plans/{plan.pk}/view-as-member/"',
+        )
+        self.assertContains(response, 'method="post"')
+        self.assertContains(response, 'name="csrfmiddlewaretoken"')
+
+
+class PlanViewAsMemberTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff-view-as@test.com', password='pw', is_staff=True,
+        )
+        cls.member = User.objects.create_user(
+            email='member-view-as@test.com', password='pw',
+        )
+        cls.other_member = User.objects.create_user(
+            email='other-view-as@test.com', password='pw',
+        )
+        cls.sprint = Sprint.objects.create(
+            name='View Sprint',
+            slug='view-sprint',
+            start_date=datetime.date(2026, 5, 1),
+        )
+        cls.plan = Plan.objects.create(member=cls.member, sprint=cls.sprint)
+
+    def _url(self, plan=None):
+        target = plan or self.plan
+        return f'/studio/plans/{target.pk}/view-as-member/'
+
+    def test_post_logs_in_as_plan_owner_and_redirects_to_owner_plan(self):
+        self.client.login(email='staff-view-as@test.com', password='pw')
+
+        response = self.client.post(self._url())
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response['Location'],
+            f'/sprints/{self.sprint.slug}/plan/{self.plan.pk}',
+        )
+        self.assertEqual(self.client.session['_impersonator_id'], self.staff.pk)
+        workspace = self.client.get(response['Location'])
+        self.assertEqual(workspace.status_code, 200)
+        self.assertEqual(workspace.wsgi_request.user, self.member)
+        self.assertContains(workspace, 'You are logged in as member-view-as@test.com')
+        self.assertContains(workspace, 'Return to your account')
+
+    def test_get_returns_405_and_keeps_staff_session(self):
+        self.client.login(email='staff-view-as@test.com', password='pw')
+
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 405)
+        self.assertNotIn('_impersonator_id', self.client.session)
+        home = self.client.get('/studio/plans/')
+        self.assertEqual(home.wsgi_request.user, self.staff)
+
+    def test_anonymous_redirects_to_login(self):
+        response = self.client.post(self._url())
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+        self.assertNotIn('_impersonator_id', self.client.session)
+
+    def test_non_staff_forbidden_and_not_impersonated(self):
+        self.client.login(email='other-view-as@test.com', password='pw')
+
+        response = self.client.post(self._url())
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn('_impersonator_id', self.client.session)
+        home = self.client.get('/')
+        self.assertEqual(home.wsgi_request.user, self.other_member)
+
+    def test_unknown_plan_returns_404(self):
+        self.client.login(email='staff-view-as@test.com', password='pw')
+
+        response = self.client.post('/studio/plans/999999/view-as-member/')
+
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn('_impersonator_id', self.client.session)
+
 
 class InterviewNoteCreateTest(TestCase):
     @classmethod

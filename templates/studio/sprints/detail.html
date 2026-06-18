@@ -471,88 +471,95 @@
   </div>
 </section>
 
-<h2 class="text-lg font-semibold text-foreground mb-4">Plans in this sprint</h2>
-{% if plans %}
-<div class="{% studio_list_class 'wrapper' %}">
-  <table class="w-full">
-    <thead class="bg-secondary">
-      <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Member</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Plan-ready email</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-border">
-      {% for plan in plans %}
-      <tr class="hover:bg-secondary/50 transition-colors">
-        <td class="px-6 py-4 text-sm">
-          <a href="{% url 'studio_user_detail' user_id=plan.member.pk %}" class="text-accent hover:underline" data-testid="sprint-detail-plan-member-link">{{ plan.member.email }}</a>
-          <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="ml-3 text-xs text-muted-foreground hover:text-accent hover:underline">View plan</a>
-        </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Status">{{ plan.get_status_display }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Plan-ready email" data-testid="plan-ready-email-state">
-          {% if plan.ready_email_state == 'sent' %}
-            Emailed <time datetime="{{ plan.ready_email_sent_at.isoformat }}">{{ plan.ready_email_sent_at|operator_datetime }}</time>
-          {% elif plan.ready_email_state == 'failed' %}
-            <span class="text-red-300">Failed</span>
-            {% if plan.ready_email_last_error %}
-            <div class="text-xs text-muted-foreground mt-1">{{ plan.ready_email_last_error|truncatechars:120 }}</div>
-            {% endif %}
-          {% elif plan.ready_email_state == 'sending' %}
-            Sending
-          {% else %}
-            Not emailed
-          {% endif %}
-        </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Created">{{ plan.created_at|operator_date }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% else %}
-<div class="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm">
-  No plans in this sprint yet.
-</div>
-{% endif %}
-
-<section class="mt-8 mb-8" data-testid="sprint-enrolled-members-section">
-  <h2 class="text-lg font-semibold text-foreground mb-4">
-    Enrolled members ({{ enrollments|length }})
-  </h2>
-  {% if enrollments %}
-  <div class="{% studio_list_class 'wrapper' %}">
-    <table class="w-full" data-testid="sprint-enrolled-members-table">
+<section class="mt-8 mb-8" data-testid="sprint-members-section">
+  <div class="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+    <h2 class="text-lg font-semibold text-foreground">Sprint members</h2>
+    <p class="text-sm text-muted-foreground" data-testid="sprint-members-counts">
+      {{ enrollment_count }} enrolled &middot; {{ plan_count }} plan{{ plan_count|pluralize }}
+    </p>
+  </div>
+  {% if sprint_member_rows %}
+  <div class="{% studio_list_class 'wrapper' %}" data-testid="sprint-enrolled-members-table">
+    <table class="w-full" data-testid="sprint-members-table">
       <thead class="bg-secondary">
         <tr>
           <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Member</th>
-          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Enrolled</th>
-          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Enrolled by</th>
-          <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Action</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Enrollment</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Plan</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Plan-ready email</th>
+          <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-border">
-        {% for enrollment in enrollments %}
+        {% for row in sprint_member_rows %}
         <tr class="hover:bg-secondary/50 transition-colors"
-            data-testid="sprint-enrolled-member-row"
-            data-user-email="{{ enrollment.user.email }}">
+            data-testid="{% if row.enrollment %}sprint-enrolled-member-row{% else %}sprint-member-row{% endif %}"
+            data-user-email="{{ row.member.email }}">
           <td class="px-6 py-4 text-sm">
-            <a href="{% url 'studio_user_detail' user_id=enrollment.user.pk %}"
+            <a href="{% url 'studio_user_detail' user_id=row.member.pk %}"
                class="text-accent hover:underline"
-               data-testid="sprint-enrolled-member-email">{{ enrollment.user.email }}</a>
-            {% if enrollment.user.get_full_name %}
-            <div class="text-xs text-muted-foreground mt-0.5">{{ enrollment.user.get_full_name }}</div>
+               data-testid="sprint-enrolled-member-email">{{ row.member.email }}</a>
+            {% if row.member.get_full_name %}
+            <div class="text-xs text-muted-foreground mt-0.5">{{ row.member.get_full_name }}</div>
             {% endif %}
           </td>
-          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Enrolled">{{ enrollment.enrolled_at|operator_date }}</td>
-          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Enrolled by">
-            {% if enrollment.enrolled_by %}{{ enrollment.enrolled_by.email }}{% else %}Self-joined{% endif %}
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Enrollment" data-testid="sprint-member-enrollment-state">
+            {% if row.enrollment %}
+              <div>Enrolled {{ row.enrollment.enrolled_at|operator_date }}</div>
+              <div class="text-xs mt-1">
+                {% if row.enrollment.enrolled_by %}
+                  by {{ row.enrollment.enrolled_by.email }}
+                {% else %}
+                  Self-joined
+                {% endif %}
+              </div>
+            {% else %}
+              Not enrolled
+            {% endif %}
           </td>
-          <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Action">
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Plan" data-testid="sprint-member-plan-state">
+            {% if row.plan %}
+              <div class="flex flex-wrap gap-x-3 gap-y-1">
+                <a href="{% url 'studio_plan_detail' plan_id=row.plan.pk %}"
+                   class="text-accent hover:underline"
+                   data-testid="sprint-detail-plan-member-link">View plan</a>
+                <a href="{% url 'studio_plan_edit' plan_id=row.plan.pk %}"
+                   class="text-accent hover:underline">Edit plan</a>
+              </div>
+              <div class="text-xs mt-1">{{ row.plan.get_visibility_display }}</div>
+              {% if row.plan.shared_at %}
+              <div class="text-xs mt-1">Shared {{ row.plan.shared_at|operator_date }}</div>
+              {% endif %}
+            {% else %}
+              <div class="text-muted-foreground">No plan yet</div>
+              <a href="{{ row.create_plan_url }}"
+                 class="text-accent hover:underline text-xs"
+                 data-testid="sprint-member-create-plan-link">Create plan</a>
+            {% endif %}
+          </td>
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Plan-ready email" data-testid="plan-ready-email-state">
+            {% if row.plan %}
+              {% if row.plan.ready_email_state == 'sent' %}
+                Emailed <time datetime="{{ row.plan.ready_email_sent_at.isoformat }}">{{ row.plan.ready_email_sent_at|operator_datetime }}</time>
+              {% elif row.plan.ready_email_state == 'failed' %}
+                <span class="text-red-300">Failed</span>
+                {% if row.plan.ready_email_last_error %}
+                <div class="text-xs text-muted-foreground mt-1">{{ row.plan.ready_email_last_error|truncatechars:120 }}</div>
+                {% endif %}
+              {% elif row.plan.ready_email_state == 'sending' %}
+                Sending
+              {% else %}
+                Not emailed
+              {% endif %}
+            {% else %}
+              &mdash;
+            {% endif %}
+          </td>
+          <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+            {% if row.enrollment %}
             <form method="post"
-                  action="{% url 'studio_sprint_unenroll' sprint_id=sprint.pk enrollment_id=enrollment.pk %}"
-                  onsubmit="return confirm('Unenroll {{ enrollment.user.email|escapejs }} from this sprint? Their plan (if any) is kept.');"
+                  action="{% url 'studio_sprint_unenroll' sprint_id=sprint.pk enrollment_id=row.enrollment.pk %}"
+                  onsubmit="return confirm('Unenroll {{ row.member.email|escapejs }} from this sprint? Their plan (if any) is kept.');"
                   data-testid="sprint-unenroll-form">
               {% csrf_token %}
               <button type="submit"
@@ -561,6 +568,9 @@
                 Unenroll
               </button>
             </form>
+            {% else %}
+            <span class="text-xs text-muted-foreground">No enrollment action</span>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -569,8 +579,8 @@
   </div>
   {% else %}
   <div class="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm"
-       data-testid="sprint-enrolled-members-empty">
-    No enrolled members in this sprint yet.
+       data-testid="sprint-members-empty">
+    No members or plans in this sprint yet.
   </div>
   {% endif %}
 </section>

@@ -378,9 +378,56 @@ def _build_pending_plan_requests(sprint):
     return rows
 
 
+def _build_sprint_member_rows(*, sprint, enrollments, plans):
+    """Merge enrollment and plan rows for the Studio sprint detail page.
+
+    Ordering is intentionally stable for operators: enrolled members stay
+    first in enrollment order, then plan-only rows follow by plan creation
+    date. A plan-only row can happen when staff unenroll a member because
+    unenrollment keeps the plan.
+    """
+    rows_by_user_id = {}
+
+    for index, enrollment in enumerate(enrollments):
+        rows_by_user_id[enrollment.user_id] = {
+            'member': enrollment.user,
+            'enrollment': enrollment,
+            'plan': None,
+            'create_plan_url': (
+                reverse('studio_plan_create')
+                + '?'
+                + urlencode({
+                    'user': enrollment.user_id,
+                    'sprint': sprint.pk,
+                })
+            ),
+            'sort_group': 0,
+            'sort_index': index,
+        }
+
+    for index, plan in enumerate(plans):
+        row = rows_by_user_id.get(plan.member_id)
+        if row is None:
+            rows_by_user_id[plan.member_id] = {
+                'member': plan.member,
+                'enrollment': None,
+                'plan': plan,
+                'create_plan_url': '',
+                'sort_group': 1,
+                'sort_index': index,
+            }
+        else:
+            row['plan'] = plan
+
+    return sorted(
+        rows_by_user_id.values(),
+        key=lambda row: (row['sort_group'], row['sort_index'], row['member'].pk),
+    )
+
+
 @staff_required
 def sprint_detail(request, sprint_id):
-    """Sprint metadata + pending plan requests inbox + list of plans.
+    """Sprint metadata + pending request inbox + merged member rows.
 
     The "Pending plan requests" inbox (issue #718) is the primary CTA
     for plan creation: it lists distinct members who pinged the team
@@ -394,15 +441,20 @@ def sprint_detail(request, sprint_id):
     plans = list(
         Plan.objects.filter(sprint=sprint)
         .select_related('member')
-        .order_by('-created_at')
+        .order_by('created_at', 'pk')
     )
     _attach_plan_ready_email_state(plans)
     enrollments = list(
         sprint.enrollments
         .select_related('user', 'enrolled_by')
-        .order_by('enrolled_at')
+        .order_by('enrolled_at', 'pk')
     )
     enrollment_count = len(enrollments)
+    sprint_member_rows = _build_sprint_member_rows(
+        sprint=sprint,
+        enrollments=enrollments,
+        plans=plans,
+    )
     event_series = sprint.event_series
     event_series_events = (
         list(event_series.events.all().order_by('start_datetime'))
@@ -416,6 +468,8 @@ def sprint_detail(request, sprint_id):
         'plans': plans,
         'enrollments': enrollments,
         'enrollment_count': enrollment_count,
+        'plan_count': len(plans),
+        'sprint_member_rows': sprint_member_rows,
         'event_series': event_series,
         'event_series_events': event_series_events,
         'pending_plan_requests': pending_plan_requests,

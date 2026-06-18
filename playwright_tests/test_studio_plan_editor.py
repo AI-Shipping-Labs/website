@@ -298,7 +298,7 @@ class TestEditorRendersWithoutErrors:
 
         # The editor root and bootstrap data are present.
         page.locator('[data-testid="plan-editor"]').wait_for(state="attached")
-        page.locator('[data-testid="plan-editor-data"]').wait_for(state="attached")
+        page.locator("#plan-editor-data").wait_for(state="attached")
 
         # SortableJS pinned-version script tag is present.
         sortable_script = page.locator(

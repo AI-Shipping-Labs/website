@@ -14,6 +14,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from plans.resource_display import parse_resource_bullet
+
 DEFAULT_PLAN_ROOTS = (
     Path("~/git/telegram-writing-assistant/articles/ai-shipping-labs/plans").expanduser(),
     Path("~/git/zoom-calls").expanduser(),
@@ -161,16 +163,7 @@ def parse_weeks(body: str, existing_weeks: dict[int, dict[str, Any]]) -> list[di
 def parse_resources(body: str) -> list[dict[str, Any]]:
     resources = []
     for index, item in enumerate(bullet_items(body)):
-        if " - " in item:
-            title, note = item.split(" - ", 1)
-        else:
-            title, note = item, ""
-        resources.append({
-            "title": title.strip()[:300],
-            "url": "",
-            "note": note.strip(),
-            "position": index,
-        })
+        resources.append(parse_resource_bullet(item, position=index))
     return resources
 
 

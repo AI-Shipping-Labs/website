@@ -148,6 +148,62 @@ class MemberPlanDetailTest(TestCase):
         self.assertNotContains(response, 'alert(1)')
         self.assertNotContains(response, 'href="javascript:')
 
+    def test_member_plan_resources_render_structured_links_and_safe_notes(self):
+        Resource.objects.create(
+            plan=self.alice_plan_cohort,
+            title='Second resource',
+            url='https://example.com/second',
+            note='Use the **deploy** guide and [Logfire](https://logfire.pydantic.dev/)',
+            position=1,
+        )
+        Resource.objects.create(
+            plan=self.alice_plan_cohort,
+            title='[Deployment docs](https://docs.example.com/deploy)',
+            position=0,
+        )
+        Resource.objects.create(
+            plan=self.alice_plan_cohort,
+            title='Carlos\'s own project notes',
+            position=2,
+        )
+        Resource.objects.create(
+            plan=self.alice_plan_cohort,
+            title='Malicious note',
+            note='Safe text <script>alert(1)</script> [bad](javascript:alert(1))',
+            position=3,
+        )
+
+        self.client.force_login(self.bob)
+        response = self.client.get(
+            reverse(
+                'member_plan_detail',
+                kwargs={
+                    'sprint_slug': self.sprint.slug,
+                    'plan_id': self.alice_plan_cohort.pk,
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode('utf-8')
+        resources_start = body.index('data-testid="plan-resources"')
+        resources_end = body.index('</section>', resources_start)
+        resources_section = body[resources_start:resources_end]
+        self.assertContains(
+            response,
+            'href="https://docs.example.com/deploy"',
+        )
+        self.assertContains(response, 'Deployment docs')
+        self.assertNotIn('[Deployment docs](', resources_section)
+        self.assertContains(response, 'href="https://example.com/second"')
+        self.assertContains(response, '<strong>deploy</strong>', html=True)
+        self.assertContains(response, 'href="https://logfire.pydantic.dev/"')
+        self.assertContains(response, 'Carlos&#x27;s own project notes')
+        self.assertNotIn('<script', resources_section)
+        self.assertNotIn('href="javascript:', resources_section)
+        self.assertLess(body.index('Deployment docs'), body.index('Second resource'))
+        self.assertLess(body.index('Second resource'), body.index('Carlos'))
+
     def test_member_plan_detail_teammate_has_read_only_status_indicators(self):
         week = Week.objects.create(plan=self.alice_plan_cohort, week_number=1)
         Checkpoint.objects.create(week=week, description='Read only checkpoint')
@@ -364,6 +420,29 @@ class MyPlanDetailOwnerSurfaceTest(TestCase):
             body.index('data-testid="plan-weeks"'),
             body.index('data-testid="plan-summary"'),
         )
+
+    def test_owner_workspace_normalizes_legacy_markdown_resource_title(self):
+        Resource.objects.create(
+            plan=self.plan,
+            title='[Deployment docs](https://docs.example.com/deploy)',
+            position=2,
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse(
+                'my_plan_detail',
+                kwargs={
+                    'sprint_slug': self.sprint.slug,
+                    'plan_id': self.plan.pk,
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="https://docs.example.com/deploy"')
+        self.assertContains(response, 'Deployment docs')
+        self.assertNotContains(response, '[Deployment docs](')
 
     def test_other_member_gets_404_for_owner_page(self):
         self.client.force_login(self.other)

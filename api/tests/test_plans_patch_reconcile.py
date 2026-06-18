@@ -418,6 +418,54 @@ class PatchReconcileResourcesTest(PlansPatchReconcileTestBase):
             1,
         )
 
+    def test_nested_patch_preserves_resource_structure(self):
+        seed = self._seed_plan()
+        plan = seed["plan"]
+
+        response = self._patch(plan.id, {
+            "resources": [
+                {
+                    "id": seed["r1"].id,
+                    "title": "amr_ai repo",
+                    "url": "https://github.com/juanpprim/amr_ai",
+                    "note": "Use before demo",
+                    "position": 1,
+                },
+                {
+                    "id": seed["r2"].id,
+                    "title": "Deployment docs",
+                    "url": "https://docs.example.com/deploy",
+                    "note": "Read first",
+                    "position": 0,
+                },
+            ],
+        })
+
+        self.assertEqual(response.status_code, 200)
+        resources = response.json()["resources"]
+        self.assertEqual(
+            [
+                (r["id"], r["title"], r["url"], r["note"], r["position"])
+                for r in resources
+            ],
+            [
+                (
+                    seed["r2"].id,
+                    "Deployment docs",
+                    "https://docs.example.com/deploy",
+                    "Read first",
+                    0,
+                ),
+                (
+                    seed["r1"].id,
+                    "amr_ai repo",
+                    "https://github.com/juanpprim/amr_ai",
+                    "Use before demo",
+                    1,
+                ),
+            ],
+        )
+
     def test_patch_deliverables_empty_list_clears_all(self):
         seed = self._seed_plan()
         plan = seed["plan"]

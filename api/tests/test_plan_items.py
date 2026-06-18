@@ -125,6 +125,62 @@ class PlanItemsCreateAppendsTest(PlanItemsTestBase):
                 self.assertEqual(response.json()["position"], 1)
 
 
+class ResourceApiContractTest(PlanItemsTestBase):
+    def test_create_list_patch_delete_preserve_structured_fields(self):
+        response = self.client.post(
+            f"/api/plans/{self.plan.id}/resources",
+            data=json.dumps({
+                "title": "amr_ai repo",
+                "url": "https://github.com/juanpprim/amr_ai",
+                "note": "Use before demo",
+                "position": 0,
+            }),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["title"], "amr_ai repo")
+        self.assertEqual(body["url"], "https://github.com/juanpprim/amr_ai")
+        self.assertEqual(body["note"], "Use before demo")
+        self.assertEqual(body["position"], 0)
+
+        resource_id = body["id"]
+        response = self.client.get(
+            f"/api/plans/{self.plan.id}/resources",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["resources"][0]["id"], resource_id)
+        self.assertEqual(response.json()["resources"][0]["url"], body["url"])
+
+        response = self.client.patch(
+            f"/api/resources/{resource_id}",
+            data=json.dumps({
+                "title": "Deployment docs",
+                "url": "https://docs.example.com/deploy",
+                "note": "Updated note",
+                "position": 0,
+            }),
+            content_type="application/json",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["id"], resource_id)
+        self.assertEqual(body["title"], "Deployment docs")
+        self.assertEqual(body["url"], "https://docs.example.com/deploy")
+        self.assertEqual(body["note"], "Updated note")
+        self.assertEqual(body["position"], 0)
+
+        response = self.client.delete(
+            f"/api/resources/{resource_id}",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Resource.objects.filter(pk=resource_id).exists())
+
+
 class PlanItemsPatchReorderTest(PlanItemsTestBase):
     def test_patch_position_reorders_siblings(self):
         for config in ITEM_CONFIGS:

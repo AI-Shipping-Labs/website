@@ -231,20 +231,22 @@ is already copied (count == 0) we show an "all caught up" notice instead.
   <h2 class="text-2xl font-semibold tracking-tight text-foreground">Resources</h2>
   <ul class="mt-3 divide-y divide-border text-sm">
     {% for resource in plan.resources.all %}
-    <li class="py-3 first:pt-0" data-testid="plan-resource">
-      {% if resource.url %}
-      <a href="{{ resource.url }}" class="inline-flex min-h-[44px] items-center gap-2 font-medium text-accent hover:underline" rel="noopener noreferrer" target="_blank">
-        {{ resource.title }}
+    {% with display=resource|resource_display %}
+    <li class="py-3 first:pt-0" data-testid="plan-resource" data-resource-id="{{ resource.pk }}">
+      {% if display.url %}
+      <a href="{{ display.url }}" class="inline-flex min-h-[44px] items-center gap-2 font-medium text-accent hover:underline" rel="noopener noreferrer" target="_blank" data-testid="plan-resource-link">
+        {{ display.title }}
         <i data-lucide="external-link" class="h-4 w-4"></i>
       </a>
-      <p class="mt-1 break-all text-xs text-muted-foreground">{{ resource.url }}</p>
+      <p class="mt-1 break-all text-xs text-muted-foreground">{{ display.url }}</p>
       {% else %}
-      <p class="font-medium text-foreground">{{ resource.title }}</p>
+      <p class="font-medium text-foreground" data-testid="plan-resource-title">{{ display.title }}</p>
       {% endif %}
-      {% if resource.note %}
-      <div class="plan-markdown mt-2 text-muted-foreground">{{ resource.note|plan_markdown }}</div>
+      {% if display.note %}
+      <div class="plan-markdown mt-2 text-muted-foreground" data-testid="plan-resource-note">{{ display.note|plan_markdown }}</div>
       {% endif %}
     </li>
+    {% endwith %}
     {% endfor %}
   </ul>
 </section>

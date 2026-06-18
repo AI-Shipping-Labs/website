@@ -19,8 +19,6 @@ It mints (or reuses) a per-user API token under a parameterizable name
 so staff tokens can be audited and revoked independently.
 """
 
-import json
-
 from accounts.models import Token
 
 
@@ -217,13 +215,13 @@ def build_plan_editor_context(plan, *, viewer, token_name):
 
     return {
         'plan': plan,
-        'plan_json': json.dumps(plan_payload),
+        'plan_payload': plan_payload,
         'api_token': token.key,
         'api_base': '/api/',
         'weeks_count': weeks_count,
         'checkpoints_count': checkpoints_count,
         # The advisory AI next-sprint draft (issue #891), kept DISTINCT
-        # from ``plan_json`` so it never blends into the live plan data.
+        # from ``plan_payload`` so it never blends into the live plan data.
         # ``None`` when no draft exists -> the editor panel does not render.
         'next_sprint_draft': _serialize_next_sprint_draft(plan),
     }

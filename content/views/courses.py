@@ -630,16 +630,8 @@ def api_cohort_enroll(request, slug, cohort_id):
 
     # Record a `course_enroll` activity row for the CRM timeline
     # (issue #853). Defensive — never raises into the enroll path.
-    from analytics.activity import record_activity, studio_course_url
-    from analytics.models import UserActivity
-    record_activity(
-        user,
-        UserActivity.EVENT_COURSE_ENROLL,
-        label=f'Enrolled in course: {course.title}',
-        object_type='course',
-        object_id=course.slug,
-        target_url=studio_course_url(course.pk),
-    )
+    from analytics.activity import record_course_enroll
+    record_course_enroll(user, course)
 
     return JsonResponse({'enrolled': True, 'cohort_id': cohort.pk})
 

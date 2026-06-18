@@ -990,12 +990,11 @@ USER_ACTIVITY_DISPLAY_LIMIT = 30
 def _build_activity_timeline(user):
     """Return the user's recent activity rows plus a total count.
 
-    Bounded by ``USER_ACTIVITY_DISPLAY_LIMIT``. Adds at most 2 DB queries
-    to the user detail page regardless of event count: one for the window
-    and one for the total. The first-payment marker adds no query — it is
-    derived in Python from the already-fetched window rows. The
-    denormalised ``label`` / ``target_url`` on each ``UserActivity`` row
-    mean no per-row joins are needed.
+    Bounded by ``USER_ACTIVITY_DISPLAY_LIMIT``. Uses one query for the
+    window, up to one batched lookup per public-target object type present
+    (course/unit/event), and a count query only when the displayed window is
+    full. The first-payment marker adds no query — it is derived in Python
+    from the already-fetched window rows.
 
     ``first_payment_at`` (issue #773) is the ``occurred_at`` of the
     earliest ``payment`` event WITHIN the displayed window, or ``None``
@@ -1005,6 +1004,7 @@ def _build_activity_timeline(user):
     already-fetched window rows adds NO extra query — the marker only
     matters where it can actually render among the displayed rows.
     """
+    from analytics.activity import resolve_activity_target_urls
     from analytics.models import UserActivity
 
     rows = list(
@@ -1012,12 +1012,13 @@ def _build_activity_timeline(user):
         .filter(user=user)
         .order_by('-occurred_at')[:USER_ACTIVITY_DISPLAY_LIMIT]
     )
+    target_urls = resolve_activity_target_urls(rows)
     activities = [
         {
             'type_label': activity.get_event_type_display(),
             'label': activity.label,
             'occurred_at': activity.occurred_at,
-            'target_url': activity.target_url,
+            'target_url': target_urls.get(activity.pk, ''),
             'is_payment': activity.event_type == UserActivity.EVENT_PAYMENT,
         }
         for activity in rows

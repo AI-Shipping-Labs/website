@@ -60,17 +60,9 @@ def ensure_enrollment(user, course, source: str = SOURCE_MANUAL):
 
     # Record a `course_enroll` activity row for the CRM timeline
     # (issue #853). Defensive — never raises into the enroll path.
-    from analytics.activity import record_activity, studio_course_url
-    from analytics.models import UserActivity
+    from analytics.activity import record_course_enroll
 
-    record_activity(
-        user,
-        UserActivity.EVENT_COURSE_ENROLL,
-        label=f'Enrolled in course: {course.title}',
-        object_type='course',
-        object_id=course.slug,
-        target_url=studio_course_url(course.pk),
-    )
+    record_course_enroll(user, course)
 
     return enrollment, True
 

@@ -23,8 +23,8 @@ rows. They accrue only from live content views going forward.
 from django.core.management.base import BaseCommand
 
 from analytics.activity import (
-    studio_course_url,
-    studio_event_url,
+    public_course_activity_url,
+    public_event_activity_url,
 )
 from analytics.models import UserActivity
 
@@ -131,7 +131,7 @@ class Command(BaseCommand):
                 object_type='course',
                 object_id=course.slug,
                 label=f'Enrolled in course: {course.title}',
-                target_url=studio_course_url(course.pk),
+                target_url=public_course_activity_url(course),
             ))
 
         for cohort_enroll in (
@@ -147,7 +147,7 @@ class Command(BaseCommand):
                 object_type='course',
                 object_id=course.slug,
                 label=f'Enrolled in course: {course.title}',
-                target_url=studio_course_url(course.pk),
+                target_url=public_course_activity_url(course),
             ))
         return rows
 
@@ -164,7 +164,7 @@ class Command(BaseCommand):
                 object_type='event',
                 object_id=event.slug,
                 label=f'Registered for event: {event.title}',
-                target_url=studio_event_url(event.pk),
+                target_url=public_event_activity_url(event),
             ))
         return rows
 
@@ -181,7 +181,7 @@ class Command(BaseCommand):
                 object_type='event',
                 object_id=event.slug,
                 label=f'Joined event: {event.title}',
-                target_url=studio_event_url(event.pk),
+                target_url=public_event_activity_url(event),
             ))
         return rows
 

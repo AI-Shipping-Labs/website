@@ -14,7 +14,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from crm.models import CRMRecord, SlackMessage, SlackThread
-from plans.models import Plan, Sprint
+from crm.services.slack_note_sync import sync_thread_to_interview_note
+from plans.models import InterviewNote, Plan, Sprint
 
 User = get_user_model()
 
@@ -62,33 +63,30 @@ class SlackUpdatesOnCRMDetailTests(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
 
-    def test_captured_thread_shows_on_crm_detail(self):
-        _thread_with_messages(
+    def test_synced_thread_shows_as_member_note_on_crm_detail(self):
+        thread = _thread_with_messages(
             member=self.member,
             texts=['Root update', 'A reply', 'Another reply'],
         )
+        sync_thread_to_interview_note(thread)
         url = reverse('studio_crm_detail', kwargs={'crm_id': self.record.pk})
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="crm-slack-updates-section"')
-        self.assertContains(response, 'data-testid="crm-slack-thread"')
-        # All three messages render.
-        self.assertContains(
-            response, 'data-testid="crm-slack-message"', count=3,
-        )
+        self.assertNotContains(response, 'data-testid="crm-slack-updates-section"')
+        self.assertContains(response, 'data-testid="member-notes-section"')
+        self.assertContains(response, 'data-testid="member-note-tag"', count=2)
         self.assertContains(response, 'Root update')
         self.assertContains(response, 'A reply')
         self.assertContains(response, 'Author')
+        self.assertEqual(InterviewNote.objects.count(), 1)
 
-    def test_empty_state_when_no_threads(self):
+    def test_no_separate_slack_empty_state_when_no_threads(self):
         url = reverse('studio_crm_detail', kwargs={'crm_id': self.record.pk})
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response, 'data-testid="crm-slack-updates-empty"',
-        )
+        self.assertNotContains(response, 'data-testid="crm-slack-updates-empty"')
         self.assertNotContains(response, 'data-testid="crm-slack-thread"')
 
 
@@ -118,6 +116,7 @@ class SlackUpdatesOnPlanDetailTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="crm-slack-updates-section"')
         self.assertContains(response, 'data-testid="crm-slack-thread"')
+        self.assertNotContains(response, 'data-testid="crm-slack-message"')
 
 
 class SlackIngestReviewTests(TestCase):

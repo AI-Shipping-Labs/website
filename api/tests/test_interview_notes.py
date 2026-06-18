@@ -84,6 +84,9 @@ class InterviewNoteDetailTest(InterviewNotesTestBase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["visibility"], "internal")
+        self.assertEqual(response.json()["tags"], [])
+        self.assertEqual(response.json()["source_type"], "")
+        self.assertEqual(response.json()["source_metadata"], {})
 
     def test_member_notes_detail_alias_returns_same_payload(self):
         response = self.client.get(
@@ -104,13 +107,21 @@ class InterviewNoteDetailTest(InterviewNotesTestBase):
         )
         response = self.client.patch(
             f"/api/member-notes/{note.id}",
-            data=json.dumps({"body": "after"}),
+            data=json.dumps({
+                "body": "_After_ body\n• .",
+                "tags": ["Needs Follow Up", "needs-follow-up"],
+                "source_type": "slack",
+                "source_metadata": {"channel_id": "C123"},
+            }),
             content_type="application/json",
             **self._auth(self.staff_token),
         )
         self.assertEqual(response.status_code, 200)
         note.refresh_from_db()
-        self.assertEqual(note.body, "after")
+        self.assertEqual(note.body, "After body")
+        self.assertEqual(note.tags, ["needs-follow-up"])
+        self.assertEqual(note.source_type, "slack")
+        self.assertEqual(note.source_metadata, {"channel_id": "C123"})
 
     def test_member_notes_detail_alias_delete_returns_405_and_keeps_row(self):
         # Issue #864 (2026-06-13): interview-note DELETE is blocked via the
@@ -150,13 +161,23 @@ class InterviewNoteCreateTest(InterviewNotesTestBase):
                 "user_email": "member@test.com",
                 "visibility": "internal",
                 "kind": "intake",
-                "body": "secret",
+                "body": "_secret_\n• .",
+                "tags": ["Manual Review", "manual review"],
+                "source_type": "slack",
+                "source_metadata": {"thread_ts": "1700000000.000000"},
             },
             token=self.staff_token,
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(InterviewNote.objects.count(), before + 1)
         self.assertEqual(response.json()["visibility"], "internal")
+        self.assertEqual(response.json()["body"], "secret")
+        self.assertEqual(response.json()["tags"], ["manual-review"])
+        self.assertEqual(response.json()["source_type"], "slack")
+        self.assertEqual(
+            response.json()["source_metadata"],
+            {"thread_ts": "1700000000.000000"},
+        )
 
     def test_member_notes_create_alias_creates_note(self):
         before = InterviewNote.objects.count()
@@ -174,6 +195,20 @@ class InterviewNoteCreateTest(InterviewNotesTestBase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(InterviewNote.objects.count(), before + 1)
         self.assertEqual(response.json()["body"], "alias note")
+
+    def test_create_rejects_non_object_source_metadata(self):
+        response = self._post(
+            {
+                "user_email": "member@test.com",
+                "visibility": "internal",
+                "kind": "intake",
+                "body": "bad metadata",
+                "source_metadata": ["not", "object"],
+            },
+            token=self.staff_token,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "invalid_type")
 
 
 class UserInterviewNotesInboxTest(InterviewNotesTestBase):

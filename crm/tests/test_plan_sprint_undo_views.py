@@ -176,7 +176,7 @@ class PanelRenderTests(UndoViewsBase):
 
     def test_panel_renders_autoapply_block_and_controls(self):
         event, *_ = self._event_with_changes()
-        url = reverse('studio_crm_detail', kwargs={'crm_id': self.record.pk})
+        url = reverse('studio_plan_detail', kwargs={'plan_id': self.plan.pk})
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="crm-slack-autoapply"')
@@ -199,7 +199,7 @@ class PanelRenderTests(UndoViewsBase):
             thread=thread, ts='1700000099.000001', slack_user_id='U_AUTHOR',
             text='just chatting', posted_at=timezone.now(), is_root=True,
         )
-        url = reverse('studio_crm_detail', kwargs={'crm_id': self.record.pk})
+        url = reverse('studio_plan_detail', kwargs={'plan_id': self.plan.pk})
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="crm-slack-thread"')

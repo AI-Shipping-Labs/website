@@ -12,9 +12,9 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
-from crm.models import SlackChannelIngest, SlackMessage, SlackThread
+from crm.models import CRMRecord, SlackChannelIngest, SlackMessage, SlackThread
 from crm.tasks import ingest_plan_sprints
-from plans.models import Plan, Sprint
+from plans.models import InterviewNote, Plan, Sprint
 
 User = get_user_model()
 
@@ -95,6 +95,20 @@ class IngestMatchingTests(TestCase):
         self.assertEqual(thread.member, self.member)
         self.assertEqual(thread.plan, self.plan)
         self.assertEqual(run.members_matched, 1)
+        self.assertIsNotNone(thread.interview_note)
+        self.assertEqual(thread.interview_note.member, self.member)
+        self.assertEqual(thread.interview_note.plan, self.plan)
+        self.assertEqual(thread.interview_note.visibility, 'internal')
+        self.assertEqual(thread.interview_note.source_type, 'slack')
+        self.assertEqual(
+            thread.interview_note.tags,
+            ['slack', 'plan-sprints', 'sprint:active-sprint'],
+        )
+        self.assertEqual(
+            thread.interview_note.source_metadata['thread_ts'],
+            '1700000000.000100',
+        )
+        self.assertTrue(CRMRecord.objects.filter(user=self.member).exists())
 
     def test_member_without_active_plan_sets_member_plan_null(self):
         self.sprint.status = 'completed'
@@ -121,6 +135,7 @@ class IngestMatchingTests(TestCase):
         self.assertIsNone(thread.member)
         self.assertIsNone(thread.plan)
         self.assertEqual(thread.messages.count(), 1)
+        self.assertIsNone(thread.interview_note)
 
 
 @override_settings(**SLACK_ON)
@@ -211,6 +226,11 @@ class IngestIncrementalTests(TestCase):
         self.assertEqual(thread.reply_count, 2)
         self.assertEqual(thread.last_seen_ingest, run2)
         self.assertEqual(run2.replies_added, 1)
+        self.assertEqual(InterviewNote.objects.count(), 1)
+        note = InterviewNote.objects.get()
+        self.assertEqual(thread.interview_note, note)
+        self.assertIn('Reply 2', note.body)
+        self.assertEqual(note.source_metadata['latest_message_ts'], '1700000102.000000')
         # No duplicate thread.
         self.assertEqual(
             SlackThread.objects.filter(thread_ts='1700000100.000000').count(), 1

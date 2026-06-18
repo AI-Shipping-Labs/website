@@ -208,6 +208,9 @@ def serialize_interview_note(note):
         "visibility": note.visibility,
         "kind": note.kind,
         "body": note.body,
+        "tags": list(note.tags or []),
+        "source_type": note.source_type,
+        "source_metadata": dict(note.source_metadata or {}),
         "created_by_email": (
             note.created_by.email if note.created_by_id else None
         ),

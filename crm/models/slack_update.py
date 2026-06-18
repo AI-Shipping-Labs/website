@@ -106,6 +106,13 @@ class SlackThread(models.Model):
         blank=True,
         related_name='last_seen_threads',
     )
+    interview_note = models.OneToOneField(
+        'plans.InterviewNote',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='slack_thread',
+    )
 
     class Meta:
         ordering = ['-posted_at']

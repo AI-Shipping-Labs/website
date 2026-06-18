@@ -59,6 +59,17 @@
                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.body }}</textarea>
     </div>
 
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Tags</label>
+      <input type="text"
+             name="tags"
+             value="{{ form_data.tags }}"
+             placeholder="manual-review, sprint:may-2026"
+             data-testid="member-note-tags-input"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Comma-separated; tags are normalized on save.</p>
+    </div>
+
     <div class="flex items-center space-x-4">
       <button type="submit"
               class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">

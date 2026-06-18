@@ -380,7 +380,7 @@ class TestScenarioBasicMemberSubscription:
 
         billing = page.locator("#billing-period-end")
         assert billing.is_visible()
-        assert "15/03/2026" in billing.inner_text()
+        assert "March 15, 2026" in billing.inner_text()
         ctx.close()
     def test_basic_uses_customer_portal_no_local_mutation_actions(
         self, django_server, test_users, django_db_blocker
@@ -577,7 +577,7 @@ class TestScenarioPendingCancellationNotice:
         assert notice.is_visible()
         text = notice.inner_text()
         assert "Main" in text
-        assert "15/05/2026" in text
+        assert "May 15, 2026" in text
         # Issue #968: cancelled-but-paid user keeps a paid tier, so the
         # stale-subscription "needs review" banner must NOT show, and no
         # dead scheduled-change text either.

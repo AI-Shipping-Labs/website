@@ -287,7 +287,7 @@ def test_scenario_3_premium_no_level_pill_no_steady_state_frame(
 
         billing = page.locator("#billing-period-end")
         assert billing.is_visible()
-        assert "01/05/2026" in billing.inner_text()
+        assert "May 1, 2026" in billing.inner_text()
     finally:
         ctx.close()
 
@@ -336,7 +336,7 @@ def test_scenario_5_pending_cancellation_notice_visible_no_cancel_button(
         assert notice.is_visible()
         text = notice.inner_text()
         assert "Main" in text
-        assert "15/05/2026" in text
+        assert "May 15, 2026" in text
 
         # Tier name is Main with no Level pill.
         assert page.locator("#tier-name").inner_text().strip() == "Main"

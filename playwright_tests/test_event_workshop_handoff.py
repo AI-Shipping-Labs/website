@@ -5,15 +5,16 @@ for an event; the canonical recording playback lives on the linked Workshop's
 landing/video pages.
 
 Issue #363 introduced the "Full workshop writeup" CTA on workshop-linked
-events. Issue #426 retired the inline recording fallback entirely, so even
-completed events without a linked workshop now render announcement-only — no
-inline player, materials, transcript, chapters, or recording paywall.
+events. Issue #426 retired the inline recording fallback entirely. Issue #1037
+allows completed standalone events to show explicit recording/material links as
+structured resources, while still forbidding inline playback UI, transcripts,
+chapters, and recording paywalls.
 
 Three scenarios:
 1. Workshop-linked completed event hands off to the workshop and renders no
    recording UI.
-2. Completed event with no linked workshop also renders no recording UI
-   (announcement-only) and has no workshop CTA.
+2. Completed event with no linked workshop renders structured resources, no
+   inline recording UI, and no workshop CTA.
 3. Upcoming workshop-linked event suppresses recording UI but keeps the
    Register flow.
 
@@ -257,8 +258,8 @@ class TestWorkshopLinkedEventHandsOff:
 
 
 # ----------------------------------------------------------------------
-# Scenario 2: completed event with no linked workshop is announcement-only
-# (issue #426 retired the inline recording fallback).
+# Scenario 2: completed event with no linked workshop shows resource links
+# without restoring inline recording UI.
 # ----------------------------------------------------------------------
 
 
@@ -266,9 +267,9 @@ class TestWorkshopLinkedEventHandsOff:
 class TestOrphanEventIsAnnouncementOnly:
     """Anonymous visitor opens a completed event with no linked Workshop.
 
-    The event page is announcement-only: title, description, and tags
-    render, but no inline recording UI. There is also no workshop writeup
-    CTA, since no Workshop is linked.
+    The event page renders title, description, tags, and explicit
+    post-event resource links, but no inline recording UI. There is also no
+    workshop writeup CTA, since no Workshop is linked.
     """
 
     def test_orphan_event_omits_inline_recording_ui(
@@ -304,7 +305,7 @@ class TestOrphanEventIsAnnouncementOnly:
         assert 'An older session never promoted to a workshop.' in body
 
         # No inline recording block, no video player, no recording-only
-        # sections, no transcript, no materials.
+        # sections, no transcript, and no old Materials UI.
         recording_block = page.locator(
             '[data-testid="event-recording-block"]'
         )
@@ -318,7 +319,22 @@ class TestOrphanEventIsAnnouncementOnly:
         assert "What You'll Learn" not in body
         assert 'Understand RAG' not in body
         assert 'Materials</h2>' not in main_html
-        assert 'https://example.com/notes.pdf' not in body
+        assert 'data-testid="recording-materials"' not in body
+
+        # Issue #1037: standalone past events may expose explicit resource
+        # links as structured external links, without restoring playback UI.
+        resources = page.locator('[data-testid="event-post-resources"]')
+        assert resources.count() == 1
+        assert 'Post-event resources' in resources.inner_text()
+        recording = page.locator('[data-testid="event-recording-resource"]')
+        assert recording.count() == 1
+        assert (
+            recording.first.get_attribute('href')
+            == 'https://www.youtube.com/watch?v=ORPHAN'
+        )
+        material = page.locator('[data-testid="event-material-resource"]')
+        assert material.count() == 1
+        assert material.first.get_attribute('href') == 'https://example.com/notes.pdf'
 
         # No workshop writeup CTA — there is no workshop to link to.
         assert (

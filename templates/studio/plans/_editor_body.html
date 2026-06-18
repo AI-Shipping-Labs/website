@@ -226,25 +226,7 @@
             data-week-id="{{ week.pk }}"
             class="plan-editor-checkpoint-list space-y-2">
           {% for cp in week.checkpoints.all|dictsort:"position" %}
-          <li data-testid="checkpoint-chip"
-              data-checkpoint-id="{{ cp.pk }}"
-              data-week-id="{{ week.pk }}"
-              data-position="{{ cp.position }}"
-              data-done="{% if cp.done_at %}true{% else %}false{% endif %}"
-              tabindex="0"
-              class="plan-editor-checkpoint group flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent">
-            <span class="plan-editor-drag-handle cursor-grab text-muted-foreground" aria-hidden="true">::</span>
-            <input type="checkbox"
-                   data-testid="checkpoint-done-toggle"
-                   class="plan-editor-checkpoint-done"
-                   {% if cp.done_at %}checked{% endif %}>
-            <span class="plan-editor-checkpoint-text plan-markdown flex-1 {% if cp.done_at %}line-through text-muted-foreground{% endif %}"
-                  data-testid="checkpoint-text"
-                  data-markdown-source="{{ cp.description }}">{{ cp.description|plan_markdown }}</span>
-            <button type="button"
-                    data-testid="checkpoint-delete"
-                    class="plan-editor-checkpoint-delete text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">x</button>
-          </li>
+          {% include "plans/_checkpoint_card.html" with checkpoint=cp week=week plan_can_edit=True task_surface="studio" %}
           {% endfor %}
         </ul>
 
@@ -409,4 +391,5 @@
         crossorigin="anonymous"></script>
 <script src="{% static 'js/studio/plan_editor_state.js' %}" defer></script>
 <script src="{% static 'js/studio/plan_editor_api.js' %}" defer></script>
+<script src="{% static 'js/plans/checkpoint_task_board.js' %}" defer></script>
 <script src="{% static 'js/studio/plan_editor.js' %}" defer></script>

@@ -131,6 +131,10 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"
+        integrity="sha384-BSxuMLxX+FCbTdYec3TbXlnMGEEM2QXTFdtDaveen71o+jswm2J36+xFqp8k4VHM"
+        crossorigin="anonymous"></script>
+<script src="{% static 'js/plans/checkpoint_task_board.js' %}" defer></script>
 <script src="{% static 'js/plans/member_plan.js' %}" defer></script>
 {% include "plans/_week_notes_script.html" %}
 {% include "comments/_qa_script.html" %}

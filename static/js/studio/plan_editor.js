@@ -117,6 +117,19 @@
     return apiClient.writeWithRetry(method, path, body, revert, failureMessage);
   }
 
+  const checkpointBoard = window.SprintPlanTaskBoard
+    ? window.SprintPlanTaskBoard.create(root, {
+      apiBase: apiBase,
+      apiToken: apiToken,
+      editable: true,
+      allowDelete: true,
+      onSaving: function () { setIndicator('saving'); },
+      onSaved: function () { setIndicator('saved'); },
+      onFailed: function (message) { setIndicator('failed', message); },
+      onToast: showToast,
+    })
+    : null;
+
   function escapeHtml(value) {
     return String(value || '')
       .replace(/&/g, '&amp;')
@@ -320,39 +333,41 @@
   // ---------- SortableJS wiring (drag) ----------
 
   if (typeof window.Sortable !== 'undefined') {
-    const checkpointLists = root.querySelectorAll('.plan-editor-checkpoint-list');
-    let dragSnapshot = null;
-    checkpointLists.forEach(function (list) {
-      window.Sortable.create(list, {
-        group: 'checkpoints',
-        handle: '.plan-editor-drag-handle',
-        animation: 150,
-        onStart: function () {
-          // Snapshot the global checkpoint state across every week so a
-          // failed move can restore exact positions.
-          dragSnapshot = [];
-          root.querySelectorAll(
-            '[data-testid="checkpoint-list"]'
-          ).forEach(function (l) {
-            const wid = parseInt(l.dataset.weekId, 10);
-            dragSnapshot = dragSnapshot.concat(snapshotCheckpointPositions(wid));
-          });
-        },
-        onEnd: function (evt) {
-          const chip = evt.item;
-          const destList = evt.to;
-          const destWeekId = parseInt(destList.dataset.weekId, 10);
-          const destPosition = evt.newIndex;
-          // Update local state optimistically before the API call.
-          chip.dataset.weekId = String(destWeekId);
-          renumberCheckpoints(destWeekId);
-          if (evt.from !== evt.to) {
-            renumberCheckpoints(parseInt(evt.from.dataset.weekId, 10));
-          }
-          moveCheckpoint(chip, destWeekId, destPosition, dragSnapshot);
-        },
+    if (!checkpointBoard) {
+      const checkpointLists = root.querySelectorAll('.plan-editor-checkpoint-list');
+      let dragSnapshot = null;
+      checkpointLists.forEach(function (list) {
+        window.Sortable.create(list, {
+          group: 'checkpoints',
+          handle: '.plan-editor-drag-handle',
+          animation: 150,
+          onStart: function () {
+            // Snapshot the global checkpoint state across every week so a
+            // failed move can restore exact positions.
+            dragSnapshot = [];
+            root.querySelectorAll(
+              '[data-testid="checkpoint-list"]'
+            ).forEach(function (l) {
+              const wid = parseInt(l.dataset.weekId, 10);
+              dragSnapshot = dragSnapshot.concat(snapshotCheckpointPositions(wid));
+            });
+          },
+          onEnd: function (evt) {
+            const chip = evt.item;
+            const destList = evt.to;
+            const destWeekId = parseInt(destList.dataset.weekId, 10);
+            const destPosition = evt.newIndex;
+            // Update local state optimistically before the API call.
+            chip.dataset.weekId = String(destWeekId);
+            renumberCheckpoints(destWeekId);
+            if (evt.from !== evt.to) {
+              renumberCheckpoints(parseInt(evt.from.dataset.weekId, 10));
+            }
+            moveCheckpoint(chip, destWeekId, destPosition, dragSnapshot);
+          },
+        });
       });
-    });
+    }
 
     // Resources reorder within their panel only (different group name).
     const resourceList = root.querySelector('.plan-editor-resource-list');
@@ -661,7 +676,9 @@
   }
 
   // Wire every existing chip on first paint. New chips wired in addCheckpoint.
-  root.querySelectorAll('[data-testid="checkpoint-chip"]').forEach(bindCheckpointChip);
+  if (!checkpointBoard) {
+    root.querySelectorAll('[data-testid="checkpoint-chip"]').forEach(bindCheckpointChip);
+  }
 
   // ---------- pre-sprint action rows ----------
 
@@ -802,15 +819,17 @@
       const li = document.createElement('li');
       li.className = 'plan-editor-checkpoint group flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent';
       li.setAttribute('data-testid', 'checkpoint-chip');
+      li.setAttribute('data-checkpoint-card', '');
       li.setAttribute('data-checkpoint-id', '');
+      li.setAttribute('data-item-id', '');
       li.setAttribute('data-week-id', String(weekId));
       li.setAttribute('data-done', 'false');
       li.setAttribute('tabindex', '0');
       li.innerHTML =
-        '<span class="plan-editor-drag-handle cursor-grab text-muted-foreground" aria-hidden="true">::</span>' +
-        '<input type="checkbox" data-testid="checkpoint-done-toggle" class="plan-editor-checkpoint-done">' +
-        '<span class="plan-editor-checkpoint-text plan-markdown flex-1" data-testid="checkpoint-text" data-markdown-source=""></span>' +
-        '<button type="button" data-testid="checkpoint-delete" class="plan-editor-checkpoint-delete text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">x</button>';
+        '<span class="plan-editor-drag-handle cursor-grab text-muted-foreground" data-checkpoint-drag-handle aria-hidden="true">::</span>' +
+        '<input type="checkbox" data-testid="checkpoint-done-toggle" data-checkpoint-done-toggle class="plan-editor-checkpoint-done">' +
+        '<span class="plan-editor-checkpoint-text plan-markdown flex-1" data-testid="checkpoint-text" data-checkpoint-text data-markdown-source=""></span>' +
+        '<button type="button" data-testid="checkpoint-delete" data-checkpoint-delete class="plan-editor-checkpoint-delete text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">x</button>';
       list.appendChild(li);
 
       apiCall('POST', 'weeks/' + weekId + '/checkpoints', {
@@ -818,11 +837,21 @@
       }).then(function (result) {
         if (result.ok && result.data && result.data.id) {
           li.dataset.checkpointId = String(result.data.id);
+          li.dataset.itemId = String(result.data.id);
           li.dataset.position = String(result.data.position);
-          bindCheckpointChip(li);
+          if (checkpointBoard) {
+            checkpointBoard.bindCard(li);
+            checkpointBoard.bindSortable();
+          } else {
+            bindCheckpointChip(li);
+          }
           // Auto-enter inline edit so the user can type immediately.
           const textEl = li.querySelector('[data-testid="checkpoint-text"]');
-          enterInlineEdit(li, textEl, result.data.id);
+          if (checkpointBoard) {
+            checkpointBoard.enterInlineEdit(li);
+          } else {
+            enterInlineEdit(li, textEl, result.data.id);
+          }
           // Hide the empty-week hint if it was visible.
           const hint = btn.parentNode.querySelector('[data-testid="empty-week-hint"]');
           if (hint) { hint.classList.add('hidden'); }
@@ -972,13 +1001,15 @@
     });
   }
 
-  root.querySelectorAll('[data-testid="move-incomplete-to-next-week"]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.preventDefault();
-      const weekId = parseInt(btn.dataset.weekId, 10);
-      moveIncompleteToNextWeek(weekId);
+  if (!checkpointBoard) {
+    root.querySelectorAll('[data-testid="move-incomplete-to-next-week"]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        const weekId = parseInt(btn.dataset.weekId, 10);
+        moveIncompleteToNextWeek(weekId);
+      });
     });
-  });
+  }
 
   // ---------- interview notes (Internal/External tabs) ----------
 

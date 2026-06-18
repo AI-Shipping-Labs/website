@@ -6,6 +6,7 @@
 
   const apiBase = root.dataset.apiBase || '/api/';
   const apiToken = root.dataset.apiToken || '';
+  let memberTaskToast = null;
   const endpoints = {
     checkpoint: 'checkpoints/',
     deliverable: 'deliverables/',
@@ -89,6 +90,39 @@
         }
         return data;
       });
+    });
+  }
+
+  function showTaskToast(message) {
+    if (!memberTaskToast) {
+      memberTaskToast = document.createElement('div');
+      memberTaskToast.setAttribute('data-testid', 'member-plan-task-error');
+      memberTaskToast.className = 'fixed bottom-4 right-4 z-50 hidden max-w-sm rounded-lg border border-destructive/40 bg-card p-3 text-sm text-foreground shadow-lg';
+      document.body.appendChild(memberTaskToast);
+    }
+    memberTaskToast.textContent = message;
+    memberTaskToast.classList.remove('hidden');
+    window.clearTimeout(memberTaskToast.dataset.timerId);
+    const timerId = window.setTimeout(function () {
+      memberTaskToast.classList.add('hidden');
+    }, 4000);
+    memberTaskToast.dataset.timerId = String(timerId);
+  }
+
+  if (window.SprintPlanTaskBoard) {
+    window.SprintPlanTaskBoard.create(root, {
+      apiBase: apiBase,
+      apiToken: apiToken,
+      editable: true,
+      allowDelete: false,
+      onToast: showTaskToast,
+      onProgressChange: function (done, total) {
+        const progress = document.querySelector('[data-testid="my-plan-progress"]');
+        if (!progress) { return; }
+        progress.textContent = total
+          ? done + ' of ' + total + ' checkpoints done'
+          : 'No checkpoints yet';
+      },
     });
   }
 
@@ -353,7 +387,7 @@
     }
   }
 
-  root.querySelectorAll('[data-plan-item]').forEach(function (item) {
+  root.querySelectorAll('[data-plan-item]:not([data-item-type="checkpoint"])').forEach(function (item) {
     const checkbox = item.querySelector('[data-done-toggle]');
     if (checkbox) {
       checkbox.addEventListener('change', function () {

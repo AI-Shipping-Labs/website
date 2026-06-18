@@ -23,6 +23,7 @@ from plans.services.next_sprint_draft_service import draft_next_sprint_plan
 from plans.services.plan_lifecycle import (
     Checkpoint,
     Deliverable,
+    MoveUnfinishedItemsError,
     NextStep,
     Plan,
     SprintEnrollment,
@@ -32,13 +33,17 @@ from plans.services.plan_lifecycle import (
     count_unfinished_carry_over_items,
     create_plan_for_enrollment,
     distribute_sprint_feedback,
+    eligible_move_target_sprints,
     find_carry_over_source_plan,
+    move_unfinished_items_to_sprint,
+    unfinished_plan_item_counts,
 )
 from plans.services.progress import annotate_plan_progress
 
 __all__ = [
     'Checkpoint',
     'Deliverable',
+    'MoveUnfinishedItemsError',
     'NextStep',
     'Plan',
     'SprintEnrollment',
@@ -50,5 +55,8 @@ __all__ = [
     'create_plan_for_enrollment',
     'distribute_sprint_feedback',
     'draft_next_sprint_plan',
+    'eligible_move_target_sprints',
     'find_carry_over_source_plan',
+    'move_unfinished_items_to_sprint',
+    'unfinished_plan_item_counts',
 ]

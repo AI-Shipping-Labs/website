@@ -35,6 +35,20 @@
           Draft next sprint plan
         </button>
       </form>
+      {% if move_unfinished_counts.total %}
+        {% if move_target_sprints %}
+          <a href="{% url 'studio_plan_move_unfinished' plan_id=plan.pk %}"
+             class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+             data-testid="studio-plan-move-unfinished">
+            Move unfinished items to another sprint
+          </a>
+        {% else %}
+          <span class="border border-border text-muted-foreground px-3 py-2 rounded-lg text-sm"
+                data-testid="studio-plan-move-unavailable">
+            No later sprint available
+          </span>
+        {% endif %}
+      {% endif %}
       <a href="{% url 'studio_plan_edit' plan_id=plan.pk %}"
          class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
         Edit plan

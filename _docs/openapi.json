@@ -5139,6 +5139,112 @@
         ]
       }
     },
+    "/api/plans/{plan_id}/move-unfinished": {
+      "post": {
+        "description": "Staff-token-only. Atomically moves unfinished Checkpoint, Deliverable, and NextStep rows from the source plan into the same member's later target sprint. Completed items and all non-work-item plan content remain on the source plan. If the target plan does not exist, it is created through the sprint enrollment helper.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "target_sprint_slug": "june-2026"
+              },
+              "schema": {
+                "properties": {
+                  "target_sprint_slug": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "target_sprint_slug"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_target_plan": true,
+                  "moved": {
+                    "checkpoints": 2,
+                    "deliverables": 1,
+                    "next_steps": 0,
+                    "total": 3
+                  },
+                  "source_plan_id": 91,
+                  "source_sprint_slug": "may-2026",
+                  "target_plan_id": 118,
+                  "target_sprint_slug": "june-2026"
+                }
+              }
+            },
+            "description": "Move completed."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "missing_field",
+                  "error": "Missing required field: target_sprint_slug"
+                }
+              }
+            },
+            "description": "Invalid JSON, non-object body, or missing target_sprint_slug."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_other_user_plan",
+                  "error": "Moving unfinished items is staff-only"
+                }
+              }
+            },
+            "description": "Missing/invalid/non-staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_target_sprint",
+                  "error": "Target sprint not found"
+                }
+              }
+            },
+            "description": "Unknown source plan or target sprint."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "target_sprint_not_later",
+                  "error": "Target sprint must be later than the source sprint"
+                }
+              }
+            },
+            "description": "Cancelled target, same/earlier target, source plan with zero unfinished items, or target plan without weeks."
+          }
+        },
+        "summary": "Move unfinished items (staff-only)",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
     "/api/plans/{plan_id}/next-steps": {
       "get": {
         "parameters": [

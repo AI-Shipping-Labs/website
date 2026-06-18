@@ -168,6 +168,7 @@ from studio.views.plans import (
     plan_draft_next_sprint_dismiss,
     plan_edit,
     plan_list,
+    plan_move_unfinished,
     plan_share,
 )
 from studio.views.projects import project_list, project_review
@@ -978,6 +979,11 @@ urlpatterns = [
         'plans/<int:plan_id>/carry-over/',
         plan_carry_over,
         name='studio_plan_carry_over',
+    ),
+    path(
+        'plans/<int:plan_id>/move-unfinished/',
+        plan_move_unfinished,
+        name='studio_plan_move_unfinished',
     ),
     # Carry-over + AI next-sprint draft (issue #891, Phase 3). POST-only;
     # staff-only. Runs the shared draft_next_sprint_plan service and

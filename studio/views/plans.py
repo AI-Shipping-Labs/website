@@ -29,6 +29,7 @@ from django.db.models import Q
 from django.http import HttpResponsePermanentRedirect, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.html import format_html
 from django.views.decorators.http import require_POST
 
 from crm.services.member_profile import build_member_profile_context
@@ -41,10 +42,14 @@ from plans.models import (
     Sprint,
 )
 from plans.services import (
+    MoveUnfinishedItemsError,
     carry_over_unfinished_tasks,
     create_plan_for_enrollment,
     draft_next_sprint_plan,
+    eligible_move_target_sprints,
     find_carry_over_source_plan,
+    move_unfinished_items_to_sprint,
+    unfinished_plan_item_counts,
 )
 from studio.decorators import staff_required
 from studio.services.plan_editor import build_plan_editor_context
@@ -279,6 +284,10 @@ def plan_detail(request, plan_id):
     )
     internal_notes = note_queryset.internal()
     external_notes = note_queryset.external()
+    move_counts = unfinished_plan_item_counts(source_plan=plan)
+    move_target_sprints = []
+    if move_counts['total']:
+        move_target_sprints = list(eligible_move_target_sprints(source_plan=plan))
 
     return render(request, 'studio/plans/detail.html', {
         'plan': plan,
@@ -291,6 +300,8 @@ def plan_detail(request, plan_id):
         'next_steps': next_steps,
         'internal_notes': internal_notes,
         'external_notes': external_notes,
+        'move_unfinished_counts': move_counts,
+        'move_target_sprints': move_target_sprints,
         # Read-only #plan-sprints Slack ingest linked to this plan (#889).
         'slack_threads': threads_for_plan(plan),
     })
@@ -450,6 +461,86 @@ def plan_carry_over(request, plan_id):
             f'No new tasks to carry over from "{source_plan.sprint.name}" '
             f'for {plan.member.email} (already up to date).',
         )
+    return redirect('studio_plan_detail', plan_id=plan.pk)
+
+
+@staff_required
+def plan_move_unfinished(request, plan_id):
+    """Staff confirmation + POST for moving unfinished items to a later sprint."""
+    plan = get_object_or_404(
+        Plan.objects.select_related('member', 'sprint'),
+        pk=plan_id,
+    )
+    counts = unfinished_plan_item_counts(source_plan=plan)
+    if counts['total'] == 0:
+        messages.info(
+            request,
+            f'{plan.member.email} has no unfinished plan items to move.',
+        )
+        return redirect('studio_plan_detail', plan_id=plan.pk)
+
+    target_sprints = list(eligible_move_target_sprints(source_plan=plan))
+    if not target_sprints:
+        messages.info(request, 'No later sprint available.')
+        return redirect('studio_plan_detail', plan_id=plan.pk)
+
+    selected_slug = (
+        request.POST.get('target_sprint_slug')
+        if request.method == 'POST'
+        else request.GET.get('target_sprint_slug')
+    )
+    selected = None
+    invalid_target = False
+    if selected_slug:
+        selected = next(
+            (sprint for sprint in target_sprints if sprint.slug == selected_slug),
+            None,
+        )
+        if selected is None:
+            messages.error(request, 'Pick a valid later sprint.')
+            invalid_target = True
+            selected = target_sprints[0]
+    else:
+        if request.method == 'POST':
+            messages.error(request, 'Pick a valid later sprint.')
+            invalid_target = True
+        selected = target_sprints[0]
+
+    if request.method != 'POST' or invalid_target:
+        return render(request, 'studio/plans/move_unfinished.html', {
+            'plan': plan,
+            'counts': counts,
+            'target_sprints': target_sprints,
+            'selected_target': selected,
+        })
+
+    try:
+        summary = move_unfinished_items_to_sprint(
+            source_plan=plan,
+            target_sprint=selected,
+            actor=request.user,
+        )
+    except MoveUnfinishedItemsError as exc:
+        messages.error(request, exc.message)
+        return redirect('studio_plan_detail', plan_id=plan.pk)
+
+    target_url = reverse(
+        'studio_plan_detail',
+        kwargs={'plan_id': summary['target_plan_id']},
+    )
+    total = summary['moved']['total']
+    messages.success(
+        request,
+        format_html(
+            'Moved {} unfinished item{} to "{}" target plan '
+            '<a href="{}" class="underline">#{}</a>.',
+            total,
+            '' if total == 1 else 's',
+            selected.name,
+            target_url,
+            summary['target_plan_id'],
+        ),
+    )
     return redirect('studio_plan_detail', plan_id=plan.pk)
 
 

@@ -136,7 +136,6 @@
       <table class="w-full">
         <thead class="bg-muted/40">
           <tr>
-            <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
             <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Visibility</th>
             {# Issue #958: per-occurrence access level so a mismatch with the series is visible. #}
@@ -150,7 +149,6 @@
         <tbody class="divide-y divide-border">
           {% for event in events %}
           <tr data-testid="event-series-member-row">
-            <td class="px-4 py-3 text-sm text-muted-foreground" data-testid="series-position">{{ event.series_position|default:"—" }}</td>
             <td class="px-4 py-3 text-sm text-foreground" data-label="Title">
               <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="hover:text-accent">{{ event.title }}</a>
             </td>
@@ -209,7 +207,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="8" class="px-4 py-6 text-center text-sm text-muted-foreground">No member events.</td>
+            <td colspan="7" class="px-4 py-6 text-center text-sm text-muted-foreground">No member events.</td>
           </tr>
           {% endfor %}
         </tbody>

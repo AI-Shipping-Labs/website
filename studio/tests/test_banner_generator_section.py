@@ -248,6 +248,36 @@ class BannerGeneratorSectionRenderingTest(_CacheCleanupMixin, TestCase):
             response, 'data-testid="banner-generator-regenerate-button"',
         )
 
+    def test_existing_banner_renders_accessible_preview_control(self):
+        article = self._make_article()
+        article.auto_banner_url = 'https://cdn.example.com/banners/article/hint.jpg'
+        article.save(update_fields=['auto_banner_url'])
+
+        response = self.client.get(f'/studio/articles/{article.pk}/edit')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="banner-preview-control"')
+        self.assertContains(response, 'aria-label="Open banner preview"')
+        self.assertContains(response, 'type="button"')
+        self.assertContains(response, 'data-testid="banner-preview-affordance"')
+        self.assertContains(response, 'data-testid="banner-generator-image"')
+        self.assertContains(response, 'data-banner-source="Generated"')
+        self.assertNotContains(response, 'banner-generator-placeholder')
+
+    def test_no_banner_renders_no_preview_control_or_dialog(self):
+        article = self._make_article()
+
+        response = self.client.get(f'/studio/articles/{article.pk}/edit')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="banner-generator-placeholder"')
+        html = response.content.decode()
+        self.assertNotRegex(
+            html,
+            r'<button[^>]+data-testid="banner-preview-control"',
+        )
+        self.assertNotRegex(html, r'<dialog[^>]+data-testid="banner-preview-dialog"')
+
     def test_success_renders_success_hint(self):
         article = self._make_article()
         _make_task(

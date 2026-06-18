@@ -63,9 +63,14 @@ class PlanDraftNextSprintApiTest(TestCase):
         return f'/api/plans/{plan.pk}/draft-next-sprint'
 
     def test_returns_documented_shape_with_draft(self):
-        source = _make_plan(self.member, self.s_may)
+        source = _make_plan(self.member, self.s_may, weeks=6)
         Checkpoint.objects.create(
-            week=source.weeks.get(week_number=1), description='Cp', position=0,
+            week=source.weeks.get(week_number=3), description='Cp week 3',
+            position=0,
+        )
+        Checkpoint.objects.create(
+            week=source.weeks.get(week_number=5), description='Cp week 5',
+            position=0,
         )
         dest = _make_plan(self.member, self.s_jun)
 
@@ -80,11 +85,29 @@ class PlanDraftNextSprintApiTest(TestCase):
 
         self.assertEqual(resp.status_code, 200)
         data = json.loads(resp.content)
-        self.assertEqual(data['carried_over'], 1)
+        self.assertEqual(
+            set(data.keys()),
+            {'carried_over', 'llm_enabled', 'source_plan_id', 'draft'},
+        )
+        self.assertEqual(data['carried_over'], 2)
         self.assertTrue(data['llm_enabled'])
         self.assertEqual(data['source_plan_id'], source.pk)
         self.assertEqual(data['draft']['goal'], 'Ship it')
         self.assertEqual(data['draft']['suggested_next_steps'], ['Step'])
+        self.assertEqual(
+            [
+                c.description
+                for c in dest.weeks.get(week_number=1).checkpoints.all()
+            ],
+            ['Cp week 3'],
+        )
+        self.assertEqual(
+            [
+                c.description
+                for c in dest.weeks.get(week_number=2).checkpoints.all()
+            ],
+            ['Cp week 5'],
+        )
 
     def test_llm_off_returns_200_with_null_draft(self):
         source = _make_plan(self.member, self.s_may)

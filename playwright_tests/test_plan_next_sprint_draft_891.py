@@ -186,6 +186,9 @@ class TestDegradesWhenAiOff:
             prev = _sprint("may-891c", datetime.date(2026, 5, 1))
             nxt = _sprint("jun-891c", datetime.date(2026, 6, 1))
             source, source_week = _plan_with_week(member, prev)
+            source_week.week_number = 3
+            source_week.position = 2
+            source_week.save(update_fields=["week_number", "position"])
             Checkpoint.objects.create(
                 week=source_week, description="Carry me forward", position=0,
             )
@@ -214,6 +217,17 @@ class TestDegradesWhenAiOff:
                 from plans.models import Checkpoint, NextSprintPlanDraft
 
                 assert Checkpoint.objects.filter(week__plan=dest_id).count() == 1
+                assert [
+                    c.description
+                    for c in Checkpoint.objects.filter(
+                        week__plan=dest_id,
+                        week__week_number=1,
+                    )
+                ] == ["Carry me forward"]
+                assert Checkpoint.objects.filter(
+                    week__plan=dest_id,
+                    week__week_number=3,
+                ).count() == 0
                 assert NextSprintPlanDraft.objects.filter(plan=dest_id).count() == 0
         finally:
             context.close()

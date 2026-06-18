@@ -2,8 +2,8 @@
 
 Covers ``find_carry_over_source_plan``, ``count_unfinished_carry_over_items``
 and ``carry_over_unfinished_tasks`` in ``plans.services``: unfinished-only
-copy, ``done_at`` reset, week_number mapping with shorter-sprint overflow,
-case-insensitive trimmed dedupe (idempotency), and atomicity.
+copy, ``done_at`` reset, compacted source-week mapping with shorter-sprint
+overflow, case-insensitive trimmed dedupe (idempotency), and atomicity.
 """
 
 import datetime
@@ -114,6 +114,10 @@ class CarryOverServiceTest(TestCase):
         week = self.dest.weeks.get(week_number=week_number)
         return list(week.checkpoints.all())
 
+    def _plan_checkpoints(self, plan, week_number):
+        week = plan.weeks.get(week_number=week_number)
+        return list(week.checkpoints.all())
+
     def test_copies_only_unfinished_checkpoints(self):
         Checkpoint.objects.create(
             week=self.src_weeks[1], description='unfinished', position=0,
@@ -139,7 +143,7 @@ class CarryOverServiceTest(TestCase):
         carry_over_unfinished_tasks(
             source_plan=self.source, destination_plan=self.dest,
         )
-        copy = self._dest_checkpoints(2)[0]
+        copy = self._dest_checkpoints(1)[0]
         self.assertIsNone(copy.done_at)
 
     def test_finished_items_remain_on_source(self):
@@ -156,34 +160,95 @@ class CarryOverServiceTest(TestCase):
             Checkpoint.objects.filter(week__plan=self.dest).count(), 0,
         )
 
-    def test_week_number_mapping_preserved(self):
+    def test_compacts_later_unfinished_source_weeks_to_front(self):
+        Checkpoint.objects.create(
+            week=self.src_weeks[1], description='done w1', position=0,
+            done_at=timezone.now(),
+        )
+        Checkpoint.objects.create(
+            week=self.src_weeks[2], description='done w2', position=0,
+            done_at=timezone.now(),
+        )
         Checkpoint.objects.create(
             week=self.src_weeks[3], description='w3 task', position=0,
+        )
+        Checkpoint.objects.create(
+            week=self.src_weeks[4], description='w4 task', position=0,
         )
         carry_over_unfinished_tasks(
             source_plan=self.source, destination_plan=self.dest,
         )
         self.assertEqual(
-            [c.description for c in self._dest_checkpoints(3)], ['w3 task'],
+            [c.description for c in self._dest_checkpoints(1)], ['w3 task'],
         )
-        self.assertEqual(self._dest_checkpoints(1), [])
+        self.assertEqual(
+            [c.description for c in self._dest_checkpoints(2)], ['w4 task'],
+        )
+        self.assertEqual(self._dest_checkpoints(3), [])
+
+    def test_source_week_one_stays_week_one_when_unfinished(self):
+        Checkpoint.objects.create(
+            week=self.src_weeks[1], description='w1 task', position=0,
+        )
+        Checkpoint.objects.create(
+            week=self.src_weeks[4], description='w4 task', position=0,
+        )
+        carry_over_unfinished_tasks(
+            source_plan=self.source, destination_plan=self.dest,
+        )
+        self.assertEqual(
+            [c.description for c in self._dest_checkpoints(1)], ['w1 task'],
+        )
+        self.assertEqual(
+            [c.description for c in self._dest_checkpoints(2)], ['w4 task'],
+        )
+
+    def test_multiple_items_in_source_week_stay_together_in_order(self):
+        Checkpoint.objects.create(
+            week=self.src_weeks[4], description='w4 second', position=2,
+        )
+        Checkpoint.objects.create(
+            week=self.src_weeks[4], description='w4 first', position=1,
+        )
+        Checkpoint.objects.create(
+            week=self.src_weeks[5], description='w5 only', position=0,
+        )
+        carry_over_unfinished_tasks(
+            source_plan=self.source, destination_plan=self.dest,
+        )
+        self.assertEqual(
+            [c.description for c in self._dest_checkpoints(1)],
+            ['w4 first', 'w4 second'],
+        )
+        self.assertEqual(
+            [c.description for c in self._dest_checkpoints(2)], ['w5 only'],
+        )
 
     def test_shorter_destination_overflows_into_last_week(self):
         short_sprint = Sprint.objects.create(
             name='Short', slug='short',
-            start_date=datetime.date(2026, 6, 1), duration_weeks=4,
+            start_date=datetime.date(2026, 6, 1), duration_weeks=2,
         )
-        short = _make_plan(self.member, short_sprint, 4)
+        short = _make_plan(self.member, short_sprint, 2)
+        Checkpoint.objects.create(
+            week=self.src_weeks[3], description='week3 task', position=0,
+        )
+        Checkpoint.objects.create(
+            week=self.src_weeks[4], description='week4 task', position=0,
+        )
         Checkpoint.objects.create(
             week=self.src_weeks[6], description='week6 task', position=0,
         )
         carry_over_unfinished_tasks(
             source_plan=self.source, destination_plan=short,
         )
-        last_week = short.weeks.get(week_number=4)
         self.assertEqual(
-            [c.description for c in last_week.checkpoints.all()],
-            ['week6 task'],
+            [c.description for c in self._plan_checkpoints(short, 1)],
+            ['week3 task'],
+        )
+        self.assertEqual(
+            [c.description for c in self._plan_checkpoints(short, 2)],
+            ['week4 task', 'week6 task'],
         )
 
     def test_copies_deliverables_and_next_steps_unfinished_only(self):
@@ -248,10 +313,11 @@ class CarryOverServiceTest(TestCase):
 
     def test_dedupe_matches_despite_whitespace_and_case(self):
         Checkpoint.objects.create(
-            week=self.src_weeks[1], description='  Build the THING  ',
+            week=self.src_weeks[3], description='  Build the THING  ',
             position=0,
         )
-        # Pre-seed destination with a differently-cased / padded variant.
+        # Source Week 3 compacts into destination Week 1. Pre-seed that
+        # compacted target with a differently-cased / padded variant.
         dest_week = self.dest.weeks.get(week_number=1)
         Checkpoint.objects.create(
             week=dest_week, description='build the thing', position=0,
@@ -264,13 +330,13 @@ class CarryOverServiceTest(TestCase):
 
     def test_dedupe_scoped_per_destination_week_for_checkpoints(self):
         # Same description in two different source weeks must each land in
-        # their own destination week; they are not deduped against each
-        # other because the dedupe is week-scoped.
+        # their own compacted destination week; they are not deduped
+        # against each other because the dedupe is week-scoped.
         Checkpoint.objects.create(
-            week=self.src_weeks[1], description='same text', position=0,
+            week=self.src_weeks[3], description='same text', position=0,
         )
         Checkpoint.objects.create(
-            week=self.src_weeks[2], description='same text', position=0,
+            week=self.src_weeks[5], description='same text', position=0,
         )
         copied = carry_over_unfinished_tasks(
             source_plan=self.source, destination_plan=self.dest,
@@ -358,3 +424,37 @@ class CountUnfinishedTest(TestCase):
             0,
         )
         self.assertEqual(count_total_unfinished(source_plan=source), 2)
+
+    def test_net_count_uses_compacted_destination_week(self):
+        source = _make_plan(self.member, self.s_prev, 2)
+        dest = _make_plan(self.member, self.s_next, 2)
+        sw = {w.week_number: w for w in source.weeks.all()}
+        dw = {w.week_number: w for w in dest.weeks.all()}
+        Checkpoint.objects.create(
+            week=sw[2], description=' build eval set ', position=0,
+        )
+        Checkpoint.objects.create(
+            week=sw[2], description='Write rubric', position=1,
+        )
+        Checkpoint.objects.create(
+            week=dw[1], description='Build Eval Set', position=0,
+        )
+
+        self.assertEqual(
+            count_unfinished_carry_over_items(
+                source_plan=source, destination_plan=dest,
+            ),
+            1,
+        )
+        copied = carry_over_unfinished_tasks(source_plan=source, destination_plan=dest)
+        self.assertEqual(copied, 1)
+        self.assertEqual(
+            [c.description for c in dw[1].checkpoints.all()],
+            ['Build Eval Set', 'Write rubric'],
+        )
+        self.assertEqual(
+            count_unfinished_carry_over_items(
+                source_plan=source, destination_plan=dest,
+            ),
+            0,
+        )

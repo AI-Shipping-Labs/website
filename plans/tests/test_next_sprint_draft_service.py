@@ -196,6 +196,35 @@ class DraftServiceTest(TestCase):
         self.assertIsNone(outcome['draft'])
         self.assertEqual(NextSprintPlanDraft.objects.filter(plan=dest).count(), 0)
 
+    def test_llm_off_compacts_carry_over_before_draft_handling(self):
+        source = _make_plan(self.member, self.s_may)
+        Checkpoint.objects.create(
+            week=source.weeks.get(week_number=3),
+            description='Late Cp',
+            position=0,
+        )
+        dest = _make_plan(self.member, self.s_jun)
+
+        with patch(
+            'plans.services.next_sprint_draft_service.llm.is_enabled',
+            return_value=False,
+        ):
+            outcome = draft_next_sprint_plan(
+                destination_plan=dest, actor=self.staff,
+            )
+
+        self.assertEqual(outcome['carried_over'], 1)
+        self.assertFalse(outcome['llm_enabled'])
+        self.assertEqual(
+            [
+                c.description
+                for c in dest.weeks.get(week_number=1).checkpoints.all()
+            ],
+            ['Late Cp'],
+        )
+        self.assertEqual(dest.weeks.get(week_number=3).checkpoints.count(), 0)
+        self.assertEqual(NextSprintPlanDraft.objects.filter(plan=dest).count(), 0)
+
     def test_llm_failure_leaves_carry_over_and_no_partial_draft(self):
         source = _make_plan(self.member, self.s_may)
         first_week = source.weeks.order_by('week_number').first()

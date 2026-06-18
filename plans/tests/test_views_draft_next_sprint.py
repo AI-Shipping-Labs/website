@@ -111,7 +111,8 @@ class DraftNextSprintViewTest(TestCase):
     def test_llm_off_flash_says_skipped_and_no_panel(self):
         source = _make_plan(self.member, self.s_may)
         Checkpoint.objects.create(
-            week=source.weeks.get(week_number=1), description='Cp', position=0,
+            week=source.weeks.get(week_number=3), description='Late Cp',
+            position=0,
         )
         dest = _make_plan(self.member, self.s_jun)
         with patch(
@@ -123,6 +124,14 @@ class DraftNextSprintViewTest(TestCase):
         self.assertContains(resp, 'AI draft was skipped because AI is off')
         self.assertNotContains(resp, 'next-sprint-draft-panel')
         self.assertEqual(NextSprintPlanDraft.objects.filter(plan=dest).count(), 0)
+        self.assertEqual(
+            [
+                c.description
+                for c in dest.weeks.get(week_number=1).checkpoints.all()
+            ],
+            ['Late Cp'],
+        )
+        self.assertEqual(dest.weeks.get(week_number=3).checkpoints.count(), 0)
 
     def test_no_prior_plan_flash_and_draft_from_state(self):
         dest = _make_plan(self.member, self.s_may)

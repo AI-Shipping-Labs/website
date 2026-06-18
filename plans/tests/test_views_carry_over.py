@@ -91,6 +91,27 @@ class CarryOverRouteAccessTest(TestCase):
         self.assertTrue(any('Carried over 1 task' in m for m in msgs))
         self.assertTrue(any('Prev' in m for m in msgs))
 
+    def test_owner_compacts_later_source_week_to_week_one(self):
+        Checkpoint.objects.filter(week__plan=self.source).delete()
+        Checkpoint.objects.create(
+            week=self.source.weeks.get(week_number=3),
+            description='late unfinished', position=0,
+        )
+        self.client.force_login(self.member)
+        resp = self.client.post(self._url(self.dest), follow=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            [
+                c.description
+                for c in self.dest.weeks.get(week_number=1).checkpoints.all()
+            ],
+            ['late unfinished'],
+        )
+        self.assertEqual(
+            self.dest.weeks.get(week_number=3).checkpoints.count(),
+            0,
+        )
+
     def test_rerun_is_no_op_with_info_message(self):
         self.client.force_login(self.member)
         self.client.post(self._url(self.dest))

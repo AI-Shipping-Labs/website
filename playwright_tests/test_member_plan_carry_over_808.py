@@ -58,7 +58,7 @@ def _make_plan(member, sprint, weeks):
 
 
 def _seed_sprint_a_and_b(member_email):
-    """Seed a finished Sprint A (2 done + 3 unfinished) and empty Sprint B.
+    """Seed Sprint A with finished early weeks and unfinished later weeks.
 
     Returns the Sprint B plan pk.
     """
@@ -80,14 +80,16 @@ def _seed_sprint_a_and_b(member_email):
         week=week1, description="done one", position=0,
         done_at=timezone.now())
     Checkpoint.objects.create(
-        week=week1, description="done two", position=1,
+        week=plan_a.weeks.get(week_number=2), description="done two", position=0,
         done_at=timezone.now())
     Checkpoint.objects.create(
-        week=week1, description="unfinished alpha", position=2)
+        week=plan_a.weeks.get(week_number=3),
+        description="unfinished alpha", position=0)
     Checkpoint.objects.create(
-        week=week1, description="unfinished beta", position=3)
+        week=plan_a.weeks.get(week_number=3),
+        description="unfinished beta", position=1)
     Checkpoint.objects.create(
-        week=plan_a.weeks.get(week_number=2),
+        week=plan_a.weeks.get(week_number=4),
         description="unfinished gamma", position=0)
     plan_b = _make_plan(member, sprint_b, 6)
     plan_b_pk = plan_b.pk
@@ -148,6 +150,19 @@ class TestCarryOverFlow:
         assert weeks_text.count("unfinished alpha") == 1
         assert weeks_text.count("unfinished beta") == 1
         assert weeks_text.count("unfinished gamma") == 1
+
+        from plans.models import Plan
+
+        plan_b = Plan.objects.get(pk=plan_b_pk)
+        assert [
+            c.description
+            for c in plan_b.weeks.get(week_number=1).checkpoints.all()
+        ] == ["unfinished alpha", "unfinished beta"]
+        assert [
+            c.description
+            for c in plan_b.weeks.get(week_number=2).checkpoints.all()
+        ] == ["unfinished gamma"]
+        assert plan_b.weeks.get(week_number=3).checkpoints.count() == 0
 
         context.close()
 

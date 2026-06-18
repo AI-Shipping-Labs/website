@@ -75,12 +75,6 @@ class PricingMobileResponsiveTest(TestCase):
         content = self._get_pricing_content()
         self.assertIn("px-4 sm:px-6 lg:px-8", content)
 
-    def test_checkout_cancelled_banner_removed(self):
-        """Local checkout feedback banner is gone with local checkout creation."""
-        content = self._get_pricing_content()
-        self.assertNotIn('id="checkout-cancelled-banner"', content)
-        self.assertNotIn('id="dismiss-cancelled-banner"', content)
-
     def test_grid_has_responsive_gap(self):
         """The tier grid should have larger gap on mobile for badge visibility."""
         content = self._get_pricing_content()

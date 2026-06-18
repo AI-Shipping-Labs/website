@@ -10,6 +10,18 @@
   {# Issue #510: tighten mobile vertical spacing on the pricing tier section #}
   <section class="overflow-x-hidden max-lg:pb-6 pt-32 sm:pb-24 lg:pb-32" id="pricing-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div id="checkout-cancelled-banner" class="mb-8 hidden rounded-xl border border-amber-500/30 bg-amber-500/10 p-4" role="alert">
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <i data-lucide="circle-alert" class="h-5 w-5 text-amber-400"></i>
+            <p class="text-sm font-medium text-amber-200">Checkout was cancelled. You can try again anytime.</p>
+          </div>
+          <button type="button" id="dismiss-cancelled-banner" class="text-amber-300 transition-colors hover:text-amber-200" aria-label="Dismiss">
+            <i data-lucide="x" class="h-4 w-4"></i>
+          </button>
+        </div>
+      </div>
+
       <!-- Header -->
       <div class="mx-auto max-w-2xl text-center">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Membership</p>
@@ -172,6 +184,32 @@
 <script src="/static/js/accounts/inline-register.js"></script>
 {% endif %}
 <script>
+// Checkout cancelled feedback from Stripe Payment Links.
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('checkout') === 'cancelled') {
+    var banner = document.getElementById('checkout-cancelled-banner');
+    if (banner) {
+      banner.classList.remove('hidden');
+    }
+    var cleanUrl = new URL(window.location);
+    cleanUrl.searchParams.delete('checkout');
+    history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+  }
+  var dismissBtn = document.getElementById('dismiss-cancelled-banner');
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', function() {
+      var banner = document.getElementById('checkout-cancelled-banner');
+      if (banner) {
+        banner.remove();
+      }
+      var url = new URL(window.location);
+      url.searchParams.delete('checkout');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    });
+  }
+})();
+
 // Billing toggle (annual/monthly)
 var isAnnual = true;
 document.getElementById('billing-toggle').addEventListener('click', function() {

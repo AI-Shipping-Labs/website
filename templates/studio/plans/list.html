@@ -52,6 +52,7 @@
     <thead class="bg-secondary">
       <tr>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Member</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Sprint</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Shared</th>
         <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
@@ -63,6 +64,7 @@
         <td class="px-6 py-4 text-sm">
           <a href="{% url 'studio_user_detail' user_id=plan.member.pk %}" class="text-accent hover:underline" data-testid="plan-list-member-link">{{ plan.member.email }}</a>
         </td>
+        <td class="px-6 py-4 text-sm text-foreground">{{ plan.display_title }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ plan.sprint.name }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">
           {% if plan.shared_at %}{{ plan.shared_at|operator_date }}{% else %}-{% endif %}
@@ -78,7 +80,7 @@
       </tr>
       {% empty %}
         {% url 'studio_plan_list' as plans_clear_url %}
-        {% studio_empty_state 'filter' entity_label='plan' entity_label_plural='plans' clear_url=plans_clear_url colspan=4 %}
+        {% studio_empty_state 'filter' entity_label='plan' entity_label_plural='plans' clear_url=plans_clear_url colspan=5 %}
       {% endfor %}
     </tbody>
   </table>

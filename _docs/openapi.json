@@ -4835,7 +4835,8 @@
           "content": {
             "application/json": {
               "example": {
-                "goal": "Ship the LLM evaluation toolkit"
+                "goal": "Ship the LLM evaluation toolkit",
+                "title": "Evaluation toolkit sprint"
               },
               "schema": {
                 "properties": {
@@ -4856,6 +4857,10 @@
                   },
                   "summary": {
                     "type": "object"
+                  },
+                  "title": {
+                    "maxLength": 280,
+                    "type": "string"
                   }
                 },
                 "type": "object"
@@ -4886,7 +4891,7 @@
             "description": "Plan not found."
           },
           "422": {
-            "description": "Bad goal length or invalid focus.supporting type."
+            "description": "Bad title/goal length or invalid focus.supporting type."
           }
         },
         "summary": "Update plan-level fields",
@@ -6852,9 +6857,12 @@
                       "created_at": "2026-04-15T12:00:00+00:00",
                       "goal": "Ship the LLM evaluation toolkit",
                       "id": 5,
-                      "member_email": "alice@example.com",
-                      "sprint_slug": "may-2026",
-                      "updated_at": "2026-04-15T12:00:00+00:00"
+                      "shared_at": null,
+                      "sprint": "may-2026",
+                      "title": "Ship the LLM evaluation toolkit",
+                      "updated_at": "2026-04-15T12:00:00+00:00",
+                      "user_email": "alice@example.com",
+                      "visibility": "private"
                     }
                   ]
                 }
@@ -6896,6 +6904,7 @@
             "application/json": {
               "example": {
                 "goal": "Ship the LLM evaluation toolkit",
+                "title": "Evaluation toolkit sprint",
                 "user_email": "alice@example.com"
               },
               "schema": {
@@ -6904,6 +6913,10 @@
                     "type": "string"
                   },
                   "goal": {
+                    "maxLength": 280,
+                    "type": "string"
+                  },
+                  "title": {
                     "maxLength": 280,
                     "type": "string"
                   },
@@ -6960,7 +6973,7 @@
             "description": "User already has a plan in this sprint."
           },
           "422": {
-            "description": "Missing user_email, unknown user, bad goal length, or unknown enum value."
+            "description": "Missing user_email, unknown user, bad goal length, bad title length, or unknown enum value."
           }
         },
         "summary": "Create a plan (staff-only)",
@@ -6989,6 +7002,7 @@
                 "plans": [
                   {
                     "goal": "Ship the toolkit",
+                    "title": "Evaluation toolkit sprint",
                     "user_email": "alice@example.com"
                   }
                 ]

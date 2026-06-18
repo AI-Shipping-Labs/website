@@ -70,6 +70,63 @@ class PlanModelConstraintsTest(TestCase):
             Plan._meta.get_field('status')
 
 
+class PlanTitleTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.member = User.objects.create_user(
+            email='member@test.com',
+            password='pw',
+            first_name='Mia',
+            last_name='Maker',
+        )
+        cls.sprint = Sprint.objects.create(
+            name='May 2026',
+            slug='may-2026',
+            start_date=datetime.date(2026, 5, 1),
+        )
+
+    def test_explicit_title_is_trimmed_and_persisted(self):
+        plan = Plan.objects.create(
+            member=self.member,
+            sprint=self.sprint,
+            title='  Vector search portfolio  ',
+            goal='Private implementation details',
+        )
+
+        self.assertEqual(plan.title, 'Vector search portfolio')
+        self.assertEqual(plan.display_title, 'Vector search portfolio')
+
+    def test_blank_title_falls_back_to_goal_then_summary_goal(self):
+        goal_plan = Plan.objects.create(
+            member=self.member,
+            sprint=self.sprint,
+            title='',
+            goal='Ship a RAG demo',
+            summary_goal='Get clients',
+        )
+
+        self.assertEqual(goal_plan.title, 'Ship a RAG demo')
+
+        Sprint.objects.create(
+            name='June 2026',
+            slug='june-2026',
+            start_date=datetime.date(2026, 6, 1),
+        )
+        june = Sprint.objects.get(slug='june-2026')
+        summary_plan = Plan.objects.create(
+            member=self.member,
+            sprint=june,
+            summary_goal='Get my first AI client',
+        )
+
+        self.assertEqual(summary_plan.title, 'Get my first AI client')
+
+    def test_blank_title_generates_member_sprint_title(self):
+        plan = Plan.objects.create(member=self.member, sprint=self.sprint)
+
+        self.assertEqual(plan.title, "Mia Maker's May 2026 plan")
+
+
 class WeekModelConstraintsTest(TestCase):
     @classmethod
     def setUpTestData(cls):

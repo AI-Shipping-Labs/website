@@ -63,6 +63,9 @@ class PlansCreateTest(PlansApiTestBase):
         body = response.json()
         self.assertEqual(body["sprint"], "may-2026")
         self.assertEqual(body["user_email"], "member@test.com")
+        self.assertEqual(body["title"], "member's May 2026 plan")
+        self.assertEqual(body["visibility"], "private")
+        self.assertIsNone(body["shared_at"])
         # Nested keys present, even if empty.
         for key in (
             "weeks", "resources", "deliverables", "next_steps",
@@ -80,6 +83,30 @@ class PlansCreateTest(PlansApiTestBase):
         plan = Plan.objects.get(member=self.member, sprint=self.sprint)
         self.assertEqual(plan.summary_current_situation, "Currently doing X")
         self.assertEqual(plan.summary_goal, "Become Y")
+
+    def test_create_plan_accepts_explicit_title(self):
+        response = self._post({
+            "user_email": "member@test.com",
+            "title": "  Vector search portfolio  ",
+            "goal": "Do not use this as title",
+        })
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["title"], "Vector search portfolio")
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        self.assertEqual(plan.title, "Vector search portfolio")
+
+    def test_create_plan_blank_title_falls_back_to_goal(self):
+        response = self._post({
+            "user_email": "member@test.com",
+            "title": "   ",
+            "goal": "Ship a RAG demo",
+        })
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["title"], "Ship a RAG demo")
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        self.assertEqual(plan.title, "Ship a RAG demo")
 
     def test_create_plan_accepts_nested_summary(self):
         response = self._post({
@@ -162,6 +189,22 @@ class PlansListTest(PlansApiTestBase):
         self.assertIn(self.member_plan.id, ids)
         self.assertIn(self.other_plan.id, ids)
 
+    def test_list_returns_title_visibility_and_shared_at(self):
+        self.member_plan.title = "Member headline"
+        self.member_plan.visibility = "cohort"
+        self.member_plan.save(update_fields=["title", "visibility"])
+
+        response = self.client.get(
+            "/api/sprints/may-2026/plans", **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        rows = {p["id"]: p for p in response.json()["plans"]}
+        row = rows[self.member_plan.id]
+        self.assertEqual(row["title"], "Member headline")
+        self.assertEqual(row["visibility"], "cohort")
+        self.assertIn("shared_at", row)
+
 
 class PlanDetailTest(PlansApiTestBase):
     @classmethod
@@ -220,6 +263,9 @@ class PlanDetailTest(PlansApiTestBase):
         self.assertEqual(body["summary"]["goal"], "my goal")
         self.assertEqual(body["focus"]["main"], "main focus")
         self.assertEqual(body["focus"]["supporting"], ["a", "b"])
+        self.assertEqual(body["title"], "my goal")
+        self.assertEqual(body["visibility"], "private")
+        self.assertIn("shared_at", body)
 
     def test_get_detail_for_other_users_plan_returns_200_for_staff(self):
         response = self.client.get(
@@ -279,6 +325,28 @@ class PlanPatchTest(PlansApiTestBase):
         self.assertEqual(body["goal"], "Ship one project")
         self.plan.refresh_from_db()
         self.assertEqual(self.plan.goal, "Ship one project")
+
+    def test_patch_updates_title(self):
+        response = self._patch({"title": "  Agent evaluation harness  "})
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["title"], "Agent evaluation harness")
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.title, "Agent evaluation harness")
+
+    def test_patch_blank_title_falls_back_to_current_goal(self):
+        self.plan.goal = "Ship one project"
+        self.plan.title = "Old title"
+        self.plan.save(update_fields=["goal", "title"])
+
+        response = self._patch({"title": "   "})
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["title"], "Ship one project")
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.title, "Ship one project")
 
     def test_patch_rejects_overlong_short_goal(self):
         response = self._patch({"goal": "x" * 281})
@@ -365,6 +433,20 @@ class PlanCreateMaxLengthValidationTest(PlansApiTestBase):
         self.assertIn("summary.weekly_hours", body["details"])
         self.assertEqual(body["details"]["max_length"], max_len)
         # No row persisted.
+        self.assertEqual(Plan.objects.count(), before)
+
+    def test_rejects_overlong_title(self):
+        max_len = Plan._meta.get_field("title").max_length
+        before = Plan.objects.count()
+        response = self._post({
+            "user_email": "member@test.com",
+            "title": "x" * (max_len + 1),
+        })
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertEqual(body["details"]["max_length"], max_len)
+        self.assertIn("title", body["details"])
         self.assertEqual(Plan.objects.count(), before)
 
     def test_rejects_overlong_summary_weekly_hours_flat(self):
@@ -559,3 +641,13 @@ class PlanPatchMaxLengthValidationTest(PlansApiTestBase):
         self.assertEqual(body["details"]["max_length"], goal_max)
         self.plan.refresh_from_db()
         self.assertEqual(self.plan.goal, "")
+
+    def test_patch_title_uses_model_meta_max_length(self):
+        max_len = Plan._meta.get_field("title").max_length
+        response = self._patch({"title": "x" * (max_len + 1)})
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertEqual(body["details"]["max_length"], max_len)
+        self.plan.refresh_from_db()
+        self.assertNotEqual(self.plan.title, "x" * (max_len + 1))

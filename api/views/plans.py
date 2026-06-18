@@ -75,9 +75,12 @@ VALID_NEXT_STEP_KINDS = {choice for choice, _label in NEXT_STEP_KIND_CHOICES}
 
 _PLAN_FLAT_EXAMPLE = {
     "id": 5,
-    "member_email": "alice@example.com",
-    "sprint_slug": "may-2026",
+    "user_email": "alice@example.com",
+    "sprint": "may-2026",
+    "title": "Ship the LLM evaluation toolkit",
+    "visibility": "private",
     "goal": "Ship the LLM evaluation toolkit",
+    "shared_at": None,
     "created_at": "2026-04-15T12:00:00+00:00",
     "updated_at": "2026-04-15T12:00:00+00:00",
 }
@@ -238,6 +241,34 @@ def _validate_goal(value, *, index=None):
     return None
 
 
+def _validate_title(value, *, index=None):
+    if value is None:
+        return "", None
+    title_max = Plan._meta.get_field("title").max_length
+    if not isinstance(value, str):
+        return "", error_response(
+            "Invalid title",
+            "validation_error",
+            status=422,
+            details=_with_index({"title": "must be a string"}, index),
+        )
+    normalized = value.strip()
+    if len(normalized) > title_max:
+        return "", error_response(
+            "Invalid title",
+            "validation_error",
+            status=422,
+            details=_with_index(
+                {
+                    "title": f"must be {title_max} characters or fewer",
+                    "max_length": title_max,
+                },
+                index,
+            ),
+        )
+    return normalized, None
+
+
 def _validate_list(value, field_name, *, index=None):
     """``value`` must be a list."""
     if not isinstance(value, list):
@@ -372,6 +403,10 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
     if err is not None:
         return None, err
 
+    title_value, err = _validate_title(plan_data.get("title", ""), index=index)
+    if err is not None:
+        return None, err
+
     # Issue #725: validate every ``max_length``-constrained summary field
     # *before* save. ``summary_weekly_hours`` is the field that motivated
     # the bug; the same check applies to any other summary key that maps
@@ -393,6 +428,7 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
     plan = Plan(
         member=member,
         sprint=sprint,
+        title=title_value,
         goal=goal_value,
         accountability=plan_data.get("accountability", "") or "",
     )
@@ -988,6 +1024,7 @@ def _reconcile_interview_notes(plan, payload_rows):
                 "required": ["user_email"],
                 "properties": {
                     "user_email": {"type": "string", "format": "email"},
+                    "title": {"type": "string", "maxLength": 280},
                     "goal": {"type": "string", "maxLength": 280},
                     "accountability": {"type": "string"},
                     "weeks": {
@@ -997,6 +1034,7 @@ def _reconcile_interview_notes(plan, payload_rows):
                 },
                 "example": {
                     "user_email": "alice@example.com",
+                    "title": "Evaluation toolkit sprint",
                     "goal": "Ship the LLM evaluation toolkit",
                 },
             },
@@ -1025,7 +1063,7 @@ def _reconcile_interview_notes(plan, payload_rows):
                 422: {
                     "description": (
                         "Missing user_email, unknown user, bad goal "
-                        "length, or unknown enum value."
+                        "length, bad title length, or unknown enum value."
                     ),
                 },
             },
@@ -1120,6 +1158,7 @@ def sprint_plans_collection(request, slug):
                     "plans": [
                         {
                             "user_email": "alice@example.com",
+                            "title": "Evaluation toolkit sprint",
                             "goal": "Ship the toolkit",
                         },
                     ],
@@ -1406,6 +1445,7 @@ def _refetch_plan_detail(plan_id):
             ),
             "request_body": {
                 "properties": {
+                    "title": {"type": "string", "maxLength": 280},
                     "goal": {"type": "string", "maxLength": 280},
                     "accountability": {"type": "string"},
                     "summary": {"type": "object"},
@@ -1416,7 +1456,10 @@ def _refetch_plan_detail(plan_id):
                         "nullable": True,
                     },
                 },
-                "example": {"goal": "Ship the LLM evaluation toolkit"},
+                "example": {
+                    "title": "Evaluation toolkit sprint",
+                    "goal": "Ship the LLM evaluation toolkit",
+                },
             },
             "responses": {
                 200: {"description": "Plan updated (nested detail shape)."},
@@ -1434,7 +1477,7 @@ def _refetch_plan_detail(plan_id):
                 404: {"description": "Plan not found."},
                 422: {
                     "description": (
-                        "Bad goal length or invalid focus.supporting type."
+                        "Bad title/goal length or invalid focus.supporting type."
                     ),
                 },
             },
@@ -1794,6 +1837,13 @@ def _apply_top_level_fields(plan, data):
             return err, False
         focus_fields = _apply_focus(plan, data["focus"])
         update_fields.extend(focus_fields)
+
+    if "title" in data:
+        title, err = _validate_title(data["title"])
+        if err is not None:
+            return err, False
+        plan.title = title or plan.fallback_title()
+        update_fields.append("title")
 
     fire_plan_shared = False
     if "shared_at" in data:

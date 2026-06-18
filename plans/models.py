@@ -23,6 +23,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 
+from accounts.utils.display import display_name
 from accounts.utils.user_checks import is_authenticated_user, is_staff_user
 from content.access import LEVEL_MAIN
 from content.access import (
@@ -60,6 +61,8 @@ NEXT_STEP_KIND_CHOICES = [
     (NEXT_STEP_KIND_PRE_SPRINT, 'Pre-sprint action'),
     (NEXT_STEP_KIND_NEXT_STEP, 'Next step'),
 ]
+
+PLAN_TITLE_MAX_LENGTH = 280
 
 PLAN_READY_EMAIL_STATUS_SENDING = 'sending'
 PLAN_READY_EMAIL_STATUS_SENT = 'sent'
@@ -587,6 +590,12 @@ class Plan(TimestampedModelMixin, models.Model):
         choices=PLAN_VISIBILITY_CHOICES,
         default='private',
     )
+    title = models.CharField(
+        max_length=PLAN_TITLE_MAX_LENGTH,
+        blank=True,
+        default='',
+        help_text='Short non-sensitive headline shown on sprint boards.',
+    )
 
     # Short sprint headline. Visibility follows the plan; longer private
     # context stays in the summary fields below.
@@ -640,6 +649,45 @@ class Plan(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return f'{self.member} — {self.sprint}'
+
+    def fallback_title(self):
+        """Return the deterministic display title for this plan."""
+        for candidate in (self.goal, self.summary_goal):
+            value = (candidate or '').strip()
+            if value:
+                return value[:PLAN_TITLE_MAX_LENGTH]
+
+        member_label = display_name(self.member).strip() or 'Member'
+        sprint_name = getattr(self.sprint, 'name', '') or 'Sprint'
+        generated = f"{member_label}'s {sprint_name} plan"
+        return generated[:PLAN_TITLE_MAX_LENGTH]
+
+    @property
+    def display_title(self):
+        value = (self.title or '').strip()
+        if value:
+            return value
+        return self.fallback_title()
+
+    def ensure_title(self):
+        """Persist a trimmed title, deriving one when the field is blank."""
+        value = (self.title or '').strip()
+        self.title = value[:PLAN_TITLE_MAX_LENGTH] if value else self.fallback_title()
+        return self.title
+
+    def save(self, *args, **kwargs):
+        before_title = self.title
+        self.ensure_title()
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            fields = set(update_fields)
+            if fields and (
+                self.title != before_title
+                or any(f in fields for f in ('title', 'goal', 'summary_goal'))
+            ):
+                fields.add('title')
+                kwargs['update_fields'] = list(fields)
+        return super().save(*args, **kwargs)
 
     def mark_shared(self):
         """Stamp ``shared_at = timezone.now()`` and persist.

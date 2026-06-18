@@ -63,6 +63,13 @@ class CreatePlanForEnrollmentTest(TestCase):
         )
         self.assertEqual(plan.visibility, 'private')
 
+    def test_created_plan_gets_generated_title(self):
+        plan, _, _ = create_plan_for_enrollment(
+            sprint=self.sprint_6, user=self.member, enrolled_by=self.staff,
+        )
+
+        self.assertEqual(plan.title, "member's 6w plan")
+
     def test_creates_sprint_enrollment_with_enrolled_by(self):
         _plan, enrollment, _ = create_plan_for_enrollment(
             sprint=self.sprint_6, user=self.member, enrolled_by=self.staff,

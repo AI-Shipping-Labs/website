@@ -45,11 +45,13 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
         cls.viewer = _make_user('viewer@test.com')
         cls.viewer_plan = Plan.objects.create(
             member=cls.viewer, sprint=cls.sprint, visibility='cohort',
+            title='Launch a support bot',
         )
         cls.cohort_member = _make_user('cohort@test.com')
         cls.cohort_plan = Plan.objects.create(
             member=cls.cohort_member, sprint=cls.sprint,
             visibility='cohort',
+            title='Agent evaluation harness',
             goal='Ship cohort goal',
             focus_main='Cohort focus text',
         )
@@ -63,6 +65,7 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
         cls.private_plan = Plan.objects.create(
             member=cls.private_member, sprint=cls.sprint,
             visibility='private',
+            title='Vector search portfolio',
             focus_main='PRIVATE_FOCUS_TEXT',
         )
         cls.no_plan_member = _make_user('noplan@test.com')
@@ -100,19 +103,19 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
         self.assertEqual(row['plan'].pk, self.cohort_plan.pk)
         self.assertContains(response, 'Cohort focus text')
 
-    def test_cohort_row_goal_visible_in_html(self):
+    def test_cohort_row_title_visible_in_html(self):
         response, _ = self._get_rows()
         self.assertContains(
             response,
-            f'data-testid="cohort-row-goal-{self.cohort_member.pk}"',
+            f'data-testid="progress-row-link-{self.cohort_member.pk}"',
         )
-        self.assertContains(response, 'Ship cohort goal')
+        self.assertContains(response, 'Agent evaluation harness')
 
-    def test_cohort_row_uses_summary_goal_when_short_goal_empty(self):
+    def test_title_uses_summary_goal_fallback_when_title_and_goal_empty(self):
         response, _ = self._get_rows()
         self.assertContains(
             response,
-            f'data-testid="cohort-row-goal-{self.summary_goal_member.pk}"',
+            f'data-testid="progress-row-link-{self.summary_goal_member.pk}"',
         )
         self.assertContains(response, 'Ship summary goal fallback')
 
@@ -129,6 +132,7 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
             response,
             f'data-testid="private-badge-{self.private_member.pk}"',
         )
+        self.assertContains(response, 'Vector search portfolio')
 
     def test_no_plan_row_kind_and_caption(self):
         response, rows = self._get_rows()
@@ -162,6 +166,10 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
             },
         )
         self.assertNotContains(response, f'href="{forbidden_href}"')
+        self.assertContains(
+            response,
+            f'data-testid="cohort-row-title-{self.private_member.pk}"',
+        )
 
     def test_self_row_links_to_my_plan_detail(self):
         response, rows = self._get_rows()
@@ -177,6 +185,52 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
             },
         )
         self.assertContains(response, f'href="{my_plan_url}"')
+
+    def test_self_private_row_title_links_to_my_plan_detail(self):
+        self.viewer_plan.visibility = 'private'
+        self.viewer_plan.title = 'Fine-tune my portfolio'
+        self.viewer_plan.save(update_fields=['visibility', 'title'])
+
+        response, rows = self._get_rows()
+        self_row = next(r for r in rows if r['member'].pk == self.viewer.pk)
+        self.assertEqual(self_row['kind'], 'private')
+        my_plan_url = reverse(
+            'my_plan_detail',
+            kwargs={
+                'sprint_slug': self.sprint.slug,
+                'plan_id': self.viewer_plan.pk,
+            },
+        )
+        self.assertContains(response, 'Fine-tune my portfolio')
+        self.assertContains(response, f'href="{my_plan_url}"')
+        self.assertContains(
+            response,
+            f'data-testid="progress-row-link-{self.viewer.pk}"',
+        )
+
+    def test_member_column_is_not_plan_link_target(self):
+        response, _ = self._get_rows()
+        body = response.content.decode()
+        link_marker = f'data-testid="progress-row-link-{self.cohort_member.pk}"'
+        row_start = body.index(f'data-testid="progress-row-{self.cohort_member.pk}"')
+        name_index = body.index('data-testid="cohort-plan-name"', row_start)
+        link_index = body.index(link_marker, row_start)
+        self.assertLess(name_index, link_index)
+
+    def test_shared_and_private_badges_have_matching_structure(self):
+        response, _ = self._get_rows()
+        shared_class = (
+            'inline-flex items-center rounded-full border border-border '
+            'px-2 py-0.5 text-xs font-medium text-muted-foreground'
+        )
+        self.assertContains(
+            response,
+            f'class="{shared_class}" data-testid="shared-badge-{self.cohort_member.pk}"',
+        )
+        self.assertContains(
+            response,
+            f'class="{shared_class}" data-testid="private-badge-{self.private_member.pk}"',
+        )
 
 
 class CohortBoardSortOrderTest(TestCase):
@@ -347,6 +401,7 @@ class CohortBoardPrivacySentinelTest(TestCase):
             member=cls.dana,
             sprint=cls.sprint,
             visibility='private',
+            title='Private but visible headline',
             focus_main='SENTINEL_FOCUS_MAIN',
             focus_supporting=['SENTINEL_FOCUS_SUPPORTING'],
             accountability='SENTINEL_ACCOUNTABILITY',
@@ -403,6 +458,7 @@ class CohortBoardPrivacySentinelTest(TestCase):
             response,
             f'data-testid="private-badge-{self.dana.pk}"',
         )
+        self.assertContains(response, 'Private but visible headline')
 
         for sentinel in [
             'SENTINEL_FOCUS_MAIN',

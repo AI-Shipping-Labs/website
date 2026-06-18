@@ -31,10 +31,22 @@ Required context:
   </p>
   {% if banner_url %}
     <div class="flex items-start space-x-3">
-      <img src="{{ banner_url }}" alt="Banner / social image"
-           style="max-width: 200px;"
-           class="rounded border border-border bg-secondary"
-           data-testid="banner-generator-image">
+      <button type="button"
+              class="group relative block rounded border border-border bg-secondary focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-background"
+              aria-label="Open banner preview"
+              data-testid="banner-preview-control"
+              data-banner-source="{{ banner_source|default:'' }}">
+        <img src="{{ banner_url }}" alt="Banner / social image"
+             style="max-width: 200px;"
+             class="rounded bg-secondary"
+             data-testid="banner-generator-image">
+        <span class="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded bg-background/90 border border-border px-2 py-1 text-xs font-medium text-foreground shadow-sm opacity-95 group-hover:bg-background"
+              aria-hidden="true"
+              data-testid="banner-preview-affordance">
+          <i data-lucide="zoom-in" class="w-3 h-3"></i>
+          <span>Preview</span>
+        </span>
+      </button>
       {% if banner_source %}
         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary border border-border text-foreground"
               data-testid="banner-source-badge">{{ banner_source }}</span>
@@ -162,6 +174,105 @@ Required context:
      data-testid="banner-generator-live-status" hidden></p>
 </div>
 
+<script>
+(function () {
+  var script = document.currentScript;
+  var section = script ? script.previousElementSibling : null;
+  if (!section || !section.matches('[data-testid="banner-generator-section"]')) {
+    section = document.querySelector('[data-testid="banner-generator-section"]');
+  }
+  if (!section) { return; }
+
+  function callLucide() {
+    if (window.lucide && window.lucide.createIcons) {
+      window.lucide.createIcons();
+    }
+  }
+
+  function currentImageUrl(control) {
+    var img = control.querySelector('[data-testid="banner-generator-image"]');
+    if (!img) { return ''; }
+    return img.currentSrc || img.src || img.getAttribute('src') || '';
+  }
+
+  function ensureDialog(section) {
+    var dialog = section.querySelector('[data-testid="banner-preview-dialog"]');
+    if (dialog) { return dialog; }
+
+    dialog = document.createElement('dialog');
+    dialog.className =
+      'w-[min(96vw,1100px)] max-w-none rounded-lg border border-border bg-card p-0 text-foreground shadow-2xl backdrop:bg-background/80';
+    dialog.setAttribute('data-testid', 'banner-preview-dialog');
+    dialog.setAttribute('aria-label', 'Banner preview');
+    dialog.innerHTML =
+      '<div class="space-y-4 p-4 sm:p-5" data-testid="banner-preview-panel">' +
+        '<div class="flex items-start justify-between gap-3">' +
+          '<div class="min-w-0">' +
+            '<h4 class="text-sm font-semibold text-foreground">Banner preview</h4>' +
+            '<p class="mt-1 text-xs text-muted-foreground" data-testid="banner-preview-source"></p>' +
+          '</div>' +
+          '<button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-secondary text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-accent" aria-label="Close banner preview" data-testid="banner-preview-close">' +
+            '<i data-lucide="x" class="h-4 w-4"></i>' +
+          '</button>' +
+        '</div>' +
+        '<img alt="Banner / social image preview" class="max-h-[72vh] w-full rounded border border-border bg-secondary object-contain" data-testid="banner-preview-image">' +
+        '<div class="flex justify-end">' +
+          '<a class="inline-flex items-center gap-1 rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-accent" target="_blank" rel="noopener noreferrer" data-testid="banner-preview-open-link">' +
+            '<i data-lucide="external-link" class="h-4 w-4"></i>' +
+            '<span>Open image in new tab</span>' +
+          '</a>' +
+        '</div>' +
+      '</div>';
+
+    dialog.addEventListener('click', function (event) {
+      if (event.target === dialog) {
+        dialog.close();
+      }
+    });
+    dialog.addEventListener('close', function () {
+      var opener = section.__bannerPreviewOpener;
+      if (opener && document.contains(opener)) {
+        opener.focus();
+      }
+    });
+    section.appendChild(dialog);
+    callLucide();
+    return dialog;
+  }
+
+  function openPreview(section, control) {
+    var url = currentImageUrl(control);
+    if (!url) { return; }
+
+    var dialog = ensureDialog(section);
+    var img = dialog.querySelector('[data-testid="banner-preview-image"]');
+    var link = dialog.querySelector('[data-testid="banner-preview-open-link"]');
+    var source = dialog.querySelector('[data-testid="banner-preview-source"]');
+    var sourceLabel = control.getAttribute('data-banner-source') || '';
+
+    img.src = url;
+    link.href = url;
+    source.textContent = sourceLabel ? 'Source: ' + sourceLabel : '';
+    source.hidden = !sourceLabel;
+    section.__bannerPreviewOpener = control;
+    dialog.showModal();
+  }
+
+  section.addEventListener('click', function (event) {
+    var closeButton = event.target.closest('[data-testid="banner-preview-close"]');
+    if (closeButton) {
+      var dialog = section.querySelector('[data-testid="banner-preview-dialog"]');
+      if (dialog) { dialog.close(); }
+      return;
+    }
+
+    var control = event.target.closest('[data-testid="banner-preview-control"]');
+    if (!control || !section.contains(control)) { return; }
+    openPreview(section, control);
+  });
+})();
+</script>
+
 {% if banner_status_url %}
 {% comment %}
 Issue #995: progressive enhancement for the "Regenerate banner" form. Intercepts
@@ -235,6 +346,10 @@ when JS is enabled and banner_status_url is set).
     var img = section.querySelector('[data-testid="banner-generator-image"]');
     if (img) {
       img.src = busted;
+      var control = img.closest('[data-testid="banner-preview-control"]');
+      if (control) {
+        control.setAttribute('data-banner-source', control.getAttribute('data-banner-source') || 'Generated');
+      }
       return;
     }
     // Empty/placeholder state: replace the placeholder with a rendered <img>.
@@ -242,14 +357,41 @@ when JS is enabled and banner_status_url is set).
     if (placeholder) {
       var wrap = document.createElement('div');
       wrap.className = 'flex items-start space-x-3';
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className =
+        'group relative block rounded border border-border bg-secondary ' +
+        'focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-background';
+      button.setAttribute('aria-label', 'Open banner preview');
+      button.setAttribute('data-testid', 'banner-preview-control');
+      button.setAttribute('data-banner-source', 'Generated');
       var newImg = document.createElement('img');
       newImg.src = busted;
       newImg.alt = 'Banner / social image';
       newImg.style.maxWidth = '200px';
-      newImg.className = 'rounded border border-border bg-secondary';
+      newImg.className = 'rounded bg-secondary';
       newImg.setAttribute('data-testid', 'banner-generator-image');
-      wrap.appendChild(newImg);
+      var affordance = document.createElement('span');
+      affordance.className =
+        'absolute bottom-2 right-2 inline-flex items-center gap-1 rounded ' +
+        'bg-background/90 border border-border px-2 py-1 text-xs font-medium ' +
+        'text-foreground shadow-sm opacity-95 group-hover:bg-background';
+      affordance.setAttribute('aria-hidden', 'true');
+      affordance.setAttribute('data-testid', 'banner-preview-affordance');
+      affordance.innerHTML =
+        '<i data-lucide="zoom-in" class="w-3 h-3"></i><span>Preview</span>';
+      button.appendChild(newImg);
+      button.appendChild(affordance);
+      wrap.appendChild(button);
+      var badge = document.createElement('span');
+      badge.className =
+        'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ' +
+        'bg-secondary border border-border text-foreground';
+      badge.setAttribute('data-testid', 'banner-source-badge');
+      badge.textContent = 'Generated';
+      wrap.appendChild(badge);
       placeholder.replaceWith(wrap);
+      if (window.lucide && window.lucide.createIcons) { window.lucide.createIcons(); }
     }
   }
 

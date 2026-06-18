@@ -17,6 +17,10 @@ the profile into an LLM prompt or the plan body (manual-assist interpretation
 of the issue's open question -- no automatic generation in this phase).
 """
 
+from crm.services.activity_context import (
+    PROFILE_ACTIVITY_LIMIT,
+    build_activity_context,
+)
 from plans.models import InterviewNote
 from questionnaires.onboarding import (
     flatten_response_answers,
@@ -63,6 +67,10 @@ def build_member_profile_context(member):
     - ``summary`` / ``next_steps``: CRM snapshot fields (``''`` when none).
     - ``has_notes``: ``True`` when recent internal notes exist.
     - ``recent_notes``: up to ``RECENT_INTERNAL_NOTE_LIMIT`` internal notes.
+    - ``has_recent_activity``: ``True`` when recent activity rows exist.
+    - ``recent_activity``: up to ``PROFILE_ACTIVITY_LIMIT`` serialized rows.
+    - ``recent_activity_total`` / ``recent_activity_has_more``: prompt
+      provenance for the capped recent-activity slice.
     - ``copy_text``: a plain-text rendering of the whole profile.
     """
     onboarding_response = get_onboarding_response(member)
@@ -84,6 +92,10 @@ def build_member_profile_context(member):
         .select_related('created_by')
         .order_by('-created_at')[:RECENT_INTERNAL_NOTE_LIMIT]
     )
+    activity_context = build_activity_context(
+        member,
+        limit=PROFILE_ACTIVITY_LIMIT,
+    )
 
     context = {
         'member': member,
@@ -96,6 +108,11 @@ def build_member_profile_context(member):
         'next_steps': (record.next_steps or '').strip() if record else '',
         'has_notes': bool(recent_notes),
         'recent_notes': recent_notes,
+        'has_recent_activity': bool(activity_context['activities']),
+        'recent_activity': activity_context['activities'],
+        'recent_activity_total': activity_context['activity_total'],
+        'recent_activity_limit': activity_context['activity_limit'],
+        'recent_activity_has_more': activity_context['activity_has_more'],
     }
     context['copy_text'] = _render_copy_text(context)
     return context
@@ -142,6 +159,21 @@ def _render_copy_text(context):
             body = (note.body or '').strip()
             if body:
                 lines.append(f'- {body}')
+
+    if context['recent_activity']:
+        lines.append('')
+        lines.append('Recent activity:')
+        for activity in context['recent_activity']:
+            occurred = activity['occurred_at'].date().isoformat()
+            category = activity['category_label']
+            type_label = activity['type_label']
+            label = activity['label']
+            lines.append(f'- {occurred} [{category}] {type_label}: {label}')
+        if context['recent_activity_has_more']:
+            lines.append(
+                f'- Showing {context["recent_activity_limit"]} '
+                f'of {context["recent_activity_total"]} events'
+            )
 
     # Only the header line means nothing substantive to copy.
     if len(lines) <= 1:

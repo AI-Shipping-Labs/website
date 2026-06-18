@@ -1004,57 +1004,9 @@ def _build_activity_timeline(user):
     already-fetched window rows adds NO extra query — the marker only
     matters where it can actually render among the displayed rows.
     """
-    from analytics.activity import resolve_activity_target_urls
-    from analytics.models import UserActivity
+    from crm.services.activity_context import build_activity_context
 
-    rows = list(
-        UserActivity.objects
-        .filter(user=user)
-        .order_by('-occurred_at')[:USER_ACTIVITY_DISPLAY_LIMIT]
-    )
-    target_urls = resolve_activity_target_urls(rows)
-    activities = [
-        {
-            'type_label': activity.get_event_type_display(),
-            'label': activity.label,
-            'occurred_at': activity.occurred_at,
-            'target_url': target_urls.get(activity.pk, ''),
-            'is_payment': activity.event_type == UserActivity.EVENT_PAYMENT,
-        }
-        for activity in rows
-    ]
-
-    if len(rows) < USER_ACTIVITY_DISPLAY_LIMIT:
-        # Fewer than a full window -> we already know the total; no extra
-        # query needed.
-        total = len(rows)
-    else:
-        total = UserActivity.objects.filter(user=user).count()
-
-    # First (oldest) payment among the displayed rows. Derived in Python
-    # from ``rows`` so no extra query is issued. ``rows`` are newest-first,
-    # so the LAST payment in the list is the earliest in time.
-    first_payment_at = None
-    for activity in activities:
-        if activity['is_payment']:
-            first_payment_at = activity['occurred_at']
-    # Tag exactly the earliest payment row so the template renders the
-    # "Upgraded to paid" marker there once. Browsing rows older than it
-    # (below it in the newest-first list) read as pre-upgrade.
-    for activity in activities:
-        activity['is_upgrade_marker'] = (
-            first_payment_at is not None
-            and activity['is_payment']
-            and activity['occurred_at'] == first_payment_at
-        )
-
-    return {
-        'activities': activities,
-        'activity_total': total,
-        'activity_limit': USER_ACTIVITY_DISPLAY_LIMIT,
-        'activity_has_more': total > USER_ACTIVITY_DISPLAY_LIMIT,
-        'first_payment_at': first_payment_at,
-    }
+    return build_activity_context(user, limit=USER_ACTIVITY_DISPLAY_LIMIT)
 
 
 @staff_required

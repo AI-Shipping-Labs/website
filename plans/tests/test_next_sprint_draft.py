@@ -15,6 +15,7 @@ from plans.services.next_sprint_draft import (
     NextSprintDraftResult,
     NextSprintDraftUnavailable,
     OnboardingAnswer,
+    RecentActivity,
     RecentUpdate,
     _build_user_message,
     draft_next_sprint,
@@ -173,6 +174,14 @@ class ProfileBlockRenderingTest(SimpleTestCase):
                     prompt='Background?', answer='Ten years of backend Java',
                 ),
             ],
+            recent_activity=[
+                RecentActivity(
+                    occurred_at='2026-06-01',
+                    category='Learning',
+                    type_label='Lesson',
+                    label='Opened lesson: Agents basics',
+                ),
+            ],
         )
 
     def test_profile_block_rendered_before_plan_state(self):
@@ -189,6 +198,11 @@ class ProfileBlockRenderingTest(SimpleTestCase):
             message,
         )
         self.assertIn('  - Background?: Ten years of backend Java', message)
+        self.assertIn('Recent activity:', message)
+        self.assertIn(
+            '  - 2026-06-01 [Learning] Lesson: Opened lesson: Agents basics',
+            message,
+        )
         # Positioned before the current-plan-state block.
         self.assertLess(
             message.index('=== Member profile ==='),
@@ -216,6 +230,28 @@ class ProfileBlockRenderingTest(SimpleTestCase):
         self.assertNotIn('CRM summary:', message)
         self.assertNotIn('CRM next steps:', message)
         self.assertNotIn('Onboarding answers:', message)
+        self.assertNotIn('Recent activity:', message)
+
+    def test_recent_activity_alone_renders_profile_block(self):
+        message = _build_user_message(
+            NextSprintDraftInput(
+                recent_activity=[
+                    RecentActivity(
+                        occurred_at='2026-06-02',
+                        category='Events',
+                        type_label='Joined',
+                        label='Joined event: Sprint kickoff',
+                    ),
+                ],
+            ),
+        )
+
+        self.assertIn('=== Member profile ===', message)
+        self.assertIn('Recent activity:', message)
+        self.assertIn(
+            '  - 2026-06-02 [Events] Joined: Joined event: Sprint kickoff',
+            message,
+        )
 
 
 class DraftImportIsolationTest(SimpleTestCase):

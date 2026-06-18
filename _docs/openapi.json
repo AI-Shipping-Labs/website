@@ -8184,6 +8184,136 @@
         ]
       }
     },
+    "/api/users/{email}/activity": {
+      "get": {
+        "description": "Staff-only read endpoint for CRM/operator automation. Returns curated ``analytics.UserActivity`` rows using the same safe public/member-facing link policy as Studio CRM. No write endpoint exists for arbitrary activity rows.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Default 30; clamped to 100.",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "description": "One of all, learning, events, content, account, comms. Default all.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "description": "ISO-8601 datetime filter on occurred_at.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "activities": [
+                    {
+                      "category": "events",
+                      "event_type": "event_register",
+                      "id": 123,
+                      "is_upgrade_marker": false,
+                      "label": "Registered for event: Agents workshop",
+                      "object_id": "agents-workshop",
+                      "object_type": "event",
+                      "occurred_at": "2026-05-19T08:30:00+00:00",
+                      "target_url": "/events/agents-workshop",
+                      "type_label": "Registered"
+                    }
+                  ],
+                  "category_counts": {
+                    "account": 1,
+                    "all": 12,
+                    "comms": 2,
+                    "content": 2,
+                    "events": 3,
+                    "learning": 4
+                  },
+                  "crm_record": {
+                    "id": 42,
+                    "persona": "Sam - Technical Professional",
+                    "status": "active"
+                  },
+                  "has_more": true,
+                  "limit": 5,
+                  "total_count": 12,
+                  "user": {
+                    "display_name": "Alice Doe",
+                    "email": "alice@example.com",
+                    "tier": {
+                      "level": 20,
+                      "slug": "main",
+                      "source": "subscription"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "Recent activity context."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown email."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "allowed": [
+                      "all",
+                      "learning",
+                      "events",
+                      "content",
+                      "account",
+                      "comms"
+                    ],
+                    "field": "category",
+                    "value": "unknown"
+                  },
+                  "error": "Invalid activity category: 'unknown'"
+                }
+              }
+            },
+            "description": "Invalid limit, category, or since."
+          }
+        },
+        "summary": "List user activity context",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
     "/api/users/{email}/aliases": {
       "post": {
         "description": "Adds an ``EmailAlias`` routing ``alias_email`` -> the user identified by ``<email>``. Future Stripe webhooks whose billing email is the alias resolve to this canonical account instead of creating a duplicate. Idempotent: re-adding the same alias to the same owner returns 200, creates no duplicate row, and still writes an audit row. 409 ``alias_is_primary_email`` if the alias is already an existing primary ``User.email``; 409 ``alias_taken`` if it already routes to a DIFFERENT user; 422 on malformed email; 404 when ``<email>`` is unknown.",

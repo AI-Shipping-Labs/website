@@ -27,6 +27,14 @@ from crm.models import (
     IngestedProgressEvent,
     SlackChannelIngest,
 )
+from crm.services.activity_context import (
+    ACTIVITY_CATEGORIES,
+    ACTIVITY_CATEGORY_ALL,
+    ACTIVITY_CATEGORY_LABELS,
+    DEFAULT_ACTIVITY_LIMIT,
+    build_activity_context,
+    normalize_activity_category,
+)
 from crm.services.slack_updates import unmatched_threads
 from crm.tasks.apply_plan_sprint_progress import reverse_change, reverse_event
 from plans.models import InterviewNote, Plan
@@ -198,9 +206,35 @@ def _get_record(crm_id):
     )
 
 
-def _record_detail_context(record):
+def _activity_filter_chips(request, active_category):
+    """Return CRM activity filter chip data while preserving query params."""
+    categories = (ACTIVITY_CATEGORY_ALL, *ACTIVITY_CATEGORIES)
+    chips = []
+    for category in categories:
+        params = request.GET.copy()
+        params['activity_category'] = category
+        query = params.urlencode()
+        chips.append({
+            'category': category,
+            'label': ACTIVITY_CATEGORY_LABELS[category],
+            'url': f'?{query}' if query else request.path,
+            'active': category == active_category,
+        })
+    return chips
+
+
+def _record_detail_context(record, request):
     """Build the shared context for the CRM detail page."""
     tier_info = _active_tier_info(record.user)
+    activity_category = normalize_activity_category(
+        request.GET.get('activity_category', ''),
+    )
+    activity_context = build_activity_context(
+        record.user,
+        limit=DEFAULT_ACTIVITY_LIMIT,
+        category=activity_category,
+        include_category_counts=True,
+    )
     note_queryset = (
         InterviewNote.objects
         .filter(member=record.user)
@@ -245,6 +279,16 @@ def _record_detail_context(record):
         'tier_source': tier_info['source'],
         'member_plans': member_plans,
         'booked_calls': booked_calls,
+        'activities': activity_context['activities'],
+        'activity_total': activity_context['activity_total'],
+        'activity_limit': activity_context['activity_limit'],
+        'activity_has_more': activity_context['activity_has_more'],
+        'first_payment_at': activity_context['first_payment_at'],
+        'active_activity_category': activity_category,
+        'activity_filter_chips': _activity_filter_chips(
+            request, activity_category,
+        ),
+        'activity_category_counts': activity_context['activity_category_counts'],
         'onboarding_response': onboarding_response,
         'onboarding_answers': onboarding_answers,
         'onboarding_submitted': onboarding_submitted,
@@ -275,7 +319,7 @@ def crm_detail(request, crm_id):
     return render(
         request,
         'studio/crm/detail.html',
-        _record_detail_context(record),
+        _record_detail_context(record, request),
     )
 
 

@@ -132,6 +132,73 @@
   </form>
 </section>
 
+<!-- Recent activity -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-activity-section">
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+    <h2 class="text-lg font-semibold text-foreground">Recent activity</h2>
+    <div class="flex flex-wrap items-center gap-2" data-testid="crm-activity-filters">
+      {% for chip in activity_filter_chips %}
+      <a href="{{ chip.url }}"
+         data-testid="crm-activity-filter-{{ chip.category }}"
+         class="px-3 py-1.5 rounded-full text-xs font-medium border {% if chip.active %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
+        {{ chip.label }}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if activities %}
+  <ul class="divide-y divide-border" data-testid="crm-activity-list">
+    {% for activity in activities %}
+    <li class="py-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3"
+        data-testid="crm-activity-row"
+        data-category="{{ activity.category }}">
+      <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground shrink-0"
+            data-testid="crm-activity-type">
+        {{ activity.type_label }}
+      </span>
+      <div class="min-w-0 flex-1">
+        {% if activity.target_url %}
+        <a href="{{ activity.target_url }}"
+           class="text-foreground hover:text-accent hover:underline"
+           data-testid="crm-activity-label">
+          {{ activity.label }}
+        </a>
+        {% else %}
+        <span class="text-foreground" data-testid="crm-activity-label">{{ activity.label }}</span>
+        {% endif %}
+      </div>
+      <span class="inline-flex items-center text-xs px-2 py-1 rounded-full border border-border text-muted-foreground shrink-0"
+            data-testid="crm-activity-category">
+        {{ activity.category_label }}
+      </span>
+      <span class="text-xs text-muted-foreground font-mono tabular-nums shrink-0"
+            data-testid="crm-activity-time">
+        {{ activity.occurred_at|operator_datetime }}
+      </span>
+    </li>
+    {% if activity.is_upgrade_marker %}
+    <li class="py-2 flex items-center gap-2 text-xs font-medium text-accent"
+        data-testid="crm-activity-upgrade-marker">
+      <span class="flex-1 border-t border-accent/40"></span>
+      <span class="shrink-0 uppercase tracking-wide">Upgraded to paid</span>
+      <span class="flex-1 border-t border-accent/40"></span>
+    </li>
+    {% endif %}
+    {% endfor %}
+  </ul>
+  {% if activity_has_more %}
+  <p class="text-xs text-muted-foreground mt-4" data-testid="crm-activity-more">
+    Showing {{ activity_limit }} of {{ activity_total }} events
+  </p>
+  {% endif %}
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="crm-activity-empty">
+    No recorded activity yet. Activity will appear here as the member uses the site.
+  </p>
+  {% endif %}
+</section>
+
 <!-- Plans & sprints -->
 <section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-plans-section">
   <h2 class="text-lg font-semibold text-foreground mb-4">Plans &amp; sprints</h2>
@@ -232,14 +299,5 @@
 <!-- Member notes (reuse the existing partial) -->
 <section class="mb-8 max-w-4xl" data-testid="crm-notes-section">
   {% include "studio/users/_member_notes.html" %}
-</section>
-
-<!-- Content context (read-only roll-up, v1 placeholder) -->
-<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-content-context-section">
-  <h2 class="text-lg font-semibold text-foreground mb-2">Content context</h2>
-  <p class="text-sm text-muted-foreground" data-testid="crm-content-context-placeholder">
-    Coming soon &mdash; a read-only roll-up of this member&rsquo;s course enrollments,
-    upcoming event registrations, and recent project submissions.
-  </p>
 </section>
 {% endblock %}

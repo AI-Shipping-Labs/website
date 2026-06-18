@@ -12,7 +12,9 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
+from analytics.models import UserActivity
 from crm.models import CRMRecord
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
@@ -286,6 +288,13 @@ class DraftProfileInjectionTest(TestCase):
             summary='Strong engineer, needs a portfolio piece.',
             next_steps='Ship a RAG project this sprint.',
         )
+        UserActivity.objects.filter(user=member).delete()
+        UserActivity.objects.create(
+            user=member,
+            event_type=UserActivity.EVENT_LESSON_OPEN,
+            label='Opened lesson: Agents basics',
+            occurred_at=timezone.now(),
+        )
         return member
 
     def _enable_llm(self, draft=None):
@@ -321,6 +330,12 @@ class DraftProfileInjectionTest(TestCase):
             'Switch into an AI engineering role',
         )
         self.assertEqual(answers['Background?'], 'Ten years of backend Java')
+        self.assertEqual(len(draft_input.recent_activity), 1)
+        self.assertEqual(
+            draft_input.recent_activity[0].label,
+            'Opened lesson: Agents basics',
+        )
+        self.assertEqual(draft_input.recent_activity[0].category, 'Learning')
 
     def test_profile_block_rendered_in_user_message_via_service(self):
         from plans.services.next_sprint_draft import _build_user_message
@@ -335,6 +350,8 @@ class DraftProfileInjectionTest(TestCase):
 
         self.assertIn('=== Member profile ===', message)
         self.assertIn('Persona: Sam — Technical Professional', message)
+        self.assertIn('Recent activity:', message)
+        self.assertIn('Opened lesson: Agents basics', message)
         self.assertLess(
             message.index('=== Member profile ==='),
             message.index('=== Current plan state ==='),
@@ -358,6 +375,7 @@ class DraftProfileInjectionTest(TestCase):
 
     def test_member_with_no_profile_still_drafts(self):
         member = User.objects.create_user(email='blank@test.com', password='pw')
+        UserActivity.objects.filter(user=member).delete()
         dest = _make_plan(member, self.s_jun)
 
         enable, stub = self._enable_llm()
@@ -372,6 +390,7 @@ class DraftProfileInjectionTest(TestCase):
         self.assertEqual(draft_input.persona, '')
         self.assertEqual(draft_input.crm_summary, '')
         self.assertEqual(draft_input.onboarding_answers, [])
+        self.assertEqual(draft_input.recent_activity, [])
 
     def test_gate_off_omits_profile_from_input(self):
         member = self._profiled_member('gated@test.com')
@@ -391,6 +410,7 @@ class DraftProfileInjectionTest(TestCase):
         self.assertEqual(draft_input.crm_summary, '')
         self.assertEqual(draft_input.crm_next_steps, '')
         self.assertEqual(draft_input.onboarding_answers, [])
+        self.assertEqual(draft_input.recent_activity, [])
 
         from plans.services.next_sprint_draft import _build_user_message
         self.assertNotIn('=== Member profile ===', _build_user_message(draft_input))
@@ -417,4 +437,8 @@ class DraftProfileInjectionTest(TestCase):
         self.assertEqual(
             answers['What are your goals?'],
             'Switch into an AI engineering role',
+        )
+        self.assertEqual(
+            passed_input.recent_activity[0].label,
+            'Opened lesson: Agents basics',
         )

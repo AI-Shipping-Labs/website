@@ -8,7 +8,9 @@ import datetime
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
+from analytics.models import UserActivity
 from crm.models import CRMRecord
 from plans.models import InterviewNote, Plan, Sprint
 from questionnaires.models import (
@@ -47,6 +49,7 @@ class CRMViewsBase(TestCase):
         # method. We still wipe to guard against any global side
         # effects from the data migration.
         CRMRecord.objects.all().delete()
+        UserActivity.objects.all().delete()
         self.client.login(email='staff@test.com', password='pw')
 
 
@@ -173,9 +176,21 @@ class CRMDetailViewTest(CRMViewsBase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="crm-detail-header"')
         self.assertContains(response, 'data-testid="crm-snapshot-card"')
+        self.assertContains(response, 'data-testid="crm-activity-section"')
         self.assertContains(response, 'data-testid="crm-plans-section"')
         self.assertContains(response, 'data-testid="crm-notes-section"')
-        self.assertContains(response, 'data-testid="crm-content-context-section"')
+        self.assertNotContains(response, 'Content context')
+        self.assertNotContains(response, 'data-testid="crm-content-context-section"')
+
+    def test_activity_section_appears_after_snapshot_before_plans(self):
+        record = CRMRecord.objects.create(user=self.member)
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+        body = response.content.decode()
+        snapshot_pos = body.index('data-testid="crm-snapshot-card"')
+        activity_pos = body.index('data-testid="crm-activity-section"')
+        plans_pos = body.index('data-testid="crm-plans-section"')
+        self.assertLess(snapshot_pos, activity_pos)
+        self.assertLess(activity_pos, plans_pos)
 
     def test_detail_header_links_back_to_user_profile(self):
         record = CRMRecord.objects.create(user=self.member)
@@ -248,6 +263,125 @@ class CRMDetailViewTest(CRMViewsBase):
         response = self.client.get(f'/studio/crm/{record.pk}/')
         self.assertContains(response, 'data-testid="crm-detail-reactivate"')
         self.assertNotContains(response, 'data-testid="crm-detail-archive"')
+
+    def _add_activity(
+        self,
+        event_type,
+        label,
+        *,
+        minutes_ago=0,
+        target_url='',
+        object_type='',
+        object_id='',
+    ):
+        return UserActivity.objects.create(
+            user=self.member,
+            event_type=event_type,
+            label=label,
+            target_url=target_url,
+            object_type=object_type,
+            object_id=object_id,
+            occurred_at=timezone.now() - timezone.timedelta(minutes=minutes_ago),
+        )
+
+    def test_activity_section_renders_rows_with_category_and_safe_link(self):
+        record = CRMRecord.objects.create(user=self.member)
+        self._add_activity(
+            UserActivity.EVENT_RESOURCE_VIEW,
+            'Viewed article: Public Link',
+            target_url='/blog/public-link?utm_source=email',
+        )
+        self._add_activity(
+            UserActivity.EVENT_EMAIL_CLICK,
+            'Clicked external dashboard',
+            target_url='https://dashboard.stripe.com/customers/cus_123',
+            minutes_ago=1,
+        )
+
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+
+        self.assertContains(response, 'data-testid="crm-activity-row"', count=2)
+        self.assertContains(response, 'Viewed article: Public Link')
+        self.assertContains(response, 'data-testid="crm-activity-category"')
+        self.assertContains(response, 'Content')
+        self.assertContains(response, 'href="/blog/public-link"')
+        self.assertNotContains(response, 'utm_source')
+        self.assertNotContains(response, 'dashboard.stripe.com')
+
+    def test_activity_category_filter_limits_rows_without_dropping_sections(self):
+        record = CRMRecord.objects.create(user=self.member)
+        self._add_activity(
+            UserActivity.EVENT_COURSE_ENROLL,
+            'Enrolled in LLM Zoomcamp',
+        )
+        self._add_activity(
+            UserActivity.EVENT_EVENT_REGISTER,
+            'Registered for Sprint kickoff',
+            minutes_ago=1,
+        )
+
+        response = self.client.get(
+            f'/studio/crm/{record.pk}/?activity_category=learning',
+        )
+
+        self.assertContains(response, 'Enrolled in LLM Zoomcamp')
+        self.assertNotContains(response, 'Registered for Sprint kickoff')
+        self.assertContains(response, 'data-testid="crm-snapshot-card"')
+        self.assertContains(response, 'data-testid="crm-plans-section"')
+        self.assertContains(response, 'data-testid="crm-notes-section"')
+        self.assertContains(
+            response,
+            'data-testid="crm-activity-filter-learning"',
+        )
+
+    def test_activity_section_caps_long_timeline(self):
+        record = CRMRecord.objects.create(user=self.member)
+        for i in range(35):
+            self._add_activity(
+                UserActivity.EVENT_LESSON_OPEN,
+                f'Opened lesson {i}',
+                minutes_ago=i,
+            )
+
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+
+        self.assertContains(response, 'data-testid="crm-activity-row"', count=30)
+        self.assertContains(response, 'Showing 30 of 35 events')
+
+    def test_activity_section_empty_state(self):
+        record = CRMRecord.objects.create(user=self.member)
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+        self.assertContains(response, 'data-testid="crm-activity-empty"')
+        self.assertContains(
+            response,
+            'No recorded activity yet. Activity will appear here as the member uses the site.',
+        )
+
+    def test_activity_section_shows_paid_upgrade_marker(self):
+        record = CRMRecord.objects.create(user=self.member)
+        self._add_activity(
+            UserActivity.EVENT_RESOURCE_VIEW,
+            'Viewed before upgrade',
+            minutes_ago=30,
+        )
+        self._add_activity(
+            UserActivity.EVENT_PAYMENT,
+            'Payment: Main',
+            minutes_ago=20,
+        )
+        self._add_activity(
+            UserActivity.EVENT_RESOURCE_VIEW,
+            'Viewed after upgrade',
+            minutes_ago=10,
+        )
+
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+
+        self.assertContains(
+            response,
+            'data-testid="crm-activity-upgrade-marker"',
+        )
+        self.assertContains(response, 'Upgraded to paid')
 
 
 class CRMBookedCallsSectionTest(CRMViewsBase):

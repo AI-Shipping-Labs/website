@@ -150,6 +150,15 @@ class OnboardingAnswer(BaseModel):
     answer: str = ''
 
 
+class RecentActivity(BaseModel):
+    """One prompt-friendly member activity row."""
+
+    occurred_at: str = ''
+    category: str = ''
+    type_label: str = ''
+    label: str = ''
+
+
 class NextSprintDraftInput(BaseModel):
     """Plain (ORM-free) input the caller assembles for the draft.
 
@@ -174,6 +183,7 @@ class NextSprintDraftInput(BaseModel):
     crm_summary: str = ''
     crm_next_steps: str = ''
     onboarding_answers: list[OnboardingAnswer] = Field(default_factory=list)
+    recent_activity: list[RecentActivity] = Field(default_factory=list)
 
     # "Where the member is now" — current plan state.
     goal: str = ''
@@ -243,8 +253,18 @@ def _build_profile_lines(draft_input):
         a for a in draft_input.onboarding_answers
         if (a.prompt or '').strip() and (a.answer or '').strip()
     ]
+    recent_activity = [
+        row for row in draft_input.recent_activity
+        if (
+            (row.occurred_at or '').strip()
+            and (row.type_label or '').strip()
+            and (row.label or '').strip()
+        )
+    ]
 
-    if not (persona or crm_summary or crm_next_steps or answers):
+    if not (
+        persona or crm_summary or crm_next_steps or answers or recent_activity
+    ):
         return []
 
     lines = []
@@ -260,6 +280,17 @@ def _build_profile_lines(draft_input):
             prompt = answer.prompt.strip()
             value = answer.answer.strip()
             lines.append(f'  - {prompt}: {value}')
+    if recent_activity:
+        lines.append('Recent activity:')
+        for activity in recent_activity:
+            category = (activity.category or '').strip()
+            type_label = activity.type_label.strip()
+            label = activity.label.strip()
+            occurred_at = activity.occurred_at.strip()
+            category_prefix = f'[{category}] ' if category else ''
+            lines.append(
+                f'  - {occurred_at} {category_prefix}{type_label}: {label}'
+            )
     return lines
 
 

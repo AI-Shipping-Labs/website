@@ -61,6 +61,17 @@ from api.serializers.users import (
 )
 from api.utils import parse_json_body, require_methods
 from community.models import CommunityAuditLog
+from crm.models import CRMRecord
+from crm.services.activity_context import (
+    ACTIVITY_CATEGORIES,
+    ACTIVITY_CATEGORY_ALL,
+    DEFAULT_ACTIVITY_LIMIT,
+    MAX_ACTIVITY_LIMIT,
+    build_activity_context,
+    is_valid_activity_category,
+    normalize_activity_category,
+    serialize_activity_for_api,
+)
 from email_app.models import EmailLog, SesEvent
 
 User = get_user_model()
@@ -118,6 +129,33 @@ def _parse_since(raw, *, field="since"):
     return value, None
 
 
+def _parse_activity_limit(raw):
+    limit, err = _parse_limit(
+        raw,
+        default=DEFAULT_ACTIVITY_LIMIT,
+        field="limit",
+    )
+    if err is not None:
+        return None, err
+    return min(limit, MAX_ACTIVITY_LIMIT), None
+
+
+def _parse_activity_category(raw):
+    value = (raw or ACTIVITY_CATEGORY_ALL).strip().lower()
+    if is_valid_activity_category(value):
+        return normalize_activity_category(value), None
+    return None, error_response(
+        f"Invalid activity category: {raw!r}",
+        "validation_error",
+        status=422,
+        details={
+            "field": "category",
+            "value": raw,
+            "allowed": [ACTIVITY_CATEGORY_ALL, *ACTIVITY_CATEGORIES],
+        },
+    )
+
+
 def _find_user(email):
     """Look up a ``User`` by case-insensitive email."""
     if not email:
@@ -131,6 +169,24 @@ def _user_not_found_response():
         "user_not_found",
         status=404,
     )
+
+
+def _serialize_crm_record_summary(user):
+    record = CRMRecord.objects.select_related('persona_ref').filter(
+        user=user,
+    ).first()
+    if record is None:
+        return None
+    persona = ''
+    if record.persona_ref_id is not None and record.persona_ref is not None:
+        persona = record.persona_ref.display_label
+    else:
+        persona = (record.persona or '').strip()
+    return {
+        "id": record.pk,
+        "status": record.status,
+        "persona": persona,
+    }
 
 
 def _actor_label(request):
@@ -502,6 +558,157 @@ def user_detail(request, email):
         user = locked
 
     return JsonResponse(serialize_user_state(user), status=200)
+
+
+_ACTIVITY_EXAMPLE = {
+    "id": 123,
+    "event_type": "event_register",
+    "type_label": "Registered",
+    "category": "events",
+    "label": "Registered for event: Agents workshop",
+    "occurred_at": "2026-05-19T08:30:00+00:00",
+    "object_type": "event",
+    "object_id": "agents-workshop",
+    "target_url": "/events/agents-workshop",
+    "is_upgrade_marker": False,
+}
+
+
+@token_required
+@csrf_exempt
+@require_methods("GET")
+@openapi_spec(
+    tag="Users",
+    summary="List recent activity for a user",
+    methods={
+        "GET": {
+            "summary": "List user activity context",
+            "description": (
+                "Staff-only read endpoint for CRM/operator automation. "
+                "Returns curated ``analytics.UserActivity`` rows using the "
+                "same safe public/member-facing link policy as Studio CRM. "
+                "No write endpoint exists for arbitrary activity rows."
+            ),
+            "query": {
+                "limit": {
+                    "type": "integer",
+                    "required": False,
+                    "description": "Default 30; clamped to 100.",
+                },
+                "category": {
+                    "type": "string",
+                    "required": False,
+                    "description": (
+                        "One of all, learning, events, content, account, "
+                        "comms. Default all."
+                    ),
+                },
+                "since": {
+                    "type": "string",
+                    "required": False,
+                    "description": "ISO-8601 datetime filter on occurred_at.",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Recent activity context.",
+                    "example": {
+                        "user": {
+                            "email": "alice@example.com",
+                            "display_name": "Alice Doe",
+                            "tier": {
+                                "slug": "main",
+                                "level": 20,
+                                "source": "subscription",
+                            },
+                        },
+                        "crm_record": {
+                            "id": 42,
+                            "status": "active",
+                            "persona": "Sam - Technical Professional",
+                        },
+                        "total_count": 12,
+                        "limit": 5,
+                        "has_more": True,
+                        "category_counts": {
+                            "all": 12,
+                            "learning": 4,
+                            "events": 3,
+                            "content": 2,
+                            "account": 1,
+                            "comms": 2,
+                        },
+                        "activities": [_ACTIVITY_EXAMPLE],
+                    },
+                },
+                404: {
+                    "description": "Unknown email.",
+                    "example": {
+                        "error": "User not found",
+                        "code": "user_not_found",
+                    },
+                },
+                422: {
+                    "description": "Invalid limit, category, or since.",
+                    "example": {
+                        "error": "Invalid activity category: 'unknown'",
+                        "code": "validation_error",
+                        "details": {
+                            "field": "category",
+                            "value": "unknown",
+                            "allowed": [
+                                "all",
+                                "learning",
+                                "events",
+                                "content",
+                                "account",
+                                "comms",
+                            ],
+                        },
+                    },
+                },
+            },
+        },
+    },
+)
+def user_activity(request, email):
+    """``GET /api/users/<email>/activity``."""
+    user = _find_user(email)
+    if user is None:
+        return _user_not_found_response()
+
+    limit, err = _parse_activity_limit(request.GET.get("limit"))
+    if err is not None:
+        return err
+    since, err = _parse_since(request.GET.get("since"))
+    if err is not None:
+        return err
+    category, err = _parse_activity_category(request.GET.get("category"))
+    if err is not None:
+        return err
+
+    context = build_activity_context(
+        user,
+        limit=limit,
+        category=category,
+        since=since,
+        include_category_counts=True,
+    )
+    return JsonResponse(
+        {
+            "user": serialize_user_state(user, compact=True),
+            "crm_record": _serialize_crm_record_summary(user),
+            "total_count": context["activity_total"],
+            "limit": context["activity_limit"],
+            "has_more": context["activity_has_more"],
+            "category_counts": context["activity_category_counts"],
+            "activities": [
+                serialize_activity_for_api(activity)
+                for activity in context["activities"]
+            ],
+        },
+        status=200,
+    )
 
 
 _SES_EVENT_EXAMPLE = {

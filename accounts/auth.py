@@ -71,6 +71,44 @@ def token_required(view_func):
     return wrapper
 
 
+def token_required_any_user(view_func):
+    """Require a valid token row but do not require the owner to be staff.
+
+    This is intentionally narrow. Most operator API endpoints use
+    ``token_required`` and stay staff-only. A small member-owned API surface can
+    use this helper, then apply its own object-level queryset permission gate.
+    """
+
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        header = request.headers.get("Authorization", "")
+        if not header:
+            return JsonResponse(
+                {"error": "Authentication token required"},
+                status=401,
+            )
+
+        parts = header.split(" ", 1)
+        if len(parts) != 2 or parts[0] != "Token" or not parts[1]:
+            return JsonResponse(
+                {"error": "Authentication token required"},
+                status=401,
+            )
+
+        key = parts[1].strip()
+        token = Token.objects.filter(key=key).select_related("user").first()
+        if token is None:
+            return JsonResponse({"error": "Invalid token"}, status=401)
+
+        Token.objects.filter(pk=token.pk).update(last_used_at=timezone.now())
+
+        request.user = token.user
+        request.auth_token = token
+        return view_func(request, *args, **kwargs)
+
+    return wrapper
+
+
 def staff_session_or_token_required(view_func):
     """Allow EITHER a staff session OR a staff-owned API token.
 

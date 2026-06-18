@@ -1079,6 +1079,7 @@ def sprint_plans_collection(request, slug):
         .select_related("member", "sprint")
         .prefetch_related(
             "weeks__checkpoints",
+            "weeks__notes__author",
             "resources",
             "deliverables",
             "next_steps",
@@ -1225,6 +1226,7 @@ def _refetch_plan_detail(plan_id):
         .select_related("member", "sprint")
         .prefetch_related(
             "weeks__checkpoints",
+            "weeks__notes__author",
             "resources",
             "deliverables",
             "next_steps",
@@ -1326,6 +1328,7 @@ def plan_detail(request, plan_id):
         .select_related("member", "sprint")
         .prefetch_related(
             "weeks__checkpoints",
+            "weeks__notes__author",
             "resources",
             "deliverables",
             "next_steps",
@@ -1738,6 +1741,7 @@ def plan_draft_next_sprint(request, plan_id):
         .select_related("member", "sprint")
         .prefetch_related(
             "weeks__checkpoints",
+            "weeks__notes__author",
             "deliverables",
             "next_steps",
         )

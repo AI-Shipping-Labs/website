@@ -49,6 +49,7 @@ LEGITIMATE_DELETE_HANDLERS = {
     # 4. Member-owned plan structure edits
     "plans.plan_detail": "member-owned plan edit: deletes a Plan (staff-only, sprint-guarded)",
     "weeks.week_detail": "member-owned plan edit: deletes a Week, re-packs",
+    "weeks.week_note_detail": "member-owned plan edit: clears a singleton WeekNote",
     "checkpoints.checkpoint_detail": "member-owned plan edit: deletes a Checkpoint, re-packs",
     "plan_items.resource_detail": "member-owned plan edit: deletes a plan resource, re-packs",
     "plan_items.deliverable_detail": "member-owned plan edit: deletes a plan deliverable, re-packs",

@@ -76,6 +76,22 @@ class WeekNoteCreateTest(TestCase):
         self.assertEqual(notes[0].body, 'Finished data import, blocked on evals')
         self.assertEqual(notes[0].author_id, self.owner.id)
 
+    def test_create_route_updates_existing_note(self):
+        note = WeekNote.objects.create(
+            week=self.week,
+            body='first weekly note',
+            author=self.owner,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            self._create_url(self.plan, self.week),
+            data={'body': 'updated weekly note'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.week.notes.count(), 1)
+        note.refresh_from_db()
+        self.assertEqual(note.body, 'updated weekly note')
+
     def test_blank_body_returns_400(self):
         self.client.force_login(self.owner)
         response = self.client.post(
@@ -136,6 +152,7 @@ class WeekNoteUpdateDeleteTest(TestCase):
             member=cls.owner, sprint=cls.sprint, visibility='cohort',
         )
         cls.week = Week.objects.create(plan=cls.plan, week_number=1)
+        cls.other_week = Week.objects.create(plan=cls.plan, week_number=2)
         # Author is the owner; the second note is also authored by
         # owner in normal flow -- a stray "foreign-author" row is
         # used only to defend the author check.
@@ -143,7 +160,7 @@ class WeekNoteUpdateDeleteTest(TestCase):
             week=cls.week, body='original body', author=cls.owner,
         )
         cls.foreign_authored = WeekNote.objects.create(
-            week=cls.week, body='foreign author body', author=cls.other,
+            week=cls.other_week, body='foreign author body', author=cls.other,
         )
 
     def _update_url(self, plan, note):
@@ -250,11 +267,9 @@ class MyPlanRendersWeekNotesTest(TestCase):
             member=cls.owner, sprint=cls.sprint, visibility='cohort',
         )
         cls.week = Week.objects.create(plan=cls.plan, week_number=1)
-        cls.note_old = WeekNote.objects.create(
-            week=cls.week, body='OLDEST_NOTE_MARKER', author=cls.owner,
-        )
-        cls.note_new = WeekNote.objects.create(
-            week=cls.week, body='NEWEST_NOTE_MARKER', author=cls.owner,
+        cls.empty_week = Week.objects.create(plan=cls.plan, week_number=2)
+        cls.note = WeekNote.objects.create(
+            week=cls.week, body='SINGLETON_NOTE_MARKER', author=cls.owner,
         )
 
     def test_owner_page_renders_notes_with_edit_form(self):
@@ -269,16 +284,18 @@ class MyPlanRendersWeekNotesTest(TestCase):
             ),
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'OLDEST_NOTE_MARKER')
-        self.assertContains(response, 'NEWEST_NOTE_MARKER')
-        # Owner sees the add-note textarea
-        self.assertContains(response, 'data-testid="plan-week-note-add-form"')
-        self.assertContains(response, 'data-testid="plan-week-note-add-textarea"')
+        self.assertContains(response, 'SINGLETON_NOTE_MARKER')
+        self.assertContains(
+            response,
+            '<li class="py-3 first:pt-0" data-testid="plan-week-note"',
+            count=1,
+        )
+        self.assertContains(response, 'data-testid="plan-week-note-add-form"', count=1)
         # Owner sees the edit/delete controls on their own notes
         self.assertContains(response, 'data-testid="plan-week-note-edit"')
         self.assertContains(response, 'data-testid="plan-week-note-delete"')
 
-    def test_owner_page_orders_notes_newest_first(self):
+    def test_owner_page_does_not_render_add_form_for_existing_note_week(self):
         self.client.force_login(self.owner)
         response = self.client.get(
             reverse(
@@ -290,11 +307,11 @@ class MyPlanRendersWeekNotesTest(TestCase):
             ),
         )
         body = response.content.decode('utf-8')
-        new_pos = body.find('NEWEST_NOTE_MARKER')
-        old_pos = body.find('OLDEST_NOTE_MARKER')
-        self.assertGreater(new_pos, 0)
-        self.assertGreater(old_pos, 0)
-        self.assertLess(new_pos, old_pos, 'newest note must render first')
+        week1_start = body.find(f'data-week-id="{self.week.pk}"')
+        week2_start = body.find(f'data-week-id="{self.empty_week.pk}"')
+        week1_html = body[week1_start:week2_start]
+        self.assertIn('SINGLETON_NOTE_MARKER', week1_html)
+        self.assertNotIn('data-testid="plan-week-note-add-form"', week1_html)
 
     def test_owner_page_does_not_render_internal_interview_note(self):
         InterviewNote.objects.create(
@@ -378,3 +395,43 @@ class TeammatePlanRendersWeekNotesReadOnlyTest(TestCase):
         self.client.force_login(self.bob)
         response = self.client.get(self._url())
         self.assertNotContains(response, 'SECRET_INTERNAL_VIA_TEAMMATE')
+
+
+class StudioPlanRendersWeekNotesReadOnlyTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='studio-week-notes@test.com',
+            password='pw',
+            is_staff=True,
+        )
+        cls.owner = User.objects.create_user(
+            email='studio-owner@test.com',
+            password='pw',
+        )
+        cls.sprint = Sprint.objects.create(
+            name='Studio Notes Sprint',
+            slug='studio-notes-sprint',
+            start_date=datetime.date(2026, 5, 1),
+        )
+        cls.plan = Plan.objects.create(
+            member=cls.owner, sprint=cls.sprint, visibility='cohort',
+        )
+        cls.week = Week.objects.create(plan=cls.plan, week_number=1)
+        WeekNote.objects.create(
+            week=cls.week,
+            body='STUDIO_SINGLETON_NOTE',
+            author=cls.owner,
+        )
+
+    def test_studio_plan_detail_renders_one_note_read_only(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(
+            reverse('studio_plan_detail', kwargs={'plan_id': self.plan.pk}),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'STUDIO_SINGLETON_NOTE')
+        self.assertContains(response, 'data-testid="studio-plan-week-note"', count=1)
+        self.assertNotContains(response, 'data-testid="plan-week-note-add-form"')
+        self.assertNotContains(response, 'data-testid="plan-week-note-edit"')
+        self.assertNotContains(response, 'data-testid="plan-week-note-delete"')

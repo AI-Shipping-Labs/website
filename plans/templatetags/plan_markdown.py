@@ -8,6 +8,7 @@ from django import template
 from django.utils.safestring import mark_safe
 
 from content.utils.markdown import render_markdown
+from plans.resource_display import normalize_resource_display
 
 register = template.Library()
 
@@ -139,3 +140,12 @@ def render_plan_markdown(value):
 @register.filter(name="plan_markdown")
 def plan_markdown(value):
     return mark_safe(render_plan_markdown(value))
+
+
+@register.filter(name="resource_display")
+def resource_display(resource):
+    return normalize_resource_display(
+        getattr(resource, "title", ""),
+        getattr(resource, "url", ""),
+        getattr(resource, "note", ""),
+    )

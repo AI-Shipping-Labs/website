@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load plan_markdown %}
 
 {% block studio_title %}Plan: {{ plan.member.email }}{% endblock %}
 
@@ -139,10 +140,12 @@
   {% if resources %}
   <ul class="text-sm text-foreground space-y-2">
     {% for r in resources %}
+    {% with display=r|resource_display %}
     <li>
-      {% if r.url %}<a href="{{ r.url }}" class="text-accent hover:underline">{{ r.title }}</a>{% else %}{{ r.title }}{% endif %}
-      {% if r.note %} — <span class="text-muted-foreground">{{ r.note }}</span>{% endif %}
+      {% if display.url %}<a href="{{ display.url }}" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline">{{ display.title }}</a>{% else %}{{ display.title }}{% endif %}
+      {% if display.note %} — <span class="plan-markdown text-muted-foreground">{{ display.note|plan_markdown }}</span>{% endif %}
     </li>
+    {% endwith %}
     {% endfor %}
   </ul>
   {% else %}

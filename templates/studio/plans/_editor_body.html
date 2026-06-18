@@ -97,13 +97,9 @@
      data-api-token="{{ api_token }}"
      data-plan-id="{{ plan.pk }}">
 
-  {# JSON bootstrap. <script type="application/json"> avoids HTML escaping #}
-  {# headaches and is parsed once on load. ``json_script`` would also work #}
-  {# but emits a wrapping script tag with id="..." which is fine; we use #}
-  {# a plain script tag so the test can read the textContent directly. #}
-  <script id="plan-editor-data"
-          type="application/json"
-          data-testid="plan-editor-data">{{ plan_json|safe }}</script>
+  {# JSON bootstrap. ``json_script`` escapes <, >, and & so user content #}
+  {# containing </script> cannot terminate the data script early. #}
+  {{ plan_payload|json_script:"plan-editor-data" }}
 
   {# Summary block. Five textareas, debounced PATCH on plan. #}
   <section class="bg-card border border-border rounded-lg p-6 mb-6"
@@ -278,18 +274,22 @@
         <ul data-testid="resource-list"
             class="plan-editor-resource-list space-y-2">
           {% for r in plan.resources.all|dictsort:"position" %}
+          {% with display=r|resource_display %}
           <li data-testid="resource-row"
               data-resource-id="{{ r.pk }}"
               tabindex="0"
               class="plan-editor-resource group flex flex-col gap-1 px-3 py-2 rounded-lg bg-secondary border border-border focus:outline-none focus:ring-2 focus:ring-accent">
-            <span class="text-sm text-foreground">{{ r.title }}</span>
-            {% if r.url %}
-            <a href="{{ r.url }}" target="_blank" rel="noopener" class="text-xs text-accent truncate">{{ r.url }}</a>
+            {% if display.url %}
+            <a href="{{ display.url }}" target="_blank" rel="noopener noreferrer" class="text-sm font-medium text-accent hover:underline" data-testid="resource-row-link">{{ display.title }}</a>
+            <a href="{{ display.url }}" target="_blank" rel="noopener noreferrer" class="text-xs text-accent truncate" data-testid="resource-row-url">{{ display.url }}</a>
+            {% else %}
+            <span class="text-sm font-medium text-foreground" data-testid="resource-row-title">{{ display.title }}</span>
             {% endif %}
-            {% if r.note %}
-            <span class="text-xs text-muted-foreground">{{ r.note }}</span>
+            {% if display.note %}
+            <span class="plan-markdown text-xs text-muted-foreground" data-testid="resource-row-note">{{ display.note|plan_markdown }}</span>
             {% endif %}
           </li>
+          {% endwith %}
           {% endfor %}
         </ul>
         <button type="button"

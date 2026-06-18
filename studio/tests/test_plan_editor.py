@@ -242,6 +242,32 @@ class PlanEditorBootstrapPayloadTest(TestCase):
         self.assertIn('EXTERNAL_NOTE_BODY', external_bodies)
         self.assertNotIn('EXTERNAL_NOTE_BODY', internal_bodies)
 
+    def test_payload_escapes_script_closing_sequence_in_resource_note(self):
+        unsafe_note = (
+            'Safe text </script><script>alert(1)</script> '
+            '[bad](javascript:alert(1))'
+        )
+        Resource.objects.create(
+            plan=self.plan,
+            title='Unsafe bootstrap note',
+            note=unsafe_note,
+            position=1,
+        )
+
+        response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
+        body = response.content.decode('utf-8')
+        payload = self._extract_payload(body)
+
+        resource = next(
+            r for r in payload['resources']
+            if r['title'] == 'Unsafe bootstrap note'
+        )
+        self.assertEqual(resource['note'], unsafe_note)
+        self.assertIn('\\u003C/script\\u003E', body)
+        self.assertNotIn(unsafe_note, body)
+        self.assertNotIn('</script><script>alert(1)</script>', body)
+        self.assertEqual(body.count('<script id="plan-editor-data"'), 1)
+
 
 class PlanEditorRenderTest(TestCase):
     """The editor shell renders the documented surface elements."""
@@ -390,6 +416,66 @@ class StudioPlanParticipantNavigationTest(TestCase):
         # Both visibility tabs render.
         self.assertContains(response, 'data-testid="interview-notes-tab-internal"')
         self.assertContains(response, 'data-testid="interview-notes-tab-external"')
+
+    def test_resources_panel_renders_structured_and_sanitized_rows(self):
+        Resource.objects.create(
+            plan=self.plan,
+            title='[Deployment docs](https://docs.example.com/deploy)',
+            position=0,
+        )
+        Resource.objects.create(
+            plan=self.plan,
+            title='Launch checklist',
+            url='https://example.com/checklist',
+            note='Use **before** demo and [bad](javascript:alert(1))',
+            position=1,
+        )
+        Resource.objects.create(
+            plan=self.plan,
+            title='Carlos notes',
+            position=2,
+        )
+
+        response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
+        body = response.content.decode('utf-8')
+        resources_panel = body[
+            body.index('data-testid="resources-panel"'):
+            body.index('data-testid="deliverables-panel"')
+        ]
+
+        self.assertContains(response, 'data-testid="resources-panel"')
+        self.assertContains(response, 'href="https://docs.example.com/deploy"')
+        self.assertContains(response, 'Deployment docs')
+        self.assertContains(response, 'href="https://example.com/checklist"')
+        self.assertContains(response, '<strong>before</strong>', html=True)
+        self.assertContains(response, 'Carlos notes')
+        self.assertNotIn('[Deployment docs](', resources_panel)
+        self.assertNotIn('href="javascript:', resources_panel)
+        self.assertNotIn('<script', resources_panel)
+
+    def test_resources_panel_does_not_show_raw_json_when_note_contains_script_close(self):
+        Resource.objects.create(
+            plan=self.plan,
+            title='Unsafe note',
+            note=(
+                'Safe text </script><script>alert(1)</script> '
+                '[bad](javascript:alert(1))'
+            ),
+            position=0,
+        )
+
+        response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
+        body = response.content.decode('utf-8')
+        data_start = body.index('<script id="plan-editor-data"')
+        data_end = body.index('</script>', data_start)
+        visible_shell = body[
+            data_end + len('</script>'):
+        ]
+
+        self.assertContains(response, 'data-testid="resources-panel"')
+        self.assertNotIn('"resources":', visible_shell)
+        self.assertNotIn('"note":', visible_shell)
+        self.assertNotIn('javascript:alert(1)', visible_shell)
 
     def test_sortable_js_loaded_with_pinned_version_and_sri(self):
         """SortableJS comes from cdn.jsdelivr.net at version 1.15.2 with SRI.

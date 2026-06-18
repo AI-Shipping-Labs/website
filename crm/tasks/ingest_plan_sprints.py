@@ -27,6 +27,7 @@ from django.utils import timezone
 from community.services.slack import SlackAPIError, SlackCommunityService
 from community.slack_config import get_slack_plan_sprints_channel_id
 from crm.models import SlackChannelIngest, SlackMessage, SlackThread
+from crm.services.slack_note_sync import sync_thread_to_interview_note
 from crm.tasks.apply_plan_sprint_progress import apply_progress_for_threads
 from integrations.config import get_config, is_enabled
 from plans.models import Plan
@@ -99,6 +100,20 @@ def _resolve_member_and_plan(slack_user_id):
     return member, plan
 
 
+def _refresh_thread_match(thread, member, plan):
+    """Persist a newly-resolved member/plan on an existing raw thread."""
+    update_fields = []
+    if member is not None and thread.member_id != member.pk:
+        thread.member = member
+        update_fields.append("member")
+    if plan is not None and thread.plan_id != plan.pk:
+        thread.plan = plan
+        update_fields.append("plan")
+    if update_fields:
+        thread.save(update_fields=update_fields)
+    return thread.member_id is not None
+
+
 def _last_successful_latest_ts(channel_id):
     """The ``latest_ts`` of the most recent successful run for this channel."""
     last = (
@@ -137,6 +152,8 @@ def _upsert_thread(service, run, channel_id, root_message):
     )
     if created:
         thread.permalink = service.get_message_permalink(channel_id, thread_ts)
+    else:
+        _refresh_thread_match(thread, member, plan)
 
     # Fetch the full thread (root + every reply) so late-arriving replies
     # are picked up on later runs.
@@ -183,6 +200,8 @@ def _upsert_thread(service, run, channel_id, root_message):
     if created:
         update_fields.append("permalink")
     thread.save(update_fields=update_fields)
+    if member is not None:
+        sync_thread_to_interview_note(thread, ingest=run)
 
     return new_replies, created, (member is not None), thread
 
@@ -309,6 +328,8 @@ def _reread_thread_replies(service, run, thread):
     thread.last_seen_ingest = run
     thread.reply_count = max(thread.messages.count() - 1, 0)
     thread.save(update_fields=["last_seen_ingest", "reply_count"])
+    if thread.member_id is not None:
+        sync_thread_to_interview_note(thread, ingest=run)
     return new_replies
 
 
@@ -363,6 +384,7 @@ def _run_reparse(service, channel_id, since_ts, *, dry_run):
     threads = list(
         SlackThread.objects
         .filter(channel_id=channel_id, posted_at__gte=since_dt)
+        .select_related('member', 'plan__sprint', 'interview_note')
         .order_by('posted_at')
     )
 
@@ -375,7 +397,9 @@ def _run_reparse(service, channel_id, since_ts, *, dry_run):
     try:
         for thread in threads:
             threads_seen += 1
-            if thread.member_id is not None:
+            member, plan = _resolve_member_and_plan(thread.slack_user_id)
+            matched = _refresh_thread_match(thread, member, plan)
+            if matched:
                 members_matched += 1
             with transaction.atomic():
                 new_replies = _reread_thread_replies(service, run, thread)

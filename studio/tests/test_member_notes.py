@@ -111,6 +111,7 @@ class MemberNoteCreateEditDeleteTest(MemberNotesTestBase):
                 'visibility': 'external',
                 'plan_id': str(self.spring_plan.pk),
                 'body': 'Meeting note body',
+                'tags': 'Manual Review, Sprint:May-2026, manual review',
             },
             follow=True,
         )
@@ -122,6 +123,7 @@ class MemberNoteCreateEditDeleteTest(MemberNotesTestBase):
         self.assertEqual(note.member, self.member)
         self.assertEqual(note.plan, self.spring_plan)
         self.assertEqual(note.created_by, self.staff)
+        self.assertEqual(note.tags, ['manual-review', 'sprint:may-2026'])
         self.assertContains(response, 'Member note added.')
 
     def test_create_with_tampered_other_member_plan_stores_unattached(self):
@@ -174,6 +176,7 @@ class MemberNoteCreateEditDeleteTest(MemberNotesTestBase):
                 'visibility': 'external',
                 'plan_id': '',
                 'body': 'After',
+                'tags': 'Needs Follow Up',
             },
         )
         self.assertRedirects(
@@ -185,6 +188,41 @@ class MemberNoteCreateEditDeleteTest(MemberNotesTestBase):
         self.assertEqual(note.kind, 'general')
         self.assertEqual(note.visibility, 'external')
         self.assertEqual(note.body, 'After')
+        self.assertEqual(note.tags, ['needs-follow-up'])
+
+    def test_edit_slack_note_tags_preserves_source_metadata(self):
+        note = InterviewNote.objects.create(
+            plan=self.spring_plan,
+            member=self.member,
+            visibility='internal',
+            kind='general',
+            body='_Clean body_',
+            tags=['slack', 'plan-sprints'],
+            source_type='slack',
+            source_metadata={'thread_ts': '1700000000.000000'},
+        )
+        response = self.client.post(
+            f'/studio/users/{self.member.pk}/notes/{note.pk}/edit',
+            {
+                'kind': 'general',
+                'visibility': 'internal',
+                'plan_id': str(self.spring_plan.pk),
+                'body': 'Clean body',
+                'tags': 'slack, plan-sprints, Needs Follow Up',
+            },
+        )
+        self.assertRedirects(
+            response,
+            f'/studio/users/{self.member.pk}/#member-notes',
+        )
+        note.refresh_from_db()
+        self.assertEqual(
+            note.tags,
+            ['slack', 'plan-sprints', 'needs-follow-up'],
+        )
+        self.assertEqual(note.source_type, 'slack')
+        self.assertEqual(note.source_metadata, {'thread_ts': '1700000000.000000'})
+        self.assertEqual(note.body, 'Clean body')
 
     def test_delete_removes_note_and_redirects_to_anchor(self):
         note = InterviewNote.objects.create(

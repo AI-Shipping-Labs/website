@@ -3295,6 +3295,9 @@
               "example": {
                 "body": "Onboarding notes...",
                 "kind": "general",
+                "tags": [
+                  "manual-review"
+                ],
                 "user_email": "alice@example.com",
                 "visibility": "external"
               },
@@ -3319,6 +3322,19 @@
                   "plan_id": {
                     "nullable": true,
                     "type": "integer"
+                  },
+                  "source_metadata": {
+                    "type": "object"
+                  },
+                  "source_type": {
+                    "maxLength": 40,
+                    "type": "string"
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
                   },
                   "user_email": {
                     "format": "email",
@@ -3354,6 +3370,11 @@
                   "kind": "general",
                   "member_email": "alice@example.com",
                   "plan_id": 5,
+                  "source_metadata": {},
+                  "source_type": "",
+                  "tags": [
+                    "intake"
+                  ],
                   "updated_at": "2026-04-15T12:00:00+00:00",
                   "visibility": "external"
                 }
@@ -3442,6 +3463,11 @@
                   "kind": "general",
                   "member_email": "alice@example.com",
                   "plan_id": 5,
+                  "source_metadata": {},
+                  "source_type": "",
+                  "tags": [
+                    "intake"
+                  ],
                   "updated_at": "2026-04-15T12:00:00+00:00",
                   "visibility": "external"
                 }
@@ -3482,7 +3508,13 @@
           "content": {
             "application/json": {
               "example": {
-                "body": "Updated body"
+                "body": "Updated body",
+                "source_metadata": {
+                  "channel_id": "C123"
+                },
+                "tags": [
+                  "follow-up"
+                ]
               },
               "schema": {
                 "properties": {
@@ -3501,6 +3533,19 @@
                       "source"
                     ],
                     "type": "string"
+                  },
+                  "source_metadata": {
+                    "type": "object"
+                  },
+                  "source_type": {
+                    "maxLength": 40,
+                    "type": "string"
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
                   },
                   "visibility": {
                     "enum": [
@@ -3528,6 +3573,11 @@
                   "kind": "general",
                   "member_email": "alice@example.com",
                   "plan_id": 5,
+                  "source_metadata": {},
+                  "source_type": "",
+                  "tags": [
+                    "intake"
+                  ],
                   "updated_at": "2026-04-15T12:00:00+00:00",
                   "visibility": "external"
                 }
@@ -3571,6 +3621,9 @@
               "example": {
                 "body": "Onboarding notes...",
                 "kind": "general",
+                "tags": [
+                  "manual-review"
+                ],
                 "user_email": "alice@example.com",
                 "visibility": "external"
               },
@@ -3595,6 +3648,19 @@
                   "plan_id": {
                     "nullable": true,
                     "type": "integer"
+                  },
+                  "source_metadata": {
+                    "type": "object"
+                  },
+                  "source_type": {
+                    "maxLength": 40,
+                    "type": "string"
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
                   },
                   "user_email": {
                     "format": "email",
@@ -3630,6 +3696,11 @@
                   "kind": "general",
                   "member_email": "alice@example.com",
                   "plan_id": 5,
+                  "source_metadata": {},
+                  "source_type": "",
+                  "tags": [
+                    "intake"
+                  ],
                   "updated_at": "2026-04-15T12:00:00+00:00",
                   "visibility": "external"
                 }
@@ -3673,6 +3744,9 @@
               "example": {
                 "body": "Onboarding notes...",
                 "kind": "general",
+                "tags": [
+                  "manual-review"
+                ],
                 "user_email": "alice@example.com",
                 "visibility": "external"
               },
@@ -3697,6 +3771,19 @@
                   "plan_id": {
                     "nullable": true,
                     "type": "integer"
+                  },
+                  "source_metadata": {
+                    "type": "object"
+                  },
+                  "source_type": {
+                    "maxLength": 40,
+                    "type": "string"
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
                   },
                   "user_email": {
                     "format": "email",
@@ -3732,6 +3819,11 @@
                   "kind": "general",
                   "member_email": "alice@example.com",
                   "plan_id": 5,
+                  "source_metadata": {},
+                  "source_type": "",
+                  "tags": [
+                    "intake"
+                  ],
                   "updated_at": "2026-04-15T12:00:00+00:00",
                   "visibility": "external"
                 }
@@ -3820,6 +3912,11 @@
                   "kind": "general",
                   "member_email": "alice@example.com",
                   "plan_id": 5,
+                  "source_metadata": {},
+                  "source_type": "",
+                  "tags": [
+                    "intake"
+                  ],
                   "updated_at": "2026-04-15T12:00:00+00:00",
                   "visibility": "external"
                 }
@@ -3860,7 +3957,13 @@
           "content": {
             "application/json": {
               "example": {
-                "body": "Updated body"
+                "body": "Updated body",
+                "source_metadata": {
+                  "channel_id": "C123"
+                },
+                "tags": [
+                  "follow-up"
+                ]
               },
               "schema": {
                 "properties": {
@@ -3879,6 +3982,19 @@
                       "source"
                     ],
                     "type": "string"
+                  },
+                  "source_metadata": {
+                    "type": "object"
+                  },
+                  "source_type": {
+                    "maxLength": 40,
+                    "type": "string"
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
                   },
                   "visibility": {
                     "enum": [
@@ -3906,6 +4022,11 @@
                   "kind": "general",
                   "member_email": "alice@example.com",
                   "plan_id": 5,
+                  "source_metadata": {},
+                  "source_type": "",
+                  "tags": [
+                    "intake"
+                  ],
                   "updated_at": "2026-04-15T12:00:00+00:00",
                   "visibility": "external"
                 }
@@ -3994,6 +4115,11 @@
                   "kind": "general",
                   "member_email": "alice@example.com",
                   "plan_id": 5,
+                  "source_metadata": {},
+                  "source_type": "",
+                  "tags": [
+                    "intake"
+                  ],
                   "updated_at": "2026-04-15T12:00:00+00:00",
                   "visibility": "external"
                 }
@@ -4034,7 +4160,13 @@
           "content": {
             "application/json": {
               "example": {
-                "body": "Updated body"
+                "body": "Updated body",
+                "source_metadata": {
+                  "channel_id": "C123"
+                },
+                "tags": [
+                  "follow-up"
+                ]
               },
               "schema": {
                 "properties": {
@@ -4053,6 +4185,19 @@
                       "source"
                     ],
                     "type": "string"
+                  },
+                  "source_metadata": {
+                    "type": "object"
+                  },
+                  "source_type": {
+                    "maxLength": 40,
+                    "type": "string"
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
                   },
                   "visibility": {
                     "enum": [
@@ -4080,6 +4225,11 @@
                   "kind": "general",
                   "member_email": "alice@example.com",
                   "plan_id": 5,
+                  "source_metadata": {},
+                  "source_type": "",
+                  "tags": [
+                    "intake"
+                  ],
                   "updated_at": "2026-04-15T12:00:00+00:00",
                   "visibility": "external"
                 }
@@ -5106,6 +5256,11 @@
                       "kind": "general",
                       "member_email": "alice@example.com",
                       "plan_id": 5,
+                      "source_metadata": {},
+                      "source_type": "",
+                      "tags": [
+                        "intake"
+                      ],
                       "updated_at": "2026-04-15T12:00:00+00:00",
                       "visibility": "external"
                     }
@@ -8302,6 +8457,11 @@
                       "kind": "general",
                       "member_email": "alice@example.com",
                       "plan_id": 5,
+                      "source_metadata": {},
+                      "source_type": "",
+                      "tags": [
+                        "intake"
+                      ],
                       "updated_at": "2026-04-15T12:00:00+00:00",
                       "visibility": "external"
                     }
@@ -8499,6 +8659,11 @@
                       "kind": "general",
                       "member_email": "alice@example.com",
                       "plan_id": 5,
+                      "source_metadata": {},
+                      "source_type": "",
+                      "tags": [
+                        "intake"
+                      ],
                       "updated_at": "2026-04-15T12:00:00+00:00",
                       "visibility": "external"
                     }
@@ -8565,6 +8730,11 @@
                       "kind": "general",
                       "member_email": "alice@example.com",
                       "plan_id": 5,
+                      "source_metadata": {},
+                      "source_type": "",
+                      "tags": [
+                        "intake"
+                      ],
                       "updated_at": "2026-04-15T12:00:00+00:00",
                       "visibility": "external"
                     }

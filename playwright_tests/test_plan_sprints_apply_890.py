@@ -6,7 +6,7 @@ the DB (the apply path is exercised at the Django-test layer), then these
 tests drive the staff-only Studio surfaces + the undo controls.
 
 Scenarios mirror the issue spec:
-  - Staff sees the auto-applied summary/blockers + the source thread on a CRM record.
+  - Staff sees the auto-applied summary/blockers + undo controls on a plan.
   - Staff undoes a single change; only that plan item reverts.
   - Staff undoes a whole event; manual completions stay done.
   - A thread with no auto-apply renders as Phase 1 (no apply controls).
@@ -107,13 +107,13 @@ class TestAutoAppliedVisibleOnCRM:
                 blockers=["Waiting on data access"],
                 items=[(cp, "checkpoint")],
             )
-            crm_id = record.pk
+            plan_id = plan.pk
 
         context = auth_context(browser, "admin-890a@test.com")
         try:
             page = context.new_page()
             page.goto(
-                f"{django_server}/studio/crm/{crm_id}/",
+                f"{django_server}/studio/plans/{plan_id}/",
                 wait_until="domcontentloaded",
             )
             assert page.locator(
@@ -204,14 +204,14 @@ class TestEventUndoLeavesManualIntact:
                 thread, plan, summary="Auto two.", blockers=[],
                 items=[(cp, "checkpoint"), (cp2, "checkpoint")],
             )
-            crm_id = record.pk
+            plan_id = plan.pk
             cp_id, cp2_id, manual_id = cp.pk, cp2.pk, manual.pk
 
         context = auth_context(browser, "admin-890c@test.com")
         try:
             page = context.new_page()
             page.goto(
-                f"{django_server}/studio/crm/{crm_id}/",
+                f"{django_server}/studio/plans/{plan_id}/",
                 wait_until="domcontentloaded",
             )
             # Expand the thread so the auto-apply controls become visible.
@@ -243,13 +243,13 @@ class TestThreadWithoutEvent:
             create_staff_user("admin-890d@test.com")
             user, record, plan, week = _make_plan("m-890d@test.com", "U_890D")
             _captured_thread(user, plan, "1700100300.000100")
-            crm_id = record.pk
+            plan_id = plan.pk
 
         context = auth_context(browser, "admin-890d@test.com")
         try:
             page = context.new_page()
             page.goto(
-                f"{django_server}/studio/crm/{crm_id}/",
+                f"{django_server}/studio/plans/{plan_id}/",
                 wait_until="domcontentloaded",
             )
             assert page.locator(

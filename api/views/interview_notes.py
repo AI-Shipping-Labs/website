@@ -26,6 +26,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from accounts.utils.tags import normalize_tags
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.plans import serialize_interview_note
@@ -70,6 +71,9 @@ _INTERVIEW_NOTE_EXAMPLE = {
     "visibility": "external",
     "kind": "general",
     "body": "Great onboarding chat.",
+    "tags": ["intake"],
+    "source_type": "",
+    "source_metadata": {},
     "created_at": "2026-04-15T12:00:00+00:00",
     "updated_at": "2026-04-15T12:00:00+00:00",
 }
@@ -80,6 +84,50 @@ _INTERVIEW_NOTE_EXAMPLE = {
 # local privilege check; ``api/views/_permissions.py`` is the single
 # place in ``api/views/`` that may inspect user attributes for staff
 # resolution.
+
+
+def _validated_tags(data):
+    if "tags" not in data:
+        return None, None
+    if not isinstance(data["tags"], list):
+        return None, error_response(
+            "tags must be a list",
+            "invalid_type",
+            details={"field": "tags", "expected": "array"},
+        )
+    return normalize_tags(data["tags"]), None
+
+
+def _validated_source_type(data):
+    if "source_type" not in data:
+        return None, None
+    if not isinstance(data["source_type"], str):
+        return None, error_response(
+            "source_type must be a string",
+            "invalid_type",
+            details={"field": "source_type", "expected": "string"},
+        )
+    source_type = data["source_type"].strip().lower()
+    if len(source_type) > 40:
+        return None, error_response(
+            "source_type is too long",
+            "validation_error",
+            status=422,
+            details={"source_type": "Must be 40 characters or fewer"},
+        )
+    return source_type, None
+
+
+def _validated_source_metadata(data):
+    if "source_metadata" not in data:
+        return None, None
+    if not isinstance(data["source_metadata"], dict):
+        return None, error_response(
+            "source_metadata must be a JSON object",
+            "invalid_type",
+            details={"field": "source_metadata", "expected": "object"},
+        )
+    return data["source_metadata"], None
 
 
 @token_required
@@ -295,8 +343,18 @@ def user_interview_notes(request, email):
                         "type": "string",
                         "enum": _VISIBILITIES_ENUM,
                     },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "source_type": {"type": "string", "maxLength": 40},
+                    "source_metadata": {"type": "object"},
                 },
-                "example": {"body": "Updated body"},
+                "example": {
+                    "body": "Updated body",
+                    "tags": ["follow-up"],
+                    "source_metadata": {"channel_id": "C123"},
+                },
             },
             "responses": {
                 200: {
@@ -411,6 +469,24 @@ def interview_note_detail(request, note_id):
             )
         note.visibility = data["visibility"]
         update_fields.append("visibility")
+    tags, tag_error = _validated_tags(data)
+    if tag_error is not None:
+        return tag_error
+    if tags is not None:
+        note.tags = tags
+        update_fields.append("tags")
+    source_type, source_type_error = _validated_source_type(data)
+    if source_type_error is not None:
+        return source_type_error
+    if source_type is not None:
+        note.source_type = source_type
+        update_fields.append("source_type")
+    source_metadata, source_metadata_error = _validated_source_metadata(data)
+    if source_metadata_error is not None:
+        return source_metadata_error
+    if source_metadata is not None:
+        note.source_metadata = source_metadata
+        update_fields.append("source_metadata")
 
     if update_fields:
         note.save(update_fields=update_fields + ["updated_at"])
@@ -452,12 +528,19 @@ def interview_note_detail(request, note_id):
                         "type": "string",
                         "enum": _KINDS_ENUM,
                     },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "source_type": {"type": "string", "maxLength": 40},
+                    "source_metadata": {"type": "object"},
                 },
                 "example": {
                     "user_email": "alice@example.com",
                     "body": "Onboarding notes...",
                     "visibility": "external",
                     "kind": "general",
+                    "tags": ["manual-review"],
                 },
             },
             "responses": {
@@ -542,6 +625,16 @@ def interview_notes_create(request):
             details={"kind": "Unknown kind"},
         )
 
+    tags, tag_error = _validated_tags(data)
+    if tag_error is not None:
+        return tag_error
+    source_type, source_type_error = _validated_source_type(data)
+    if source_type_error is not None:
+        return source_type_error
+    source_metadata, source_metadata_error = _validated_source_metadata(data)
+    if source_metadata_error is not None:
+        return source_metadata_error
+
     plan_id = data.get("plan_id")
     plan = None
     if plan_id is not None:
@@ -565,6 +658,9 @@ def interview_notes_create(request):
         visibility=visibility,
         kind=kind,
         body=body,
+        tags=tags or [],
+        source_type=source_type or "",
+        source_metadata=source_metadata or {},
         created_by=request.user,
     )
     note = (

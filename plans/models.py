@@ -30,6 +30,12 @@ from content.access import (
     VISIBILITY_CHOICES as TIER_VISIBILITY_CHOICES,
 )
 from content.models.mixins import TimestampedModelMixin
+from plans.interview_note_utils import (
+    normalize_note_body,
+    normalize_note_tags,
+    normalize_source_metadata,
+    normalize_source_type,
+)
 
 SPRINT_STATUS_CHOICES = [
     ('draft', 'Draft'),
@@ -1029,6 +1035,14 @@ class InterviewNote(TimestampedModelMixin, models.Model):
         default='general',
     )
     body = models.TextField()
+    tags = models.JSONField(default=list, blank=True)
+    source_type = models.CharField(
+        max_length=40,
+        blank=True,
+        default='',
+        db_index=True,
+    )
+    source_metadata = models.JSONField(default=dict, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -1048,6 +1062,18 @@ class InterviewNote(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return f'{self.get_kind_display()} note for {self.member}'
+
+    def save(self, *args, **kwargs):
+        self.tags = normalize_note_tags(self.tags)
+        self.source_type = normalize_source_type(self.source_type)
+        self.source_metadata = normalize_source_metadata(self.source_metadata)
+        self.body = normalize_note_body(self.body, self.source_type)
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            update_fields.update({'tags', 'source_type', 'source_metadata', 'body'})
+            kwargs['update_fields'] = list(update_fields)
+        super().save(*args, **kwargs)
 
 
 class NextSprintPlanDraft(TimestampedModelMixin, models.Model):

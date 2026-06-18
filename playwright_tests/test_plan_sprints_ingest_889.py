@@ -98,7 +98,7 @@ def _make_member_with_plan(email, slack_user_id, *, active=True):
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffReviewsFullThread:
-    def test_full_thread_visible_on_crm_record(
+    def test_full_thread_visible_as_member_note_on_crm_record(
         self, django_server, django_db_blocker, browser, settings,
     ):
         for key, value in SLACK_SETTINGS.items():
@@ -130,17 +130,14 @@ class TestStaffReviewsFullThread:
                 f"{django_server}/studio/crm/{crm_id}/",
                 wait_until="domcontentloaded",
             )
-            panel = page.locator('[data-testid="crm-slack-updates-section"]')
-            assert panel.count() == 1
-            # Reply count of 2 is shown on the thread summary.
-            assert page.locator(
-                '[data-testid="crm-slack-thread-reply-count"]'
-            ).first.inner_text().strip().startswith("2")
-
-            # Expand the thread; all three messages render with authors.
-            page.locator('[data-testid="crm-slack-thread"] summary').first.click()
-            messages = page.locator('[data-testid="crm-slack-message"]')
-            assert messages.count() == 3
+            assert page.locator('[data-testid="crm-slack-updates-section"]').count() == 0
+            notes = page.locator('[data-testid="internal-notes"]')
+            assert notes.locator('[data-testid="member-note-tag"]').filter(
+                has_text="slack"
+            ).is_visible()
+            assert notes.locator('[data-testid="member-note-tag"]').filter(
+                has_text="plan-sprints"
+            ).is_visible()
             body = page.content()
             assert "Finished week 1 work" in body
             assert "Nice progress!" in body
@@ -194,15 +191,10 @@ class TestNewReplyShowsAfterNextRun:
                 f"{django_server}/studio/crm/{crm_id}/",
                 wait_until="domcontentloaded",
             )
-            # Thread appears exactly once.
-            assert page.locator(
-                '[data-testid="crm-slack-thread"]'
+            assert page.locator('[data-testid="crm-slack-updates-section"]').count() == 0
+            assert page.locator('[data-testid="internal-notes"] li').filter(
+                has_text="Day one update"
             ).count() == 1
-            assert page.locator(
-                '[data-testid="crm-slack-thread-reply-count"]'
-            ).first.inner_text().strip().startswith("2")
-
-            page.locator('[data-testid="crm-slack-thread"] summary').first.click()
             body = page.content()
             assert "Added a second reply" in body
         finally:
@@ -270,10 +262,10 @@ class TestNoopWhenSlackNotConfigured:
                 f"{django_server}/studio/crm/{crm_id}/",
                 wait_until="domcontentloaded",
             )
-            # Page renders fine with the empty state, not a 500.
+            # Page renders fine without the removed Slack-only empty panel.
             assert page.locator(
                 '[data-testid="crm-slack-updates-empty"]'
-            ).count() == 1
+            ).count() == 0
             assert page.locator(
                 '[data-testid="crm-slack-thread"]'
             ).count() == 0
@@ -315,6 +307,11 @@ class TestMatchedUpdateLinkedToActivePlan:
             assert page.locator(
                 '[data-testid="crm-slack-thread"]'
             ).count() == 1
-            assert "Update tied to my plan" in page.content()
+            assert "Update tied to my plan" not in page.locator(
+                '[data-testid="crm-slack-updates-section"]'
+            ).inner_text()
+            assert "Update tied to my plan" in page.locator(
+                '[data-testid="member-notes-section"]'
+            ).inner_text()
         finally:
             context.close()

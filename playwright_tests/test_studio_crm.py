@@ -345,6 +345,88 @@ class TestStudioCRM:
         ).is_visible()
         context.close()
 
+    @pytest.mark.core
+    def test_slack_origin_note_renders_as_tagged_member_note(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _wipe_state()
+        pks = _seed_users_and_data()
+
+        from accounts.models import User
+        from plans.models import InterviewNote
+
+        staff = User.objects.get(email=STAFF_EMAIL)
+        member = User.objects.get(email=ENGAGED_EMAIL)
+        InterviewNote.objects.create(
+            member=member,
+            visibility="internal",
+            kind="general",
+            body=(
+                "_[Update] Week 4: Standalone Reimplementation_\n"
+                "• _Repository Scaffolding:_ Created api/ and src/.\n"
+                "B_locker:_\n"
+                "• .\n"
+                "• Keep /query and https://example.com intact."
+            ),
+            tags=["slack", "plan-sprints"],
+            source_type="slack",
+            source_metadata={
+                "channel_id": "C_PLAN",
+                "thread_ts": "1700000000.000000",
+                "ingest_id": 12,
+                "permalink": "https://slack.example/thread",
+            },
+            created_by=staff,
+        )
+        connection.close()
+
+        context = _auth_context(browser, STAFF_EMAIL)
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/studio/crm/{pks['engaged_record_pk']}/",
+            wait_until="domcontentloaded",
+        )
+
+        assert page.locator('[data-testid="crm-slack-updates-section"]').count() == 0
+        note = page.locator('[data-testid="internal-notes"] li').filter(
+            has_text="Standalone Reimplementation"
+        )
+        assert note.locator('[data-testid="member-note-tag"]').filter(
+            has_text="slack"
+        ).is_visible()
+        assert note.locator('[data-testid="member-note-tag"]').filter(
+            has_text="plan-sprints"
+        ).is_visible()
+        assert note.get_by_text("Repository Scaffolding:").is_visible()
+        assert note.get_by_text("Blocker:").is_visible()
+        assert note.get_by_text("• .").count() == 0
+
+        source = note.locator('[data-testid="member-note-source"]')
+        assert source.locator('[data-testid="member-note-source-summary"]').is_visible()
+        assert source.locator('[data-testid="member-note-source-details"]').is_hidden()
+        source.locator("summary").click()
+        assert source.locator('[data-testid="member-note-source-details"]').is_visible()
+        assert source.get_by_text("C_PLAN").is_visible()
+        assert source.locator('[data-testid="member-note-source-link"]').is_visible()
+
+        note.get_by_text("Edit").click()
+        page.wait_for_url("**/notes/**/edit")
+        tags_input = page.locator('[data-testid="member-note-tags-input"]')
+        tags_input.fill("slack, plan-sprints, Needs Follow Up")
+        page.get_by_role("button", name="Save changes").click()
+        page.wait_for_url(f"{django_server}/studio/users/{pks['engaged_pk']}/#member-notes")
+        page.goto(
+            f"{django_server}/studio/crm/{pks['engaged_record_pk']}/",
+            wait_until="domcontentloaded",
+        )
+        edited_note = page.locator('[data-testid="internal-notes"] li').filter(
+            has_text="Standalone Reimplementation"
+        )
+        assert edited_note.get_by_text("needs-follow-up").is_visible()
+        assert edited_note.locator('[data-testid="member-note-source"]').is_visible()
+        context.close()
+
     def test_scenario_5_plans_only_user_not_in_crm_list(
         self, django_server, browser,
     ):

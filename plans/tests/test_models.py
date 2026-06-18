@@ -187,6 +187,32 @@ class InterviewNoteModelTest(TestCase):
         note.visibility = 'external'
         note.full_clean()
 
+    def test_interview_note_normalizes_tags_and_slack_body(self):
+        note = InterviewNote.objects.create(
+            member=self.member,
+            body=(
+                '_This week, I planned to:_\n'
+                '• _Repository Scaffolding:_ Created api/ and src/.\n'
+                'B_locker:_\n'
+                '• .\n'
+                '• Keep https://example.com and /query intact.'
+            ),
+            tags=['Manual Review', 'manual-review', 'Sprint:May 2026'],
+            source_type='Slack',
+            source_metadata=['not', 'object'],
+        )
+
+        self.assertEqual(note.tags, ['manual-review', 'sprint:may-2026'])
+        self.assertEqual(note.source_type, 'slack')
+        self.assertEqual(note.source_metadata, {})
+        self.assertIn('This week, I planned to:', note.body)
+        self.assertIn('Repository Scaffolding:', note.body)
+        self.assertIn('Blocker:', note.body)
+        self.assertIn('https://example.com', note.body)
+        self.assertIn('/query', note.body)
+        self.assertNotIn('B_locker:_', note.body)
+        self.assertNotIn('• .', note.body)
+
 
 class SprintDurationTest(TestCase):
     """The system must support variable-length sprints, not just 6 weeks."""

@@ -40,7 +40,36 @@
             </form>
           </span>
         </div>
+        {% if note.tags %}
+        <div class="flex flex-wrap gap-1.5 mt-2" data-testid="member-note-tags">
+          {% for tag in note.tags %}
+          <span class="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground border border-border"
+                data-testid="member-note-tag">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
         <p class="text-sm text-foreground whitespace-pre-line mt-2">{{ note.body }}</p>
+        {% if note.source_metadata %}
+        <details class="mt-3 rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground"
+                 data-testid="member-note-source">
+          <summary class="cursor-pointer text-muted-foreground" data-testid="member-note-source-summary">
+            Source: {% if note.source_type == "slack" %}Slack #plan-sprints{% else %}{{ note.source_type|default:"Imported" }}{% endif %} &middot; {{ note.created_at|operator_datetime }}
+          </summary>
+          <dl class="mt-2 grid gap-1" data-testid="member-note-source-details">
+            {% for key, value in note.source_metadata.items %}
+            <div class="grid gap-1 sm:grid-cols-[10rem_1fr]">
+              <dt class="font-medium text-muted-foreground">{{ key }}</dt>
+              <dd class="text-foreground break-words">{{ value }}</dd>
+            </div>
+            {% endfor %}
+          </dl>
+          {% if note.source_metadata.permalink %}
+          <a href="{{ note.source_metadata.permalink }}" target="_blank" rel="noopener"
+             data-testid="member-note-source-link"
+             class="mt-2 inline-flex text-accent hover:underline">Open in Slack</a>
+          {% endif %}
+        </details>
+        {% endif %}
       </li>
       {% endfor %}
     </ul>
@@ -73,7 +102,36 @@
             </form>
           </span>
         </div>
+        {% if note.tags %}
+        <div class="flex flex-wrap gap-1.5 mt-2" data-testid="member-note-tags">
+          {% for tag in note.tags %}
+          <span class="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground border border-border"
+                data-testid="member-note-tag">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
         <p class="text-sm text-foreground whitespace-pre-line mt-2">{{ note.body }}</p>
+        {% if note.source_metadata %}
+        <details class="mt-3 rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground"
+                 data-testid="member-note-source">
+          <summary class="cursor-pointer text-muted-foreground" data-testid="member-note-source-summary">
+            Source: {% if note.source_type == "slack" %}Slack #plan-sprints{% else %}{{ note.source_type|default:"Imported" }}{% endif %} &middot; {{ note.created_at|operator_datetime }}
+          </summary>
+          <dl class="mt-2 grid gap-1" data-testid="member-note-source-details">
+            {% for key, value in note.source_metadata.items %}
+            <div class="grid gap-1 sm:grid-cols-[10rem_1fr]">
+              <dt class="font-medium text-muted-foreground">{{ key }}</dt>
+              <dd class="text-foreground break-words">{{ value }}</dd>
+            </div>
+            {% endfor %}
+          </dl>
+          {% if note.source_metadata.permalink %}
+          <a href="{{ note.source_metadata.permalink }}" target="_blank" rel="noopener"
+             data-testid="member-note-source-link"
+             class="mt-2 inline-flex text-accent hover:underline">Open in Slack</a>
+          {% endif %}
+        </details>
+        {% endif %}
       </li>
       {% endfor %}
     </ul>

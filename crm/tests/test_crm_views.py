@@ -96,6 +96,28 @@ class CRMListViewTest(CRMViewsBase):
             'data-testid="crm-row-notes-count">2',
         )
 
+    def test_list_note_count_includes_slack_origin_notes(self):
+        record = CRMRecord.objects.create(user=self.member)
+        InterviewNote.objects.create(
+            member=self.member,
+            visibility='internal',
+            body='Manual note',
+            created_by=self.staff,
+        )
+        InterviewNote.objects.create(
+            member=self.member,
+            visibility='internal',
+            body='Slack note',
+            source_type='slack',
+            tags=['slack', 'plan-sprints'],
+            source_metadata={'thread_ts': '1700000000.000000'},
+        )
+
+        response = self.client.get('/studio/crm/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'data-testid="crm-row-{record.pk}"')
+        self.assertContains(response, 'data-testid="crm-row-notes-count">2')
+
     def test_default_filter_is_active_and_hides_archived(self):
         active_record = CRMRecord.objects.create(
             user=self.member, status='active',
@@ -189,6 +211,31 @@ class CRMDetailViewTest(CRMViewsBase):
         self.assertContains(response, 'data-testid="external-notes"')
         self.assertContains(response, 'Inner note body')
         self.assertContains(response, 'Outer note body')
+
+    def test_detail_shows_slack_origin_note_as_tagged_member_note(self):
+        record = CRMRecord.objects.create(user=self.member)
+        InterviewNote.objects.create(
+            member=self.member,
+            visibility='internal',
+            body='Clean Slack update body',
+            tags=['slack', 'plan-sprints', 'sprint:may-2026'],
+            source_type='slack',
+            source_metadata={
+                'channel_id': 'C123',
+                'thread_ts': '1700000000.000000',
+                'permalink': 'https://slack.example/thread',
+            },
+        )
+
+        response = self.client.get(f'/studio/crm/{record.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Slack updates from #plan-sprints')
+        self.assertNotContains(response, 'data-testid="crm-slack-updates-section"')
+        self.assertContains(response, 'Clean Slack update body')
+        self.assertContains(response, 'data-testid="member-note-tag"', count=3)
+        self.assertContains(response, 'plan-sprints')
+        self.assertContains(response, 'Source: Slack #plan-sprints')
+        self.assertContains(response, 'data-testid="member-note-source-link"')
 
     def test_detail_shows_archive_button_when_active(self):
         record = CRMRecord.objects.create(user=self.member, status='active')

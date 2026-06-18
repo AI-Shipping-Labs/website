@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from accounts.utils.tags import normalize_tags
 from plans.models import (
     KIND_CHOICES,
     VISIBILITY_CHOICES,
@@ -14,6 +15,17 @@ from plans.models import (
 from studio.decorators import staff_required
 
 User = get_user_model()
+
+
+def _parse_note_tags(raw_tags):
+    if not raw_tags:
+        return []
+    pieces = [piece.strip() for piece in raw_tags.split(',')]
+    return normalize_tags([piece for piece in pieces if piece])
+
+
+def _format_note_tags(tags):
+    return ', '.join(tags or [])
 
 
 def _normalize_choice(raw, choices, default):
@@ -94,6 +106,7 @@ def member_note_create(request, user_id):
                 'kind': 'intake',
                 'visibility': 'internal',
                 'body': '',
+                'tags': '',
                 'plan_id': str(selected_plan.pk) if selected_plan else '',
             },
         )
@@ -102,6 +115,7 @@ def member_note_create(request, user_id):
         'kind': _normalize_kind(request.POST.get('kind', '')),
         'visibility': _normalize_visibility(request.POST.get('visibility', '')),
         'body': (request.POST.get('body') or '').strip(),
+        'tags': request.POST.get('tags') or '',
         'plan_id': (request.POST.get('plan_id') or '').strip(),
     }
     if not form_data['body']:
@@ -122,6 +136,7 @@ def member_note_create(request, user_id):
         kind=form_data['kind'],
         visibility=form_data['visibility'],
         body=form_data['body'],
+        tags=_parse_note_tags(form_data['tags']),
         created_by=request.user if request.user.is_authenticated else None,
     )
     messages.success(request, 'Member note added.')
@@ -148,6 +163,7 @@ def member_note_edit(request, user_id, note_id):
                 'kind': note.kind,
                 'visibility': note.visibility,
                 'body': note.body,
+                'tags': _format_note_tags(note.tags),
                 'plan_id': str(note.plan_id) if note.plan_id else '',
             },
         )
@@ -156,6 +172,7 @@ def member_note_edit(request, user_id, note_id):
         'kind': _normalize_choice(request.POST.get('kind', ''), KIND_CHOICES, note.kind),
         'visibility': _normalize_visibility(request.POST.get('visibility', '')),
         'body': (request.POST.get('body') or '').strip(),
+        'tags': request.POST.get('tags') or '',
         'plan_id': (request.POST.get('plan_id') or '').strip(),
     }
     if not form_data['body']:
@@ -173,6 +190,7 @@ def member_note_edit(request, user_id, note_id):
     note.kind = form_data['kind']
     note.visibility = form_data['visibility']
     note.body = form_data['body']
+    note.tags = _parse_note_tags(form_data['tags'])
     note.save()
     messages.success(request, 'Member note updated.')
     return redirect(_member_detail_anchor(detail_user))

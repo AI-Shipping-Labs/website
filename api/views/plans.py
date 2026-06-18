@@ -22,6 +22,7 @@ from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required, token_required_any_user
+from accounts.utils.tags import normalize_tags
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.plans import (
@@ -318,6 +319,69 @@ def _validate_kind(value, *, index=None):
     return None
 
 
+def _validate_note_source_metadata(note_data, *, index=None):
+    if "source_metadata" not in note_data:
+        return None
+    if isinstance(note_data["source_metadata"], dict):
+        return None
+    return error_response(
+        "interview_notes.source_metadata must be an object",
+        "invalid_type",
+        details=_with_index({
+            "field": "interview_notes.source_metadata",
+            "expected": "object",
+        }, index),
+    )
+
+
+def _validate_note_tags(note_data, *, index=None):
+    if "tags" not in note_data:
+        return None
+    if isinstance(note_data["tags"], list):
+        return None
+    return error_response(
+        "interview_notes.tags must be a list",
+        "invalid_type",
+        details=_with_index({
+            "field": "interview_notes.tags",
+            "expected": "array",
+        }, index),
+    )
+
+
+def _validate_note_source_type(note_data, *, index=None):
+    if "source_type" not in note_data:
+        return None
+    if not isinstance(note_data["source_type"], str):
+        return error_response(
+            "interview_notes.source_type must be a string",
+            "invalid_type",
+            details=_with_index({
+                "field": "interview_notes.source_type",
+                "expected": "string",
+            }, index),
+        )
+    if len(note_data["source_type"].strip()) <= 40:
+        return None
+    return error_response(
+        "interview_notes.source_type is too long",
+        "validation_error",
+        status=422,
+        details=_with_index({
+            "field": "interview_notes.source_type",
+            "max_length": 40,
+        }, index),
+    )
+
+
+def _note_extra_kwargs(note_data):
+    return {
+        "tags": normalize_tags(note_data.get("tags", [])),
+        "source_type": (note_data.get("source_type") or "").strip().lower(),
+        "source_metadata": note_data.get("source_metadata") or {},
+    }
+
+
 def _validate_next_step_kind(value, field_path="kind", *, index=None):
     if value not in VALID_NEXT_STEP_KINDS:
         return error_response(
@@ -544,12 +608,21 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
         err = _validate_kind(kind, index=index)
         if err is not None:
             return None, err
+        for validator in (
+            _validate_note_tags,
+            _validate_note_source_type,
+            _validate_note_source_metadata,
+        ):
+            err = validator(note_data, index=index)
+            if err is not None:
+                return None, err
         InterviewNote.objects.create(
             plan=plan,
             member=member,
             visibility=visibility,
             kind=kind,
             body=note_data.get("body", "") or "",
+            **_note_extra_kwargs(note_data),
         )
 
     return plan, None
@@ -942,6 +1015,14 @@ def _reconcile_interview_notes(plan, payload_rows):
             err = _validate_kind(kind)
             if err is not None:
                 return err
+        for validator in (
+            _validate_note_tags,
+            _validate_note_source_type,
+            _validate_note_source_metadata,
+        ):
+            err = validator(row)
+            if err is not None:
+                return err
 
         row_id = row.get("id")
         if row_id is not None:
@@ -967,6 +1048,15 @@ def _reconcile_interview_notes(plan, payload_rows):
             if "body" in row:
                 existing.body = row["body"] or ""
                 update_fields.append("body")
+            if "tags" in row:
+                existing.tags = normalize_tags(row["tags"])
+                update_fields.append("tags")
+            if "source_type" in row:
+                existing.source_type = row["source_type"].strip().lower()
+                update_fields.append("source_type")
+            if "source_metadata" in row:
+                existing.source_metadata = row["source_metadata"]
+                update_fields.append("source_metadata")
             if update_fields:
                 existing.save(
                     update_fields=list(set(update_fields)) + ["updated_at"],
@@ -979,6 +1069,7 @@ def _reconcile_interview_notes(plan, payload_rows):
                 visibility=row.get("visibility", "external"),
                 kind=row.get("kind", "general"),
                 body=row.get("body", "") or "",
+                **_note_extra_kwargs(row),
             )
 
     for existing_id, existing_row in existing_by_id.items():

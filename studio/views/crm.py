@@ -27,7 +27,7 @@ from crm.models import (
     IngestedProgressEvent,
     SlackChannelIngest,
 )
-from crm.services.slack_updates import threads_for_member, unmatched_threads
+from crm.services.slack_updates import unmatched_threads
 from crm.tasks.apply_plan_sprint_progress import reverse_change, reverse_event
 from plans.models import InterviewNote, Plan
 from questionnaires.models import Persona
@@ -265,8 +265,6 @@ def _record_detail_context(record):
         'persona_choices': list(
             Persona.objects.filter(is_active=True).order_by('order', 'name')
         ),
-        # Read-only #plan-sprints Slack ingest (issue #889). Staff-only.
-        'slack_threads': threads_for_member(record.user),
     }
 
 

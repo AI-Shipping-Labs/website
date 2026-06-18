@@ -1,0 +1,102 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Move unfinished items: {{ plan.member.email }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to plan
+  </a>
+  <div class="mt-2">
+    <h1 class="text-2xl font-semibold text-foreground">Move unfinished items to another sprint</h1>
+    <p class="text-sm text-muted-foreground mt-1">
+      {{ plan.member.email }} · {{ plan.sprint.name }}
+    </p>
+  </div>
+</div>
+
+<section class="bg-card border border-border rounded-lg p-6 max-w-3xl">
+  <form method="post" data-testid="move-unfinished-form">
+    {% csrf_token %}
+
+    <label for="target_sprint_slug" class="block text-sm font-medium text-foreground">
+      Target sprint
+    </label>
+    <select id="target_sprint_slug"
+            name="target_sprint_slug"
+            class="studio-select mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+            data-testid="move-unfinished-target">
+      {% for sprint in target_sprints %}
+        <option value="{{ sprint.slug }}"
+                data-target-name="{{ sprint.name }}"
+                {% if sprint.pk == selected_target.pk %}selected{% endif %}>
+          {{ sprint.name }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <div class="mt-6 rounded-lg border border-border bg-secondary/30 p-4"
+         data-testid="move-unfinished-confirmation">
+      <h2 class="text-sm font-semibold text-foreground mb-3">Confirm move</h2>
+      <dl class="grid gap-3 text-sm sm:grid-cols-2">
+        <div>
+          <dt class="text-xs uppercase text-muted-foreground">Member</dt>
+          <dd class="mt-1 text-foreground">{{ plan.member.email }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase text-muted-foreground">Source sprint</dt>
+          <dd class="mt-1 text-foreground">{{ plan.sprint.name }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase text-muted-foreground">Target sprint</dt>
+          <dd class="mt-1 text-foreground" data-testid="move-unfinished-target-name">{{ selected_target.name }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase text-muted-foreground">Total</dt>
+          <dd class="mt-1 text-foreground" data-testid="move-unfinished-total">{{ counts.total }}</dd>
+        </div>
+      </dl>
+
+      <div class="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+        <div class="rounded-md border border-border bg-background p-3">
+          <div class="text-xs uppercase text-muted-foreground">Checkpoints</div>
+          <div class="mt-1 font-semibold text-foreground" data-testid="move-unfinished-checkpoints">{{ counts.checkpoints }}</div>
+        </div>
+        <div class="rounded-md border border-border bg-background p-3">
+          <div class="text-xs uppercase text-muted-foreground">Deliverables</div>
+          <div class="mt-1 font-semibold text-foreground" data-testid="move-unfinished-deliverables">{{ counts.deliverables }}</div>
+        </div>
+        <div class="rounded-md border border-border bg-background p-3">
+          <div class="text-xs uppercase text-muted-foreground">Next steps</div>
+          <div class="mt-1 font-semibold text-foreground" data-testid="move-unfinished-next-steps">{{ counts.next_steps }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-6 flex items-center gap-3">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent/90 transition-colors"
+              data-testid="move-unfinished-confirm">
+        Confirm move
+      </button>
+      <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}"
+         class="text-sm text-muted-foreground hover:text-foreground"
+         data-testid="move-unfinished-cancel">
+        Cancel
+      </a>
+    </div>
+  </form>
+</section>
+
+<script>
+  (() => {
+    const select = document.querySelector('[data-testid="move-unfinished-target"]');
+    const targetName = document.querySelector('[data-testid="move-unfinished-target-name"]');
+    if (!select || !targetName) return;
+    select.addEventListener('change', () => {
+      const option = select.options[select.selectedIndex];
+      targetName.textContent = option.dataset.targetName || option.textContent.trim();
+    });
+  })();
+</script>
+{% endblock %}

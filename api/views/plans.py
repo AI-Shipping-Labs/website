@@ -11,6 +11,7 @@ Endpoints:
 - ``DELETE /api/plans/<id>/`` -- delete (staff)
 """
 
+import json
 import logging
 
 from django.contrib.auth import get_user_model
@@ -47,7 +48,11 @@ from plans.models import (
     Sprint,
     Week,
 )
-from plans.services import draft_next_sprint_plan
+from plans.services import (
+    MoveUnfinishedItemsError,
+    draft_next_sprint_plan,
+    move_unfinished_items_to_sprint,
+)
 
 
 def _coerce_datetime(value):
@@ -1427,6 +1432,163 @@ def plan_detail(request, plan_id):
         serialize_plan_detail(plan, viewer=request.user),
         status=200,
     )
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Plans",
+    summary="Move unfinished plan items to another sprint",
+    methods={
+        "POST": {
+            "summary": "Move unfinished items (staff-only)",
+            "description": (
+                "Staff-token-only. Atomically moves unfinished Checkpoint, "
+                "Deliverable, and NextStep rows from the source plan into "
+                "the same member's later target sprint. Completed items and "
+                "all non-work-item plan content remain on the source plan. "
+                "If the target plan does not exist, it is created through "
+                "the sprint enrollment helper."
+            ),
+            "request_body": {
+                "required": ["target_sprint_slug"],
+                "properties": {
+                    "target_sprint_slug": {"type": "string"},
+                },
+                "example": {"target_sprint_slug": "june-2026"},
+            },
+            "responses": {
+                200: {
+                    "description": "Move completed.",
+                    "example": {
+                        "source_plan_id": 91,
+                        "source_sprint_slug": "may-2026",
+                        "target_plan_id": 118,
+                        "target_sprint_slug": "june-2026",
+                        "created_target_plan": True,
+                        "moved": {
+                            "checkpoints": 2,
+                            "deliverables": 1,
+                            "next_steps": 0,
+                            "total": 3,
+                        },
+                    },
+                },
+                400: {
+                    "description": (
+                        "Invalid JSON, non-object body, or missing "
+                        "target_sprint_slug."
+                    ),
+                    "example": {
+                        "error": "Missing required field: target_sprint_slug",
+                        "code": "missing_field",
+                    },
+                },
+                403: {
+                    "description": "Missing/invalid/non-staff token.",
+                    "example": {
+                        "error": "Moving unfinished items is staff-only",
+                        "code": "forbidden_other_user_plan",
+                    },
+                },
+                404: {
+                    "description": "Unknown source plan or target sprint.",
+                    "example": {
+                        "error": "Target sprint not found",
+                        "code": "unknown_target_sprint",
+                    },
+                },
+                422: {
+                    "description": (
+                        "Cancelled target, same/earlier target, source plan "
+                        "with zero unfinished items, or target plan without "
+                        "weeks."
+                    ),
+                    "example": {
+                        "error": (
+                            "Target sprint must be later than the source sprint"
+                        ),
+                        "code": "target_sprint_not_later",
+                    },
+                },
+            },
+        },
+    },
+)
+def plan_move_unfinished(request, plan_id):
+    """``POST /api/plans/<id>/move-unfinished`` (issue #1042)."""
+    if not bearer_is_admin(request.user):
+        return error_response(
+            "Moving unfinished items is staff-only",
+            "forbidden_other_user_plan",
+            status=403,
+        )
+
+    source_plan = (
+        Plan.objects
+        .select_related("member", "sprint")
+        .filter(pk=plan_id)
+        .first()
+    )
+    if source_plan is None:
+        return error_response(
+            "Plan not found",
+            "unknown_plan",
+            status=404,
+        )
+
+    try:
+        data = json.loads(request.body or b"{}")
+    except (json.JSONDecodeError, ValueError):
+        return error_response("Invalid JSON", "invalid_json", status=400)
+    if not isinstance(data, dict):
+        return error_response(
+            "Body must be a JSON object",
+            "invalid_type",
+            details={"field": "body", "expected": "object"},
+        )
+
+    target_slug = data.get("target_sprint_slug")
+    if target_slug is None:
+        return error_response(
+            "Missing required field: target_sprint_slug",
+            "missing_field",
+            details={"field": "target_sprint_slug"},
+        )
+    if not isinstance(target_slug, str) or not target_slug.strip():
+        return error_response(
+            "Invalid target_sprint_slug",
+            "validation_error",
+            status=422,
+            details={"target_sprint_slug": "must be a non-empty string"},
+        )
+    target_slug = target_slug.strip()
+
+    target_sprint = Sprint.objects.filter(slug=target_slug).first()
+    if target_sprint is None:
+        return error_response(
+            "Target sprint not found",
+            "unknown_target_sprint",
+            status=404,
+            details={"target_sprint_slug": target_slug},
+        )
+
+    try:
+        summary = move_unfinished_items_to_sprint(
+            source_plan=source_plan,
+            target_sprint=target_sprint,
+            actor=request.user,
+        )
+    except MoveUnfinishedItemsError as exc:
+        return error_response(
+            exc.message,
+            exc.code,
+            status=exc.status,
+            details=exc.details,
+        )
+
+    return JsonResponse(summary, status=200)
 
 
 def _apply_top_level_fields(plan, data):

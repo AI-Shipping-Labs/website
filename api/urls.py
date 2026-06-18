@@ -79,6 +79,7 @@ from api.views.plan_sprints_ingest import plan_sprints_ingest
 from api.views.plans import (
     plan_detail,
     plan_draft_next_sprint,
+    plan_move_unfinished,
     sprint_plans_bulk_import,
     sprint_plans_collection,
 )
@@ -419,6 +420,11 @@ urlpatterns = [
         "plans/<int:plan_id>",
         plan_detail,
         name="api_plan_detail",
+    ),
+    path(
+        "plans/<int:plan_id>/move-unfinished",
+        plan_move_unfinished,
+        name="api_plan_move_unfinished",
     ),
     # Carry-over + AI next-sprint draft (issue #891, Phase 3). Staff-only;
     # same shared service as the Studio "Draft next sprint plan" button.

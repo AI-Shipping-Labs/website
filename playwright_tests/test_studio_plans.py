@@ -159,6 +159,111 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
 
 
 @pytest.mark.django_db(transaction=True)
+class TestMoveUnfinishedPlanItems:
+    """Staff moves unfinished plan items into a selected later sprint."""
+
+    def test_staff_moves_unfinished_items_to_selected_later_sprint(
+        self, django_server, browser,
+    ):
+        from accounts.models import User
+        from plans.models import Checkpoint, Deliverable, Plan, Sprint, Week
+
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user(
+            "member@test.com",
+            tier_slug="free",
+            email_verified=True,
+        )
+
+        member = User.objects.get(email="member@test.com")
+        may = Sprint.objects.create(
+            name="May Sprint", slug="may-2026", start_date="2026-05-01",
+            duration_weeks=4,
+        )
+        june = Sprint.objects.create(
+            name="June Sprint", slug="june-2026", start_date="2026-06-01",
+            duration_weeks=4,
+        )
+        july = Sprint.objects.create(
+            name="July Sprint", slug="july-2026", start_date="2026-07-01",
+            duration_weeks=4,
+        )
+        source = Plan.objects.create(member=member, sprint=may)
+        for n in range(1, 5):
+            Week.objects.create(plan=source, week_number=n, position=n - 1)
+        source_week = source.weeks.get(week_number=1)
+        Checkpoint.objects.create(
+            week=source_week, description="Move checkpoint A", position=0,
+        )
+        Checkpoint.objects.create(
+            week=source_week, description="Move checkpoint B", position=1,
+        )
+        Checkpoint.objects.create(
+            week=source_week,
+            description="Completed checkpoint stays",
+            position=2,
+            done_at="2026-05-10T10:00:00Z",
+        )
+        Deliverable.objects.create(
+            plan=source, description="Move deliverable", position=0,
+        )
+        source_id = source.pk
+        june_id = june.pk
+        july_id = july.pk
+        connection.close()
+
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+
+        page.goto(
+            f"{django_server}/studio/plans/{source_id}/",
+            wait_until="domcontentloaded",
+        )
+        page.get_by_test_id("studio-plan-move-unfinished").click()
+        page.wait_for_url(
+            f"{django_server}/studio/plans/{source_id}/move-unfinished/"
+        )
+
+        page.get_by_test_id("move-unfinished-target-name").wait_for(
+            state="visible"
+        )
+        assert page.get_by_test_id("move-unfinished-target-name").inner_text() == (
+            "June Sprint"
+        )
+        assert page.get_by_test_id("move-unfinished-checkpoints").inner_text() == "2"
+        assert page.get_by_test_id("move-unfinished-deliverables").inner_text() == "1"
+        assert page.get_by_test_id("move-unfinished-total").inner_text() == "3"
+
+        page.get_by_test_id("move-unfinished-target").select_option("july-2026")
+        assert page.get_by_test_id("move-unfinished-target-name").inner_text() == (
+            "July Sprint"
+        )
+        page.get_by_test_id("move-unfinished-confirm").click()
+        page.wait_for_url(f"{django_server}/studio/plans/{source_id}/")
+
+        page.locator("text=Moved 3 unfinished items to \"July Sprint\"").wait_for(
+            state="visible"
+        )
+        page.locator("text=Completed checkpoint stays").wait_for(state="visible")
+        assert page.locator("text=Move checkpoint A").count() == 0
+        assert page.locator("text=Move deliverable").count() == 0
+
+        # The selected July plan receives the moved items; June remains absent.
+        july_plan = Plan.objects.get(member=member, sprint_id=july_id)
+        assert not Plan.objects.filter(member=member, sprint_id=june_id).exists()
+        connection.close()
+        page.goto(
+            f"{django_server}/studio/plans/{july_plan.pk}/",
+            wait_until="domcontentloaded",
+        )
+        page.locator("text=Move checkpoint A").wait_for(state="visible")
+        page.locator("text=Move checkpoint B").wait_for(state="visible")
+        page.locator("text=Move deliverable").wait_for(state="visible")
+
+
+@pytest.mark.django_db(transaction=True)
 class TestStaffCapturesInterviewNotes:
     """Add internal then external member notes; confirm UI separation."""
 

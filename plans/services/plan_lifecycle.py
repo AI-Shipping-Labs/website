@@ -15,6 +15,7 @@ add a third surface, copy-paste it" drift the orchestrator flagged.
 """
 
 from django.db import IntegrityError, transaction
+from django.db.models import Max
 from django.utils import timezone
 
 from accounts.utils.activation import mark_activated
@@ -23,11 +24,23 @@ from plans.models import (
     Deliverable,
     NextStep,
     Plan,
+    Sprint,
     SprintEnrollment,
     Week,
 )
 from questionnaires.models import Response
 from questionnaires.services import build_response_questions
+
+
+class MoveUnfinishedItemsError(Exception):
+    """Validation error raised by ``move_unfinished_items_to_sprint``."""
+
+    def __init__(self, message, code, *, status=400, details=None):
+        super().__init__(message)
+        self.message = message
+        self.code = code
+        self.status = status
+        self.details = details or {}
 
 
 def create_plan_for_enrollment(*, sprint, user, enrolled_by):
@@ -207,6 +220,212 @@ def count_total_unfinished(*, source_plan):
     deliverables = source_plan.deliverables.filter(done_at__isnull=True).count()
     next_steps = source_plan.next_steps.filter(done_at__isnull=True).count()
     return checkpoints + deliverables + next_steps
+
+
+def unfinished_plan_item_counts(*, source_plan):
+    """Return unfinished Checkpoint/Deliverable/NextStep counts."""
+    checkpoints = Checkpoint.objects.filter(
+        week__plan=source_plan, done_at__isnull=True,
+    ).count()
+    deliverables = source_plan.deliverables.filter(done_at__isnull=True).count()
+    next_steps = source_plan.next_steps.filter(done_at__isnull=True).count()
+    return {
+        'checkpoints': checkpoints,
+        'deliverables': deliverables,
+        'next_steps': next_steps,
+        'total': checkpoints + deliverables + next_steps,
+    }
+
+
+def eligible_move_target_sprints(*, source_plan):
+    """Later non-cancelled sprints eligible for moving unfinished items."""
+    return Sprint.objects.filter(
+        start_date__gt=source_plan.sprint.start_date,
+    ).exclude(status='cancelled').order_by('start_date', 'id')
+
+
+def _next_position(queryset):
+    max_position = queryset.aggregate(max_position=Max('position'))['max_position']
+    return 0 if max_position is None else max_position + 1
+
+
+def _move_summary(*, source_plan, target_plan, target_sprint, created_target_plan, counts):
+    return {
+        'source_plan_id': source_plan.pk,
+        'source_sprint_slug': source_plan.sprint.slug,
+        'target_plan_id': target_plan.pk,
+        'target_sprint_slug': target_sprint.slug,
+        'created_target_plan': created_target_plan,
+        'moved': counts,
+    }
+
+
+def move_unfinished_items_to_sprint(*, source_plan, target_sprint, actor):
+    """Move unfinished plan work items into a later sprint for the member.
+
+    Moves existing rows, rather than copying them:
+    - unfinished ``Checkpoint`` rows move to the same-numbered target week,
+      or to the target plan's last week when the target sprint is shorter;
+    - unfinished ``Deliverable`` and ``NextStep`` rows move to the target
+      plan;
+    - completed rows and all other plan content remain on the source plan.
+
+    The target plan is reused when it already exists, otherwise it is
+    created through ``create_plan_for_enrollment`` so the enrollment and
+    weeks are materialized consistently. Runs in one transaction; any
+    validation or database failure leaves both plans unchanged.
+    """
+    if target_sprint.status == 'cancelled':
+        raise MoveUnfinishedItemsError(
+            'Target sprint is cancelled',
+            'cancelled_target_sprint',
+            status=422,
+            details={'target_sprint_slug': target_sprint.slug},
+        )
+    if target_sprint.start_date <= source_plan.sprint.start_date:
+        raise MoveUnfinishedItemsError(
+            'Target sprint must be later than the source sprint',
+            'target_sprint_not_later',
+            status=422,
+            details={
+                'source_sprint_slug': source_plan.sprint.slug,
+                'target_sprint_slug': target_sprint.slug,
+            },
+        )
+
+    with transaction.atomic():
+        source_plan = (
+            Plan.objects
+            .select_for_update()
+            .select_related('member', 'sprint')
+            .get(pk=source_plan.pk)
+        )
+        target_sprint = Sprint.objects.select_for_update().get(pk=target_sprint.pk)
+        if target_sprint.status == 'cancelled':
+            raise MoveUnfinishedItemsError(
+                'Target sprint is cancelled',
+                'cancelled_target_sprint',
+                status=422,
+                details={'target_sprint_slug': target_sprint.slug},
+            )
+        if target_sprint.start_date <= source_plan.sprint.start_date:
+            raise MoveUnfinishedItemsError(
+                'Target sprint must be later than the source sprint',
+                'target_sprint_not_later',
+                status=422,
+                details={
+                    'source_sprint_slug': source_plan.sprint.slug,
+                    'target_sprint_slug': target_sprint.slug,
+                },
+            )
+
+        counts = unfinished_plan_item_counts(source_plan=source_plan)
+        if counts['total'] == 0:
+            raise MoveUnfinishedItemsError(
+                'Source plan has no unfinished items to move',
+                'no_unfinished_items',
+                status=422,
+                details={'source_plan_id': source_plan.pk},
+            )
+
+        target_plan, _enrollment, created_target_plan = create_plan_for_enrollment(
+            sprint=target_sprint,
+            user=source_plan.member,
+            enrolled_by=actor,
+        )
+        target_plan = (
+            Plan.objects
+            .select_for_update()
+            .select_related('member', 'sprint')
+            .get(pk=target_plan.pk)
+        )
+
+        target_weeks = list(
+            target_plan.weeks.select_for_update().order_by('week_number', 'id')
+        )
+        target_weeks_by_number = {week.week_number: week for week in target_weeks}
+        last_target_week = target_weeks[-1] if target_weeks else None
+        if counts['checkpoints'] and last_target_week is None:
+            raise MoveUnfinishedItemsError(
+                'Target plan has no weeks for checkpoint placement',
+                'target_plan_has_no_weeks',
+                status=422,
+                details={'target_plan_id': target_plan.pk},
+            )
+
+        moved_counts = {
+            'checkpoints': 0,
+            'deliverables': 0,
+            'next_steps': 0,
+            'total': 0,
+        }
+
+        checkpoint_positions = {
+            week.pk: _next_position(week.checkpoints.all())
+            for week in target_weeks
+        }
+        source_checkpoints = (
+            Checkpoint.objects
+            .select_for_update()
+            .filter(week__plan=source_plan, done_at__isnull=True)
+            .select_related('week')
+            .order_by('week__week_number', 'position', 'id')
+        )
+        for checkpoint in source_checkpoints:
+            target_week = target_weeks_by_number.get(
+                checkpoint.week.week_number,
+                last_target_week,
+            )
+            checkpoint.week = target_week
+            checkpoint.position = checkpoint_positions[target_week.pk]
+            checkpoint_positions[target_week.pk] += 1
+            checkpoint.done_at = None
+            checkpoint.save(update_fields=['week', 'position', 'done_at', 'updated_at'])
+            moved_counts['checkpoints'] += 1
+
+        deliverable_position = _next_position(target_plan.deliverables.all())
+        source_deliverables = (
+            source_plan.deliverables
+            .select_for_update()
+            .filter(done_at__isnull=True)
+            .order_by('position', 'id')
+        )
+        for deliverable in source_deliverables:
+            deliverable.plan = target_plan
+            deliverable.position = deliverable_position
+            deliverable_position += 1
+            deliverable.done_at = None
+            deliverable.save(update_fields=['plan', 'position', 'done_at', 'updated_at'])
+            moved_counts['deliverables'] += 1
+
+        next_step_position = _next_position(target_plan.next_steps.all())
+        source_next_steps = (
+            source_plan.next_steps
+            .select_for_update()
+            .filter(done_at__isnull=True)
+            .order_by('position', 'id')
+        )
+        for step in source_next_steps:
+            step.plan = target_plan
+            step.position = next_step_position
+            next_step_position += 1
+            step.done_at = None
+            step.save(update_fields=['plan', 'position', 'done_at', 'updated_at'])
+            moved_counts['next_steps'] += 1
+
+        moved_counts['total'] = (
+            moved_counts['checkpoints']
+            + moved_counts['deliverables']
+            + moved_counts['next_steps']
+        )
+
+    return _move_summary(
+        source_plan=source_plan,
+        target_plan=target_plan,
+        target_sprint=target_sprint,
+        created_target_plan=created_target_plan,
+        counts=moved_counts,
+    )
 
 
 def count_unfinished_carry_over_items(*, source_plan, destination_plan):

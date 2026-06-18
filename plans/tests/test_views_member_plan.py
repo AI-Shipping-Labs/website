@@ -205,7 +205,12 @@ class MemberPlanDetailTest(TestCase):
         self.assertLess(body.index('Second resource'), body.index('Carlos'))
 
     def test_member_plan_detail_teammate_has_read_only_status_indicators(self):
-        week = Week.objects.create(plan=self.alice_plan_cohort, week_number=1)
+        week = Week.objects.create(
+            plan=self.alice_plan_cohort, week_number=1, position=0,
+        )
+        Week.objects.create(
+            plan=self.alice_plan_cohort, week_number=2, position=1,
+        )
         Checkpoint.objects.create(week=week, description='Read only checkpoint')
         Deliverable.objects.create(
             plan=self.alice_plan_cohort,
@@ -229,6 +234,10 @@ class MemberPlanDetailTest(TestCase):
         self.assertNotContains(response, 'data-done-toggle')
         self.assertNotContains(response, 'data-markdown-input')
         self.assertNotContains(response, 'data-testid="plan-item-edit"')
+        self.assertNotContains(response, 'data-checkpoint-drag-handle')
+        self.assertNotContains(response, 'data-testid="move-incomplete-to-next-week"')
+        self.assertContains(response, 'data-checkpoint-card')
+        self.assertContains(response, 'Read only checkpoint')
 
     def test_member_plan_detail_teammate_blocked_from_private_plan(self):
         self.client.force_login(self.bob)
@@ -381,6 +390,10 @@ class MyPlanDetailOwnerSurfaceTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '<strong>owner</strong>', html=True)
         self.assertContains(response, '<strong>prototype</strong>', html=True)
+        self.assertContains(response, 'data-checkpoint-card')
+        self.assertContains(response, 'data-checkpoint-list')
+        self.assertContains(response, 'data-checkpoint-text')
+        self.assertContains(response, 'data-checkpoint-drag-handle')
         self.assertContains(response, 'data-testid="plan-row-done-toggle"')
         self.assertContains(response, 'data-testid="plan-item-markdown-input"')
         self.assertContains(response, 'data-testid="plan-item-edit"')
@@ -395,6 +408,25 @@ class MyPlanDetailOwnerSurfaceTest(TestCase):
         )
         self.assertNotContains(response, 'Internal notes')
         self.assertNotContains(response, 'href="/studio/')
+
+    def test_owner_page_shows_bulk_move_only_before_final_week(self):
+        Week.objects.create(plan=self.plan, week_number=2, position=1)
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse(
+                'my_plan_detail',
+                kwargs={
+                    'sprint_slug': self.sprint.slug,
+                    'plan_id': self.plan.pk,
+                },
+            ),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'data-testid="move-incomplete-to-next-week"',
+            count=1,
+        )
 
     def test_owner_workspace_prioritizes_timeline_and_resources(self):
         self.client.force_login(self.owner)

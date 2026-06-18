@@ -1,0 +1,85 @@
+{% load plan_markdown %}
+{% comment %}
+Shared sprint-plan checkpoint task card.
+
+The shared task-board client binds to the canonical data-checkpoint-* hooks.
+Surface-specific data-testid values remain stable for existing member and
+Studio tests.
+{% endcomment %}
+{% if task_surface == "studio" %}
+<li data-testid="checkpoint-chip"
+    data-checkpoint-card
+    data-checkpoint-id="{{ checkpoint.pk }}"
+    data-item-id="{{ checkpoint.pk }}"
+    data-week-id="{{ week.pk }}"
+    data-position="{{ checkpoint.position }}"
+    data-done="{% if checkpoint.done_at %}true{% else %}false{% endif %}"
+    tabindex="0"
+    class="plan-editor-checkpoint group flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent">
+  <span class="plan-editor-drag-handle cursor-grab text-muted-foreground" data-checkpoint-drag-handle aria-hidden="true">::</span>
+  <input type="checkbox"
+         data-testid="checkpoint-done-toggle"
+         data-checkpoint-done-toggle
+         class="plan-editor-checkpoint-done"
+         {% if checkpoint.done_at %}checked{% endif %}>
+  <span class="plan-editor-checkpoint-text plan-markdown flex-1 {% if checkpoint.done_at %}line-through text-muted-foreground{% endif %}"
+        data-testid="checkpoint-text"
+        data-checkpoint-text
+        data-markdown-source="{{ checkpoint.description }}">{{ checkpoint.description|plan_markdown }}</span>
+  <button type="button"
+          data-testid="checkpoint-delete"
+          data-checkpoint-delete
+          class="plan-editor-checkpoint-delete text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">x</button>
+</li>
+{% else %}
+<li class="group flex min-h-[52px] items-start gap-3 rounded-md bg-card px-3 py-3 text-sm shadow-sm ring-1 ring-border/70 transition-colors {% if checkpoint.done_at %}is-complete{% endif %}"
+    data-testid="plan-checkpoint"
+    data-checkpoint-card
+    data-plan-item
+    data-item-type="checkpoint"
+    data-item-id="{{ checkpoint.pk }}"
+    data-checkpoint-id="{{ checkpoint.pk }}"
+    data-week-id="{{ week.pk }}"
+    data-position="{{ checkpoint.position }}"
+    data-done="{% if checkpoint.done_at %}true{% else %}false{% endif %}"
+    {% if plan_can_edit %}tabindex="0"{% endif %}>
+  {% if plan_can_edit %}
+  <span class="mt-1 cursor-grab text-muted-foreground opacity-70 group-hover:opacity-100"
+        data-checkpoint-drag-handle
+        aria-hidden="true">::</span>
+  <input type="checkbox"
+         class="mt-1 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent"
+         data-testid="plan-row-done-toggle"
+         data-checkpoint-done-toggle
+         data-done-toggle
+         aria-label="Mark checkpoint done"
+         {% if checkpoint.done_at %}checked{% endif %}>
+  {% else %}
+    {% if checkpoint.done_at %}
+    <span class="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-500/15 text-xs text-green-400" aria-label="Done">&#10003;</span>
+    {% else %}
+    <span class="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border text-xs text-muted-foreground" aria-label="Not done"></span>
+    {% endif %}
+  {% endif %}
+  <div class="min-w-0 flex-1">
+    <div class="plan-markdown cursor-text {% if checkpoint.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
+         data-testid="checkpoint-text"
+         data-checkpoint-text
+         data-rendered-markdown
+         {% if plan_can_edit %}data-markdown-source="{{ checkpoint.description }}"{% endif %}>{{ checkpoint.description|plan_markdown }}</div>
+    {% if plan_can_edit %}
+    <textarea class="mt-2 hidden w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              rows="3"
+              data-checkpoint-edit-input
+              data-markdown-input
+              data-testid="plan-item-markdown-input">{{ checkpoint.description }}</textarea>
+    <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      <button type="button" class="text-accent hover:underline" data-checkpoint-edit data-edit-item data-testid="plan-item-edit">Edit</button>
+      <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-checkpoint-save data-save-item data-testid="plan-item-save">Save</button>
+      <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-checkpoint-cancel data-cancel-edit>Cancel</button>
+      <span class="text-muted-foreground" data-checkpoint-status data-save-status data-testid="plan-item-save-status" aria-live="polite"></span>
+    </div>
+    {% endif %}
+  </div>
+</li>
+{% endif %}

@@ -19,6 +19,32 @@ class ActivitySectionTest(TestCase):
         cls.member = User.objects.create_user(
             email='member-853@test.com', password='pw',
         )
+        from content.models import Course, Module, Unit
+        from events.models import Event
+
+        cls.course = Course.objects.create(
+            title='Activity Course',
+            slug='activity-course',
+            status='published',
+        )
+        cls.module = Module.objects.create(
+            course=cls.course,
+            title='Module A',
+            slug='module-a',
+            sort_order=1,
+        )
+        cls.unit = Unit.objects.create(
+            module=cls.module,
+            title='Lesson A',
+            slug='lesson-a',
+            sort_order=1,
+        )
+        cls.event = Event.objects.create(
+            title='Activity Event',
+            slug='activity-event',
+            start_datetime=timezone.now() + timezone.timedelta(days=1),
+            status='upcoming',
+        )
         # Creating users fires the signup signal; clear so each test
         # controls the rows it expects.
         UserActivity.objects.all().delete()
@@ -29,12 +55,22 @@ class ActivitySectionTest(TestCase):
     def _url(self):
         return reverse('studio_user_detail', args=[self.member.pk])
 
-    def _add(self, event_type, label, target_url='', minutes_ago=0):
+    def _add(
+        self,
+        event_type,
+        label,
+        target_url='',
+        minutes_ago=0,
+        object_type='',
+        object_id='',
+    ):
         return UserActivity.objects.create(
             user=self.member,
             event_type=event_type,
             label=label,
             target_url=target_url,
+            object_type=object_type,
+            object_id=object_id,
             occurred_at=timezone.now() - timezone.timedelta(minutes=minutes_ago),
         )
 
@@ -73,14 +109,111 @@ class ActivitySectionTest(TestCase):
         self.assertContains(response, 'data-testid="user-activity-type"')
         self.assertContains(response, 'Email click')
 
-    def test_target_url_makes_label_clickable(self):
+    def test_safe_public_target_url_makes_label_clickable(self):
         self._add(
-            UserActivity.EVENT_COURSE_ENROLL,
-            'Enrolled in course: DE',
-            target_url='/studio/courses/5/edit',
+            UserActivity.EVENT_EMAIL_CLICK,
+            'Clicked email link',
+            target_url='/notifications',
         )
         response = self.client.get(self._url())
-        self.assertContains(response, 'href="/studio/courses/5/edit"')
+        self.assertContains(response, 'href="/notifications"')
+
+    def test_resource_view_keeps_public_target_url(self):
+        self._add(
+            UserActivity.EVENT_RESOURCE_VIEW,
+            'Viewed article: Public Link',
+            target_url='/blog/public-link',
+        )
+        response = self.client.get(self._url())
+        self.assertContains(response, 'href="/blog/public-link"')
+
+    def test_legacy_course_studio_url_derives_public_url(self):
+        self._add(
+            UserActivity.EVENT_COURSE_ENROLL,
+            'Enrolled in course: Activity Course',
+            target_url=f'/studio/courses/{self.course.pk}/edit',
+            object_type='course',
+            object_id=self.course.slug,
+        )
+        response = self.client.get(self._url())
+        self.assertContains(response, 'href="/courses/activity-course"')
+        self.assertNotContains(
+            response, f'href="/studio/courses/{self.course.pk}/edit"',
+        )
+
+    def test_legacy_lesson_studio_url_derives_public_url(self):
+        self._add(
+            UserActivity.EVENT_LESSON_OPEN,
+            'Opened lesson: Module A / Lesson A',
+            target_url=f'/studio/units/{self.unit.pk}/edit',
+            object_type='unit',
+            object_id=str(self.unit.pk),
+        )
+        response = self.client.get(self._url())
+        self.assertContains(
+            response,
+            'href="/courses/activity-course/module-a/lesson-a"',
+        )
+        self.assertNotContains(
+            response, f'href="/studio/units/{self.unit.pk}/edit"',
+        )
+
+    def test_event_register_and_join_derives_public_url(self):
+        self._add(
+            UserActivity.EVENT_EVENT_REGISTER,
+            'Registered for event: Activity Event',
+            target_url=f'/studio/events/{self.event.pk}/edit',
+            object_type='event',
+            object_id=self.event.slug,
+            minutes_ago=2,
+        )
+        self._add(
+            UserActivity.EVENT_EVENT_JOIN,
+            'Joined event: Activity Event',
+            target_url=f'/studio/events/{self.event.pk}/edit',
+            object_type='event',
+            object_id=self.event.slug,
+            minutes_ago=1,
+        )
+        response = self.client.get(self._url())
+        public_url = self.event.get_absolute_url()
+        self.assertContains(response, f'href="{public_url}"', count=2)
+        self.assertNotContains(
+            response, f'href="/studio/events/{self.event.pk}/edit"',
+        )
+
+    def test_deleted_or_malformed_targets_render_plain_text(self):
+        self._add(
+            UserActivity.EVENT_COURSE_ENROLL,
+            'Enrolled in course: Missing',
+            target_url='/studio/courses/404/edit',
+            object_type='course',
+            object_id='missing-course',
+            minutes_ago=3,
+        )
+        self._add(
+            UserActivity.EVENT_LESSON_OPEN,
+            'Opened lesson: Missing',
+            target_url='/admin/content/unit/404/change/',
+            object_type='unit',
+            object_id='not-an-int',
+            minutes_ago=2,
+        )
+        self._add(
+            UserActivity.EVENT_EMAIL_CLICK,
+            'Clicked external dashboard',
+            target_url='https://dashboard.stripe.com/customers/cus_123',
+            minutes_ago=1,
+        )
+        response = self.client.get(self._url())
+        self.assertContains(response, 'Enrolled in course: Missing')
+        self.assertContains(response, 'Opened lesson: Missing')
+        self.assertContains(response, 'Clicked external dashboard')
+        self.assertNotContains(response, 'href="/studio/courses/404/edit"')
+        self.assertNotContains(
+            response, 'href="/admin/content/unit/404/change/"',
+        )
+        self.assertNotContains(response, 'href="https://dashboard.stripe.com')
 
     def test_more_line_when_over_limit(self):
         # Display window raised to 30 in #773 (resource_view rows share
@@ -111,6 +244,35 @@ class ActivitySectionTest(TestCase):
 
         with self.assertNumQueries(2):
             _build_activity_timeline(busy)
+
+    def test_query_budget_batches_public_target_lookups(self):
+        for i in range(12):
+            self._add(
+                UserActivity.EVENT_COURSE_ENROLL,
+                f'Course {i}',
+                object_type='course',
+                object_id=self.course.slug,
+                minutes_ago=i,
+            )
+            self._add(
+                UserActivity.EVENT_LESSON_OPEN,
+                f'Lesson {i}',
+                object_type='unit',
+                object_id=str(self.unit.pk),
+                minutes_ago=i + 20,
+            )
+            self._add(
+                UserActivity.EVENT_EVENT_REGISTER,
+                f'Event {i}',
+                object_type='event',
+                object_id=self.event.slug,
+                minutes_ago=i + 40,
+            )
+
+        from studio.views.users import _build_activity_timeline
+
+        with self.assertNumQueries(5):
+            _build_activity_timeline(self.member)
 
     def test_query_budget_empty_user_single_query(self):
         from studio.views.users import _build_activity_timeline

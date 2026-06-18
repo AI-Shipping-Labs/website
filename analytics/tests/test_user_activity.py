@@ -14,6 +14,8 @@ from django.utils import timezone
 from analytics.activity import (
     get_user_activity_retention_days,
     record_activity,
+    record_event_join,
+    record_event_register,
     record_lesson_open,
 )
 from analytics.models import UserActivity
@@ -99,6 +101,7 @@ class LessonOpenDedupeTest(TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row.event_type, UserActivity.EVENT_LESSON_OPEN)
         self.assertIn('Intro', row.label)
+        self.assertEqual(row.target_url, '/courses/llm/m1/intro')
 
     def test_dedupes_within_window(self):
         record_lesson_open(self.user, unit=self.unit)
@@ -155,7 +158,41 @@ class CourseEnrollInstrumentationTest(TestCase):
         self.assertIsNotNone(row)
         self.assertIn('Data Eng', row.label)
         self.assertEqual(row.object_id, 'de')
-        self.assertTrue(row.target_url)
+        self.assertEqual(row.target_url, '/courses/de')
+
+
+class EventActivityInstrumentationTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from events.models import Event
+
+        cls.user = User.objects.create_user(
+            email='event-act@test.com',
+            password='pw',
+        )
+        cls.event = Event.objects.create(
+            title='Public Event',
+            slug='public-event',
+            start_datetime=timezone.now() + timedelta(days=1),
+            status='upcoming',
+        )
+
+    def setUp(self):
+        UserActivity.objects.all().delete()
+
+    def test_event_register_records_public_target(self):
+        row = record_event_register(self.user, self.event)
+        self.assertIsNotNone(row)
+        self.assertEqual(row.event_type, UserActivity.EVENT_EVENT_REGISTER)
+        self.assertEqual(row.object_id, 'public-event')
+        self.assertEqual(row.target_url, self.event.get_absolute_url())
+
+    def test_event_join_records_public_target(self):
+        row = record_event_join(self.user, self.event)
+        self.assertIsNotNone(row)
+        self.assertEqual(row.event_type, UserActivity.EVENT_EVENT_JOIN)
+        self.assertEqual(row.object_id, 'public-event')
+        self.assertEqual(row.target_url, self.event.get_absolute_url())
 
 
 class PurgeTaskTest(TestCase):
@@ -204,3 +241,47 @@ class BackfillCommandTest(TestCase):
             user=user, event_type=UserActivity.EVENT_SIGNUP,
         ).count()
         self.assertEqual(second_count, 1)
+
+    def test_backfill_course_and_event_rows_use_public_targets(self):
+        from django.core.management import call_command
+
+        from content.models import Course, Enrollment
+        from events.models import Event, EventJoinClick, EventRegistration
+
+        user = User.objects.create_user(email='bf-links@test.com', password='pw')
+        course = Course.objects.create(
+            title='Backfill Course',
+            slug='backfill-course',
+            status='published',
+        )
+        event = Event.objects.create(
+            title='Backfill Event',
+            slug='backfill-event',
+            start_datetime=timezone.now() + timedelta(days=1),
+            status='upcoming',
+        )
+        Enrollment.objects.create(user=user, course=course)
+        EventRegistration.objects.create(user=user, event=event)
+        EventJoinClick.objects.create(user=user, event=event)
+        UserActivity.objects.all().delete()
+
+        call_command('backfill_user_activity')
+
+        course_row = UserActivity.objects.get(
+            user=user,
+            event_type=UserActivity.EVENT_COURSE_ENROLL,
+            object_id='backfill-course',
+        )
+        register_row = UserActivity.objects.get(
+            user=user,
+            event_type=UserActivity.EVENT_EVENT_REGISTER,
+            object_id='backfill-event',
+        )
+        join_row = UserActivity.objects.get(
+            user=user,
+            event_type=UserActivity.EVENT_EVENT_JOIN,
+            object_id='backfill-event',
+        )
+        self.assertEqual(course_row.target_url, '/courses/backfill-course')
+        self.assertEqual(register_row.target_url, event.get_absolute_url())
+        self.assertEqual(join_row.target_url, event.get_absolute_url())

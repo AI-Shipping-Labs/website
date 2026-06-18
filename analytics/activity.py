@@ -15,12 +15,15 @@ without a redeploy.
 """
 
 import logging
+from urllib.parse import urlsplit
 
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from accounts.utils.user_checks import is_authenticated_user
 from analytics.models import UserActivity
+from content.models.course import Course, Unit
+from events.models.event import Event
 from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -31,6 +34,7 @@ logger = logging.getLogger(__name__)
 # bounded for storage / PII. Tunable via the Studio-editable
 # ``USER_ACTIVITY_RETENTION_DAYS`` setting.
 DEFAULT_USER_ACTIVITY_RETENTION_DAYS = 365
+MANAGEMENT_ACTIVITY_URL_PREFIXES = ('/studio', '/admin')
 
 
 def get_user_activity_retention_days():
@@ -122,7 +126,7 @@ def record_lesson_open(user, *, unit, dedupe_minutes=30):
 
         module = unit.module
         label = f'Opened lesson: {module.title} / {unit.title}'
-        target_url = _safe_studio_unit_url(unit.pk)
+        target_url = public_unit_activity_url(unit)
         return record_activity(
             user,
             UserActivity.EVENT_LESSON_OPEN,
@@ -140,14 +144,6 @@ def record_lesson_open(user, *, unit, dedupe_minutes=30):
         return None
 
 
-def _safe_studio_unit_url(unit_pk):
-    """Build the Studio unit-edit deep link, or '' if reversing fails."""
-    try:
-        return reverse('studio_unit_edit', args=[unit_pk])
-    except NoReverseMatch:
-        return ''
-
-
 def _safe_public_url(name, *args):
     """Reverse a named public URL, returning '' on ``NoReverseMatch``.
 
@@ -159,6 +155,155 @@ def _safe_public_url(name, *args):
         return reverse(name, args=args)
     except NoReverseMatch:
         return ''
+
+
+def is_safe_public_activity_url(target_url):
+    """Return True for same-site non-management activity destinations."""
+    value = (target_url or '').strip()
+    if not value.startswith('/') or value.startswith('//'):
+        return False
+    path = urlsplit(value).path
+    for prefix in MANAGEMENT_ACTIVITY_URL_PREFIXES:
+        if path == prefix or path.startswith(f'{prefix}/'):
+            return False
+    return True
+
+
+def public_course_activity_url(course):
+    """Return the public/member course URL when the course page can resolve."""
+    if course is None or getattr(course, 'status', '') != 'published':
+        return ''
+    return course.get_absolute_url() or ''
+
+
+def public_unit_activity_url(unit):
+    """Return the public/member lesson URL when the lesson page can resolve."""
+    if unit is None:
+        return ''
+    module = getattr(unit, 'module', None)
+    course = getattr(module, 'course', None)
+    if course is None or getattr(course, 'status', '') != 'published':
+        return ''
+    return unit.get_absolute_url() or ''
+
+
+def public_event_activity_url(event):
+    """Return the canonical public/member event URL when the event exists."""
+    if event is None:
+        return ''
+    return event.get_absolute_url() or ''
+
+
+def resolve_activity_target_url(
+    activity,
+    *,
+    courses_by_slug=None,
+    units_by_pk=None,
+    events_by_slug=None,
+):
+    """Apply the shared CRM activity-link policy to one activity row."""
+    courses_by_slug = courses_by_slug or {}
+    units_by_pk = units_by_pk or {}
+    events_by_slug = events_by_slug or {}
+
+    event_type = activity.event_type
+    object_id = str(activity.object_id or '')
+
+    if event_type == UserActivity.EVENT_COURSE_ENROLL and object_id:
+        target = public_course_activity_url(courses_by_slug.get(object_id))
+        if target:
+            return target
+
+    if event_type == UserActivity.EVENT_LESSON_OPEN and object_id:
+        try:
+            unit_pk = int(object_id)
+        except (TypeError, ValueError):
+            unit_pk = None
+        if unit_pk is not None:
+            target = public_unit_activity_url(units_by_pk.get(unit_pk))
+            if target:
+                return target
+
+    if event_type in {
+        UserActivity.EVENT_EVENT_REGISTER,
+        UserActivity.EVENT_EVENT_JOIN,
+    } and object_id:
+        target = public_event_activity_url(events_by_slug.get(object_id))
+        if target:
+            return target
+
+    stored_target = activity.target_url or ''
+    if is_safe_public_activity_url(stored_target):
+        return stored_target
+    return ''
+
+
+def resolve_activity_target_urls(activities):
+    """Batch-resolve public targets for visible activity rows.
+
+    The returned mapping is keyed by ``UserActivity.pk`` and uses bounded
+    lookups by object type, avoiding one query per timeline row.
+    """
+    course_slugs = set()
+    unit_pks = set()
+    event_slugs = set()
+
+    for activity in activities:
+        object_id = str(activity.object_id or '')
+        if not object_id:
+            continue
+        if activity.event_type == UserActivity.EVENT_COURSE_ENROLL:
+            course_slugs.add(object_id)
+        elif activity.event_type == UserActivity.EVENT_LESSON_OPEN:
+            try:
+                unit_pks.add(int(object_id))
+            except (TypeError, ValueError):
+                continue
+        elif activity.event_type in {
+            UserActivity.EVENT_EVENT_REGISTER,
+            UserActivity.EVENT_EVENT_JOIN,
+        }:
+            event_slugs.add(object_id)
+
+    courses_by_slug = {}
+    if course_slugs:
+        courses_by_slug = {
+            course.slug: course
+            for course in Course.objects.filter(
+                slug__in=course_slugs,
+                status='published',
+            )
+        }
+
+    units_by_pk = {}
+    if unit_pks:
+        units_by_pk = {
+            unit.pk: unit
+            for unit in Unit.objects.select_related(
+                'module',
+                'module__course',
+            ).filter(
+                pk__in=unit_pks,
+                module__course__status='published',
+            )
+        }
+
+    events_by_slug = {}
+    if event_slugs:
+        events_by_slug = {
+            event.slug: event
+            for event in Event.objects.filter(slug__in=event_slugs)
+        }
+
+    return {
+        activity.pk: resolve_activity_target_url(
+            activity,
+            courses_by_slug=courses_by_slug,
+            units_by_pk=units_by_pk,
+            events_by_slug=events_by_slug,
+        )
+        for activity in activities
+    }
 
 
 # Human-readable kind labels for ``resource_view`` rows (issue #773). Maps
@@ -247,7 +392,31 @@ def record_event_register(user, event):
         label=f'Registered for event: {event.title}',
         object_type='event',
         object_id=event.slug,
-        target_url=studio_event_url(event.pk),
+        target_url=public_event_activity_url(event),
+    )
+
+
+def record_course_enroll(user, course):
+    """Record a `course_enroll` activity row for the CRM timeline."""
+    return record_activity(
+        user,
+        UserActivity.EVENT_COURSE_ENROLL,
+        label=f'Enrolled in course: {course.title}',
+        object_type='course',
+        object_id=course.slug,
+        target_url=public_course_activity_url(course),
+    )
+
+
+def record_event_join(user, event):
+    """Record an `event_join` activity row for the CRM timeline."""
+    return record_activity(
+        user,
+        UserActivity.EVENT_EVENT_JOIN,
+        label=f'Joined event: {event.title}',
+        object_type='event',
+        object_id=event.slug,
+        target_url=public_event_activity_url(event),
     )
 
 
@@ -272,6 +441,14 @@ __all__ = [
     'record_lesson_open',
     'record_resource_view',
     'record_event_register',
+    'record_course_enroll',
+    'record_event_join',
+    'resolve_activity_target_url',
+    'resolve_activity_target_urls',
+    'is_safe_public_activity_url',
+    'public_course_activity_url',
+    'public_unit_activity_url',
+    'public_event_activity_url',
     'studio_course_url',
     'studio_event_url',
     'get_user_activity_retention_days',

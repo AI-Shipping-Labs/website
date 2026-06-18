@@ -502,16 +502,8 @@ def event_join_redirect(request, slug):
 
     # Mirror the join click onto the CRM timeline (issue #853).
     # Defensive — never raises into the redirect path.
-    from analytics.activity import record_activity, studio_event_url
-    from analytics.models import UserActivity
-    record_activity(
-        request.user,
-        UserActivity.EVENT_EVENT_JOIN,
-        label=f'Joined event: {event.title}',
-        object_type='event',
-        object_id=event.slug,
-        target_url=studio_event_url(event.pk),
-    )
+    from analytics.activity import record_event_join
+    record_event_join(request.user, event)
 
     # Issue #936: mark this registration as "joined" on the first
     # live-window click. A guarded ``filter(joined_at__isnull=True)``

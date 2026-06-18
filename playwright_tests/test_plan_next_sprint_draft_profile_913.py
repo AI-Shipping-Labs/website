@@ -227,6 +227,8 @@ class TestDraftForMemberWhoSkippedOnboarding:
 
             create_staff_user("admin-913b@test.com")
             # No onboarding response and no CRM record for this member.
+            # Account signup activity is still part of the member profile
+            # context after #1054.
             member = create_user("m-913b@test.com")
             plan = _plan_with_week(member, _sprint("jun-913b"))
             plan_id = plan.pk
@@ -255,7 +257,19 @@ class TestDraftForMemberWhoSkippedOnboarding:
             body = page.content()
             assert "Continue from plan state only" in body
             assert "Scope a RAG project" in body
-            # No profile block was sent (no onboarding / CRM data).
-            assert seen and "=== Member profile ===" not in seen[0]
+            # The profile block may contain recent activity even when the
+            # member skipped onboarding, but it must not invent onboarding /
+            # CRM facts and the draft still falls back to plan state.
+            assert seen
+            assert "=== Member profile ===" in seen[0]
+            assert "Recent activity:" in seen[0]
+            assert "Signup: Signed up" in seen[0]
+            assert "Switch into an AI engineering role" not in seen[0]
+            assert "CRM summary:" not in seen[0]
+            assert "Onboarding answers:" not in seen[0]
+            assert (
+                "(no recent updates — draft from plan state only)"
+                in seen[0]
+            )
         finally:
             context.close()

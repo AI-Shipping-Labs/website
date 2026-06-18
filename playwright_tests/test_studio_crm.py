@@ -770,14 +770,23 @@ class TestStudioCRM:
                 f'[data-testid="{testid}"]'
             ).count() == 0, f"unexpected element with testid {testid!r}"
 
+        # The former content context section is now recent activity context.
+        assert page.locator(
+            '[data-testid="crm-content-context-section"]'
+        ).count() == 0
+        assert page.locator("text=Content context").count() == 0
+        assert page.locator('[data-testid="crm-activity-section"]').count() == 1
+
         # The remaining sections still render in the same vertical
-        # order: header, snapshot, plans, notes, content context.
+        # order: header, snapshot, activity, plans, calls, onboarding, notes.
         expected_order = [
             "crm-detail-header",
             "crm-snapshot-card",
+            "crm-activity-section",
             "crm-plans-section",
+            "crm-booked-calls-section",
+            "crm-onboarding-section",
             "crm-notes-section",
-            "crm-content-context-section",
         ]
         body = page.content()
         positions = [body.find(f'data-testid="{t}"') for t in expected_order]

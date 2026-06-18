@@ -18,6 +18,7 @@ from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from django.test import TestCase
+from django.urls import reverse
 
 from plans.models import (
     InterviewNote,
@@ -157,6 +158,19 @@ class SprintDurationTest(TestCase):
         sprint_8.full_clean()
         self.assertEqual(
             Sprint.objects.get(pk=sprint_8.pk).duration_weeks, 8,
+        )
+
+
+class SprintUrlTest(TestCase):
+    def test_get_absolute_url_returns_public_sprint_detail_url(self):
+        sprint = Sprint(
+            name='June 2026', slug='june-2026',
+            start_date=datetime.date(2026, 6, 1),
+        )
+
+        self.assertEqual(
+            sprint.get_absolute_url(),
+            reverse('sprint_detail', kwargs={'sprint_slug': 'june-2026'}),
         )
 
 

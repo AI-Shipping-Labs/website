@@ -20,6 +20,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 
 from accounts.utils.user_checks import is_authenticated_user, is_staff_user
@@ -164,6 +165,9 @@ class Sprint(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return self.name
+
+    def get_absolute_url(self):
+        return reverse('sprint_detail', kwargs={'sprint_slug': self.slug})
 
     @property
     def end_date(self):

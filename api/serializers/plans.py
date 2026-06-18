@@ -69,6 +69,20 @@ def serialize_checkpoint(checkpoint):
     }
 
 
+def serialize_week_note(note):
+    """Singleton participant week-note dict."""
+    if note is None:
+        return None
+    return {
+        "id": note.id,
+        "week_id": note.week_id,
+        "body": note.body,
+        "author_email": note.author.email if note.author_id else None,
+        "created_at": _isoformat_or_none(note.created_at),
+        "updated_at": _isoformat_or_none(note.updated_at),
+    }
+
+
 def serialize_week(week, *, with_checkpoints=True):
     """Week dict. When ``with_checkpoints`` is True the week includes a
     ``checkpoints`` array (used in plan detail). The flat shape is used by
@@ -80,6 +94,7 @@ def serialize_week(week, *, with_checkpoints=True):
         "week_number": week.week_number,
         "theme": week.theme,
         "position": week.position,
+        "note": serialize_week_note(week.notes.first()),
     }
     if with_checkpoints:
         data["checkpoints"] = [

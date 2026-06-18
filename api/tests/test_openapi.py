@@ -80,6 +80,14 @@ class BuildSpecTest(TestCase):
             {"get", "patch", "delete"},
         )
 
+    def test_week_note_singular_path_present(self):
+        self.assertIn("/api/weeks/{week_id}/note", self.document["paths"])
+        operations = self.document["paths"]["/api/weeks/{week_id}/note"]
+        self.assertEqual(
+            set(operations.keys()),
+            {"get", "put", "patch", "delete"},
+        )
+
     def test_path_parameter_inferred_from_django_converter(self):
         operations = self.document["paths"]["/api/sprints/{slug}"]
         get_params = operations["get"].get("parameters", [])

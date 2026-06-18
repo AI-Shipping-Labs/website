@@ -60,6 +60,10 @@ def _build_endpoints(plan_id, sprint_slug, week_id, checkpoint_id, note_id,
             "PATCH", f"/api/weeks/{week_id}", {},
             {"PATCH", "DELETE"},
         ),
+        (
+            "GET", f"/api/weeks/{week_id}/note", None,
+            {"GET", "PUT", "PATCH", "DELETE"},
+        ),
         # Checkpoints
         (
             "POST", f"/api/weeks/{week_id}/checkpoints",
@@ -186,6 +190,9 @@ class AuthMatrixTest(TestCase):
             return self.client.get(path, **(headers or {}))
         if method == "DELETE":
             return self.client.delete(path, **(headers or {}))
+        if method == "PUT":
+            data = json.dumps(body) if body is not None else "{}"
+            return self.client.put(path, data=data, **kwargs)
         data = json.dumps(body) if body is not None else "{}"
         if method == "POST":
             return self.client.post(path, data=data, **kwargs)
@@ -219,7 +226,7 @@ class AuthMatrixTest(TestCase):
 
     def test_wrong_method_returns_405_for_every_endpoint(self):
         # Map of the four primary verbs we test against.
-        all_methods = ["GET", "POST", "PATCH", "DELETE"]
+        all_methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
         auth = {"HTTP_AUTHORIZATION": f"Token {self.token.key}"}
         for _method, path, _body, allowed in self.endpoints:
             for verb in all_methods:

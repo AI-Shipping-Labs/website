@@ -150,6 +150,10 @@ class TestParticipantNotes:
             "Finished data import, blocked on evals"
             in note.locator('[data-testid="plan-week-note-body"]').inner_text()
         )
+        assert page.locator(
+            f'[data-testid="plan-week-notes"][data-week-id="{data["week_id"]}"] '
+            '[data-testid="plan-week-note-add-form"]'
+        ).count() == 0
 
         # Edit
         note.locator('[data-testid="plan-week-note-edit"]').click()
@@ -172,6 +176,19 @@ class TestParticipantNotes:
             "Finished import and drafted eval checklist"
             in note.locator('[data-testid="plan-week-note-body"]').inner_text()
         )
+        assert page.locator(
+            f'[data-testid="plan-week-notes"][data-week-id="{data["week_id"]}"] '
+            '[data-testid="plan-week-note"]'
+        ).count() == 1
+        assert page.locator(
+            f'[data-testid="plan-week-notes"][data-week-id="{data["week_id"]}"] '
+            '[data-testid="plan-week-note-add-form"]'
+        ).count() == 0
+
+        from plans.models import WeekNote
+
+        assert WeekNote.objects.filter(week_id=data["week_id"]).count() == 1
+        connection.close()
 
         # Delete (skip the confirm() dialog by accepting it)
         page.once("dialog", lambda d: d.accept())

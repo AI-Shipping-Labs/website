@@ -775,12 +775,7 @@ class NextStep(TimestampedModelMixin, models.Model):
 
 
 class WeekNote(TimestampedModelMixin, models.Model):
-    """Optional member-authored "how the week went" comment.
-
-    Unsure if anyone will use this; ship it now but do not surface it
-    prominently in the Studio UI yet (it does not have its own admin
-    page in #432).
-    """
+    """Singleton member-authored "how the week went" note for a week."""
 
     week = models.ForeignKey(
         Week, on_delete=models.CASCADE, related_name='notes',
@@ -796,6 +791,12 @@ class WeekNote(TimestampedModelMixin, models.Model):
 
     class Meta:
         ordering = ['week', '-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['week'],
+                name='unique_week_note_per_week',
+            ),
+        ]
 
     def __str__(self):
         return f'Note on week {self.week_id}'

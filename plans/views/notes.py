@@ -8,9 +8,9 @@ intake notes that must NEVER appear on member-facing surfaces.
 URLs follow the sprint-scoped no-trailing-slash convention used
 elsewhere in ``plans/urls.py``:
 
-- ``POST /sprints/<slug>/plan/<plan_id>/weeks/<week_id>/notes`` -- create a
-  note on the given week. Owner-only. Empty body returns HTTP 400 and
-  does not create a row.
+- ``POST /sprints/<slug>/plan/<plan_id>/weeks/<week_id>/notes`` -- create or
+  update the singleton note on the given week. Owner-only. Empty body returns
+  HTTP 400 and does not create or update a row.
 - ``POST /sprints/<slug>/plan/<plan_id>/week-notes/<note_id>`` (with
   ``_method=patch``) or ``PATCH ...`` -- update the body of a note.
   Author-only. Empty body returns 400.
@@ -83,7 +83,7 @@ def _serialize_note(note: WeekNote) -> dict:
 @login_required
 @require_http_methods(['POST'])
 def week_note_create(request, sprint_slug, plan_id, week_id):
-    """Create a ``WeekNote`` on ``week_id``. Owner-only."""
+    """Create or update the singleton ``WeekNote`` on ``week_id``."""
     plan = _owned_plan_or_404(plan_id, sprint_slug, request.user)
     week = get_object_or_404(Week.objects.filter(pk=week_id, plan=plan))
 
@@ -95,16 +95,24 @@ def week_note_create(request, sprint_slug, plan_id, week_id):
             )
         return HttpResponseBadRequest('Note body is required.')
 
-    note = WeekNote.objects.create(
-        week=week,
-        body=body,
-        author=request.user,
-    )
+    note = WeekNote.objects.filter(week=week).first()
+    created = note is None
+    if note is not None:
+        if note.author_id != request.user.id:
+            raise Http404('Note not found')
+        note.body = body
+        note.save(update_fields=['body', 'updated_at'])
+    else:
+        note = WeekNote.objects.create(
+            week=week,
+            body=body,
+            author=request.user,
+        )
 
     if _is_ajax(request):
-        return JsonResponse(_serialize_note(note), status=201)
+        return JsonResponse(_serialize_note(note), status=201 if created else 200)
 
-    messages.success(request, 'Note added.')
+    messages.success(request, 'Note added.' if created else 'Note updated.')
     return redirect(_owner_workspace_url(plan) + f'#week-{week.pk}')
 
 

@@ -6,6 +6,7 @@ Endpoints:
 - ``POST /api/plans/<id>/weeks/`` -- create
 - ``PATCH /api/weeks/<id>/`` -- update
 - ``DELETE /api/weeks/<id>/`` -- delete
+- ``GET|PUT|PATCH|DELETE /api/weeks/<id>/note`` -- singleton participant note
 """
 
 from django.db import IntegrityError, transaction
@@ -13,13 +14,13 @@ from django.db.models import Max
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-from accounts.auth import token_required
+from accounts.auth import token_required, token_required_any_user
 from api.openapi import openapi_spec
 from api.safety import error_response
-from api.serializers.plans import serialize_week
+from api.serializers.plans import serialize_week, serialize_week_note
 from api.utils import parse_json_body, require_methods
 from api.views._permissions import visible_plans_for
-from plans.models import Week
+from plans.models import Week, WeekNote
 
 _WEEK_EXAMPLE = {
     "id": 11,
@@ -27,6 +28,16 @@ _WEEK_EXAMPLE = {
     "week_number": 1,
     "theme": "Discovery",
     "position": 0,
+    "note": None,
+    "created_at": "2026-04-15T12:00:00+00:00",
+    "updated_at": "2026-04-15T12:00:00+00:00",
+}
+
+_WEEK_NOTE_EXAMPLE = {
+    "id": 41,
+    "week_id": 11,
+    "body": "Week 1 shipped",
+    "author_email": "member@example.com",
     "created_at": "2026-04-15T12:00:00+00:00",
     "updated_at": "2026-04-15T12:00:00+00:00",
 }
@@ -47,7 +58,7 @@ def _load_plan_for_write(user, plan_id):
 def _load_week_for_write(user, week_id):
     """Return the week if the bearer can write to its plan, else an error."""
     week = (
-        Week.objects.select_related("plan")
+        Week.objects.select_related("plan", "plan__member")
         .filter(pk=week_id)
         .first()
     )
@@ -132,7 +143,7 @@ def plan_weeks_collection(request, plan_id):
         weeks = list(
             plan.weeks.all()
             .order_by("position", "week_number")
-            .prefetch_related("checkpoints")
+            .prefetch_related("checkpoints", "notes__author")
         )
         return JsonResponse(
             {"weeks": [serialize_week(w, with_checkpoints=False) for w in weeks]},
@@ -282,4 +293,132 @@ def week_detail(request, week_id):
     return JsonResponse(
         serialize_week(week, with_checkpoints=False),
         status=200,
+    )
+
+
+@token_required_any_user
+@csrf_exempt
+@require_methods("GET", "PUT", "PATCH", "DELETE")
+@openapi_spec(
+    tag="Weeks",
+    summary="Retrieve, upsert, or delete a singleton week note",
+    methods={
+        "GET": {
+            "summary": "Retrieve the singleton participant note for a week",
+            "responses": {
+                200: {
+                    "description": "The singleton note or null.",
+                    "example": {"note": _WEEK_NOTE_EXAMPLE},
+                },
+                404: {
+                    "description": "Week not found or not visible.",
+                    "example": {
+                        "error": "Week not found",
+                        "code": "unknown_week",
+                    },
+                },
+            },
+        },
+        "PUT": {
+            "summary": "Create or replace the singleton participant note",
+            "request_body": {
+                "required": ["body"],
+                "properties": {"body": {"type": "string"}},
+                "example": {"body": "Week 1 shipped"},
+            },
+            "responses": {
+                200: {
+                    "description": "Note updated.",
+                    "example": {"note": _WEEK_NOTE_EXAMPLE},
+                },
+                201: {
+                    "description": "Note created.",
+                    "example": {"note": _WEEK_NOTE_EXAMPLE},
+                },
+                400: {"description": "Invalid JSON or blank body."},
+                404: {"description": "Week not found."},
+            },
+        },
+        "PATCH": {
+            "summary": "Create or partially update the singleton participant note",
+            "request_body": {
+                "required": ["body"],
+                "properties": {"body": {"type": "string"}},
+                "example": {"body": "Week 1 shipped and demo recorded"},
+            },
+            "responses": {
+                200: {
+                    "description": "Note updated.",
+                    "example": {"note": _WEEK_NOTE_EXAMPLE},
+                },
+                201: {
+                    "description": "Note created.",
+                    "example": {"note": _WEEK_NOTE_EXAMPLE},
+                },
+                400: {"description": "Invalid JSON or blank body."},
+                404: {"description": "Week not found."},
+            },
+        },
+        "DELETE": {
+            "summary": "Delete the singleton participant note",
+            "responses": {
+                204: {"description": "Note deleted or already absent."},
+                404: {"description": "Week not found."},
+            },
+        },
+    },
+)
+def week_note_detail(request, week_id):
+    """``GET / PUT / PATCH / DELETE /api/weeks/<week_id>/note``."""
+    week, err = _load_week_for_write(request.user, week_id)
+    if err is not None:
+        return err
+
+    if request.method == "GET":
+        note = (
+            WeekNote.objects
+            .filter(week=week)
+            .select_related("author")
+            .first()
+        )
+        return JsonResponse({"note": serialize_week_note(note)}, status=200)
+
+    if request.method == "DELETE":
+        WeekNote.objects.filter(week=week).delete()
+        return JsonResponse({}, status=204)
+
+    data, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return parse_error
+    if not isinstance(data, dict):
+        return error_response(
+            "Body must be a JSON object",
+            "invalid_type",
+            details={"field": "body", "expected": "object"},
+        )
+
+    body = (data.get("body") or "").strip()
+    if not body:
+        return error_response(
+            "Missing required field: body",
+            "missing_field",
+            details={"field": "body"},
+        )
+
+    note = WeekNote.objects.filter(week=week).first()
+    created = note is None
+    if note is None:
+        note = WeekNote.objects.create(
+            week=week,
+            body=body,
+            author=week.plan.member,
+        )
+    else:
+        note.body = body
+        note.author = week.plan.member
+        note.save(update_fields=["body", "author", "updated_at"])
+    note = WeekNote.objects.select_related("author").get(pk=note.pk)
+    return JsonResponse(
+        {"note": serialize_week_note(note)},
+        status=201 if created else 200,
     )

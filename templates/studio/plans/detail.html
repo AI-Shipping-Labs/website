@@ -119,27 +119,27 @@
       {% endif %}
 
       {% comment %}
-      Read-only view of the participant ``WeekNote`` rows (issue #499).
+      Read-only view of the participant singleton ``WeekNote`` row.
       Staff cannot edit or delete from Studio -- the member-authored
       notes are owner-only, and the Studio surface is for context
       not authoring. Empty weeks render a small caption.
       {% endcomment %}
       <div class="mt-3 border-t border-border pt-3" data-testid="studio-plan-week-notes" data-week-id="{{ week.pk }}">
         <h4 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Participant notes</h4>
-        {% if week.notes.all %}
+        {% with note=week.notes.first %}
+        {% if note %}
         <ul class="space-y-2">
-          {% for note in week.notes.all %}
           <li class="rounded-md border border-border bg-card p-2" data-testid="studio-plan-week-note">
             <p class="text-xs text-muted-foreground">
               {% if note.author %}{{ note.author.email }}{% else %}-{% endif %} &middot; {{ note.created_at|operator_datetime }}
             </p>
             <p class="mt-1 whitespace-pre-line text-sm text-foreground">{{ note.body }}</p>
           </li>
-          {% endfor %}
         </ul>
         {% else %}
         <p class="text-xs text-muted-foreground italic">No participant notes for this week.</p>
         {% endif %}
+        {% endwith %}
       </div>
     </li>
     {% endfor %}

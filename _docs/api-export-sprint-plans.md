@@ -55,7 +55,8 @@ This returns a flat list with `id` and `user_email` for each plan.
 
 ## Step 3: Fetch full plan details
 
-Each plan's nested detail (goal, summary, focus, weeks, checkpoints, deliverables, etc.) is at:
+Each plan's nested detail (goal, summary, focus, weeks, checkpoints, singleton
+participant week note, deliverables, etc.) is at:
 
 ```
 GET /api/plans/<id>
@@ -132,6 +133,11 @@ For every nested-collection key present in the body, the server reconciles in pl
 
 Six collection keys participate: `weeks`, `weeks[].checkpoints`, `resources`, `deliverables`, `next_steps`, `interview_notes`. Top-level fields (`goal`, `accountability`, `summary`, `focus`, `shared_at`) keep the old partial-update behaviour — a PATCH that sends only those keys does NOT touch any child collection. Plan visibility is governed by `shared_at` (issue #728 removed the legacy `status` field).
 
+Participant week notes are intentionally not an append collection in the plan
+PATCH payload. Each week serializes a singular `note` value:
+`null` or `{id, week_id, body, author_email, created_at, updated_at}`. Manage
+that note through `/api/weeks/<week_id>/note`.
+
 The whole PATCH is wrapped in `transaction.atomic()`. If any validation fails partway through, every change rolls back; the database state matches the pre-call snapshot.
 
 ### Constraints
@@ -173,6 +179,10 @@ diff <(jq . plan81.json) <(curl -sL \
 | `/api/sprints/<slug>/plans` | GET | List plans in a sprint (flat) |
 | `/api/plans/<id>` | GET | Full nested plan detail |
 | `/api/plans/<id>` | PATCH | Update top-level fields and/or reconcile nested children (issue #734) |
+| `/api/plans/<id>/weeks` | GET | List weeks, each with `note: null | object` |
+| `/api/weeks/<week_id>/note` | GET | Read the singleton participant week note |
+| `/api/weeks/<week_id>/note` | PUT/PATCH | Create or update the singleton participant week note |
+| `/api/weeks/<week_id>/note` | DELETE | Clear the singleton participant week note |
 
 All endpoints require `Authorization: Token <key>` header.
 

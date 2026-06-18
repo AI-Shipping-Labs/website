@@ -116,7 +116,7 @@ from api.views.utm_campaigns import (
     utm_campaign_links_collection,
     utm_campaigns_collection,
 )
-from api.views.weeks import plan_weeks_collection, week_detail
+from api.views.weeks import plan_weeks_collection, week_detail, week_note_detail
 from api.views.worker import (
     worker_task_detail,
     worker_tasks_collection,
@@ -443,6 +443,11 @@ urlpatterns = [
         "weeks/<int:week_id>",
         week_detail,
         name="api_week_detail",
+    ),
+    path(
+        "weeks/<int:week_id>/note",
+        week_note_detail,
+        name="api_week_note_detail",
     ),
     # ---- Checkpoints (issue #433) -------------------------------------
     path(

@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from accounts.models import Token
-from plans.models import Checkpoint, Plan, Sprint, Week
+from plans.models import Checkpoint, Plan, Sprint, Week, WeekNote
 
 User = get_user_model()
 
@@ -26,12 +26,27 @@ class WeeksApiTestBase(TestCase):
         cls.member = User.objects.create_user(
             email="member@test.com", password="pw",
         )
+        cls.other = User.objects.create_user(
+            email="other@test.com", password="pw",
+        )
+        cls.member_token = Token(
+            key="member-week-note-token",
+            user=cls.member,
+            name="m",
+        )
+        cls.other_token = Token(
+            key="other-week-note-token",
+            user=cls.other,
+            name="o",
+        )
+        Token.objects.bulk_create([cls.member_token, cls.other_token])
         cls.plan = Plan.objects.create(
             member=cls.member, sprint=cls.sprint,
         )
 
-    def _auth(self):
-        return {"HTTP_AUTHORIZATION": f"Token {self.token.key}"}
+    def _auth(self, token=None):
+        token = token or self.token
+        return {"HTTP_AUTHORIZATION": f"Token {token.key}"}
 
 
 class WeekCreateTest(WeeksApiTestBase):
@@ -49,6 +64,7 @@ class WeekCreateTest(WeeksApiTestBase):
         self.assertEqual(response.status_code, 201)
         # First week has position 0; the new one auto-positions to 1.
         self.assertEqual(response.json()["position"], 1)
+        self.assertIsNone(response.json()["note"])
 
     def test_create_first_week_starts_at_position_zero(self):
         response = self._post({"week_number": 1})
@@ -88,6 +104,7 @@ class WeekPatchTest(WeeksApiTestBase):
         week.refresh_from_db()
         self.assertEqual(week.theme, "new")
         self.assertEqual(week.week_number, 1)
+        self.assertIsNone(response.json()["note"])
 
 
 class WeekDeleteTest(WeeksApiTestBase):
@@ -111,3 +128,130 @@ class WeekUnknownIdTest(WeeksApiTestBase):
         )
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["code"], "unknown_week")
+
+
+class WeekNoteApiTest(WeeksApiTestBase):
+    def setUp(self):
+        self.week = Week.objects.create(plan=self.plan, week_number=1)
+
+    def _put(self, payload, *, token=None):
+        return self.client.put(
+            f"/api/weeks/{self.week.id}/note",
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self._auth(token),
+        )
+
+    def _patch(self, payload, *, token=None):
+        return self.client.patch(
+            f"/api/weeks/{self.week.id}/note",
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self._auth(token),
+        )
+
+    def test_get_returns_null_when_no_note_exists(self):
+        response = self.client.get(
+            f"/api/weeks/{self.week.id}/note",
+            **self._auth(self.member_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"note": None})
+
+    def test_staff_put_then_put_updates_same_member_authored_note(self):
+        response = self._put({"body": "Week 1 shipped"})
+        self.assertEqual(response.status_code, 201)
+        first = response.json()["note"]
+        self.assertEqual(first["body"], "Week 1 shipped")
+        self.assertEqual(first["author_email"], "member@test.com")
+
+        response = self._put({"body": "Week 1 shipped and demo recorded"})
+        self.assertEqual(response.status_code, 200)
+        second = response.json()["note"]
+        self.assertEqual(second["id"], first["id"])
+        self.assertEqual(second["body"], "Week 1 shipped and demo recorded")
+        self.assertEqual(WeekNote.objects.filter(week=self.week).count(), 1)
+        self.assertEqual(self.week.notes.get().author_id, self.member.id)
+
+    def test_member_patch_can_manage_own_week_note(self):
+        response = self._patch(
+            {"body": "Member-authored note"},
+            token=self.member_token,
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["note"]["author_email"], "member@test.com")
+
+    def test_other_member_cannot_read_or_write_note(self):
+        WeekNote.objects.create(
+            week=self.week,
+            body="private weekly note",
+            author=self.member,
+        )
+        response = self.client.get(
+            f"/api/weeks/{self.week.id}/note",
+            **self._auth(self.other_token),
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["code"], "unknown_week")
+
+        response = self._put(
+            {"body": "overwrite"},
+            token=self.other_token,
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.week.notes.get().body, "private weekly note")
+
+    def test_blank_body_rejected_without_erasing_existing_note(self):
+        note = WeekNote.objects.create(
+            week=self.week,
+            body="keep me",
+            author=self.member,
+        )
+        response = self._patch({"body": "   "})
+        self.assertEqual(response.status_code, 400)
+        note.refresh_from_db()
+        self.assertEqual(note.body, "keep me")
+
+    def test_delete_clears_note_and_get_returns_null(self):
+        WeekNote.objects.create(
+            week=self.week,
+            body="delete me",
+            author=self.member,
+        )
+        response = self.client.delete(
+            f"/api/weeks/{self.week.id}/note",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(WeekNote.objects.filter(week=self.week).exists())
+
+        response = self.client.get(
+            f"/api/weeks/{self.week.id}/note",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"note": None})
+
+    def test_week_list_and_plan_detail_serialize_singular_note(self):
+        note = WeekNote.objects.create(
+            week=self.week,
+            body="serialized singleton",
+            author=self.member,
+        )
+        response = self.client.get(
+            f"/api/plans/{self.plan.id}/weeks",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 200)
+        week_body = response.json()["weeks"][0]
+        self.assertEqual(week_body["note"]["id"], note.id)
+        self.assertNotIn("notes", week_body)
+
+        response = self.client.get(
+            f"/api/plans/{self.plan.id}",
+            **self._auth(),
+        )
+        self.assertEqual(response.status_code, 200)
+        week_body = response.json()["weeks"][0]
+        self.assertEqual(week_body["note"]["body"], "serialized singleton")
+        self.assertNotIn("notes", week_body)

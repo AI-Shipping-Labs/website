@@ -25,6 +25,7 @@ from plans.models import (
     Plan,
     Sprint,
     Week,
+    WeekNote,
 )
 
 User = get_user_model()
@@ -83,6 +84,13 @@ class WeekModelConstraintsTest(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 Week.objects.create(plan=self.plan, week_number=1)
+
+    def test_week_note_unique_per_week(self):
+        week = Week.objects.create(plan=self.plan, week_number=1)
+        WeekNote.objects.create(week=week, body='first')
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                WeekNote.objects.create(week=week, body='second')
 
 
 class NextStepModelTest(TestCase):

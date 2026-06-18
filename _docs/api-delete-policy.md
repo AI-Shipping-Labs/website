@@ -67,6 +67,7 @@ would break the editor. All are gated by `visible_plans_for(user)`.
 | --- | --- |
 | `api/views/plans.py` (`plan_detail`) | a member's `Plan` (staff-only; 409 if sprint guard applies) |
 | `api/views/weeks.py` (`week_detail`) | a `Week`, re-packs siblings |
+| `api/views/weeks.py` (`week_note_detail`) | the singleton participant `WeekNote` for a week |
 | `api/views/checkpoints.py` (`checkpoint_detail`) | a `Checkpoint`, re-packs |
 | `api/views/plan_items.py` (`resource_detail`, `deliverable_detail`, `next_step_detail`) | a plan item, re-packs |
 
@@ -100,8 +101,9 @@ be changed with `PATCH status=...`); only the hard-`DELETE` is blocked.
    `DELETE` handler fails CI until it is classified — so a violation cannot be
    silently reintroduced.
 
-Current classification (issue #864, after the 2026-06-13 human decision): 12
-forbidden (405-protected) + 9 legitimate = 21 `DELETE` handlers in `api/views/`.
+Current classification (issue #864, after the 2026-06-13 human decision, plus
+issue #1045's singleton week-note clear route): 12 forbidden (405-protected) +
+10 legitimate = 22 `DELETE` handlers in `api/views/`.
 
 When you add or change a `DELETE` handler, update both this document and the
 classification in `api/delete_policy.py`.

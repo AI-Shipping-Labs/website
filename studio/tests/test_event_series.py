@@ -233,6 +233,96 @@ class StudioEventSeriesDetailTest(StaffMixin, TestCase):
         self.assertEqual(self.series.name, 'Renamed Series')
         self.assertIn('description', self.series.description)
 
+    @staticmethod
+    def _member_rows_text(html):
+        rows = re.findall(
+            r'<tr data-testid="event-series-member-row".*?</tr>',
+            html,
+            flags=re.DOTALL,
+        )
+        return [
+            ' '.join(re.sub(r'<[^>]+>', ' ', row).split())
+            for row in rows
+        ]
+
+    def test_scrambled_positions_render_in_date_order_without_number_column(self):
+        scrambled = EventSeries.objects.create(
+            name='Scrambled Detail Series',
+            slug='scrambled-detail-series',
+            start_time=time(18, 0),
+            timezone='UTC',
+        )
+        plan = [
+            ('Alpha kickoff', 'alpha-kickoff', 1, datetime(2026, 6, 10, 18, 0)),
+            ('Bravo lab', 'bravo-lab', 7, datetime(2026, 6, 11, 18, 0)),
+            ('Charlie clinic', 'charlie-clinic', 3, datetime(2026, 6, 12, 18, 0)),
+            ('Delta review', 'delta-review', 4, datetime(2026, 6, 13, 18, 0)),
+            ('Echo demo', 'echo-demo', 8, datetime(2026, 6, 14, 18, 0)),
+            ('Foxtrot close', 'foxtrot-close', 9, datetime(2026, 6, 15, 18, 0)),
+        ]
+        for title, slug, position, starts_at in plan:
+            Event.objects.create(
+                title=title,
+                slug=slug,
+                start_datetime=timezone.make_aware(
+                    starts_at,
+                    zoneinfo.ZoneInfo('UTC'),
+                ),
+                event_series=scrambled,
+                series_position=position,
+                status='draft',
+                origin='studio',
+                timezone='UTC',
+            )
+
+        response = self.client.get(f'/studio/event-series/{scrambled.pk}/')
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertNotIn('data-testid="series-position"', html)
+        self.assertNotIn('> # <', ' '.join(html.split()))
+        self.assertNotRegex(html, r'<th[^>]*>\s*#\s*</th>')
+
+        headers = re.findall(r'<th[^>]*>(.*?)</th>', html, flags=re.DOTALL)
+        header_text = [' '.join(re.sub(r'<[^>]+>', ' ', h).split()) for h in headers]
+        self.assertEqual(
+            header_text[:7],
+            ['Title', 'Visibility', 'Access', 'Zoom', 'Start', 'Registrations', 'Actions'],
+        )
+
+        row_text = self._member_rows_text(html)
+        self.assertEqual(len(row_text), 6)
+        self.assertEqual(
+            [row.split(' Not published ')[0] for row in row_text],
+            [
+                'Alpha kickoff',
+                'Bravo lab',
+                'Charlie clinic',
+                'Delta review',
+                'Echo demo',
+                'Foxtrot close',
+            ],
+        )
+        for text, (_title, _slug, position, _starts_at) in zip(row_text, plan):
+            self.assertNotRegex(text, rf'^{position}\b')
+            self.assertNotRegex(text, rf'\b{position}\s+{re.escape(_title)}\b')
+            self.assertIn('Not published', text)
+            self.assertIn('Free', text)
+            self.assertIn('Publish', text)
+            self.assertIn('Edit', text)
+
+    def test_empty_series_uses_new_table_colspan(self):
+        empty = EventSeries.objects.create(
+            name='Empty Detail Series',
+            slug='empty-detail-series',
+            start_time=time(18, 0),
+        )
+        response = self.client.get(f'/studio/event-series/{empty.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No member events.')
+        self.assertContains(response, 'colspan="7"')
+        self.assertNotContains(response, 'colspan="8"')
+        self.assertNotIn('data-testid="series-position"', response.content.decode())
+
 
 class StudioEventSeriesAddOccurrenceTest(StaffMixin, TestCase):
     """``POST .../add-occurrence`` appends one more event."""
@@ -263,6 +353,25 @@ class StudioEventSeriesAddOccurrenceTest(StaffMixin, TestCase):
         self.assertEqual(new_event.series_position, 4)
         self.assertEqual(new_event.origin, 'studio')
         self.assertEqual(new_event.event_series_id, self.series.pk)
+
+    def test_added_occurrence_position_is_stored_but_not_displayed(self):
+        start = (date.today() + timedelta(days=30)).strftime('%d/%m/%Y')
+        response = self.client.post(
+            f'/studio/event-series/{self.series.pk}/add-occurrence',
+            {'start_date': start, 'duration_hours': '1', 'timezone': 'UTC'},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        new_event = self.series.events.order_by('-series_position').first()
+        self.assertEqual(new_event.series_position, 4)
+        html = response.content.decode()
+        self.assertNotIn('data-testid="series-position"', html)
+        row_text = StudioEventSeriesDetailTest._member_rows_text(html)
+        self.assertTrue(any(new_event.title in row for row in row_text))
+        for row in row_text:
+            if new_event.title in row:
+                self.assertNotRegex(row, r'^4\b')
+                break
 
     def test_add_occurrence_blank_time_defaults_to_series_start_time(self):
         # Series start_time is 18:00 in UTC (no series tz -> 'UTC').

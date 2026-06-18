@@ -112,7 +112,10 @@ class TestScenario2StudioEditable:
         )
         series.save()
         events = []
-        base_dt = datetime(2026, 6, 3, 18, 0)
+        base_dt = datetime.combine(
+            date.today() + timedelta(days=14),
+            datetime(2026, 1, 1, 18, 0).time(),
+        )
         for i in range(1, 7):
             ev = Event(
                 title=f"Spring Workshop Series — Session {i}",
@@ -647,6 +650,51 @@ def _seed_shuffled_office_hours():
     return series
 
 
+def _seed_scrambled_studio_series():
+    """Seed the Studio detail regression case from issue #1041."""
+    from django.db import connection
+    from django.utils import timezone
+
+    from events.models import Event, EventSeries
+
+    series = EventSeries(
+        name="Scrambled Studio Series",
+        slug="scrambled-studio-series",
+        start_time=datetime(2026, 1, 1, 18, 0).time(),
+        timezone="UTC",
+    )
+    series.save()
+    base_date = date.today() + timedelta(days=10)
+    plan = [
+        ("Alpha kickoff", "alpha-kickoff-pw", 1, base_date, "draft"),
+        ("Bravo lab", "bravo-lab-pw", 7, base_date + timedelta(days=1), "upcoming"),
+        ("Charlie clinic", "charlie-clinic-pw", 3, base_date + timedelta(days=2), "draft"),
+        ("Delta review", "delta-review-pw", 4, base_date + timedelta(days=3), "draft"),
+        ("Echo demo", "echo-demo-pw", 8, base_date + timedelta(days=4), "draft"),
+        ("Foxtrot close", "foxtrot-close-pw", 9, base_date + timedelta(days=5), "draft"),
+    ]
+    events = []
+    for title, slug, position, start_date, status in plan:
+        starts_at = datetime.combine(start_date, datetime(2026, 1, 1, 18, 0).time())
+        event = Event(
+            title=title,
+            slug=slug,
+            start_datetime=timezone.make_aware(
+                starts_at,
+                zoneinfo.ZoneInfo("UTC"),
+            ),
+            status=status,
+            origin="studio",
+            timezone="UTC",
+            event_series=series,
+            series_position=position,
+        )
+        event.save()
+        events.append(event)
+    connection.close()
+    return series, events
+
+
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario957ChronologicalOrder:
@@ -744,6 +792,102 @@ class TestScenario957ChronologicalOrder:
             for t in date_texts
         ]
         assert parsed == sorted(parsed)
+
+        ctx.close()
+
+
+# ---------------------------------------------------------------------------
+# Issue #1041: Studio series detail hides internal occurrence numbers while
+# preserving chronological table order and row actions.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestScenario1041StudioSeriesDetailNoInternalNumbers:
+    def test_scrambled_positions_are_hidden_and_row_actions_still_work(
+        self, django_server, browser
+    ):
+        from events.models import Event
+
+        _reset_event_state()
+        _create_staff_user("staff-eg1041@test.com")
+        series, events = _seed_scrambled_studio_series()
+        ctx = _auth_context(browser, "staff-eg1041@test.com")
+        page = ctx.new_page()
+        page.on("dialog", lambda d: d.accept())
+
+        page.goto(
+            f"{django_server}/studio/event-series/{series.pk}/",
+            wait_until="domcontentloaded",
+        )
+
+        table = page.locator("table").first
+        assert table.locator("thead th").all_inner_texts() == [
+            "TITLE",
+            "VISIBILITY",
+            "ACCESS",
+            "ZOOM",
+            "START",
+            "REGISTRATIONS",
+            "ACTIONS",
+        ]
+        assert page.locator('[data-testid="series-position"]').count() == 0
+
+        rows = page.locator('[data-testid="event-series-member-row"]')
+        assert rows.count() == 6
+        titles = [
+            rows.nth(i).locator('td[data-label="Title"]').inner_text()
+            for i in range(rows.count())
+        ]
+        assert titles == [
+            "Alpha kickoff",
+            "Bravo lab",
+            "Charlie clinic",
+            "Delta review",
+            "Echo demo",
+            "Foxtrot close",
+        ]
+        for i, position in enumerate([1, 7, 3, 4, 8, 9]):
+            cells = rows.nth(i).locator("td").all_inner_texts()
+            assert len(cells) == 7
+            assert cells[0] == titles[i]
+            assert not rows.nth(i).inner_text().startswith(f"{position}\n")
+
+        rows.nth(0).locator('[data-testid="member-event-publish"]').click()
+        page.wait_for_url(re.compile(rf".*/studio/event-series/{series.pk}/$"))
+        assert rows.nth(0).locator('[data-testid="event-publish-state"]').inner_text() == "Published"
+        assert page.locator('[data-testid="series-position"]').count() == 0
+
+        rows.nth(1).locator('[data-testid="member-event-unpublish"]').click()
+        page.wait_for_url(re.compile(rf".*/studio/event-series/{series.pk}/$"))
+        assert rows.nth(1).locator('[data-testid="event-publish-state"]').inner_text() == "Not published"
+        assert page.locator('[data-testid="series-position"]').count() == 0
+
+        rows.nth(1).locator('[data-testid="member-event-edit"]').click()
+        page.wait_for_url(re.compile(rf".*/studio/events/{events[1].pk}/edit$"))
+        page.fill('input[name="title"]', "Bravo lab updated")
+        page.locator("button:has-text('Save Changes')").first.click()
+        page.wait_for_url(re.compile(rf".*/studio/events/{events[1].pk}/edit$"))
+        page.goto(
+            f"{django_server}/studio/event-series/{series.pk}/",
+            wait_until="domcontentloaded",
+        )
+        assert rows.nth(1).locator('td[data-label="Title"]').inner_text() == "Bravo lab updated"
+        assert page.locator('[data-testid="series-position"]').count() == 0
+
+        future = date.today() + timedelta(days=35)
+        page.fill('input[name="title"]', "Golf followup")
+        page.fill('input[name="start_date"]', future.strftime("%d/%m/%Y"))
+        page.locator('[data-testid="add-occurrence-submit"]').click()
+        page.wait_for_url(re.compile(rf".*/studio/event-series/{series.pk}/$"))
+
+        new_event = Event.objects.get(title="Golf followup")
+        assert new_event.series_position == 10
+        assert page.locator('[data-testid="series-position"]').count() == 0
+        assert page.locator('[data-testid="event-series-member-row"]').last.locator(
+            'td[data-label="Title"]'
+        ).inner_text() == "Golf followup"
 
         ctx.close()
 

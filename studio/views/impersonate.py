@@ -9,15 +9,21 @@ from studio.decorators import staff_required
 User = get_user_model()
 
 
+def impersonate_as(request, target_user):
+    """Switch this browser session to ``target_user`` and remember the staff id."""
+    impersonator_id = request.user.pk
+    login(request, target_user, backend='django.contrib.auth.backends.ModelBackend')
+    # Set after login() because login() cycles the session key.
+    request.session['_impersonator_id'] = impersonator_id
+    return impersonator_id
+
+
 @staff_required
 @require_POST
 def impersonate_user(request, user_id):
     """Log the admin in as the target user, storing the admin's ID in session."""
     target_user = get_object_or_404(User, pk=user_id)
-    impersonator_id = request.user.pk
-    login(request, target_user, backend='django.contrib.auth.backends.ModelBackend')
-    # Set after login() because login() cycles the session key
-    request.session['_impersonator_id'] = impersonator_id
+    impersonate_as(request, target_user)
     return redirect('/')
 
 

@@ -5,10 +5,11 @@ sprints), and sprint unenroll (hard-delete of a single membership row),
 plus the shared staff-gating and POST-only contract.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from plans.models import Plan, Sprint, SprintEnrollment
 from tests.fixtures import TierSetupMixin
@@ -215,29 +216,118 @@ class SprintUnenrollTest(TierSetupMixin, TestCase):
         )
 
 
-class SprintDetailEnrolledMembersTest(TierSetupMixin, TestCase):
-    """The sprint detail page lists enrolled members with an Unenroll form."""
+class SprintDetailMembersTest(TierSetupMixin, TestCase):
+    """The sprint detail page merges enrollments and plans into one table."""
 
     def setUp(self):
         self.staff = User.objects.create_user(
             email='staff@example.com', password='pw', is_staff=True,
         )
-        self.member = User.objects.create_user(
-            email='member@example.com', password='pw',
+        self.enrolled_with_plan = User.objects.create_user(
+            email='with-plan@example.com', password='pw',
+            first_name='With', last_name='Plan',
+        )
+        self.enrolled_without_plan = User.objects.create_user(
+            email='no-plan@example.com', password='pw',
+        )
+        self.plan_only = User.objects.create_user(
+            email='plan-only@example.com', password='pw',
         )
         self.sprint = _make_sprint(slug='roster')
-        SprintEnrollment.objects.create(sprint=self.sprint, user=self.member)
 
-    def test_detail_lists_enrolled_member_and_unenroll_control(self):
+    def test_detail_merges_enrollments_and_plans(self):
+        enrollment = SprintEnrollment.objects.create(
+            sprint=self.sprint,
+            user=self.enrolled_with_plan,
+            enrolled_by=self.staff,
+        )
+        SprintEnrollment.objects.create(
+            sprint=self.sprint,
+            user=self.enrolled_without_plan,
+        )
+        plan = Plan.objects.create(
+            sprint=self.sprint,
+            member=self.enrolled_with_plan,
+            visibility='cohort',
+            shared_at=timezone.now(),
+        )
+        plan_only = Plan.objects.create(
+            sprint=self.sprint,
+            member=self.plan_only,
+            visibility='private',
+        )
+        SprintEnrollment.objects.filter(
+            sprint=self.sprint,
+            user=self.plan_only,
+        ).delete()
+
         self.client.login(email='staff@example.com', password='pw')
         response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
+
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'sprint-enrolled-members-section')
-        self.assertContains(response, 'member@example.com')
+        rows = response.context['sprint_member_rows']
+        self.assertEqual([row['member'].email for row in rows], [
+            'with-plan@example.com',
+            'no-plan@example.com',
+            'plan-only@example.com',
+        ])
+        self.assertEqual(response.context['enrollment_count'], 2)
+        self.assertEqual(response.context['plan_count'], 2)
+        self.assertEqual(rows[0]['enrollment'], enrollment)
+        self.assertEqual(rows[0]['plan'], plan)
+        self.assertIsNotNone(rows[1]['enrollment'])
+        self.assertIsNone(rows[1]['plan'])
+        self.assertIsNone(rows[2]['enrollment'])
+        self.assertEqual(rows[2]['plan'], plan_only)
+
+        self.assertContains(response, 'Sprint members')
+        self.assertContains(response, '2 enrolled')
+        self.assertContains(response, '2 plans')
+        self.assertNotContains(response, 'Plans in this sprint')
+        self.assertNotContains(response, 'Enrolled members')
+        self.assertContains(response, 'with-plan@example.com')
+        self.assertContains(response, 'With Plan')
+        self.assertContains(response, 'Enrolled')
+        self.assertContains(response, 'by staff@example.com')
+        self.assertContains(response, 'View plan')
+        self.assertContains(response, 'Edit plan')
+        self.assertContains(response, 'Cohort (visible to other members of the same sprint)')
+        self.assertContains(response, 'Shared')
+        self.assertContains(response, 'no-plan@example.com')
+        self.assertContains(response, 'No plan yet')
+        self.assertContains(
+            response,
+            f'/studio/plans/new?user={self.enrolled_without_plan.pk}&amp;sprint={self.sprint.pk}',
+        )
+        self.assertContains(response, 'plan-only@example.com')
+        self.assertContains(response, 'Not enrolled')
+        self.assertContains(response, 'Private (only the member and staff)')
+
+        body = response.content.decode()
+        plan_only_row_start = body.index('data-user-email="plan-only@example.com"')
+        plan_only_row_end = body.index('</tr>', plan_only_row_start)
+        plan_only_row = body[plan_only_row_start:plan_only_row_end]
+        self.assertNotIn('sprint-unenroll-form', plan_only_row)
+        self.assertNotIn('Plan.status', body)
+        self.assertNotIn('get_status_display', body)
+
+    def test_detail_lists_enrolled_member_and_unenroll_control(self):
+        SprintEnrollment.objects.create(
+            sprint=self.sprint,
+            user=self.enrolled_without_plan,
+        )
+
+        self.client.login(email='staff@example.com', password='pw')
+        response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'sprint-members-section')
+        self.assertContains(response, 'no-plan@example.com')
         self.assertContains(
             response,
             f'/studio/sprints/{self.sprint.pk}/enrollments/',
         )
+        self.assertContains(response, 'sprint-unenroll-form')
 
     def test_cancelled_sprint_shows_cancelled_status(self):
         self.sprint.status = 'cancelled'
@@ -246,3 +336,68 @@ class SprintDetailEnrolledMembersTest(TierSetupMixin, TestCase):
         response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
         self.assertContains(response, 'sprint-status-badge')
         self.assertContains(response, 'Cancelled')
+
+    def test_member_rows_order_enrolled_then_plan_only_by_created_at(self):
+        enrolled_later = SprintEnrollment.objects.create(
+            sprint=self.sprint,
+            user=self.enrolled_without_plan,
+        )
+        enrolled_earlier = SprintEnrollment.objects.create(
+            sprint=self.sprint,
+            user=self.enrolled_with_plan,
+        )
+        plan_only_older_user = User.objects.create_user(
+            email='plan-only-older@example.com', password='pw',
+        )
+        plan_only_newer_user = User.objects.create_user(
+            email='plan-only-newer@example.com', password='pw',
+        )
+        older_plan = Plan.objects.create(
+            sprint=self.sprint,
+            member=plan_only_older_user,
+        )
+        newer_plan = Plan.objects.create(
+            sprint=self.sprint,
+            member=plan_only_newer_user,
+        )
+        now = timezone.now()
+        SprintEnrollment.objects.filter(pk=enrolled_earlier.pk).update(
+            enrolled_at=now - timedelta(days=2),
+        )
+        SprintEnrollment.objects.filter(pk=enrolled_later.pk).update(
+            enrolled_at=now - timedelta(days=1),
+        )
+        Plan.objects.filter(pk=older_plan.pk).update(
+            created_at=now - timedelta(days=4),
+        )
+        Plan.objects.filter(pk=newer_plan.pk).update(
+            created_at=now - timedelta(days=3),
+        )
+        SprintEnrollment.objects.filter(
+            sprint=self.sprint,
+            user__in=[plan_only_older_user, plan_only_newer_user],
+        ).delete()
+
+        self.client.login(email='staff@example.com', password='pw')
+        response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [row['member'].email for row in response.context['sprint_member_rows']],
+            [
+                'with-plan@example.com',
+                'no-plan@example.com',
+                'plan-only-older@example.com',
+                'plan-only-newer@example.com',
+            ],
+        )
+
+    def test_empty_detail_renders_one_unified_empty_state(self):
+        self.client.login(email='staff@example.com', password='pw')
+
+        response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="sprint-members-empty"')
+        self.assertContains(response, 'No members or plans in this sprint yet.')
+        self.assertNotContains(response, 'No enrolled members in this sprint yet.')

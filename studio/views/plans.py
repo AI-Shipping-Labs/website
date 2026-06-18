@@ -53,6 +53,7 @@ from plans.services import (
 )
 from studio.decorators import staff_required
 from studio.services.plan_editor import build_plan_editor_context
+from studio.views.impersonate import impersonate_as
 
 logger = logging.getLogger(__name__)
 
@@ -305,6 +306,33 @@ def plan_detail(request, plan_id):
         # Read-only #plan-sprints Slack ingest linked to this plan (#889).
         'slack_threads': threads_for_plan(plan),
     })
+
+
+@staff_required
+@require_POST
+def plan_view_as_member(request, plan_id):
+    """Impersonate the plan owner and open their member-facing workspace."""
+    plan = get_object_or_404(
+        Plan.objects.select_related('member', 'sprint'),
+        pk=plan_id,
+    )
+    actor_id = request.user.pk
+    impersonate_as(request, plan.member)
+    logger.info(
+        'Staff user %s viewed plan %s as member %s',
+        actor_id,
+        plan.pk,
+        plan.member_id,
+    )
+    return redirect(
+        reverse(
+            'my_plan_detail',
+            kwargs={
+                'sprint_slug': plan.sprint.slug,
+                'plan_id': plan.pk,
+            },
+        ),
+    )
 
 
 @staff_required

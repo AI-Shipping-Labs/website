@@ -103,6 +103,7 @@ from api.views.tier_reconcile import (
 )
 from api.views.user_merge import merge_users
 from api.views.users import (
+    user_activity,
     user_detail,
     user_email_log,
     user_mark_bounced,
@@ -538,6 +539,11 @@ urlpatterns = [
         "users/<path:email>/email-log",
         user_email_log,
         name="api_user_email_log",
+    ),
+    path(
+        "users/<path:email>/activity",
+        user_activity,
+        name="api_user_activity",
     ),
     path(
         "users/<path:email>/tags/<str:tag>",

@@ -42,6 +42,7 @@ from plans.models import NextSprintPlanDraft
 from plans.services.next_sprint_draft import (
     NextSprintDraftInput,
     OnboardingAnswer,
+    RecentActivity,
     RecentUpdate,
     draft_next_sprint,
 )
@@ -127,6 +128,7 @@ def _build_profile_fields(member):
             'crm_summary': '',
             'crm_next_steps': '',
             'onboarding_answers': [],
+            'recent_activity': [],
         }
 
     context = build_member_profile_context(member)
@@ -135,11 +137,21 @@ def _build_profile_fields(member):
         for row in context['onboarding_answers']
         if row['answered']
     ]
+    recent_activity = [
+        RecentActivity(
+            occurred_at=row['occurred_at'].date().isoformat(),
+            category=row['category_label'],
+            type_label=row['type_label'],
+            label=row['label'],
+        )
+        for row in context['recent_activity']
+    ]
     return {
         'persona': context['persona'],
         'crm_summary': context['summary'],
         'crm_next_steps': context['next_steps'],
         'onboarding_answers': onboarding_answers,
+        'recent_activity': recent_activity,
     }
 
 

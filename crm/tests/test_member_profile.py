@@ -9,7 +9,9 @@ no-CRM fallback, and that only INTERNAL notes are surfaced.
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
+from analytics.models import UserActivity
 from crm.models import CRMRecord
 from crm.services.member_profile import build_member_profile_context
 from plans.models import InterviewNote
@@ -70,6 +72,7 @@ class MemberProfilePopulatedTest(TestCase):
             member=cls.member, visibility='internal',
             body='Very motivated on the intro call',
         )
+        UserActivity.objects.all().delete()
 
     def test_includes_onboarding_answers(self):
         ctx = build_member_profile_context(self.member)
@@ -111,6 +114,26 @@ class MemberProfilePopulatedTest(TestCase):
         ctx = build_member_profile_context(self.member)
         self.assertEqual(ctx['persona'], persona.display_label)
 
+    def test_recent_activity_included_in_context_and_copy_text(self):
+        UserActivity.objects.create(
+            user=self.member,
+            event_type=UserActivity.EVENT_RESOURCE_VIEW,
+            label='Viewed article: RAG patterns',
+            target_url='/blog/rag-patterns',
+            occurred_at=timezone.now(),
+        )
+
+        ctx = build_member_profile_context(self.member)
+
+        self.assertTrue(ctx['has_recent_activity'])
+        self.assertEqual(len(ctx['recent_activity']), 1)
+        self.assertEqual(
+            ctx['recent_activity'][0]['label'],
+            'Viewed article: RAG patterns',
+        )
+        self.assertIn('Recent activity:', ctx['copy_text'])
+        self.assertIn('Viewed article: RAG patterns', ctx['copy_text'])
+
 
 class MemberProfileNotesScopingTest(TestCase):
     def test_only_internal_notes_surfaced(self):
@@ -132,6 +155,7 @@ class MemberProfileNotesScopingTest(TestCase):
 class MemberProfileEmptyFallbackTest(TestCase):
     def test_no_onboarding_no_crm_no_notes(self):
         member = User.objects.create_user(email='empty@test.com', password='pw')
+        UserActivity.objects.filter(user=member).delete()
         ctx = build_member_profile_context(member)
         self.assertFalse(ctx['has_onboarding'])
         self.assertFalse(ctx['onboarding_submitted'])
@@ -142,6 +166,8 @@ class MemberProfileEmptyFallbackTest(TestCase):
         self.assertEqual(ctx['next_steps'], '')
         self.assertFalse(ctx['has_notes'])
         self.assertEqual(ctx['recent_notes'], [])
+        self.assertFalse(ctx['has_recent_activity'])
+        self.assertEqual(ctx['recent_activity'], [])
         # Nothing substantive to copy beyond the header -> empty copy block.
         self.assertEqual(ctx['copy_text'], '')
 

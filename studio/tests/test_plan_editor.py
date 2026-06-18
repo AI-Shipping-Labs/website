@@ -112,6 +112,7 @@ class PlanEditorBootstrapPayloadTest(TestCase):
         )
         cls.plan = Plan.objects.create(
             member=cls.member, sprint=cls.sprint,
+            title='Agent onboarding plan',
             goal='Short sprint goal',
             summary_current_situation='SITN',
             summary_goal='GOAL',
@@ -182,6 +183,8 @@ class PlanEditorBootstrapPayloadTest(TestCase):
         # Issue #728: ``status`` was removed from the payload entirely.
         self.assertNotIn('status', self.payload)
         self.assertEqual(self.payload['duration_weeks'], 6)
+        self.assertEqual(self.payload['title'], 'Agent onboarding plan')
+        self.assertEqual(self.payload['visibility'], 'private')
         self.assertEqual(self.payload['goal'], 'Short sprint goal')
 
     def test_payload_summary_block(self):
@@ -381,6 +384,8 @@ class StudioPlanParticipantNavigationTest(TestCase):
 
     def test_summary_textareas_are_rendered_with_field_names(self):
         response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
+        self.assertContains(response, 'data-field="title"')
+        self.assertContains(response, 'data-testid="plan-title-input"')
         self.assertContains(response, 'data-field="goal"')
         self.assertContains(response, 'maxlength="280"')
         self.assertContains(response, 'type="text"')

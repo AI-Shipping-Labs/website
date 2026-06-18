@@ -66,7 +66,8 @@ def _create_sprint(slug, name, start_date):
 
 
 def _create_plan_with_checkpoints(*, member_email, sprint_slug,
-                                  visibility, total, done, focus_main='',
+                                  visibility, total, done, title='',
+                                  goal='', summary_goal='', focus_main='',
                                   week_theme='', checkpoint_desc_prefix='cp'):
     from django.utils import timezone
 
@@ -77,6 +78,9 @@ def _create_plan_with_checkpoints(*, member_email, sprint_slug,
     sprint = Sprint.objects.get(slug=sprint_slug)
     plan = Plan.objects.create(
         member=user, sprint=sprint, visibility=visibility,
+        title=title,
+        goal=goal,
+        summary_goal=summary_goal,
         focus_main=focus_main,
     )
     week = Week.objects.create(
@@ -220,12 +224,14 @@ class TestPrivatePlanLeaksNoContent:
         _create_plan_with_checkpoints(
             member_email='dana@test.com', sprint_slug=sprint.slug,
             visibility='private', total=1, done=0,
+            title='Vector search portfolio',
             focus_main='SECRET FOCUS',
             week_theme='SECRET THEME',
             checkpoint_desc_prefix='SECRET TASK',
         )
 
         from accounts.models import User
+        viewer_pk = User.objects.get(email='viewer@test.com').pk
         dana_pk = User.objects.get(email='dana@test.com').pk
         connection.close()
 
@@ -240,8 +246,17 @@ class TestPrivatePlanLeaksNoContent:
             page.locator(
                 f'[data-testid="private-badge-{dana_pk}"]',
             ).wait_for(state='visible')
+            shared_badge = page.locator(
+                f'[data-testid="shared-badge-{viewer_pk}"]',
+            )
+            shared_badge.wait_for(state='visible')
+            private_badge = page.locator(
+                f'[data-testid="private-badge-{dana_pk}"]',
+            )
+            assert shared_badge.get_attribute('class') == private_badge.get_attribute('class')
 
             page_text = page.locator('main').inner_text()
+            assert 'Vector search portfolio' in page_text
             assert 'SECRET FOCUS' not in page_text
             assert 'SECRET THEME' not in page_text
             assert 'SECRET TASK' not in page_text
@@ -251,6 +266,10 @@ class TestPrivatePlanLeaksNoContent:
                 f'[data-testid="progress-count-{dana_pk}"]',
             )
             assert '0 of 1' in count_locator.inner_text()
+            private_link = page.locator(
+                f'a[data-testid="progress-row-link-{dana_pk}"]',
+            )
+            assert private_link.count() == 0
         finally:
             context.close()
 
@@ -280,6 +299,7 @@ class TestCohortPlanLinkStillWorks:
         eli_plan = _create_plan_with_checkpoints(
             member_email='eli@test.com', sprint_slug=sprint.slug,
             visibility='cohort', total=2, done=1,
+            title='Agent evaluation harness',
             focus_main='Build the eval harness',
         )
 
@@ -294,6 +314,7 @@ class TestCohortPlanLinkStillWorks:
                 f'a[href="/sprints/{sprint.slug}/plans/{eli_plan.pk}"]',
             ).first
             link.wait_for(state='visible')
+            assert 'Agent evaluation harness' in link.inner_text()
             link.click()
             page.wait_for_url(
                 f'{django_server}/sprints/{sprint.slug}/plans/{eli_plan.pk}',

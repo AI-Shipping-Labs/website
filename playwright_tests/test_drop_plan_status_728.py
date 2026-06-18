@@ -144,18 +144,23 @@ class TestDropPlanStatus728:
         )
         # No status <select> in the filter form.
         assert page.locator('select[name="status"]').count() == 0
-        # The table has 4 column headers: Member, Sprint, Shared, Actions.
+        # The table has no Status column. The Title column is expected after
+        # #1047 added first-class plan titles.
         # Headers render via Tailwind's ``uppercase`` class, so Playwright's
         # ``inner_text()`` returns the visually-uppercased form. Compare
         # case-insensitively so the test is robust to future CSS changes.
         headers = page.locator("table thead th").all_inner_texts()
         headers = [h.strip() for h in headers]
-        expected = ["Member", "Sprint", "Shared", "Actions"]
+        expected = ["Member", "Title", "Sprint", "Shared", "Actions"]
         assert len(headers) == len(expected)
         for actual, want in zip(headers, expected):
             assert re.fullmatch(want, actual, re.IGNORECASE), (
                 f"header {actual!r} does not match {want!r}"
             )
+        assert not any(
+            re.fullmatch("Status", header, re.IGNORECASE)
+            for header in headers
+        )
 
     def test_my_plan_view_has_no_status_chip(self, django_server, browser):
         from django.utils import timezone

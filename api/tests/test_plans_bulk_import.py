@@ -64,6 +64,7 @@ class BulkImportHappyPathTest(BulkImportTestBase):
             "plans": [
                 {
                     "user_email": "m1@test.com",
+                    "title": "Imported plan title",
                     "summary": {
                         "current_situation": "now",
                         "goal": "later",
@@ -114,6 +115,7 @@ class BulkImportHappyPathTest(BulkImportTestBase):
         self.assertEqual(Plan.objects.count(), before + 1)
 
         plan = Plan.objects.get(member=self.member1, sprint=self.sprint)
+        self.assertEqual(plan.title, "Imported plan title")
         self.assertEqual(plan.focus_supporting, ["evals", "guardrails"])
         self.assertEqual(plan.weeks.count(), 2)
         self.assertEqual(
@@ -146,6 +148,20 @@ class BulkImportHappyPathTest(BulkImportTestBase):
         self.assertEqual(body["created"], 3)
         self.assertEqual(len(body["plan_ids"]), 3)
         self.assertEqual(Plan.objects.count(), before + 3)
+
+    def test_blank_title_falls_back_to_summary_goal(self):
+        response = self._post({
+            "plans": [
+                {
+                    "user_email": "m1@test.com",
+                    "title": " ",
+                    "summary": {"goal": "Get my first AI client"},
+                },
+            ],
+        })
+        self.assertEqual(response.status_code, 201)
+        plan = Plan.objects.get(member=self.member1, sprint=self.sprint)
+        self.assertEqual(plan.title, "Get my first AI client")
 
 
 class BulkImportFailureModesTest(BulkImportTestBase):
@@ -250,6 +266,26 @@ class BulkImportMaxLengthValidationTest(BulkImportTestBase):
         self.assertEqual(body["details"]["max_length"], max_len)
         self.assertEqual(body["details"]["index"], 3)
         # Atomic: rows 0-2 are also rolled back.
+        self.assertEqual(Plan.objects.count(), before)
+
+    def test_overlong_title_rejects_and_rolls_back(self):
+        max_len = Plan._meta.get_field("title").max_length
+        before = Plan.objects.count()
+        response = self._post({
+            "plans": [
+                {"user_email": "m1@test.com"},
+                {
+                    "user_email": "m2@test.com",
+                    "title": "x" * (max_len + 1),
+                },
+            ],
+        })
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertIn("title", body["details"])
+        self.assertEqual(body["details"]["max_length"], max_len)
+        self.assertEqual(body["details"]["index"], 1)
         self.assertEqual(Plan.objects.count(), before)
 
     def test_overlong_week_theme_rejects_and_rolls_back(self):

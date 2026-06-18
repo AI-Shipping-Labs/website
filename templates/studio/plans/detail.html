@@ -17,6 +17,7 @@
         Sprint: <a href="{% url 'studio_sprint_detail' sprint_id=plan.sprint.pk %}" class="text-accent hover:underline">{{ plan.sprint.name }}</a>
         {% if plan.shared_at %}· Shared {{ plan.shared_at|operator_date }}{% endif %}
       </p>
+      <p class="text-sm text-foreground mt-2" data-testid="plan-detail-title">{{ plan.display_title }}</p>
     </div>
     <div class="flex items-center gap-2" data-testid="studio-header-actions">
       {% include "studio/includes/_admin_link.html" with obj=plan %}
@@ -62,6 +63,10 @@
 <section data-testid="plan-summary" class="bg-card border border-border rounded-lg p-6 mb-8">
   <h2 class="text-lg font-semibold text-foreground mb-4">Summary</h2>
   <dl class="space-y-3 text-sm">
+    <div data-field="title">
+      <dt class="text-xs text-muted-foreground uppercase">Title</dt>
+      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.display_title }}</dd>
+    </div>
     <div data-field="goal">
       <dt class="text-xs text-muted-foreground uppercase">Goal</dt>
       <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.goal|default:"-" }}</dd>

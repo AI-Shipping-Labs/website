@@ -118,19 +118,9 @@
               <td class="px-4 py-4 align-top sm:px-5">
                 <span class="hidden" data-testid="progress-row-kind-{{ row.member.pk }}">{{ row.kind }}</span>
                 <div class="flex flex-wrap items-center gap-2">
-                  {% if row.kind == 'cohort' %}
-                    {% if row.is_self %}
-                    <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=row.plan.pk %}" class="font-semibold text-foreground hover:text-accent hover:underline" data-testid="progress-row-link-{{ row.member.pk }}">
-                    {% else %}
-                    <a href="{% url 'member_plan_detail' sprint_slug=sprint.slug plan_id=row.plan.pk %}" class="font-semibold text-foreground hover:text-accent hover:underline" data-testid="progress-row-link-{{ row.member.pk }}">
-                    {% endif %}
-                      <span data-testid="cohort-plan-name">{{ row.member|display_name }}{% if row.is_self %} (you){% endif %}</span>
-                    </a>
-                  {% else %}
                   <h2 class="text-sm font-semibold text-foreground" data-testid="cohort-plan-name">
                     {{ row.member|display_name }}{% if row.is_self %} (you){% endif %}
                   </h2>
-                  {% endif %}
                 </div>
               </td>
               <td class="px-4 py-4 align-top sm:px-5">
@@ -149,27 +139,36 @@
               </td>
               <td class="px-4 py-4 align-top sm:px-5">
                 {% if row.kind == 'cohort' %}
-                <span class="inline-flex items-center rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">Shared</span>
+                <span class="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid="shared-badge-{{ row.member.pk }}">Shared</span>
                 {% elif row.kind == 'private' %}
                 <div data-testid="progress-row-private-{{ row.member.pk }}">
-                  <span class="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="private-badge-{{ row.member.pk }}">Private</span>
+                  <span class="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid="private-badge-{{ row.member.pk }}">Private</span>
                 </div>
                 {% else %}
                 <span class="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">Pending</span>
                 {% endif %}
               </td>
               <td class="px-4 py-4 align-top sm:px-5">
-                {% if row.kind == 'cohort' %}
-                  {% if row.plan.goal or row.plan.summary_goal %}
-                  <p class="max-w-xl text-sm font-medium leading-relaxed text-foreground line-clamp-2" data-testid="cohort-row-goal-{{ row.member.pk }}">{% firstof row.plan.goal row.plan.summary_goal %}</p>
+                {% if row.plan %}
+                  {% if row.is_self %}
+                  <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=row.plan.pk %}"
+                     class="max-w-xl text-sm font-medium leading-relaxed text-foreground hover:text-accent hover:underline line-clamp-2"
+                     data-testid="progress-row-link-{{ row.member.pk }}"
+                     data-row-title-link="owner">{{ row.plan.display_title }}</a>
+                  {% elif row.kind == 'cohort' %}
+                  <a href="{% url 'member_plan_detail' sprint_slug=sprint.slug plan_id=row.plan.pk %}"
+                     class="max-w-xl text-sm font-medium leading-relaxed text-foreground hover:text-accent hover:underline line-clamp-2"
+                     data-testid="progress-row-link-{{ row.member.pk }}"
+                     data-row-title-link="cohort">{{ row.plan.display_title }}</a>
+                  {% else %}
+                  <p class="max-w-xl text-sm font-medium leading-relaxed text-foreground line-clamp-2"
+                     data-testid="cohort-row-title-{{ row.member.pk }}">{{ row.plan.display_title }}</p>
                   {% endif %}
                   {% if row.plan.focus_main %}
-                  <p class="max-w-xl text-sm leading-relaxed text-muted-foreground line-clamp-2 {% if row.plan.goal or row.plan.summary_goal %}mt-1{% endif %}">{{ row.plan.focus_main }}</p>
-                  {% else %}
-                  <p class="text-sm text-muted-foreground {% if row.plan.goal or row.plan.summary_goal %}mt-1{% endif %}">Plan shared with cohort.</p>
+                  {% if row.kind == 'cohort' %}
+                  <p class="max-w-xl text-sm leading-relaxed text-muted-foreground line-clamp-2 mt-1">{{ row.plan.focus_main }}</p>
                   {% endif %}
-                {% elif row.kind == 'private' %}
-                <p class="text-sm text-muted-foreground">Progress only; plan details are private.</p>
+                  {% endif %}
                 {% else %}
                 <div data-testid="progress-row-no-plan-{{ row.member.pk }}">
                   {% comment %}

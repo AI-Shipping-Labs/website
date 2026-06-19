@@ -49,6 +49,9 @@ from content.views.request_call import request_a_call
 from content.views.tags import tags_detail, tags_index
 from content.views.workshops import (
     api_workshop_page_complete,
+    legacy_workshop_detail_redirect,
+    legacy_workshop_page_redirect,
+    legacy_workshop_video_redirect,
     workshop_detail,
     workshop_page_detail,
     workshop_video,
@@ -86,36 +89,30 @@ urlpatterns = [
     # Workshops (issue #296). Three-section layout: landing, video, per-page
     # tutorial. Each section gates against its own field on Workshop.
     #
-    # Issue #750: detail URLs are keyed on ``<YYYY-MM-DD>-<slug>`` so the
-    # URL is derivable from the content repo and slug collisions across
-    # different dates no longer clobber each other. The canonical routes
-    # use a regex that intentionally ONLY matches the ``YYYY-MM-DD-<slug>``
-    # shape.
-    #
-    # Issue #915: the legacy slug-only routes (``/workshops/<slug>`` etc.)
-    # and their 301 redirects were removed. A bare slug like
-    # ``build-your-own-search-engine`` now matches no workshop route and
-    # returns 404. If a specific high-value old bare-slug URL must keep
-    # working, an operator can add a one-off 301 in the Studio ``Redirect``
-    # table (no redeploy required).
-    #
-    # The regex matches dates loosely (``\d{4}-\d{2}-\d{2}``); the view
-    # parses the date strictly and 404s on an invalid month/day (e.g.
-    # ``9999-99-99``).
+    # Slug-only workshop URLs are canonical. Dated legacy routes redirect
+    # only after the view strictly validates the (date, slug) pair against
+    # a published workshop; malformed, draft, unknown, or date-mismatched
+    # dated links return 404.
     path('workshops', workshops_list, name='workshops_list'),
-    # Canonical routes (date-slug). Regex anchors the date prefix shape.
     re_path(
         r'^workshops/(?P<date_slug>\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*)$',
-        workshop_detail,
-        name='workshop_detail',
+        legacy_workshop_detail_redirect,
+        name='legacy_workshop_detail_redirect',
     ),
     re_path(
         r'^workshops/(?P<date_slug>\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*)/video$',
-        workshop_video,
-        name='workshop_video',
+        legacy_workshop_video_redirect,
+        name='legacy_workshop_video_redirect',
     ),
     re_path(
         r'^workshops/(?P<date_slug>\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*)/tutorial/(?P<page_slug>[a-z0-9][a-z0-9-]*)$',
+        legacy_workshop_page_redirect,
+        name='legacy_workshop_page_redirect',
+    ),
+    path('workshops/<slug:slug>', workshop_detail, name='workshop_detail'),
+    path('workshops/<slug:slug>/video', workshop_video, name='workshop_video'),
+    path(
+        'workshops/<slug:slug>/tutorial/<slug:page_slug>',
         workshop_page_detail,
         name='workshop_page_detail',
     ),

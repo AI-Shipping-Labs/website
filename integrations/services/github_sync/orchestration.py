@@ -1,8 +1,6 @@
 """Sync orchestration, repository classification, and lock handling."""
 
-import datetime as dt
 import os
-import re
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -678,40 +676,7 @@ def _build_cross_workshop_lookup(workshop_dirs, repo_dir, errors=None):
         title = data.get('title') or slug
         content_id = data.get('content_id') or ''
 
-        # Issue #750: derive the date-slug URL key (``YYYY-MM-DD-<slug>``)
-        # so cross-workshop links rewrite to the canonical URL shape.
-        # Prefer ``date:`` in yaml; fall back to the ``YYYY-MM-DD`` prefix
-        # on the folder name (mirrors the resolution rule in
-        # ``_sync_single_workshop``). Tolerates missing date fields by
-        # falling back to the bare slug — the workshop dispatcher will
-        # then refuse to import the workshop anyway, so a slug-only key
-        # here is fine (no consumer will see it).
-        workshop_date = None
-        date_value = data.get('date')
-        if isinstance(date_value, str):
-            try:
-                workshop_date = dt.date.fromisoformat(date_value.strip())
-            except ValueError:
-                workshop_date = None
-        elif isinstance(date_value, dt.datetime):
-            workshop_date = date_value.date()
-        elif isinstance(date_value, dt.date):
-            workshop_date = date_value
-        if workshop_date is None:
-            m = re.match(r'^(\d{4})-(\d{2})-(\d{2})', folder_name)
-            if m:
-                try:
-                    workshop_date = dt.date(
-                        int(m.group(1)),
-                        int(m.group(2)),
-                        int(m.group(3)),
-                    )
-                except ValueError:
-                    workshop_date = None
-        url_key = (
-            f'{workshop_date.isoformat()}-{slug}'
-            if workshop_date is not None else slug
-        )
+        url_key = slug
 
         pages = {}
         try:
@@ -748,10 +713,8 @@ def _build_cross_workshop_lookup(workshop_dirs, repo_dir, errors=None):
             'slug': slug,
             'title': title,
             'content_id': content_id,
-            # Issue #750: URL uses the date-slug key so cross-workshop
-            # rewrites emit the canonical URL shape. ``url_key`` is
-            # also surfaced so downstream consumers don't have to
-            # re-parse the ``url`` string.
+            # URL uses the canonical slug-only key. ``url_key`` is also
+            # surfaced so downstream consumers don't have to parse ``url``.
             'url_key': url_key,
             'url': f'/workshops/{url_key}',
             'pages': pages,

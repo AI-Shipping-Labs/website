@@ -216,7 +216,7 @@ class RegisteredTutorialAnonymousTest(TierSetupMixin, TestCase):
             workshop=cls.workshop, slug='intro', title='Intro',
             sort_order=1, body=_LONG_BODY,
         )
-        cls.url = '/workshops/2026-04-21-reg-tut/tutorial/intro'
+        cls.url = '/workshops/reg-tut/tutorial/intro'
 
     def test_returns_403(self):
         response = self.client.get(self.url)
@@ -251,14 +251,14 @@ class RegisteredTutorialAnonymousTest(TierSetupMixin, TestCase):
         # Sign-in (primary) link with next= preserved.
         self.assertContains(
             response,
-            'href="/accounts/login/?next=%2Fworkshops%2F2026-04-21-reg-tut%2Ftutorial%2Fintro"',
+            'href="/accounts/login/?next=%2Fworkshops%2Freg-tut%2Ftutorial%2Fintro"',
             status_code=403,
         )
         self.assertContains(response, 'Sign In', status_code=403)
         # Create-a-free-account (secondary) link with next= preserved.
         self.assertContains(
             response,
-            'href="/accounts/signup/?next=%2Fworkshops%2F2026-04-21-reg-tut%2Ftutorial%2Fintro"',
+            'href="/accounts/signup/?next=%2Fworkshops%2Freg-tut%2Ftutorial%2Fintro"',
             status_code=403,
         )
         self.assertContains(
@@ -298,7 +298,7 @@ class FreeUserOnPaidTierTutorialTest(TierSetupMixin, TestCase):
             workshop=cls.workshop, slug='lesson', title='Lesson',
             sort_order=1, body=_LONG_BODY,
         )
-        cls.url = '/workshops/2026-04-21-paid-tut/tutorial/lesson'
+        cls.url = '/workshops/paid-tut/tutorial/lesson'
         # Issue #532: the test user is read-only — no test mutates it.
         cls.user = User.objects.create_user(
             email='free-paid@x.com', password='pw',
@@ -360,7 +360,7 @@ class EligibleUserTutorialTest(TierSetupMixin, TestCase):
             workshop=cls.workshop, slug='lesson', title='Lesson',
             sort_order=1, body=_LONG_BODY,
         )
-        cls.url = '/workshops/2026-04-21-eligible-tut/tutorial/lesson'
+        cls.url = '/workshops/eligible-tut/tutorial/lesson'
         # Issue #532: read-only test user.
         cls.user = User.objects.create_user(
             email='main-eligible@x.com', password='pw',
@@ -398,7 +398,7 @@ class EmptyBodyTutorialFallbackTest(TierSetupMixin, TestCase):
             workshop=cls.workshop, slug='empty', title='Empty Page',
             sort_order=1, body='',
         )
-        cls.url = '/workshops/2026-04-21-empty-body/tutorial/empty'
+        cls.url = '/workshops/empty-body/tutorial/empty'
         # Issue #532: read-only test user.
         cls.user = User.objects.create_user(
             email='empty-body-free@x.com', password='pw',
@@ -449,7 +449,7 @@ class UnverifiedEmailTutorialTest(TierSetupMixin, TestCase):
             tier=self.free_tier, email_verified=False,
         )
         self.client.login(email='unverified@x.com', password='pw')
-        response = self.client.get('/workshops/2026-04-21-verify-tut/tutorial/intro')
+        response = self.client.get('/workshops/verify-tut/tutorial/intro')
         # Verify-email path returns 200 (the user can resolve it without
         # leaving the page).
         self.assertEqual(response.status_code, 200)
@@ -476,7 +476,7 @@ class TutorialWithVideoStartShowsThumbnailTest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_sees_locked_thumbnail(self):
-        response = self.client.get('/workshops/2026-04-21-thumb-tut/tutorial/step')
+        response = self.client.get('/workshops/thumb-tut/tutorial/step')
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response, 'data-testid="teaser-video-thumbnail"',
@@ -520,11 +520,11 @@ class AnonymousPaidRecordingVideoTest(TierSetupMixin, TestCase):
         )
 
     def test_returns_403(self):
-        response = self.client.get('/workshops/2026-04-21-reg-vid/video')
+        response = self.client.get('/workshops/reg-vid/video')
         self.assertEqual(response.status_code, 403)
 
     def test_renders_locked_thumbnail(self):
-        response = self.client.get('/workshops/2026-04-21-reg-vid/video')
+        response = self.client.get('/workshops/reg-vid/video')
         self.assertContains(
             response, 'data-testid="teaser-video-thumbnail"',
             status_code=403,
@@ -536,7 +536,7 @@ class AnonymousPaidRecordingVideoTest(TierSetupMixin, TestCase):
         )
 
     def test_does_not_embed_video_player(self):
-        response = self.client.get('/workshops/2026-04-21-reg-vid/video')
+        response = self.client.get('/workshops/reg-vid/video')
         self.assertNotContains(
             response, 'data-testid="video-player"', status_code=403,
         )
@@ -544,11 +544,11 @@ class AnonymousPaidRecordingVideoTest(TierSetupMixin, TestCase):
     def test_anonymous_gets_signup_companion_link(self):
         # Anonymous on a paid recording: primary "View Pricing" CTA with
         # a "Create a free account" companion (next= preserved).
-        response = self.client.get('/workshops/2026-04-21-reg-vid/video')
+        response = self.client.get('/workshops/reg-vid/video')
         self.assertContains(response, 'View Pricing', status_code=403)
         self.assertContains(
             response,
-            'href="/accounts/signup/?next=%2Fworkshops%2F2026-04-21-reg-vid%2Fvideo"',
+            'href="/accounts/signup/?next=%2Fworkshops%2Freg-vid%2Fvideo"',
             status_code=403,
         )
         self.assertContains(
@@ -556,7 +556,7 @@ class AnonymousPaidRecordingVideoTest(TierSetupMixin, TestCase):
         )
 
     def test_renders_teaser_description_with_fade(self):
-        response = self.client.get('/workshops/2026-04-21-reg-vid/video')
+        response = self.client.get('/workshops/reg-vid/video')
         self.assertContains(
             response, 'WORKSHOPVIDEOMARKER', status_code=403,
         )
@@ -569,7 +569,7 @@ class AnonymousPaidRecordingVideoTest(TierSetupMixin, TestCase):
         )
 
     def test_renders_first_three_timestamps(self):
-        response = self.client.get('/workshops/2026-04-21-reg-vid/video')
+        response = self.client.get('/workshops/reg-vid/video')
         self.assertContains(
             response, 'data-testid="teaser-timestamps"', status_code=403,
         )
@@ -601,11 +601,11 @@ class FreeUserOnPaidRecordingTest(TierSetupMixin, TestCase):
         self.client.login(email='free-vid@x.com', password='pw')
 
     def test_returns_403(self):
-        response = self.client.get('/workshops/2026-04-21-paid-vid/video')
+        response = self.client.get('/workshops/paid-vid/video')
         self.assertEqual(response.status_code, 403)
 
     def test_renders_view_pricing_with_main_tier_badge(self):
-        response = self.client.get('/workshops/2026-04-21-paid-vid/video')
+        response = self.client.get('/workshops/paid-vid/video')
         self.assertContains(
             response, 'View Pricing', status_code=403,
         )
@@ -617,7 +617,7 @@ class FreeUserOnPaidRecordingTest(TierSetupMixin, TestCase):
         )
 
     def test_does_not_render_signup_companion(self):
-        response = self.client.get('/workshops/2026-04-21-paid-vid/video')
+        response = self.client.get('/workshops/paid-vid/video')
         self.assertNotContains(
             response, 'data-testid="teaser-signup-cta"', status_code=403,
         )
@@ -644,15 +644,15 @@ class EligibleVideoTest(TierSetupMixin, TestCase):
         self.client.login(email='premium@x.com', password='pw')
 
     def test_returns_200(self):
-        response = self.client.get('/workshops/2026-04-21-elig-vid/video')
+        response = self.client.get('/workshops/elig-vid/video')
         self.assertEqual(response.status_code, 200)
 
     def test_video_player_embeds(self):
-        response = self.client.get('/workshops/2026-04-21-elig-vid/video')
+        response = self.client.get('/workshops/elig-vid/video')
         self.assertContains(response, 'data-testid="video-player"')
 
     def test_no_teaser_artifacts(self):
-        response = self.client.get('/workshops/2026-04-21-elig-vid/video')
+        response = self.client.get('/workshops/elig-vid/video')
         self.assertNotContains(response, 'data-testid="video-paywall"')
         self.assertNotContains(response, 'data-testid="teaser-body"')
 
@@ -669,7 +669,7 @@ class VideoPageMissingRecordingFallbackTest(TierSetupMixin, TestCase):
         )
 
     def test_anon_sees_paywall_without_thumbnail(self):
-        response = self.client.get('/workshops/2026-04-21-no-rec/video')
+        response = self.client.get('/workshops/no-rec/video')
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response, 'data-testid="video-paywall"', status_code=403,
@@ -713,11 +713,11 @@ class FreeBadgeOnRegisteredWorkshopsTest(TierSetupMixin, TestCase):
         )
 
     def test_landing_renders_free_badge_for_registered_workshop(self):
-        response = self.client.get('/workshops/2026-04-21-reg-ws')
+        response = self.client.get('/workshops/reg-ws')
         self.assertContains(response, 'data-testid="workshop-free-badge"')
         self.assertNotContains(response, 'data-testid="workshop-tier-badge"')
 
     def test_landing_paid_workshop_keeps_tier_badge(self):
-        response = self.client.get('/workshops/2026-04-21-paid-ws')
+        response = self.client.get('/workshops/paid-ws')
         self.assertContains(response, 'data-testid="workshop-tier-badge"')
         self.assertNotContains(response, 'data-testid="workshop-free-badge"')

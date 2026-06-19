@@ -1,5 +1,8 @@
 """Tests for redirect model, middleware, and studio views."""
 
+import importlib
+
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
@@ -18,12 +21,38 @@ class RedirectSeedTest(TestCase):
             ('/ai-engineer-interview-questions', '/interview'),
             ('/ai-engineer-interview-questions/theory-interview-questions', '/interview/theory'),
             ('/ai-engineer-learning-path', '/learning-path/ai-engineer'),
+            (
+                '/workshops/2026-06-17-cloudflare-workers-vectorize-agent',
+                '/workshops/cloudflare-workers-vectorize-agent',
+            ),
         ]
         for source, target in expected:
             r = Redirect.objects.get(source_path=source)
             self.assertEqual(r.target_path, target)
             self.assertEqual(r.redirect_type, 301)
             self.assertTrue(r.is_active)
+
+    def test_cloudflare_workshop_seed_repairs_existing_row(self):
+        Redirect.objects.update_or_create(
+            source_path='/workshops/2026-06-17-cloudflare-workers-vectorize-agent',
+            defaults={
+                'target_path': '/stale-target',
+                'redirect_type': 302,
+                'is_active': False,
+            },
+        )
+
+        seed_module = importlib.import_module(
+            'integrations.migrations.0023_seed_cloudflare_workshop_redirect'
+        )
+        seed_module.seed_cloudflare_workshop_redirect(apps, None)
+
+        redirect = Redirect.objects.get(
+            source_path='/workshops/2026-06-17-cloudflare-workers-vectorize-agent'
+        )
+        self.assertEqual(redirect.target_path, '/workshops/cloudflare-workers-vectorize-agent')
+        self.assertEqual(redirect.redirect_type, 301)
+        self.assertTrue(redirect.is_active)
 
 
 class RedirectMiddlewareTest(TestCase):
@@ -82,6 +111,12 @@ class RedirectMiddlewareTest(TestCase):
         response = self.client.get('/ai-engineer-resources')
         self.assertEqual(response.status_code, 301)
         self.assertEqual(response['Location'], '/interview')
+
+    def test_cloudflare_workshop_seed_redirect_works(self):
+        clear_redirect_cache()
+        response = self.client.get('/workshops/2026-06-17-cloudflare-workers-vectorize-agent')
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], '/workshops/cloudflare-workers-vectorize-agent')
 
 
 class StudioRedirectListTest(TestCase):

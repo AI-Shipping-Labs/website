@@ -296,17 +296,17 @@ class WatchBarVisibilityTest(TierSetupMixin, TestCase):
 
     def test_main_user_sees_watch_bar_when_video_start_set(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-wb/tutorial/setup')
+        response = self.client.get('/workshops/wb/tutorial/setup')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="watch-this-section"')
         # Bar links to the video page with the same ?t= value.
-        self.assertContains(response, 'href="/workshops/2026-04-21-wb/video?t=16:00"')
+        self.assertContains(response, 'href="/workshops/wb/video?t=16:00"')
         # Visible label uses the original MM:SS string.
         self.assertContains(response, 'Watch this section (16:00)')
 
     def test_main_user_no_bar_when_video_start_empty(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-wb/tutorial/no-ts')
+        response = self.client.get('/workshops/wb/tutorial/no-ts')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="watch-this-section"')
 
@@ -314,14 +314,14 @@ class WatchBarVisibilityTest(TierSetupMixin, TestCase):
         # Basic = level 10, pages gate = 10, recording gate = 20.
         # Page renders, but watch bar must not (recording gate fails).
         self.client.force_login(self.user_basic)
-        response = self.client.get('/workshops/2026-04-21-wb/tutorial/setup')
+        response = self.client.get('/workshops/wb/tutorial/setup')
         self.assertContains(response, 'data-testid="page-body"')
         self.assertNotContains(response, 'data-testid="watch-this-section"')
 
     def test_anon_no_bar_even_if_video_start_set(self):
         # Anonymous = level 0, fails both gates => paywall + no bar.
         # Issue #515: gated tutorial pages return 403.
-        response = self.client.get('/workshops/2026-04-21-wb/tutorial/setup')
+        response = self.client.get('/workshops/wb/tutorial/setup')
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response, 'data-testid="page-paywall"', status_code=403,
@@ -365,7 +365,7 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
 
     def test_inverse_links_render_for_matching_timestamps(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-vl/video')
+        response = self.client.get('/workshops/vl/video')
         self.assertContains(response, 'data-testid="video-chapters"')
         self.assertContains(
             response,
@@ -374,10 +374,10 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
         )
         # Both linked pages are reachable from the timestamps panel.
         self.assertContains(
-            response, 'href="/workshops/2026-04-21-vl/tutorial/intro"',
+            response, 'href="/workshops/vl/tutorial/intro"',
         )
         self.assertContains(
-            response, 'href="/workshops/2026-04-21-vl/tutorial/setup-page"',
+            response, 'href="/workshops/vl/tutorial/setup-page"',
         )
         self.assertContains(response, 'Tutorial: Intro Page')
         self.assertContains(response, 'Tutorial: Setup Page')
@@ -387,14 +387,14 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
         # tutorial sub-link must be absent. We assert this by counting
         # links above (== 2, not 3).
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-vl/video')
+        response = self.client.get('/workshops/vl/video')
         # Sanity check: the 8:30 row label still renders.
         self.assertContains(response, 'No matching page')
 
     def test_query_t_propagates_to_youtube_player_vars(self):
         # ?t=16:00 -> 960 seconds -> rendered into playerVars.start.
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-vl/video?t=16:00')
+        response = self.client.get('/workshops/vl/video?t=16:00')
         self.assertEqual(response.status_code, 200)
         # Look for the start: 960 line inside the playerVars object.
         self.assertContains(response, 'start: 960')
@@ -404,7 +404,7 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
         # must not request autoplay nor call playVideo() on load — it
         # arrives parked at the offset and paused.
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-vl/video?t=16:00')
+        response = self.client.get('/workshops/vl/video?t=16:00')
         html = response.content.decode()
         self.assertIn('start: 960', html)
         # No autoplay playerVar and no programmatic play on load.
@@ -413,14 +413,14 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
 
     def test_malformed_t_does_not_break_page(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-vl/video?t=not-a-time')
+        response = self.client.get('/workshops/vl/video?t=not-a-time')
         self.assertEqual(response.status_code, 200)
         # No start parameter rendered when ?t= was unparseable.
         self.assertNotContains(response, 'start:')
 
     def test_no_t_param_omits_start(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-vl/video')
+        response = self.client.get('/workshops/vl/video')
         self.assertNotContains(response, 'start:')
 
     def test_paywalled_user_does_not_get_inverse_links(self):
@@ -428,7 +428,7 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
         # links section is absent (no timestamps panel either).
         # Issue #515: gated workshop video page returns 403.
         self.client.force_login(self.user_basic)
-        response = self.client.get('/workshops/2026-04-21-vl/video?t=16:00')
+        response = self.client.get('/workshops/vl/video?t=16:00')
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response, 'data-testid="video-paywall"', status_code=403,
@@ -469,11 +469,11 @@ class WorkshopVideoDuplicateVideoStartTest(TierSetupMixin, TestCase):
 
     def test_lowest_sort_order_page_wins(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-dup/video')
+        response = self.client.get('/workshops/dup/video')
         # First page link rendered, second page is silently ignored.
-        self.assertContains(response, 'href="/workshops/2026-04-21-dup/tutorial/first"')
+        self.assertContains(response, 'href="/workshops/dup/tutorial/first"')
         self.assertNotContains(
-            response, 'href="/workshops/2026-04-21-dup/tutorial/second"',
+            response, 'href="/workshops/dup/tutorial/second"',
         )
         self.assertContains(
             response, 'data-testid="timestamp-tutorial-link"', count=1,
@@ -505,10 +505,10 @@ class WorkshopVideoCanonicalTimestampShapeTest(TierSetupMixin, TestCase):
 
     def test_canonical_shape_links_to_tutorial(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-leg/video')
+        response = self.client.get('/workshops/leg/video')
         # The 960s timestamp matches video_start="16:00".
         self.assertContains(
-            response, 'href="/workshops/2026-04-21-leg/tutorial/setup"',
+            response, 'href="/workshops/leg/tutorial/setup"',
         )
         self.assertContains(response, 'Tutorial: Setup Page')
 
@@ -533,7 +533,7 @@ class WorkshopVideoFallbackEmbedStartTest(TierSetupMixin, TestCase):
 
     def test_fallback_iframe_url_carries_start(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-fb/video?t=16:00')
+        response = self.client.get('/workshops/fb/video?t=16:00')
         self.assertEqual(response.status_code, 200)
         # The augmented URL is rendered into the iframe src.
         self.assertContains(
@@ -545,7 +545,7 @@ class WorkshopVideoFallbackEmbedStartTest(TierSetupMixin, TestCase):
         # request autoplay through the constructed URL. The allow=autoplay
         # attribute permits playback but does not force it.
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-fb/video?t=16:00')
+        response = self.client.get('/workshops/fb/video?t=16:00')
         html = response.content.decode()
         # The constructed src carries start= but no autoplay param.
         self.assertIn('embed/xyz?start=960', html)
@@ -554,7 +554,7 @@ class WorkshopVideoFallbackEmbedStartTest(TierSetupMixin, TestCase):
 
     def test_fallback_iframe_unchanged_without_t(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-fb/video')
+        response = self.client.get('/workshops/fb/video')
         self.assertContains(
             response, 'src="https://drive.example.com/embed/xyz"',
         )
@@ -588,7 +588,7 @@ class WorkshopVideoSelfHostedCueTest(TierSetupMixin, TestCase):
 
     def test_self_hosted_video_element_renders(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-sh/video')
+        response = self.client.get('/workshops/sh/video')
         self.assertContains(response, 'id="video-player-self-hosted"')
 
     def test_self_hosted_video_has_no_autoplay_attribute(self):
@@ -596,8 +596,8 @@ class WorkshopVideoSelfHostedCueTest(TierSetupMixin, TestCase):
         # autoplay — regardless of whether ?t= is supplied.
         self.client.force_login(self.user_main)
         for url in (
-            '/workshops/2026-04-21-sh/video',
-            '/workshops/2026-04-21-sh/video?t=16:00',
+            '/workshops/sh/video',
+            '/workshops/sh/video?t=16:00',
         ):
             response = self.client.get(url)
             html = response.content.decode()
@@ -612,7 +612,7 @@ class WorkshopVideoSelfHostedCueTest(TierSetupMixin, TestCase):
         # would auto-play. (The chapter-click handler still plays, but
         # that handler is keyed on .video-timestamp clicks, not load.)
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-sh/video?t=16:00')
+        response = self.client.get('/workshops/sh/video?t=16:00')
         html = response.content.decode()
         self.assertIn('var startSeconds = 960;', html)
         self.assertIn('video.currentTime = startSeconds;', html)
@@ -634,7 +634,7 @@ class WorkshopVideoSelfHostedCueTest(TierSetupMixin, TestCase):
         # Without ?t= the load-time cue script is not emitted at all, so
         # the player parks at 0 (paused) with no JS touching currentTime.
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-sh/video')
+        response = self.client.get('/workshops/sh/video')
         html = response.content.decode()
         self.assertNotIn('var startSeconds', html)
 
@@ -642,7 +642,7 @@ class WorkshopVideoSelfHostedCueTest(TierSetupMixin, TestCase):
         # Boundary guard: the explicit chapter-click handler keeps its
         # seek-AND-play behavior (this issue only governs initial load).
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/2026-04-21-sh/video')
+        response = self.client.get('/workshops/sh/video')
         html = response.content.decode()
         self.assertIn("source === 'self_hosted'", html)
         self.assertIn('video.play();', html)

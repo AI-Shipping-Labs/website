@@ -111,7 +111,7 @@ class FooterNewsletterSuppressionTest(TierSetupMixin, TestCase):
     def test_workshop_detail_anonymous_hides_footer_newsletter(self):
         """Anonymous GET /workshops/anon-ws (pages paywall branch)
         renders without the footer newsletter block."""
-        response = self.client.get('/workshops/2026-04-21-anon-ws')
+        response = self.client.get('/workshops/anon-ws')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, FOOTER_NEWSLETTER_ANCHOR)
         self.assertNotContains(response, FOOTER_NEWSLETTER_HEADING)

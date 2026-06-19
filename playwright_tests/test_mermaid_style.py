@@ -165,7 +165,7 @@ class TestDarkBorderVisible:
         try:
             page.goto(
                 f'{django_server}'
-                f'/workshops/2026-04-21-dark-border-walkthrough/tutorial/arch',
+                f'/workshops/dark-border-walkthrough/tutorial/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_wide_diagram(page)
@@ -224,7 +224,7 @@ class TestLightBorderNotRegressed:
         try:
             page.goto(
                 f'{django_server}'
-                f'/workshops/2026-04-21-light-border-walkthrough/tutorial/arch',
+                f'/workshops/light-border-walkthrough/tutorial/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_wide_diagram(page)
@@ -277,7 +277,7 @@ class TestToggleRoundTripPreservesBorders:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/2026-04-21-border-roundtrip/tutorial/arch',
+                f'{django_server}/workshops/border-roundtrip/tutorial/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_wide_diagram(page)
@@ -374,7 +374,7 @@ class TestMobileWideDiagramScrollsInPlace:
         try:
             page.goto(
                 f'{django_server}'
-                f'/workshops/2026-04-21-mobile-wide-walkthrough/tutorial/arch',
+                f'/workshops/mobile-wide-walkthrough/tutorial/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_wide_diagram(page)
@@ -445,7 +445,7 @@ class TestDesktopNarrowDiagramNoScrollbar:
         try:
             page.goto(
                 f'{django_server}'
-                f'/workshops/2026-04-21-desktop-narrow-walkthrough/tutorial/arch',
+                f'/workshops/desktop-narrow-walkthrough/tutorial/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_narrow_diagram(page)
@@ -507,7 +507,7 @@ class TestPagesWithoutDiagramsUnaffected:
         try:
             page.goto(
                 f'{django_server}'
-                f'/workshops/2026-04-21-style-plain-walkthrough/tutorial/setup',
+                f'/workshops/style-plain-walkthrough/tutorial/setup',
                 wait_until='domcontentloaded',
             )
             page.wait_for_load_state('networkidle', timeout=3000)
@@ -553,7 +553,7 @@ class TestQAScreenshots:
         try:
             page.goto(
                 f'{django_server}'
-                f'/workshops/2026-04-21-shot359-walkthrough/tutorial/arch',
+                f'/workshops/shot359-walkthrough/tutorial/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_wide_diagram(page)

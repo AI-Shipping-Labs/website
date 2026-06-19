@@ -1032,17 +1032,17 @@ class WorkshopSyncMdLinkRewriteTest(_WorkshopSyncFixtureBase):
         # gone and replaced with the title.
         self.assertIn(
             '[Part 1: The starting notebook]'
-            '(/workshops/2026-04-21-end-to-end-agent-deployment/tutorial/starting-notebook)',
+            '(/workshops/end-to-end-agent-deployment/tutorial/starting-notebook)',
             overview.body,
         )
         self.assertIn(
             '[Q&A: side discussions]'
-            '(/workshops/2026-04-21-end-to-end-agent-deployment/tutorial/qa)',
+            '(/workshops/end-to-end-agent-deployment/tutorial/qa)',
             overview.body,
         )
         self.assertIn(
             '[the Q&A page]'
-            '(/workshops/2026-04-21-end-to-end-agent-deployment/tutorial/qa#tmux)',
+            '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
             overview.body,
         )
         self.assertNotIn('](10-qa.md)', overview.body)
@@ -1050,15 +1050,15 @@ class WorkshopSyncMdLinkRewriteTest(_WorkshopSyncFixtureBase):
 
         # Rendered HTML carries the right hrefs.
         self.assertIn(
-            'href="/workshops/2026-04-21-end-to-end-agent-deployment/tutorial/qa"',
+            'href="/workshops/end-to-end-agent-deployment/tutorial/qa"',
             overview.body_html,
         )
         self.assertIn(
-            'href="/workshops/2026-04-21-end-to-end-agent-deployment/tutorial/qa#tmux"',
+            'href="/workshops/end-to-end-agent-deployment/tutorial/qa#tmux"',
             overview.body_html,
         )
         self.assertIn(
-            'href="/workshops/2026-04-21-end-to-end-agent-deployment/tutorial/starting-notebook"',
+            'href="/workshops/end-to-end-agent-deployment/tutorial/starting-notebook"',
             overview.body_html,
         )
         # And no leftover bare-filename hrefs.
@@ -1070,7 +1070,7 @@ class WorkshopSyncMdLinkRewriteTest(_WorkshopSyncFixtureBase):
             workshop=workshop, slug='starting-notebook',
         )
         self.assertIn(
-            'href="/workshops/2026-04-21-end-to-end-agent-deployment/tutorial/overview"',
+            'href="/workshops/end-to-end-agent-deployment/tutorial/overview"',
             starting.body_html,
         )
 
@@ -1449,14 +1449,14 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
 
         page = WorkshopPage.objects.get(slug='qa')
         # Bare-filename label gets title-substituted to the workshop title.
-        self.assertIn('[Demo Workshop](/workshops/2026-04-21-ws)', page.body)
+        self.assertIn('[Demo Workshop](/workshops/ws)', page.body)
         # Custom label preserved with anchor.
         self.assertIn(
-            '[the overview](/workshops/2026-04-21-ws#getting-started)',
+            '[the overview](/workshops/ws#getting-started)',
             page.body,
         )
         # Case-insensitive match still resolves.
-        self.assertIn('](/workshops/2026-04-21-ws)', page.body)
+        self.assertIn('](/workshops/ws)', page.body)
 
     def test_copy_file_links_to_landing_via_virtual_lookup(self):
         # When copy_file points at 01-intro.md, that filename also routes
@@ -1481,9 +1481,9 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
         next_page = WorkshopPage.objects.get(slug='next')
         # 01-intro.md routes to the workshop landing, not the tutorial URL,
         # and the visible label is title-substituted to the workshop title.
-        self.assertIn('[Demo Workshop](/workshops/2026-04-21-ws)', next_page.body)
+        self.assertIn('[Demo Workshop](/workshops/ws)', next_page.body)
         self.assertNotIn(
-            '/workshops/2026-04-21-ws/tutorial/intro', next_page.body,
+            '/workshops/ws/tutorial/intro', next_page.body,
         )
 
     def test_readme_image_url_rewritten_on_landing(self):
@@ -1689,12 +1689,12 @@ class WorkshopSyncCrossWorkshopLinkRewriteTest(_WorkshopSyncFixtureBase):
 
         # Stored markdown body has the rewritten URL.
         self.assertIn(
-            '[the previous workshop](/workshops/2026-04-21-end-to-end-agent-deployment)',
+            '[the previous workshop](/workshops/end-to-end-agent-deployment)',
             page.body,
         )
         # And the rendered HTML carries the right href.
         self.assertIn(
-            'href="/workshops/2026-04-21-end-to-end-agent-deployment"',
+            'href="/workshops/end-to-end-agent-deployment"',
             page.body_html,
         )
         # The pre-rewrite URL must NOT appear in the rendered HTML.
@@ -1719,12 +1719,12 @@ class WorkshopSyncCrossWorkshopLinkRewriteTest(_WorkshopSyncFixtureBase):
         page = WorkshopPage.objects.get(workshop=source, slug='overview')
         # Sub-page resolves through the target's pages map; anchor preserved.
         self.assertIn(
-            '[setup details](/workshops/2026-04-21-end-to-end-agent-deployment/'
+            '[setup details](/workshops/end-to-end-agent-deployment/'
             'tutorial/overview#prerequisites)',
             page.body,
         )
         self.assertIn(
-            'href="/workshops/2026-04-21-end-to-end-agent-deployment/tutorial/'
+            'href="/workshops/end-to-end-agent-deployment/tutorial/'
             'overview#prerequisites"',
             page.body_html,
         )
@@ -1740,11 +1740,11 @@ class WorkshopSyncCrossWorkshopLinkRewriteTest(_WorkshopSyncFixtureBase):
         source = Workshop.objects.get(slug='lambda-agent-deployment')
         page = WorkshopPage.objects.get(workshop=source, slug='overview')
         self.assertIn(
-            '[the workshop repo](/workshops/2026-04-21-end-to-end-agent-deployment)',
+            '[the workshop repo](/workshops/end-to-end-agent-deployment)',
             page.body,
         )
         self.assertIn(
-            'href="/workshops/2026-04-21-end-to-end-agent-deployment"',
+            'href="/workshops/end-to-end-agent-deployment"',
             page.body_html,
         )
 
@@ -1813,12 +1813,12 @@ class WorkshopSyncCrossWorkshopLinkRewriteTest(_WorkshopSyncFixtureBase):
         # Workshop.description is the rewritten markdown body.
         self.assertIn(
             '[Previous workshop: end-to-end agent deployment]'
-            '(/workshops/2026-04-21-end-to-end-agent-deployment)',
+            '(/workshops/end-to-end-agent-deployment)',
             source.description,
         )
         # And the rendered description_html carries the right href.
         self.assertIn(
-            'href="/workshops/2026-04-21-end-to-end-agent-deployment"',
+            'href="/workshops/end-to-end-agent-deployment"',
             source.description_html,
         )
 

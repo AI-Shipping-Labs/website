@@ -1996,7 +1996,7 @@ class StudioSyncHistoryItemLinksTest(TestCase):
             finished_at=timezone.now(),
         )
 
-    def test_workshop_item_renders_as_date_slug_link(self):
+    def test_workshop_item_renders_as_slug_link(self):
         self._log_with_item({
             'title': 'Event Feedback Sprint',
             'slug': 'event-feedback',
@@ -2007,13 +2007,12 @@ class StudioSyncHistoryItemLinksTest(TestCase):
         response = self.client.get('/studio/sync/history/')
         self.assertContains(
             response,
-            'href="/workshops/2026-04-15-event-feedback"',
+            'href="/workshops/event-feedback"',
         )
         self.assertContains(response, 'Event Feedback Sprint')
 
-    def test_workshop_item_without_date_falls_back_to_plain_text(self):
-        """Legacy log rows synced before the dispatcher emitted ``date`` must
-        not render a broken link like ``/workshops/-<slug>``."""
+    def test_workshop_item_without_date_uses_slug_link(self):
+        """A slug is enough to link historical sync rows."""
         self._log_with_item({
             'title': 'Legacy Workshop',
             'slug': 'legacy-ws',
@@ -2022,7 +2021,7 @@ class StudioSyncHistoryItemLinksTest(TestCase):
         })
         response = self.client.get('/studio/sync/history/')
         self.assertContains(response, 'Legacy Workshop')
-        self.assertNotContains(response, 'href="/workshops/')
+        self.assertContains(response, 'href="/workshops/legacy-ws"')
 
     def test_module_item_renders_as_course_module_link(self):
         self._log_with_item({

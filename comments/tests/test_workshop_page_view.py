@@ -78,7 +78,7 @@ class WorkshopPageQASectionTest(TierSetupMixin, TestCase):
         )
 
     def test_page_with_content_id_renders_qa_section(self):
-        response = self.client.get('/workshops/2026-04-21-open-ws/tutorial/intro')
+        response = self.client.get('/workshops/open-ws/tutorial/intro')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="qa-section"')
         self.assertContains(
@@ -88,7 +88,7 @@ class WorkshopPageQASectionTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Questions &amp; Answers')
 
     def test_page_without_content_id_does_not_render_qa_section(self):
-        response = self.client.get('/workshops/2026-04-21-open-ws/tutorial/no-id')
+        response = self.client.get('/workshops/open-ws/tutorial/no-id')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'id="qa-section"')
 
@@ -99,7 +99,7 @@ class WorkshopPageQASectionTest(TierSetupMixin, TestCase):
         links carry a ``?next=`` pointing back at the current path
         so the visitor lands on the tutorial after auth.
         """
-        tutorial_path = '/workshops/2026-04-21-open-ws/tutorial/intro'
+        tutorial_path = '/workshops/open-ws/tutorial/intro'
         response = self.client.get(tutorial_path)
         self.assertContains(response, 'id="qa-section"')
 
@@ -136,7 +136,7 @@ class WorkshopPageQASectionTest(TierSetupMixin, TestCase):
         leaking into the authenticated branch.
         """
         self.client.force_login(self.basic_user)
-        response = self.client.get('/workshops/2026-04-21-open-ws/tutorial/intro')
+        response = self.client.get('/workshops/open-ws/tutorial/intro')
         # Authenticated branch is rendered.
         self.assertContains(response, 'id="qa-new-question"')
         self.assertContains(response, 'id="qa-post-btn"')
@@ -150,7 +150,7 @@ class WorkshopPageQASectionTest(TierSetupMixin, TestCase):
         # is_gated=True and the upgrade card replaces the body — the
         # Q&A include is in the {% else %} branch and must not render.
         self.client.force_login(self.free_user)
-        response = self.client.get('/workshops/2026-04-21-paid-ws/tutorial/intro')
+        response = self.client.get('/workshops/paid-ws/tutorial/intro')
         self.assertEqual(response.status_code, 403)
         self.assertContains(response, 'data-testid="page-paywall"', status_code=403)
         self.assertNotContains(response, 'id="qa-section"', status_code=403)
@@ -161,5 +161,5 @@ class WorkshopPageQASectionTest(TierSetupMixin, TestCase):
         # workshop page template. Without it the markup would render but
         # nothing would fetch the comments — confirm the IIFE is on the
         # page when the section is.
-        response = self.client.get('/workshops/2026-04-21-open-ws/tutorial/intro')
+        response = self.client.get('/workshops/open-ws/tutorial/intro')
         self.assertContains(response, "document.getElementById('qa-section')")

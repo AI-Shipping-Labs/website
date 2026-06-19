@@ -245,8 +245,7 @@ class NotificationServiceNotifyTest(TestCase):
         )
         NotificationService.notify('workshop', workshop.pk)
         n = Notification.objects.filter(user=self.free_user).first()
-        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
-        self.assertEqual(n.url, '/workshops/2026-01-01-url-workshop')
+        self.assertEqual(n.url, '/workshops/url-workshop')
         self.assertEqual(n.title, 'New workshop: URL Workshop')
         self.assertEqual(n.notification_type, 'new_content')
         self.assertFalse(n.read)
@@ -598,10 +597,9 @@ class NotificationServiceWorkshopEmailTest(TestCase):
             self.assertEqual(context['workshop_title'], 'Build a RAG App')
             self.assertEqual(context['workshop_slug'], 'build-a-rag-app')
             self.assertIn('Hands-on workshop', context['workshop_description'])
-            # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
             self.assertEqual(
                 context['workshop_url'],
-                '/workshops/2026-01-01-build-a-rag-app',
+                '/workshops/build-a-rag-app',
             )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')

@@ -245,7 +245,7 @@ class TestDarkModeDiagram:
         try:
             page.goto(
                 f'{django_server}'
-                f'/workshops/2026-04-21-theme-dark-walkthrough/tutorial/arch',
+                f'/workshops/theme-dark-walkthrough/tutorial/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_mermaid_ready(page)
@@ -305,7 +305,7 @@ class TestLightModeDiagram:
         try:
             page.goto(
                 f'{django_server}'
-                f'/workshops/2026-04-21-theme-light-walkthrough/tutorial/arch',
+                f'/workshops/theme-light-walkthrough/tutorial/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_mermaid_ready(page)
@@ -368,7 +368,7 @@ class TestThemeToggleRerendersDiagram:
         try:
             page.goto(
                 f'{django_server}'
-                f'/workshops/2026-04-21-theme-toggle-walkthrough/tutorial/arch',
+                f'/workshops/theme-toggle-walkthrough/tutorial/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_mermaid_ready(page)
@@ -486,7 +486,7 @@ class TestThemeToggleRoundTrip:
         try:
             page.goto(
                 f'{django_server}'
-                f'/workshops/2026-04-21-theme-roundtrip-walkthrough/tutorial/arch',
+                f'/workshops/theme-roundtrip-walkthrough/tutorial/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_mermaid_ready(page)
@@ -573,7 +573,7 @@ class TestNoDiagramNoBandwidthAcrossThemes:
         try:
             page.goto(
                 f'{django_server}'
-                f'/workshops/2026-04-21-theme-plain-walkthrough/tutorial/setup',
+                f'/workshops/theme-plain-walkthrough/tutorial/setup',
                 wait_until='domcontentloaded',
             )
             # Wait for network idle instead of sleeping 500ms — assertion
@@ -643,7 +643,7 @@ class TestXssStaysEscapedAfterRerender:
         try:
             page.goto(
                 f'{django_server}'
-                f'/workshops/2026-04-21-theme-xss-walkthrough/tutorial/xss',
+                f'/workshops/theme-xss-walkthrough/tutorial/xss',
                 wait_until='domcontentloaded',
             )
             # Body is up.

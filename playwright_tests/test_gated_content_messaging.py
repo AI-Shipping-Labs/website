@@ -180,7 +180,7 @@ class TestGatedContentMessaging:
 
         page = browser.new_page()
         page.goto(
-            f"{django_server}/workshops/2026-04-21-landing-gated-workshop",
+            f"{django_server}/workshops/landing-gated-workshop",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -260,7 +260,7 @@ class TestGatedContentMessaging:
         free_ctx = _auth_context(browser, "free-workshop-gate@test.com")
         page = free_ctx.new_page()
         page.goto(
-            f"{django_server}/workshops/2026-04-21-gated-workshop/tutorial/intro",
+            f"{django_server}/workshops/gated-workshop/tutorial/intro",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -277,7 +277,7 @@ class TestGatedContentMessaging:
         basic_ctx = _auth_context(browser, "basic-workshop-gate@test.com")
         page = basic_ctx.new_page()
         page.goto(
-            f"{django_server}/workshops/2026-04-21-gated-workshop/tutorial/intro",
+            f"{django_server}/workshops/gated-workshop/tutorial/intro",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -285,7 +285,7 @@ class TestGatedContentMessaging:
         assert 'data-testid="page-body"' in body
 
         page.goto(
-            f"{django_server}/workshops/2026-04-21-gated-workshop/video",
+            f"{django_server}/workshops/gated-workshop/video",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -300,7 +300,7 @@ class TestGatedContentMessaging:
         main_ctx = _auth_context(browser, "main-workshop-gate@test.com")
         page = main_ctx.new_page()
         page.goto(
-            f"{django_server}/workshops/2026-04-21-gated-workshop/video",
+            f"{django_server}/workshops/gated-workshop/video",
             wait_until="domcontentloaded",
         )
         body = page.content()

@@ -253,9 +253,8 @@ def rewrite_workshop_md_links(
     valid intra-workshop links are sibling references only — no ``..`` or
     nested subfolders. The rewriter resolves each sibling ``.md`` filename to
     ``/workshops/<workshop_url_key>/tutorial/<page_slug>`` (no trailing
-    slash). Issue #750: ``workshop_url_key`` is the ``<YYYY-MM-DD>-<slug>``
-    composite. When unset (legacy callers, tests pre-#750), the rewriter
-    falls back to ``workshop_slug`` so existing behaviour is preserved.
+    slash). ``workshop_url_key`` is the slug-only canonical public key. When
+    unset, the rewriter falls back to ``workshop_slug``.
 
     Beyond URL resolution, when the link's visible text equals the bare
     filename (modulo surrounding whitespace, case-insensitive) the rewriter
@@ -366,10 +365,6 @@ def rewrite_workshop_md_links(
         if resolved is None:
             return match.group(0)
         page_meta, fragment, canonical = resolved
-        # Issue #750: prefer the date-slug ``url_key`` when supplied so
-        # rewritten URLs are content-derivable. Fall back to the bare
-        # workshop slug to keep pre-#750 callers (tests, older lookups)
-        # working unchanged.
         path_key = workshop_url_key or workshop_slug
         url = page_meta.get('url') or (
             f'/workshops/{path_key}/tutorial/{page_meta["slug"]}'
@@ -509,9 +504,8 @@ def rewrite_cross_workshop_md_links(
         if sub.endswith('/'):
             sub = sub[:-1]
 
-        # Issue #750: cross-workshop URLs use the date-slug key when the
-        # lookup carries one (current sync). Falls back to the bare slug
-        # for older lookups / hand-built test fixtures.
+        # Cross-workshop URLs use the canonical key when the lookup carries
+        # one. Falls back to the bare slug for older hand-built fixtures.
         target_key = target.get('url_key') or target['slug']
         landing_url = target.get('url') or f'/workshops/{target_key}'
 

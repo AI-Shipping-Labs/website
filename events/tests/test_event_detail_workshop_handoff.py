@@ -139,7 +139,7 @@ class EventDetailWorkshopHandoffTest(TestCase):
             response, 'data-testid="event-workshop-writeup-link"'
         )
         self.assertContains(
-            response, '/workshops/2026-04-21-linked-workshop',
+            response, '/workshops/linked-workshop',
         )
 
     def test_linked_event_shows_announcement_description(self):

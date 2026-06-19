@@ -174,7 +174,7 @@ class TestVisitorBrowsesCatalog:
         assert 'Basic+' not in body
 
         production_card = page.locator(
-            'article:has(a[href="/workshops/2026-04-21-ws"])',
+            'article:has(a[href="/workshops/ws"])',
         )
         production_fallback = production_card.locator(
             '[data-testid="workshop-card-preview-fallback"]',
@@ -198,7 +198,7 @@ class TestVisitorBrowsesCatalog:
         page.locator('a:has-text("Production Agents")').first.click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert '/workshops/2026-04-21-ws' in page.url
+        assert '/workshops/ws' in page.url
         body = page.content()
 
         # Title is visible for SEO + a single paywall card.
@@ -242,7 +242,7 @@ class TestVisitorBrowsesCatalog:
             '() => document.documentElement.scrollWidth <= '
             'document.documentElement.clientWidth',
         )
-        card = page.locator('article:has(a[href="/workshops/2026-04-21-mobile-workshop"])')
+        card = page.locator('article:has(a[href="/workshops/mobile-workshop"])')
         fallback = card.locator('[data-testid="workshop-card-preview-fallback"]')
         assert fallback.count() == 1
         assert title not in fallback.inner_text()
@@ -254,7 +254,7 @@ class TestVisitorBrowsesCatalog:
         )
         card.locator('a').first.click()
         page.wait_for_load_state('domcontentloaded')
-        assert '/workshops/2026-04-21-mobile-workshop' in page.url
+        assert '/workshops/mobile-workshop' in page.url
 
         body = page.content()
         assert 'data-testid="workshop-detail-preview"' not in body
@@ -339,7 +339,7 @@ class TestBasicUserReadsPagesButNotRecording:
         ctx = _auth_context(browser, 'basic@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/2026-04-21-ws',
+            f'{django_server}/workshops/ws',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -358,7 +358,7 @@ class TestBasicUserReadsPagesButNotRecording:
             'a:has-text("Introduction")',
         ).first.click()
         page.wait_for_load_state('domcontentloaded')
-        assert '/workshops/2026-04-21-ws/tutorial/intro' in page.url
+        assert '/workshops/ws/tutorial/intro' in page.url
 
         body = page.content()
         # Body renders, sidebar highlights current page.
@@ -379,7 +379,7 @@ class TestBasicUserReadsPagesButNotRecording:
         page = ctx.new_page()
         # First page: Next visible, Prev absent.
         page.goto(
-            f'{django_server}/workshops/2026-04-21-ws/tutorial/intro',
+            f'{django_server}/workshops/ws/tutorial/intro',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -388,7 +388,7 @@ class TestBasicUserReadsPagesButNotRecording:
 
         # Middle page: Both visible.
         page.goto(
-            f'{django_server}/workshops/2026-04-21-ws/tutorial/setup',
+            f'{django_server}/workshops/ws/tutorial/setup',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -397,7 +397,7 @@ class TestBasicUserReadsPagesButNotRecording:
 
         # Last page: Prev visible, Next absent.
         page.goto(
-            f'{django_server}/workshops/2026-04-21-ws/tutorial/deploy',
+            f'{django_server}/workshops/ws/tutorial/deploy',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -432,7 +432,7 @@ class TestMainUserHasFullAccess:
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/2026-04-21-ws/video',
+            f'{django_server}/workshops/ws/video',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -479,7 +479,7 @@ class TestEventsPastCardLinksToWorkshop:
         assert 'data-testid="past-card-workshop-badge"' in body
         # The past card link points to /workshops/<slug>.
         link = page.locator('[data-testid="past-card-workshop-link"]').first
-        assert link.get_attribute('href') == '/workshops/2026-04-21-ws'
+        assert link.get_attribute('href') == '/workshops/ws'
 
 
 # ----------------------------------------------------------------------
@@ -500,8 +500,8 @@ class TestWorkshopSitemap:
         page.goto(f'{django_server}/sitemap.xml')
         # response.text() doesn't exist on the page object — read content.
         body = page.content()
-        assert '/workshops/2026-04-21-ws-sitemap' in body
-        assert '/workshops/2026-04-21-ws-sitemap/tutorial/only-page' in body
+        assert '/workshops/ws-sitemap' in body
+        assert '/workshops/ws-sitemap/tutorial/only-page' in body
 
 
 # ----------------------------------------------------------------------
@@ -530,7 +530,7 @@ class TestWorkshopActionsBelowTutorialPages:
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/2026-04-21-ws',
+            f'{django_server}/workshops/ws',
             wait_until='domcontentloaded',
         )
 
@@ -594,7 +594,7 @@ class TestWorkshopWithoutCodeRepoNoEmptySlot:
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/2026-04-21-ws-nogit',
+            f'{django_server}/workshops/ws-nogit',
             wait_until='domcontentloaded',
         )
 
@@ -651,11 +651,11 @@ class TestDraftWorkshopHidden:
         # use a workshop-specific phrase that wouldn't appear elsewhere.
         assert 'Hidden Draft Workshop' not in page.content()
 
-        response = page.goto(f'{django_server}/workshops/2026-04-21-draft-ws')
+        response = page.goto(f'{django_server}/workshops/draft-ws')
         assert response is not None and response.status == 404
 
         response = page.goto(
-            f'{django_server}/workshops/2026-04-21-draft-ws/tutorial/intro',
+            f'{django_server}/workshops/draft-ws/tutorial/intro',
         )
         assert response is not None and response.status == 404
 
@@ -697,7 +697,7 @@ class TestWorkshopMaterialsUnification:
         )
 
         page.goto(
-            f'{django_server}/workshops/2026-04-21-materials-only-workshop',
+            f'{django_server}/workshops/materials-only-workshop',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -738,7 +738,7 @@ class TestWorkshopMaterialsUnification:
         ctx = _auth_context(browser, 'main@test.com')
         p = ctx.new_page()
         p.goto(
-            f'{django_server}/workshops/2026-04-21-recorded-workshop/video',
+            f'{django_server}/workshops/recorded-workshop/video',
             wait_until='domcontentloaded',
         )
         body = p.content()
@@ -771,7 +771,7 @@ class TestWorkshopMaterialsUnification:
         )
 
         page.goto(
-            f'{django_server}/workshops/2026-04-21-override-workshop',
+            f'{django_server}/workshops/override-workshop',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -781,7 +781,7 @@ class TestWorkshopMaterialsUnification:
         assert 'https://example.com/old' not in body
 
         page.goto(
-            f'{django_server}/workshops/2026-04-21-override-workshop/video',
+            f'{django_server}/workshops/override-workshop/video',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -808,7 +808,7 @@ class TestWorkshopMaterialsUnification:
         )
 
         page.goto(
-            f'{django_server}/workshops/2026-04-21-paid-pages-workshop',
+            f'{django_server}/workshops/paid-pages-workshop',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -840,7 +840,7 @@ class TestWorkshopMaterialsUnification:
         )
 
         page.goto(
-            f'{django_server}/workshops/2026-04-21-recording-paywall-workshop/video',
+            f'{django_server}/workshops/recording-paywall-workshop/video',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -866,7 +866,7 @@ class TestWorkshopMaterialsUnification:
         )
 
         page.goto(
-            f'{django_server}/workshops/2026-04-21-bare-workshop',
+            f'{django_server}/workshops/bare-workshop',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -874,7 +874,7 @@ class TestWorkshopMaterialsUnification:
         assert 'Materials</h2>' not in body
 
         page.goto(
-            f'{django_server}/workshops/2026-04-21-bare-workshop/video',
+            f'{django_server}/workshops/bare-workshop/video',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -911,7 +911,7 @@ class TestWorkshopMaterialsUnification:
         )
         body = page.content()
         assert 'data-testid="event-workshop-writeup"' in body
-        assert '/workshops/2026-04-21-linked-mat-workshop' in body
+        assert '/workshops/linked-mat-workshop' in body
         # No event-level resource section or material URL on the detail page.
         assert 'data-testid="event-post-resources"' not in body
         assert 'data-testid="event-recording-resource"' not in body

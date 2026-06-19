@@ -152,7 +152,7 @@ class TestReadmeBecomesLandingDescription:
         assert non_info == [], non_info
 
         page.goto(
-            f'{django_server}/workshops/2026-04-21-readme-driven',
+            f'{django_server}/workshops/readme-driven',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -215,7 +215,7 @@ class TestCopyFileOverrideAndLink:
 
         # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>; the
         # synced workshop has date=2026-04-21.
-        landing_url = '/workshops/2026-04-21-copy-override'
+        landing_url = '/workshops/copy-override'
 
         # Anonymous user can see the landing (level 0).
         page = browser.new_page()
@@ -307,7 +307,7 @@ class TestReadmeLinkRoutesBackToLanding:
 
         # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>; the
         # synced workshop has date=2026-04-21.
-        landing_url = '/workshops/2026-04-21-readme-links'
+        landing_url = '/workshops/readme-links'
 
         _create_user('basic@test.com', tier_slug='basic')
         ctx = _auth_context(browser, 'basic@test.com')
@@ -362,7 +362,7 @@ class TestWorkshopWithoutDescriptionRendersCleanLanding:
         assert sync_log.errors == [], sync_log.errors
 
         page.goto(
-            f'{django_server}/workshops/2026-04-21-no-copy',
+            f'{django_server}/workshops/no-copy',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -408,7 +408,7 @@ class TestReadmeImagesResolveToCdnUrls:
         assert non_info == [], non_info
 
         page.goto(
-            f'{django_server}/workshops/2026-04-21-image-readme',
+            f'{django_server}/workshops/image-readme',
             wait_until='domcontentloaded',
         )
         # Find the architecture image inside the description block.

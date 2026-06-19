@@ -6,7 +6,7 @@
 
 {% block title %}{{ workshop.title }} — Recording | AI Shipping Labs{% endblock %}
 {% block meta_description %}Workshop recording: {{ workshop.description|strip_markdown|truncatechars:140 }}{% endblock %}
-{% block canonical %}<link rel="canonical" href="{{ site_url }}/workshops/{{ workshop.url_key }}/video">{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ workshop.get_absolute_url }}/video">{% endblock %}
 {% block og_tags %}{% og_tags workshop %}{% endblock %}
 {% block structured_data %}{% structured_data workshop %}{% endblock %}
 

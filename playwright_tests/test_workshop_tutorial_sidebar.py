@@ -117,7 +117,7 @@ class TestSidebarFitsColumnOnLongTitle:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/2026-04-21-long-title-ws/tutorial/intro',
+                f'{django_server}/workshops/long-title-ws/tutorial/intro',
                 wait_until='domcontentloaded',
             )
 
@@ -183,7 +183,7 @@ class TestSidebarFitsColumnOnLongTitle:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/2026-04-21-long-title-ws/tutorial/intro',
+                f'{django_server}/workshops/long-title-ws/tutorial/intro',
                 wait_until='domcontentloaded',
             )
 
@@ -302,7 +302,7 @@ class TestProseLinksShareAccentColor:
         page = ctx.new_page()
         try:
             url = (
-                f'{django_server}/workshops/2026-04-21-prose-links-ws/tutorial/links'
+                f'{django_server}/workshops/prose-links-ws/tutorial/links'
             )
             page.goto(url, wait_until='domcontentloaded')
 
@@ -456,7 +456,7 @@ class TestSharedReaderWorkshopBehavior:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/2026-04-21-shared-reader/tutorial/intro',
+                f'{django_server}/workshops/shared-reader/tutorial/intro',
                 wait_until='domcontentloaded',
             )
             collapse = page.locator(
@@ -486,7 +486,7 @@ class TestSharedReaderWorkshopBehavior:
                 " === 'expanded'",
             )
             page.goto(
-                f'{django_server}/workshops/2026-04-21-shared-reader/tutorial/setup',
+                f'{django_server}/workshops/shared-reader/tutorial/setup',
                 wait_until='domcontentloaded',
             )
             assert page.evaluate(
@@ -547,7 +547,7 @@ class TestSharedReaderWorkshopBehavior:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/2026-04-21-shared-reader/tutorial/intro',
+                f'{django_server}/workshops/shared-reader/tutorial/intro',
                 wait_until='domcontentloaded',
             )
             page.locator('[data-testid="mark-page-complete-btn"]').click()

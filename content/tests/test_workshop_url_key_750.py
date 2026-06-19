@@ -1,26 +1,23 @@
-"""Tests for issue #750 — switch workshop detail URLs to ``/<date>-<slug>``.
+"""Tests for workshop URL canonicalization (#750, #915, #1064).
 
 Covers:
 
-- ``Workshop.url_key`` property (date-slug composite).
+- ``Workshop.url_key`` property (slug-only canonical key).
 - ``Workshop.get_absolute_url`` and ``WorkshopPage.get_absolute_url`` use it.
 - The internal helpers ``_parse_date_slug`` and ``_resolve_workshop_by_key``
   raise ``Http404`` on malformed input vs. missing workshop.
-- Canonical date-slug URLs return 200 for published workshops.
-- Issue #915: the legacy slug-only routes were removed — a bare slug
-  URL (landing, video, tutorial) now returns 404 with no ``Location``
-  header instead of 301-redirecting to the canonical URL.
-- Malformed URLs (bad date prefix, no date prefix + missing slug) return 404.
-- ``reverse('workshop_detail', kwargs={'date_slug': ...})`` succeeds;
-  passing ``slug=...`` raises NoReverseMatch.
-- Sitemap emits the canonical date-slug URLs only — no slug-only shape.
+- Canonical slug-only URLs return 200 for published workshops.
+- Valid dated legacy URLs 301 to slug-only URLs with query strings preserved.
+- Malformed, unknown, draft, and date-mismatched dated URLs return 404.
+- ``reverse('workshop_detail', kwargs={'slug': ...})`` uses slug-only paths.
+- Sitemap emits slug-only URLs and omits dated workshop loc entries.
 """
 
 from datetime import date
 
 from django.http import Http404
 from django.test import SimpleTestCase, TestCase
-from django.urls import NoReverseMatch, reverse
+from django.urls import reverse
 
 from content.models import Workshop, WorkshopPage
 from content.views.workshops import (
@@ -30,17 +27,15 @@ from content.views.workshops import (
 
 
 class WorkshopUrlKeyPropertyTest(SimpleTestCase):
-    """``Workshop.url_key`` joins date + slug deterministically."""
+    """``Workshop.url_key`` returns the canonical slug-only key."""
 
-    def test_url_key_concatenates_iso_date_and_slug(self):
+    def test_url_key_returns_slug(self):
         ws = Workshop(slug='build-it', date=date(2026, 5, 14))
-        self.assertEqual(ws.url_key, '2026-05-14-build-it')
+        self.assertEqual(ws.url_key, 'build-it')
 
     def test_get_absolute_url_uses_url_key(self):
         ws = Workshop(slug='build-it', date=date(2026, 5, 14))
-        self.assertEqual(
-            ws.get_absolute_url(), '/workshops/2026-05-14-build-it',
-        )
+        self.assertEqual(ws.get_absolute_url(), '/workshops/build-it')
 
 
 class WorkshopPageGetAbsoluteUrlTest(TestCase):
@@ -61,7 +56,7 @@ class WorkshopPageGetAbsoluteUrlTest(TestCase):
         )
         self.assertEqual(
             page.get_absolute_url(),
-            '/workshops/2026-05-14-pg-ws/tutorial/intro',
+            '/workshops/pg-ws/tutorial/intro',
         )
 
 
@@ -74,9 +69,6 @@ class ParseDateSlugTest(SimpleTestCase):
         self.assertEqual(slug, 'build-it')
 
     def test_no_date_prefix_raises_http404(self):
-        # A bare slug (the shape that lived in old emails) does not match
-        # the date-slug regex and must 404. Issue #915 removed the legacy
-        # slug-only fallback, so there is nothing else for it to match.
         with self.assertRaises(Http404):
             _parse_date_slug('build-it')
 
@@ -140,7 +132,7 @@ class ResolveWorkshopByKeyTest(TestCase):
 
 
 class CanonicalUrlsResolveTest(TestCase):
-    """End-to-end: the canonical date-slug URLs return 200 for published rows."""
+    """End-to-end: canonical slug-only URLs return 200 for published rows."""
 
     @classmethod
     def setUpTestData(cls):
@@ -159,14 +151,17 @@ class CanonicalUrlsResolveTest(TestCase):
         )
 
     def test_canonical_landing_returns_200(self):
-        response = self.client.get('/workshops/2026-05-14-build-it')
+        response = self.client.get('/workshops/build-it')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Build It')
+
+    def test_canonical_video_returns_200(self):
+        response = self.client.get('/workshops/build-it/video')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Build It')
 
     def test_canonical_tutorial_returns_200(self):
-        response = self.client.get(
-            '/workshops/2026-05-14-build-it/tutorial/intro',
-        )
+        response = self.client.get('/workshops/build-it/tutorial/intro')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Intro')
 
@@ -174,32 +169,39 @@ class CanonicalUrlsResolveTest(TestCase):
         response = self.client.get('/workshops/9999-99-99-bad-date')
         self.assertEqual(response.status_code, 404)
 
-    def test_bare_slug_with_no_match_returns_404(self):
-        # ``totally-made-up-slug`` has no date prefix, so the canonical
-        # route doesn't match. Issue #915 removed the legacy slug-only
-        # fallback, so the request 404s.
+    def test_unknown_slug_returns_404(self):
         response = self.client.get('/workshops/totally-made-up-slug')
         self.assertEqual(response.status_code, 404)
 
-    def test_bare_slug_matching_published_workshop_now_404s(self):
-        # Issue #915: a bare slug that DOES match a published workshop
-        # used to 301 to the canonical date-slug URL. Now it 404s with
-        # no ``Location`` header — the legacy redirect was removed.
-        for path in (
-            '/workshops/build-it',
-            '/workshops/build-it/video',
-            '/workshops/build-it/tutorial/intro',
-        ):
-            with self.subTest(path=path):
-                response = self.client.get(path)
-                self.assertEqual(response.status_code, 404)
-                self.assertNotIn('Location', response)
+    def test_valid_dated_landing_redirects_to_slug_only(self):
+        response = self.client.get('/workshops/2026-05-14-build-it')
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], '/workshops/build-it')
+
+    def test_valid_dated_video_redirects_and_preserves_query(self):
+        response = self.client.get('/workshops/2026-05-14-build-it/video?t=300')
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], '/workshops/build-it/video?t=300')
+
+    def test_valid_dated_tutorial_redirects_to_slug_only(self):
+        response = self.client.get(
+            '/workshops/2026-05-14-build-it/tutorial/intro?utm=x',
+        )
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(
+            response['Location'],
+            '/workshops/build-it/tutorial/intro?utm=x',
+        )
+
+    def test_date_slug_mismatch_returns_404(self):
+        response = self.client.get('/workshops/2026-05-15-build-it')
+        self.assertEqual(response.status_code, 404)
 
 
 class ReverseWorkshopUrlTest(TestCase):
-    """``reverse`` succeeds with ``date_slug`` and fails with ``slug``."""
+    """``reverse`` succeeds with the slug-only canonical route."""
 
-    def test_reverse_workshop_detail_with_date_slug(self):
+    def test_reverse_workshop_detail_with_slug(self):
         ws = Workshop.objects.create(
             slug='build',
             title='Build',
@@ -209,41 +211,28 @@ class ReverseWorkshopUrlTest(TestCase):
             pages_required_level=0,
             recording_required_level=0,
         )
-        url = reverse(
-            'workshop_detail', kwargs={'date_slug': ws.url_key},
-        )
-        self.assertEqual(url, '/workshops/2026-05-14-build')
+        url = reverse('workshop_detail', kwargs={'slug': ws.url_key})
+        self.assertEqual(url, '/workshops/build')
 
-    def test_reverse_workshop_detail_with_slug_only_raises(self):
-        # Issue #750 acceptance criterion: callers that still pass
-        # ``slug=...`` must crash hard so we catch stragglers at runtime
-        # rather than silently routing to the legacy redirect.
-        with self.assertRaises(NoReverseMatch):
-            reverse(
-                'workshop_detail', kwargs={'slug': 'build'},
-            )
-
-    def test_reverse_workshop_video_with_date_slug(self):
+    def test_reverse_workshop_video_with_slug(self):
         url = reverse(
             'workshop_video',
-            kwargs={'date_slug': '2026-05-14-build'},
+            kwargs={'slug': 'build'},
         )
-        self.assertEqual(url, '/workshops/2026-05-14-build/video')
+        self.assertEqual(url, '/workshops/build/video')
 
-    def test_reverse_workshop_page_detail_with_date_slug(self):
+    def test_reverse_workshop_page_detail_with_slug(self):
         url = reverse(
             'workshop_page_detail',
             kwargs={
-                'date_slug': '2026-05-14-build', 'page_slug': 'intro',
+                'slug': 'build', 'page_slug': 'intro',
             },
         )
-        self.assertEqual(
-            url, '/workshops/2026-05-14-build/tutorial/intro',
-        )
+        self.assertEqual(url, '/workshops/build/tutorial/intro')
 
 
-class SitemapEmitsDateSlugUrlsTest(TestCase):
-    """The sitemap emits the canonical date-slug URL shape only."""
+class SitemapEmitsSlugOnlyUrlsTest(TestCase):
+    """The sitemap emits the canonical slug-only URL shape only."""
 
     @classmethod
     def setUpTestData(cls):
@@ -263,21 +252,15 @@ class SitemapEmitsDateSlugUrlsTest(TestCase):
 
     def test_sitemap_contains_canonical_landing(self):
         response = self.client.get('/sitemap.xml')
-        self.assertContains(response, '/workshops/2026-05-14-sit-ws')
+        self.assertContains(response, '/workshops/sit-ws')
 
     def test_sitemap_contains_canonical_tutorial(self):
         response = self.client.get('/sitemap.xml')
-        self.assertContains(
-            response, '/workshops/2026-05-14-sit-ws/tutorial/intro',
-        )
+        self.assertContains(response, '/workshops/sit-ws/tutorial/intro')
 
-    def test_sitemap_omits_bare_slug_landing(self):
-        # The bare slug must not appear as a sitemap entry. Scope the
-        # NotContains assertion to the ``<loc>`` element shape so it
-        # doesn't trip on the date-slug URL incidentally containing
-        # the bare slug as a suffix.
+    def test_sitemap_omits_dated_landing(self):
         response = self.client.get('/sitemap.xml')
         self.assertNotContains(
             response,
-            '<loc>https://aishippinglabs.com/workshops/sit-ws</loc>',
+            '<loc>https://aishippinglabs.com/workshops/2026-05-14-sit-ws</loc>',
         )

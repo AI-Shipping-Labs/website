@@ -203,23 +203,11 @@ class Workshop(
 
     @property
     def url_key(self):
-        """Content-derivable URL key: ``<YYYY-MM-DD>-<slug>``.
-
-        Issue #750. The workshop folder in the content repo is named
-        ``<YYYY-MM-DD>-<slug>``; the public URL uses the same string so a
-        rebuild from the content repo (drop DB, re-sync) produces the
-        same URLs deterministically. Two workshops with the same slug
-        but different dates are now disambiguated by the date prefix.
-        """
-        return f'{self.date.isoformat()}-{self.slug}'
+        """Public URL key for workshops: the stable unique slug."""
+        return self.slug
 
     def get_absolute_url(self):
-        """Public landing URL: ``/workshops/<YYYY-MM-DD>-<slug>``.
-
-        Issue #750 — switched from a slug-only key to ``url_key`` so the
-        URL is derivable from the content repo and slug collisions across
-        different workshop dates no longer clobber each other.
-        """
+        """Public landing URL: ``/workshops/<slug>``."""
         return f'/workshops/{self.url_key}'
 
     def get_studio_edit_url(self):
@@ -427,11 +415,7 @@ class WorkshopPage(
         return f'{self.workshop.title} — {self.title}'
 
     def get_absolute_url(self):
-        """Public URL for this tutorial page within its workshop.
-
-        Issue #750 — uses ``Workshop.url_key`` so the URL is keyed on
-        ``<YYYY-MM-DD>-<slug>`` (content-derivable, collision-free).
-        """
+        """Public URL for this tutorial page within its workshop."""
         return f'/workshops/{self.workshop.url_key}/tutorial/{self.slug}'
 
     @property

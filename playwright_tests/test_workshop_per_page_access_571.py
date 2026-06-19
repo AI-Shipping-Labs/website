@@ -210,7 +210,7 @@ class TestFreeMemberCompletesWorkshop:
             p = ctx.new_page()
             # Page 1 — full body.
             r = p.goto(
-                f'{django_server}/workshops/2026-04-21-free-end-to-end/tutorial/page-one',
+                f'{django_server}/workshops/free-end-to-end/tutorial/page-one',
                 wait_until='domcontentloaded',
             )
             assert r.status == 200
@@ -218,7 +218,7 @@ class TestFreeMemberCompletesWorkshop:
 
             # Page 2 — full body (registered wall passes a verified free user).
             r = p.goto(
-                f'{django_server}/workshops/2026-04-21-free-end-to-end/tutorial/page-two',
+                f'{django_server}/workshops/free-end-to-end/tutorial/page-two',
                 wait_until='domcontentloaded',
             )
             assert r.status == 200
@@ -228,7 +228,7 @@ class TestFreeMemberCompletesWorkshop:
 
             # Page 3 — full body.
             r = p.goto(
-                f'{django_server}/workshops/2026-04-21-free-end-to-end/tutorial/page-three',
+                f'{django_server}/workshops/free-end-to-end/tutorial/page-three',
                 wait_until='domcontentloaded',
             )
             assert r.status == 200
@@ -258,7 +258,7 @@ class TestAnonymousOnPaidWorkshopUpgradeWall:
         )
 
         response = page.goto(
-            f'{django_server}/workshops/2026-04-21-paid-ws/tutorial/lesson-one',
+            f'{django_server}/workshops/paid-ws/tutorial/lesson-one',
             wait_until='domcontentloaded',
         )
         assert response.status == 403
@@ -301,7 +301,7 @@ class TestFreeMemberOnPaidWorkshopWithOpenPreview:
             p = ctx.new_page()
             # Open page — full body.
             r = p.goto(
-                f'{django_server}/workshops/2026-04-21-paid-preview/tutorial/intro',
+                f'{django_server}/workshops/paid-preview/tutorial/intro',
                 wait_until='domcontentloaded',
             )
             assert r.status == 200
@@ -309,7 +309,7 @@ class TestFreeMemberOnPaidWorkshopWithOpenPreview:
 
             # Inherited page — upgrade card.
             r = p.goto(
-                f'{django_server}/workshops/2026-04-21-paid-preview/tutorial/part-two',
+                f'{django_server}/workshops/paid-preview/tutorial/part-two',
                 wait_until='domcontentloaded',
             )
             assert r.status == 403
@@ -423,14 +423,14 @@ class TestVideoGateUnchanged:
             p = ctx.new_page()
             # Landing renders (anonymous landing is 0 by default).
             r = p.goto(
-                f'{django_server}/workshops/2026-04-21-video-gate',
+                f'{django_server}/workshops/video-gate',
                 wait_until='domcontentloaded',
             )
             assert r.status == 200
 
             # Video page — recording paywall present, no player.
             r = p.goto(
-                f'{django_server}/workshops/2026-04-21-video-gate/video',
+                f'{django_server}/workshops/video-gate/video',
                 wait_until='domcontentloaded',
             )
             assert r.status == 403

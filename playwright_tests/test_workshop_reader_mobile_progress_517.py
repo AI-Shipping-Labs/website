@@ -148,7 +148,7 @@ class TestMobileProgressBarPositionAtAGlance:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/2026-04-21-regional-setup/tutorial/regional-setup",
+                f"{django_server}/workshops/regional-setup/tutorial/regional-setup",
                 wait_until="domcontentloaded",
             )
             bar = page.locator('[data-testid="reader-mobile-progress-bar"]')
@@ -224,7 +224,7 @@ class TestFreeUserOpensDrawerFromTop:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/2026-04-21-public-tour/tutorial/intro",
+                f"{django_server}/workshops/public-tour/tutorial/intro",
                 wait_until="domcontentloaded",
             )
             toggle = page.locator(
@@ -278,7 +278,7 @@ class TestNavigateBetweenPagesFromDrawer:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/2026-04-21-regional-setup/tutorial/intro",
+                f"{django_server}/workshops/regional-setup/tutorial/intro",
                 wait_until="domcontentloaded",
             )
             toggle = page.locator(
@@ -289,9 +289,9 @@ class TestNavigateBetweenPagesFromDrawer:
 
             # Click the CLI page link inside the drawer.
             page.locator(
-                '#sidebar-nav a[href="/workshops/2026-04-21-regional-setup/tutorial/cli"]',
+                '#sidebar-nav a[href="/workshops/regional-setup/tutorial/cli"]',
             ).click()
-            page.wait_for_url("**/workshops/2026-04-21-regional-setup/tutorial/cli")
+            page.wait_for_url("**/workshops/regional-setup/tutorial/cli")
 
             text = page.locator(
                 '[data-testid="reader-mobile-progress-text"]',
@@ -324,7 +324,7 @@ class TestDrawerReflectsCompletionAfterReload:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/2026-04-21-regional-setup/tutorial/intro",
+                f"{django_server}/workshops/regional-setup/tutorial/intro",
                 wait_until="domcontentloaded",
             )
             # Tap mark-complete (button copy: "Mark as completed").
@@ -415,7 +415,7 @@ class TestAnonymousVisitorSeesPositionWithoutFill:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/2026-04-21-public-tour/tutorial/step-2",
+                f"{django_server}/workshops/public-tour/tutorial/step-2",
                 wait_until="domcontentloaded",
             )
             text = page.locator(
@@ -469,7 +469,7 @@ class TestGatedPageHidesProgressBar:
         page = ctx.new_page()
         try:
             response = page.goto(
-                f"{django_server}/workshops/2026-04-21-main-only/tutorial/intro",
+                f"{django_server}/workshops/main-only/tutorial/intro",
                 wait_until="domcontentloaded",
             )
             assert response.status == 403
@@ -620,7 +620,7 @@ class TestDesktopLayoutUnchanged:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/2026-04-21-regional-setup/tutorial/regional-setup",
+                f"{django_server}/workshops/regional-setup/tutorial/regional-setup",
                 wait_until="domcontentloaded",
             )
 
@@ -686,7 +686,7 @@ class TestSinglePageWorkshop:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/2026-04-21-single/tutorial/only",
+                f"{django_server}/workshops/single/tutorial/only",
                 wait_until="domcontentloaded",
             )
             text = page.locator(

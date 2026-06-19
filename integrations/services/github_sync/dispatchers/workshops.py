@@ -176,8 +176,7 @@ def _cleanup_stale_workshops_for_source(source, seen_slugs, failed_slugs, stats)
         detail=lambda ws, action: {
             'title': ws.title,
             'slug': ws.slug,
-            # Issue #782: include the workshop date so the Studio sync history
-            # template can render a ``/workshops/<date>-<slug>`` link.
+            # Include the workshop date for historical sync context.
             'date': ws.date.isoformat(),
             'action': action,
             'content_type': 'workshop',
@@ -340,11 +339,9 @@ def _sync_single_workshop(
         # ``[README.md](README.md)`` resolves to the landing URL instead
         # of emitting a broken-link warning.
         #
-        # Issue #750: emit the date-slug URL shape (``<date>-<slug>``) so
-        # rewritten links match the new canonical URL. The key is
-        # derived inline (Workshop.url_key isn't reachable here — the
-        # row may not exist yet).
-        workshop_url_key = f'{workshop_date.isoformat()}-{slug}'
+        # Slug-only workshop URLs are canonical; keep a single key threaded
+        # through all sync-generated links.
+        workshop_url_key = slug
         page_lookup = _build_workshop_page_lookup(
             workshop_dir, slug, workshop_title=title,
             copy_file=data.get('copy_file'),
@@ -410,9 +407,7 @@ def _sync_single_workshop(
             detail=lambda obj, action: {
                 'title': title,
                 'slug': slug,
-                # Issue #782: include the workshop date so the Studio sync
-                # history template can render a ``/workshops/<date>-<slug>``
-                # link.
+                # Include the workshop date for historical sync context.
                 'date': workshop_date.isoformat(),
                 'action': action,
                 'content_type': 'workshop',
@@ -998,10 +993,7 @@ def _sync_workshop_pages(
                 source_path=rel_path,
                 sync_errors=stats.get('errors'),
                 cross_workshop_lookup=cross_workshop_lookup,
-                # Issue #750: rewrite to the date-slug URL shape. The
-                # dispatcher passes the pre-computed key; fall back to
-                # the Workshop.url_key property when called directly
-                # without the threaded value.
+                # Rewrite to the canonical slug-only URL shape.
                 workshop_url_key=workshop_url_key or workshop.url_key,
             )
             # Issue #526: rewrite cross-workshop links AFTER the

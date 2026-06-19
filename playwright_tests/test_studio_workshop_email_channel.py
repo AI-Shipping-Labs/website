@@ -362,7 +362,7 @@ class TestWorkshopOptOut:
         # /workshops/<YYYY-MM-DD>-<slug>; the workshop factory pins the
         # date to 2026-04-21.
         link = user_page.locator(
-            '#notification-list a[href="/workshops/2026-04-21-opt-out-rag"]',
+            '#notification-list a[href="/workshops/opt-out-rag"]',
         )
         assert link.count() >= 1
         assert 'New workshop:' in dropdown.inner_text()

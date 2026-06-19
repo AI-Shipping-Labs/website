@@ -220,7 +220,7 @@ def test_workshop_video_desktop_summaries_share_typography(
     page = ctx.new_page()
     page.set_viewport_size(DESKTOP)
     page.goto(
-        f'{django_server}/workshops/2026-04-21-test-ws/video',
+        f'{django_server}/workshops/test-ws/video',
         wait_until='domcontentloaded',
     )
 
@@ -295,7 +295,7 @@ def test_workshop_video_mobile_summaries_share_typography(
     page = ctx.new_page()
     page.set_viewport_size(MOBILE)
     page.goto(
-        f'{django_server}/workshops/2026-04-21-test-ws/video',
+        f'{django_server}/workshops/test-ws/video',
         wait_until='domcontentloaded',
     )
 
@@ -380,7 +380,7 @@ def test_faq_and_workshop_chapters_share_color_and_weight(
     page = ctx.new_page()
     page.set_viewport_size(DESKTOP)
     page.goto(
-        f'{django_server}/workshops/2026-04-21-test-ws/video',
+        f'{django_server}/workshops/test-ws/video',
         wait_until='domcontentloaded',
     )
     chapters_style = _summary_style(
@@ -579,7 +579,7 @@ def test_accordions_still_open_close_with_chevron_rotation(
     page.on('pageerror', lambda exc: errors.append(str(exc)))
 
     page.goto(
-        f'{django_server}/workshops/2026-04-21-test-ws/video',
+        f'{django_server}/workshops/test-ws/video',
         wait_until='domcontentloaded',
     )
 
@@ -707,7 +707,7 @@ def test_tier_card_and_accordion_share_design_system(django_server, browser):
     page = ctx.new_page()
     page.set_viewport_size(DESKTOP)
     page.goto(
-        f'{django_server}/workshops/2026-04-21-test-ws/video',
+        f'{django_server}/workshops/test-ws/video',
         wait_until='domcontentloaded',
     )
     chapters_style = _summary_style(

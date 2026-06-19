@@ -278,12 +278,10 @@ class TestBasicUserReadsPagesButNotRecording:
     def test_basic_user_reads_canonical_tutorial_page(
         self, browser, django_server,
     ):
-        """Basic user reads a tutorial via the canonical date-slug URL.
+        """Basic user reads a tutorial via the canonical slug-only URL.
 
-        Issue #915 removed the legacy ``/workshops/<slug>/tutorial/<page>``
-        301 redirect, so we navigate straight to the canonical
-        ``/workshops/<date>-<slug>/tutorial/<page>`` URL (no redirect) and
-        verify the bare-slug URL now 404s.
+        Issue #1064 made ``/workshops/<slug>/tutorial/<page>`` canonical
+        again. Valid dated deep links now 301 to the slug-only URL.
         """
         _clear_workshops()
         workshop = _create_workshop(
@@ -297,12 +295,12 @@ class TestBasicUserReadsPagesButNotRecording:
         )
         _create_user('basic@test.com', tier_slug='basic')
 
-        legacy_url = (
+        canonical_url = (
             f'{django_server}/workshops/{workshop.slug}/'
             f'tutorial/starting-notebook'
         )
-        canonical_url = (
-            f'{django_server}/workshops/{workshop.url_key}/'
+        dated_url = (
+            f'{django_server}/workshops/2026-04-21-{workshop.slug}/'
             f'tutorial/starting-notebook'
         )
 
@@ -319,12 +317,24 @@ class TestBasicUserReadsPagesButNotRecording:
         assert 'data-testid="page-body"' in body
         assert 'Open the notebook.' in body
 
-        # Issue #915: the old bare-slug tutorial URL now 404s.
-        legacy_response = page.goto(
-            legacy_url, wait_until='domcontentloaded',
+        # Issue #1064: dated deep links redirect to the slug-only URL.
+        dated_response = page.goto(
+            dated_url, wait_until='domcontentloaded',
         )
-        assert legacy_response is not None
-        assert legacy_response.status == 404
+        assert dated_response is not None
+        assert dated_response.status == 200
+        assert page.url == canonical_url
+        chain = []
+        current = dated_response.request
+        while current is not None:
+            chain.append(current)
+            current = current.redirected_from
+        statuses = [
+            response.status
+            for request in chain
+            if (response := request.response()) is not None
+        ]
+        assert 301 in statuses
 
         ctx.close()
 

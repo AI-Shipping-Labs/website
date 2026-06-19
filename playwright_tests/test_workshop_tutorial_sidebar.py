@@ -514,9 +514,8 @@ class TestSharedReaderWorkshopBehavior:
             },
         ])
         page = ctx.new_page()
-        # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>;
-        # ``_create_workshop`` pins date to 2026-04-21.
-        url_key = '2026-04-21-shared-reader'
+        # Issue #1064: slug-only workshop URLs are canonical.
+        url_key = 'shared-reader'
         try:
             page.goto(
                 f'{django_server}/workshops/{url_key}/tutorial/intro',

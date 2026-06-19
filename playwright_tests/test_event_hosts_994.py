@@ -198,6 +198,35 @@ class TestEventHosts994:
         anon.close()
 
     @pytest.mark.core
+    def test_single_host_detail_uses_full_width_layout(
+        self, django_server, page,
+    ):
+        from django.db import connection
+
+        from events.models import Event, EventHost, Host
+
+        _reset_state()
+        event = _make_event("single-host-public-event", "Single Host Public Event")
+        alexey = Host.objects.get(slug="alexey-grigorev")
+        EventHost.objects.create(event=event, host=alexey, position=0)
+        connection.close()
+
+        event = Event.objects.get(pk=event.pk)
+        page.goto(
+            f"{django_server}{event.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
+
+        hosts_section = page.locator('[data-testid="event-hosts"]')
+        host = page.locator('[data-testid="event-host"]')
+        expect(hosts_section).to_be_visible()
+        expect(host).to_have_count(1)
+        expect(host).to_have_attribute("data-layout", "single")
+        expect(hosts_section.locator(".sm\\:grid-cols-2")).to_have_count(0)
+        expect(host).to_contain_text("Alexey Grigorev")
+        expect(host).to_contain_text("Chief Agent Officer at AI Shipping Labs")
+
+    @pytest.mark.core
     def test_event_without_hosts_has_no_empty_hosts_section(
         self, django_server, page,
     ):

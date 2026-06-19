@@ -1,9 +1,35 @@
 {% if event_hosts %}
 <section class="mt-10 mb-12 border-t border-border pt-8" data-testid="event-hosts">
   <h2 class="mb-5 text-xl font-semibold tracking-tight">Hosted by</h2>
+  {% if event_hosts|length == 1 %}
+  {% for host in event_hosts %}
+  <article class="rounded-lg border border-border bg-card/70 p-5 sm:p-6" data-testid="event-host" data-layout="single">
+    <div class="gap-5 sm:flex sm:items-start">
+      <img src="{{ host.display_photo_url }}" alt="{{ host.name }}"
+           class="mb-4 h-20 w-20 flex-none rounded-md border border-border object-cover sm:mb-0">
+      <div class="min-w-0 flex-1">
+        <div>
+          <h3 class="text-lg font-semibold text-foreground">{{ host.name }}</h3>
+          {% if host.title %}
+          <p class="mt-1 text-sm text-muted-foreground">{{ host.title }}</p>
+          {% endif %}
+        </div>
+        {% if host.bio_html %}
+        <div class="prose mt-3 max-w-none text-sm">
+          {{ host.bio_html|safe }}
+        </div>
+        {% endif %}
+        {% if host.email %}
+        <a href="mailto:{{ host.email }}" class="mt-3 inline-flex text-xs text-muted-foreground transition-colors hover:text-accent hover:underline">{{ host.email }}</a>
+        {% endif %}
+      </div>
+    </div>
+  </article>
+  {% endfor %}
+  {% else %}
   <div class="grid gap-4 sm:grid-cols-2">
     {% for host in event_hosts %}
-    <article class="rounded-lg border border-border bg-card/70 p-4" data-testid="event-host">
+    <article class="rounded-lg border border-border bg-card/70 p-4" data-testid="event-host" data-layout="grid">
       <div class="flex items-start gap-3">
         <img src="{{ host.display_photo_url }}" alt="{{ host.name }}"
              class="h-14 w-14 flex-none rounded-md border border-border object-cover">
@@ -25,5 +51,6 @@
     </article>
     {% endfor %}
   </div>
+  {% endif %}
 </section>
 {% endif %}

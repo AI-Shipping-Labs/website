@@ -91,6 +91,25 @@ class SeededHostTest(TestCase):
 
 @tag('core')
 class EventHostsDetailTest(TestCase):
+    def test_detail_with_single_host_uses_full_width_layout(self):
+        event = Event.objects.create(
+            title='Single Host Event',
+            slug='single-host-event',
+            description='A one-host event should not look like half a grid.',
+            start_datetime=timezone.now() + timedelta(days=3),
+            status='upcoming',
+        )
+        alexey = Host.objects.get(slug='alexey-grigorev')
+        EventHost.objects.create(event=event, host=alexey, position=0)
+
+        response = self.client.get(event.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="event-host"')
+        self.assertContains(response, 'data-layout="single"')
+        hosts_section = response.content.decode().split('data-testid="event-hosts"', 1)[1]
+        self.assertNotIn('sm:grid-cols-2', hosts_section)
+
     def test_detail_renders_hosts_in_order_with_bio_html_and_photos(self):
         event = Event.objects.create(
             title='Public Hosted Event',
@@ -125,6 +144,7 @@ class EventHostsDetailTest(TestCase):
         self.assertIn('<strong>Host bio</strong>', body)
         self.assertIn('valeriia.png', body)
         self.assertIn('alexey.png', body)
+        self.assertIn('data-layout="grid"', hosts_section)
 
     def test_detail_without_hosts_has_no_empty_hosts_section(self):
         event = Event.objects.create(

@@ -699,9 +699,13 @@ class Event(
     def formatted_date(self):
         """Return a formatted date string."""
         value = self.start_datetime
-        return f'{value.strftime("%a, %b")} {value.day}, {value.year}'
+        return f'{value.strftime("%B")} {value.day}, {value.year}'
 
     def short_date(self):
+        value = self.start_datetime
+        return f'{value.strftime("%b")} {value.day}, {value.year}'
+
+    def weekday_date(self):
         value = self.start_datetime
         return f'{value.strftime("%a, %b")} {value.day}, {value.year}'
 

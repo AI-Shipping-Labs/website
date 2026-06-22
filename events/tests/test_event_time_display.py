@@ -235,9 +235,7 @@ class EventDetailTimeDisplayTest(TestCase):
 class EventListAndCalendarScopeTest(TestCase):
     def test_list_and_calendar_are_date_only_and_link_to_detail(self):
         # Issue #713: use a future start so the event lands in the
-        # Upcoming section (which shows ``formatted_date`` per the
-        # template). Otherwise the row falls into the compact past
-        # list that renders ``short_date``.
+        # Upcoming section.
         future = timezone.now() + timedelta(days=30)
         future = future.replace(hour=16, minute=30, second=0, microsecond=0)
         event = Event.objects.create(
@@ -255,6 +253,6 @@ class EventListAndCalendarScopeTest(TestCase):
         # Issue #673: links go to the canonical id+slug URL now.
         self.assertContains(list_response, event.get_absolute_url())
         self.assertContains(calendar_response, event.get_absolute_url())
-        self.assertContains(list_response, event.formatted_date())
+        self.assertContains(list_response, event.weekday_date())
         self.assertNotContains(list_response, event.formatted_start())
         self.assertNotContains(calendar_response, event.formatted_time())

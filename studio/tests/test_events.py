@@ -692,7 +692,7 @@ class StudioEventCreateTest(StaffUserMixin, TestCase):
     def test_created_event_appears_on_list(self):
         self.client.post('/studio/events/new', {
             'title': 'Visible On List',
-            'event_date': '21/06/2026',
+            'event_date': '21/07/2026',
             'event_time': '10:00',
         })
         response = self.client.get('/studio/events/')

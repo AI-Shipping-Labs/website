@@ -586,30 +586,23 @@ if not SES_ENABLED:
     AWS_ACCESS_KEY_ID = ''
     AWS_SECRET_ACCESS_KEY = ''
 
-# S3 image upload kill-switch (issue #532)
-# Mirrors the SES_ENABLED pattern above. Production deploys MUST set
-# S3_ENABLED=true to enable real S3 image uploads during content sync; every
-# other environment (local dev, CI, Playwright, manage.py test) defaults to off
-# so that no real boto3 calls are made. Without this gate the GitHub-sync
-# pipeline ran ``list_objects_v2`` against the configured bucket on every
-# integration test, causing 18+ "Failed to list S3 objects: ... non-empty
-# Access Key" warnings per file and ~300ms-1s of real boto3 round-trip per
-# call — adding up to ~30-60s of slow test time in CI.
+# S3 content-image uploads (issues #532, #1068)
+# S3_ENABLED is now a registered IntegrationSetting in
+# integrations/settings_registry.py (s3_content group), resolved at runtime
+# via ``integrations.config.is_enabled('S3_ENABLED')`` (DB override -> env ->
+# default 'false'). It is no longer read from settings here — the gate lives
+# in ``integrations/services/github_sync/media.py:upload_images_to_s3``.
 #
-# When S3_ENABLED is False, ``upload_images_to_s3`` short-circuits before
-# constructing any boto3 client and returns a no-op stats dict so callers
-# (orchestration, sync_content management command) keep behaving normally.
-# As a belt-and-suspenders defence we also blank the AWS access keys here
-# (already blanked when SES_ENABLED is False, but kept idempotent) so that
-# any future code path that slips past the gate cannot authenticate against
-# a real S3 account using leaked env credentials.
-S3_ENABLED = (
-    not TESTING
-    and os.environ.get('S3_ENABLED', 'false').lower() == 'true'
-)
-if not S3_ENABLED:
-    AWS_ACCESS_KEY_ID = ''
-    AWS_SECRET_ACCESS_KEY = ''
+# The AWS access-key blanking below stays as a belt-and-suspenders defence:
+# when SES_ENABLED is False the keys are already blanked above, but this
+# keeps the blanking idempotent so any code path that slips past the
+# ``is_enabled('S3_ENABLED')`` gate still cannot authenticate against AWS
+# with leaked env credentials. (When SES_ENABLED is True the keys are
+# populated and S3_ENABLED controls whether the content pipeline uses them.)
+#
+# ``TESTING`` (set above) is still consulted by ``upload_images_to_s3`` as
+# an unconditional short-circuit so no real boto3 round-trips happen under
+# ``manage.py test`` regardless of the S3_ENABLED value (issue #532).
 
 # Cache configuration
 # django-q writes cluster heartbeats (used by the /studio/worker/ dashboard)

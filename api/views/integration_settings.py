@@ -27,10 +27,9 @@ After every successful write the view calls
 workers / qcluster processes see the new value on their next
 ``get_config()`` call.
 
-NOTE: ``S3_ENABLED`` is currently an env var read once at process startup in
-``website/settings.py`` — it is NOT in ``INTEGRATION_GROUPS`` and therefore
-cannot be written through this endpoint. A separate ticket must promote it
-into the registry first.
+NOTE: ``S3_ENABLED`` was promoted into the ``s3_content`` group in
+``INTEGRATION_GROUPS`` (issue #1068), so it is now readable and writable
+through this endpoint like every other registered key.
 """
 
 import json

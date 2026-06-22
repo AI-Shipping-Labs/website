@@ -366,6 +366,27 @@ class IntegrationSettingsApiTest(TestCase):
         self.assertEqual(response.json(), {"status": "ok", "updated": 3})
         self.assertEqual(mock_clear.call_count, 1)
 
+    def test_post_can_set_s3_enabled_true_and_false(self):
+        # Issue #1068: boolean write path works for S3_ENABLED.
+        response = self._post_json({
+            "updates": [{"key": "S3_ENABLED", "value": True}],
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            IntegrationSetting.objects.get(key="S3_ENABLED").value,
+            "true",
+        )
+
+        response = self._post_json({
+            "updates": [{"key": "S3_ENABLED", "value": False}],
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            IntegrationSetting.objects.get(key="S3_ENABLED").value,
+            "false",
+        )
+        IntegrationSetting.objects.filter(key="S3_ENABLED").delete()
+
     # ---- error-path leak check -------------------------------------------
 
     def test_post_invalid_key_response_does_not_echo_value(self):
@@ -482,6 +503,44 @@ class IntegrationSettingsGetApiTest(TestCase):
         self.assertEqual(entry["group"], "ses")
         self.assertFalse(entry["is_secret"])
         self.assertNotIn("value", entry)
+
+    def test_get_lists_s3_enabled_key(self):
+        # Issue #1068: S3_ENABLED is now in the s3_content group.
+        response = self._get()
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+
+        entry = self._entry_for(body, "S3_ENABLED")
+        self.assertEqual(entry["group"], "s3_content")
+        self.assertTrue(entry["is_boolean"])
+        self.assertFalse(entry["is_secret"])
+        self.assertNotIn("value", entry)
+
+    def test_get_s3_enabled_source_is_default(self):
+        """S3_ENABLED defaults to false with source default when unset."""
+        response = self._get()
+        body = response.json()
+        entry = self._entry_for(body, "S3_ENABLED")
+        self.assertEqual(entry["source"], "default")
+        self.assertTrue(entry["configured"])
+
+    def test_get_s3_enabled_source_is_db_when_overridden(self):
+        """When a DB row exists, source resolves to db."""
+        IntegrationSetting.objects.update_or_create(
+            key="S3_ENABLED",
+            defaults={
+                "value": "true",
+                "is_secret": False,
+                "group": "s3_content",
+            },
+        )
+        try:
+            response = self._get()
+            body = response.json()
+            entry = self._entry_for(body, "S3_ENABLED")
+            self.assertEqual(entry["source"], "db")
+        finally:
+            IntegrationSetting.objects.filter(key="S3_ENABLED").delete()
 
     # ---- auth -------------------------------------------------------------
 

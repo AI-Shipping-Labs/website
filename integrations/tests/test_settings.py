@@ -484,10 +484,12 @@ class SettingsDashboardViewTest(TestCase):
         # GitHub has the default Secrets Manager path but no App IDs,
         # LLM has provider+model defaults but no API key (issue #799),
         # Observability has the LOGFIRE_ENABLED default ('false', a set
-        # value) but no token (issue #813), and Maven has the
+        # value) but no token (issue #813), Maven has the
         # MAVEN_ENROLLMENT_ENABLED default ('false', a set value) but no
-        # shared secret (issue #960).
-        self.assertEqual(summary['partial_count'], 6)
+        # shared secret (issue #960), and S3 Content Images has the
+        # S3_ENABLED default ('false', a set value) but no bucket/CDN
+        # (issue #1068).
+        self.assertEqual(summary['partial_count'], 7)
         self.assertEqual(
             summary['missing_count'],
             expected_total_items - summary['configured_count'] - summary['partial_count'],

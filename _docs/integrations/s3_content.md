@@ -21,6 +21,46 @@ browsers via the CDN.
 Direct deep-link URLs are intentionally written in code blocks so they
 do not render as clickable links. Copy them into the browser.
 
+## S3_ENABLED
+
+Purpose: Master switch for content-image uploads to S3 during content
+sync. Read by
+`integrations/services/github_sync/media.py:upload_images_to_s3` via
+`integrations.config.is_enabled('S3_ENABLED')`. When on, the sync
+pipeline walks the content directory for image files and uploads them
+to the bucket (public-read). When off, image URLs are still rewritten
+to CDN paths in the synced markdown, but no S3 objects are uploaded.
+
+Without it: Images 403 in production. The markdown references
+`CONTENT_CDN_BASE` URLs for objects that were never uploaded, so
+CloudFront returns 403 and banners / cover images / inline images are
+broken. In a non-test environment the sync run records a
+`step='s3_disabled'` error entry and the SyncLog status is `partial`,
+making the misconfiguration visible in the dashboard. (Under
+`manage.py test` the skip is silent — no error entries — so test
+assertions stay clean; this is the issue #532 testing kill-switch.)
+
+Where to find it: Studio > Settings > Integration Settings > S3
+Content Images > `S3_ENABLED`, or
+`GET /api/integrations/settings` (search for the `s3_content` group).
+Toggle it on and save. No redeploy needed.
+
+Prereqs:
+- `AWS_S3_CONTENT_BUCKET` must be configured (uploads need a target).
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (Email/SES group) must
+  have `s3:PutObject` / `s3:ListBucket` on the bucket.
+- `CONTENT_CDN_BASE` must point at a CDN fronting the bucket so the
+  rewritten URLs resolve.
+
+Rotation: n/a — boolean toggle. Safe to flip at any time. When you
+turn it on, the next content sync uploads all images that are not
+already in the bucket (MD5/ETag deduplication skips unchanged files).
+
+Test vs live: Off by default everywhere (`default: 'false'`).
+Production MUST set it to true. Tests and local dev keep it off;
+`TESTING=True` is an unconditional short-circuit that prevents real
+boto3 calls regardless of the `S3_ENABLED` value (issue #532).
+
 ## AWS_S3_CONTENT_BUCKET
 
 Purpose: Bucket name for synced content images. Read by

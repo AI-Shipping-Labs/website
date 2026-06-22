@@ -198,6 +198,19 @@ INTEGRATION_GROUPS = [
             {'key': 'AWS_S3_CONTENT_BUCKET', 'is_secret': False, 'description': 'S3 bucket for content images extracted from synced markdown. Public-read.', 'docs_url': '_docs/integrations/s3_content.md#aws_s3_content_bucket'},
             {'key': 'AWS_S3_CONTENT_REGION', 'is_secret': False, 'description': 'AWS region of the content-images bucket.', 'docs_url': '_docs/integrations/s3_content.md#aws_s3_content_region'},
             {'key': 'CONTENT_CDN_BASE', 'is_secret': False, 'description': 'Public CDN base URL fronting the content bucket (e.g. https://cdn.aishippinglabs.com). Without this images break on the live site.', 'docs_url': '_docs/integrations/s3_content.md#content_cdn_base'},
+            {
+                'key': 'S3_ENABLED',
+                'is_secret': False,
+                'is_boolean': True,
+                'default': 'false',
+                'description': (
+                    'Master switch for content-image uploads to S3 during '
+                    'content sync. When off, image URLs are still rewritten '
+                    'to CDN paths but no objects are uploaded, so images 403 '
+                    'in production. Must be on in production.'
+                ),
+                'docs_url': '_docs/integrations/s3_content.md#s3_enabled',
+            },
         ],
     },
     {

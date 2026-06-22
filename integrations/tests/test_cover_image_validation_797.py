@@ -21,6 +21,7 @@ from botocore.exceptions import ClientError
 from django.test import TestCase, override_settings
 
 from content.models import Workshop
+from integrations.config import clear_config_cache
 from integrations.models import ContentSource
 from integrations.services.github_sync.media import (
     rewrite_cover_image_url,
@@ -123,6 +124,7 @@ class UploadImagesToS3StepTaggingTest(TestCase):
     """Unit tests for the new ``step`` tags on upload_images_to_s3 errors."""
 
     def setUp(self):
+        clear_config_cache()
         self.source = ContentSource.objects.create(
             repo_name='test-org/content',
         )
@@ -137,6 +139,7 @@ class UploadImagesToS3StepTaggingTest(TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     @override_settings(
+        TESTING=False,
         S3_ENABLED=True,
         AWS_S3_CONTENT_BUCKET='test-bucket',
         AWS_S3_CONTENT_REGION='us-east-1',
@@ -162,6 +165,7 @@ class UploadImagesToS3StepTaggingTest(TestCase):
         self.assertIn('Access Denied', entry['error'])
 
     @override_settings(
+        TESTING=False,
         S3_ENABLED=True,
         AWS_S3_CONTENT_BUCKET='test-bucket',
         AWS_S3_CONTENT_REGION='us-east-1',

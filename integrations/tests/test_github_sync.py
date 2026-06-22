@@ -2381,19 +2381,21 @@ class DirectAdminEditFlagTest(TestCase):
 # ===========================================================================
 
 
-@override_settings(S3_ENABLED=True)
+@override_settings(TESTING=False, S3_ENABLED=True)
 class S3ImageUploadTest(TestCase):
     """Test upload_images_to_s3 with MD5/ETag deduplication.
 
-    The S3_ENABLED kill-switch (issue #532) is force-False under
-    ``manage.py test``, which would short-circuit ``upload_images_to_s3``
-    before reaching the boto3 client. These tests need to exercise the
-    actual upload path with mocked boto3, so the class-level
-    ``override_settings(S3_ENABLED=True)`` re-enables it. The dedicated
+    Under ``manage.py test`` ``settings.TESTING`` is True, which
+    unconditionally short-circuits ``upload_images_to_s3`` before
+    reaching the boto3 client (issue #532). These tests need to
+    exercise the actual upload path with mocked boto3, so the
+    class-level ``override_settings(TESTING=False, S3_ENABLED=True)``
+    bypasses the test kill-switch AND enables S3. The dedicated
     ``S3KillSwitchTest`` below covers the off-by-default behaviour.
     """
 
     def setUp(self):
+        clear_config_cache()
         self.source = ContentSource.objects.create(
             repo_name='test-org/content',
         )
@@ -2671,13 +2673,16 @@ class S3ImageUploadTest(TestCase):
 
 
 class S3KillSwitchTest(TestCase):
-    """Regression test for the S3_ENABLED kill-switch (issue #532).
+    """Regression test for the TESTING kill-switch (issues #532, #1068).
 
-    Under ``manage.py test`` ``settings.S3_ENABLED`` is force-False, so the
-    sync pipeline must NOT construct any boto3 S3 client even when the
-    bucket and credentials are configured. Each call would otherwise emit a
-    real ~300ms-1s ``list_objects_v2`` round-trip (see CI logs:
-    "Failed to list S3 objects: ... non-empty Access Key").
+    Under ``manage.py test`` ``settings.TESTING`` is True, which
+    unconditionally short-circuits ``upload_images_to_s3`` before
+    constructing any boto3 S3 client — regardless of the S3_ENABLED
+    value. The sync pipeline must NOT construct any boto3 S3 client
+    even when the bucket and credentials are configured. Each call
+    would otherwise emit a real ~300ms-1s ``list_objects_v2``
+    round-trip (see CI logs: "Failed to list S3 objects: ... non-empty
+    Access Key").
     """
 
     def setUp(self):

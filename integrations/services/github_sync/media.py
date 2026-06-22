@@ -9,7 +9,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
 
-from integrations.config import get_config
+from integrations.config import get_config, is_enabled
 from integrations.services.github_sync.common import IMAGE_EXTENSIONS, logger
 
 
@@ -162,18 +162,36 @@ def upload_images_to_s3(content_dir, source):
     Returns:
         dict: {'uploaded': int, 'skipped': int, 'errors': list}
     """
-    # Issue #532: kill-switch for tests / local dev. When S3_ENABLED is False
-    # (the default everywhere except production), short-circuit before
-    # constructing any boto3 client so we never make a real ``list_objects_v2``
-    # round-trip against AWS. Each round-trip is ~300ms-1s with the
-    # "non-empty Access Key" warning that the legacy code path emitted, and
+    # Issue #532: kill-switch for tests / local dev. ``TESTING`` is True
+    # under ``manage.py test`` (set in website/settings.py), so CI/Playwright/
+    # unit tests never make a real ``list_objects_v2`` round-trip against AWS
+    # regardless of the S3_ENABLED setting. Each round-trip is ~300ms-1s with
+    # the "non-empty Access Key" warning the legacy code path emitted, and
     # integration tests exercise this function many times per file.
-    if not getattr(settings, 'S3_ENABLED', False):
+    #
+    # Issue #1068: S3_ENABLED is now a registered IntegrationSetting resolved
+    # via ``is_enabled()`` (DB override -> env -> default 'false'). When the
+    # skip is due to TESTING, return a clean no-op so test assertions stay
+    # clean. When the skip is due to S3_ENABLED being false in a non-test
+    # environment, surface a structured error so the SyncLog shows 'partial'
+    # and the dashboard makes the misconfiguration visible instead of silent.
+    is_testing = getattr(settings, 'TESTING', False)
+    if is_testing or not is_enabled('S3_ENABLED'):
         logger.info(
-            'S3_ENABLED is false - skipping image upload for %s',
-            source.repo_name,
+            'S3 image upload skipped for %s (TESTING=%s, S3_ENABLED resolved=%s)',
+            source.repo_name, is_testing, is_enabled('S3_ENABLED'),
         )
-        return {'uploaded': 0, 'skipped': 0, 'errors': []}
+        if is_testing:
+            return {'uploaded': 0, 'skipped': 0, 'errors': []}
+        return {
+            'uploaded': 0,
+            'skipped': 0,
+            'errors': [{
+                'file': '',
+                'error': 'S3 image upload disabled (S3_ENABLED is false)',
+                'step': 's3_disabled',
+            }],
+        }
 
     bucket = get_config('AWS_S3_CONTENT_BUCKET')
     region = get_config('AWS_S3_CONTENT_REGION', 'eu-central-1')

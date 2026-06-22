@@ -73,8 +73,8 @@ class TestScenario1CreateOneOff:
         # Form heading reads "New Event".
         assert page.get_by_role("heading", name="New Event").is_visible()
 
-        page.fill('input[name="title"]', "Office Hours May 21")
-        page.fill('input[name="event_date"]', "21/06/2026")
+        page.fill('input[name="title"]', "Office Hours July 21")
+        page.fill('input[name="event_date"]', "21/07/2026")
         page.fill('input[name="event_time"]', "18:00")
         # Leave duration blank — defaults to 1 hour.
         # Issue #860: this Zoom event has no meeting/URL yet, so submit fires
@@ -97,7 +97,7 @@ class TestScenario1CreateOneOff:
             wait_until="domcontentloaded",
         )
         # The new row is present; Studio-origin rows have no GitHub marker.
-        new_event = Event.objects.get(title="Office Hours May 21")
+        new_event = Event.objects.get(title="Office Hours July 21")
         row = page.locator(
             f'tr:has(a[href="/studio/events/{new_event.pk}/edit"])'
         ).first

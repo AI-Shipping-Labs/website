@@ -29,7 +29,7 @@ the series page, where visitors can inspect and register for all sessions.
         <span class="flex items-center gap-1.5">
           <i data-lucide="calendar" class="h-4 w-4"></i>
           {% if user.is_authenticated %}
-            {% user_event_datetime row.next_occurrence.start_datetime user %}
+            {% user_event_datetime row.next_occurrence.start_datetime user fmt='%a, %b %d, %Y, %H:%M' %}
           {% else %}
             {{ row.next_occurrence|event_source_short_datetime }}
           {% endif %}

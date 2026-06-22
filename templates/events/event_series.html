@@ -120,7 +120,7 @@
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span data-testid="series-event-date">
                 {% if user.is_authenticated %}
-                  {% user_event_datetime event.start_datetime user %}
+                  {% user_event_datetime event.start_datetime user fmt='%a, %b %d, %Y, %H:%M' %}
                 {% else %}
                   {{ event|event_source_full_datetime }}
                 {% endif %}

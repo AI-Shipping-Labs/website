@@ -133,24 +133,24 @@ class StudioEventListTest(StaffUserMixin, TestCase):
             title='Berlin Date Event',
             slug='berlin-date-event',
             start_datetime=datetime(
-                2026, 6, 20, 12, 0, tzinfo=ZoneInfo('UTC'),
+                2026, 7, 20, 12, 0, tzinfo=ZoneInfo('UTC'),
             ),
         )
         response = self.client.get('/studio/events/')
         self.assertContains(response, 'data-testid="event-row-date"')
-        self.assertContains(response, 'Jun 20, 2026, 14:00 Europe/Berlin')
-        self.assertNotContains(response, '>Jun 20, 2026, 12:00<')
+        self.assertContains(response, 'Mon, Jul 20, 2026, 14:00 Europe/Berlin')
+        self.assertNotContains(response, '>Jul 20, 2026, 12:00<')
 
     def test_list_renders_utc_label_without_preference(self):
         Event.objects.create(
             title='UTC Date Event',
             slug='utc-date-event',
             start_datetime=datetime(
-                2026, 6, 20, 12, 0, tzinfo=ZoneInfo('UTC'),
+                2026, 7, 20, 12, 0, tzinfo=ZoneInfo('UTC'),
             ),
         )
         response = self.client.get('/studio/events/')
-        self.assertContains(response, 'Jun 20, 2026, 12:00 UTC')
+        self.assertContains(response, 'Mon, Jul 20, 2026, 12:00 UTC')
 
     def test_list_renders_create_buttons(self):
         """Both ``New event`` and ``New event series`` buttons are present."""

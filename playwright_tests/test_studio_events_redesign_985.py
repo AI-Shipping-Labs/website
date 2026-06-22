@@ -66,8 +66,8 @@ def test_studio_events_redesigned_list_and_past_pagination(django_server, browse
     berlin_event = Event.objects.create(
         title="Berlin Noon",
         slug="berlin-noon-985",
-        start_datetime=datetime(2026, 6, 20, 12, 0, tzinfo=ZoneInfo("UTC")),
-        end_datetime=datetime(2026, 6, 20, 13, 0, tzinfo=ZoneInfo("UTC")),
+        start_datetime=datetime(2026, 7, 20, 12, 0, tzinfo=ZoneInfo("UTC")),
+        end_datetime=datetime(2026, 7, 20, 13, 0, tzinfo=ZoneInfo("UTC")),
         kind="standard",
         platform="zoom",
     )
@@ -127,7 +127,7 @@ def test_studio_events_redesigned_list_and_past_pagination(django_server, browse
     berlin_row = page.locator(
         f'tr:has(a[href="/studio/events/{berlin_event.pk}/edit"])'
     ).first
-    assert "14:00 Europe/Berlin" in berlin_row.locator(
+    assert "Mon, Jul 20, 2026, 14:00 Europe/Berlin" in berlin_row.locator(
         '[data-testid="event-row-date"]'
     ).inner_text()
 

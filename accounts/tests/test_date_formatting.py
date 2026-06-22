@@ -68,6 +68,19 @@ class DateFormattingHelperTest(SimpleTestCase):
             'March 21, 2026, 12:00 America/New_York',
         )
 
+    def test_user_event_datetime_accepts_custom_format(self):
+        user = SimpleNamespace(preferred_timezone='Europe/Berlin')
+        value = datetime(2026, 6, 24, 16, 0, tzinfo=UTC)
+
+        self.assertEqual(
+            date_formatting.user_event_datetime(
+                value,
+                user,
+                fmt='%a, %b %d, %Y, %H:%M',
+            ),
+            'Wed, Jun 24, 2026, 18:00 Europe/Berlin',
+        )
+
     def test_event_source_helpers_use_event_timezone(self):
         event = SimpleNamespace(
             start_datetime=datetime(2026, 3, 21, 16, 0, tzinfo=UTC),

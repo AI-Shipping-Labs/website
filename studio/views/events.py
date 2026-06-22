@@ -315,7 +315,7 @@ def _decorate_event_list_row(event, user, now=None):
     event.start_datetime_display = format_user_datetime(
         event.start_datetime,
         user,
-        fmt='%b %d, %Y, %H:%M',
+        fmt='%a, %b %d, %Y, %H:%M',
     )
     return event
 

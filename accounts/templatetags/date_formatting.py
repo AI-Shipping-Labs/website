@@ -82,11 +82,11 @@ def operator_time(value):
 
 
 @register.simple_tag
-def user_event_datetime(value, user):
+def user_event_datetime(value, user, fmt=None):
     """Render a member-specific event/session datetime via the timezone helper."""
     if value in (None, ''):
         return ''
-    return format_user_datetime(value, user)
+    return format_user_datetime(value, user, fmt=fmt)
 
 
 @register.filter

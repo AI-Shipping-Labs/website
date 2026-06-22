@@ -155,7 +155,7 @@ class EventRecordingFieldsTest(TestCase):
         event = Event(start_datetime=timezone.make_aware(
             timezone.datetime(2025, 7, 20, 12, 0),
         ))
-        self.assertEqual(event.formatted_date(), 'July 20, 2025')
+        self.assertEqual(event.formatted_date(), 'Sun, Jul 20, 2025')
 
 # --- Tag filtering tests ---
 
@@ -327,7 +327,7 @@ class RecordingsListDisplayTest(TestCase):
 
     def test_shows_date(self):
         response = self.client.get('/events?filter=past')
-        self.assertContains(response, 'July 20, 2025')
+        self.assertContains(response, 'Sun, Jul 20, 2025')
 
     def test_shows_tags(self):
         response = self.client.get('/events?filter=past')

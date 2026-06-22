@@ -436,7 +436,7 @@ class PublicEventSeriesViewTest(TestCase):
 
         self.assertContains(
             response,
-            'June 15, 2026, 12:00 America/New_York',
+            'Mon, Jun 15, 2026, 12:00 America/New_York',
         )
         self.assertNotContains(response, 'Monday, Jun 15, 2026 · 18:00 Europe/Berlin')
 

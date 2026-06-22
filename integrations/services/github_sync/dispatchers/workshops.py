@@ -1071,6 +1071,11 @@ def _sync_workshop_pages(
                     'action': action,
                     'content_type': 'workshop_page',
                 },
+                identity_changed=lambda obj: (
+                    obj.slug != slug
+                    or obj.source_path != rel_path
+                ),
+                apply_identity=lambda obj: setattr(obj, 'slug', slug),
             )
 
             expanded_body_html = expand_content_includes(

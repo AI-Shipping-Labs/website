@@ -867,6 +867,62 @@ class WorkshopSyncPageRemovalTest(_WorkshopSyncFixtureBase):
         self.assertEqual(WorkshopPage.objects.get().slug, 'a')
 
 
+class WorkshopPageSourcePathChangeTest(_WorkshopSyncFixtureBase):
+    """A page whose ``source_path`` changes (e.g. repo restructuring) but
+    whose ``(workshop, slug)`` stays the same must be updated in place,
+    not deleted by the stale-page cleanup.
+
+    Regression: ``source_path`` is in
+    :data:`_NO_CHANGE_IGNORED_FIELDS`, so without ``identity_changed``/
+    ``apply_identity`` on the page upsert the new ``source_path`` was
+    never written to the row. The stale cleanup then deleted the row
+    because its old ``source_path`` was no longer on disk.
+    """
+
+    def test_page_survives_source_path_change(self):
+        folder = '2026/2026-04-21-demo'
+        content_id = SAMPLE_WORKSHOP_UUID
+
+        self._write_workshop_yaml(folder=folder, content_id=content_id,
+                                  slug='demo')
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        first_log = sync_repo(self.source, self.repo)
+        self.assertEqual(first_log.errors, [])
+
+        page = WorkshopPage.objects.get(slug='overview')
+        self.assertEqual(
+            page.source_path, f'{folder}/01-overview.md',
+        )
+
+        # Simulate a repo restructure: move the folder one level deeper.
+        # Same workshop slug, same page filename/slug — only the parent
+        # path changed.
+        moved_folder = '2026/04/2026-04-21-demo'
+        os.makedirs(os.path.join(self.temp_dir, moved_folder))
+        shutil.move(
+            os.path.join(self.temp_dir, folder, 'workshop.yaml'),
+            os.path.join(self.temp_dir, moved_folder, 'workshop.yaml'),
+        )
+        shutil.move(
+            os.path.join(self.temp_dir, folder, '01-overview.md'),
+            os.path.join(self.temp_dir, moved_folder, '01-overview.md'),
+        )
+
+        second_log = sync_repo(self.source, self.repo)
+        self.assertEqual(
+            second_log.errors, [],
+            f'Expected no errors, got: {second_log.errors}',
+        )
+
+        # The page survived — same pk, updated source_path.
+        page_after = WorkshopPage.objects.get(slug='overview')
+        self.assertEqual(page_after.pk, page.pk)
+        self.assertEqual(
+            page_after.source_path,
+            f'{moved_folder}/01-overview.md',
+        )
+
 class WorkshopSeedContentSourceTest(TestCase):
     """seed_content_sources registers the workshops-content repo idempotently."""
 

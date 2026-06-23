@@ -1,0 +1,40 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Event emissions{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <h1 class="text-2xl font-semibold text-foreground">Event emissions</h1>
+  <p class="text-muted-foreground mt-1">Read-only log of recorded emit_event calls (one row per successful claim).</p>
+</div>
+
+{% if emissions %}
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="emissions-list">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Event</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Envelope id</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">When</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for em in emissions %}
+      <tr class="hover:bg-secondary/50 transition-colors" data-testid="emission-row">
+        <td class="px-4 py-2.5 align-top text-sm text-foreground" data-label="User">{{ em.user.email|default:"system" }}</td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono" data-label="Event">{{ em.event_name }}</td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono break-all" data-label="Envelope id">{{ em.envelope_id }}</td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground" data-label="When">{{ em.created_at|operator_datetime }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground" data-testid="emissions-empty">
+  No emissions recorded yet.
+</div>
+{% endif %}
+{% endblock %}

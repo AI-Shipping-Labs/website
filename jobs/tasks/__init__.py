@@ -1,4 +1,4 @@
-from .cleanup import cleanup_old_webhook_logs
+from .cleanup import cleanup_old_webhook_deliveries, cleanup_old_webhook_logs
 from .expire_overrides import expire_tier_overrides
 from .healthcheck import health_check
 from .helpers import async_task, schedule
@@ -11,6 +11,7 @@ __all__ = [
     'TASK_NAME_MAX_LENGTH',
     'async_task',
     'build_task_name',
+    'cleanup_old_webhook_deliveries',
     'cleanup_old_webhook_logs',
     'constrain_task_name',
     'expire_tier_overrides',

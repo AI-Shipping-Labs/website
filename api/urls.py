@@ -101,6 +101,14 @@ from api.views.tier_reconcile import (
     tier_reconcile_apply,
     tier_reconcile_diagnostics,
 )
+from api.views.triggers import (
+    deliveries_collection,
+    emissions_collection,
+    subscription_detail,
+    subscriptions_collection,
+    widget_detail,
+    widgets_collection,
+)
 from api.views.user_merge import merge_users
 from api.views.users import (
     user_activity,
@@ -676,5 +684,38 @@ urlpatterns = [
         "ses-events",
         ses_events_dispatch,
         name="api_ses_events",
+    ),
+    # ---- Event triggers (issue #1070) ---------------------------------
+    # Staff-token-gated management + observability. No DELETE: deactivate
+    # via ``is_active``. Subscription/widget secrets are never returned.
+    path(
+        "triggers/subscriptions",
+        subscriptions_collection,
+        name="api_trigger_subscriptions",
+    ),
+    path(
+        "triggers/subscriptions/<int:subscription_id>",
+        subscription_detail,
+        name="api_trigger_subscription_detail",
+    ),
+    path(
+        "triggers/widgets",
+        widgets_collection,
+        name="api_trigger_widgets",
+    ),
+    path(
+        "triggers/widgets/<int:widget_id>",
+        widget_detail,
+        name="api_trigger_widget_detail",
+    ),
+    path(
+        "triggers/emissions",
+        emissions_collection,
+        name="api_trigger_emissions",
+    ),
+    path(
+        "triggers/deliveries",
+        deliveries_collection,
+        name="api_trigger_deliveries",
     ),
 ]

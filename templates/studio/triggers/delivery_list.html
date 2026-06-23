@@ -1,0 +1,71 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Webhook deliveries{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <h1 class="text-2xl font-semibold text-foreground">Webhook deliveries</h1>
+  <p class="text-muted-foreground mt-1">Read-only log of outbound delivery attempts.</p>
+</div>
+
+<form method="get" class="mb-6 flex flex-wrap items-end gap-3" data-testid="delivery-filters">
+  <div>
+    <label class="block text-xs font-medium text-muted-foreground mb-1">Subscription</label>
+    <select name="subscription" class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground" data-testid="delivery-filter-subscription">
+      <option value="">All</option>
+      {% for sub in subscriptions %}
+      <option value="{{ sub.id }}" {% if selected_subscription == sub.id|stringformat:'s' %}selected{% endif %}>#{{ sub.id }} {{ sub.target_url }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-xs font-medium text-muted-foreground mb-1">Status</label>
+    <select name="succeeded" class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground" data-testid="delivery-filter-status">
+      <option value="" {% if not selected_succeeded %}selected{% endif %}>All</option>
+      <option value="true" {% if selected_succeeded == 'true' %}selected{% endif %}>Succeeded</option>
+      <option value="false" {% if selected_succeeded == 'false' %}selected{% endif %}>Failed</option>
+    </select>
+  </div>
+  <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90" data-testid="delivery-filter-apply">Filter</button>
+</form>
+
+{% if deliveries %}
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="deliveries-list">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Subscription</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Target</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Attempt</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">HTTP</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">When</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for d in deliveries %}
+      <tr class="hover:bg-secondary/50 transition-colors" data-testid="delivery-row">
+        <td class="px-4 py-2.5 align-top text-sm text-foreground" data-label="Subscription">#{{ d.subscription_id }}</td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono break-all" data-label="Target">{{ d.target_url }}</td>
+        <td class="px-4 py-2.5 align-top text-sm text-foreground" data-label="Attempt">{{ d.attempt }}</td>
+        <td class="px-4 py-2.5 align-top text-sm" data-label="Status">
+          {% if d.succeeded %}
+            <span class="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-500" data-testid="delivery-succeeded">Succeeded</span>
+          {% else %}
+            <span class="inline-flex items-center rounded-full bg-red-500/15 px-2 py-0.5 text-xs font-medium text-red-500" data-testid="delivery-failed">Failed</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground" data-label="HTTP">{{ d.response_status|default:"-" }}</td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground" data-label="When">{{ d.created_at|operator_datetime }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground" data-testid="deliveries-empty">
+  No deliveries recorded yet.
+</div>
+{% endif %}
+{% endblock %}

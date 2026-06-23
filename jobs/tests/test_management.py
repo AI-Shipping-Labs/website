@@ -224,6 +224,7 @@ class SetupSchedulesCommandTest(TestCase):
         expected = {
             'health-check',
             'cleanup-webhook-logs',
+            'cleanup-webhook-deliveries',
             'purge-user-activity',
             'event-reminders',
             'complete-finished-events',

@@ -1,0 +1,44 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if is_create %}New widget{% else %}Edit widget{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_trigger_widget_list' %}" class="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+    <i data-lucide="arrow-left" class="h-4 w-4"></i> Back to widgets
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-3">
+    {% if is_create %}New widget{% else %}Edit widget{% endif %}
+  </h1>
+</div>
+
+{% if widget %}
+<div class="max-w-2xl mb-6 rounded-lg border border-border bg-card p-4">
+  <div class="flex items-center justify-between gap-2 mb-2">
+    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Embed shortcode</p>
+    <button type="button"
+            class="shrink-0 rounded border border-border bg-secondary px-2 py-0.5 text-xs text-foreground hover:opacity-90"
+            data-copy-text="{{ widget.embed_shortcode }}"
+            data-testid="widget-form-embed-copy">Copy</button>
+  </div>
+  <code class="block text-xs font-mono text-foreground whitespace-pre" data-testid="widget-form-embed-shortcode">{{ widget.embed_shortcode }}</code>
+</div>
+{% endif %}
+
+<form method="post" class="max-w-2xl space-y-5" data-testid="widget-form">
+  {% csrf_token %}
+  {% for field in form %}
+  <div>
+    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-foreground mb-1">{{ field.label }}</label>
+    {{ field }}
+    {% if field.help_text %}<p class="text-xs text-muted-foreground mt-1">{{ field.help_text }}</p>{% endif %}
+    {% if field.errors %}<p class="text-xs text-red-500 mt-1" data-testid="field-error">{{ field.errors|striptags }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  <div class="flex items-center gap-3">
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90" data-testid="widget-save">Save</button>
+    <a href="{% url 'studio_trigger_widget_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+  </div>
+</form>
+{% include "studio/triggers/_embed_copy_script.html" %}
+{% endblock %}

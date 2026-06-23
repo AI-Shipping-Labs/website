@@ -1,0 +1,30 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if is_create %}New subscription{% else %}Edit subscription{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_trigger_subscription_list' %}" class="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+    <i data-lucide="arrow-left" class="h-4 w-4"></i> Back to subscriptions
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-3">
+    {% if is_create %}New subscription{% else %}Edit subscription{% endif %}
+  </h1>
+</div>
+
+<form method="post" class="max-w-2xl space-y-5" data-testid="subscription-form">
+  {% csrf_token %}
+  {% for field in form %}
+  <div>
+    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-foreground mb-1">{{ field.label }}</label>
+    {{ field }}
+    {% if field.help_text %}<p class="text-xs text-muted-foreground mt-1">{{ field.help_text }}</p>{% endif %}
+    {% if field.errors %}<p class="text-xs text-red-500 mt-1" data-testid="field-error">{{ field.errors|striptags }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  <div class="flex items-center gap-3">
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90" data-testid="subscription-save">Save</button>
+    <a href="{% url 'studio_trigger_subscription_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+  </div>
+</form>
+{% endblock %}

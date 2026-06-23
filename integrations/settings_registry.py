@@ -751,6 +751,26 @@ INTEGRATION_GROUPS = [
             },
         ],
     },
+    {
+        'name': 'triggers',
+        'label': 'Event triggers',
+        'keys': [
+            {
+                'key': 'TRIGGERS_ENABLED',
+                'is_secret': False,
+                'is_boolean': True,
+                'default': 'false',
+                'description': (
+                    'Master switch for the outbound event-hooks subsystem '
+                    '(issue #1070). When off, emit_event records nothing and '
+                    'dispatches no webhooks, and claim widgets show a paused '
+                    'state. Turn on once at least one TriggerSubscription points '
+                    'at a live handler. Default off.'
+                ),
+                'docs_url': '_docs/integrations/triggers.md#triggers_enabled',
+            },
+        ],
+    },
 ]
 
 

@@ -1,0 +1,13 @@
+{% load static %}
+{% comment %}
+Event claim widget hydration (issue #1070). Included only from templates
+that render markdown-derived HTML which may contain a
+``div[data-event-widget]`` placeholder. The script self-guards on the
+absence of those nodes and exits immediately, so this partial costs almost
+nothing on pages without an embedded widget.
+
+The placeholder is user-agnostic (rendered once at save); per-user state is
+fetched from ``/widgets/<slug>/state`` and the claim POSTs to
+``/widgets/<slug>/claim`` — Django re-checks min_level + dedup server-side.
+{% endcomment %}
+<script src="{% static 'js/event-widget.js' %}" defer></script>

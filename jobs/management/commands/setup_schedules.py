@@ -31,6 +31,18 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: cleanup-webhook-logs (daily at 3 AM)'))
 
+        # Prune old outbound webhook-delivery rows daily at 03:10 UTC
+        # (issue #1070). Reuses the cleanup-webhook-logs wiring/cadence
+        # rather than a new bespoke cron; 10 minutes after the inbound log
+        # cleanup so the two pruning jobs don't overlap.
+        schedule(
+            'jobs.tasks.cleanup.cleanup_old_webhook_deliveries',
+            cron='10 3 * * *',
+            name='cleanup-webhook-deliveries',
+            days=30,
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: cleanup-webhook-deliveries (daily at 03:10 UTC)'))
+
         # Purge old per-user CRM activity timeline rows daily at 03:30 UTC
         # (issue #853). Off-peak, after the webhook-log cleanup. The
         # retention window comes from the Studio-editable

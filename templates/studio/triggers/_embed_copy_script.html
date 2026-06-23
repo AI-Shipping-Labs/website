@@ -1,0 +1,34 @@
+{% comment %}
+Copy-to-clipboard for the event-widget embed shortcode (issue #1070).
+
+Copies the LITERAL multi-line ``data-copy-text`` attribute value (the
+``EventWidget.embed_shortcode`` string with real newlines), NOT the
+``<code>`` element's textContent — an inline ``<code>`` collapses the
+fence onto one line, which the markdown parser then rejects. Mirrors the
+``data-copy-target`` button pattern in ``studio/api_tokens/created.html``.
+{% endcomment %}
+<script>
+(function() {
+  document.querySelectorAll('[data-copy-text]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var text = btn.getAttribute('data-copy-text') || '';
+      var done = function() {
+        var original = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(function() { btn.textContent = original; }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(done);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        done();
+      }
+    });
+  });
+})();
+</script>

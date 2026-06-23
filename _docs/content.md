@@ -304,6 +304,13 @@ Same steps regardless of which content type the repo holds.
 - Files without recognizable frontmatter are skipped; files with broken frontmatter raise a sync error.
 - Test fixtures for the sync live in `integrations/tests/test_github_sync.py`.
 
+## Embeddable widgets
+
+Authors can drop a one-click event claim widget into synced markdown using
+the `eventwidget` shortcode (a markdown-render-time expansion, not a Django
+template tag). See `_docs/event-widgets.md` for the embed syntax and the
+list of available widgets and parameters.
+
 ## Future enhancements
 
 Tracked as separate issues, not yet implemented:

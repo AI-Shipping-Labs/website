@@ -1,0 +1,69 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Trigger subscriptions{% endblock %}
+
+{% block studio_content %}
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Trigger subscriptions</h1>
+    <p class="text-muted-foreground mt-1">
+      Outbound webhook handlers that receive a signed POST when a matching event is emitted.
+    </p>
+  </div>
+  <div class="flex items-center gap-2 shrink-0">
+    <a href="{% url 'studio_trigger_subscription_create' %}"
+       data-testid="subscription-create-link"
+       class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2">
+      <i data-lucide="plus" class="h-4 w-4"></i>
+      <span>New subscription</span>
+    </a>
+  </div>
+</div>
+
+{% if subscriptions %}
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="subscriptions-list">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Event type</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Filter</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Target URL</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Secret</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for sub in subscriptions %}
+      <tr class="hover:bg-secondary/50 transition-colors" data-testid="subscription-row">
+        <td class="px-4 py-2.5 align-top text-sm text-foreground" data-label="Event type">{{ sub.event_type }}</td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono" data-label="Filter">{{ sub.property_filter|default:"{}" }}</td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono break-all" data-label="Target URL">{{ sub.target_url }}</td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono" data-label="Secret" data-testid="subscription-secret-masked">••••••••</td>
+        <td class="px-4 py-2.5 align-top text-sm" data-label="Status">
+          {% if sub.is_active %}
+            <span class="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-500" data-testid="subscription-active">Active</span>
+          {% else %}
+            <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid="subscription-inactive">Inactive</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-2.5 align-top {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <a href="{% url 'studio_trigger_subscription_edit' sub.id %}" class="{% studio_action_class 'secondary' %}" data-testid="subscription-edit">Edit</a>
+          <form method="post" action="{% url 'studio_trigger_subscription_toggle' sub.id %}" class="{% studio_list_class 'action_form' %}">
+            {% csrf_token %}
+            <button type="submit" class="{% studio_action_class 'secondary' %}" data-testid="subscription-toggle">
+              {% if sub.is_active %}Deactivate{% else %}Activate{% endif %}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  {% url 'studio_trigger_subscription_create' as create_url %}
+  {% studio_empty_state 'fresh' entity_label='subscription' entity_label_plural='subscriptions' create_url=create_url cta_label='Create subscription' testid_suffix='subscriptions-empty' %}
+{% endif %}
+{% endblock %}

@@ -40,6 +40,8 @@ urlpatterns = [
     path('', include('plans.urls')),
     path('', include('community.urls')),
     path('studio/', include('studio.urls')),
+    path('', include('triggers.urls')),
+    path('studio/triggers/', include('triggers.studio_urls')),
 ]
 
 if settings.DEBUG:

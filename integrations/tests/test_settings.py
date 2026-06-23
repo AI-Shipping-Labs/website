@@ -421,7 +421,7 @@ class SettingsDashboardViewTest(TestCase):
         }
         self.assertEqual(groups_by_section['payments'], ['stripe'])
         self.assertEqual(groups_by_section['content'], ['zoom', 'youtube', 'calendly', 'github'])
-        self.assertEqual(groups_by_section['messaging'], ['ses', 'slack', 'maven'])
+        self.assertEqual(groups_by_section['messaging'], ['ses', 'slack', 'maven', 'triggers'])
         self.assertEqual(groups_by_section['storage'], ['s3_recordings', 's3_content'])
         self.assertEqual(groups_by_section['site'], ['site'])
         self.assertEqual(groups_by_section['analytics'], ['analytics'])
@@ -474,12 +474,15 @@ class SettingsDashboardViewTest(TestCase):
         summary = response.context['status_summary']
         expected_total_items = len(response.context['auth_providers']) + len(response.context['groups'])
         self.assertEqual(summary['total_items'], expected_total_items)
-        # Only Google OAuth is configured here. The `analytics` and
-        # `calendly` groups are all-optional and nothing is set, so after
-        # issue #938 they are `not_configured` rather than "configured" by
-        # vacuous truth. A registry default alone (e.g. analytics'
-        # USER_ACTIVITY_RETENTION_DAYS=365) does not count as set.
-        self.assertEqual(summary['configured_count'], 1)
+        # Google OAuth is configured here. The `triggers` group (issue
+        # #1070) is also "configured": its only key TRIGGERS_ENABLED is a
+        # boolean with a set default ('false') and there are no other
+        # required keys, so the group is fully satisfied by default. The
+        # `analytics` and `calendly` groups are all-optional and nothing is
+        # set, so after issue #938 they are `not_configured` rather than
+        # "configured" by vacuous truth. A registry default alone (e.g.
+        # analytics' USER_ACTIVITY_RETENTION_DAYS=365) does not count as set.
+        self.assertEqual(summary['configured_count'], 2)
         # Stripe has one DB-backed key, SES has one env-backed key,
         # GitHub has the default Secrets Manager path but no App IDs,
         # LLM has provider+model defaults but no API key (issue #799),

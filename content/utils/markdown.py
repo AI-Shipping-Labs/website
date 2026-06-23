@@ -3,7 +3,11 @@
 import markdown as markdown_lib
 import nh3
 
-from content.markdown_extensions import ExternalLinksExtension, MermaidExtension
+from content.markdown_extensions import (
+    EventWidgetExtension,
+    ExternalLinksExtension,
+    MermaidExtension,
+)
 from content.utils.linkify import linkify_urls
 
 # nh3 (ammonia) allowlist for sanitising rendered markdown HTML. It covers
@@ -22,7 +26,12 @@ _SANITIZE_TAGS = {
 _SANITIZE_ATTRIBUTES = {
     'a': {'href', 'title', 'target', 'rel'},
     'img': {'src', 'alt', 'title'},
-    'div': {'class'},
+    # ``data-event-widget`` is the hydration hook for the claim widget
+    # (issue #1070). It carries only a slug and is read by
+    # ``static/js/event-widget.js`` to fetch per-user state; keeping it on
+    # the allowlist means the placeholder survives sanitisation on article
+    # surfaces that run rendered HTML back through ``sanitize_html``.
+    'div': {'class', 'data-event-widget'},
     'span': {'class'},
     'code': {'class'},
     'pre': {'class'},
@@ -52,6 +61,7 @@ MARKDOWN_CORE_EXTENSIONS = [
 
 MARKDOWN_EXTENSIONS = [
     MermaidExtension,
+    EventWidgetExtension,
     ExternalLinksExtension,
     *MARKDOWN_CORE_EXTENSIONS,
 ]
@@ -69,10 +79,13 @@ def _build_extensions(
     include_mermaid=True,
     include_external_links=True,
     include_codehilite=True,
+    include_event_widget=True,
 ):
     extensions = []
     if include_mermaid:
         extensions.append(MermaidExtension())
+    if include_event_widget:
+        extensions.append(EventWidgetExtension())
     if include_external_links:
         extensions.append(ExternalLinksExtension())
     for name in MARKDOWN_CORE_EXTENSIONS:
@@ -99,6 +112,7 @@ def render_markdown(
     include_mermaid=True,
     include_external_links=True,
     include_codehilite=True,
+    include_event_widget=True,
     codehilite_guess_lang=False,
 ):
     """Convert markdown to HTML with the platform's runtime extension set.
@@ -114,6 +128,7 @@ def render_markdown(
             include_mermaid=include_mermaid,
             include_external_links=include_external_links,
             include_codehilite=include_codehilite,
+            include_event_widget=include_event_widget,
         ),
         extension_configs=_build_extension_configs(
             codehilite_guess_lang=codehilite_guess_lang,
@@ -141,6 +156,9 @@ def render_email_markdown(text):
         text,
         include_mermaid=False,
         include_codehilite=False,
+        # The claim widget needs the site's JS hydration runtime, which an
+        # inbox can't run — drop the shortcode placeholder in email.
+        include_event_widget=False,
     )
 
 

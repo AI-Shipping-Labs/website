@@ -155,6 +155,7 @@ INSTALLED_APPS = [
     'comments',
     'analytics',
     'api',
+    'triggers.apps.TriggersConfig',
 ]
 
 MIDDLEWARE = [

@@ -447,6 +447,7 @@ def studio_sidebar_state(path):
         or 'redirects' in p
         or '/settings' in p
         or '/api-tokens' in p
+        or '/triggers/' in p
     )
 
     # Events is the dashboard default (#576) — when no other section is

@@ -1,0 +1,78 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Event widgets{% endblock %}
+
+{% block studio_content %}
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Event widgets</h1>
+    <p class="text-muted-foreground mt-1">
+      Embeddable claim widgets. Copy the shortcode into synced markdown content.
+    </p>
+  </div>
+  <div class="flex items-center gap-2 shrink-0">
+    <a href="{% url 'studio_trigger_widget_create' %}"
+       data-testid="widget-create-link"
+       class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2">
+      <i data-lucide="plus" class="h-4 w-4"></i>
+      <span>New widget</span>
+    </a>
+  </div>
+</div>
+
+{% if widgets %}
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="widgets-list">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Slug</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Event name</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Min level</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Embed shortcode</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for widget in widgets %}
+      <tr class="hover:bg-secondary/50 transition-colors" data-testid="widget-row">
+        <td class="px-4 py-2.5 align-top text-sm text-foreground" data-label="Slug">{{ widget.slug }}</td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono" data-label="Event name">{{ widget.event_name }}</td>
+        <td class="px-4 py-2.5 align-top text-sm text-foreground" data-label="Min level">{{ widget.min_level }}</td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono break-all" data-label="Embed shortcode">
+          <div class="flex items-start gap-2">
+            <code data-testid="widget-embed-shortcode" class="whitespace-pre">{{ widget.embed_shortcode }}</code>
+            <button type="button"
+                    class="shrink-0 rounded border border-border bg-secondary px-2 py-0.5 text-xs text-foreground hover:opacity-90"
+                    data-copy-text="{{ widget.embed_shortcode }}"
+                    data-testid="widget-embed-copy">Copy</button>
+          </div>
+        </td>
+        <td class="px-4 py-2.5 align-top text-sm" data-label="Status">
+          {% if widget.is_active %}
+            <span class="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-500" data-testid="widget-active">Active</span>
+          {% else %}
+            <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid="widget-inactive">Inactive</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-2.5 align-top {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <a href="{% url 'studio_trigger_widget_edit' widget.id %}" class="{% studio_action_class 'secondary' %}" data-testid="widget-edit">Edit</a>
+          <form method="post" action="{% url 'studio_trigger_widget_toggle' widget.id %}" class="{% studio_list_class 'action_form' %}">
+            {% csrf_token %}
+            <button type="submit" class="{% studio_action_class 'secondary' %}" data-testid="widget-toggle">
+              {% if widget.is_active %}Deactivate{% else %}Activate{% endif %}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  {% url 'studio_trigger_widget_create' as create_url %}
+  {% studio_empty_state 'fresh' entity_label='widget' entity_label_plural='widgets' create_url=create_url cta_label='Create widget' testid_suffix='widgets-empty' %}
+{% endif %}
+{% include "studio/triggers/_embed_copy_script.html" %}
+{% endblock %}

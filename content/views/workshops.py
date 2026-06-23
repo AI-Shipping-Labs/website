@@ -231,8 +231,8 @@ def _build_landing_context(workshop, user):
             next_qs = urlencode({'next': landing_url})
             pages_cta_message = 'Sign in to access this workshop'
             pages_gated_description = (
-                'This workshop is free with a free account. Sign in or '
-                'create one in seconds.'
+                'This workshop is free — you just need an account. Sign in '
+                'or create one in seconds.'
             )
             pages_cta_url = f'/accounts/login/?{next_qs}'
             pages_cta_label = 'Sign In'
@@ -599,8 +599,8 @@ def _build_video_gated_context(request, workshop, event):
     if gated_reason == 'authentication_required':
         gated_heading = 'Sign in to watch this recording'
         gated_description = (
-            'This recording is free with a free account. Sign in or '
-            'create one in seconds.'
+            'This recording is free — you just need an account. Sign in '
+            'or create one in seconds.'
         )
         gated_cta_url = f'/accounts/login/?{next_qs}'
         gated_cta_label = 'Sign In'
@@ -826,8 +826,8 @@ def _build_page_gated_context(request, workshop, page):
     if gated_reason == 'authentication_required':
         gated_heading = 'Sign in to keep reading this tutorial'
         gated_description = (
-            'This tutorial is free with a free account. Sign in or create '
-            'one in seconds.'
+            'This tutorial is free — you just need an account. Sign in or '
+            'create one in seconds.'
         )
         gated_cta_url = f'/accounts/login/?{next_qs}'
         gated_cta_label = 'Sign In'

@@ -208,7 +208,7 @@ def _sync_single_workshop(
     # AppConfig chain, and importing content/events models at module-top
     # would tie those apps' import timing to this one. Matches the pattern
     # used by every other ``_sync_*`` helper in this file.
-    from content.access import VISIBILITY_CHOICES
+    from content.access import UNIT_VISIBILITY_CHOICES
     from content.models import Workshop
 
     yaml_path = os.path.join(workshop_dir, 'workshop.yaml')
@@ -227,7 +227,10 @@ def _sync_single_workshop(
         pages_required_level = data.get('pages_required_level')
 
         # Validate pages_required_level is a legal visibility tier level.
-        valid_levels = {level for level, _ in VISIBILITY_CHOICES}
+        # All three workshop gates accept LEVEL_REGISTERED (5) — "free but
+        # requires sign-in" — in addition to the open/paid tiers, matching
+        # the model fields' UNIT_VISIBILITY_CHOICES.
+        valid_levels = {level for level, _ in UNIT_VISIBILITY_CHOICES}
         if pages_required_level not in valid_levels:
             raise ValueError(
                 f'Invalid pages_required_level={pages_required_level!r}; '

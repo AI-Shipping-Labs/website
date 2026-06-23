@@ -19,7 +19,6 @@ from content.access import (
     LEVEL_OPEN,
     LEVEL_REGISTERED,
     UNIT_VISIBILITY_CHOICES,
-    VISIBILITY_CHOICES,
     get_user_level,
 )
 from content.models.mixins import (
@@ -149,7 +148,7 @@ class Workshop(
     )
     landing_required_level = models.IntegerField(
         default=0,
-        choices=VISIBILITY_CHOICES,
+        choices=UNIT_VISIBILITY_CHOICES,
         help_text=(
             'Minimum tier level required to view the workshop landing page. '
             'Must be <= pages_required_level.'
@@ -168,9 +167,11 @@ class Workshop(
     )
     recording_required_level = models.IntegerField(
         default=20,
-        choices=VISIBILITY_CHOICES,
+        choices=UNIT_VISIBILITY_CHOICES,
         help_text=(
-            'Minimum tier level required to watch the recording. Must be '
+            'Minimum tier level required to watch the recording. Accepts '
+            'LEVEL_REGISTERED (5) so a free-with-sign-in workshop can gate '
+            'its recording at the same level as its pages. Must be '
             '>= pages_required_level.'
         ),
     )

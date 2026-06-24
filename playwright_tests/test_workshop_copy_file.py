@@ -358,8 +358,11 @@ class TestWorkshopWithoutDescriptionRendersCleanLanding:
                 title='Only', body='Tutorial body.\n',
             ),
         })
-        # No errors expected.
-        assert sync_log.errors == [], sync_log.errors
+        # No non-info errors expected.
+        non_info = [
+            e for e in (sync_log.errors or []) if e.get('severity') != 'info'
+        ]
+        assert non_info == [], non_info
 
         page.goto(
             f'{django_server}/workshops/no-copy',

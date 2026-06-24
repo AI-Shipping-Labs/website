@@ -15,10 +15,13 @@ import time
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
+from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
+from email_app.models import EmailLog
 from events.models import Event
+from events.models.registration import EventRegistration
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 
@@ -198,6 +201,129 @@ class UploadRecordingToS3Test(TestCase):
     @patch('jobs.tasks.recordings_s3.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')
     @patch('integrations.services.zoom.requests.post')
+    def test_successful_upload_notifies_host_after_s3_save(
+        self,
+        mock_zoom_post,
+        mock_requests_get,
+        mock_boto_client,
+    ):
+        """Host notification fires only after recording_s3_url is saved."""
+        from jobs.tasks.recording_upload import upload_recording_to_s3
+
+        self.event.host_email = 'host@example.com'
+        self.event.save(update_fields=['host_email'])
+        attendee = get_user_model().objects.create_user(
+            email='attendee@example.com',
+            password='pw',
+        )
+        EventRegistration.objects.create(event=self.event, user=attendee)
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'test-token',
+            'expires_in': 3600,
+        }
+        mock_zoom_post.return_value = token_response
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.iter_content.return_value = [b'fake-video-data']
+        mock_response.raise_for_status = MagicMock()
+        mock_requests_get.return_value = mock_response
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+
+        result = upload_recording_to_s3(
+            self.recording.id,
+            'https://zoom.us/rec/download/abc123',
+        )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['host_notification_status'], 'sent')
+        self.assertEqual(result['host_notification_recipient_count'], 1)
+        self.assertEqual(result['host_notification_skipped_reason'], '')
+        self.assertEqual(len(result['host_notification_email_log_ids']), 1)
+        self.assertEqual(
+            result['host_notification_results'][0]['email'],
+            'host@example.com',
+        )
+
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.recording_s3_url)
+        self.assertFalse(self.event.published)
+
+        self.assertEqual(
+            EmailLog.objects.filter(
+                event=self.event,
+                email_type='event_recording_ready',
+                recipient_email='host@example.com',
+            ).count(),
+            1,
+        )
+        self.assertFalse(
+            EmailLog.objects.filter(
+                event=self.event,
+                email_type='post_event_followup',
+            ).exists()
+        )
+
+    @patch('jobs.tasks.recordings_s3.boto3.client')
+    @patch('jobs.tasks.recording_upload.requests.get')
+    @patch('integrations.services.zoom.requests.post')
+    @patch('events.services.recording_ready_notification.notify_recording_ready')
+    def test_notification_failure_does_not_retry_successful_upload(
+        self,
+        mock_notify,
+        mock_zoom_post,
+        mock_requests_get,
+        mock_boto_client,
+    ):
+        """Notification errors are surfaced without rolling back S3 state."""
+        from jobs.tasks.recording_upload import upload_recording_to_s3
+
+        mock_notify.side_effect = RuntimeError('email path exploded')
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'test-token',
+            'expires_in': 3600,
+        }
+        mock_zoom_post.return_value = token_response
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.iter_content.return_value = [b'fake-video-data']
+        mock_response.raise_for_status = MagicMock()
+        mock_requests_get.return_value = mock_response
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+
+        result = upload_recording_to_s3(
+            self.recording.id,
+            'https://zoom.us/rec/download/abc123',
+        )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['host_notification_status'], 'error')
+        self.assertEqual(
+            result['host_notification_skipped_reason'],
+            'notification_error',
+        )
+        self.assertEqual(result['host_notification_email_log_ids'], [])
+        self.assertEqual(
+            result['host_notification_results'][0]['reason'],
+            'RuntimeError',
+        )
+        self.recording.refresh_from_db()
+        self.assertTrue(self.recording.recording_s3_url)
+
+    @patch('jobs.tasks.recordings_s3.boto3.client')
+    @patch('jobs.tasks.recording_upload.requests.get')
+    @patch('integrations.services.zoom.requests.post')
     def test_s3_key_structure(self, mock_zoom_post, mock_requests_get, mock_boto_client):
         """S3 key follows recordings/{year}/{slug}.mp4 pattern."""
         from jobs.tasks.recording_upload import upload_recording_to_s3
@@ -321,6 +447,9 @@ class UploadRecordingToS3Test(TestCase):
         # s3_url should NOT be set on the recording
         self.recording.refresh_from_db()
         self.assertEqual(self.recording.recording_s3_url, '')
+        self.assertFalse(
+            EmailLog.objects.filter(email_type='event_recording_ready').exists()
+        )
 
     @patch('jobs.tasks.recordings_s3.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')

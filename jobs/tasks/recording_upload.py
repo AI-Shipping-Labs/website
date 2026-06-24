@@ -77,7 +77,41 @@ def upload_recording_to_s3(event_id, download_url):
         event.title, s3_url,
     )
 
-    return {'status': 'ok', 's3_url': s3_url, 'event_id': event_id}
+    from events.services.recording_ready_notification import notify_recording_ready
+
+    try:
+        host_notification = notify_recording_ready(event)
+    except Exception as exc:
+        logger.exception(
+            'Recording-ready host notification failed for event "%s" after '
+            'successful S3 upload',
+            event.title,
+        )
+        host_notification = {
+            'status': 'error',
+            'recipient_count': 0,
+            'attempted_recipient_count': 0,
+            'skipped_reason': 'notification_error',
+            'email_log_ids': [],
+            'results': [{
+                'status': 'error',
+                'reason': exc.__class__.__name__,
+            }],
+        }
+
+    return {
+        'status': 'ok',
+        's3_url': s3_url,
+        'event_id': event_id,
+        'host_notification_status': host_notification['status'],
+        'host_notification_recipient_count': host_notification['recipient_count'],
+        'host_notification_attempted_recipient_count': (
+            host_notification['attempted_recipient_count']
+        ),
+        'host_notification_skipped_reason': host_notification['skipped_reason'],
+        'host_notification_email_log_ids': host_notification['email_log_ids'],
+        'host_notification_results': host_notification['results'],
+    }
 
 
 def _build_authenticated_download_url(download_url):

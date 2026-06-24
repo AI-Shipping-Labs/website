@@ -94,6 +94,7 @@ def send_registration_confirmation(registration):
     ics_content = generate_ics(
         event,
         audience=AUDIENCE_HOST if is_host else AUDIENCE_ATTENDEE,
+        attendee_email=user.email,
     )
 
     # Send raw email with attachment
@@ -120,7 +121,47 @@ def send_registration_confirmation(registration):
     return email_log
 
 
-def _send_raw_email(to_email, subject, html_body, ics_content, method='REQUEST'):
+def build_calendar_email_message(
+    to_email,
+    subject,
+    html_body,
+    ics_content,
+    *,
+    method='REQUEST',
+    filename='event.ics',
+):
+    """Build the raw MIME message used for calendar lifecycle emails."""
+    from_email = get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL)
+    normalized_method = method.upper()
+
+    msg = MIMEMultipart('mixed')
+    msg['Subject'] = subject
+    msg['From'] = from_email
+    msg['To'] = to_email
+
+    body = MIMEText(html_body, 'html', 'utf-8')
+    msg.attach(body)
+
+    ics_str = (
+        ics_content.decode('utf-8')
+        if isinstance(ics_content, bytes)
+        else ics_content
+    )
+    cal_part = MIMEText(ics_str, 'calendar', 'utf-8')
+    cal_part.set_param('method', normalized_method, header='Content-Type')
+    cal_part.add_header('Content-Disposition', 'attachment', filename=filename)
+    msg.attach(cal_part)
+    return msg
+
+
+def _send_raw_email(
+    to_email,
+    subject,
+    html_body,
+    ics_content,
+    method='REQUEST',
+    filename='event.ics',
+):
     """Send a raw email via SES with .ics calendar attachment.
 
     Args:
@@ -147,21 +188,14 @@ def _send_raw_email(to_email, subject, html_body, ics_content, method='REQUEST')
         return 'ses-disabled-noop'
 
     from_email = get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL)
-
-    msg = MIMEMultipart('mixed')
-    msg['Subject'] = subject
-    msg['From'] = from_email
-    msg['To'] = to_email
-
-    # HTML body
-    body = MIMEText(html_body, 'html', 'utf-8')
-    msg.attach(body)
-
-    # .ics attachment
-    ics_str = ics_content.decode('utf-8') if isinstance(ics_content, bytes) else ics_content
-    cal_part = MIMEText(ics_str, 'calendar; method=' + method, 'utf-8')
-    cal_part.add_header('Content-Disposition', 'attachment', filename='event.ics')
-    msg.attach(cal_part)
+    msg = build_calendar_email_message(
+        to_email,
+        subject,
+        html_body,
+        ics_content,
+        method=method,
+        filename=filename,
+    )
 
     client = boto3.client(
         'sesv2',

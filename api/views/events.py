@@ -41,6 +41,11 @@ from events.models.event import (
     EVENT_STATUS_CHOICES,
     EXTERNAL_HOST_CHOICES,
 )
+from events.services.calendar_lifecycle import (
+    enqueue_cancellation_update,
+    enqueue_schedule_update,
+    should_notify_cancellation,
+)
 from events.services.display_time import resolve_event_creation_timezone
 from events.services.host_registration import maybe_register_host_as_attendee
 from integrations.services.banner_generator import (
@@ -1068,12 +1073,21 @@ def event_detail(request, slug):
     if banner_error_response is not None:
         return banner_error_response
 
+    old_start = event.start_datetime
+    old_end = event.end_datetime
+    old_status = event.status
+
     with transaction.atomic():
         _apply_event_values(event, values)
         save_error = _save_event_or_error(event)
         if save_error is not None:
             return save_error
         _set_event_hosts(event, host_ids)
+
+    if should_notify_cancellation(event, old_status):
+        enqueue_cancellation_update(event, old_status)
+    else:
+        enqueue_schedule_update(event, old_start, old_end)
 
     zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
     # Best-effort host auto-registration. A PATCH that flips a draft to a

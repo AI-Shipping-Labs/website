@@ -86,6 +86,13 @@ def _vevents_by_uid(cal):
     return {str(v.get('uid')): v for v in _vevents(cal)}
 
 
+def _attendee_text(vevent):
+    attendee = vevent.get('attendee')
+    if isinstance(attendee, list):
+        attendee = attendee[0]
+    return str(attendee)
+
+
 def _ics_from_raw(raw):
     """Extract and decode the text/calendar attachment from a raw SES message.
 
@@ -211,6 +218,8 @@ class SendSeriesRegistrationInviteTest(TierSetupMixin, TestCase):
             str(by_uid['event-woh-b@aishippinglabs.com'].get('location')),
             'https://aishippinglabs.com/events/woh-b/join',
         )
+        for vevent in by_uid.values():
+            self.assertEqual(_attendee_text(vevent), 'mailto:member@test.com')
         html = _html_from_raw(raw)
         self.assertIn('about 5 minutes before the start time', html)
         self.assertNotIn('15 minutes', html)
@@ -299,6 +308,7 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
         }
         self.assertEqual(by_uid['event-woh-u1@aishippinglabs.com'], 2)
         vevent = _vevents_by_uid(cal)['event-woh-u1@aishippinglabs.com']
+        self.assertEqual(_attendee_text(vevent), 'mailto:alice@test.com')
         self.assertEqual(
             str(vevent.get('url')),
             'https://aishippinglabs.com/events/woh-u1/join',
@@ -357,7 +367,9 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
         )
 
     @patch('events.services.registration_email.boto3')
-    def test_skips_unsubscribed(self, mock_boto3):
+    def test_unsubscribed_subscriber_still_gets_transactional_update(
+        self, mock_boto3,
+    ):
         client = mock_boto3.client.return_value
         client.send_email.return_value = {'MessageId': 'm'}
         self.bob.unsubscribed = True
@@ -365,8 +377,8 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
 
         sent = send_series_update_to_subscribers(self.e1)
 
-        self.assertEqual(sent, 1)
-        self.assertFalse(
+        self.assertEqual(sent, 2)
+        self.assertTrue(
             EmailLog.objects.filter(
                 email_type='series_update', user=self.bob,
             ).exists(),
@@ -420,6 +432,8 @@ class SendSeriesCancellationTest(TierSetupMixin, TestCase):
         self.assertEqual(
             str(vevents[0].get('uid')), 'event-woh-c1@aishippinglabs.com',
         )
+        self.assertEqual(_attendee_text(vevents[0]), 'mailto:member@test.com')
+        self.assertEqual(str(vevents[0].get('status')), 'CANCELLED')
         self.assertEqual(
             str(vevents[0].get('url')),
             'https://aishippinglabs.com/events/woh-c1/join',

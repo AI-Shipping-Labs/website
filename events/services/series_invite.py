@@ -53,6 +53,7 @@ from content.access import (
 from email_app.services.email_service import EmailService
 from events.models import EventRegistration
 from events.services.calendar_invite import generate_ics, generate_series_ics
+from events.services.calendar_lifecycle import user_has_permanent_bounce
 from events.services.registration_email import _send_raw_email
 from events.services.series_registration import _eligible_occurrences
 from integrations.config import site_base_url
@@ -196,7 +197,11 @@ def send_series_registration_invite(user, series, events):
     subject, full_html = _render_series_email(
         'series_registration', user, series, events, 'series_registration',
     )
-    ics_content = generate_series_ics(events, method='REQUEST')
+    ics_content = generate_series_ics(
+        events,
+        method='REQUEST',
+        attendee_email=user.email,
+    )
     ses_message_id = _send_raw_email(
         to_email=user.email,
         subject=subject,
@@ -249,7 +254,7 @@ def send_series_update_to_subscribers(event, user_ids=None):
     sent = 0
     for user in User.objects.filter(id__in=subscriber_user_ids):
         try:
-            if user.unsubscribed:
+            if user_has_permanent_bounce(user):
                 continue
             events = _subscriber_upcoming_events(user, series)
             if not events:
@@ -257,7 +262,11 @@ def send_series_update_to_subscribers(event, user_ids=None):
             subject, full_html = _render_series_email(
                 'series_update', user, series, events, 'series_update',
             )
-            ics_content = generate_series_ics(events, method='REQUEST')
+            ics_content = generate_series_ics(
+                events,
+                method='REQUEST',
+                attendee_email=user.email,
+            )
             ses_message_id = _send_raw_email(
                 to_email=user.email,
                 subject=subject,
@@ -313,12 +322,16 @@ def send_series_cancellation_to_subscribers(event):
 
     from accounts.models import User
 
-    ics_content = generate_ics(event, method='CANCEL')
     sent = 0
     for user in User.objects.filter(id__in=registered_user_ids):
         try:
-            if user.unsubscribed:
+            if user_has_permanent_bounce(user):
                 continue
+            ics_content = generate_ics(
+                event,
+                method='CANCEL',
+                attendee_email=user.email,
+            )
             subject, full_html = _render_series_email(
                 'series_cancellation', user, series, [event],
                 'series_cancellation',

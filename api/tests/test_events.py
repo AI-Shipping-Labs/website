@@ -306,6 +306,65 @@ class EventsListAndDetailTest(EventsApiTestBase):
         )
 
 
+class EventsApiCalendarLifecycleTest(EventsApiTestBase):
+    def setUp(self):
+        self.studio_event.status = "upcoming"
+        self.studio_event.ics_sequence = 0
+        self.studio_event.save(update_fields=["status", "ics_sequence"])
+        EventRegistration.objects.get_or_create(
+            event=self.studio_event,
+            user=self.member,
+        )
+
+    @patch("events.tasks.notify_reschedule.enqueue_reschedule_notice")
+    def test_patch_schedule_change_enqueues_calendar_update(self, mock_enqueue):
+        new_start = self.studio_event.start_datetime + timedelta(days=2)
+        new_end = new_start + timedelta(hours=2)
+
+        response = self._patch(
+            self.studio_event.slug,
+            {
+                "start_datetime": new_start.isoformat(),
+                "end_datetime": new_end.isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.studio_event.refresh_from_db()
+        self.assertEqual(self.studio_event.start_datetime, new_start)
+        self.assertEqual(self.studio_event.end_datetime, new_end)
+        self.assertGreater(self.studio_event.ics_sequence, 0)
+        mock_enqueue.assert_called_once()
+        self.assertEqual(mock_enqueue.call_args.args[0], self.studio_event.pk)
+
+    @patch("events.tasks.notify_cancellation.enqueue_cancellation_notice")
+    def test_patch_cancelled_enqueues_calendar_cancellation(self, mock_enqueue):
+        response = self._patch(self.studio_event.slug, {"status": "cancelled"})
+
+        self.assertEqual(response.status_code, 200)
+        self.studio_event.refresh_from_db()
+        self.assertEqual(self.studio_event.status, "cancelled")
+        self.assertEqual(self.studio_event.ics_sequence, 1)
+        mock_enqueue.assert_called_once_with(self.studio_event.pk)
+
+    @patch("events.tasks.notify_cancellation.enqueue_cancellation_notice")
+    @patch("events.tasks.notify_reschedule.enqueue_reschedule_notice")
+    def test_patch_non_schedule_field_does_not_enqueue_or_bump_sequence(
+        self, mock_reschedule, mock_cancel,
+    ):
+        response = self._patch(
+            self.studio_event.slug,
+            {"title": "Studio Event Renamed"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.studio_event.refresh_from_db()
+        self.assertEqual(self.studio_event.title, "Studio Event Renamed")
+        self.assertEqual(self.studio_event.ics_sequence, 0)
+        mock_reschedule.assert_not_called()
+        mock_cancel.assert_not_called()
+
+
 class EventsCreateTest(EventsApiTestBase):
     def setUp(self):
         clear_config_cache()

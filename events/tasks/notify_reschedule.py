@@ -19,9 +19,8 @@ Two-stage fan-out (issue #670):
    carrying ``METHOD:REQUEST`` and a bumped SEQUENCE, and writes one
    ``EmailLog(email_type='event_rescheduled')`` row.
 
-Skips unsubscribed users (mirrors ``email_app.tasks.welcome_imported``)
-even though the message is transactional — a fully unsubscribed user
-should not be re-notified.
+Calendar lifecycle email is transactional: global newsletter unsubscribe
+does not suppress it. Permanent bounce state still suppresses delivery.
 """
 
 import logging
@@ -36,6 +35,7 @@ from accounts.services.timezones import (
 )
 from events.models import Event, EventRegistration, SeriesRegistration
 from events.services.calendar_invite import generate_ics
+from events.services.calendar_lifecycle import user_has_permanent_bounce
 from events.services.cancel_token import generate_cancel_token
 from events.services.host_registration import (
     build_host_management_links,
@@ -119,7 +119,7 @@ def send_reschedule_notice_fanout(event_id, old_start_iso):
 def send_reschedule_notice_one(event_id, user_id, old_start_iso):
     """Stage-2 per-user send.
 
-    Skips unsubscribed users. Renders ``old_start`` and the event's
+    Renders ``old_start`` and the event's
     current ``start_datetime`` in the recipient's preferred timezone
     (UTC fallback when unset) so the body shows both times in the same
     zone — never UTC for one and local for the other.
@@ -139,8 +139,12 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
     except User.DoesNotExist:
         return {"status": "skipped", "reason": "missing_user", "user_id": user_id}
 
-    if user.unsubscribed:
-        return {"status": "skipped", "reason": "unsubscribed", "user_id": user_id}
+    if user_has_permanent_bounce(user):
+        return {
+            "status": "skipped",
+            "reason": "permanent_bounce",
+            "user_id": user_id,
+        }
 
     # The registration may have been cancelled between fan-out and the
     # per-user send; emailing a rescheduled time to someone who already
@@ -218,7 +222,11 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
     # detected the change), so by the time this task runs the event's
     # ``ics_sequence`` is already greater than whatever the registration
     # email's ``.ics`` carried.
-    ics_content = generate_ics(event, method='REQUEST')
+    ics_content = generate_ics(
+        event,
+        method='REQUEST',
+        attendee_email=user.email,
+    )
 
     ses_message_id = _send_raw_email(
         to_email=user.email,

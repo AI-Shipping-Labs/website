@@ -68,7 +68,8 @@ def _event_urls(event):
     return detail_url, join_url
 
 
-def build_vevent(event, audience=AUDIENCE_ATTENDEE):
+def build_vevent(event, audience=AUDIENCE_ATTENDEE, attendee_email=None,
+                 method='REQUEST'):
     """Build a single ``VEVENT`` component for ``event``.
 
     Shared between attendee invites, host invites, and the public feed.
@@ -82,6 +83,8 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE):
     Args:
         event: ``events.models.Event`` instance.
         audience: One of ``attendee``, ``public_feed``, or ``host``.
+        attendee_email: Optional recipient email for emailed attendee invites.
+        method: iCalendar method. ``CANCEL`` adds ``STATUS:CANCELLED``.
 
     Returns:
         ``icalendar.Event`` ready to be added to a calendar.
@@ -142,6 +145,8 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE):
 
     vevent.add('dtstamp', timezone.now())
     vevent.add('sequence', event.ics_sequence)
+    if method == 'CANCEL':
+        vevent.add('status', 'CANCELLED')
 
     # Stable UID per event. Per RFC 5545 the UID must be globally
     # stable across iCal client reloads — DO NOT swap this for
@@ -207,10 +212,19 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE):
     organizer.params['cn'] = vText('AI Shipping Labs')
     vevent.add('organizer', organizer)
 
+    if attendee_email:
+        attendee = vCalAddress(f'mailto:{attendee_email}')
+        attendee.params['cn'] = vText(attendee_email)
+        attendee.params['role'] = vText('REQ-PARTICIPANT')
+        attendee.params['partstat'] = vText('ACCEPTED')
+        attendee.params['rsvp'] = vText('FALSE')
+        vevent.add('attendee', attendee)
+
     return vevent
 
 
-def generate_ics(event, method='REQUEST', audience=AUDIENCE_ATTENDEE):
+def generate_ics(event, method='REQUEST', audience=AUDIENCE_ATTENDEE,
+                 attendee_email=None):
     """Generate a single-event ``.ics`` calendar file.
 
     Used for the per-event invite attachment in registration emails and
@@ -222,6 +236,7 @@ def generate_ics(event, method='REQUEST', audience=AUDIENCE_ATTENDEE):
             ``CANCEL`` for cancellation).
         audience: ``attendee`` by default. Use ``host`` for host-only
             invites that should not switch to the attendee join flow.
+        attendee_email: Optional recipient email to stamp as ``ATTENDEE``.
 
     Returns:
         bytes: The ``.ics`` file content.
@@ -230,11 +245,19 @@ def generate_ics(event, method='REQUEST', audience=AUDIENCE_ATTENDEE):
     cal.add('prodid', '-//AI Shipping Labs//Events//EN')
     cal.add('version', '2.0')
     cal.add('method', method)
-    cal.add_component(build_vevent(event, audience=audience))
+    cal.add_component(
+        build_vevent(
+            event,
+            audience=audience,
+            attendee_email=attendee_email,
+            method=method,
+        ),
+    )
     return cal.to_ical()
 
 
-def generate_series_ics(events, method='REQUEST', audience=AUDIENCE_ATTENDEE):
+def generate_series_ics(events, method='REQUEST', audience=AUDIENCE_ATTENDEE,
+                        attendee_email=None):
     """Generate a multi-event ``.ics`` invite covering several occurrences.
 
     Used by the series subscriber invite (issue #869): when a member
@@ -264,6 +287,8 @@ def generate_series_ics(events, method='REQUEST', audience=AUDIENCE_ATTENDEE):
         method: iCalendar method (``REQUEST`` for new/update,
             ``CANCEL`` for cancellation).
         audience: ``attendee`` by default for subscriber invites.
+        attendee_email: Optional recipient email to stamp as ``ATTENDEE``
+            on every ``VEVENT``.
 
     Returns:
         bytes: The ``.ics`` file content.
@@ -273,7 +298,14 @@ def generate_series_ics(events, method='REQUEST', audience=AUDIENCE_ATTENDEE):
     cal.add('version', '2.0')
     cal.add('method', method)
     for event in events:
-        cal.add_component(build_vevent(event, audience=audience))
+        cal.add_component(
+            build_vevent(
+                event,
+                audience=audience,
+                attendee_email=attendee_email,
+                method=method,
+            ),
+        )
     return cal.to_ical()
 
 

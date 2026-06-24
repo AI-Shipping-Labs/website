@@ -37,6 +37,7 @@ TRANSACTIONAL_EMAIL_TYPES = {
     "password_reset",
     "event_registration",
     "event_rescheduled",
+    "event_cancelled",
     "welcome_imported",
     # Issue #703: paid-signup automation.
     "cofounder_welcome",

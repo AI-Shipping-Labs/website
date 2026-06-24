@@ -25,9 +25,12 @@ from accounts.services.timezones import (
 from content.access import VISIBILITY_CHOICES
 from events.models import Event, EventFeedback, EventHost, EventRegistration, Host
 from events.models.event import EXTERNAL_HOST_CHOICES
+from events.services.calendar_lifecycle import (
+    enqueue_cancellation_update,
+    enqueue_schedule_update,
+)
 from events.services.display_time import resolve_event_creation_timezone
 from events.services.host_registration import maybe_register_host_as_attendee
-from events.tasks.notify_reschedule import enqueue_reschedule_notice
 from events.tasks.send_post_event_followup import enqueue_post_event_followup
 from integrations.services.banner_generator.dispatch import enqueue_if_missing
 from integrations.services.zoom import create_meeting
@@ -398,7 +401,7 @@ def _event_pager_context(request, page, paginator):
     }
 
 
-def _maybe_notify_reschedule(request, event, old_start):
+def _maybe_notify_reschedule(request, event, old_start, old_end=None):
     """Issue #670: enqueue rescheduling notices after a date-changing save.
 
     Trigger rules (all must hold):
@@ -424,29 +427,9 @@ def _maybe_notify_reschedule(request, event, old_start):
       user toggling ``unsubscribed`` between save and send doesn't
       produce a discrepancy in the flash).
     """
-    if old_start is None or event.start_datetime is None:
+    count = enqueue_schedule_update(event, old_start, old_end)
+    if count is None:
         return
-    if abs((event.start_datetime - old_start).total_seconds()) < 60:
-        return
-    now = djtimezone.now()
-    if old_start <= now:
-        return
-    # Admin moved an upcoming event into the past: the email would
-    # advertise a time the recipient cannot reach.
-    if event.start_datetime <= now:
-        return
-
-    count = EventRegistration.objects.filter(event=event).count()
-    if count > 0:
-        enqueue_reschedule_notice(event.pk, old_start.isoformat())
-
-    # Issue #869: series subscribers get the canonical UPDATE as a
-    # multi-event series invite (the per-event reschedule notice above
-    # skips them to avoid double emails). Enqueue the series fan-out for
-    # an occurrence that belongs to a series.
-    if event.event_series_id:
-        from events.tasks.notify_series_invite import enqueue_series_update
-        enqueue_series_update(event.pk)
 
     label = 'attendee' if count == 1 else 'attendees'
     messages.success(
@@ -456,27 +439,13 @@ def _maybe_notify_reschedule(request, event, old_start):
 
 
 def _maybe_notify_series_cancellation(event, old_status):
-    """Issue #869: notify series subscribers when an occurrence is cancelled.
+    """Notify registered attendees when an occurrence is cancelled.
 
-    Fires only on a transition INTO ``cancelled`` for an occurrence that
-    belongs to a series. Bumps ``ics_sequence`` so the ``METHOD:CANCEL``
-    ``.ics`` carries a higher SEQUENCE than the last invite the subscriber
-    received (calendar clients only honour a CANCEL whose SEQUENCE is
-    greater-or-equal), then enqueues the per-subscriber CANCEL fan-out.
-
-    API cancellations stay notification-free per the #678 contract — this
-    is wired only into the Studio edit path.
+    Fires only on a transition INTO ``cancelled`` for a future event. The
+    shared lifecycle helper bumps ``ics_sequence`` and enqueues the single
+    event and, where applicable, series cancellation fan-outs.
     """
-    if not event.event_series_id:
-        return
-    if event.status != 'cancelled' or old_status == 'cancelled':
-        return
-
-    event.ics_sequence = (event.ics_sequence or 0) + 1
-    event.save(update_fields=['ics_sequence'])
-
-    from events.tasks.notify_series_invite import enqueue_series_cancellation
-    enqueue_series_cancellation(event.pk)
+    enqueue_cancellation_update(event, old_status)
 
 
 @staff_required
@@ -767,6 +736,7 @@ def event_edit(request, event_id):
             # notify, not "did the form do a write?" semantics.
             old_event = Event.objects.get(pk=event.pk)
             old_start = old_event.start_datetime
+            old_end = old_event.end_datetime
 
             event.title = request.POST.get('title', '').strip()
             event.slug = request.POST.get('slug', '').strip() or slugify(event.title)
@@ -863,7 +833,7 @@ def event_edit(request, event_id):
             # both old and new starts are non-null, both are in the
             # future, and the delta is >= 60s. End-only edits and
             # past-event edits stay silent.
-            _maybe_notify_reschedule(request, event, old_start)
+            _maybe_notify_reschedule(request, event, old_start, old_end)
 
             maybe_register_host_as_attendee(event)
 

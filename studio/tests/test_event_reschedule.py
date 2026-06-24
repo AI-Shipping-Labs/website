@@ -6,9 +6,8 @@ The non-synced edit branch must:
   - the start_datetime changed by >= 60 seconds, AND
   - ``old_start`` is in the future, AND
   - both old and new starts are non-null.
-- End-only edits and title/description-only edits MUST NOT enqueue.
-- End-only edits still bump ``ics_sequence`` via ``Event.save()`` so
-  subscribed calendar feeds update without sending attendee reschedule email.
+- End-only edits enqueue updates for registered attendees so their calendar
+  entry gets the new DTEND.
 - The flash message reports the pre-filter registration count.
 - The synced edit branch NEVER enqueues regardless of input.
 """
@@ -65,7 +64,7 @@ class StudioEventRescheduleTriggerTest(StaffUserMixin, TestCase):
             f'/studio/events/{self.event.pk}/edit', data, follow=True,
         )
 
-    @patch('studio.views.events.enqueue_reschedule_notice')
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_date_changed_enqueues_notice(self, mock_enqueue):
         """Moving the start by a week (in the future) enqueues the task."""
         # Two registered users so the flash count is reported.
@@ -93,7 +92,7 @@ class StudioEventRescheduleTriggerTest(StaffUserMixin, TestCase):
             message_strings,
         )
 
-    @patch('studio.views.events.enqueue_reschedule_notice')
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_flash_count_includes_unsubscribed_users(self, mock_enqueue):
         """Pre-filter count: admins see audience size, not deliveries."""
         # Two regular users + one unsubscribed user. The flash reports
@@ -118,7 +117,7 @@ class StudioEventRescheduleTriggerTest(StaffUserMixin, TestCase):
             message_strings,
         )
 
-    @patch('studio.views.events.enqueue_reschedule_notice')
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_singular_flash_for_one_attendee(self, mock_enqueue):
         """Singular 'attendee' (no 's') when count == 1."""
         user = User.objects.create_user(email='solo@test.com')
@@ -136,7 +135,7 @@ class StudioEventRescheduleTriggerTest(StaffUserMixin, TestCase):
             message_strings,
         )
 
-    @patch('studio.views.events.enqueue_reschedule_notice')
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_date_changed_bumps_ics_sequence(self, mock_enqueue):
         """SEQUENCE bump enables calendar clients to overwrite the entry."""
         before = self.event.ics_sequence
@@ -148,7 +147,7 @@ class StudioEventRescheduleTriggerTest(StaffUserMixin, TestCase):
         self.event.refresh_from_db()
         self.assertGreater(self.event.ics_sequence, before)
 
-    @patch('studio.views.events.enqueue_reschedule_notice')
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_sub_minute_drift_does_not_enqueue(self, mock_enqueue):
         """No-op re-save (same wall-clock) MUST NOT enqueue."""
         # Same date+time means the parser produces a delta well under
@@ -168,7 +167,7 @@ class StudioEventRescheduleTriggerTest(StaffUserMixin, TestCase):
             any('Rescheduling notice' in m for m in message_strings),
         )
 
-    @patch('studio.views.events.enqueue_reschedule_notice')
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_title_only_change_does_not_enqueue(self, mock_enqueue):
         response = self._post_edit(title='Live Q&A (updated)')
 
@@ -178,23 +177,25 @@ class StudioEventRescheduleTriggerTest(StaffUserMixin, TestCase):
             any('Rescheduling notice' in m for m in message_strings),
         )
 
-    @patch('studio.views.events.enqueue_reschedule_notice')
-    def test_duration_only_change_does_not_enqueue(self, mock_enqueue):
-        """End-only edits update calendars but do not enqueue email."""
-        # Same date+time, longer duration. end_datetime moves; start
-        # does not.
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
+    def test_duration_only_change_enqueues_calendar_update(self, mock_enqueue):
+        """End-only edits update attendee calendars with the new DTEND."""
+        user = User.objects.create_user(email='duration@test.com')
+        EventRegistration.objects.create(event=self.event, user=user)
+        # Same date+time, longer duration. end_datetime moves; start does not.
         before_sequence = self.event.ics_sequence
         response = self._post_edit(duration_hours='3')
 
-        mock_enqueue.assert_not_called()
+        mock_enqueue.assert_called_once()
         self.event.refresh_from_db()
         self.assertGreater(self.event.ics_sequence, before_sequence)
         message_strings = [m.message for m in response.context['messages']]
-        self.assertFalse(
-            any('Rescheduling notice' in m for m in message_strings),
+        self.assertIn(
+            'Rescheduling notice sent to 1 registered attendee.',
+            message_strings,
         )
 
-    @patch('studio.views.events.enqueue_reschedule_notice')
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_zero_registrations_still_flashes_but_no_enqueue(self, mock_enqueue):
         """Trigger fires, no fan-out, flash still informs the admin."""
         new_start = self.event.start_datetime + timedelta(days=7)
@@ -210,7 +211,7 @@ class StudioEventRescheduleTriggerTest(StaffUserMixin, TestCase):
             message_strings,
         )
 
-    @patch('studio.views.events.enqueue_reschedule_notice')
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_idempotent_resave_does_not_re_enqueue(self, mock_enqueue):
         """A second save with no further date change does not re-fire."""
         for i in range(2):
@@ -256,7 +257,7 @@ class StudioEventReschedulePastEventRuleTest(StaffUserMixin, TestCase):
             EventRegistration.objects.create(event=self.event, user=user)
 
     @patch('django.utils.timezone.now')
-    @patch('studio.views.events.enqueue_reschedule_notice')
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_past_event_correction_does_not_enqueue(self, mock_enqueue, mock_now):
         # Freeze "now" AFTER the event's start so old_start < now().
         mock_now.return_value = datetime(2026, 5, 20, 12, 0, tzinfo=UTC)
@@ -285,7 +286,7 @@ class StudioEventReschedulePastEventRuleTest(StaffUserMixin, TestCase):
         )
 
     @patch('django.utils.timezone.now')
-    @patch('studio.views.events.enqueue_reschedule_notice')
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_future_event_moved_into_past_does_not_enqueue(
         self, mock_enqueue, mock_now,
     ):
@@ -343,7 +344,7 @@ class StudioEventRescheduleSyncedTest(StaffUserMixin, TestCase):
             source_path='synced.md',
         )
 
-    @patch('studio.views.events.enqueue_reschedule_notice')
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_synced_edit_never_enqueues(self, mock_enqueue):
         self.client.post(
             f'/studio/events/{self.event.pk}/edit',

@@ -140,7 +140,7 @@ class StudioSeriesRescheduleTriggerTest(StaffUserMixin, TestCase):
         )
 
     @patch('events.tasks.notify_series_invite.enqueue_series_update')
-    @patch('studio.views.events.enqueue_reschedule_notice')
+    @patch('events.tasks.notify_reschedule.enqueue_reschedule_notice')
     def test_time_change_enqueues_series_update(self, mock_resched, mock_update):
         new_start = self.event.start_datetime + timedelta(days=7)
         self.client.post(

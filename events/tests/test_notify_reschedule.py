@@ -4,7 +4,7 @@ Coverage:
 - ``enqueue_reschedule_notice`` defers via ``jobs.tasks.async_task``.
 - ``send_reschedule_notice_fanout`` enqueues one stage-2 task per
   registration (no N+1 over the user FK).
-- ``send_reschedule_notice_one`` skips unsubscribed users, writes one
+- ``send_reschedule_notice_one`` treats unsubscribe as transactional, writes one
   ``EmailLog`` row per successful send, renders both OLD and NEW times
   in the recipient's timezone (or UTC fallback), and the regenerated
   ``.ics`` carries ``METHOD:REQUEST`` with a higher SEQUENCE than the
@@ -220,17 +220,16 @@ class SendRescheduleNoticeOneTest(TestCase):
         ).get()
         self.assertEqual(log.ses_message_id, 'ses-3')
 
-    @patch('events.tasks.notify_reschedule._send_raw_email')
-    def test_send_skips_unsubscribed_user(self, mock_send):
+    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-unsub')
+    def test_send_does_not_skip_unsubscribed_user(self, mock_send):
         result = send_reschedule_notice_one(
             self.event.pk,
             self.unsub_user.pk,
             '2026-06-08T16:00:00+00:00',
         )
-        self.assertEqual(result['status'], 'skipped')
-        self.assertEqual(result['reason'], 'unsubscribed')
-        mock_send.assert_not_called()
-        self.assertFalse(
+        self.assertEqual(result['status'], 'sent')
+        mock_send.assert_called_once()
+        self.assertTrue(
             EmailLog.objects.filter(
                 email_type='event_rescheduled', user=self.unsub_user,
             ).exists(),

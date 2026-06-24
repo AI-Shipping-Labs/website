@@ -190,6 +190,11 @@ def upload_images_to_s3(content_dir, source):
                 'file': '',
                 'error': 'S3 image upload disabled (S3_ENABLED is false)',
                 'step': 's3_disabled',
+                # Informational notice, not a content failure: the SyncLog
+                # still goes 'partial' (any non-empty errors does) so the
+                # dashboard surfaces the misconfiguration, but downstream
+                # checks that gate on real failures filter out info entries.
+                'severity': 'info',
             }],
         }
 

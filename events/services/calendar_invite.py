@@ -102,17 +102,26 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE):
     if is_external is None:
         is_external = bool(getattr(event, 'external_host', '') or '')
     external_host = getattr(event, 'external_host', '') or ''
-    # Issue #726: tier-gated events appear in the public feed with a
-    # ``[Members only]`` SUMMARY prefix so a subscriber can tell at a
-    # glance which sessions need a paid tier to attend. Both the
-    # ``[Members only]`` and ``[Hosted on X]`` prefixes may apply; the
-    # documented order is ``[Members only] [Hosted on X] <title>``.
+    # Issue #726 / #1072: the ``[Members only]`` SUMMARY prefix on
+    # tier-gated events (``required_level > 0``) is PUBLIC-FEED-ONLY. It
+    # exists solely for discovery on the anonymous, unauthenticated feed
+    # at ``/events/calendar.ics`` so a subscriber who never registered can
+    # tell at a glance which sessions need a paid tier. It is deliberately
+    # NOT added to attendee or host invites (registration email + per-event
+    # ``.ics`` download, host invite, series invite/cancel, reschedule
+    # invite): those recipients already registered or host the event and
+    # know the tier, so the prefix is noise there (issue #1072).
+    #
+    # The ``[Hosted on X]`` prefix for external events is a separate sibling
+    # prefix and still applies to ALL audiences. When both apply on the
+    # public feed the documented order is ``[Members only] [Hosted on X]
+    # <title>``; on attendee/host invites it is ``[Hosted on X] <title>``.
     required_level = getattr(event, 'required_level', 0) or 0
     is_gated = required_level > 0
     summary = event.title
     if is_external:
         summary = f'[Hosted on {external_host}] {summary}'
-    if is_gated:
+    if is_gated and audience == AUDIENCE_PUBLIC_FEED:
         summary = f'[Members only] {summary}'
     vevent.add('summary', summary)
 

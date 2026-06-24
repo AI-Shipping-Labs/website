@@ -48,6 +48,7 @@ from events.services.calendar_lifecycle import (
 )
 from events.services.display_time import resolve_event_creation_timezone
 from events.services.host_registration import maybe_register_host_as_attendee
+from events.services.zoom_lifecycle import sync_or_delete_zoom_meeting
 from integrations.services.banner_generator import (
     is_enabled as banner_generator_is_enabled,
 )
@@ -1073,9 +1074,10 @@ def event_detail(request, slug):
     if banner_error_response is not None:
         return banner_error_response
 
-    old_start = event.start_datetime
-    old_end = event.end_datetime
-    old_status = event.status
+    old_event = Event.objects.get(pk=event.pk)
+    old_start = old_event.start_datetime
+    old_end = old_event.end_datetime
+    old_status = old_event.status
 
     with transaction.atomic():
         _apply_event_values(event, values)
@@ -1089,7 +1091,10 @@ def event_detail(request, slug):
     else:
         enqueue_schedule_update(event, old_start, old_end)
 
-    zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
+    zoom_error = sync_or_delete_zoom_meeting(event, old_event)
+    create_zoom_error = _maybe_create_zoom_meeting(event, create_zoom)
+    if zoom_error is None:
+        zoom_error = create_zoom_error
     # Best-effort host auto-registration. A PATCH that flips a draft to a
     # published status, or adds a platform-user host_email to a published
     # event, creates the host registration and sends the normal confirmation.

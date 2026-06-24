@@ -128,6 +128,32 @@ def _meeting_settings():
     }
 
 
+def build_meeting_payload(event, *, include_type=True):
+    """Build the shared Zoom meeting schedule/settings payload for an event."""
+    duration = 60
+    if event.end_datetime and event.start_datetime:
+        delta = event.end_datetime - event.start_datetime
+        duration = max(1, int(delta.total_seconds() / 60))
+
+    meeting_timezone = (event.timezone or '').strip()
+    try:
+        local_start = event.start_datetime.astimezone(ZoneInfo(meeting_timezone))
+    except (ZoneInfoNotFoundError, ValueError):
+        meeting_timezone = 'UTC'
+        local_start = event.start_datetime.astimezone(ZoneInfo('UTC'))
+
+    payload = {
+        'topic': event.title,
+        'start_time': local_start.strftime('%Y-%m-%dT%H:%M:%S'),
+        'duration': duration,
+        'timezone': meeting_timezone,
+        'settings': _meeting_settings(),
+    }
+    if include_type:
+        payload['type'] = 2  # Scheduled meeting
+    return payload
+
+
 def create_meeting(event):
     """Create a Zoom meeting for the given event.
 
@@ -143,32 +169,10 @@ def create_meeting(event):
     """
     token = get_access_token()
 
-    # Calculate duration in minutes
-    duration = 60  # default 60 minutes
-    if event.end_datetime and event.start_datetime:
-        delta = event.end_datetime - event.start_datetime
-        duration = max(1, int(delta.total_seconds() / 60))
-
     # Zoom interprets a ``start_time`` without a ``Z``/offset as LOCAL time in
-    # the supplied ``timezone``. ``event.start_datetime`` is stored/returned in
-    # UTC, so we must convert it to the event timezone before formatting,
-    # otherwise the meeting is scheduled off by the zone's UTC offset (#996).
-    meeting_timezone = (event.timezone or '').strip()
-    try:
-        local_start = event.start_datetime.astimezone(ZoneInfo(meeting_timezone))
-    except (ZoneInfoNotFoundError, ValueError):
-        # Blank or invalid timezone: fall back to UTC rather than raising.
-        meeting_timezone = 'UTC'
-        local_start = event.start_datetime.astimezone(ZoneInfo('UTC'))
-
-    payload = {
-        'topic': event.title,
-        'type': 2,  # Scheduled meeting
-        'start_time': local_start.strftime('%Y-%m-%dT%H:%M:%S'),
-        'duration': duration,
-        'timezone': meeting_timezone,
-        'settings': _meeting_settings(),
-    }
+    # the supplied ``timezone``. ``build_meeting_payload`` converts stored UTC
+    # datetimes to the event timezone before formatting (#996).
+    payload = build_meeting_payload(event)
 
     url = urljoin(ZOOM_API_BASE_URL, 'users/me/meetings')
     response = requests.post(
@@ -203,15 +207,8 @@ def create_meeting(event):
     }
 
 
-def update_meeting_settings(event):
-    """Patch an existing Zoom meeting's settings in place (issue #1004).
-
-    Sends ``PATCH /v2/meetings/{meeting_id}`` with a body of ONLY
-    ``{'settings': _meeting_settings()}`` so the waiting-room / join-before-host
-    configuration is applied to a meeting that already exists. It deliberately
-    does NOT send ``topic`` / ``start_time`` / ``duration`` — Zoom keeps the
-    join URL stable as long as the meeting is patched rather than recreated, so
-    every calendar invite and event page already mailed out stays valid.
+def update_meeting(event):
+    """Patch an existing Zoom meeting's schedule/settings in place.
 
     A successful PATCH returns HTTP 204 with no body.
 
@@ -220,6 +217,40 @@ def update_meeting_settings(event):
 
     Raises:
         ZoomAPIError: If the Zoom API call fails (non-2xx response).
+    """
+    token = get_access_token()
+
+    url = urljoin(ZOOM_API_BASE_URL, f'meetings/{event.zoom_meeting_id}')
+    response = requests.patch(
+        url,
+        json=build_meeting_payload(event, include_type=False),
+        headers={
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json',
+        },
+        timeout=10,
+    )
+
+    # PATCH returns 204 No Content on success; accept any 2xx for safety.
+    if response.status_code not in (200, 201, 204):
+        raise ZoomAPIError(
+            f'Failed to update Zoom meeting: {response.status_code}',
+            status_code=response.status_code,
+            response_data=response.json() if response.content else None,
+        )
+
+    logger.info(
+        'Updated Zoom meeting %s for event "%s"',
+        event.zoom_meeting_id, event.title,
+    )
+
+
+def update_meeting_settings(event):
+    """Patch an existing Zoom meeting's settings in place (issue #1004).
+
+    Sends ``PATCH /v2/meetings/{meeting_id}`` with a body of ONLY
+    ``{'settings': _meeting_settings()}`` so the waiting-room / join-before-host
+    configuration can be applied independently of event schedule edits.
     """
     token = get_access_token()
 
@@ -245,6 +276,38 @@ def update_meeting_settings(event):
     logger.info(
         'Updated Zoom meeting %s settings for event "%s"',
         event.zoom_meeting_id, event.title,
+    )
+
+
+def delete_meeting(event):
+    """Delete an existing Zoom meeting.
+
+    Zoom returns 204 on successful deletion. A 404 is also treated as success
+    because the external meeting is already absent and local cleanup may
+    proceed.
+    """
+    token = get_access_token()
+
+    url = urljoin(ZOOM_API_BASE_URL, f'meetings/{event.zoom_meeting_id}')
+    response = requests.delete(
+        url,
+        headers={
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json',
+        },
+        timeout=10,
+    )
+
+    if response.status_code not in (200, 202, 204, 404):
+        raise ZoomAPIError(
+            f'Failed to delete Zoom meeting: {response.status_code}',
+            status_code=response.status_code,
+            response_data=response.json() if response.content else None,
+        )
+
+    logger.info(
+        'Deleted Zoom meeting %s for event "%s" (status %s)',
+        event.zoom_meeting_id, event.title, response.status_code,
     )
 
 

@@ -26,6 +26,10 @@ Six scenarios from the groomed spec:
 7. Gated and draft events stay out of the public feed — drafts,
    cancelled, and Main-tier events never appear in the anonymous
    feed body.
+8. The per-event ``.ics`` download drops the [Members only] prefix
+   (issue #1072) — that surface is an attendee-style single-event
+   invite, so a gated event reads its plain title there while the
+   public feed keeps the prefix.
 
 Usage:
     uv run pytest playwright_tests/test_events_calendar_feed.py -v
@@ -489,3 +493,87 @@ class TestGatedAndDraftStayOutOfPublicFeed:
             "Cancelled Only", "cancelled-only",
         ):
             assert forbidden not in text, f"{forbidden!r} leaked into feed"
+
+
+# --- Scenario 8: per-event download drops the members-only prefix --------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestPerEventDownloadDropsMembersOnlyPrefix:
+    """Issue #1072: the per-event ``.ics`` download is an attendee-style
+    single-event invite, not the discovery feed. A gated event's SUMMARY
+    there must read the plain title (the exact entry the reporter circled),
+    while the same event on the public feed still carries the prefix.
+    """
+
+    def test_gated_event_download_has_no_members_only_prefix(
+        self, django_server, page,
+    ):
+        _clear_events()
+        _ensure_tiers()
+        future = timezone.now() + timedelta(days=3)
+        _create_event(
+            slug="exploring-vercel",
+            title="Exploring Vercel",
+            required_level=20,
+            start_datetime=future,
+        )
+
+        # Per-event download — attendee audience, no prefix.
+        status, _, body = _http_get(
+            f"{django_server}/events/exploring-vercel/calendar.ics",
+        )
+        assert status == 200
+        text = body.decode("utf-8")
+        assert "SUMMARY:Exploring Vercel" in text
+        assert "[Members only]" not in text
+
+        # Same gated event on the public feed — prefix preserved.
+        status_feed, _, body_feed = _http_get(
+            f"{django_server}/events/calendar.ics",
+        )
+        assert status_feed == 200
+        assert "[Members only] Exploring Vercel" in body_feed.decode("utf-8")
+
+    def test_gated_external_download_keeps_hosted_drops_members_only(
+        self, django_server, page,
+    ):
+        _clear_events()
+        _ensure_tiers()
+        future = timezone.now() + timedelta(days=3)
+        _create_event(
+            slug="maven-gated",
+            title="Maven Gated Cohort",
+            external_host="Maven",
+            required_level=20,
+            start_datetime=future,
+        )
+
+        status, _, body = _http_get(
+            f"{django_server}/events/maven-gated/calendar.ics",
+        )
+        assert status == 200
+        text = body.decode("utf-8")
+        # ``[Hosted on Maven]`` hint preserved; ``[Members only]`` dropped.
+        assert "SUMMARY:[Hosted on Maven] Maven Gated Cohort" in text
+        assert "[Members only]" not in text
+
+    def test_open_event_download_is_plain_title(
+        self, django_server, page,
+    ):
+        _clear_events()
+        _ensure_tiers()
+        future = timezone.now() + timedelta(days=3)
+        _create_event(
+            slug="open-download",
+            title="Open Download Event",
+            start_datetime=future,
+        )
+
+        status, _, body = _http_get(
+            f"{django_server}/events/open-download/calendar.ics",
+        )
+        assert status == 200
+        text = body.decode("utf-8")
+        assert "SUMMARY:Open Download Event" in text
+        assert "[Members only]" not in text

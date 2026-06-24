@@ -13,7 +13,13 @@ from icalendar import Calendar
 from accounts.models import User
 from email_app.tests.test_email_service import assert_no_internal_footer_text
 from events.models import Event, EventRegistration
-from events.services.calendar_invite import generate_ics
+from events.services.calendar_invite import (
+    AUDIENCE_ATTENDEE,
+    AUDIENCE_HOST,
+    AUDIENCE_PUBLIC_FEED,
+    build_vevent,
+    generate_ics,
+)
 from events.services.registration_email import send_registration_confirmation
 from payments.models import Tier
 
@@ -180,6 +186,104 @@ class GenerateIcsTest(TestCase):
         self.assertNotEqual(str(vevent.get('location')), internal_join_url)
 
 
+@override_settings(SITE_BASE_URL='https://aishippinglabs.com')
+class MembersOnlySummaryAudienceTest(TestCase):
+    """Issue #1072: ``[Members only]`` is scoped to the public feed only.
+
+    The prefix exists for discovery on the anonymous feed at
+    ``/events/calendar.ics``; attendee and host invites already know the
+    tier, so they must not carry it. The ``[Hosted on X]`` prefix is a
+    separate concern that stays on every audience.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.start = timezone.now() + timedelta(days=1)
+        cls.gated = Event.objects.create(
+            slug='gated-evt',
+            title='Exploring Vercel',
+            description='Gated body text.',
+            start_datetime=cls.start,
+            status='upcoming',
+            required_level=20,
+        )
+        cls.gated_external = Event.objects.create(
+            slug='gated-external-evt',
+            title='LLM Cohort',
+            description='Gated external body.',
+            start_datetime=cls.start,
+            status='upcoming',
+            required_level=20,
+            external_host='Maven',
+            zoom_join_url='https://maven.com/aisl/llm',
+        )
+        cls.open_event = Event.objects.create(
+            slug='open-evt',
+            title='Open Meetup',
+            description='Open to everyone.',
+            start_datetime=cls.start,
+            status='upcoming',
+            required_level=0,
+        )
+
+    def test_gated_attendee_summary_has_no_members_only_prefix(self):
+        vevent = build_vevent(self.gated, audience=AUDIENCE_ATTENDEE)
+        self.assertEqual(str(vevent.get('summary')), 'Exploring Vercel')
+
+    def test_gated_host_summary_has_no_members_only_prefix(self):
+        vevent = build_vevent(self.gated, audience=AUDIENCE_HOST)
+        self.assertEqual(str(vevent.get('summary')), 'Exploring Vercel')
+
+    def test_gated_public_feed_summary_keeps_members_only_prefix(self):
+        vevent = build_vevent(self.gated, audience=AUDIENCE_PUBLIC_FEED)
+        self.assertEqual(
+            str(vevent.get('summary')), '[Members only] Exploring Vercel',
+        )
+
+    def test_gated_external_attendee_keeps_hosted_drops_members_only(self):
+        vevent = build_vevent(self.gated_external, audience=AUDIENCE_ATTENDEE)
+        self.assertEqual(
+            str(vevent.get('summary')), '[Hosted on Maven] LLM Cohort',
+        )
+
+    def test_gated_external_public_feed_keeps_both_prefixes(self):
+        vevent = build_vevent(
+            self.gated_external, audience=AUDIENCE_PUBLIC_FEED,
+        )
+        self.assertEqual(
+            str(vevent.get('summary')),
+            '[Members only] [Hosted on Maven] LLM Cohort',
+        )
+
+    def test_open_event_summary_is_plain_title_for_every_audience(self):
+        for audience in (
+            AUDIENCE_ATTENDEE, AUDIENCE_HOST, AUDIENCE_PUBLIC_FEED,
+        ):
+            with self.subTest(audience=audience):
+                vevent = build_vevent(self.open_event, audience=audience)
+                self.assertEqual(str(vevent.get('summary')), 'Open Meetup')
+
+    def test_per_event_ics_download_drops_members_only_prefix(self):
+        """``generate_ics`` defaults to the attendee audience.
+
+        This is the per-event download at ``/events/<slug>/calendar.ics``
+        and the registration-email attachment — the exact surface the
+        reporter circled.
+        """
+        ics_bytes = generate_ics(self.gated)
+        cal = Calendar.from_ical(ics_bytes)
+        vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
+        self.assertEqual(str(vevent.get('summary')), 'Exploring Vercel')
+        self.assertNotIn('[Members only]', ics_bytes.decode('utf-8'))
+
+    def test_gated_attendee_description_keeps_full_body(self):
+        """Issue #1072 touches only SUMMARY — the attendee body is intact."""
+        vevent = build_vevent(self.gated, audience=AUDIENCE_ATTENDEE)
+        description = str(vevent.get('description'))
+        self.assertIn('Gated body text.', description)
+        self.assertNotIn('members-only', description)
+
+
 @override_settings(
     SITE_BASE_URL='https://aishippinglabs.com',
     SES_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
@@ -215,6 +319,15 @@ class SendRegistrationConfirmationTest(TestCase):
             start_datetime=cls.start,
             end_datetime=cls.start + timedelta(hours=2),
             status='upcoming',
+        )
+        cls.gated_event = Event.objects.create(
+            slug='gated-test-event',
+            title='Exploring Vercel',
+            description='A gated test event.',
+            start_datetime=cls.start,
+            end_datetime=cls.start + timedelta(hours=2),
+            status='upcoming',
+            required_level=20,
         )
 
     @patch('events.services.registration_email.boto3')
@@ -318,6 +431,30 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertEqual(str(vevent.get('location')), join_url)
         self.assertEqual(str(vevent.get('uid')), 'event-test-event@aishippinglabs.com')
         self.assertNotIn('zoom.us', ics_bytes.decode('utf-8'))
+
+    @patch('events.services.registration_email.boto3')
+    def test_gated_event_ics_attachment_has_no_members_only_prefix(self, mock_boto3):
+        """Issue #1072 regression: the reporter's registered gated event.
+
+        The attendee's confirmation email ``.ics`` SUMMARY must read the
+        plain event title, not ``[Members only] Exploring Vercel``.
+        """
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'msg-gated'}
+        mock_boto3.client.return_value = mock_client
+
+        registration = EventRegistration.objects.create(
+            event=self.gated_event, user=self.user,
+        )
+        send_registration_confirmation(registration)
+
+        raw_data = mock_client.send_email.call_args.kwargs['Content']['Raw']['Data']
+        msg = self._parse_raw_email(raw_data)
+        ics_bytes = self._get_calendar_part(msg)
+        cal = Calendar.from_ical(ics_bytes)
+        vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
+        self.assertEqual(str(vevent.get('summary')), 'Exploring Vercel')
+        self.assertNotIn('[Members only]', ics_bytes.decode('utf-8'))
 
     @patch('events.services.registration_email.boto3')
     def test_send_email_html_footer_has_no_unsubscribe_link(self, mock_boto3):

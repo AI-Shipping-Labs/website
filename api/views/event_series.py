@@ -81,6 +81,7 @@ from events.models.event_series import EVENT_SERIES_CADENCE_CHOICES
 from events.services.series_registration import (
     enroll_series_registrants_in_event,
 )
+from events.services.zoom_lifecycle import sync_or_delete_zoom_meeting
 from events.tasks.create_series_zoom_meetings import (
     eligible_occurrence_count,
     enqueue_create_series_zoom_meetings,
@@ -1306,6 +1307,7 @@ def event_series_occurrences_reconcile(request, series_id):
     kept = []
     cancelled = []
     reactivated = []
+    cancelled_zoom_events = []
 
     with transaction.atomic():
         # Index existing occurrences by minute-rounded key. A given minute
@@ -1364,9 +1366,11 @@ def event_series_occurrences_reconcile(request, series_id):
         for event in extras:
             if _dedup_key(event.start_datetime) in desired_keys:
                 continue
+            old_event = Event.objects.get(pk=event.pk)
             event.status = "cancelled"
             event.save(update_fields=["status"])
             cancelled.append(event.pk)
+            cancelled_zoom_events.append((event, old_event))
 
         # Recompute chronological positions + auto-titles once the set has
         # converged (issue #876). Cancelling does not change a date, but
@@ -1374,19 +1378,25 @@ def event_series_occurrences_reconcile(request, series_id):
         if any_created_or_reactivated:
             renumber_series_occurrences(series)
 
-    return JsonResponse(
-        {
-            "created": created,
-            "kept": kept,
-            "cancelled": cancelled,
-            "reactivated": reactivated,
-            "created_count": len(created),
-            "kept_count": len(kept),
-            "cancelled_count": len(cancelled),
-            "reactivated_count": len(reactivated),
-        },
-        status=200,
-    )
+    zoom_errors = []
+    for event, old_event in cancelled_zoom_events:
+        zoom_error = sync_or_delete_zoom_meeting(event, old_event)
+        if zoom_error is not None:
+            zoom_errors.append({"event_id": event.pk, "zoom_error": zoom_error})
+
+    body = {
+        "created": created,
+        "kept": kept,
+        "cancelled": cancelled,
+        "reactivated": reactivated,
+        "created_count": len(created),
+        "kept_count": len(kept),
+        "cancelled_count": len(cancelled),
+        "reactivated_count": len(reactivated),
+    }
+    if zoom_errors:
+        body["zoom_errors"] = zoom_errors
+    return JsonResponse(body, status=200)
 
 
 @token_required
@@ -1550,6 +1560,7 @@ def event_series_occurrence_detail(request, series_id, occurrence_id):
         "start_datetime" in values
         and values["start_datetime"] != event.start_datetime
     )
+    old_event = Event.objects.get(pk=event.pk)
 
     with transaction.atomic():
         if title_set:
@@ -1561,7 +1572,11 @@ def event_series_occurrence_detail(request, series_id, occurrence_id):
         if start_changed:
             renumber_series_occurrences(series)
             event.refresh_from_db()
-    return JsonResponse(serialize_event(event), status=200)
+    zoom_error = sync_or_delete_zoom_meeting(event, old_event)
+    body = serialize_event(event)
+    if zoom_error is not None:
+        body["zoom_error"] = zoom_error
+    return JsonResponse(body, status=200)
 
 
 @token_required

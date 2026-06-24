@@ -134,6 +134,14 @@ class EventSeriesApiTestBase(TestCase):
             **self._auth(token),
         )
 
+    def _put(self, path, payload, *, token=None):
+        return self.client.put(
+            path,
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self._auth(token),
+        )
+
 
 class EventSeriesAuthTest(EventSeriesApiTestBase):
     def test_list_requires_token(self):
@@ -598,6 +606,17 @@ class EventSeriesBulkOccurrencesTest(EventSeriesApiTestBase):
 
 
 class EventSeriesOccurrencePatchTest(EventSeriesApiTestBase):
+    def _make_occurrence_zoom_backed(self, occurrence):
+        occurrence.platform = "zoom"
+        occurrence.zoom_meeting_id = f"zoom-{occurrence.pk}"
+        occurrence.zoom_join_url = f"https://zoom.us/j/{occurrence.pk}"
+        occurrence.save(update_fields=[
+            "platform",
+            "zoom_meeting_id",
+            "zoom_join_url",
+        ])
+        return occurrence
+
     def test_patch_occurrence_cancel_does_not_send_email(self):
         path = (
             f"/api/event-series/{self.series.pk}"
@@ -616,6 +635,48 @@ class EventSeriesOccurrencePatchTest(EventSeriesApiTestBase):
         self.occurrence_1.refresh_from_db()
         self.assertEqual(self.occurrence_1.status, "cancelled")
         self.assertEqual(send_mail_mock.call_count, 0)
+
+    def test_patch_occurrence_reschedule_patches_existing_zoom_meeting(self):
+        occurrence = self._make_occurrence_zoom_backed(self.occurrence_1)
+        path = (
+            f"/api/event-series/{self.series.pk}"
+            f"/occurrences/{occurrence.pk}"
+        )
+        new_start = occurrence.start_datetime + timedelta(days=2, hours=1)
+
+        with patch("events.services.zoom_lifecycle.update_meeting") as update_zoom:
+            response = self._patch(
+                path,
+                {
+                    "title": "Occurrence New Title",
+                    "start_datetime": new_start.isoformat(),
+                    "end_datetime": (new_start + timedelta(hours=2)).isoformat(),
+                    "timezone": "America/New_York",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        update_zoom.assert_called_once()
+        synced_event = update_zoom.call_args.args[0]
+        self.assertEqual(synced_event.pk, occurrence.pk)
+        self.assertEqual(synced_event.zoom_meeting_id, f"zoom-{occurrence.pk}")
+        self.assertEqual(synced_event.title, "Occurrence New Title")
+
+    def test_patch_occurrence_cancel_deletes_future_zoom_meeting(self):
+        occurrence = self._make_occurrence_zoom_backed(self.occurrence_1)
+        path = (
+            f"/api/event-series/{self.series.pk}"
+            f"/occurrences/{occurrence.pk}"
+        )
+
+        with patch("events.services.zoom_lifecycle.delete_meeting") as delete_zoom:
+            response = self._patch(path, {"status": "cancelled"})
+
+        self.assertEqual(response.status_code, 200)
+        delete_zoom.assert_called_once()
+        occurrence.refresh_from_db()
+        self.assertEqual(occurrence.zoom_meeting_id, "")
+        self.assertEqual(occurrence.zoom_join_url, "")
 
     def test_patch_occurrence_404_when_not_in_series(self):
         path = (
@@ -684,6 +745,76 @@ class EventSeriesUrlOrderingTest(EventSeriesApiTestBase):
         self.assertEqual(
             match.url_name, "api_event_series_occurrences_bulk",
         )
+
+
+class EventSeriesReconcileZoomCleanupTest(EventSeriesApiTestBase):
+    def test_reconcile_cancels_removed_future_zoom_occurrence_and_clears_fields(self):
+        keep = self.occurrence_1
+        remove = self.occurrence_2
+        for occurrence in (keep, remove):
+            occurrence.platform = "zoom"
+            occurrence.zoom_meeting_id = f"zoom-{occurrence.pk}"
+            occurrence.zoom_join_url = f"https://zoom.us/j/{occurrence.pk}"
+            occurrence.save(update_fields=[
+                "platform",
+                "zoom_meeting_id",
+                "zoom_join_url",
+            ])
+
+        with patch("events.services.zoom_lifecycle.delete_meeting") as delete_zoom:
+            response = self._put(
+                f"/api/event-series/{self.series.pk}/occurrences",
+                {
+                    "occurrences": [
+                        {
+                            "start_datetime": keep.start_datetime.isoformat(),
+                            "end_datetime": keep.end_datetime.isoformat(),
+                        },
+                    ],
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        delete_zoom.assert_called_once()
+        body = response.json()
+        self.assertEqual(body["cancelled"], [remove.pk])
+        keep.refresh_from_db()
+        remove.refresh_from_db()
+        self.assertEqual(keep.zoom_meeting_id, f"zoom-{keep.pk}")
+        self.assertEqual(remove.status, "cancelled")
+        self.assertEqual(remove.zoom_meeting_id, "")
+        self.assertEqual(remove.zoom_join_url, "")
+
+    def test_reconcile_leaves_past_zoom_occurrence_fields_when_cancelled(self):
+        keep = self.occurrence_1
+        past = self.occurrence_2
+        past_start = timezone.now().replace(microsecond=0) - timedelta(days=3)
+        past.start_datetime = past_start
+        past.end_datetime = past_start + timedelta(hours=1)
+        past.status = "completed"
+        past.platform = "zoom"
+        past.zoom_meeting_id = "past-zoom"
+        past.zoom_join_url = "https://zoom.us/j/past-zoom"
+        past.save()
+
+        with patch("events.services.zoom_lifecycle.delete_meeting") as delete_zoom:
+            response = self._put(
+                f"/api/event-series/{self.series.pk}/occurrences",
+                {
+                    "occurrences": [
+                        {
+                            "start_datetime": keep.start_datetime.isoformat(),
+                            "end_datetime": keep.end_datetime.isoformat(),
+                        },
+                    ],
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        delete_zoom.assert_not_called()
+        past.refresh_from_db()
+        self.assertEqual(past.status, "cancelled")
+        self.assertEqual(past.zoom_meeting_id, "past-zoom")
 
 
 class EventSeriesChronologicalNamingTest(EventSeriesApiTestBase):

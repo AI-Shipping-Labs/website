@@ -530,6 +530,90 @@ class ZoomWaitingRoomSettingsTest(TestCase):
 
     @patch('integrations.services.zoom.requests.patch')
     @patch('integrations.services.zoom.requests.post')
+    def test_update_meeting_patches_schedule_payload(self, mock_post, mock_patch):
+        from integrations.services.zoom import update_meeting
+
+        self.event.title = 'Retitled Workshop'
+        self.event.start_datetime = datetime(
+            2026, 7, 1, 15, 0, tzinfo=dt_timezone.utc,
+        )
+        self.event.end_datetime = datetime(
+            2026, 7, 1, 17, 0, tzinfo=dt_timezone.utc,
+        )
+        self.event.timezone = 'Europe/Berlin'
+        self.event.save()
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'token-abc', 'expires_in': 3600,
+        }
+        mock_post.return_value = token_response
+
+        patch_response = MagicMock()
+        patch_response.status_code = 204
+        patch_response.content = b''
+        mock_patch.return_value = patch_response
+
+        update_meeting(self.event)
+
+        called_url = mock_patch.call_args.args[0]
+        self.assertTrue(called_url.endswith('/meetings/12121212121'))
+        body = mock_patch.call_args.kwargs['json']
+        self.assertEqual(body['topic'], 'Retitled Workshop')
+        self.assertEqual(body['start_time'], '2026-07-01T17:00:00')
+        self.assertEqual(body['duration'], 120)
+        self.assertEqual(body['timezone'], 'Europe/Berlin')
+        self.assertIn('settings', body)
+        self.assertNotIn('type', body)
+
+    @patch('integrations.services.zoom.requests.delete')
+    @patch('integrations.services.zoom.requests.post')
+    def test_delete_meeting_404_is_success(self, mock_post, mock_delete):
+        from integrations.services.zoom import delete_meeting
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'token-abc', 'expires_in': 3600,
+        }
+        mock_post.return_value = token_response
+
+        delete_response = MagicMock()
+        delete_response.status_code = 404
+        delete_response.content = b''
+        mock_delete.return_value = delete_response
+
+        delete_meeting(self.event)
+        called_url = mock_delete.call_args.args[0]
+        self.assertTrue(called_url.endswith('/meetings/12121212121'))
+
+    @patch('integrations.services.zoom.requests.delete')
+    @patch('integrations.services.zoom.requests.post')
+    def test_delete_meeting_raises_on_error(self, mock_post, mock_delete):
+        from integrations.services.zoom import ZoomAPIError, delete_meeting
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'token-abc', 'expires_in': 3600,
+        }
+        mock_post.return_value = token_response
+
+        delete_response = MagicMock()
+        delete_response.status_code = 403
+        delete_response.content = b'{"code":124,"message":"not allowed"}'
+        delete_response.json.return_value = {
+            'code': 124, 'message': 'not allowed',
+        }
+        mock_delete.return_value = delete_response
+
+        with self.assertRaises(ZoomAPIError) as ctx:
+            delete_meeting(self.event)
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    @patch('integrations.services.zoom.requests.patch')
+    @patch('integrations.services.zoom.requests.post')
     def test_update_meeting_settings_patches_settings_only(
         self, mock_post, mock_patch,
     ):

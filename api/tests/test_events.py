@@ -754,18 +754,24 @@ class EventsUpdateTest(EventsApiTestBase):
         self.studio_event.zoom_meeting_id = "123456"
         self.studio_event.save()
 
-        response = self._patch(
-            "studio-event",
-            {
-                "platform": "custom",
-                "zoom_join_url": "https://example.com/custom",
-            },
-        )
+        with (
+            patch("events.services.zoom_lifecycle.update_meeting") as update_zoom,
+            patch("events.services.zoom_lifecycle.delete_meeting") as delete_zoom,
+        ):
+            response = self._patch(
+                "studio-event",
+                {
+                    "platform": "custom",
+                    "zoom_join_url": "https://example.com/custom",
+                },
+            )
 
         self.assertEqual(response.status_code, 200)
         self.studio_event.refresh_from_db()
         self.assertEqual(self.studio_event.zoom_join_url, "https://example.com/custom")
         self.assertEqual(self.studio_event.zoom_meeting_id, "")
+        update_zoom.assert_not_called()
+        delete_zoom.assert_not_called()
 
     def test_patch_changes_and_clears_hosts(self):
         EventHost.objects.create(
@@ -1138,6 +1144,98 @@ class EventsCreateZoomTest(EventsApiTestBase):
         self.assertIn("create_zoom", body["details"])
         mock_create.assert_not_called()
         self.assertEqual(Event.objects.count(), before_count)
+
+
+class EventsZoomLifecyclePatchTest(EventsApiTestBase):
+    def _make_zoom_backed(self, *, start=None, status="upcoming"):
+        if start is None:
+            start = timezone.now().replace(microsecond=0) + timedelta(days=10)
+        self.studio_event.platform = "zoom"
+        self.studio_event.status = status
+        self.studio_event.start_datetime = start
+        self.studio_event.end_datetime = start + timedelta(hours=1)
+        self.studio_event.timezone = "Europe/Berlin"
+        self.studio_event.zoom_meeting_id = "zoom-123"
+        self.studio_event.zoom_join_url = "https://zoom.us/j/zoom-123"
+        self.studio_event.save()
+        return self.studio_event
+
+    def test_patch_reschedule_updates_existing_zoom_meeting(self):
+        event = self._make_zoom_backed()
+        new_start = event.start_datetime + timedelta(days=1, hours=2)
+        new_end = new_start + timedelta(hours=2)
+
+        with patch("events.services.zoom_lifecycle.update_meeting") as update_zoom:
+            response = self._patch(
+                event.slug,
+                {
+                    "start_datetime": new_start.isoformat(),
+                    "end_datetime": new_end.isoformat(),
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("zoom_error", response.json())
+        update_zoom.assert_called_once()
+        event.refresh_from_db()
+        self.assertEqual(event.zoom_meeting_id, "zoom-123")
+        self.assertEqual(event.zoom_join_url, "https://zoom.us/j/zoom-123")
+
+    def test_patch_timezone_updates_zoom_local_wall_clock(self):
+        event = self._make_zoom_backed()
+
+        with patch("events.services.zoom_lifecycle.update_meeting") as update_zoom:
+            response = self._patch(event.slug, {"timezone": "America/New_York"})
+
+        self.assertEqual(response.status_code, 200)
+        update_zoom.assert_called_once()
+        self.assertEqual(update_zoom.call_args.args[0].timezone, "America/New_York")
+
+    def test_patch_zoom_update_failure_returns_saved_event_with_zoom_error(self):
+        event = self._make_zoom_backed()
+
+        with patch(
+            "events.services.zoom_lifecycle.update_meeting",
+            side_effect=ZoomAPIError("Zoom PATCH failed", status_code=503),
+        ):
+            response = self._patch(event.slug, {"title": "Saved New Title"})
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["title"], "Saved New Title")
+        self.assertIn("zoom_error", body)
+        self.assertIn("Zoom PATCH failed", body["zoom_error"])
+        event.refresh_from_db()
+        self.assertEqual(event.title, "Saved New Title")
+        self.assertEqual(event.zoom_meeting_id, "zoom-123")
+
+    def test_patch_cancel_future_zoom_event_deletes_and_clears_fields(self):
+        event = self._make_zoom_backed()
+
+        with patch("events.services.zoom_lifecycle.delete_meeting") as delete_zoom:
+            response = self._patch(event.slug, {"status": "cancelled"})
+
+        self.assertEqual(response.status_code, 200)
+        delete_zoom.assert_called_once()
+        body = response.json()
+        self.assertEqual(body["status"], "cancelled")
+        self.assertEqual(body["zoom_join_url"], "")
+        event.refresh_from_db()
+        self.assertEqual(event.zoom_meeting_id, "")
+        self.assertEqual(event.zoom_join_url, "")
+
+    def test_patch_cancel_past_completed_zoom_event_does_not_delete(self):
+        past_start = timezone.now().replace(microsecond=0) - timedelta(days=3)
+        event = self._make_zoom_backed(start=past_start, status="completed")
+
+        with patch("events.services.zoom_lifecycle.delete_meeting") as delete_zoom:
+            response = self._patch(event.slug, {"status": "cancelled"})
+
+        self.assertEqual(response.status_code, 200)
+        delete_zoom.assert_not_called()
+        event.refresh_from_db()
+        self.assertEqual(event.status, "cancelled")
+        self.assertEqual(event.zoom_meeting_id, "zoom-123")
 
 
 class EventsHostAutoRegistrationTest(EventsApiTestBase):

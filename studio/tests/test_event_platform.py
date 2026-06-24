@@ -11,13 +11,17 @@ Covers:
 - Custom URL displayed on public event detail page via existing join link logic
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.test import Client, TestCase
 from django.utils import timezone
 
 from events.models import Event, EventRegistration
+from integrations.services.zoom import ZoomAPIError
 
 User = get_user_model()
 
@@ -89,6 +93,38 @@ class StudioEventEditPlatformTest(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
 
+    def _zoom_event(self, **overrides):
+        start = datetime(2026, 7, 1, 15, 0, tzinfo=dt_timezone.utc)
+        defaults = {
+            'title': 'Zoom Sync',
+            'slug': 'zoom-sync',
+            'start_datetime': start,
+            'end_datetime': start + timedelta(hours=1),
+            'timezone': 'Europe/Berlin',
+            'platform': 'zoom',
+            'status': 'upcoming',
+            'zoom_meeting_id': '99999',
+            'zoom_join_url': 'https://zoom.us/j/99999',
+        }
+        defaults.update(overrides)
+        return Event.objects.create(**defaults)
+
+    def _post_edit(self, event, *, follow=False, **overrides):
+        data = {
+            'title': event.title,
+            'slug': event.slug,
+            'description': event.description,
+            'platform': event.platform,
+            'event_date': '01/07/2026',
+            'event_time': '17:00',
+            'duration_hours': '1',
+            'timezone': event.timezone,
+            'status': event.status,
+            'required_level': str(event.required_level),
+        }
+        data.update(overrides)
+        return self.client.post(f'/studio/events/{event.pk}/edit', data, follow=follow)
+
     def test_edit_zoom_event_preselects_zoom(self):
         """Edit form for a Zoom event pre-selects 'Zoom' in the dropdown."""
         event = Event.objects.create(
@@ -148,22 +184,106 @@ class StudioEventEditPlatformTest(TestCase):
             title='Switch to Custom', slug='switch-custom',
             start_datetime=timezone.now(), platform='zoom',
         )
-        self.client.post(f'/studio/events/{event.pk}/edit', {
-            'title': 'Switch to Custom',
-            'slug': 'switch-custom',
-            'platform': 'custom',
-            'custom_url': 'https://youtube.com/live/xyz',
-            'event_date': '15/03/2026',
-            'event_time': '14:00',
-            'duration_hours': '1',
-            'timezone': 'Europe/Berlin',
-            'status': 'upcoming',
-            'required_level': '0',
-        })
+        with (
+            patch('events.services.zoom_lifecycle.update_meeting') as update_zoom,
+            patch('events.services.zoom_lifecycle.delete_meeting') as delete_zoom,
+        ):
+            self.client.post(f'/studio/events/{event.pk}/edit', {
+                'title': 'Switch to Custom',
+                'slug': 'switch-custom',
+                'platform': 'custom',
+                'custom_url': 'https://youtube.com/live/xyz',
+                'event_date': '15/03/2026',
+                'event_time': '14:00',
+                'duration_hours': '1',
+                'timezone': 'Europe/Berlin',
+                'status': 'upcoming',
+                'required_level': '0',
+            })
         event.refresh_from_db()
         self.assertEqual(event.platform, 'custom')
         self.assertEqual(event.zoom_join_url, 'https://youtube.com/live/xyz')
         self.assertEqual(event.zoom_meeting_id, '')
+        update_zoom.assert_not_called()
+        delete_zoom.assert_not_called()
+
+    def test_edit_reschedule_patches_existing_zoom_meeting(self):
+        event = self._zoom_event()
+
+        with patch('events.services.zoom_lifecycle.update_meeting') as update_zoom:
+            response = self._post_edit(
+                event,
+                event_time='19:00',
+                duration_hours='2',
+            )
+
+        self.assertEqual(response.status_code, 302)
+        update_zoom.assert_called_once()
+        synced_event = update_zoom.call_args.args[0]
+        self.assertEqual(synced_event.zoom_meeting_id, '99999')
+        self.assertEqual(synced_event.zoom_join_url, 'https://zoom.us/j/99999')
+        self.assertEqual(synced_event.end_datetime - synced_event.start_datetime,
+                         timedelta(hours=2))
+
+    def test_edit_title_change_patches_zoom_topic(self):
+        event = self._zoom_event(slug='zoom-title-sync')
+
+        with patch('events.services.zoom_lifecycle.update_meeting') as update_zoom:
+            response = self._post_edit(
+                event,
+                title='Renamed Zoom Sync',
+                slug='zoom-title-sync',
+            )
+
+        self.assertEqual(response.status_code, 302)
+        update_zoom.assert_called_once()
+        self.assertEqual(update_zoom.call_args.args[0].title, 'Renamed Zoom Sync')
+
+    def test_edit_unrelated_fields_do_not_touch_zoom(self):
+        event = self._zoom_event(slug='zoom-noop-sync')
+
+        with (
+            patch('events.services.zoom_lifecycle.update_meeting') as update_zoom,
+            patch('events.services.zoom_lifecycle.delete_meeting') as delete_zoom,
+        ):
+            response = self._post_edit(event, description='Copy changed only')
+
+        self.assertEqual(response.status_code, 302)
+        update_zoom.assert_not_called()
+        delete_zoom.assert_not_called()
+
+    def test_edit_cancel_future_zoom_event_deletes_and_clears_fields(self):
+        event = self._zoom_event(slug='zoom-cancel-sync')
+
+        with patch('events.services.zoom_lifecycle.delete_meeting') as delete_zoom:
+            response = self._post_edit(event, status='cancelled')
+
+        self.assertEqual(response.status_code, 302)
+        delete_zoom.assert_called_once()
+        event.refresh_from_db()
+        self.assertEqual(event.status, 'cancelled')
+        self.assertEqual(event.zoom_meeting_id, '')
+        self.assertEqual(event.zoom_join_url, '')
+
+    def test_edit_zoom_failure_warns_without_rolling_back_event(self):
+        event = self._zoom_event(slug='zoom-failure-sync')
+
+        with patch(
+            'events.services.zoom_lifecycle.update_meeting',
+            side_effect=ZoomAPIError('Zoom unavailable', status_code=503),
+        ):
+            response = self._post_edit(
+                event,
+                title='Saved Despite Zoom Failure',
+                slug='zoom-failure-sync',
+                follow=True,
+            )
+
+        event.refresh_from_db()
+        self.assertEqual(event.title, 'Saved Despite Zoom Failure')
+        self.assertEqual(event.zoom_meeting_id, '99999')
+        messages = [str(message) for message in get_messages(response.wsgi_request)]
+        self.assertTrue(any('Zoom unavailable' in message for message in messages))
 
     def test_edit_save_zoom_platform(self):
         """Editing an event to zoom platform sets platform='zoom'."""

@@ -31,6 +31,7 @@ from events.services.calendar_lifecycle import (
 )
 from events.services.display_time import resolve_event_creation_timezone
 from events.services.host_registration import maybe_register_host_as_attendee
+from events.services.zoom_lifecycle import sync_or_delete_zoom_meeting
 from events.tasks.send_post_event_followup import enqueue_post_event_followup
 from integrations.services.banner_generator.dispatch import enqueue_if_missing
 from integrations.services.zoom import create_meeting
@@ -654,10 +655,10 @@ def event_edit(request, event_id):
     default_tz = _default_timezone_for(request.user)
 
     if request.method == 'POST':
-        # Issue #869: snapshot the persisted status before any in-memory
-        # mutation so we can detect a transition INTO ``cancelled`` after
-        # save and notify series subscribers (CANCEL their calendar entry).
-        old_status = Event.objects.values_list('status', flat=True).get(pk=event.pk)
+        # Snapshot the persisted row before any in-memory mutation so lifecycle
+        # hooks can compare the saved state against the previous one.
+        old_event = Event.objects.get(pk=event.pk)
+        old_status = old_event.status
         selected_host_ids, host_error = _validate_host_ids(
             request.POST.getlist('host_ids'),
         )
@@ -715,6 +716,12 @@ def event_edit(request, event_id):
 
             event.save()
             _set_event_hosts(event, selected_host_ids)
+            zoom_error = sync_or_delete_zoom_meeting(event, old_event)
+            if zoom_error is not None:
+                messages.warning(
+                    request,
+                    f'Event saved, but Zoom could not be updated: {zoom_error}',
+                )
             # Issue #857: publishing/editing a series occurrence into a
             # registrable state auto-enrolls existing series registrants.
             # Best-effort, idempotent, gated on ``is_upcoming``.
@@ -734,7 +741,6 @@ def event_edit(request, event_id):
             # re-save still hits ``event.save()`` — we use
             # field-level comparison after save to decide whether to
             # notify, not "did the form do a write?" semantics.
-            old_event = Event.objects.get(pk=event.pk)
             old_start = old_event.start_datetime
             old_end = old_event.end_datetime
 
@@ -827,6 +833,13 @@ def event_edit(request, event_id):
                     enroll_series_registrants_in_event,
                 )
                 enroll_series_registrants_in_event(event)
+
+            zoom_error = sync_or_delete_zoom_meeting(event, old_event)
+            if zoom_error is not None:
+                messages.warning(
+                    request,
+                    f'Event saved, but Zoom could not be updated: {zoom_error}',
+                )
 
             # Issue #670: detect a meaningful start-time change and
             # notify registered attendees. The trigger fires only when

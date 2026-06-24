@@ -134,6 +134,18 @@ PREVIEW_CONTEXTS = {
             'https://aishippinglabs.com/events/ai-shipping-workshop/feedback'
         ),
     },
+    'event_recording_ready': {
+        'user_name': 'Ada',
+        'event_title': 'AI Shipping Workshop',
+        'event_datetime': 'March 21, 2026, 18:00-19:00 Europe/Berlin',
+        'publish_state': 'Ready for review/publishing',
+        'publish_copy': (
+            'The event is not public yet. Review the upload, then publish '
+            'and send the attendee follow-up when ready.'
+        ),
+        'studio_event_url': 'https://aishippinglabs.com/studio/events/42/edit',
+        'zoom_recording_url': 'https://zoom.us/rec/play/preview',
+    },
     'event_rescheduled': {
         'user_name': 'Ada',
         'event_title': 'AI Shipping Workshop',

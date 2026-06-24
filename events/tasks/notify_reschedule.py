@@ -30,6 +30,7 @@ from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 
 from accounts.services.timezones import (
+    CALENDAR_INVITE_DATETIME_FORMAT,
     build_timezone_account_url,
     build_timezone_email_line,
     format_user_datetime,
@@ -192,10 +193,15 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
             # Issue #666 contract: pre-format BOTH times via
             # format_user_datetime so the template context carries
             # strings, not raw datetimes. Both render in the recipient's
-            # timezone (or UTC fallback) — never mismatched.
-            'old_event_datetime': format_user_datetime(old_start, user),
+            # timezone (or UTC fallback) — never mismatched. Issue #1071:
+            # calendar-invite emails carry the weekday via the dedicated
+            # CALENDAR_INVITE_DATETIME_FORMAT (the global default stays
+            # weekday-free).
+            'old_event_datetime': format_user_datetime(
+                old_start, user, fmt=CALENDAR_INVITE_DATETIME_FORMAT,
+            ),
             'new_event_datetime': format_user_datetime(
-                event.start_datetime, user,
+                event.start_datetime, user, fmt=CALENDAR_INVITE_DATETIME_FORMAT,
             ),
             'timezone_help': build_timezone_email_line(
                 user, build_timezone_account_url(site_url),

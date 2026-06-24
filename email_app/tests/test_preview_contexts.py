@@ -77,3 +77,31 @@ class EventRegistrationPreviewContextTest(TestCase):
         ):
             self.assertIn(key, ctx)
             self.assertTrue(ctx[key])
+
+
+class CalendarInviteWeekdayPreviewContextTest(TestCase):
+    """Issue #1071: calendar-invite previews must carry the weekday.
+
+    The real send formats these emails with CALENDAR_INVITE_DATETIME_FORMAT
+    (a leading weekday). The preview placeholders must mirror that shape so
+    the operator preview matches what recipients actually receive.
+    """
+
+    def test_event_rescheduled_times_include_weekday(self):
+        ctx = PREVIEW_CONTEXTS['event_rescheduled']
+        # March 21 and March 28, 2026 are both Saturdays.
+        self.assertTrue(
+            ctx['old_event_datetime'].startswith('Saturday, '),
+            ctx['old_event_datetime'],
+        )
+        self.assertTrue(
+            ctx['new_event_datetime'].startswith('Saturday, '),
+            ctx['new_event_datetime'],
+        )
+
+    def test_series_update_occurrences_include_weekday(self):
+        ctx = PREVIEW_CONTEXTS['series_update']
+        # Changed-occurrence framing with a weekday-stamped before/after.
+        self.assertTrue(ctx['changed_occurrence'])
+        self.assertIn('Thursday, ', ctx['occurrences_list'])
+        self.assertIn('(was ', ctx['occurrences_list'])

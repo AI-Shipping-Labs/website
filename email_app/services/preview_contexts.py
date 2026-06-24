@@ -138,9 +138,12 @@ PREVIEW_CONTEXTS = {
         'user_name': 'Ada',
         'event_title': 'AI Shipping Workshop',
         # Issue #670: both times pre-formatted via format_user_datetime in
-        # the recipient's preferred timezone. Mirror that shape here.
-        'old_event_datetime': 'March 21, 2026, 18:00 Europe/Berlin',
-        'new_event_datetime': 'March 28, 2026, 18:00 Europe/Berlin',
+        # the recipient's preferred timezone. Issue #1071: calendar-invite
+        # emails (incl. event_rescheduled) carry the weekday via
+        # CALENDAR_INVITE_DATETIME_FORMAT — mirror that shape here. Both
+        # dates fall on a Saturday.
+        'old_event_datetime': 'Saturday, March 21, 2026, 18:00 Europe/Berlin',
+        'new_event_datetime': 'Saturday, March 28, 2026, 18:00 Europe/Berlin',
         'join_url': (
             'https://aishippinglabs.com/events/community-lunch/join'
         ),
@@ -198,6 +201,70 @@ PREVIEW_CONTEXTS = {
         'course_slug_list': '',
         'password_reset_url': 'https://aishippinglabs.com/reset?token=demo',
         'sign_in_url': 'https://aishippinglabs.com/accounts/login/',
+    },
+    # Issue #869 / #1071: the series calendar-invite emails. Real sends
+    # assemble ``occurrences_list`` as a preformatted markdown bullet list
+    # via _render_series_email, with calendar-invite times carrying the
+    # weekday (CALENDAR_INVITE_DATETIME_FORMAT). Mirror that string shape so
+    # the Studio preview renders the template with no missing variables.
+    'series_registration': {
+        'user_name': 'Ada',
+        'series_name': 'LLM Zoomcamp 2026 office hours',
+        'series_url': (
+            'https://aishippinglabs.com/events/series/llm-zoomcamp-office-hours'
+        ),
+        'registered_count': 2,
+        'registered_count_plural': 's',
+        'occurrences_list': (
+            '- Office hours — Thursday, June 25, 2026, 18:00 Europe/Berlin\n'
+            '- Office hours — Thursday, July 02, 2026, 18:00 Europe/Berlin'
+        ),
+        'partial_note': '',
+        'timezone_help': (
+            'Times above are shown in your timezone. Wrong zone? '
+            '[Change your timezone](https://aishippinglabs.com/account/'
+            '#display-preferences-section).'
+        ),
+    },
+    # Issue #1071: changed-occurrence framing. ``changed_occurrence`` is
+    # truthy and the changed line in ``occurrences_list`` already carries a
+    # ``(was ...)`` before/after annotation, matching how the real send
+    # renders a single-occurrence reschedule.
+    'series_update': {
+        'user_name': 'Ada',
+        'series_name': 'LLM Zoomcamp 2026 office hours',
+        'series_url': (
+            'https://aishippinglabs.com/events/series/llm-zoomcamp-office-hours'
+        ),
+        'registered_count': 2,
+        'registered_count_plural': 's',
+        'changed_occurrence': True,
+        'event_title': 'Office hours',
+        'occurrences_list': (
+            '- Office hours — Thursday, June 25, 2026, 18:00 Europe/Berlin '
+            '(was Wednesday, June 24, 2026, 18:00 Europe/Berlin)\n'
+            '- Office hours — Thursday, July 02, 2026, 18:00 Europe/Berlin'
+        ),
+        'partial_note': '',
+        'timezone_help': (
+            'Times above are shown in your timezone. Wrong zone? '
+            '[Change your timezone](https://aishippinglabs.com/account/'
+            '#display-preferences-section).'
+        ),
+    },
+    'series_cancellation': {
+        'user_name': 'Ada',
+        'series_name': 'LLM Zoomcamp 2026 office hours',
+        'series_url': (
+            'https://aishippinglabs.com/events/series/llm-zoomcamp-office-hours'
+        ),
+        'registered_count': 1,
+        'registered_count_plural': '',
+        'occurrences_list': (
+            '- Office hours — Thursday, June 25, 2026, 18:00 Europe/Berlin'
+        ),
+        'partial_note': '',
+        'timezone_help': '',
     },
 }
 

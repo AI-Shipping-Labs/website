@@ -22,13 +22,19 @@ from events.models import Event
 logger = logging.getLogger(__name__)
 
 
-def enqueue_series_update(event_id, user_ids=None):
+def enqueue_series_update(event_id, user_ids=None, old_start_iso=None):
     """Enqueue a series-update fan-out for ``event_id``.
 
     Called from the Studio reschedule path (``user_ids=None`` — all
-    subscribers) and the auto-enroll addition hook (``user_ids`` scoped to
-    the newly enrolled subscribers). Fire-and-forget: callers must not let
-    an enqueue failure block the originating action.
+    subscribers — with ``old_start_iso`` set so the email can name the
+    moved session and show before -> after) and the auto-enroll addition
+    hook (``user_ids`` scoped to the newly enrolled subscribers, no
+    ``old_start_iso`` because a brand-new occurrence has no old time).
+    Fire-and-forget: callers must not let an enqueue failure block the
+    originating action.
+
+    ``old_start_iso`` is an ISO datetime string (Django-Q task arguments
+    must be JSON-serialisable, mirroring ``enqueue_reschedule_notice``).
     """
     from jobs.tasks import async_task, build_task_name
 
@@ -36,6 +42,7 @@ def enqueue_series_update(event_id, user_ids=None):
         'events.tasks.notify_series_invite.send_series_update',
         event_id,
         user_ids,
+        old_start_iso,
         task_name=build_task_name(
             'Send series calendar update',
             f'event #{event_id}',
@@ -44,8 +51,13 @@ def enqueue_series_update(event_id, user_ids=None):
     )
 
 
-def send_series_update(event_id, user_ids=None):
-    """Worker: re-send the updated series invite to subscribers."""
+def send_series_update(event_id, user_ids=None, old_start_iso=None):
+    """Worker: re-send the updated series invite to subscribers.
+
+    Forwards ``old_start_iso`` (when supplied by the Studio reschedule
+    path) so the rendered email names the changed occurrence and shows its
+    old -> new time.
+    """
     try:
         event = Event.objects.get(pk=event_id)
     except Event.DoesNotExist:
@@ -53,7 +65,9 @@ def send_series_update(event_id, user_ids=None):
 
     from events.services.series_invite import send_series_update_to_subscribers
 
-    count = send_series_update_to_subscribers(event, user_ids=user_ids)
+    count = send_series_update_to_subscribers(
+        event, user_ids=user_ids, old_start_iso=old_start_iso,
+    )
     return {'status': 'sent', 'event_id': event_id, 'count': count}
 
 

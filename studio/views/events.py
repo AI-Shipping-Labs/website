@@ -446,7 +446,10 @@ def _maybe_notify_reschedule(request, event, old_start):
     # an occurrence that belongs to a series.
     if event.event_series_id:
         from events.tasks.notify_series_invite import enqueue_series_update
-        enqueue_series_update(event.pk)
+        # Issue #1071: thread the changed occurrence's old start so the
+        # series-update email names the moved session and shows old -> new
+        # (Django-Q args must be JSON-serialisable, so pass the ISO string).
+        enqueue_series_update(event.pk, old_start_iso=old_start.isoformat())
 
     label = 'attendee' if count == 1 else 'attendees'
     messages.success(

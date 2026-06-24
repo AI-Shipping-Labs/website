@@ -56,7 +56,7 @@ def enqueue_schedule_update(event, old_start, old_end=None):
 
     if event.event_series_id:
         from events.tasks.notify_series_invite import enqueue_series_update
-        enqueue_series_update(event.pk)
+        enqueue_series_update(event.pk, old_start_iso=old_start.isoformat())
 
     return count
 

@@ -157,4 +157,10 @@ class StudioSeriesRescheduleTriggerTest(StaffUserMixin, TestCase):
             },
             follow=True,
         )
-        mock_update.assert_called_once_with(self.event.pk)
+        # Issue #1071: the reschedule path now threads the changed
+        # occurrence's old start (ISO string) so the series-update email can
+        # name the moved session and show old -> new.
+        mock_update.assert_called_once()
+        self.assertEqual(mock_update.call_args.args[0], self.event.pk)
+        self.assertIn('old_start_iso', mock_update.call_args.kwargs)
+        self.assertTrue(mock_update.call_args.kwargs['old_start_iso'])

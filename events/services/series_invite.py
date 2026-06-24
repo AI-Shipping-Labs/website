@@ -41,6 +41,7 @@ import logging
 from django.template.loader import render_to_string
 
 from accounts.services.timezones import (
+    CALENDAR_INVITE_DATETIME_FORMAT,
     build_timezone_account_url,
     build_timezone_email_line,
     format_user_datetime,
@@ -131,20 +132,55 @@ def _partial_access_note(user, series, accessible_events, site_url):
     )
 
 
-def _render_series_email(template_name, user, series, events, email_type):
+def _render_series_email(
+    template_name, user, series, events, email_type,
+    changed_event=None, old_start=None,
+):
     """Render the shared series email body for ``template_name``.
 
     Returns ``(subject, full_html)`` ready for ``_send_raw_email``.
+
+    Issue #1071: for the ``series_update`` template a single-occurrence
+    reschedule threads ``changed_event`` (the occurrence that moved) and
+    its ``old_start`` so the email names that session and shows old -> new
+    on its line. The changed-occurrence framing only applies when BOTH are
+    supplied AND the changed occurrence is in the subscriber's accessible
+    ``events`` list; otherwise (new-occurrence addition, or a subscriber
+    who does not hold the moved occurrence) the email gracefully falls back
+    to the whole-series framing with no dangling before/after.
+
+    Calendar-invite times are rendered with the weekday via the dedicated
+    :data:`CALENDAR_INVITE_DATETIME_FORMAT`; the global default stays
+    weekday-free (issue #1071).
     """
     site_url = site_base_url()
     series_url = f'{site_url}{series.get_absolute_url()}'
     partial_note = _partial_access_note(user, series, events, site_url)
 
     ordered = sorted(events, key=lambda e: e.start_datetime)
-    lines = [
-        f'- {event.title} — {format_user_datetime(event.start_datetime, user)}'
-        for event in ordered
-    ]
+    changed_event_id = changed_event.pk if changed_event is not None else None
+    has_old_start = old_start is not None
+    # The reframed copy applies only when the moved occurrence is one the
+    # subscriber actually has on their calendar — otherwise a "(was ...)"
+    # annotation would dangle on a session they cannot see.
+    changed_in_list = has_old_start and any(
+        event.pk == changed_event_id for event in ordered
+    )
+
+    lines = []
+    for event in ordered:
+        new_time = format_user_datetime(
+            event.start_datetime, user, fmt=CALENDAR_INVITE_DATETIME_FORMAT,
+        )
+        if changed_in_list and event.pk == changed_event_id:
+            old_time = format_user_datetime(
+                old_start, user, fmt=CALENDAR_INVITE_DATETIME_FORMAT,
+            )
+            lines.append(
+                f'- {event.title} — {new_time} (was {old_time})'
+            )
+        else:
+            lines.append(f'- {event.title} — {new_time}')
     occurrences_list = '\n'.join(lines)
     registered_count = len(ordered)
 
@@ -159,6 +195,12 @@ def _render_series_email(template_name, user, series, events, email_type):
             'registered_count_plural': '' if registered_count == 1 else 's',
             'occurrences_list': occurrences_list,
             'partial_note': partial_note,
+            # Issue #1071: the series_update template branches on
+            # ``changed_occurrence`` to name the moved session in the
+            # subject/lead. Inert for the registration/cancellation
+            # templates (they don't render it).
+            'changed_occurrence': changed_in_list,
+            'event_title': changed_event.title if changed_in_list else '',
             # Issue #963: the "set/update your timezone" line. Only the
             # series_registration template renders {{ timezone_help }};
             # for series_update / series_cancellation it is inert context.
@@ -218,7 +260,7 @@ def send_series_registration_invite(user, series, events):
     return email_log
 
 
-def send_series_update_to_subscribers(event, user_ids=None):
+def send_series_update_to_subscribers(event, user_ids=None, old_start_iso=None):
     """Fan an updated series invite out to subscribers of ``event``'s series.
 
     Called when an occurrence's time changes (all subscribers) or a new
@@ -230,9 +272,15 @@ def send_series_update_to_subscribers(event, user_ids=None):
     clients UPDATE rather than duplicate by UID.
 
     Args:
-        event: the changed/added occurrence (used to resolve the series).
+        event: the changed/added occurrence. For a time change this IS the
+            changed occurrence (issue #1071): when ``old_start_iso`` is set
+            the email names this session and shows its old -> new time.
         user_ids: optional iterable of subscriber user ids to target. When
             ``None``, every subscriber of the series is targeted.
+        old_start_iso: optional ISO datetime string for the changed
+            occurrence's previous start (supplied by the Studio reschedule
+            path). When ``None`` (a brand-new occurrence was added) the
+            email keeps the whole-series framing with no before/after.
 
     Best-effort and per-recipient isolated. Returns the number of
     subscribers a send was attempted for.
@@ -240,6 +288,16 @@ def send_series_update_to_subscribers(event, user_ids=None):
     series = getattr(event, 'event_series', None)
     if series is None:
         return 0
+
+    # Re-hydrate the old start (Django-Q delivered it as a JSON string).
+    # Naive datetimes are treated as UTC, matching format_user_datetime and
+    # the reschedule-notice _parse_iso contract.
+    old_start = None
+    if old_start_iso is not None:
+        from datetime import UTC, datetime
+        old_start = datetime.fromisoformat(old_start_iso)
+        if old_start.tzinfo is None:
+            old_start = old_start.replace(tzinfo=UTC)
 
     subscriber_user_ids = set(
         series.series_registrations.values_list('user_id', flat=True)
@@ -261,6 +319,7 @@ def send_series_update_to_subscribers(event, user_ids=None):
                 continue
             subject, full_html = _render_series_email(
                 'series_update', user, series, events, 'series_update',
+                changed_event=event, old_start=old_start,
             )
             ics_content = generate_series_ics(
                 events,

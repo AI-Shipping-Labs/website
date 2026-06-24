@@ -1,10 +1,10 @@
 ---
-subject: "Your {{ series_name }} calendar invite has been updated"
+subject: "{% if changed_occurrence %}Updated time for {{ event_title }} ({{ series_name }}){% else %}Your {{ series_name }} calendar invite has been updated{% endif %}"
 ---
 
 Hi {{ user_name }},
 
-There's been a change to the **{{ series_name }}** series, so we've refreshed your calendar invite. Your upcoming session{{ registered_count_plural }}:
+{% if changed_occurrence %}The time for **{{ event_title }}** in the **{{ series_name }}** series has changed, so we've refreshed your calendar invite for the whole series. Your upcoming session{{ registered_count_plural }}:{% else %}There's been a change to the **{{ series_name }}** series, so we've refreshed your calendar invite. Your upcoming session{{ registered_count_plural }}:{% endif %}
 
 {{ occurrences_list }}
 

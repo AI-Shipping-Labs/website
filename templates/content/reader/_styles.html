@@ -2,8 +2,15 @@
   @media (min-width: 1024px) {
     #content-sidebar-aside {
       transition: width 200ms ease, opacity 200ms ease, margin 200ms ease;
-      overflow: hidden;
     }
+    /*
+      Issue #1080: `overflow: hidden` is only applied while the sidebar is
+      collapsing/collapsed. Applying it at rest turned the <aside> into a
+      scroll container, which broke `position: sticky` on the inner wrapper
+      (it never pinned on scroll) and shifted the wrapper down by the sticky
+      `top` offset at rest, leaving a large empty band above the back-link.
+      Clipping is only needed when the width animates to 0.
+    */
     :root[data-content-sidebar="collapsed"] #content-sidebar-aside {
       width: 0 !important;
       min-width: 0 !important;
@@ -11,6 +18,7 @@
       pointer-events: none;
       margin-right: -2rem;
       flex-basis: 0;
+      overflow: hidden;
     }
     :root[data-content-sidebar="collapsed"] #content-sidebar-main {
       flex: 0 1 56rem;

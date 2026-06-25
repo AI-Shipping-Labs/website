@@ -1163,6 +1163,136 @@
         ]
       }
     },
+    "/api/crm/export": {
+      "get": {
+        "description": "Returns the complete per-user CRM aggregate (core user state, ``crm_record``, ``notes``, nested ``plans``, sprint and course enrollments, and ``onboarding_responses``) in a single response, reusing the per-resource serializers so the shapes are identical. Staff-token only. Internal-visibility notes ARE included (this is the staff CRM surface). Defaults to ``scope=crm`` (only members carrying CRM signal); pass ``scope=all`` for the full user table. Ordered by ``User.id``; ``count`` is the page size, ``total`` the full match before slicing.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "description": "``crm`` (default) returns only users with CRM signal (a CRMRecord, a note, a plan, an onboarding response, or a non-system tag). ``all`` returns every user. Unknown value -> 422.",
+              "enum": [
+                "crm",
+                "all"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Default 200; clamped to the configurable ``CRM_EXPORT_MAX_LIMIT`` ceiling.",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "description": "Default 0. Pages deterministically by id.",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "description": "ISO-8601 datetime; only users with ``date_joined >= since``.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "description": "Substring search across email / name / Stripe id / Slack id / tags (same semantics as ``GET /api/users``).",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "generated_at": "2026-06-25T10:00:00+00:00",
+                  "limit": 200,
+                  "members": [
+                    {
+                      "course_enrollments": [],
+                      "crm_record": {
+                        "created_at": "2026-04-15T12:00:00+00:00",
+                        "id": 42,
+                        "next_steps": "Pair on week-2 deliverable.",
+                        "persona": "Sam - Technical Professional",
+                        "status": "active",
+                        "summary": "Mid-career engineer pivoting into AI.",
+                        "updated_at": "2026-05-19T08:30:00+00:00"
+                      },
+                      "display_name": "Alice Doe",
+                      "email": "alice@example.com",
+                      "notes": [],
+                      "onboarding_responses": [],
+                      "plans": [],
+                      "sprint_enrollments": [
+                        {
+                          "enrolled_at": "2026-04-15T12:00:00+00:00",
+                          "enrolled_by": "staff@example.com",
+                          "sprint_slug": "may-2026"
+                        }
+                      ],
+                      "tags": [
+                        "early-adopter"
+                      ],
+                      "tier": {
+                        "level": 20,
+                        "slug": "main",
+                        "source": "override"
+                      }
+                    }
+                  ],
+                  "offset": 0,
+                  "scope": "crm",
+                  "total": 1
+                }
+              }
+            },
+            "description": "The per-user CRM aggregate page."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "allowed": [
+                      "crm",
+                      "all"
+                    ],
+                    "field": "scope",
+                    "value": "everyone"
+                  },
+                  "error": "Invalid scope: 'everyone'"
+                }
+              }
+            },
+            "description": "Invalid ``scope`` / ``limit`` / ``offset`` / ``since``."
+          }
+        },
+        "summary": "Export the per-user CRM aggregate",
+        "tags": [
+          "CRM"
+        ]
+      }
+    },
     "/api/deliverables/{item_id}": {
       "delete": {
         "parameters": [

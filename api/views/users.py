@@ -171,22 +171,41 @@ def _user_not_found_response():
     )
 
 
-def _serialize_crm_record_summary(user):
-    record = CRMRecord.objects.select_related('persona_ref').filter(
-        user=user,
-    ).first()
+def resolve_crm_persona(record):
+    """Resolve a ``CRMRecord``'s persona label.
+
+    Prefers the structured ``persona_ref.display_label`` when set,
+    otherwise falls back to the free-text ``persona`` field. Shared by
+    the summary (this module) and the full CRM-export serializer (issue
+    #1079) so both callers agree on persona resolution.
+    """
+    if record.persona_ref_id is not None and record.persona_ref is not None:
+        return record.persona_ref.display_label
+    return (record.persona or '').strip()
+
+
+def serialize_crm_record_summary(record):
+    """Compact CRM-record dict (``id`` / ``status`` / ``persona``).
+
+    ``record`` may be ``None`` (no ``CRMRecord``), in which case ``None``
+    is returned. Kept record-based (not user-based) so the export path
+    can serialize a pre-fetched record without re-querying.
+    """
     if record is None:
         return None
-    persona = ''
-    if record.persona_ref_id is not None and record.persona_ref is not None:
-        persona = record.persona_ref.display_label
-    else:
-        persona = (record.persona or '').strip()
     return {
         "id": record.pk,
         "status": record.status,
-        "persona": persona,
+        "persona": resolve_crm_persona(record),
     }
+
+
+def _serialize_crm_record_summary(user):
+    """Look up a user's ``CRMRecord`` and serialize the compact summary."""
+    record = CRMRecord.objects.select_related('persona_ref').filter(
+        user=user,
+    ).first()
+    return serialize_crm_record_summary(record)
 
 
 def _actor_label(request):

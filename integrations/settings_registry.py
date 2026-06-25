@@ -440,6 +440,21 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/site.md#sprint_badge_window_days',
             },
+            {
+                'key': 'CRM_EXPORT_MAX_LIMIT',
+                'is_secret': False,
+                'optional': True,
+                'default': '200',
+                'description': (
+                    'Hard ceiling on the page size for the CRM export '
+                    'endpoint (GET /api/crm/export, issue #1079). The '
+                    'requested ``limit`` is clamped to this ceiling so a '
+                    'single call cannot pull an unbounded aggregate. Default '
+                    '200. A blank, non-numeric, or non-positive override '
+                    'falls back to 200.'
+                ),
+                'docs_url': '_docs/integrations/site.md#crm_export_max_limit',
+            },
         ],
     },
     {

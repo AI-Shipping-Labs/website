@@ -1,21 +1,21 @@
 {% extends "studio/base.html" %}
 {% load studio_filters %}
 
-{% block studio_title %}{% if campaign %}Edit Campaign{% else %}New Campaign{% endif %}{% endblock %}
+{% block studio_title %}{% if is_edit %}Edit Campaign{% else %}New Campaign{% endif %}{% endblock %}
 
 {% block studio_content %}
 <div class="mb-8">
   <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
     <a href="{% url 'studio_campaign_list' %}" class="hover:text-foreground">Campaigns</a>
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
-    <span class="text-foreground">{% if campaign %}{{ campaign.subject }}{% else %}New Campaign{% endif %}</span>
+    <span class="text-foreground">{% if is_edit %}{{ campaign.subject }}{% else %}New Campaign{% endif %}</span>
   </div>
   <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
     <div class="min-w-0">
-      <h1 class="text-2xl font-semibold text-foreground">{% if campaign %}Edit Campaign{% else %}New Campaign{% endif %}</h1>
+      <h1 class="text-2xl font-semibold text-foreground">{% if is_edit %}Edit Campaign{% else %}New Campaign{% endif %}</h1>
     </div>
     <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
-      {% if campaign %}
+      {% if is_edit %}
       {% include "studio/includes/_admin_link.html" with obj=campaign %}
       {% endif %}
     </div>
@@ -37,6 +37,29 @@
       <label class="block text-sm font-medium text-foreground mb-1">Body (Markdown)</label>
       <textarea name="body" rows="16"
                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ campaign.body|default:'' }}</textarea>
+    </div>
+
+    {% comment %}
+      Issue #1076: optional event-registrant audience. When an event is
+      selected the audience is everyone registered for it, and the tier
+      selector below becomes an optional additional narrowing filter.
+    {% endcomment %}
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="target-event-select">Event registrants (optional audience)</label>
+      <select name="target_event" id="target-event-select" data-testid="campaign-target-event"
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="" {% if not selected_event_id %}selected{% endif %}>No event — use tier/tag audience below</option>
+        {% for event in event_options %}
+        <option value="{{ event.pk }}" {% if event.pk == selected_event_id %}selected{% endif %}>{{ event.title }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1" data-testid="target-event-help">
+        {% if selected_event_id %}
+          Audience is everyone registered for the selected event. The tier filter below narrows that set further (optional).
+        {% else %}
+          Pick an event to target everyone registered for it. Leave blank to use the tier/tag audience below.
+        {% endif %}
+      </p>
     </div>
 
     <div>
@@ -129,7 +152,7 @@
   </div>
 
   <div class="flex items-center space-x-4">
-    {% if campaign %}
+    {% if is_edit %}
     <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
       Save Changes
     </button>
@@ -138,7 +161,7 @@
       Save as Draft
     </button>
     {% endif %}
-    <a href="{% if campaign %}{% url 'studio_campaign_detail' campaign_id=campaign.pk %}{% else %}{% url 'studio_campaign_list' %}{% endif %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+    <a href="{% if is_edit %}{% url 'studio_campaign_detail' campaign_id=campaign.pk %}{% else %}{% url 'studio_campaign_list' %}{% endif %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
   </div>
 </form>
 {% endblock %}

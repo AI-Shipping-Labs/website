@@ -238,6 +238,13 @@ def _build_context(event):
             'and send the attendee follow-up when ready.'
         )
 
+    # Issue #1076: CTA deep-link to the pre-filled "recording available"
+    # campaign draft. Opens a draft for review in Studio — it never sends.
+    campaign_prefill_url = (
+        f'{site_base_url()}/studio/campaigns/new'
+        f'?event={event.pk}&template=recording_available'
+    )
+
     return {
         'event_title': event.title,
         'event_datetime': event_datetime,
@@ -245,6 +252,7 @@ def _build_context(event):
         'publish_copy': publish_copy,
         'studio_event_url': studio_event_url,
         'zoom_recording_url': (event.recording_url or '').strip(),
+        'campaign_prefill_url': campaign_prefill_url,
     }
 
 

@@ -104,6 +104,24 @@ class EmailCampaign(models.Model):
             'verified-only filter; unsubscribed=False is always enforced.'
         ),
     )
+    # Issue #1076: optional event-registrant audience. Null = the historical
+    # tier/tag/Slack audience (unchanged). Non-null scopes the audience to
+    # everyone registered for that event (``EventRegistration.user``), with
+    # the existing tier/tag/Slack/verification filters ANDing on top. SET_NULL
+    # so deleting an event leaves the campaign as a plain tier/tag campaign
+    # rather than cascading the campaign away.
+    target_event = models.ForeignKey(
+        'events.Event',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='+',
+        help_text=(
+            'When set, the audience is everyone registered for this event '
+            '(the tier/tag/Slack/verification filters AND on top). Null = '
+            'the historical tier/tag audience.'
+        ),
+    )
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -156,8 +174,19 @@ class EmailCampaign(models.Model):
         verification_filter = {}
         if self.audience_verification != self.AUDIENCE_VERIFICATION_EVERYONE:
             verification_filter['email_verified'] = True
+        # Issue #1076: when ``target_event`` is set the base set is the
+        # event's registrants (the ``EventRegistration.user`` reverse
+        # relation). The registrant set REPLACES the "all users at tier
+        # level" base set; the tier/tag/Slack/verification filters then AND
+        # on top (default ``target_min_level=0`` adds no extra tier gate).
+        if self.target_event_id is not None:
+            user_qs = User.objects.filter(
+                event_registrations__event_id=self.target_event_id,
+            )
+        else:
+            user_qs = User.objects.all()
         base_qs = (
-            User.objects.filter(
+            user_qs.filter(
                 unsubscribed=False,
                 **verification_filter,
             )

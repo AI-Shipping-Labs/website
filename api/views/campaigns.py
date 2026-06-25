@@ -27,6 +27,7 @@ from api.utils import (
     validation_response,
 )
 from email_app.models import EmailCampaign
+from events.models import Event
 
 READ_ONLY_FIELDS = {
     "id",
@@ -44,6 +45,7 @@ WRITABLE_FIELDS = {
     "target_tags_none",
     "slack_filter",
     "audience_verification",
+    "target_event",
     "is_archived",
 }
 
@@ -65,6 +67,7 @@ _CAMPAIGN_EXAMPLE = {
     "target_tags_none": ["unsubscribed"],
     "slack_filter": "any",
     "audience_verification": "verified_only",
+    "target_event": None,
     "status": "draft",
     "is_archived": False,
     "sent_at": None,
@@ -87,6 +90,7 @@ def _serialize_campaign(campaign):
         "target_tags_none": list(campaign.target_tags_none or []),
         "slack_filter": campaign.slack_filter,
         "audience_verification": campaign.audience_verification,
+        "target_event": campaign.target_event_id,
         "status": campaign.status,
         "is_archived": campaign.is_archived,
         "sent_at": _iso(campaign.sent_at),
@@ -164,6 +168,21 @@ def _collect_campaign_values(data, *, existing=None):
                 errors[field] = "Must be an array of strings."
             else:
                 values[field] = normalize_tags(raw)
+
+    if "target_event" in data:
+        raw_event = data["target_event"]
+        if raw_event is None:
+            values["target_event"] = None
+        elif isinstance(raw_event, bool) or not isinstance(raw_event, int):
+            # ``bool`` is an ``int`` subclass; reject it explicitly so
+            # ``true``/``false`` are not coerced to event id 1/0.
+            errors["target_event"] = "Must be an integer event id or null."
+        else:
+            event = Event.objects.filter(pk=raw_event).first()
+            if event is None:
+                errors["target_event"] = "Unknown event."
+            else:
+                values["target_event"] = event
 
     if "is_archived" in data:
         if not isinstance(data["is_archived"], bool):
@@ -251,6 +270,11 @@ def _apply_campaign_values(campaign, values):
                     },
                     "slack_filter": {"type": "string"},
                     "audience_verification": {"type": "string"},
+                    "target_event": {
+                        "type": "integer",
+                        "nullable": True,
+                        "description": "Event id to target registrants, or null.",
+                    },
                     "is_archived": {"type": "boolean"},
                 },
                 "example": {
@@ -376,6 +400,11 @@ def campaigns_collection(request):
                     },
                     "slack_filter": {"type": "string"},
                     "audience_verification": {"type": "string"},
+                    "target_event": {
+                        "type": "integer",
+                        "nullable": True,
+                        "description": "Event id to target registrants, or null.",
+                    },
                     "is_archived": {"type": "boolean"},
                 },
                 "example": {"is_archived": True},

@@ -61,7 +61,12 @@
       </div>
       <div>
         <p class="text-sm text-muted-foreground">Audience</p>
+        {% if campaign.target_event %}
+        <p class="text-sm text-foreground mt-1" data-testid="audience-event">Registrants of {{ campaign.target_event.title }}</p>
+        <p class="text-xs text-muted-foreground mt-1">{{ campaign.get_target_min_level_display }} (narrowing filter)</p>
+        {% else %}
         <p class="text-sm text-foreground mt-1">{{ campaign.get_target_min_level_display }}</p>
+        {% endif %}
       </div>
       <div>
         <p class="text-sm text-muted-foreground">Eligible Recipients</p>

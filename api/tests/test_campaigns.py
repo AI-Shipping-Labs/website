@@ -145,6 +145,7 @@ class CampaignsListTest(CampaignsApiTestBase):
                 "target_tags_none",
                 "slack_filter",
                 "audience_verification",
+                "target_event",
                 "status",
                 "is_archived",
                 "sent_at",
@@ -492,3 +493,73 @@ class CampaignsSendPathSentinelTest(TestCase):
                 "The send path is Studio-only by design."
             ),
         )
+
+
+class CampaignsApiTargetEventTest(CampaignsApiTestBase):
+    """Issue #1076: ``target_event`` is a writable, round-tripping field."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from datetime import datetime
+        from datetime import timezone as dt_timezone
+
+        from events.models import Event
+
+        cls.event = Event.objects.create(
+            title="Registrant Broadcast",
+            slug="registrant-broadcast",
+            start_datetime=datetime(2026, 6, 8, 16, 0, tzinfo=dt_timezone.utc),
+            end_datetime=datetime(2026, 6, 8, 17, 0, tzinfo=dt_timezone.utc),
+            status="completed",
+        )
+
+    def test_get_serializes_target_event_id(self):
+        self.draft.target_event = self.event
+        self.draft.save(update_fields=["target_event"])
+        response = self.client.get(
+            f"/api/campaigns/{self.draft.pk}", **self._auth()
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["target_event"], self.event.pk)
+
+    def test_post_creates_with_target_event(self):
+        response = self._post({
+            "subject": "Recording is up",
+            "body": "watch it",
+            "target_event": self.event.pk,
+        })
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["target_event"], self.event.pk)
+        campaign = EmailCampaign.objects.get(pk=body["id"])
+        self.assertEqual(campaign.target_event_id, self.event.pk)
+
+    def test_patch_sets_and_clears_target_event(self):
+        set_resp = self._patch(self.draft.pk, {"target_event": self.event.pk})
+        self.assertEqual(set_resp.status_code, 200)
+        self.assertEqual(set_resp.json()["target_event"], self.event.pk)
+
+        clear_resp = self._patch(self.draft.pk, {"target_event": None})
+        self.assertEqual(clear_resp.status_code, 200)
+        self.assertIsNone(clear_resp.json()["target_event"])
+        self.draft.refresh_from_db()
+        self.assertIsNone(self.draft.target_event_id)
+
+    def test_unknown_event_id_rejected_with_422(self):
+        response = self._post({
+            "subject": "Bad event",
+            "body": "x",
+            "target_event": 999999,
+        })
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("target_event", response.json()["details"])
+
+    def test_non_integer_target_event_rejected(self):
+        response = self._post({
+            "subject": "Bad type",
+            "body": "x",
+            "target_event": "not-an-int",
+        })
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("target_event", response.json()["details"])

@@ -566,6 +566,23 @@
         {% endif %}
       </p>
     {% endif %}
+
+    {% comment %}
+      Issue #1076: editable "recording available" broadcast to registrants.
+      Distinct from the transactional "Send follow-up now" above — this opens
+      a PRE-FILLED draft campaign in Studio for review (subject/body editable,
+      test-send available) and never sends on click. Rendered regardless of
+      registration count; the campaign detail page shows the resolved audience
+      size (0 when the event has no registrations).
+    {% endcomment %}
+    <a href="{{ recording_campaign_url }}"
+       data-testid="email-registrants-recording-button"
+       class="mt-4 block w-full text-center bg-secondary border border-accent text-accent px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent/10 transition-colors">
+      Email registrants: recording available
+    </a>
+    <p class="text-xs text-muted-foreground mt-2">
+      Opens an editable draft campaign pre-filled with the workshop write-up. Review and send it yourself — nothing is sent from this button.
+    </p>
   </div>
 </aside>
 {% endif %}

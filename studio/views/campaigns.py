@@ -15,6 +15,11 @@ from accounts.tier_audience import effective_level_at_least_q
 from accounts.utils.tags import normalize_tags
 from email_app.models import EmailCampaign
 from email_app.services.email_service import EmailService, EmailServiceError
+from email_app.services.recording_available_prefill import (
+    RECORDING_AVAILABLE_TEMPLATE,
+    build_recording_available_prefill,
+)
+from events.models import Event
 from integrations.config import get_config
 from studio.decorators import staff_required
 
@@ -262,9 +267,35 @@ def campaign_list(request):
     )
 
 
+def _resolve_target_event(raw_value):
+    """Return the ``Event`` for a raw id, or None for blank/invalid input."""
+    raw_value = (raw_value or "").strip()
+    if not raw_value:
+        return None
+    try:
+        event_id = int(raw_value)
+    except (TypeError, ValueError):
+        return None
+    return Event.objects.filter(pk=event_id).first()
+
+
+def _event_picker_options():
+    """Events for the audience picker, most-recent first."""
+    return Event.objects.order_by("-start_datetime").only(
+        "id", "title", "start_datetime",
+    )
+
+
 @staff_required
 def campaign_create(request):
-    """Create a new email campaign."""
+    """Create a new email campaign.
+
+    Issue #1076: a ``GET ?event=<id>&template=recording_available`` deep-link
+    (from the host recording-ready email or the Studio event page) opens this
+    form with the event pre-selected as the audience and the subject/body
+    pre-filled from the configurable recording-available templates. No send
+    happens here — the operator reviews/edits and presses send later.
+    """
     if request.method == "POST":
         subject = request.POST.get("subject", "").strip()
         body = request.POST.get("body", "")
@@ -277,6 +308,7 @@ def campaign_create(request):
         audience_verification = _normalize_audience_verification(
             request.POST.get("audience_verification", "")
         )
+        target_event = _resolve_target_event(request.POST.get("target_event"))
 
         campaign = EmailCampaign.objects.create(
             subject=subject,
@@ -286,6 +318,7 @@ def campaign_create(request):
             target_tags_none=target_tags_none,
             slack_filter=slack_filter,
             audience_verification=audience_verification,
+            target_event=target_event,
             status="draft",
         )
         messages.success(
@@ -294,17 +327,39 @@ def campaign_create(request):
         )
         return redirect("studio_campaign_detail", campaign_id=campaign.pk)
 
-    # Brand-new campaign defaults to ``target_min_level=0`` (Everyone),
-    # so the helper next to the audience selector can preview the size.
-    recipient_count = _recipient_count_for_level(0)
+    # Issue #1076 pre-fill: when an ``event`` query param resolves and the
+    # ``recording_available`` template is requested, build a draft-shaped
+    # ``EmailCampaign`` (unsaved) so the shared form renders the pre-filled
+    # subject/body and pre-selects the event audience.
+    prefill_event = _resolve_target_event(request.GET.get("event"))
+    template = request.GET.get("template", "")
+    draft = None
+    if prefill_event is not None and template == RECORDING_AVAILABLE_TEMPLATE:
+        prefill = build_recording_available_prefill(prefill_event)
+        draft = EmailCampaign(
+            subject=prefill["subject"],
+            body=prefill["body"],
+            target_event=prefill_event,
+        )
+        recipient_count = draft.get_recipient_count()
+    else:
+        # Brand-new campaign defaults to ``target_min_level=0`` (Everyone),
+        # so the helper next to the audience selector can preview the size.
+        recipient_count = _recipient_count_for_level(0)
+
     return render(
         request,
         "studio/campaigns/form.html",
         {
-            "campaign": None,
+            "campaign": draft,
+            "is_edit": False,
             "form_action": "create",
             "recipient_count": recipient_count,
             "known_tags": _all_known_contact_tags(),
+            "event_options": _event_picker_options(),
+            "selected_event_id": (
+                draft.target_event_id if draft is not None else None
+            ),
         },
     )
 
@@ -359,6 +414,7 @@ def campaign_edit(request, campaign_id):
         audience_verification = _normalize_audience_verification(
             request.POST.get("audience_verification", "")
         )
+        target_event = _resolve_target_event(request.POST.get("target_event"))
 
         campaign.subject = subject
         campaign.body = body
@@ -367,6 +423,7 @@ def campaign_edit(request, campaign_id):
         campaign.target_tags_none = target_tags_none
         campaign.slack_filter = slack_filter
         campaign.audience_verification = audience_verification
+        campaign.target_event = target_event
         campaign.save(update_fields=[
             "subject",
             "body",
@@ -375,6 +432,7 @@ def campaign_edit(request, campaign_id):
             "target_tags_none",
             "slack_filter",
             "audience_verification",
+            "target_event",
         ])
 
         messages.success(
@@ -389,9 +447,12 @@ def campaign_edit(request, campaign_id):
         "studio/campaigns/form.html",
         {
             "campaign": campaign,
+            "is_edit": True,
             "form_action": "edit",
             "recipient_count": recipient_count,
             "known_tags": _all_known_contact_tags(),
+            "event_options": _event_picker_options(),
+            "selected_event_id": campaign.target_event_id,
         },
     )
 
@@ -600,6 +661,7 @@ def campaign_duplicate(request, campaign_id):
         target_tags_none=list(campaign.target_tags_none or []),
         slack_filter=campaign.slack_filter,
         audience_verification=campaign.audience_verification,
+        target_event=campaign.target_event,
         status="draft",
     )
     messages.success(

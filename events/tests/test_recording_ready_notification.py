@@ -131,6 +131,14 @@ class RecordingReadyNotificationSendTest(TestCase):
         self.assertIn('Ready for review/publishing', html)
         self.assertIn('Zoom source/review fallback', html)
         self.assertNotIn(event.recording_s3_url, html)
+        # Issue #1076: the host email carries a CTA deep-linking to the
+        # pre-filled recording-available campaign draft. The ``&`` is
+        # HTML-escaped in the rendered markdown link.
+        self.assertIn(
+            f'/studio/campaigns/new?event={event.pk}'
+            '&amp;template=recording_available',
+            html,
+        )
 
     @patch('events.services.recording_ready_notification.EmailService._send_ses')
     def test_registered_host_logs_user_not_recipient_email(self, mock_send):

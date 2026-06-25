@@ -874,6 +874,13 @@ def event_edit(request, event_id):
     context['send_followup_url'] = reverse(
         'studio_event_send_followup', kwargs={'event_id': event.pk},
     )
+    # Issue #1076: deep-link to the pre-filled "recording available" campaign
+    # draft (editable broadcast to registrants — distinct from the
+    # transactional follow-up above). Opens a draft for review; never sends.
+    context['recording_campaign_url'] = (
+        f"{reverse('studio_campaign_create')}"
+        f"?event={event.pk}&template=recording_available"
+    )
     # ``form_values`` and ``errors`` are only meaningful on the create flow
     # (issue #574). Provide empty defaults here so the shared template's
     # ``form_values.foo`` lookups resolve cleanly when rendering edit.

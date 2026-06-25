@@ -88,6 +88,7 @@
                       "slack_filter": "any",
                       "status": "draft",
                       "subject": "Week 3 of May 2026 sprint",
+                      "target_event": null,
                       "target_min_level": 0,
                       "target_tags_any": [
                         "sprint:may-2026"
@@ -156,6 +157,11 @@
                     "maxLength": 255,
                     "type": "string"
                   },
+                  "target_event": {
+                    "description": "Event id to target registrants, or null.",
+                    "nullable": true,
+                    "type": "integer"
+                  },
                   "target_min_level": {
                     "type": "integer"
                   },
@@ -197,6 +203,7 @@
                   "slack_filter": "any",
                   "status": "draft",
                   "subject": "Week 3 of May 2026 sprint",
+                  "target_event": null,
                   "target_min_level": 0,
                   "target_tags_any": [
                     "sprint:may-2026"
@@ -249,6 +256,7 @@
                   "slack_filter": "any",
                   "status": "draft",
                   "subject": "Week 3 of May 2026 sprint",
+                  "target_event": null,
                   "target_min_level": 0,
                   "target_tags_any": [
                     "sprint:may-2026"
@@ -314,6 +322,11 @@
                     "maxLength": 255,
                     "type": "string"
                   },
+                  "target_event": {
+                    "description": "Event id to target registrants, or null.",
+                    "nullable": true,
+                    "type": "integer"
+                  },
                   "target_min_level": {
                     "type": "integer"
                   },
@@ -351,6 +364,7 @@
                   "slack_filter": "any",
                   "status": "draft",
                   "subject": "Week 3 of May 2026 sprint",
+                  "target_event": null,
                   "target_min_level": 0,
                   "target_tags_any": [
                     "sprint:may-2026"

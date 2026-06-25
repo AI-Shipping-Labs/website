@@ -181,6 +181,35 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/ses.md#campaign_test_recipients',
             },
+            {
+                'key': 'RECORDING_AVAILABLE_SUBJECT_TEMPLATE',
+                'is_secret': False,
+                'optional': True,
+                'description': (
+                    'Default subject pre-filled into the "recording available" '
+                    'campaign draft an operator reaches from the host '
+                    'recording-ready email or the Studio event page (issue '
+                    '#1076). ``{event_title}`` is substituted with the event '
+                    'title. Pre-fill only — the operator reviews and edits the '
+                    'draft before sending, so a blank/odd setting can never '
+                    'auto-broadcast.'
+                ),
+                'docs_url': '_docs/integrations/ses.md#recording_available_subject_template',
+            },
+            {
+                'key': 'RECORDING_AVAILABLE_BODY_TEMPLATE',
+                'is_secret': False,
+                'optional': True,
+                'description': (
+                    'Default markdown body pre-filled into the "recording '
+                    'available" campaign draft (issue #1076). Placeholders: '
+                    '``{event_title}``, ``{recording_url}``, and '
+                    '``{workshop_writeup}`` (the linked workshop write-up, or a '
+                    'short generic line when the event has no linked workshop). '
+                    'Pre-fill only — never auto-sent.'
+                ),
+                'docs_url': '_docs/integrations/ses.md#recording_available_body_template',
+            },
         ],
     },
     {

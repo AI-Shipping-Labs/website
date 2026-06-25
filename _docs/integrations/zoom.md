@@ -243,3 +243,37 @@ Type: boolean (`true` / `false`). Default: `false`.
 
 Where it applies: same as `ZOOM_WAITING_ROOM` — `create_meeting` for new
 meetings and `apply_zoom_meeting_settings` for existing upcoming meetings.
+
+## ZOOM_AUTO_RECORDING
+
+Purpose: Controls how event-created Zoom meetings auto-record. Set on every
+meeting's `settings.auto_recording` in `_meeting_settings()` so each event
+meeting starts recording automatically once the host joins, without anyone
+clicking Record. The recording-ready webhook then drives the
+`jobs/tasks/recording_upload.py` chain (pull from Zoom cloud → publish), so
+`cloud` is required for that pipeline to find an asset.
+
+Allowed values:
+
+| Value   | Effect                                                        |
+| ------- | ------------------------------------------------------------ |
+| `cloud` | Record to the Zoom cloud (default; needed for the recording webhook). |
+| `local` | Record to the host's local machine (no cloud asset to fetch). |
+| `none`  | Do not auto-record.                                          |
+
+Type: string (`cloud` / `local` / `none`). Default: `cloud`.
+
+Account-level prerequisite: This per-meeting setting only takes effect if cloud
+recording is enabled and not locked at the Zoom ACCOUNT level for the host
+account used by the server-to-server OAuth app. If an account admin has cloud
+recording disabled or locked off, Zoom ignores the per-meeting
+`auto_recording: cloud` request and the meeting will not record — this is the
+most common reason an event meeting fails to auto-record even though the payload
+is correct (issue #1081). Verify it in the Zoom admin console under
+Account Management → Account Settings → Recording. The licensing/account config
+itself is not managed in this repo.
+
+Where it applies: same as `ZOOM_WAITING_ROOM` — `create_meeting` for new
+meetings and `apply_zoom_meeting_settings` (`update_meeting_settings`) for
+existing upcoming meetings, so the backfill turns auto-record on for older
+meetings too.

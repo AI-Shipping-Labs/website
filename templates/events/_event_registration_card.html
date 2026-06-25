@@ -146,7 +146,14 @@
         View Pricing
       </a>
     </div>
-  {% elif is_registered %}
+  {% elif is_effectively_registered %}
+    {% comment %}
+      Issue #1077: the registered block renders for both per-occurrence
+      registrants and series-only registrants. ``registration_source`` is
+      'event' (per-occurrence row, possibly alongside a series flag) or
+      'series' (covered by the standing series flag only). The copy and the
+      cancel control branch on it.
+    {% endcomment %}
     <div data-testid="event-registered-confirmation">
       <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex items-center gap-3">
@@ -154,7 +161,11 @@
             <i data-lucide="check" class="h-5 w-5 text-green-400"></i>
           </div>
           <div>
-            <p class="font-semibold text-foreground">You're registered!</p>
+            {% if registration_source == 'series' %}
+            <p class="font-semibold text-foreground" data-testid="event-registered-heading">You're registered for this series</p>
+            {% else %}
+            <p class="font-semibold text-foreground" data-testid="event-registered-heading">You're registered!</p>
+            {% endif %}
           </div>
         </div>
         <a href="{{ event_ics_url }}"
@@ -196,6 +207,24 @@
       </div>
       {% endif %}
 
+      {% if registration_source == 'series' %}
+      {% comment %}
+        Issue #1077: series-only registration. There is no per-occurrence
+        ``EventRegistration`` row to delete, so the per-occurrence cancel
+        button would be a no-op — render a link to the series page instead.
+      {% endcomment %}
+      <div class="mt-5 border-t border-border pt-4" data-testid="event-series-registration-manage">
+        <p class="text-sm text-muted-foreground" data-testid="event-series-registration-explainer">
+          You're registered for every upcoming session in this series.
+        </p>
+        <a href="{{ event.event_series.get_absolute_url }}"
+           class="mt-3 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline"
+           data-testid="event-manage-series-registration-link">
+          <i data-lucide="settings" class="h-4 w-4"></i>
+          Manage series registration
+        </a>
+      </div>
+      {% else %}
       <div class="mt-5 flex justify-end border-t border-border pt-4">
         <button type="button"
                 class="w-full rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-red-500/50 hover:text-red-400 sm:w-auto"
@@ -204,6 +233,7 @@
           Cancel registration
         </button>
       </div>
+      {% endif %}
     </div>
   {% else %}
     <div class="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">

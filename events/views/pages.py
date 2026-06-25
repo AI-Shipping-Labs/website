@@ -26,6 +26,7 @@ from events.models import (
     EventJoinClick,
     EventRegistration,
     EventSeries,
+    SeriesRegistration,
 )
 from events.models.event import HIDDEN_FROM_PUBLIC_STATUSES
 from events.services.calendar_feed import (
@@ -585,12 +586,42 @@ def event_detail(request, event_id, slug):
     # Check access for registration gating
     has_access = can_access(user, event)
 
-    # Check if user is registered
+    # Check if user is registered.
+    #
+    # Issue #1077: the event page must be series-aware. A viewer holding a
+    # standing ``SeriesRegistration`` for the series this occurrence belongs
+    # to is "effectively registered" even when they have no per-occurrence
+    # ``EventRegistration`` row (the two legitimately diverge — see the
+    # issue). We resolve both flags here, mirroring ``event_series_public``,
+    # and pass an explicit ``registration_source`` so the template does not
+    # re-derive it.
+    #
+    # ``is_registered`` keeps its meaning: the per-occurrence flag. The
+    # template's registered block keys on ``is_effectively_registered``
+    # instead, while still consulting ``registration_source`` to decide
+    # which cancel control to render.
     is_registered = False
+    is_series_registered = False
     if user.is_authenticated:
         is_registered = EventRegistration.objects.filter(
             event=event, user=user,
         ).exists()
+        if event.event_series_id is not None:
+            is_series_registered = SeriesRegistration.objects.filter(
+                series_id=event.event_series_id, user=user,
+            ).exists()
+
+    # A per-occurrence row wins over the standing series flag so the
+    # per-occurrence "Cancel registration" button stays available when both
+    # exist (matches the dedupe precedent in ``notify_reschedule`` /
+    # ``notify_cancellation``).
+    if is_registered:
+        registration_source = 'event'
+    elif is_series_registered:
+        registration_source = 'series'
+    else:
+        registration_source = 'none'
+    is_effectively_registered = registration_source != 'none'
 
     # Build gating context for the upcoming-event registration CTA. The
     # event detail page is announcement-only (issue #426) — recording
@@ -603,7 +634,7 @@ def event_detail(request, event_id, slug):
     # ``status='upcoming'`` row whose end has passed no longer offers
     # the join link.
     show_join_link = (
-        is_registered
+        is_effectively_registered
         and event.can_show_zoom_link()
         and event.is_upcoming
     )
@@ -653,7 +684,7 @@ def event_detail(request, event_id, slug):
     user_feedback = None
     if user.is_authenticated:
         user_feedback = feedback_qs.filter(user=user).first()
-    can_submit_feedback = is_registered and event_is_past
+    can_submit_feedback = is_effectively_registered and event_is_past
     feedback_thanks = request.GET.get('feedback') == 'thanks'
     post_event_resources = _build_event_post_resources(
         event,
@@ -665,6 +696,13 @@ def event_detail(request, event_id, slug):
         'event_time_display': build_event_time_display(event, user),
         'has_access': has_access,
         'is_registered': is_registered,
+        # Issue #1077: series-aware registration state. The template's
+        # registered block keys on ``is_effectively_registered``; it then
+        # consults ``registration_source`` ('event' / 'series' / 'none') to
+        # pick the heading copy and which cancel control to render.
+        'is_series_registered': is_series_registered,
+        'is_effectively_registered': is_effectively_registered,
+        'registration_source': registration_source,
         'show_event_location': should_display_event_location(event),
         'show_zoom_link': show_join_link,
         'required_tier_name': required_tier_name,
@@ -741,9 +779,17 @@ def event_feedback_submit(request, event_id, slug):
             permanent=True,
         )
 
+    # Issue #1077: feedback eligibility mirrors the detail page's combined
+    # "effectively registered" flag — a series-registered attendee with no
+    # per-occurrence row is a valid feedback author too, otherwise the form
+    # shown by ``can_submit_feedback`` would 403 on submit.
     is_registered = EventRegistration.objects.filter(
         event=event, user=request.user,
     ).exists()
+    if not is_registered and event.event_series_id is not None:
+        is_registered = SeriesRegistration.objects.filter(
+            series_id=event.event_series_id, user=request.user,
+        ).exists()
     if not is_registered:
         return HttpResponseForbidden(
             'Only registered attendees can leave feedback.'
@@ -863,7 +909,6 @@ def event_series_public(request, series_id, slug):
     is_series_registered = False
     registered_event_ids = set()
     if user.is_authenticated:
-        from events.models import SeriesRegistration
         is_series_registered = SeriesRegistration.objects.filter(
             series=series, user=user,
         ).exists()

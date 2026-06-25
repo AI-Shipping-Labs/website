@@ -35,6 +35,7 @@ from api.views.course_enrollments import (
     course_enrollment_detail,
     course_enrollments_collection,
 )
+from api.views.crm_export import crm_export
 from api.views.docs import docs_page, openapi_json
 from api.views.enrollments import (
     sprint_enrollment_detail,
@@ -684,6 +685,15 @@ urlpatterns = [
         "ses-events",
         ses_events_dispatch,
         name="api_ses_events",
+    ),
+    # ---- CRM export (issue #1079) -------------------------------------
+    # Staff-token read-only aggregate: the full per-user CRM record (state +
+    # crm_record + notes + nested plans + enrollments + onboarding
+    # responses) in one call. Slashless form like every other /api route.
+    path(
+        "crm/export",
+        crm_export,
+        name="api_crm_export",
     ),
     # ---- Event triggers (issue #1070) ---------------------------------
     # Staff-token-gated management + observability. No DELETE: deactivate

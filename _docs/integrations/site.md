@@ -205,3 +205,30 @@ the new value.
 
 Test vs live: n/a. Use per-environment values if non-production
 test checkouts should route somewhere else.
+
+## CRM_EXPORT_MAX_LIMIT
+
+Purpose: Hard ceiling on the page size for the CRM export endpoint
+(`GET /api/crm/export`, issue #1079). The requested `limit` query
+param is clamped to this value so a single call cannot pull an
+unbounded per-user aggregate. Read by
+`api/views/crm_export.py:_export_max_limit` via
+`get_config("CRM_EXPORT_MAX_LIMIT", 200)`.
+
+Default: `200`.
+
+Without it (blank): Falls back to `200`. A blank, non-numeric, or
+non-positive override is ignored and the default is used.
+
+Where to find it: This is operator intent — pick the largest page
+size you are comfortable serving in one call. Larger values make the
+deeply-nested aggregate response heavier; raise it only if a trusted
+analyst job needs bigger pages.
+
+Prereqs: None beyond a staff-owned API token to call the endpoint.
+
+Rotation: Safe to change at any time. The next export request uses
+the new value (no redeploy).
+
+Test vs live: n/a. Use per-environment values if a staging analyst
+job needs a different ceiling.

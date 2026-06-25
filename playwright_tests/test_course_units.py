@@ -928,3 +928,70 @@ class TestScenario10DashboardContinueLearning:
         assert page.url.endswith(expected_href)
 
         context.close()
+
+
+# ---------------------------------------------------------------
+# Issue #1080: shared reader sidebar gap-fix regression guard.
+# The course unit reader includes the same `_sidebar.html` partial,
+# so the back-link must align with the breadcrumb (no empty band).
+# ---------------------------------------------------------------
+
+@pytest.mark.django_db(transaction=True)
+class TestScenario11CourseSidebarTopAlignment:
+    """Issue #1080: course sidebar back-link aligns with the breadcrumb."""
+
+    def test_course_unit_back_link_aligns_with_breadcrumb(
+        self, django_server, browser,
+    ):
+        _clear_courses()
+        _create_user("main-1080-course@test.com", tier_slug="main")
+
+        course = _create_course(
+            title="Gap Fix Course",
+            slug="gap-1080-course",
+            required_level=10,
+        )
+        module = _create_module(course, "Module 1", sort_order=0)
+        _create_unit(
+            module, "Unit 1", sort_order=0,
+            body="# Lesson\n\nBody content for the unit.",
+        )
+
+        from playwright_tests.conftest import create_session_for_user
+        session_key = create_session_for_user("main-1080-course@test.com")
+        ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+        ctx.add_cookies([
+            {"name": "sessionid", "value": session_key,
+             "domain": "127.0.0.1", "path": "/"},
+            {"name": "csrftoken", "value": "e2e-test-csrf-token-value",
+             "domain": "127.0.0.1", "path": "/"},
+        ])
+        page = ctx.new_page()
+        try:
+            page.goto(
+                f"{django_server}/courses/gap-1080-course/module-1/unit-1",
+                wait_until="domcontentloaded",
+            )
+            back = page.locator(
+                'aside a[href="/courses/gap-1080-course"]'
+            ).first
+            back.wait_for(state="visible")
+            crumb = page.locator('[data-testid="breadcrumb-course"]').first
+            crumb.wait_for(state="visible")
+
+            os.makedirs(".tmp/screenshots", exist_ok=True)
+            page.screenshot(
+                path=".tmp/screenshots/1080-course-after-1280.png",
+                full_page=False,
+            )
+
+            back_box = back.bounding_box()
+            crumb_box = crumb.bounding_box()
+            assert back_box is not None and crumb_box is not None
+            delta = abs(back_box["y"] - crumb_box["y"])
+            assert delta <= 8, (
+                f"Course back-link top {back_box['y']:.1f} not aligned with "
+                f"breadcrumb top {crumb_box['y']:.1f} (delta {delta:.1f}px)"
+            )
+        finally:
+            ctx.close()

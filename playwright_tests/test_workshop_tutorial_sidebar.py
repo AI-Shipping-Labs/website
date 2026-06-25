@@ -415,6 +415,288 @@ class TestCourseUnitSidebarRegressionGuard:
             ctx.close()
 
 
+# ----------------------------------------------------------------------
+# Issue #1080: the sticky sidebar wrapper must align with the breadcrumb
+# at the top of the column (no large empty band) and still pin below the
+# fixed header on scroll. Assert on measured geometry so the test fails
+# if the gap returns.
+# ----------------------------------------------------------------------
+
+SHOT_DIR_1080 = '.tmp/screenshots'
+
+# Body long enough to make the page scrollable past the sidebar.
+_LONG_BODY = '# Welcome\n\n' + '\n\n'.join(
+    f'Paragraph {i}: ' + 'lorem ipsum dolor sit amet ' * 20
+    for i in range(60)
+)
+
+
+@pytest.mark.django_db(transaction=True)
+class TestWorkshopSidebarTopAlignment:
+    """Issue #1080: no dead space above the sidebar back-link."""
+
+    def _setup(self):
+        _clear_workshops()
+        _create_workshop(
+            slug='gap-1080-ws',
+            title='Gap Fix Workshop',
+            landing=0,
+            pages=0,
+            recording=0,
+            pages_data=[
+                ('overview', 'Overview', _LONG_BODY),
+                ('next', 'Second Page', '# Two\n\nMore body.'),
+            ],
+        )
+        _create_user('basic-1080@test.com', tier_slug='basic')
+
+    def _ctx(self, browser, width=1280, height=900):
+        from playwright_tests.conftest import create_session_for_user
+        session_key = create_session_for_user('basic-1080@test.com')
+        ctx = browser.new_context(viewport={'width': width, 'height': height})
+        ctx.add_cookies([
+            {'name': 'sessionid', 'value': session_key,
+             'domain': '127.0.0.1', 'path': '/'},
+            {'name': 'csrftoken', 'value': 'e2e-test-csrf-token-value',
+             'domain': '127.0.0.1', 'path': '/'},
+        ])
+        return ctx
+
+    def test_back_link_aligns_with_breadcrumb_no_empty_band(
+        self, browser, django_server,
+    ):
+        os.makedirs(SHOT_DIR_1080, exist_ok=True)
+        self._setup()
+        ctx = self._ctx(browser)
+        page = ctx.new_page()
+        try:
+            page.goto(
+                f'{django_server}/workshops/gap-1080-ws/tutorial/overview',
+                wait_until='domcontentloaded',
+            )
+            link = page.locator('[data-testid="sidebar-back-to-workshop"]')
+            link.wait_for(state='visible')
+            crumb = page.locator('[data-testid="page-breadcrumb"]')
+
+            page.screenshot(
+                path=f'{SHOT_DIR_1080}/1080-workshop-after-1280.png',
+                full_page=False,
+            )
+
+            link_box = link.bounding_box()
+            crumb_box = crumb.bounding_box()
+            assert link_box is not None
+            assert crumb_box is not None
+
+            # The sidebar back-link top edge must be within ~8px of the
+            # main-column breadcrumb top edge — no large empty band above.
+            delta = abs(link_box['y'] - crumb_box['y'])
+            assert delta <= 8, (
+                f'Back-link top {link_box["y"]:.1f} not aligned with '
+                f'breadcrumb top {crumb_box["y"]:.1f} (delta {delta:.1f}px)'
+            )
+
+            # The nav card listing the pages is visible without scrolling.
+            nav = page.locator('[data-testid="workshop-sidebar"]')
+            assert nav.is_visible()
+            nav_box = nav.bounding_box()
+            assert nav_box is not None
+            assert nav_box['y'] < 900, (
+                f'Nav card top {nav_box["y"]:.1f} is below the fold'
+            )
+        finally:
+            ctx.close()
+
+    def test_sidebar_pins_below_header_on_scroll(
+        self, browser, django_server,
+    ):
+        self._setup()
+        ctx = self._ctx(browser)
+        page = ctx.new_page()
+        try:
+            page.goto(
+                f'{django_server}/workshops/gap-1080-ws/tutorial/overview',
+                wait_until='domcontentloaded',
+            )
+            link = page.locator('[data-testid="sidebar-back-to-workshop"]')
+            link.wait_for(state='visible')
+
+            header = page.locator('#site-header')
+            header_box = header.bounding_box()
+            assert header_box is not None
+            header_bottom = header_box['y'] + header_box['height']
+
+            page.evaluate('window.scrollTo(0, 1200)')
+            page.wait_for_function('window.scrollY >= 1000')
+
+            link_box = link.bounding_box()
+            assert link_box is not None
+            # The back-link stays visible and its top is at or below the
+            # header bottom — it is pinned, not hidden behind the header
+            # and not scrolled off the top.
+            assert link_box['y'] >= header_bottom - 1, (
+                f'Sidebar back-link top {link_box["y"]:.1f} is above header '
+                f'bottom {header_bottom:.1f} — it slid under the header'
+            )
+            assert link_box['y'] < 400, (
+                f'Sidebar back-link top {link_box["y"]:.1f} did not pin '
+                f'near the header — it scrolled away'
+            )
+        finally:
+            ctx.close()
+
+    def test_collapse_then_expand_no_empty_band(
+        self, browser, django_server,
+    ):
+        os.makedirs(SHOT_DIR_1080, exist_ok=True)
+        self._setup()
+        ctx = self._ctx(browser)
+        page = ctx.new_page()
+        try:
+            page.goto(
+                f'{django_server}/workshops/gap-1080-ws/tutorial/overview',
+                wait_until='domcontentloaded',
+            )
+            collapse = page.locator(
+                '[data-testid="content-sidebar-collapse-btn"]',
+            )
+            collapse.wait_for(state='visible')
+            main = page.locator('#content-sidebar-main')
+            main_before = main.bounding_box()
+            assert main_before is not None
+
+            collapse.click()
+            page.wait_for_function(
+                "document.documentElement.getAttribute('data-content-sidebar')"
+                " === 'collapsed'",
+            )
+            floating = page.locator(
+                '[data-testid="content-sidebar-floating-toggle"]',
+            )
+            assert floating.is_visible()
+            # Sidebar column collapses to zero width — no dead left column.
+            aside = page.locator('#content-sidebar-aside')
+            aside_box = aside.bounding_box()
+            # bounding_box is None when width/height collapse to 0.
+            assert aside_box is None or aside_box['width'] < 2, (
+                f'Collapsed aside still has width '
+                f'{aside_box["width"] if aside_box else 0}'
+            )
+            # Main content widened.
+            main_collapsed = main.bounding_box()
+            assert main_collapsed is not None
+            assert main_collapsed['width'] >= main_before['width'] - 1
+
+            page.screenshot(
+                path=f'{SHOT_DIR_1080}/1080-workshop-collapsed.png',
+                full_page=False,
+            )
+
+            # Expand again and re-check alignment.
+            floating.click()
+            page.wait_for_function(
+                "document.documentElement.getAttribute('data-content-sidebar')"
+                " === 'expanded'",
+            )
+            link = page.locator('[data-testid="sidebar-back-to-workshop"]')
+            link.wait_for(state='visible')
+            crumb = page.locator('[data-testid="page-breadcrumb"]')
+            link_box = link.bounding_box()
+            crumb_box = crumb.bounding_box()
+            assert link_box is not None and crumb_box is not None
+            assert abs(link_box['y'] - crumb_box['y']) <= 8, (
+                'Empty band reappeared above the back-link after expanding'
+            )
+        finally:
+            ctx.close()
+
+    def test_mobile_layout_no_empty_band(self, browser, django_server):
+        os.makedirs(SHOT_DIR_1080, exist_ok=True)
+        self._setup()
+        ctx = self._ctx(browser, width=390, height=780)
+        page = ctx.new_page()
+        try:
+            page.goto(
+                f'{django_server}/workshops/gap-1080-ws/tutorial/overview',
+                wait_until='domcontentloaded',
+            )
+            crumb = page.locator('[data-testid="page-breadcrumb"]')
+            crumb.wait_for(state='visible')
+            bar = page.locator(
+                '[data-testid="reader-mobile-progress-bar"]',
+            )
+            bar.wait_for(state='visible')
+
+            bar_box = bar.bounding_box()
+            crumb_box = crumb.bounding_box()
+            assert bar_box is not None and crumb_box is not None
+            # Mobile drawer/progress bar renders above the breadcrumb.
+            assert bar_box['y'] < crumb_box['y'], (
+                'Mobile progress bar is not above the breadcrumb'
+            )
+            # The collapse button is desktop-only.
+            assert not page.locator(
+                '[data-testid="content-sidebar-collapse-btn"]',
+            ).is_visible()
+
+            page.screenshot(
+                path=f'{SHOT_DIR_1080}/1080-workshop-mobile.png',
+                full_page=False,
+            )
+        finally:
+            ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestGatedTutorialNoOrphanColumn:
+    """Issue #1080: gated pages render single-column, no empty sidebar."""
+
+    def test_gated_tutorial_single_column_no_sidebar(
+        self, browser, django_server,
+    ):
+        os.makedirs(SHOT_DIR_1080, exist_ok=True)
+        _clear_workshops()
+        _create_workshop(
+            slug='gated-1080-ws',
+            title='Gated Workshop',
+            landing=0,
+            # pages require a paid level so an anonymous visitor is gated.
+            pages=20,
+            recording=20,
+            pages_data=[
+                ('overview', 'Overview', '# Locked\n\nSecret body.'),
+            ],
+        )
+        ctx = browser.new_context(viewport={'width': 1280, 'height': 900})
+        page = ctx.new_page()
+        try:
+            page.goto(
+                f'{django_server}/workshops/gated-1080-ws/tutorial/overview',
+                wait_until='domcontentloaded',
+            )
+            # No sidebar aside is rendered on gated pages.
+            assert page.locator('#content-sidebar-aside').count() == 0
+            # The breadcrumb sits near the top of the single column.
+            crumb = page.locator('[data-testid="page-breadcrumb"]')
+            crumb.wait_for(state='visible')
+            crumb_box = crumb.bounding_box()
+            assert crumb_box is not None
+            header = page.locator('#site-header')
+            header_box = header.bounding_box()
+            header_bottom = header_box['y'] + header_box['height']
+            # No large empty band between header and the breadcrumb.
+            assert crumb_box['y'] - header_bottom < 140, (
+                f'Large empty band on gated page: breadcrumb {crumb_box["y"]:.1f}'
+                f' vs header bottom {header_bottom:.1f}'
+            )
+            page.screenshot(
+                path=f'{SHOT_DIR_1080}/1080-workshop-gated.png',
+                full_page=False,
+            )
+        finally:
+            ctx.close()
+
+
 @pytest.mark.django_db(transaction=True)
 class TestSharedReaderWorkshopBehavior:
     """Workshop tutorials and course units share the reader chrome."""

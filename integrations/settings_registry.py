@@ -97,6 +97,21 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/zoom.md#zoom_join_before_host',
             },
+            {
+                'key': 'ZOOM_AUTO_RECORDING',
+                'is_secret': False,
+                'optional': True,
+                'default': 'cloud',
+                'description': (
+                    'How event-created Zoom meetings auto-record: cloud '
+                    '(default, records to Zoom cloud so the recording-ready '
+                    'webhook can fetch it), local, or none. Requires cloud '
+                    'recording to be enabled and not locked at the Zoom '
+                    'account level for the host account, otherwise the '
+                    'per-meeting request is ignored.'
+                ),
+                'docs_url': '_docs/integrations/zoom.md#zoom_auto_recording',
+            },
         ],
     },
     {

@@ -3,11 +3,14 @@
 
 The config change in ``integrations/services/zoom.py`` only affects NEWLY
 created meetings. Meetings created before the change still carry the old
-``join_before_host: True`` on Zoom's side. This command PATCHes the current
-settings (``join_before_host: False``, plus the configured waiting-room flag)
-onto every upcoming event that already has a ``zoom_meeting_id``, WITHOUT
-recreating the meeting — so the join URL (already mailed out in calendar invites
-and shown on event pages) is preserved.
+settings on Zoom's side. This command PATCHes the full current settings payload
+(the configured ``auto_recording`` — ``cloud`` by default — plus
+``join_before_host: False`` and the configured waiting-room flag) onto every
+upcoming event that already has a ``zoom_meeting_id``, WITHOUT recreating the
+meeting — so the join URL (already mailed out in calendar invites and shown on
+event pages) is preserved. Because it sends the whole settings body, running it
+turns ON cloud auto-recording for any pre-existing meeting that lacked it
+(provided cloud recording is enabled at the Zoom account level, #1081).
 
 Usage::
 
@@ -31,9 +34,10 @@ from integrations.services.zoom import update_meeting_settings
 
 class Command(BaseCommand):
     help = (
-        "Apply the standard Zoom meeting settings (join-before-host off, plus "
-        "the configured waiting-room flag) to existing upcoming meetings "
-        "without changing their join URL (#1004)."
+        "Apply the standard Zoom meeting settings (auto_recording — cloud by "
+        "default — plus join-before-host off and the configured waiting-room "
+        "flag) to existing upcoming meetings without changing their join URL "
+        "(#1004, #1081)."
     )
 
     def add_arguments(self, parser):

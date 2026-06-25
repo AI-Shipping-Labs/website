@@ -454,7 +454,11 @@ class ZoomWaitingRoomSettingsTest(TestCase):
         zoom.clear_token_cache()
         # Isolate from any leaked override rows / warmed cache for these keys.
         IntegrationSetting.objects.filter(
-            key__in=['ZOOM_WAITING_ROOM', 'ZOOM_JOIN_BEFORE_HOST'],
+            key__in=[
+                'ZOOM_WAITING_ROOM',
+                'ZOOM_JOIN_BEFORE_HOST',
+                'ZOOM_AUTO_RECORDING',
+            ],
         ).delete()
         clear_config_cache()
         self.addCleanup(clear_config_cache)
@@ -527,6 +531,42 @@ class ZoomWaitingRoomSettingsTest(TestCase):
         self.assertEqual(payload['settings']['auto_recording'], 'cloud')
         self.assertIs(payload['settings']['mute_upon_entry'], True)
         self.assertIs(payload['settings']['auto_transcribing'], True)
+
+    @patch('integrations.services.zoom.requests.post')
+    def test_create_meeting_respects_auto_recording_override(self, mock_post):
+        # The auto_recording value is configurable (not hardcoded): flipping the
+        # Studio setting to 'none' is reflected end-to-end in the POST payload
+        # (#1081).
+        self._set_override('ZOOM_AUTO_RECORDING', 'none')
+        payload = self._create_payload(mock_post)
+        self.assertEqual(payload['settings']['auto_recording'], 'none')
+
+    @patch('integrations.services.zoom.requests.patch')
+    @patch('integrations.services.zoom.requests.post')
+    def test_update_meeting_settings_pushes_auto_recording_cloud(
+        self, mock_post, mock_patch,
+    ):
+        # The backfill (update_meeting_settings) sends the full settings body,
+        # so it turns auto_recording: cloud on for pre-existing meetings (#1081).
+        from integrations.services.zoom import update_meeting_settings
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'token-abc', 'expires_in': 3600,
+        }
+        mock_post.return_value = token_response
+
+        patch_response = MagicMock()
+        patch_response.status_code = 204
+        patch_response.content = b''
+        mock_patch.return_value = patch_response
+
+        update_meeting_settings(self.event)
+
+        body = mock_patch.call_args.kwargs['json']
+        self.assertEqual(body['settings']['auto_recording'], 'cloud')
+        self.assertIs(body['settings']['join_before_host'], False)
 
     @patch('integrations.services.zoom.requests.patch')
     @patch('integrations.services.zoom.requests.post')
@@ -1761,6 +1801,22 @@ class ZoomSettingsTest(TestCase):
         self.assertIsInstance(settings.ZOOM_CLIENT_SECRET, str)
         self.assertIsInstance(settings.ZOOM_ACCOUNT_ID, str)
         self.assertIsInstance(settings.ZOOM_WEBHOOK_SECRET_TOKEN, str)
+
+    def test_auto_recording_key_registered_in_zoom_group(self):
+        """ZOOM_AUTO_RECORDING is exposed as a Studio-editable Zoom setting (#1081)."""
+        from integrations.settings_registry import get_group_by_name
+
+        zoom_group = get_group_by_name('zoom')
+        entry = next(
+            (k for k in zoom_group['keys'] if k['key'] == 'ZOOM_AUTO_RECORDING'),
+            None,
+        )
+        self.assertIsNotNone(
+            entry, 'ZOOM_AUTO_RECORDING must be registered in the zoom group',
+        )
+        self.assertTrue(entry.get('description'))
+        self.assertTrue(entry.get('docs_url'))
+        self.assertEqual(entry.get('default'), 'cloud')
 
 
 # --- Recording Model Event FK Test ---

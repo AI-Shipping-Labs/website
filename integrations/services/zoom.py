@@ -112,15 +112,19 @@ def _meeting_settings():
     """Build the shared Zoom meeting ``settings`` payload.
 
     Used by both ``create_meeting`` and ``update_meeting_settings`` so a new
-    meeting and an in-place patch always carry the same join-before-host /
-    waiting-room configuration. ``join_before_host`` defaults OFF so early
-    joiners see Zoom's "waiting for the host to start" hold and cloud recording
-    only begins once the host joins — with no manual admitting. ``waiting_room``
-    defaults OFF (it would require the host to admit each attendee); it stays
-    configurable for operators who want it (issue #1004).
+    meeting and an in-place patch always carry the same auto-record /
+    join-before-host / waiting-room configuration. ``auto_recording`` defaults
+    to ``cloud`` (configurable via ``ZOOM_AUTO_RECORDING`` — ``cloud`` / ``local``
+    / ``none``) so event meetings record automatically once the host joins; this
+    only takes effect if cloud recording is enabled/licensed at the Zoom account
+    level (#1081). ``join_before_host`` defaults OFF so early joiners see Zoom's
+    "waiting for the host to start" hold and cloud recording only begins once the
+    host joins — with no manual admitting. ``waiting_room`` defaults OFF (it
+    would require the host to admit each attendee); it stays configurable for
+    operators who want it (issue #1004).
     """
     return {
-        'auto_recording': 'cloud',
+        'auto_recording': get_config('ZOOM_AUTO_RECORDING', 'cloud'),
         'join_before_host': _config_bool('ZOOM_JOIN_BEFORE_HOST', default=False),
         'mute_upon_entry': True,
         'waiting_room': _config_bool('ZOOM_WAITING_ROOM', default=False),

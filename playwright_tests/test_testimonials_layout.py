@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from playwright_tests.conftest import SETTLE_TIMEOUT_MS, goto_with_retry
+
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -61,6 +63,17 @@ def _ensure_testimonial_course():
 
 
 def _assert_no_horizontal_overflow(page, selector):
+    # Wait for the target element to attach before evaluating against it.
+    # Against the live dev environment (scheduled-playwright-dev.yml) the page
+    # can still be settling when ``goto_with_retry(..., wait_until="networkidle")``
+    # returns on a cold/contended 4-shard runner, so a bare ``evaluate_all`` can
+    # race the element's attachment and time out (Issue #1083). Using the shared,
+    # load-tolerant ``SETTLE_TIMEOUT_MS`` budget (Issue #903) keeps a warm run
+    # instant while giving a loaded shard headroom -- it is NOT a blind bump of
+    # the default 30s timeout.
+    page.locator(selector).first.wait_for(
+        state="attached", timeout=SETTLE_TIMEOUT_MS
+    )
     overflows = page.locator(selector).evaluate_all(
         """els => els.filter(el => el.scrollWidth > el.clientWidth + 1).length"""
     )
@@ -70,6 +83,9 @@ def _assert_no_horizontal_overflow(page, selector):
 def _screenshot_section(page, name):
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
     section = page.locator('[data-testid="testimonial-grid"]').first
+    # Wait for the grid to attach before evaluating against it (Issue #1083);
+    # see ``_assert_no_horizontal_overflow`` for the SETTLE_TIMEOUT_MS rationale.
+    section.wait_for(state="attached", timeout=SETTLE_TIMEOUT_MS)
     page.add_style_tag(
         content="header, #section-nav { visibility: hidden !important; }"
     )
@@ -82,10 +98,15 @@ def _screenshot_section(page, name):
 @pytest.mark.django_db
 def test_homepage_testimonials_desktop_and_mobile_screenshots(django_server, page):
     page.set_viewport_size({"width": 1280, "height": 900})
-    page.goto(f"{django_server}/", wait_until="networkidle")
+    goto_with_retry(page, f"{django_server}/", wait_until="networkidle")
     grid = page.locator('[data-testid="testimonial-grid"]').first
     cards = page.locator('[data-testid="testimonial-card"]')
 
+    # Wait for the grid to attach before the first ``.evaluate`` against it.
+    # See ``_assert_no_horizontal_overflow`` for the SETTLE_TIMEOUT_MS rationale
+    # (Issue #1083 / #903): the live dev page can still be settling when the
+    # ``networkidle`` goto returns on a contended shard.
+    grid.wait_for(state="attached", timeout=SETTLE_TIMEOUT_MS)
     assert grid.is_visible()
     assert cards.count() >= 4
     assert grid.evaluate("el => getComputedStyle(el).display") == "grid"
@@ -97,7 +118,7 @@ def test_homepage_testimonials_desktop_and_mobile_screenshots(django_server, pag
     _screenshot_section(page, "homepage-desktop")
 
     page.set_viewport_size({"width": 390, "height": 900})
-    page.goto(f"{django_server}/", wait_until="networkidle")
+    goto_with_retry(page, f"{django_server}/", wait_until="networkidle")
     _assert_no_horizontal_overflow(page, '[data-testid="testimonial-card"]')
     _screenshot_section(page, "homepage-mobile")
 

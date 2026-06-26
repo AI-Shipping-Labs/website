@@ -380,7 +380,11 @@ class SendRegistrationConfirmationTest(TestCase):
         raise AssertionError('No text/calendar part found in email')
 
     @patch('events.services.registration_email.boto3')
-    def test_send_email_contains_ics_attachment(self, mock_boto3):
+    def test_send_email_calendar_is_multipart_alternative_sibling(self, mock_boto3):
+        """Issue #1088: the text/calendar part is delivered as a
+        multipart/alternative sibling of the HTML body, NOT as a
+        Content-Disposition: attachment, so Gmail merges by UID in place.
+        """
         mock_client = MagicMock()
         mock_client.send_email.return_value = {'MessageId': 'msg-456'}
         mock_boto3.client.return_value = mock_client
@@ -393,20 +397,48 @@ class SendRegistrationConfirmationTest(TestCase):
         call_kwargs = mock_client.send_email.call_args[1]
         raw_data = call_kwargs['Content']['Raw']['Data']
         msg = self._parse_raw_email(raw_data)
-        parts = self._get_parts(msg)
 
-        # Check that there is a calendar part with .ics content
-        calendar_types = [
-            ct for ct in parts if 'calendar' in ct
+        # A multipart/alternative container must exist.
+        alternative_parts = [
+            part for part in msg.walk()
+            if part.get_content_type() == 'multipart/alternative'
         ]
-        self.assertTrue(calendar_types, 'No text/calendar part found in email')
+        self.assertTrue(
+            alternative_parts,
+            'No multipart/alternative container found in email',
+        )
+        alternative = alternative_parts[0]
 
-        ics_content = parts[calendar_types[0]]
+        # The text/html body and the text/calendar part are SIBLINGS inside
+        # the same multipart/alternative container.
+        child_types = [
+            child.get_content_type()
+            for child in alternative.get_payload()
+        ]
+        self.assertIn('text/html', child_types)
+        self.assertIn('text/calendar', child_types)
+
+        cal_part = next(
+            child for child in alternative.get_payload()
+            if child.get_content_type() == 'text/calendar'
+        )
+
+        # method=REQUEST on the calendar part's Content-Type.
+        self.assertEqual(cal_part.get_param('method'), 'REQUEST')
+
+        # No Content-Disposition: attachment on the calendar part.
+        self.assertIsNone(cal_part.get('Content-Disposition'))
+        self.assertNotIn('Content-Disposition: attachment', raw_data)
+
+        # The .ics payload is unchanged and present in the sibling part.
+        ics_content = cal_part.get_payload(decode=True).decode('utf-8')
         self.assertIn('VCALENDAR', ics_content)
         self.assertIn('VEVENT', ics_content)
-
-        # Check filename in raw headers
-        self.assertIn('event.ics', raw_data)
+        self.assertIn('UID:event-test-event@aishippinglabs.com', ics_content)
+        self.assertIn('METHOD:REQUEST', ics_content)
+        self.assertIn('SEQUENCE:', ics_content)
+        self.assertIn('ORGANIZER', ics_content)
+        self.assertIn('ATTENDEE', ics_content)
 
     @patch('events.services.registration_email.boto3')
     def test_send_email_ics_attachment_uses_attendee_join_url(self, mock_boto3):

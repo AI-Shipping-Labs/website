@@ -39,6 +39,8 @@ from pathlib import Path
 
 import pytest
 
+from playwright_tests.conftest import SETTLE_TIMEOUT_MS, goto_with_retry
+
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -114,8 +116,19 @@ def _ensure_long_quote_course():
 
 
 def _scroll_section_into_view(page):
-    """Scroll the testimonial grid into view, hiding the sticky header."""
+    """Scroll the testimonial grid into view, hiding the sticky header.
+
+    Wait for the grid to be attached before evaluating against it. Against
+    the live dev environment (scheduled-playwright.yml) the homepage can
+    still be settling when ``page.goto(..., wait_until="networkidle")``
+    returns on a cold/contended 4-shard runner, so a bare
+    ``section.evaluate`` can race the element's attachment and time out
+    (Issue #1083). Using the shared, load-tolerant ``SETTLE_TIMEOUT_MS``
+    budget (Issue #903) keeps a warm run instant while giving a loaded
+    shard headroom -- it is NOT a blind bump of the default 30s timeout.
+    """
     section = page.locator('[data-testid="testimonial-grid"]').first
+    section.wait_for(state="attached", timeout=SETTLE_TIMEOUT_MS)
     page.add_style_tag(
         content="header, #section-nav { visibility: hidden !important; }"
     )
@@ -196,7 +209,7 @@ def _assert_clamp_utility_applied(measurements, viewport_label):
 def test_homepage_desktop_row_heights_equal(django_server, page):
     """Each row of the homepage 2-col testimonial grid has equal-height cards."""
     page.set_viewport_size({"width": 1280, "height": 900})
-    page.goto(f"{django_server}/", wait_until="networkidle")
+    goto_with_retry(page, f"{django_server}/", wait_until="networkidle")
     _scroll_section_into_view(page)
 
     geometries = _card_geometry(page)
@@ -234,7 +247,7 @@ def test_homepage_desktop_row_heights_equal(django_server, page):
 def test_homepage_desktop_no_truncation_for_current_corpus(django_server, page):
     """No current homepage testimonial is clipped at desktop 1280x900."""
     page.set_viewport_size({"width": 1280, "height": 900})
-    page.goto(f"{django_server}/", wait_until="networkidle")
+    goto_with_retry(page, f"{django_server}/", wait_until="networkidle")
     _scroll_section_into_view(page)
 
     measurements = _quote_truncation(page)
@@ -262,7 +275,7 @@ def test_homepage_mobile_carousel_no_truncation_for_current_corpus(
 ):
     """No current homepage testimonial is clipped at mobile 393x851."""
     page.set_viewport_size({"width": 393, "height": 851})
-    page.goto(f"{django_server}/", wait_until="networkidle")
+    goto_with_retry(page, f"{django_server}/", wait_until="networkidle")
     _scroll_section_into_view(page)
 
     measurements = _quote_truncation(page)

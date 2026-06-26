@@ -1397,6 +1397,30 @@
         ]
       }
     },
+    "/api/diagnostics/cleanup-gates": {
+      "get": {
+        "description": "Returns the production-data gate counts the blocked cleanup issues (#1016 / #1018 / #1017) wait on, plus a ``generated_at`` timestamp. Staff-token only, read-only. Integer counts only -- no PII, no row ids, no titles. Each gate proceeds only when its count is ``0``.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "completed_future_events": 0,
+                  "generated_at": "2026-06-26T10:00:00+00:00",
+                  "null_completed_unit_progress": 0,
+                  "workshops_missing_content_id": 0
+                }
+              }
+            },
+            "description": "The cleanup-gate counts."
+          }
+        },
+        "summary": "Read the cleanup-gate counts",
+        "tags": [
+          "Diagnostics"
+        ]
+      }
+    },
     "/api/event-series": {
       "delete": {
         "description": "DELETE returns 405 with a structured error -- deletion is not exposed through the API. Hide the series with ``PATCH is_active=false``.",

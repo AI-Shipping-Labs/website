@@ -22,6 +22,7 @@ from api.views.checkpoints import (
     checkpoint_move,
     week_checkpoints_create,
 )
+from api.views.cleanup_gates import cleanup_gates_diagnostics
 from api.views.contacts import (
     contacts_export,
     contacts_import,
@@ -647,6 +648,15 @@ urlpatterns = [
         "payments/tier-reconcile",
         tier_reconcile_apply,
         name="api_tier_reconcile_apply",
+    ),
+    # ---- Cleanup-gate diagnostics (issue #1087) -----------------------
+    # Staff-token read-only counts the blocked cleanups (#1016 / #1018 /
+    # #1017) gate on. Integer counts only -- no PII. No captures, so no
+    # converter/literal collision concerns. Slashless like every /api route.
+    path(
+        "diagnostics/cleanup-gates",
+        cleanup_gates_diagnostics,
+        name="api_cleanup_gates_diagnostics",
     ),
     # ---- Onboarding read API (issue #837) -----------------------------
     # Staff-token read-only feed over the questionnaires app: survey shape

@@ -707,7 +707,7 @@ Deploy Dev workflow runs the same command in a parallel `playwright-core`
 job with the default marker exclusion:
 
 ```bash
-pytest -m "core and not manual_visual and not legacy_checkout and not slow_platform" playwright_tests/ -v
+pytest -m "core and not manual_visual and not slow_platform" playwright_tests/ -v
 ```
 
 A failure blocks the deploy. The scheduled workflow runs the broader Playwright
@@ -716,7 +716,7 @@ run. That scheduled default is sharded across separate GitHub Actions matrix
 jobs and uses:
 
 ```bash
-pytest -m "not manual_visual and not legacy_checkout and not slow_platform" <shard files> -v
+pytest -m "not manual_visual and not slow_platform" <shard files> -v
 ```
 
 Manual dispatch of `scheduled-playwright.yml` can also run the excluded marker
@@ -732,7 +732,6 @@ Use these markers to keep default CI focused while preserving opt-in coverage:
 |---|---|---|
 | `core` | Deploy-critical user/operator smoke paths (auth, access control, payments, one happy path per major content type, Studio safety). | Run on every push via Deploy Dev's `playwright-core` job (`make test-playwright-core`). Included in the scheduled full suite. |
 | `manual_visual` | Screenshot generators and tests whose primary output is manual visual review. | Excluded from Deploy Dev and the scheduled default; runnable with `make test-playwright-manual-visual` or scheduled manual dispatch with `include_excluded`. |
-| `legacy_checkout` | Retained local Stripe Checkout/subscription API coverage while the product migrates to Payment Links and the Customer Portal. | Excluded from Deploy Dev and the scheduled default. Do not add or move payment tests under this marker while #604/#612/#613 are active unless that work owns the payment change. |
 | `slow_platform` | SQLite/threading/migration/concurrency tests or equivalent platform-level checks that are valuable but slow or contention-prone. | Excluded from default pytest-marker Playwright runs. For Django `manage.py test`, mirror with `@tag('slow_platform')` when practical so future tag-based runs can exclude it explicitly. |
 | `visual_regression` | Automated CSS class / Tailwind utility / spacing / color / layout-density assertions (`px-5`, `min-h-*`, `bg-card`, `flex-col`, `max-w-7xl`, etc.). Distinct from `manual_visual`: these run unattended, they just shouldn't gate push. | Excluded from `make test`, `make test-core`, `make test-playwright`, `make test-playwright-core`, Deploy Dev, and `ci.yml`. Included in the scheduled Playwright workflow's default run. Run on demand with `make test-visual-regression`. Playwright tests use `@pytest.mark.visual_regression`; Django tests use `@tag('visual_regression')`. |
 | `local_only` | Tests that require the local Django runner — direct ORM seeding, session-cookie injection, `create_user`/`create_staff_user`/`auth_context`/`create_session_for_user`/`ensure_tiers`/`ensure_site_config_tiers` helpers, or pytest-django DB fixtures. They cannot run against a deployed environment. | Included in every run that hits a local base URL (default `PLAYWRIGHT_BASE_URL` unset, or set to `127.0.0.1`/`localhost`). Excluded automatically from the dev-environment scheduled suite (`scheduled-playwright-dev.yml`) — `playwright_tests/conftest.py` skips them when `PLAYWRIGHT_BASE_URL` is non-local. |
@@ -749,7 +748,7 @@ local DB state cannot pass against dev.
 If your test creates DB rows, relies on a session/DB fixture, or POSTs to
 a write endpoint, mark it `local_only` or `creates_data` so the dev
 scheduled suite does not pick it up. The dev suite's marker filter
-(`not manual_visual and not legacy_checkout and not slow_platform and
+(`not manual_visual and not slow_platform and
 not visual_regression and not local_only and not creates_data`) leaves
 the anonymous, read-only subset of the suite as the dev-suite payload.
 Note: `playwright_tests/conftest.py` does NOT auto-skip tests carrying

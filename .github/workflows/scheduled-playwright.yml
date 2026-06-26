@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       include_excluded:
-        description: "Also run manual_visual / legacy_checkout / slow_platform marker suites"
+        description: "Also run manual_visual / slow_platform marker suites"
         required: false
         type: boolean
         default: false
@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PLAYWRIGHT_DEFAULT_MARKERS: not manual_visual and not legacy_checkout and not slow_platform
+  PLAYWRIGHT_DEFAULT_MARKERS: not manual_visual and not slow_platform
 
 jobs:
   changes:
@@ -168,7 +168,7 @@ jobs:
         run: uv run playwright install --with-deps chromium
 
       - name: Run excluded Playwright marker suites
-        run: uv run pytest -m "manual_visual or legacy_checkout or slow_platform" playwright_tests/ -v
+        run: uv run pytest -m "manual_visual or slow_platform" playwright_tests/ -v
 
   notify:
     name: Scheduled Playwright Failure Issue

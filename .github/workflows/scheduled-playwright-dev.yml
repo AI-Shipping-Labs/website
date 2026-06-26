@@ -18,7 +18,7 @@ concurrency:
 env:
   PLAYWRIGHT_BASE_URL: https://dev.aishippinglabs.com
   PLAYWRIGHT_DEFAULT_MARKERS: >-
-    not manual_visual and not legacy_checkout and not slow_platform
+    not manual_visual and not slow_platform
     and not visual_regression and not local_only and not creates_data
 
 jobs:

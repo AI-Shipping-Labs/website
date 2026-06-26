@@ -4,7 +4,7 @@ The scheduled dev workflow (``scheduled-playwright-dev.yml``) runs the Playwrigh
 suite against ``https://dev.aishippinglabs.com`` on a 3-hour cron with the marker
 filter::
 
-    not manual_visual and not legacy_checkout and not slow_platform
+    not manual_visual and not slow_platform
     and not visual_regression and not local_only and not creates_data
 
 Because ``PLAYWRIGHT_BASE_URL`` is then a non-local host,

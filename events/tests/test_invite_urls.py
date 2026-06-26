@@ -58,7 +58,7 @@ class IcsJoinUrlOverrideTest(TestCase):
         ics_bytes = generate_ics(self.event)
         url_line = _join_url_line(ics_bytes)
         self.assertIn(
-            'https://override.example.com/events/override-event/join',
+            f'https://override.example.com{self.event.get_join_url()}',
             url_line,
         )
         self.assertNotIn('https://env.example.com', url_line)
@@ -68,7 +68,7 @@ class IcsJoinUrlOverrideTest(TestCase):
         ics_bytes = generate_ics(self.event)
         url_line = _join_url_line(ics_bytes)
         self.assertIn(
-            'https://env.example.com/events/override-event/join',
+            f'https://env.example.com{self.event.get_join_url()}',
             url_line,
         )
 
@@ -137,11 +137,11 @@ class RegistrationEmailJoinUrlOverrideTest(TestCase):
         msg = self._capture_raw_email()
         html = self._get_html_body(msg)
         self.assertIn(
-            'https://override.example.com/events/reg-event/join',
+            f'https://override.example.com{self.event.get_join_url()}',
             html,
         )
         self.assertNotIn(
-            'https://env.example.com/events/reg-event/join',
+            f'https://env.example.com{self.event.get_join_url()}',
             html,
         )
 
@@ -149,6 +149,6 @@ class RegistrationEmailJoinUrlOverrideTest(TestCase):
         msg = self._capture_raw_email()
         html = self._get_html_body(msg)
         self.assertIn(
-            'https://env.example.com/events/reg-event/join',
+            f'https://env.example.com{self.event.get_join_url()}',
             html,
         )

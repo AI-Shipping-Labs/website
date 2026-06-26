@@ -211,7 +211,10 @@ class TestSprintDetailRedesign981:
         page.goto(f"{django_server}/sprints/{sprint_slug}", wait_until="domcontentloaded")
 
         join = page.locator('[data-testid="sprint-call-join"]')
-        assert join.get_attribute("href").endswith("/events/live-sprint-call/join")
+        # Issue #1082: id-canonical /events/<id>/<slug>/join URL.
+        join_href = join.get_attribute("href")
+        assert join_href.endswith("/live-sprint-call/join")
+        assert "/events/" in join_href
         assert join.get_attribute("target") == "_blank"
         assert "zoom.example.com/raw-live-link" not in page.content()
         ctx.close()

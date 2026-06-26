@@ -159,7 +159,7 @@ class GenerateSeriesIcsTest(TestCase):
 
         for event in (self.e1, self.e2):
             vevent = by_uid[f'event-{event.slug}@aishippinglabs.com']
-            join_url = f'https://aishippinglabs.com/events/{event.slug}/join'
+            join_url = f'https://aishippinglabs.com{event.get_join_url()}'
             self.assertEqual(str(vevent.get('url')), join_url)
             self.assertEqual(str(vevent.get('location')), join_url)
             self.assertIn(
@@ -212,11 +212,11 @@ class SendSeriesRegistrationInviteTest(TierSetupMixin, TestCase):
         by_uid = _vevents_by_uid(cal)
         self.assertEqual(
             str(by_uid['event-woh-a@aishippinglabs.com'].get('url')),
-            'https://aishippinglabs.com/events/woh-a/join',
+            f'https://aishippinglabs.com{self.e1.get_join_url()}',
         )
         self.assertEqual(
             str(by_uid['event-woh-b@aishippinglabs.com'].get('location')),
-            'https://aishippinglabs.com/events/woh-b/join',
+            f'https://aishippinglabs.com{self.e2.get_join_url()}',
         )
         for vevent in by_uid.values():
             self.assertEqual(_attendee_text(vevent), 'mailto:member@test.com')
@@ -311,11 +311,11 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
         self.assertEqual(_attendee_text(vevent), 'mailto:alice@test.com')
         self.assertEqual(
             str(vevent.get('url')),
-            'https://aishippinglabs.com/events/woh-u1/join',
+            f'https://aishippinglabs.com{self.e1.get_join_url()}',
         )
         self.assertEqual(
             str(vevent.get('location')),
-            'https://aishippinglabs.com/events/woh-u1/join',
+            f'https://aishippinglabs.com{self.e1.get_join_url()}',
         )
         self.assertEqual(
             EmailLog.objects.filter(email_type='series_update').count(), 2,
@@ -436,11 +436,11 @@ class SendSeriesCancellationTest(TierSetupMixin, TestCase):
         self.assertEqual(str(vevents[0].get('status')), 'CANCELLED')
         self.assertEqual(
             str(vevents[0].get('url')),
-            'https://aishippinglabs.com/events/woh-c1/join',
+            f'https://aishippinglabs.com{self.cancelled.get_join_url()}',
         )
         self.assertEqual(
             str(vevents[0].get('location')),
-            'https://aishippinglabs.com/events/woh-c1/join',
+            f'https://aishippinglabs.com{self.cancelled.get_join_url()}',
         )
 
     @patch('events.services.registration_email.boto3')

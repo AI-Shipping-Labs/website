@@ -96,7 +96,7 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         self.assertEqual(int(vevent.get('sequence')), 0)
         self.assertIn('mailto:noreply@aishippinglabs.com', str(vevent.get('organizer')))
         self.assertEqual(_attendee_text(vevent), 'mailto:attendee1073@test.com')
-        join_url = 'https://aishippinglabs.com/events/calendar-lifecycle-1073/join'
+        join_url = f'https://aishippinglabs.com{self.event.get_join_url()}'
         self.assertEqual(str(vevent.get('url')), join_url)
         self.assertEqual(str(vevent.get('location')), join_url)
         self.assertIn(f'Join: {join_url}', str(vevent.get('description')))

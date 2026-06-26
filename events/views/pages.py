@@ -408,9 +408,34 @@ def events_list(request):
 
 
 @login_required
-def event_join_redirect(request, slug):
-    """Redirect registered users to the event join URL, tracking each click."""
-    event = get_object_or_404(Event, slug=slug)
+def event_join_redirect(request, slug, event_id=None):
+    """Redirect registered users to the event join URL, tracking each click.
+
+    Issue #1082: two route shapes reach this view —
+
+    - The id-canonical ``events/<int:event_id>/<slug:slug>/join`` route
+      passes ``event_id`` (the lookup key) plus a cosmetic ``slug``. On a
+      slug mismatch we 301 to the canonical join URL, mirroring
+      ``event_detail`` and ``event_feedback_submit``.
+    - The legacy ``events/<slug>/join`` alias passes ``slug`` only and
+      looks up by slug (unchanged behavior) so calendar ``.ics`` entries
+      and stale emails never 404.
+
+    All downstream behavior (draft 404, registration check, #704 time
+    gating, past/no-url unavailable pages, click recording, ``joined_at``
+    stamping) is identical regardless of which shape was used.
+    """
+    if event_id is not None:
+        event = get_object_or_404(Event, pk=event_id)
+        # Slug is cosmetic on the canonical route — 301 to the canonical
+        # join URL on a mismatch, same pattern as event_detail / feedback.
+        if slug != event.slug:
+            return redirect(
+                f'/events/{event.pk}/{event.slug}/join',
+                permanent=True,
+            )
+    else:
+        event = get_object_or_404(Event, slug=slug)
 
     # Draft events return 404 for non-staff users
     if event.status == 'draft' and not request.user.is_staff:

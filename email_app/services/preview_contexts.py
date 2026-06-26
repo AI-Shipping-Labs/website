@@ -60,8 +60,8 @@ PREVIEW_CONTEXTS = {
         # accounts.services.timezones.format_user_datetime. Mirror that
         # shape here so the Studio preview matches what users will see.
         'event_datetime': 'March 21, 2026, 18:00 Europe/Berlin',
-        # Match the real send shape: {site}/events/{slug}/join.
-        'join_url': 'https://aishippinglabs.com/events/community-lunch/join',
+        # Match the real send shape: {site}/events/{id}/{slug}/join (#1082).
+        'join_url': 'https://aishippinglabs.com/events/42/community-lunch/join',
         # Issue #588: real send mints a JWT-signed cancel URL. The
         # preview URL must be a real URL shape so operators can hover
         # the link in the Studio preview and confirm the wiring.
@@ -114,8 +114,8 @@ PREVIEW_CONTEXTS = {
         'event_datetime': 'March 21, 2026, 18:00 Europe/Berlin',
         # Issue #706: ``event_url`` is the platform-side join redirect
         # (#704 time-gates it). Single CTA, matches the real send shape:
-        # {site}/events/{slug}/join.
-        'event_url': 'https://aishippinglabs.com/events/ai-shipping-workshop/join',
+        # {site}/events/{id}/{slug}/join (#1082).
+        'event_url': 'https://aishippinglabs.com/events/42/ai-shipping-workshop/join',
     },
     'post_event_followup': {
         'user_name': 'Ada',
@@ -157,7 +157,7 @@ PREVIEW_CONTEXTS = {
         'old_event_datetime': 'Saturday, March 21, 2026, 18:00 Europe/Berlin',
         'new_event_datetime': 'Saturday, March 28, 2026, 18:00 Europe/Berlin',
         'join_url': (
-            'https://aishippinglabs.com/events/community-lunch/join'
+            'https://aishippinglabs.com/events/42/community-lunch/join'
         ),
         'cancel_url': (
             'https://aishippinglabs.com/events/community-lunch/'

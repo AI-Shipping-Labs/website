@@ -7,9 +7,9 @@ audience-specific URL rules:
   ``VCALENDAR`` with ``METHOD:REQUEST`` — used for attendee ``.ics``
   attachments and the per-event download at
   ``/events/<slug>/calendar.ics`` (issue #484). Attendee community
-  events use the slug-keyed ``/events/<slug>/join`` redirect in
-  DESCRIPTION, URL, and LOCATION so raw Zoom links stay hidden behind
-  the gated join flow.
+  events use the id-canonical ``/events/<id>/<slug>/join`` redirect
+  (issue #1082) in DESCRIPTION, URL, and LOCATION so raw Zoom links stay
+  hidden behind the gated join flow.
 - ``generate_series_ics(events, method)`` builds a multi-event
   ``VCALENDAR`` WITH a ``METHOD`` property — used for the series
   subscriber invite (issue #869) so a whole series lands in the
@@ -64,7 +64,14 @@ def _event_urls(event):
         # Defensive fallback for stub events (e.g. a SimpleNamespace
         # without ``id``) used in some integration tests.
         detail_url = f'{site_url}/events/{event.slug}'
-    join_url = f'{site_url}/events/{event.slug}/join'
+    # Issue #1082: id-canonical join URL via ``Event.get_join_url``. The
+    # same defensive fallback for stub events keeps the slug-only shape
+    # (still a live alias route) when the helper or id is unavailable.
+    join_path = getattr(event, 'get_join_url', lambda: '')()
+    if join_path:
+        join_url = f'{site_url}{join_path}'
+    else:
+        join_url = f'{site_url}/events/{event.slug}/join'
     return detail_url, join_url
 
 
@@ -76,7 +83,7 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE, attendee_email=None,
     All audiences keep the same UID, DTSTART/DTEND, SEQUENCE, organizer,
     and summary shape so calendar clients update one entry by UID. URL,
     LOCATION, and gated DESCRIPTION behavior vary by audience:
-    attendee community events use ``/events/<slug>/join``; public feed
+    attendee community events use ``/events/<id>/<slug>/join``; public feed
     events use public detail URLs and anonymous-safe gated stubs; host
     invites use the non-attendee public detail URL.
 

@@ -17,7 +17,6 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from django.urls import reverse
 from django.utils import timezone
 from freezegun import freeze_time
 
@@ -100,7 +99,7 @@ class StartingSoonHelperWindowTest(TierSetupMixin, TestCase):
         # Join URL is the time-gated dashboard endpoint, never raw Zoom.
         self.assertEqual(
             result['join_url'],
-            reverse('event_join', kwargs={'slug': event.slug}),
+            event.get_join_url(),
         )
         self.assertNotIn('zoom.us', result['join_url'])
 
@@ -294,8 +293,9 @@ class StartingSoonDashboardViewTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Cohort Office Hours')
         # Open join page label (> 5 min away).
         self.assertContains(response, 'Open join page')
-        # Join URL is /events/<slug>/join, NEVER raw Zoom.
-        join_url = reverse('event_join', kwargs={'slug': event.slug})
+        # Join URL is the id-canonical /events/<id>/<slug>/join (#1082),
+        # NEVER raw Zoom.
+        join_url = event.get_join_url()
         self.assertContains(response, f'href="{join_url}"')
         self.assertNotContains(response, 'href="https://zoom.us/j/abc"')
         # Meta refresh present.

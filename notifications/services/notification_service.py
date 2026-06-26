@@ -402,8 +402,6 @@ class NotificationService:
         Returns:
             Notification if created, None if already sent.
         """
-        from django.urls import reverse
-
         from accounts.services.timezones import (
             build_timezone_account_url,
             build_timezone_email_line,
@@ -434,7 +432,7 @@ class NotificationService:
         # tick would skip this user entirely. Log loudly for ops.
         try:
             base_url = site_base_url()
-            event_url = f"{base_url}{reverse('event_join', kwargs={'slug': event.slug})}"
+            event_url = f"{base_url}{event.get_join_url()}"  # #1082: id-canonical
             EmailService().send(
                 user,
                 'event_reminder',

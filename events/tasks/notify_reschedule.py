@@ -177,7 +177,8 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
     old_start = _parse_iso(old_start_iso)
 
     site_url = site_base_url()
-    join_url = f'{site_url}/events/{event.slug}/join'
+    # Issue #1082: id-canonical join URL via ``Event.get_join_url``.
+    join_url = f'{site_url}{event.get_join_url()}'
     cancel_token = generate_cancel_token(registration)
     cancel_url = (
         f'{site_url}/events/{event.slug}/cancel-registration?token={cancel_token}'

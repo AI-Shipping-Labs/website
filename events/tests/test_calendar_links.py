@@ -58,13 +58,13 @@ class BuildCalendarLinksTest(TestCase):
             ['20260615T180000Z/20260615T193000Z'],
         )
         self.assertIn(
-            '/events/ai-agents-workshop/join',
+            self.event.get_join_url(),
             params['location'][0],
         )
         details = params['details'][0]
         self.assertIn('Build a working agent in 90 minutes', details)
         self.assertIn(
-            'https://aishippinglabs.com/events/ai-agents-workshop/join',
+            f'https://aishippinglabs.com{self.event.get_join_url()}',
             details,
         )
 
@@ -161,7 +161,7 @@ class BuildCalendarLinksTest(TestCase):
         details = _qs(url)['details'][0]
         # 2000 chars of description plus the "\n\nJoin: <url>" suffix.
         join_line = (
-            '\n\nJoin: https://aishippinglabs.com/events/long-desc/join'
+            f'\n\nJoin: https://aishippinglabs.com{event.get_join_url()}'
         )
         self.assertEqual(len(details), 2000 + len(join_line))
 
@@ -178,7 +178,7 @@ class BuildCalendarLinksTest(TestCase):
 
         params = _qs(build_calendar_links(event)['google'])
         self.assertIn(
-            'https://aishippinglabs.com/events/empty-desc/join',
+            f'https://aishippinglabs.com{event.get_join_url()}',
             params['details'][0],
         )
 
@@ -195,7 +195,7 @@ class BuildCalendarLinksTest(TestCase):
         self.assertEqual(params['startdt'], ['2026-06-15T18:00:00Z'])
         self.assertEqual(params['enddt'], ['2026-06-15T19:30:00Z'])
         self.assertIn(
-            '/events/ai-agents-workshop/join',
+            self.event.get_join_url(),
             params['location'][0],
         )
 
@@ -217,7 +217,7 @@ class BuildCalendarLinksTest(TestCase):
 
         links = build_calendar_links(self.event)
         join_url = (
-            'https://aishippinglabs.com/events/ai-agents-workshop/join'
+            f'https://aishippinglabs.com{self.event.get_join_url()}'
         )
 
         google = _qs(links['google'])
@@ -267,6 +267,6 @@ class CalendarLinksJoinUrlOverrideTest(TestCase):
         params = _qs(build_calendar_links(self.event)['google'])
         self.assertEqual(
             params['location'],
-            ['https://studio.example.com/events/override-event/join'],
+            [f'https://studio.example.com{self.event.get_join_url()}'],
         )
         self.assertNotIn('env.example.com', params['location'][0])

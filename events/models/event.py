@@ -475,6 +475,27 @@ class Event(
             kwargs={'event_id': self.id, 'slug': self.slug},
         )
 
+    def get_join_url(self):
+        """Return the canonical ``/events/<id>/<slug>/join`` URL.
+
+        Issue #1082: the join verb route is id-canonical, mirroring
+        ``get_absolute_url``. ``event_join_redirect`` reads the integer
+        ``event_id`` only; the slug is cosmetic and a mismatch triggers a
+        301 to the canonical form. This is the single source of truth for
+        every server-side join-URL builder (calendar invites, add-to-
+        calendar deep links, registration/reschedule emails, the on-page
+        Join button, and notification links).
+
+        Returns ``''`` for unsaved rows (``self.id is None``) so the same
+        defensive contract as ``get_absolute_url`` holds.
+        """
+        if self.id is None:
+            return ''
+        return reverse(
+            'event_join',
+            kwargs={'event_id': self.id, 'slug': self.slug},
+        )
+
     def get_studio_edit_url(self):
         return f'/studio/events/{self.pk}/edit'
 

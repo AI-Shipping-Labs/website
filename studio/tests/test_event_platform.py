@@ -379,9 +379,9 @@ class CustomURLPublicEventDetailTest(TestCase):
 
         response = self.client.get(event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
-        # Join link still uses /events/{slug}/join redirect — slug-keyed
-        # sibling routes are intentionally unchanged by issue #673.
-        self.assertContains(response, '/events/youtube-event/join')
+        # Issue #1082: the join link is now the id-canonical
+        # /events/<id>/<slug>/join URL via Event.get_join_url.
+        self.assertContains(response, event.get_join_url())
 
     def test_custom_url_event_join_link_works(self):
         """The join link on a custom URL event points to the custom URL."""
@@ -402,9 +402,8 @@ class CustomURLPublicEventDetailTest(TestCase):
 
         response = self.client.get(event.get_absolute_url())
         content = response.content.decode()
-        # Join link still uses /events/{slug}/join redirect (slug-keyed
-        # sibling route unchanged by issue #673).
-        self.assertIn('/events/discord-event-public/join', content)
+        # Issue #1082: id-canonical /events/<id>/<slug>/join URL.
+        self.assertIn(event.get_join_url(), content)
 
     def test_zoom_event_still_works(self):
         """Standard Zoom events still display correctly."""
@@ -425,6 +424,5 @@ class CustomURLPublicEventDetailTest(TestCase):
         self.client.login(email='user3@test.com', password='pass')
 
         response = self.client.get(event.get_absolute_url())
-        # Join link still uses /events/{slug}/join redirect (slug-keyed
-        # sibling route unchanged by issue #673).
-        self.assertContains(response, '/events/zoom-detail-event/join')
+        # Issue #1082: id-canonical /events/<id>/<slug>/join URL.
+        self.assertContains(response, event.get_join_url())

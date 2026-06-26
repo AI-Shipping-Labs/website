@@ -293,13 +293,20 @@ class SendRescheduleNoticeOneTest(TestCase):
         ics_bytes = mock_send.call_args.kwargs['ics_content']
         cal = _parse_ics(ics_bytes)
         vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
-        join_url = 'https://aishippinglabs.com/events/live-qa/join'
+        join_url = f'https://aishippinglabs.com{self.event.get_join_url()}'
 
         self.assertEqual(int(vevent.get('sequence')), 1)
         self.assertEqual(str(vevent.get('url')), join_url)
         self.assertEqual(str(vevent.get('location')), join_url)
         self.assertIn(f'Join: {join_url}', str(vevent.get('description')))
-        self.assertNotIn(self.event.get_absolute_url(), str(vevent.get('url')))
+        # Issue #1082: the id-canonical join URL has the detail path as a
+        # prefix, so guard that it is the join verb route (ends in /join)
+        # and not the bare detail URL.
+        self.assertTrue(str(vevent.get('url')).endswith('/join'))
+        self.assertNotEqual(
+            str(vevent.get('url')),
+            f'https://aishippinglabs.com{self.event.get_absolute_url()}',
+        )
 
     @patch('events.tasks.notify_reschedule._send_raw_email')
     def test_send_skips_cancelled_registration(self, mock_send):

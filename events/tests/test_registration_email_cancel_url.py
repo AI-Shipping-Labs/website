@@ -155,7 +155,7 @@ class RegistrationEmailCancelUrlOverrideTest(TestCase):
             {
                 'event_title': self.event.title,
                 'event_datetime': self.event.formatted_start(),
-                'join_url': f'{site_url}/events/{self.event.slug}/join',
+                'join_url': f'{site_url}{self.event.get_join_url()}',
                 'cancel_url': cancel_url,
                 'google_calendar_url': calendar_links['google'],
                 'outlook_calendar_url': calendar_links['outlook'],

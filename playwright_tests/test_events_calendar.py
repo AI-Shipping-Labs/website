@@ -564,7 +564,8 @@ class TestScenario7ZoomLinkVisibleBeforeEvent:
         assert "5 minutes" in next_steps
         assert "15 minutes" not in next_steps
         assert "Join the event" not in body
-        assert "/events/nearly-imminent-workshop/join" not in body
+        # Issue #1082: id-canonical /events/<id>/<slug>/join URL.
+        assert event.get_join_url() not in body
         assert "https://zoom.us/j/654321" not in body
 
     def test_zoom_link_shown_within_5_minutes_of_start(
@@ -607,8 +608,9 @@ class TestScenario7ZoomLinkVisibleBeforeEvent:
         assert "https://zoom.us/j/123456" not in body
 
         # The raw Zoom URL is hidden behind the join redirect endpoint.
+        # Issue #1082: id-canonical /events/<id>/<slug>/join URL.
         join_link = page.locator(
-            'a[href="/events/imminent-workshop/join"]'
+            f'a[href="{event.get_join_url()}"]'
         )
         assert join_link.count() >= 1
 # ---------------------------------------------------------------

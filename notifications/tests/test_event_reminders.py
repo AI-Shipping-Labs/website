@@ -568,8 +568,9 @@ class CheckEventRemindersTest(TestCase):
         self, mock_slack, mock_ses,
     ):
         """The email body has a single CTA: ``event_url`` points to the
-        ``/events/<slug>/join`` redirect (prefixed with site_base_url). The
-        ``/events/<id>/<slug>`` detail page URL must NOT appear."""
+        id-canonical ``/events/<id>/<slug>/join`` redirect (#1082, prefixed
+        with site_base_url). The ``/events/<id>/<slug>`` detail page URL
+        must NOT appear."""
         from integrations.config import site_base_url
 
         event = Event.objects.create(
@@ -587,9 +588,13 @@ class CheckEventRemindersTest(TestCase):
 
         base = site_base_url()
         # Single CTA: event_url is the platform-side join redirect.
-        self.assertIn(f'{base}/events/url-event-slug/join', html_body)
-        # The detail page URL must not leak into the reminder body.
-        self.assertNotIn(f'{base}{event.get_absolute_url()}', html_body)
+        self.assertIn(f'{base}{event.get_join_url()}', html_body)
+        # The detail page URL must not leak into the reminder body as a
+        # standalone link. Issue #1082: the join URL legitimately has the
+        # detail path as a prefix, so check the detail URL is never the
+        # href target (followed by the closing quote), only the join URL.
+        self.assertNotIn(f'{base}{event.get_absolute_url()}"', html_body)
+        self.assertNotIn(f"{base}{event.get_absolute_url()}'", html_body)
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_email_body_renders_event_datetime_in_user_timezone(

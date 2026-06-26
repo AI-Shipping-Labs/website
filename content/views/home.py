@@ -707,7 +707,8 @@ def _get_starting_soon_event(user):
       INCLUSIVE on the "Join now" side, matching the boundary in
       ``events.views.pages.event_join_redirect``.
 
-    The Join button URL is always ``/events/<slug>/join``; #704 branches
+    The Join button URL is the id-canonical ``/events/<id>/<slug>/join``
+    (issue #1082, via ``Event.get_join_url``); #704 branches
     server-side between the countdown page (delta > 5 min) and the Zoom
     302 (delta <= 5 min). The label is purely a UX hint.
     """
@@ -748,7 +749,7 @@ def _get_starting_soon_event(user):
         'minutes_until_start': minutes_until_start,
         'remaining_seconds': remaining_seconds,
         'event_start_local': format_user_datetime(event.start_datetime, user),
-        'join_url': reverse('event_join', kwargs={'slug': event.slug}),
+        'join_url': event.get_join_url(),  # Issue #1082: id-canonical
         'join_label': join_label,
     }
 

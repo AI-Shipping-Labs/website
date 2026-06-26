@@ -981,9 +981,9 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='soon@test.com', password='pass')
         response = self.client.get(event.get_absolute_url())
-        # Issue #673: the /join route still keys on slug (slug-keyed
-        # sibling routes were intentionally left unchanged).
-        self.assertContains(response, '/events/soon-event/join')
+        # Issue #1082: the on-page Join button now uses the id-canonical
+        # ``/events/<id>/<slug>/join`` URL via ``Event.get_join_url``.
+        self.assertContains(response, event.get_join_url())
         self.assertContains(response, 'data-testid="event-join-now"')
         self.assertNotContains(response, 'https://zoom.us/j/123456')
 
@@ -1006,7 +1006,7 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
         self.assertContains(response, "You're registered!")
         self.assertContains(response, '5 minutes before')
         self.assertNotContains(response, 'data-testid="event-join-now"')
-        self.assertNotContains(response, '/events/six-minute-event/join')
+        self.assertNotContains(response, event.get_join_url())
         self.assertNotContains(response, 'https://zoom.us/j/654321')
 
     def test_zoom_link_not_shown_when_far_from_start(self):
@@ -1025,7 +1025,7 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='far@test.com', password='pass')
         response = self.client.get(event.get_absolute_url())
-        self.assertNotContains(response, '/events/far-event/join')
+        self.assertNotContains(response, event.get_join_url())
 
     def test_zoom_link_not_shown_when_not_registered(self):
         event = Event.objects.create(
@@ -1604,7 +1604,7 @@ class EventCalendarIcsViewTest(TestCase):
         response = self.client.get('/events/ics-download-event/calendar.ics')
         cal = Calendar.from_ical(response.content)
         vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
-        join_url = 'https://aishippinglabs.com/events/ics-download-event/join'
+        join_url = f'https://aishippinglabs.com{self.event.get_join_url()}'
 
         self.assertEqual(str(vevent.get('url')), join_url)
         self.assertEqual(str(vevent.get('location')), join_url)

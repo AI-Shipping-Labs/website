@@ -49,16 +49,36 @@ urlpatterns = [
         event_series_no_slug_redirect,
         name='event_series_no_slug',
     ),
-    # Issue #673: slug-keyed sibling routes for join, .ics download, and
-    # cancel-registration intentionally stay on ``events/<slug>/<verb>``.
-    # They are not user-bookmarkable surfaces (URLs minted server-side
-    # into emails and the registration card), so the cost of moving them
-    # to id+slug is higher than the benefit. They must be registered
+    # Issue #1082: id-canonical join route, mirroring the #673 detail URL
+    # and the #679 ``feedback`` verb. Registered BEFORE the canonical
+    # ``events/<int:event_id>/<slug:slug>`` detail route below so the
+    # literal ``join`` segment is not swallowed by the slug converter.
+    # ``event_id`` is the lookup key; ``slug`` is cosmetic and a mismatch
+    # 301s to the canonical join URL. This is the name every
+    # ``reverse('event_join', ...)`` caller and ``Event.get_join_url``
+    # mint going forward.
+    path(
+        'events/<int:event_id>/<slug:slug>/join',
+        event_join_redirect,
+        name='event_join',
+    ),
+    # Issue #1082: legacy slug-only join route kept as a permanent alias so
+    # existing calendar ``.ics`` entries already in attendees' clients and
+    # stale registration emails that point at ``/events/<slug>/join`` keep
+    # resolving and never 404. Registered BEFORE the canonical detail route
+    # for the same swallowing reason as the id+slug join route above.
+    path(
+        'events/<slug:slug>/join',
+        event_join_redirect,
+        name='event_join_legacy',
+    ),
+    # Issue #673: slug-keyed sibling routes for .ics download and
+    # cancel-registration intentionally stay on ``events/<slug>/<verb>``
+    # (deferred follow-up to id-canonicalize). They must be registered
     # BEFORE the new ``events/<int:event_id>/<slug:slug>`` canonical
-    # route below — a 3-segment URL like ``/events/foo/join`` should
-    # always reach the join redirect, not be interpreted as an
+    # route below — a 3-segment URL like ``/events/foo/calendar.ics``
+    # should always reach the verb route, not be interpreted as an
     # event-detail attempt.
-    path('events/<slug:slug>/join', event_join_redirect, name='event_join'),
     path(
         'events/<slug:slug>/calendar.ics',
         event_calendar_ics,

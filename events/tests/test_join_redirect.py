@@ -227,6 +227,128 @@ class EventJoinRedirectTest(TierSetupMixin, TestCase):
         )
 
 
+class EventJoinIdCanonicalRouteTest(TierSetupMixin, TestCase):
+    """Issue #1082: id-canonical ``/events/<id>/<slug>/join`` route.
+
+    The route mirrors the #673 detail URL and the #679 ``feedback`` verb:
+    lookup is by ``event_id``, ``slug`` is cosmetic and a mismatch 301s to
+    the canonical join URL. The legacy slug-only ``/events/<slug>/join``
+    route stays alive as a permanent alias so existing calendar entries
+    and stale emails never 404.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.user = User.objects.create_user(
+            email='canon@example.com',
+            password='testpass123',
+        )
+        cls.event = Event.objects.create(
+            title='Canonical Join Event',
+            slug='canonical-join-event',
+            start_datetime=timezone.now() + timedelta(days=1),
+            status='upcoming',
+            zoom_join_url='https://zoom.us/j/canon',
+        )
+        cls.draft_event = Event.objects.create(
+            title='Canon Draft',
+            slug='canon-draft',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='draft',
+            zoom_join_url='https://zoom.us/j/draftcanon',
+        )
+        EventRegistration.objects.create(event=cls.event, user=cls.user)
+
+    def _login(self):
+        self.client.login(email='canon@example.com', password='testpass123')
+
+    def _canonical_url(self):
+        return f'/events/{self.event.pk}/{self.event.slug}/join'
+
+    def test_get_join_url_helper_returns_canonical_shape(self):
+        """``Event.get_join_url`` mints the id+slug join URL."""
+        self.assertEqual(self.event.get_join_url(), self._canonical_url())
+
+    def test_reverse_event_join_returns_id_slug_path(self):
+        """``reverse('event_join', event_id+slug)`` is the canonical path."""
+        from django.urls import reverse
+        url = reverse(
+            'event_join',
+            kwargs={'event_id': self.event.pk, 'slug': self.event.slug},
+        )
+        self.assertEqual(url, self._canonical_url())
+
+    def test_canonical_route_redirects_to_zoom_inside_window(self):
+        """Canonical route yields the same Zoom 302 as the legacy route."""
+        _move_event_to(self.event, start_offset=timedelta(minutes=1))
+        self._login()
+        response = self.client.get(self._canonical_url())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], 'https://zoom.us/j/canon')
+        self.assertEqual(
+            EventJoinClick.objects.filter(
+                event=self.event, user=self.user,
+            ).count(),
+            1,
+        )
+
+    def test_legacy_slug_only_route_still_resolves(self):
+        """The legacy ``/events/<slug>/join`` alias is not broken."""
+        _move_event_to(self.event, start_offset=timedelta(minutes=1))
+        self._login()
+        response = self.client.get(f'/events/{self.event.slug}/join')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], 'https://zoom.us/j/canon')
+
+    def test_cosmetic_wrong_slug_301s_to_canonical(self):
+        """A wrong slug on the canonical route 301s to the right slug."""
+        self._login()
+        response = self.client.get(
+            f'/events/{self.event.pk}/totally-wrong-slug/join'
+        )
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], self._canonical_url())
+
+    def test_canonical_route_draft_404_for_non_staff(self):
+        """Draft events 404 on the canonical route for non-staff."""
+        self._login()
+        response = self.client.get(
+            f'/events/{self.draft_event.pk}/{self.draft_event.slug}/join'
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_canonical_route_unregistered_redirects_to_detail(self):
+        """Unregistered user is sent to the detail page on the canonical route."""
+        User.objects.create_user(
+            email='canon-outsider@example.com',
+            password='testpass123',
+        )
+        self.client.login(
+            email='canon-outsider@example.com', password='testpass123',
+        )
+        response = self.client.get(self._canonical_url())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response['Location'], self.event.get_absolute_url(),
+        )
+
+    def test_canonical_route_anonymous_redirected_to_login_with_next(self):
+        """Anonymous user on the canonical route is sent to login + next=."""
+        response = self.client.get(self._canonical_url())
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+        self.assertIn(f'next={self._canonical_url()}', response['Location'])
+
+    def test_legacy_route_anonymous_redirected_to_login_with_next(self):
+        """Anonymous user on the legacy route is sent to login + next=."""
+        legacy = f'/events/{self.event.slug}/join'
+        response = self.client.get(legacy)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+        self.assertIn(f'next={legacy}', response['Location'])
+
+
 class EventJoinTimeWindowTest(TierSetupMixin, TestCase):
     """Time-gate the /events/<slug>/join redirect (issue #704).
 

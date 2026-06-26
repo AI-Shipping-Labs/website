@@ -252,7 +252,7 @@ class HostAutoRegistrationServiceTest(TestCase):
         self.assertEqual(int(vevent.get('sequence')), event.ics_sequence)
         self.assertEqual(str(vevent.get('url')), detail_url)
         self.assertEqual(str(vevent.get('location')), detail_url)
-        self.assertNotIn('/events/host-auto-registration/join', ics)
+        self.assertNotIn(event.get_join_url(), ics)
         self.assertEqual(
             EmailLog.objects.filter(
                 user=self.host,

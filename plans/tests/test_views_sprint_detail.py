@@ -332,9 +332,10 @@ class SprintDetailCallsTest(TestCase):
         response = self._get()
 
         self.assertContains(response, 'data-testid="sprint-call-join"')
+        # Issue #1082: id-canonical /events/<id>/<slug>/join URL.
         self.assertContains(
             response,
-            f'href="{reverse("event_join", kwargs={"slug": event.slug})}"',
+            f'href="{event.get_join_url()}"',
         )
         self.assertContains(response, 'target="_blank"')
         self.assertNotContains(response, 'https://zoom.example.com/raw-live')

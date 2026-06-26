@@ -81,7 +81,13 @@ def build_calendar_links(event):
         the duration.
     """
     site_url = site_base_url()
-    join_url = f'{site_url}/events/{event.slug}/join'
+    # Issue #1082: id-canonical join URL via ``Event.get_join_url`` with a
+    # defensive slug-only fallback for stub events used in tests.
+    join_path = getattr(event, 'get_join_url', lambda: '')()
+    if join_path:
+        join_url = f'{site_url}{join_path}'
+    else:
+        join_url = f'{site_url}/events/{event.slug}/join'
 
     # Issue #712: ``Event.effective_end_datetime`` is the single source
     # of truth for "when did this event end?" — ``end_datetime`` when

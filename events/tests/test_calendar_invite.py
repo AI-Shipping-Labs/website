@@ -61,7 +61,9 @@ class GenerateIcsTest(TestCase):
 
         vevent = vevents[0]
         self.assertEqual(str(vevent.get('summary')), 'AI Agents Workshop')
-        join_url = 'https://aishippinglabs.com/events/ai-workshop/join'
+        join_url = (
+            f'https://aishippinglabs.com{self.event.get_join_url()}'
+        )
         description = str(vevent.get('description'))
         self.assertIn('Learn about AI agents.', description)
         self.assertIn(f'Join: {join_url}', description)
@@ -153,7 +155,7 @@ class GenerateIcsTest(TestCase):
         )
         ics_bytes = generate_ics(event)
         vevent = self._vevent(ics_bytes)
-        join_url = 'https://aishippinglabs.com/events/zoom-event/join'
+        join_url = f'https://aishippinglabs.com{event.get_join_url()}'
 
         self.assertIn(f'Join: {join_url}', str(vevent.get('description')))
         self.assertEqual(str(vevent.get('url')), join_url)
@@ -175,7 +177,7 @@ class GenerateIcsTest(TestCase):
         vevent = self._vevent(ics_bytes)
         detail_url = f'https://aishippinglabs.com{event.get_absolute_url()}'
         internal_join_url = (
-            'https://aishippinglabs.com/events/partner-cohort/join'
+            f'https://aishippinglabs.com{event.get_join_url()}'
         )
 
         self.assertIn(f'Join: {detail_url}', str(vevent.get('description')))
@@ -424,7 +426,7 @@ class SendRegistrationConfirmationTest(TestCase):
         ics_bytes = self._get_calendar_part(msg)
         cal = Calendar.from_ical(ics_bytes)
         vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
-        join_url = 'https://aishippinglabs.com/events/test-event/join'
+        join_url = f'https://aishippinglabs.com{self.event.get_join_url()}'
 
         self.assertIn(f'Join: {join_url}', str(vevent.get('description')))
         self.assertEqual(str(vevent.get('url')), join_url)
@@ -514,7 +516,7 @@ class SendRegistrationConfirmationTest(TestCase):
         parts = self._get_parts(msg)
 
         html_body = parts.get('text/html', '')
-        self.assertIn('/events/test-event/join', html_body)
+        self.assertIn(self.event.get_join_url(), html_body)
         self.assertIn('about 5 minutes before the start time', html_body)
         self.assertNotIn('15 minutes', html_body)
 

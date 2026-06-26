@@ -77,7 +77,7 @@ def _build_sprint_call_entries(events, user):
             'is_next_upcoming': is_next_upcoming,
             'location_label': _event_location_label(event),
             'detail_url': event.get_absolute_url(),
-            'join_url': reverse('event_join', kwargs={'slug': event.slug}),
+            'join_url': event.get_join_url(),  # Issue #1082: id-canonical
         })
     return entries
 

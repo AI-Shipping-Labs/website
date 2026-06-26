@@ -41,7 +41,6 @@ pythonpath = ["."]
 markers = [
     "core: critical user-path Playwright tests run on every push (see _docs/testing-guidelines.md)",
     "manual_visual: screenshot-generator/manual-review Playwright tests excluded from default CI",
-    "legacy_checkout: retained local Stripe Checkout/subscription API tests excluded from default CI",
     "slow_platform: SQLite/threading/migration/concurrency tests excluded from default CI",
     "visual_regression: CSS class / Tailwind utility / layout assertion tests, excluded from default CI and run on the scheduled workflow",
     "local_only: requires the local Django runner (DB fixtures, session-cookie injection, in-process auth) and cannot run against a deployed environment (dev/prod). Skipped automatically when PLAYWRIGHT_BASE_URL points at a non-local host.",

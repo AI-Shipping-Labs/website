@@ -74,7 +74,7 @@ coverage:
 # so concurrent runs from separate worktrees no longer collide on a fixed
 # port. Set PLAYWRIGHT_DJANGO_PORT only to pin a known port.
 test-playwright:
-	uv run pytest -m "not legacy_checkout and not visual_regression" playwright_tests/ -v
+	uv run pytest -m "not visual_regression" playwright_tests/ -v
 
 # Run only the core subset of Playwright tests (auth, access control, payments,
 # one happy path each for events/courses/sprints/plans, notifications, and

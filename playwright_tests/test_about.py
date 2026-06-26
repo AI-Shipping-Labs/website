@@ -14,6 +14,8 @@ import os
 
 import pytest
 
+from playwright_tests.conftest import goto_with_retry
+
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -24,7 +26,12 @@ class TestAboutPageBrandIcons:
     def test_linkedin_icons_render_as_inline_svg(
         self, django_server, page
     ):
-        page.goto(f"{django_server}/about", wait_until="domcontentloaded")
+        # ``goto_with_retry`` (Issue #928) is a drop-in no-op on the happy path
+        # but adds a bounded 5xx retry so a transient error mid rolling dev
+        # deploy does not red the scheduled dev run (Issue #1084).
+        goto_with_retry(
+            page, f"{django_server}/about", wait_until="domcontentloaded"
+        )
 
         # Both LinkedIn anchors must be present.
         linkedin_links = page.locator('a[aria-label="LinkedIn"]')

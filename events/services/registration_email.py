@@ -131,15 +131,31 @@ def build_calendar_email_message(
     method='REQUEST',
     filename='event.ics',
 ):
-    """Build the raw MIME message used for calendar lifecycle emails."""
+    """Build the raw MIME message used for calendar lifecycle emails.
+
+    Issue #1088: the ``text/calendar`` part is delivered as a
+    ``multipart/alternative`` SIBLING of the HTML body rather than a
+    ``Content-Disposition: attachment`` part. Gmail/Google Calendar only
+    fire their heuristic "this email updates your calendar / merge by UID"
+    handling when the invite arrives as an alternative body representation
+    of an ``METHOD:REQUEST``/``CANCEL`` message, not as a named attachment.
+    This is also the RFC-correct delivery for itip calendar messages.
+
+    Container shape: ``multipart/alternative[ text/html, text/calendar;
+    method=<METHOD> ]``. The HTML is listed first and the calendar last so
+    non-calendar clients render the HTML body while calendar-aware clients
+    pick the richer (last-listed) calendar alternative — a known
+    Gmail-compatibility ordering nuance.
+    """
     from_email = get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL)
     normalized_method = method.upper()
 
-    msg = MIMEMultipart('mixed')
+    msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
     msg['From'] = from_email
     msg['To'] = to_email
 
+    # HTML body first: the human-readable representation.
     body = MIMEText(html_body, 'html', 'utf-8')
     msg.attach(body)
 
@@ -148,9 +164,14 @@ def build_calendar_email_message(
         if isinstance(ics_content, bytes)
         else ics_content
     )
+    # Calendar last: the "richest" alternative. Carries the itip ``method``
+    # param on its Content-Type (preserved unchanged). Deliberately NO
+    # ``Content-Disposition: attachment`` so Gmail treats it as a calendar
+    # update to merge by UID, not a downloadable file. We keep a ``name``
+    # hint on the Content-Type for clients that still offer a download.
     cal_part = MIMEText(ics_str, 'calendar', 'utf-8')
     cal_part.set_param('method', normalized_method, header='Content-Type')
-    cal_part.add_header('Content-Disposition', 'attachment', filename=filename)
+    cal_part.set_param('name', filename, header='Content-Type')
     msg.attach(cal_part)
     return msg
 
@@ -163,7 +184,11 @@ def _send_raw_email(
     method='REQUEST',
     filename='event.ics',
 ):
-    """Send a raw email via SES with .ics calendar attachment.
+    """Send a raw email via SES with the .ics calendar as a body alternative.
+
+    Issue #1088: the calendar is delivered as a ``multipart/alternative``
+    sibling of the HTML body (``text/calendar; method=...``), not as a
+    ``Content-Disposition: attachment`` part.
 
     Args:
         to_email: Recipient email address.

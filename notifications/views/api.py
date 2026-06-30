@@ -8,6 +8,7 @@ Notification API endpoints:
 
 
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 
@@ -21,6 +22,7 @@ def api_notification_list(request):
 
     Query params:
         page: Page number (default 1).
+        filter: all|unread (default all, for backwards compatibility).
 
     Returns JSON:
         {
@@ -30,16 +32,29 @@ def api_notification_list(request):
             "total": 42
         }
     """
-    page = int(request.GET.get('page', 1))
+    notification_filter = request.GET.get('filter', 'all')
+    if notification_filter not in {'all', 'unread'}:
+        return JsonResponse(
+            {'ok': False, 'error': 'invalid_filter'},
+            status=400,
+        )
+
     per_page = 20
-    offset = (page - 1) * per_page
 
     qs = Notification.objects.filter(
         user=request.user,
     ).order_by('-created_at')
+    if notification_filter == 'unread':
+        qs = qs.filter(read=False)
 
-    total = qs.count()
-    notifications = qs[offset:offset + per_page]
+    paginator = Paginator(qs, per_page)
+    page_number = request.GET.get('page', 1)
+    try:
+        page_obj = paginator.page(page_number)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages or 1)
 
     data = {
         'notifications': [
@@ -52,11 +67,12 @@ def api_notification_list(request):
                 'read': n.read,
                 'created_at': n.created_at.isoformat(),
             }
-            for n in notifications
+            for n in page_obj.object_list
         ],
-        'page': page,
-        'has_next': (offset + per_page) < total,
-        'total': total,
+        'page': page_obj.number,
+        'has_next': page_obj.has_next(),
+        'total': paginator.count,
+        'filter': notification_filter,
     }
 
     return JsonResponse(data)

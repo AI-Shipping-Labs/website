@@ -151,11 +151,11 @@ class TestScenario1CheckUnreadNotificationsViaBell:
         self, django_server
     , browser):
         """Given a user logged in as free@test.com (Free tier) who has 3
-        unread notifications (new article, new recording, new download).
+        unread notifications and 1 read notification.
         1. Observe the header bell icon - badge shows "3"
         2. Click the bell icon - dropdown appears with 3 notifications
         3. Click the first notification (article) - marks read, navigates
-        4. Navigate back, click bell - badge shows "2", clicked one is read
+        4. Navigate back, click bell - badge shows "2", clicked one is gone
         """
         _ensure_tiers()
         _clear_notifications()
@@ -185,6 +185,14 @@ class TestScenario1CheckUnreadNotificationsViaBell:
             body="A new download is available.",
             url="/downloads/some-download",
             notification_type="new_content",
+        )
+        _create_notification(
+            user=user,
+            title="Already read: Hidden from bell",
+            body="This should stay in history only.",
+            url="/blog/read-history",
+            notification_type="new_content",
+            read=True,
         )
 
         context = _auth_context(browser, "free@test.com")
@@ -224,6 +232,7 @@ class TestScenario1CheckUnreadNotificationsViaBell:
         assert "New article: Test Article for Notif" in dropdown_text
         assert "New recording: Workshop Recording" in dropdown_text
         assert "New download: AI Cheat Sheet" in dropdown_text
+        assert "Already read: Hidden from bell" not in dropdown_text
 
         # Step 3: Click on the first notification (article)
         # The article link navigates to /blog/test-article-notif
@@ -252,6 +261,19 @@ class TestScenario1CheckUnreadNotificationsViaBell:
 
         # Then: Badge shows "2" (one was marked as read)
         assert badge.inner_text() == "2"
+
+        bell_btn.click()
+        dropdown.wait_for(state="visible", timeout=5000)
+        page.wait_for_function(
+            """() => {
+                var list = document.getElementById('notification-list');
+                return list && !list.textContent.includes('Loading');
+            }""",
+            timeout=10000,
+        )
+        dropdown_text = dropdown.inner_text()
+        assert "New article: Test Article for Notif" not in dropdown_text
+        assert "Already read: Hidden from bell" not in dropdown_text
 # ---------------------------------------------------------------
 # Scenario 2: Member marks all notifications as read from the
 #              dropdown
@@ -268,7 +290,7 @@ class TestScenario2MarkAllReadFromDropdown:
         """Given a user logged in as free@test.com (Free tier) who has 5
         unread notifications.
         1. Click the bell icon to open the dropdown - all 5 appear unread
-        2. Click "Mark all as read" - all appear as read, badge disappears
+        2. Click "Mark all as read" - unread list empties, badge disappears
         """
         _ensure_tiers()
         _clear_notifications()
@@ -329,11 +351,11 @@ class TestScenario2MarkAllReadFromDropdown:
         )
         mark_all_btn.click()
 
-        # Wait for the notifications to reload without unread dots
+        # Wait for the unread-only list to empty
         page.wait_for_function(
             """() => {
-                var dots = document.querySelectorAll('#notification-list .rounded-full.bg-accent');
-                return dots.length === 0;
+                var list = document.getElementById('notification-list');
+                return list && list.textContent.includes('No pending notifications');
             }""",
             timeout=10000,
         )
@@ -342,6 +364,67 @@ class TestScenario2MarkAllReadFromDropdown:
         assert badge.evaluate(
             "el => el.classList.contains('hidden')"
         )
+# ---------------------------------------------------------------
+# Scenario 3: Member acknowledges one notification in place on the
+#              notifications page
+# ---------------------------------------------------------------
+
+@pytest.mark.django_db(transaction=True)
+class TestScenario3MarkOneReadOnNotificationsPage:
+    """Member uses row-level 'Mark as read' without leaving the page."""
+
+    @pytest.mark.core
+    def test_mark_one_read_in_place_on_notifications_page(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _clear_notifications()
+        user = _create_user("free@test.com", tier_slug="free")
+
+        for i in range(3):
+            _create_notification(
+                user=user,
+                title=f"Pending Notif {i + 1}",
+                body=f"Body {i + 1}",
+                url=f"/blog/pending-{i + 1}",
+                notification_type="new_content",
+                read=False,
+            )
+
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/notifications",
+            wait_until="domcontentloaded",
+        )
+
+        assert page.locator('[aria-current="page"]:has-text("Unread")').count() == 1
+        assert page.locator("[data-notification-row]").count() == 3
+
+        second_row = page.locator("[data-notification-row]").nth(1)
+        second_title = second_row.locator("[data-notification-target]").inner_text()
+        second_row.locator('[data-mark-read-button]').click()
+
+        page.wait_for_function(
+            """title => !Array.from(document.querySelectorAll('[data-notification-row]'))
+                .some(row => row.textContent.includes(title))""",
+            arg=second_title,
+            timeout=10000,
+        )
+
+        assert "/notifications" in page.url
+        assert page.locator("[data-notification-row]").count() == 2
+
+        page.get_by_role("link", name="All").click()
+        page.wait_for_url("**/notifications?filter=all", timeout=10000)
+        assert page.locator(f'text="{second_title}"').count() == 1
+        history_row = page.locator("[data-notification-row]").filter(
+            has_text=second_title
+        )
+        assert history_row.locator('[data-mark-read-button]').count() == 0
+        assert history_row.locator("text=Read").count() >= 1
+
+
 # ---------------------------------------------------------------
 # Scenario 4: Member uses "Mark all as read" on the notifications
 #              page
@@ -358,7 +441,7 @@ class TestScenario4MarkAllReadOnNotificationsPage:
         """Given a user logged in as free@test.com (Free tier) who has
         8 unread notifications.
         1. Navigate to /notifications - 8 appear as unread
-        2. Click "Mark all as read" - page reloads, all appear as read
+        2. Click "Mark all as read" - page reloads to empty unread state
         3. Observe the bell icon - badge is no longer visible
         """
         _ensure_tiers()
@@ -402,11 +485,14 @@ class TestScenario4MarkAllReadOnNotificationsPage:
         ):
             mark_all_btn.click()
 
-        # Then: All notifications appear as read (no unread dots)
-        unread_dots_after = page.locator(
-            "main .rounded-full.bg-accent"
-        )
-        assert unread_dots_after.count() == 0
+        # Then: The unread view is empty.
+        assert page.locator("text=No pending notifications").count() == 1
+        assert page.locator("[data-notification-row]").count() == 0
+
+        page.get_by_role("link", name="All").click()
+        page.wait_for_url("**/notifications?filter=all", timeout=10000)
+        assert page.locator("[data-notification-row]").count() == 8
+        assert page.locator('[data-mark-read-button]').count() == 0
 
         # Step 3: Observe the header bell icon
         badge = page.locator("#notification-badge")

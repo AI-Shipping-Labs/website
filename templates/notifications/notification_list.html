@@ -13,37 +13,70 @@
         <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">Notifications</h1>
         <p class="mt-2 text-sm text-muted-foreground">Updates from your courses, events, and community activity.</p>
       </div>
-      <button onclick="markAllRead()" id="mark-all-btn"
-              class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+      <button onclick="markAllRead()" id="mark-all-btn" {% if unread_count == 0 %}hidden{% endif %}
+              class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
         <i data-lucide="check-check" class="h-4 w-4"></i>
         Mark all as read
       </button>
     </div>
 
+    <nav class="mb-5 inline-flex rounded-md bg-secondary p-1" aria-label="Notification filters">
+      <a href="/notifications"
+         {% if active_filter == 'unread' %}aria-current="page"{% endif %}
+         class="rounded-sm px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if active_filter == 'unread' %}bg-background text-foreground shadow-sm{% else %}text-muted-foreground hover:text-foreground{% endif %}">
+        Unread
+      </a>
+      <a href="{{ all_filter_url }}"
+         {% if active_filter == 'all' %}aria-current="page"{% endif %}
+         class="rounded-sm px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if active_filter == 'all' %}bg-background text-foreground shadow-sm{% else %}text-muted-foreground hover:text-foreground{% endif %}">
+        All
+      </a>
+    </nav>
+
     {% if notifications %}
-    <div class="rounded-lg border border-border bg-card p-3 sm:p-4">
-      <div class="space-y-2">
+    <div id="notification-feed" data-active-filter="{{ active_filter }}" class="overflow-hidden rounded-lg bg-card shadow-sm ring-1 ring-border/60">
+      <div class="divide-y divide-border/60">
       {% for notification in notifications %}
-      <a href="{{ notification.url }}"
-         onclick="markRead(event, {{ notification.pk }}, '{{ notification.url }}')"
-         class="block rounded-lg border {% if not notification.read %}border-accent/30 bg-accent/5{% else %}border-border bg-background{% endif %} p-4 transition-colors hover:border-accent/50 hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-        <div class="flex items-start gap-3">
+      <article data-notification-row data-notification-id="{{ notification.pk }}"
+               class="group flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-secondary/35 sm:flex-row sm:items-start sm:justify-between sm:gap-4 {% if not notification.read %}bg-accent/5{% else %}bg-card{% endif %}">
+        <div class="flex min-w-0 items-start gap-3">
           {% if not notification.read %}
-          <span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-accent"></span>
+          <span data-unread-dot class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-accent"></span>
           {% else %}
           <span class="mt-1.5 h-2 w-2 flex-shrink-0"></span>
           {% endif %}
           <div class="min-w-0 flex-1">
+            {% if notification.url %}
+            <a href="{{ notification.url }}"
+               data-notification-target
+               data-notification-id="{{ notification.pk }}"
+               class="text-sm transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if not notification.read %}font-medium text-foreground{% else %}text-muted-foreground{% endif %}">
+              {{ notification.title }}
+            </a>
+            {% else %}
             <p class="text-sm {% if not notification.read %}font-medium text-foreground{% else %}text-muted-foreground{% endif %}">
               {{ notification.title }}
             </p>
+            {% endif %}
             {% if notification.body %}
             <p class="mt-1 text-sm text-muted-foreground line-clamp-2">{{ notification.body|truncatechars:80 }}</p>
             {% endif %}
-            <p class="mt-1 text-xs text-muted-foreground/60">{{ notification.created_at|timesince }} ago</p>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground/70">
+              <span>{{ notification.created_at|timesince }} ago</span>
+              <span data-read-label class="{% if notification.read %}inline-flex{% else %}hidden{% endif %} rounded-sm bg-secondary px-1.5 py-0.5">Read</span>
+              <span data-unread-label class="{% if notification.read %}hidden{% else %}inline-flex{% endif %} rounded-sm bg-accent/10 px-1.5 py-0.5 text-accent">Unread</span>
+            </div>
           </div>
         </div>
-      </a>
+        {% if not notification.read %}
+        <button type="button"
+                data-mark-read-button
+                data-notification-id="{{ notification.pk }}"
+                class="ml-5 inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:ml-0">
+          Mark as read
+        </button>
+        {% endif %}
+      </article>
       {% endfor %}
       </div>
     </div>
@@ -52,7 +85,7 @@
     {% if page_obj.has_other_pages %}
     <nav class="mt-8 flex items-center justify-center gap-4">
       {% if page_obj.has_previous %}
-      <a href="?page={{ page_obj.previous_page_number }}"
+      <a href="?{{ pagination_filter_query }}page={{ page_obj.previous_page_number }}"
          class="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
         Previous
       </a>
@@ -61,7 +94,7 @@
         Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
       </span>
       {% if page_obj.has_next %}
-      <a href="?page={{ page_obj.next_page_number }}"
+      <a href="?{{ pagination_filter_query }}page={{ page_obj.next_page_number }}"
          class="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
         Next
       </a>
@@ -69,9 +102,15 @@
     </nav>
     {% endif %}
 
-    {% else %}
-    {% member_empty_state title='No notifications yet' body='When there is something new for your account, it will show up here.' icon='bell-off' kind='fresh' %}
     {% endif %}
+
+    <div id="notification-empty-state" {% if notifications %}hidden{% endif %}>
+      {% if active_filter == 'all' %}
+      {% member_empty_state title='No notification history yet' body='When there is something new for your account, it will show up here.' icon='bell-off' kind='fresh' %}
+      {% else %}
+      {% member_empty_state title='No pending notifications' body='You are all caught up. New updates will show up here when they need your attention.' icon='bell-off' kind='fresh' %}
+      {% endif %}
+    </div>
   </div>
 </main>
 
@@ -83,20 +122,90 @@ function getCsrfToken() {
   return cookie ? cookie.split('=')[1] : '';
 }
 
-function markRead(e, id, url) {
-  e.preventDefault();
-  fetch('/api/notifications/' + id + '/read', {
+function updateHeaderBadges(count) {
+  var text = count > 9 ? '9+' : String(count);
+  ['notification-badge', 'mobile-notification-badge'].forEach(function(id) {
+    var badge = document.getElementById(id);
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = text;
+      badge.classList.remove('hidden');
+      badge.classList.add('flex');
+    } else {
+      badge.classList.add('hidden');
+      badge.classList.remove('flex');
+    }
+  });
+}
+
+function refreshUnreadBadge() {
+  fetch('/api/notifications/unread-count')
+    .then(function(response) { return response.json(); })
+    .then(function(data) { updateHeaderBadges(data.count); })
+    .catch(function() {});
+}
+
+function markNotificationRead(id) {
+  return fetch('/api/notifications/' + id + '/read', {
     method: 'POST',
     headers: {
       'X-CSRFToken': getCsrfToken(),
       'Content-Type': 'application/json',
     },
-  }).then(function() {
-    window.location.href = url;
-  }).catch(function() {
-    window.location.href = url;
   });
 }
+
+document.querySelectorAll('[data-notification-target]').forEach(function(link) {
+  link.addEventListener('click', function(e) {
+    e.preventDefault();
+    var targetUrl = link.getAttribute('href');
+    markNotificationRead(link.dataset.notificationId)
+      .finally(function() {
+        window.location.href = targetUrl;
+      });
+  });
+});
+
+document.querySelectorAll('[data-mark-read-button]').forEach(function(button) {
+  button.addEventListener('click', function() {
+    var row = button.closest('[data-notification-row]');
+    var feed = document.getElementById('notification-feed');
+    var activeFilter = feed ? feed.dataset.activeFilter : 'unread';
+
+    button.disabled = true;
+    markNotificationRead(button.dataset.notificationId)
+      .then(function(response) {
+        if (!response.ok) throw new Error('mark-read-failed');
+        if (activeFilter === 'unread') {
+          row.remove();
+          if (!document.querySelector('[data-notification-row]')) {
+            if (feed) feed.hidden = true;
+            var emptyState = document.getElementById('notification-empty-state');
+            if (emptyState) emptyState.hidden = false;
+            var markAllButton = document.getElementById('mark-all-btn');
+            if (markAllButton) markAllButton.hidden = true;
+          }
+        } else {
+          row.classList.remove('bg-accent/5');
+          row.classList.add('bg-card');
+          var dot = row.querySelector('[data-unread-dot]');
+          if (dot) dot.remove();
+          var unreadLabel = row.querySelector('[data-unread-label]');
+          var readLabel = row.querySelector('[data-read-label]');
+          if (unreadLabel) unreadLabel.classList.add('hidden');
+          if (readLabel) {
+            readLabel.classList.remove('hidden');
+            readLabel.classList.add('inline-flex');
+          }
+          button.remove();
+        }
+        refreshUnreadBadge();
+      })
+      .catch(function() {
+        button.disabled = false;
+      });
+  });
+});
 
 function markAllRead() {
   fetch('/api/notifications/read-all', {

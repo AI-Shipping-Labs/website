@@ -46,6 +46,57 @@ class NotificationApiListTest(TestCase):
         self.assertEqual(len(data['notifications']), 1)
         self.assertEqual(data['notifications'][0]['title'], 'Test Notification')
         self.assertEqual(data['total'], 1)
+        self.assertEqual(data['filter'], 'all')
+
+    def test_filter_unread_returns_only_unread_notifications(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        Notification.objects.create(user=self.user, title='Unread')
+        Notification.objects.create(user=self.user, title='Read', read=True)
+
+        response = self.client.get('/api/notifications?filter=unread')
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['filter'], 'unread')
+        self.assertEqual(data['total'], 1)
+        self.assertEqual(data['notifications'][0]['title'], 'Unread')
+        self.assertFalse(data['notifications'][0]['read'])
+
+    def test_filter_all_returns_read_and_unread_notifications(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        Notification.objects.create(user=self.user, title='Unread')
+        Notification.objects.create(user=self.user, title='Read', read=True)
+
+        response = self.client.get('/api/notifications?filter=all')
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['filter'], 'all')
+        self.assertEqual(data['total'], 2)
+        self.assertEqual(
+            {notification['title'] for notification in data['notifications']},
+            {'Unread', 'Read'},
+        )
+
+    def test_invalid_filter_returns_400(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        response = self.client.get('/api/notifications?filter=archived')
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertEqual(data['error'], 'invalid_filter')
+
+    def test_listing_notifications_does_not_mark_them_read(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        notification = Notification.objects.create(
+            user=self.user,
+            title='Unread',
+        )
+
+        response = self.client.get('/api/notifications?filter=unread')
+
+        self.assertEqual(response.status_code, 200)
+        notification.refresh_from_db()
+        self.assertFalse(notification.read)
 
     def test_does_not_return_other_users_notifications(self):
         other_user = User.objects.create_user(
@@ -76,6 +127,27 @@ class NotificationApiListTest(TestCase):
         self.assertEqual(len(data['notifications']), 5)
         self.assertFalse(data['has_next'])
         self.assertEqual(data['page'], 2)
+
+    def test_unread_filter_pagination_counts_only_unread(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        for i in range(25):
+            Notification.objects.create(user=self.user, title=f'Unread {i}')
+        for i in range(5):
+            Notification.objects.create(
+                user=self.user,
+                title=f'Read {i}',
+                read=True,
+            )
+
+        response = self.client.get('/api/notifications?filter=unread&page=2')
+
+        data = json.loads(response.content)
+        self.assertEqual(data['filter'], 'unread')
+        self.assertEqual(data['total'], 25)
+        self.assertEqual(len(data['notifications']), 5)
+        self.assertTrue(
+            all(not notification['read'] for notification in data['notifications']),
+        )
 
     def test_notification_body_truncated_to_80(self):
         self.client.login(email='testuser@example.com', password='testpass123')

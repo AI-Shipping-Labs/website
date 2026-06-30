@@ -45,6 +45,74 @@ class NotificationListPageTest(TestCase):
         response = self.client.get('/notifications')
         self.assertContains(response, 'Test Notification')
 
+    def test_defaults_to_unread_filter(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        Notification.objects.create(user=self.user, title='Unread Notification')
+        Notification.objects.create(
+            user=self.user,
+            title='Read Notification',
+            read=True,
+        )
+
+        response = self.client.get('/notifications')
+
+        self.assertEqual(response.context['active_filter'], 'unread')
+        self.assertContains(response, 'aria-current="page"')
+        self.assertContains(response, 'Unread Notification')
+        self.assertNotContains(response, 'Read Notification')
+        self.assertEqual(len(response.context['notifications']), 1)
+
+    def test_all_filter_shows_read_and_unread_newest_first(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        Notification.objects.create(user=self.user, title='Older Unread')
+        Notification.objects.create(
+            user=self.user,
+            title='Newer Read',
+            read=True,
+        )
+
+        response = self.client.get('/notifications?filter=all')
+
+        self.assertEqual(response.context['active_filter'], 'all')
+        notifications = list(response.context['notifications'])
+        self.assertEqual([n.title for n in notifications], [
+            'Newer Read',
+            'Older Unread',
+        ])
+        self.assertContains(response, 'Older Unread')
+        self.assertContains(response, 'Newer Read')
+
+    def test_invalid_filter_safely_defaults_to_unread(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        Notification.objects.create(user=self.user, title='Unread Fallback Item')
+        Notification.objects.create(
+            user=self.user,
+            title='Read Fallback Item',
+            read=True,
+        )
+
+        response = self.client.get('/notifications?filter=archived')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['active_filter'], 'unread')
+        notifications = list(response.context['notifications'])
+        self.assertEqual([n.title for n in notifications], ['Unread Fallback Item'])
+        self.assertContains(response, 'Unread Fallback Item')
+        self.assertNotContains(response, 'Read Fallback Item')
+
+    def test_viewing_page_does_not_mark_notifications_read(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        notification = Notification.objects.create(
+            user=self.user,
+            title='Unread Notification',
+        )
+
+        response = self.client.get('/notifications')
+
+        self.assertEqual(response.status_code, 200)
+        notification.refresh_from_db()
+        self.assertFalse(notification.read)
+
     def test_does_not_show_other_users_notifications(self):
         other_user = User.objects.create_user(
             email='other@example.com', password='testpass123',
@@ -68,11 +136,18 @@ class NotificationListPageTest(TestCase):
     def test_empty_state(self):
         self.client.login(email='testuser@example.com', password='testpass123')
         response = self.client.get('/notifications')
-        self.assertContains(response, 'No notifications yet')
-        self.assertContains(response, 'When there is something new for your account')
+        self.assertContains(response, 'No pending notifications')
+        self.assertContains(response, 'You are all caught up')
         self.assertContains(response, 'data-testid="member-empty-state"')
         self.assertContains(response, 'data-empty-kind="fresh"')
-        self.assertNotContains(response, 'bg-accent/5')
+        self.assertEqual(len(response.context['notifications']), 0)
+
+    def test_all_filter_empty_state(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        response = self.client.get('/notifications?filter=all')
+        self.assertContains(response, 'No notification history yet')
+        self.assertContains(response, 'When there is something new for your account')
+        self.assertContains(response, 'data-testid="member-empty-state"')
 
     def test_mark_all_as_read_button_present(self):
         self.client.login(email='testuser@example.com', password='testpass123')
@@ -80,11 +155,35 @@ class NotificationListPageTest(TestCase):
         response = self.client.get('/notifications')
         self.assertContains(response, 'Mark all as read')
 
+    def test_mark_all_as_read_button_hidden_without_unread_notifications(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        Notification.objects.create(user=self.user, title='Read', read=True)
+        response = self.client.get('/notifications?filter=all')
+        self.assertContains(response, 'id="mark-all-btn" hidden')
+
     def test_unread_notification_shows_accent_dot(self):
         self.client.login(email='testuser@example.com', password='testpass123')
         Notification.objects.create(user=self.user, title='Unread')
         response = self.client.get('/notifications')
         self.assertContains(response, 'bg-accent')
+
+    def test_unread_notifications_show_mark_read_action(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        Notification.objects.create(user=self.user, title='Unread')
+
+        response = self.client.get('/notifications')
+
+        self.assertContains(response, 'data-mark-read-button')
+        self.assertContains(response, 'Mark as read')
+
+    def test_read_notifications_do_not_show_mark_read_action(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        Notification.objects.create(user=self.user, title='Read', read=True)
+
+        response = self.client.get('/notifications?filter=all')
+
+        self.assertContains(response, 'Read')
+        self.assertNotContains(response, 'Mark as read')
 
     def test_page_title(self):
         self.client.login(email='testuser@example.com', password='testpass123')
@@ -111,6 +210,23 @@ class NotificationListPageTest(TestCase):
         # Page 2 markers in markup
         self.assertContains(response, 'Page 2 of 2')
         self.assertContains(response, 'Previous')
+        self.assertContains(response, '?filter=unread&amp;page=1')
+
+    def test_all_filter_pagination_preserves_filter(self):
+        self.client.login(email='testuser@example.com', password='testpass123')
+        for i in range(25):
+            Notification.objects.create(
+                user=self.user,
+                title=f'Read Notif {i:02d}',
+                read=True,
+            )
+
+        response = self.client.get('/notifications?filter=all&page=2')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['active_filter'], 'all')
+        self.assertContains(response, 'Page 2 of 2')
+        self.assertContains(response, '?filter=all&amp;page=1')
 
     # Replaces playwright_tests/test_notifications.py::
     # TestScenario3BrowseNotificationsPage::
@@ -133,6 +249,7 @@ class NotificationListPageTest(TestCase):
         # The page renders a link with the notification url as href
         response = self.client.get('/notifications')
         self.assertContains(response, f'href="{article.get_absolute_url()}"')
+        self.assertContains(response, 'data-notification-target')
         # Following that link returns 200 (target page exists)
         target_response = self.client.get(article.get_absolute_url())
         self.assertEqual(target_response.status_code, 200)

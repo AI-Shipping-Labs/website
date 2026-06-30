@@ -85,7 +85,7 @@
         <!-- Notification Dropdown -->
         <div id="notification-dropdown" class="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-popover shadow-lg hidden z-50">
           <div class="flex items-center justify-between border-b border-border px-4 py-3">
-            <span class="text-sm font-medium text-foreground">Notifications</span>
+            <span class="text-sm font-medium text-foreground">Unread notifications</span>
             <button type="button" onclick="notifMarkAllRead()" class="text-xs text-muted-foreground hover:text-foreground transition-colors">Mark all as read</button>
           </div>
           <div id="notification-list" class="max-h-96 overflow-y-auto">
@@ -449,19 +449,18 @@
     }
 
     function loadNotifications() {
-      fetch('/api/notifications?page=1')
+      fetch('/api/notifications?filter=unread&page=1')
         .then(function(r) { return r.json(); })
         .then(function(data) {
           var notifs = data.notifications;
           if (notifs.length === 0) {
-            listEl.innerHTML = '<div class="px-4 py-8 text-center text-sm text-muted-foreground">No notifications yet.</div>';
+            listEl.innerHTML = '<div class="px-4 py-8 text-center text-sm text-muted-foreground">No pending notifications.</div>';
             return;
           }
           var html = '';
           notifs.forEach(function(n) {
-            var unreadDot = n.read ? '<span class="mt-1.5 h-2 w-2 flex-shrink-0"></span>' :
-              '<span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-accent"></span>';
-            var titleClass = n.read ? 'text-muted-foreground' : 'font-medium text-foreground';
+            var unreadDot = '<span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-accent"></span>';
+            var titleClass = 'font-medium text-foreground';
             html += '<a href="' + n.url + '" onclick="notifMarkRead(event, ' + n.id + ', \'' + n.url + '\')" ' +
               'class="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-secondary/50 border-b border-border/50">' +
               unreadDot +

@@ -53,6 +53,7 @@ from plans.services import (
     MoveUnfinishedItemsError,
     draft_next_sprint_plan,
     move_unfinished_items_to_sprint,
+    send_plan_ready_email_for_plan,
     send_plan_ready_emails,
 )
 
@@ -1118,6 +1119,14 @@ def _reconcile_interview_notes(plan, payload_rows):
                     "title": {"type": "string", "maxLength": 280},
                     "goal": {"type": "string", "maxLength": 280},
                     "accountability": {"type": "string"},
+                    "send_ready_email": {
+                        "type": "boolean",
+                        "description": (
+                            "Optional. Defaults to false for compatibility. "
+                            "When true, staff plan creation sends the "
+                            "idempotent plan-ready transactional email."
+                        ),
+                    },
                     "weeks": {
                         "type": "array",
                         "items": {"type": "object"},
@@ -1127,11 +1136,22 @@ def _reconcile_interview_notes(plan, payload_rows):
                     "user_email": "alice@example.com",
                     "title": "Evaluation toolkit sprint",
                     "goal": "Ship the LLM evaluation toolkit",
+                    "send_ready_email": False,
                 },
             },
             "responses": {
                 201: {
                     "description": "Plan created (nested detail shape).",
+                    "example": {
+                        **_PLAN_FLAT_EXAMPLE,
+                        "ready_email": {
+                            "requested": False,
+                            "sent": False,
+                            "skipped_already_sent": False,
+                            "failed": False,
+                            "error": "",
+                        },
+                    },
                 },
                 400: {"description": "Invalid JSON body."},
                 403: {
@@ -1154,7 +1174,8 @@ def _reconcile_interview_notes(plan, payload_rows):
                 422: {
                     "description": (
                         "Missing user_email, unknown user, bad goal "
-                        "length, bad title length, or unknown enum value."
+                        "length, bad title length, non-boolean "
+                        "send_ready_email, or unknown enum value."
                     ),
                 },
             },
@@ -1198,6 +1219,15 @@ def sprint_plans_collection(request, slug):
             details={"field": "body", "expected": "object"},
         )
 
+    send_ready_email = data.get("send_ready_email", False)
+    if not isinstance(send_ready_email, bool):
+        return error_response(
+            "send_ready_email must be a boolean",
+            "validation_error",
+            status=422,
+            details={"field": "send_ready_email", "expected": "boolean"},
+        )
+
     with transaction.atomic():
         plan, err = _create_plan_from_payload(data, sprint)
         if err is not None:
@@ -1217,8 +1247,20 @@ def sprint_plans_collection(request, slug):
         )
         .get(pk=plan.pk)
     )
+    if send_ready_email:
+        ready_email = send_plan_ready_email_for_plan(plan, actor=request.user)
+    else:
+        ready_email = {
+            "requested": False,
+            "sent": False,
+            "skipped_already_sent": False,
+            "failed": False,
+            "error": "",
+        }
+    body = serialize_plan_detail(plan, viewer=request.user)
+    body["ready_email"] = ready_email
     return JsonResponse(
-        serialize_plan_detail(plan, viewer=request.user),
+        body,
         status=201,
     )
 

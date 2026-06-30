@@ -89,6 +89,22 @@
     </div>
     {% endif %}
 
+    <div class="mb-6 rounded-lg border border-border bg-secondary/30 p-4">
+      <label class="flex items-start gap-3 text-sm font-medium text-foreground">
+        <input type="checkbox"
+               name="send_ready_email"
+               class="mt-1 h-4 w-4 rounded border-border text-accent focus:ring-accent"
+               {% if form_data.send_ready_email %}checked{% endif %}
+               data-testid="plan-send-ready-email-checkbox">
+        <span>
+          Email member when plan is ready
+          <span class="block mt-1 text-xs font-normal text-muted-foreground" data-testid="plan-send-ready-email-helper">
+            Sends &ldquo;Your plan for {{ ready_email_sprint_name|default:"selected sprint" }} is ready&rdquo; with a direct link to the member's plan. Uncheck if this is only a draft.
+          </span>
+        </span>
+      </label>
+    </div>
+
   </form>
 </div>
 

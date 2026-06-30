@@ -49,6 +49,7 @@ from plans.services import (
     eligible_move_target_sprints,
     find_carry_over_source_plan,
     move_unfinished_items_to_sprint,
+    send_plan_ready_email_for_plan,
     unfinished_plan_item_counts,
 )
 from studio.decorators import staff_required
@@ -145,6 +146,38 @@ def _picker_extra_query_for(sprint_id_str):
     return urlencode({'sprint': sprint.slug})
 
 
+def _ready_email_sprint_name(sprint_id_str):
+    if not sprint_id_str or not sprint_id_str.isdigit():
+        return 'selected sprint'
+    sprint = Sprint.objects.filter(pk=int(sprint_id_str)).only('name').first()
+    if sprint is None:
+        return 'selected sprint'
+    return sprint.name
+
+
+def _send_ready_email_and_flash(request, plan):
+    result = send_plan_ready_email_for_plan(plan, actor=request.user)
+    if result['sent']:
+        messages.success(
+            request,
+            f'Plan created for {plan.member.email} in "{plan.sprint.name}" '
+            'and plan-ready email sent.',
+        )
+    elif result['failed']:
+        messages.warning(
+            request,
+            f'Plan created for {plan.member.email} in "{plan.sprint.name}", '
+            'but the plan-ready email failed. The member can be retried from '
+            'the sprint plan-ready email panel.',
+        )
+    else:
+        messages.info(
+            request,
+            f'Plan created for {plan.member.email} in "{plan.sprint.name}".',
+        )
+    return result
+
+
 @staff_required
 def plan_create(request):
     """Form: pick member, pick sprint.
@@ -198,12 +231,14 @@ def plan_create(request):
             'form_data': {
                 'member': prefill_member,
                 'sprint': prefill_sprint,
+                'send_ready_email': True,
             },
             'sprints': sprints,
             'user_search_url': user_search_url,
             'picker_extra_query': _picker_extra_query_for(prefill_sprint),
             'prefill_member_display': _picker_prefill_display(prefill_member),
             'member_profile': member_profile,
+            'ready_email_sprint_name': _ready_email_sprint_name(prefill_sprint),
             'error': '',
             'primary_label': 'Create plan',
         })
@@ -211,6 +246,7 @@ def plan_create(request):
     form_data = {
         'member': (request.POST.get('member') or '').strip(),
         'sprint': (request.POST.get('sprint') or '').strip(),
+        'send_ready_email': request.POST.get('send_ready_email') == 'on',
     }
 
     def _render_with_error(error, status=400):
@@ -222,6 +258,7 @@ def plan_create(request):
             'user_search_url': user_search_url,
             'picker_extra_query': _picker_extra_query_for(form_data['sprint']),
             'prefill_member_display': _picker_prefill_display(form_data['member']),
+            'ready_email_sprint_name': _ready_email_sprint_name(form_data['sprint']),
             'error': error,
             'primary_label': 'Create plan',
         }, status=status)
@@ -249,7 +286,14 @@ def plan_create(request):
         enrolled_by=request.user,
     )
 
-    messages.success(request, f'Plan created for {member.email} in "{sprint.name}".')
+    if form_data['send_ready_email']:
+        _send_ready_email_and_flash(request, plan)
+    else:
+        messages.success(
+            request,
+            f'Plan created for {member.email} in "{sprint.name}". '
+            'Plan-ready email not sent.',
+        )
     return redirect('studio_plan_detail', plan_id=plan.pk)
 
 

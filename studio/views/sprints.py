@@ -57,6 +57,7 @@ from plans.services import (
     create_plan_for_enrollment,
     distribute_sprint_feedback,
     preview_plan_ready_emails,
+    send_plan_ready_email_for_plan,
     send_plan_ready_emails,
 )
 from questionnaires.models import Questionnaire, Response
@@ -511,6 +512,27 @@ def _attach_plan_ready_email_state(plans):
             plan.ready_email_state_label = 'Not emailed'
             plan.ready_email_sent_at = None
             plan.ready_email_last_error = ''
+
+
+def _flash_plan_create_ready_email_result(request, plan, result):
+    if result['sent']:
+        messages.success(
+            request,
+            f'Plan created for {plan.member.email} in "{plan.sprint.name}" '
+            'and plan-ready email sent.',
+        )
+    elif result['failed']:
+        messages.warning(
+            request,
+            f'Plan created for {plan.member.email} in "{plan.sprint.name}", '
+            'but the plan-ready email failed. The member can be retried from '
+            'the sprint plan-ready email panel.',
+        )
+    else:
+        messages.info(
+            request,
+            f'Plan created for {plan.member.email} in "{plan.sprint.name}".',
+        )
 
 
 @staff_required
@@ -1001,11 +1023,13 @@ def sprint_add_member(request, sprint_id):
             'form_data': {
                 'member': '',
                 'sprint': str(sprint.pk),
+                'send_ready_email': True,
             },
             'sprint': sprint,
             'user_search_url': user_search_url,
             'picker_extra_query': picker_extra_query,
             'prefill_member_display': '',
+            'ready_email_sprint_name': sprint.name,
             'error': '',
             'primary_label': 'Add member',
         })
@@ -1014,6 +1038,7 @@ def sprint_add_member(request, sprint_id):
     form_data = {
         'member': raw_member,
         'sprint': str(sprint.pk),
+        'send_ready_email': request.POST.get('send_ready_email') == 'on',
     }
 
     def _render_with_error(error, status=400):
@@ -1026,6 +1051,7 @@ def sprint_add_member(request, sprint_id):
             'user_search_url': user_search_url,
             'picker_extra_query': picker_extra_query,
             'prefill_member_display': _prefill_display(raw_member),
+            'ready_email_sprint_name': sprint.name,
             'error': error,
             'primary_label': 'Add member',
         }, status=status)
@@ -1044,10 +1070,15 @@ def sprint_add_member(request, sprint_id):
     )
 
     if created_now:
-        messages.success(
-            request,
-            f'Plan created for {member.email} in "{sprint.name}".',
-        )
+        if form_data['send_ready_email']:
+            result = send_plan_ready_email_for_plan(plan, actor=request.user)
+            _flash_plan_create_ready_email_result(request, plan, result)
+        else:
+            messages.success(
+                request,
+                f'Plan created for {member.email} in "{sprint.name}". '
+                'Plan-ready email not sent.',
+            )
     else:
         messages.info(
             request,
@@ -1088,10 +1119,8 @@ def sprint_plan_request_create_plan(request, sprint_id, member_id):
     )
 
     if created_now:
-        messages.success(
-            request,
-            f'Plan created for {member.email} in "{sprint.name}".',
-        )
+        result = send_plan_ready_email_for_plan(plan, actor=request.user)
+        _flash_plan_create_ready_email_result(request, plan, result)
     else:
         messages.info(
             request,

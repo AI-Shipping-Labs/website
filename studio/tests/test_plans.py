@@ -6,7 +6,18 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from crm.models import CRMRecord
-from plans.models import InterviewNote, NextStep, Plan, Sprint, Week
+from email_app.models import EmailLog
+from notifications.models import Notification
+from plans.models import (
+    PLAN_READY_EMAIL_STATUS_FAILED,
+    PLAN_READY_EMAIL_STATUS_SENT,
+    InterviewNote,
+    NextStep,
+    Plan,
+    PlanReadyEmailLog,
+    Sprint,
+    Week,
+)
 from questionnaires.models import (
     Answer,
     Questionnaire,
@@ -312,6 +323,113 @@ class PlanCreateTest(TestCase):
         # form). Asserting the select is absent rather than just the
         # label so a future label-only render also fails the test.
         self.assertNotContains(response, 'name="status"')
+
+    def test_plan_create_form_renders_ready_email_checkbox_checked_by_default(self):
+        response = self.client.get('/studio/plans/new')
+
+        self.assertContains(response, 'Email member when plan is ready')
+        self.assertContains(response, 'data-testid="plan-send-ready-email-checkbox"')
+        self.assertContains(response, 'name="send_ready_email"')
+        self.assertContains(response, 'checked')
+        self.assertContains(
+            response,
+            'Uncheck if this is only a draft.',
+        )
+
+    def test_validation_error_preserves_unchecked_ready_email_choice(self):
+        response = self.client.post('/studio/plans/new', {
+            'member': '',
+            'sprint': str(self.sprint.pk),
+        })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'Pick a member.', status_code=400)
+        self.assertFalse(response.context['form_data']['send_ready_email'])
+        body = response.content.decode()
+        marker = body[body.find('name="send_ready_email"') - 200:]
+        self.assertNotIn('checked', marker[:400])
+
+    def test_plan_create_unchecked_ready_email_has_no_email_side_effects(self):
+        response = self.client.post('/studio/plans/new', {
+            'member': str(self.member.pk),
+            'sprint': str(self.sprint.pk),
+        }, follow=True)
+
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        self.assertRedirects(response, f'/studio/plans/{plan.pk}/')
+        plan.refresh_from_db()
+        self.assertIsNone(plan.shared_at)
+        self.assertEqual(PlanReadyEmailLog.objects.filter(plan=plan).count(), 0)
+        self.assertEqual(Notification.objects.filter(user=self.member).count(), 0)
+        self.assertEqual(EmailLog.objects.filter(user=self.member).count(), 0)
+        flash_texts = [str(m) for m in response.context['messages']]
+        self.assertTrue(
+            any('Plan-ready email not sent.' in t for t in flash_texts),
+            msg=f'Expected skipped-email flash, got {flash_texts!r}',
+        )
+
+    def test_plan_create_checked_ready_email_sends_and_logs(self):
+        from unittest.mock import patch
+
+        with patch(
+            'email_app.services.email_service.EmailService._send_ses',
+            return_value='ses-1',
+        ):
+            response = self.client.post('/studio/plans/new', {
+                'member': str(self.member.pk),
+                'sprint': str(self.sprint.pk),
+                'send_ready_email': 'on',
+            }, follow=True)
+
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        self.assertRedirects(response, f'/studio/plans/{plan.pk}/')
+        plan.refresh_from_db()
+        self.assertIsNotNone(plan.shared_at)
+        log = PlanReadyEmailLog.objects.get(plan=plan)
+        self.assertEqual(log.status, PLAN_READY_EMAIL_STATUS_SENT)
+        self.assertEqual(log.notification.notification_type, 'plan_shared')
+        self.assertEqual(log.email_log.email_type, 'plan_shared')
+        self.assertEqual(
+            Notification.objects.filter(
+                user=self.member, notification_type='plan_shared',
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(user=self.member, email_type='plan_shared').count(),
+            1,
+        )
+        flash_texts = [str(m) for m in response.context['messages']]
+        self.assertTrue(
+            any('and plan-ready email sent.' in t for t in flash_texts),
+            msg=f'Expected sent-email flash, got {flash_texts!r}',
+        )
+
+    def test_plan_create_email_failure_keeps_plan_and_warns(self):
+        from unittest.mock import patch
+
+        with patch(
+            'email_app.services.email_service.EmailService._send_ses',
+            side_effect=RuntimeError('SES down'),
+        ):
+            response = self.client.post('/studio/plans/new', {
+                'member': str(self.member.pk),
+                'sprint': str(self.sprint.pk),
+                'send_ready_email': 'on',
+            }, follow=True)
+
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        self.assertRedirects(response, f'/studio/plans/{plan.pk}/')
+        plan.refresh_from_db()
+        self.assertIsNone(plan.shared_at)
+        log = PlanReadyEmailLog.objects.get(plan=plan)
+        self.assertEqual(log.status, PLAN_READY_EMAIL_STATUS_FAILED)
+        self.assertIn('SES down', log.last_error)
+        flash_texts = [str(m) for m in response.context['messages']]
+        self.assertTrue(
+            any('plan-ready email failed' in t for t in flash_texts),
+            msg=f'Expected failed-email warning, got {flash_texts!r}',
+        )
 
     def test_plan_create_rejects_duplicate_member_sprint(self):
         Plan.objects.create(

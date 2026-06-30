@@ -7227,6 +7227,7 @@
             "application/json": {
               "example": {
                 "goal": "Ship the LLM evaluation toolkit",
+                "send_ready_email": false,
                 "title": "Evaluation toolkit sprint",
                 "user_email": "alice@example.com"
               },
@@ -7238,6 +7239,10 @@
                   "goal": {
                     "maxLength": 280,
                     "type": "string"
+                  },
+                  "send_ready_email": {
+                    "description": "Optional. Defaults to false for compatibility. When true, staff plan creation sends the idempotent plan-ready transactional email.",
+                    "type": "boolean"
                   },
                   "title": {
                     "maxLength": 280,
@@ -7265,6 +7270,28 @@
         },
         "responses": {
           "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-04-15T12:00:00+00:00",
+                  "goal": "Ship the LLM evaluation toolkit",
+                  "id": 5,
+                  "ready_email": {
+                    "error": "",
+                    "failed": false,
+                    "requested": false,
+                    "sent": false,
+                    "skipped_already_sent": false
+                  },
+                  "shared_at": null,
+                  "sprint": "may-2026",
+                  "title": "Ship the LLM evaluation toolkit",
+                  "updated_at": "2026-04-15T12:00:00+00:00",
+                  "user_email": "alice@example.com",
+                  "visibility": "private"
+                }
+              }
+            },
             "description": "Plan created (nested detail shape)."
           },
           "400": {
@@ -7296,7 +7323,7 @@
             "description": "User already has a plan in this sprint."
           },
           "422": {
-            "description": "Missing user_email, unknown user, bad goal length, bad title length, or unknown enum value."
+            "description": "Missing user_email, unknown user, bad goal length, bad title length, non-boolean send_ready_email, or unknown enum value."
           }
         },
         "summary": "Create a plan (staff-only)",

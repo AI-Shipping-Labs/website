@@ -16,7 +16,11 @@ from plans.models import (
     PlanReadyEmailLog,
     Sprint,
 )
-from plans.services import preview_plan_ready_emails, send_plan_ready_emails
+from plans.services import (
+    preview_plan_ready_emails,
+    send_plan_ready_email_for_plan,
+    send_plan_ready_emails,
+)
 
 User = get_user_model()
 
@@ -104,6 +108,107 @@ class PlanReadyEmailServiceTest(TestCase):
         self.assertEqual(
             EmailLog.objects.filter(user=plan.member, email_type='plan_shared').count(),
             1,
+        )
+
+    @patch('email_app.services.email_service.EmailService._send_ses')
+    def test_individual_send_creates_side_effects_and_result(self, mock_ses):
+        mock_ses.return_value = 'ses-1'
+        plan = self._member_plan('solo@test.com')
+
+        result = send_plan_ready_email_for_plan(plan, actor=self.staff)
+
+        self.assertEqual(
+            result,
+            {
+                'requested': True,
+                'sent': True,
+                'skipped_already_sent': False,
+                'failed': False,
+                'error': '',
+            },
+        )
+        plan.refresh_from_db()
+        self.assertIsNotNone(plan.shared_at)
+        log = PlanReadyEmailLog.objects.get(plan=plan)
+        self.assertEqual(log.status, PLAN_READY_EMAIL_STATUS_SENT)
+        self.assertEqual(log.triggered_by, self.staff)
+        self.assertEqual(log.notification.notification_type, 'plan_shared')
+        self.assertEqual(log.email_log.email_type, 'plan_shared')
+        self.assertEqual(
+            Notification.objects.filter(
+                user=plan.member, notification_type='plan_shared',
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=plan.member, email_type='plan_shared',
+            ).count(),
+            1,
+        )
+
+    @patch('email_app.services.email_service.EmailService._send_ses')
+    def test_individual_send_is_idempotent_for_successful_plan(self, mock_ses):
+        mock_ses.return_value = 'ses-1'
+        plan = self._member_plan('solo@test.com')
+
+        first = send_plan_ready_email_for_plan(plan, actor=self.staff)
+        second = send_plan_ready_email_for_plan(plan, actor=self.staff)
+
+        self.assertTrue(first['sent'])
+        self.assertEqual(
+            second,
+            {
+                'requested': True,
+                'sent': False,
+                'skipped_already_sent': True,
+                'failed': False,
+                'error': '',
+            },
+        )
+        self.assertEqual(PlanReadyEmailLog.objects.filter(plan=plan).count(), 1)
+        self.assertEqual(
+            EmailLog.objects.filter(user=plan.member, email_type='plan_shared').count(),
+            1,
+        )
+        self.assertEqual(mock_ses.call_count, 1)
+
+    @patch('email_app.services.email_service.EmailService._send_ses')
+    def test_individual_failure_records_failed_log_and_keeps_plan_unshared(
+        self,
+        mock_ses,
+    ):
+        mock_ses.side_effect = RuntimeError('SES rejected solo@test.com')
+        plan = self._member_plan('solo@test.com')
+
+        result = send_plan_ready_email_for_plan(plan, actor=self.staff)
+
+        self.assertTrue(result['requested'])
+        self.assertFalse(result['sent'])
+        self.assertTrue(result['failed'])
+        self.assertIn('SES rejected solo@test.com', result['error'])
+        plan.refresh_from_db()
+        self.assertIsNone(plan.shared_at)
+        log = PlanReadyEmailLog.objects.get(plan=plan)
+        self.assertEqual(log.status, PLAN_READY_EMAIL_STATUS_FAILED)
+        self.assertIn('SES rejected solo@test.com', log.last_error)
+        self.assertEqual(EmailLog.objects.count(), 0)
+
+    @patch('email_app.services.email_service.EmailService._send_ses')
+    def test_individual_failed_log_remains_eligible_for_bulk_retry(self, mock_ses):
+        plan = self._member_plan('solo@test.com')
+        mock_ses.side_effect = [RuntimeError('SES down'), 'ses-2']
+
+        failed = send_plan_ready_email_for_plan(plan, actor=self.staff)
+        retried = send_plan_ready_emails(sprint=self.sprint, actor=self.staff)
+
+        self.assertTrue(failed['failed'])
+        self.assertEqual(retried['sent_count'], 1)
+        plan.refresh_from_db()
+        self.assertIsNotNone(plan.shared_at)
+        self.assertEqual(
+            PlanReadyEmailLog.objects.get(plan=plan).status,
+            PLAN_READY_EMAIL_STATUS_SENT,
         )
 
     @patch('email_app.services.email_service.EmailService._send_ses')

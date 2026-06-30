@@ -14,7 +14,16 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from plans.models import Plan, PlanRequest, Sprint, SprintEnrollment
+from email_app.models import EmailLog
+from notifications.models import Notification
+from plans.models import (
+    PLAN_READY_EMAIL_STATUS_SENT,
+    Plan,
+    PlanReadyEmailLog,
+    PlanRequest,
+    Sprint,
+    SprintEnrollment,
+)
 
 User = get_user_model()
 
@@ -232,6 +241,12 @@ class CreatePlanFromRequestSubmitTest(TestCase):
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
+        self.ses_patcher = patch(
+            'email_app.services.email_service.EmailService._send_ses',
+            return_value='ses-1',
+        )
+        self.mock_ses = self.ses_patcher.start()
+        self.addCleanup(self.ses_patcher.stop)
         # One pending request as the inbox precondition.
         PlanRequest.objects.create(sprint=self.sprint, member=self.member)
 
@@ -261,6 +276,33 @@ class CreatePlanFromRequestSubmitTest(TestCase):
         self.assertTrue(
             any('Plan created for alice@test.com' in t for t in flash_texts),
             msg=f'Expected success flash, got {flash_texts!r}',
+        )
+
+    def test_post_sends_ready_email_for_newly_created_plan(self):
+        response = self.client.post(self._url(), follow=True)
+
+        plan = Plan.objects.get(sprint=self.sprint, member=self.member)
+        self.assertRedirects(response, f'/studio/plans/{plan.pk}/edit/')
+        plan.refresh_from_db()
+        self.assertIsNotNone(plan.shared_at)
+        log = PlanReadyEmailLog.objects.get(plan=plan)
+        self.assertEqual(log.status, PLAN_READY_EMAIL_STATUS_SENT)
+        self.assertEqual(log.notification.notification_type, 'plan_shared')
+        self.assertEqual(log.email_log.email_type, 'plan_shared')
+        self.assertEqual(
+            Notification.objects.filter(
+                user=self.member, notification_type='plan_shared',
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(user=self.member, email_type='plan_shared').count(),
+            1,
+        )
+        flash_texts = [str(m) for m in response.context['messages']]
+        self.assertTrue(
+            any('and plan-ready email sent.' in t for t in flash_texts),
+            msg=f'Expected sent-email flash, got {flash_texts!r}',
         )
 
     def test_post_preserves_plan_request_audit_rows(self):
@@ -308,6 +350,19 @@ class CreatePlanFromRequestSubmitTest(TestCase):
             ).count(),
             1,
         )
+
+    def test_second_post_does_not_send_duplicate_ready_email(self):
+        self.client.post(self._url())
+        response = self.client.post(self._url(), follow=True)
+
+        plan = Plan.objects.get(sprint=self.sprint, member=self.member)
+        self.assertRedirects(response, f'/studio/plans/{plan.pk}/edit/')
+        self.assertEqual(PlanReadyEmailLog.objects.filter(plan=plan).count(), 1)
+        self.assertEqual(
+            EmailLog.objects.filter(user=self.member, email_type='plan_shared').count(),
+            1,
+        )
+        self.assertEqual(self.mock_ses.call_count, 1)
 
     def test_second_post_flashes_already_has_plan_message(self):
         self.client.post(self._url())

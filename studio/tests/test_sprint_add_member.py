@@ -8,11 +8,14 @@ do not duplicate it here.
 """
 
 import datetime
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from plans.models import Plan, Sprint, SprintEnrollment
+from email_app.models import EmailLog
+from notifications.models import Notification
+from plans.models import Plan, PlanReadyEmailLog, Sprint, SprintEnrollment
 
 User = get_user_model()
 
@@ -149,6 +152,16 @@ class SprintAddMemberFormRenderTest(TestCase):
         self.assertContains(response, 'data-testid="add-member-heading"')
         self.assertContains(response, 'Spring Cohort')
 
+    def test_get_renders_ready_email_checkbox_with_locked_sprint_name(self):
+        response = self.client.get(
+            f'/studio/sprints/{self.sprint.pk}/add-member',
+        )
+
+        self.assertContains(response, 'Email member when plan is ready')
+        self.assertContains(response, 'data-testid="plan-send-ready-email-checkbox"')
+        self.assertContains(response, 'Your plan for Spring Cohort is ready')
+        self.assertContains(response, 'checked')
+
     def test_form_action_url_posts_back_to_add_member(self):
         response = self.client.get(
             f'/studio/sprints/{self.sprint.pk}/add-member',
@@ -195,6 +208,55 @@ class SprintAddMemberSubmitTest(TestCase):
         self.assertEqual(enrollment.enrolled_by_id, self.staff.pk)
         # Plan has 6 weeks.
         self.assertEqual(plan.weeks.count(), 6)
+
+    def test_post_unchecked_ready_email_has_no_email_side_effects(self):
+        response = self.client.post(
+            f'/studio/sprints/{self.sprint.pk}/add-member',
+            {'member': str(self.member.pk)},
+            follow=True,
+        )
+
+        plan = Plan.objects.get(sprint=self.sprint, member=self.member)
+        self.assertRedirects(response, f'/studio/plans/{plan.pk}/edit/')
+        plan.refresh_from_db()
+        self.assertIsNone(plan.shared_at)
+        self.assertEqual(PlanReadyEmailLog.objects.filter(plan=plan).count(), 0)
+        self.assertEqual(Notification.objects.filter(user=self.member).count(), 0)
+        self.assertEqual(EmailLog.objects.filter(user=self.member).count(), 0)
+        flash_texts = [str(m) for m in response.context['messages']]
+        self.assertTrue(
+            any('Plan-ready email not sent.' in t for t in flash_texts),
+            msg=f'Expected skipped-email flash, got {flash_texts!r}',
+        )
+
+    @patch('email_app.services.email_service.EmailService._send_ses')
+    def test_post_checked_ready_email_sends_and_logs(self, mock_ses):
+        mock_ses.return_value = 'ses-1'
+
+        response = self.client.post(
+            f'/studio/sprints/{self.sprint.pk}/add-member',
+            {
+                'member': str(self.member.pk),
+                'send_ready_email': 'on',
+            },
+            follow=True,
+        )
+
+        plan = Plan.objects.get(sprint=self.sprint, member=self.member)
+        self.assertRedirects(response, f'/studio/plans/{plan.pk}/edit/')
+        plan.refresh_from_db()
+        self.assertIsNotNone(plan.shared_at)
+        self.assertEqual(PlanReadyEmailLog.objects.filter(plan=plan).count(), 1)
+        self.assertEqual(
+            Notification.objects.filter(
+                user=self.member, notification_type='plan_shared',
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(user=self.member, email_type='plan_shared').count(),
+            1,
+        )
 
     def test_idempotent_re_add_does_not_duplicate_rows(self):
         # First add.

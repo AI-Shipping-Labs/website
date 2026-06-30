@@ -7,11 +7,14 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from accounts.models import Token
+from email_app.models import EmailLog
+from notifications.models import Notification
 from plans.models import (
     Checkpoint,
     Deliverable,
     NextStep,
     Plan,
+    PlanReadyEmailLog,
     Resource,
     Sprint,
     Week,
@@ -66,6 +69,16 @@ class PlansCreateTest(PlansApiTestBase):
         self.assertEqual(body["title"], "member's May 2026 plan")
         self.assertEqual(body["visibility"], "private")
         self.assertIsNone(body["shared_at"])
+        self.assertEqual(
+            body["ready_email"],
+            {
+                "requested": False,
+                "sent": False,
+                "skipped_already_sent": False,
+                "failed": False,
+                "error": "",
+            },
+        )
         # Nested keys present, even if empty.
         for key in (
             "weeks", "resources", "deliverables", "next_steps",
@@ -107,6 +120,103 @@ class PlansCreateTest(PlansApiTestBase):
         self.assertEqual(body["title"], "Ship a RAG demo")
         plan = Plan.objects.get(member=self.member, sprint=self.sprint)
         self.assertEqual(plan.title, "Ship a RAG demo")
+
+    def test_create_plan_default_does_not_send_ready_email(self):
+        response = self._post({"user_email": "member@test.com"})
+
+        self.assertEqual(response.status_code, 201)
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        plan.refresh_from_db()
+        self.assertIsNone(plan.shared_at)
+        self.assertEqual(PlanReadyEmailLog.objects.filter(plan=plan).count(), 0)
+        self.assertEqual(Notification.objects.filter(user=self.member).count(), 0)
+        self.assertEqual(EmailLog.objects.filter(user=self.member).count(), 0)
+        self.assertFalse(response.json()["ready_email"]["requested"])
+
+    def test_create_plan_send_ready_email_true_sends_and_returns_result(self):
+        from unittest.mock import patch
+
+        with patch(
+            'email_app.services.email_service.EmailService._send_ses',
+            return_value='ses-1',
+        ):
+            response = self._post({
+                "user_email": "member@test.com",
+                "send_ready_email": True,
+            })
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertTrue(body["ready_email"]["requested"])
+        self.assertTrue(body["ready_email"]["sent"])
+        self.assertFalse(body["ready_email"]["failed"])
+        plan = Plan.objects.get(member=self.member, sprint=self.sprint)
+        plan.refresh_from_db()
+        self.assertIsNotNone(plan.shared_at)
+        self.assertEqual(PlanReadyEmailLog.objects.filter(plan=plan).count(), 1)
+        self.assertEqual(
+            Notification.objects.filter(
+                user=self.member, notification_type='plan_shared',
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(user=self.member, email_type='plan_shared').count(),
+            1,
+        )
+
+    def test_create_plan_rejects_non_boolean_send_ready_email(self):
+        response = self._post({
+            "user_email": "member@test.com",
+            "send_ready_email": "yes",
+        })
+
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "validation_error")
+        self.assertEqual(body["details"]["field"], "send_ready_email")
+        self.assertEqual(Plan.objects.count(), 0)
+        self.assertEqual(PlanReadyEmailLog.objects.count(), 0)
+        self.assertEqual(Notification.objects.count(), 0)
+        self.assertEqual(EmailLog.objects.count(), 0)
+
+    def test_non_staff_token_cannot_create_and_send_ready_email(self):
+        non_staff = User.objects.create_user(
+            email="nonstaff@test.com", password="pw",
+        )
+        token = Token(
+            key="legacy-non-staff-plan-create-token",
+            user=non_staff,
+            name="legacy-member-token",
+        )
+        Token.objects.bulk_create([token])
+
+        response = self._post({
+            "user_email": "member@test.com",
+            "send_ready_email": True,
+        }, token=token)
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(Plan.objects.count(), 0)
+        self.assertEqual(PlanReadyEmailLog.objects.count(), 0)
+        self.assertEqual(Notification.objects.count(), 0)
+        self.assertEqual(EmailLog.objects.count(), 0)
+
+    def test_openapi_documents_send_ready_email_field_and_response(self):
+        from api.openapi import build_spec
+        from api.urls import urlpatterns
+
+        document = build_spec(urlpatterns)
+        operation = document['paths']['/api/sprints/{slug}/plans']['post']
+
+        properties = operation['requestBody']['content']['application/json'][
+            'schema'
+        ]['properties']
+        self.assertIn('send_ready_email', properties)
+        example = operation['responses']['201']['content']['application/json'][
+            'example'
+        ]
+        self.assertIn('ready_email', example)
 
     def test_create_plan_accepts_nested_summary(self):
         response = self._post({

@@ -62,6 +62,51 @@ def preview_plan_ready_emails(sprint):
     return send_plan_ready_emails(sprint=sprint, actor=None, dry_run=True)
 
 
+def _ready_email_result(*, requested, sent=False, skipped=False, failed=False, error=''):
+    return {
+        'requested': requested,
+        'sent': sent,
+        'skipped_already_sent': skipped,
+        'failed': failed,
+        'error': error,
+    }
+
+
+def send_plan_ready_email_for_plan(plan, *, actor):
+    """Send the default plan-ready email for one newly prepared plan.
+
+    This is the individual-create counterpart to ``send_plan_ready_emails``:
+    it uses ``PlanReadyEmailLog`` as the durable per-plan guard, sends through
+    the same ``plan_shared`` delivery path, stamps ``Plan.shared_at`` only on
+    success, and lets failed rows remain eligible for the bulk retry action.
+    """
+    log, should_send = _claim_plan_for_send(plan, actor=actor)
+    if not should_send:
+        return _ready_email_result(requested=True, skipped=True)
+
+    try:
+        delivery = NotificationService.create_plan_shared_delivery(plan)
+        if delivery.email_log is None:
+            raise RuntimeError(
+                delivery.email_error or 'plan_shared email was not logged',
+            )
+    except Exception as exc:
+        logger.exception(
+            'Failed to send individual plan-ready email to %s for plan %s',
+            plan.member.email,
+            plan.pk,
+        )
+        _mark_plan_send_failed(log, exc)
+        return _ready_email_result(
+            requested=True,
+            failed=True,
+            error=str(exc),
+        )
+
+    _mark_plan_send_sent(plan, log, delivery)
+    return _ready_email_result(requested=True, sent=True)
+
+
 def send_plan_ready_emails(*, sprint, actor, dry_run=False):
     """Send or preview plan-ready emails for one sprint.
 
@@ -144,19 +189,7 @@ def send_plan_ready_emails(*, sprint, actor, dry_run=False):
             summary['failed_count'] += 1
             continue
 
-        sent_at = timezone.now()
-        Plan.objects.filter(pk=plan.pk, shared_at__isnull=True).update(
-            shared_at=sent_at,
-            updated_at=sent_at,
-        )
-        PlanReadyEmailLog.objects.filter(pk=log.pk).update(
-            status=PLAN_READY_EMAIL_STATUS_SENT,
-            notification=delivery.notification,
-            email_log=delivery.email_log,
-            sent_at=sent_at,
-            last_error='',
-            updated_at=sent_at,
-        )
+        sent_at = _mark_plan_send_sent(plan, log, delivery)
         sent = _plan_identity(plan)
         sent['sent_at'] = sent_at.isoformat()
         summary['sent'].append(sent)
@@ -207,3 +240,20 @@ def _mark_plan_send_failed(log, exc):
         last_error=str(exc)[:2000],
         updated_at=now,
     )
+
+
+def _mark_plan_send_sent(plan, log, delivery):
+    sent_at = timezone.now()
+    Plan.objects.filter(pk=plan.pk, shared_at__isnull=True).update(
+        shared_at=sent_at,
+        updated_at=sent_at,
+    )
+    PlanReadyEmailLog.objects.filter(pk=log.pk).update(
+        status=PLAN_READY_EMAIL_STATUS_SENT,
+        notification=delivery.notification,
+        email_log=delivery.email_log,
+        sent_at=sent_at,
+        last_error='',
+        updated_at=sent_at,
+    )
+    return sent_at

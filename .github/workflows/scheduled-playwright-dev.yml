@@ -22,8 +22,38 @@ env:
     and not visual_regression and not local_only and not creates_data
 
 jobs:
+  wake-dev:
+    name: Wake Dev ECS Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::387546586013:role/website-deploy
+          aws-region: eu-west-1
+
+      - name: Wake dev service
+        uses: ./.github/actions/wake-dev-ecs
+        with:
+          aws-region: eu-west-1
+          ecs-cluster: ai-shipping-labs
+          ecs-service: ai-shipping-labs-dev
+          desired-count: "1"
+          ping-url: https://dev.aishippinglabs.com/ping
+          max-attempts: "30"
+          sleep-seconds: "10"
+
   playwright-dev:
     name: Playwright Dev Suite (${{ matrix.shard_name }})
+    needs: [wake-dev]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -106,7 +136,7 @@ jobs:
 
   notify:
     name: Scheduled Playwright (dev) Failure Issue
-    needs: [playwright-dev]
+    needs: [wake-dev, playwright-dev]
     if: always()
     runs-on: ubuntu-latest
     permissions:

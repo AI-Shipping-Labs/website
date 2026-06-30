@@ -1,0 +1,78 @@
+name: Wake dev ECS service
+description: Scale the dev ECS service up and poll /ping until it is ready.
+
+inputs:
+  aws-region:
+    description: AWS region that hosts the dev ECS service.
+    required: true
+  ecs-cluster:
+    description: ECS cluster name.
+    required: true
+  ecs-service:
+    description: ECS service name.
+    required: true
+  desired-count:
+    description: Desired count to request before polling.
+    required: true
+    default: "1"
+  ping-url:
+    description: URL to poll for readiness.
+    required: true
+  expected-text:
+    description: Optional text that must appear in the ping response body.
+    required: false
+    default: ""
+  max-attempts:
+    description: Number of readiness polling attempts.
+    required: true
+    default: "30"
+  sleep-seconds:
+    description: Seconds to sleep between polling attempts.
+    required: true
+    default: "10"
+
+runs:
+  using: composite
+  steps:
+    - name: Scale service and poll readiness
+      shell: bash
+      env:
+        AWS_REGION: ${{ inputs.aws-region }}
+        ECS_CLUSTER: ${{ inputs.ecs-cluster }}
+        ECS_SERVICE: ${{ inputs.ecs-service }}
+        DESIRED_COUNT: ${{ inputs.desired-count }}
+        PING_URL: ${{ inputs.ping-url }}
+        EXPECTED_TEXT: ${{ inputs.expected-text }}
+        MAX_ATTEMPTS: ${{ inputs.max-attempts }}
+        SLEEP_SECONDS: ${{ inputs.sleep-seconds }}
+      run: |
+        set -euo pipefail
+
+        echo "Scaling ECS service ${ECS_SERVICE} in cluster ${ECS_CLUSTER} to desired count ${DESIRED_COUNT}..."
+        aws ecs update-service \
+          --region "${AWS_REGION}" \
+          --cluster "${ECS_CLUSTER}" \
+          --service "${ECS_SERVICE}" \
+          --desired-count "${DESIRED_COUNT}" \
+          > /dev/null
+
+        echo "Polling ${PING_URL} for readiness for up to $((MAX_ATTEMPTS * SLEEP_SECONDS))s..."
+        for i in $(seq 1 "${MAX_ATTEMPTS}"); do
+          response="$(curl -fsSL --max-time 10 "${PING_URL}" 2>/dev/null || true)"
+          if [ -n "${response}" ]; then
+            if [ -z "${EXPECTED_TEXT}" ]; then
+              echo "::notice ::${PING_URL} returned HTTP 200 after ${i} attempt(s)."
+              exit 0
+            fi
+            if printf '%s' "${response}" | grep -Fq -- "${EXPECTED_TEXT}"; then
+              echo "::notice ::${PING_URL} returned '${response}' matching '${EXPECTED_TEXT}' after ${i} attempt(s)."
+              exit 0
+            fi
+          fi
+
+          echo "Attempt ${i}/${MAX_ATTEMPTS}: ${PING_URL} returned '${response:-<unreachable>}'; expected '${EXPECTED_TEXT:-HTTP 200}'. Sleeping ${SLEEP_SECONDS}s..."
+          sleep "${SLEEP_SECONDS}"
+        done
+
+        echo "::error ::Readiness timeout: ${PING_URL} did not return '${EXPECTED_TEXT:-HTTP 200}' after $((MAX_ATTEMPTS * SLEEP_SECONDS))s."
+        exit 1

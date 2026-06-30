@@ -139,10 +139,11 @@ deploy_service() {
     fi
 
     echo "Updating ECS service..."
-    # The worker service is provisioned at desired_count=0 in Terraform so a
-    # stale `latest`-tagged task never runs. Each deploy bumps it to 1 so the
-    # worker fleet stays sized with the web fleet.
-    if [ "${ROLE}" = "worker" ]; then
+    # Dev may be provisioned at desired_count=0 to reduce idle Fargate cost.
+    # Worker services also run from a 0 baseline so stale tasks do not linger.
+    # Each rollout that targets either path must wake the service with the new
+    # task definition so ECS has a task to register with the ALB.
+    if [ "${ENV}" = "dev" ] || [ "${ROLE}" = "worker" ]; then
         aws ecs update-service \
             --cluster ${CLUSTER} \
             --service ${SERVICE} \

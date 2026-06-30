@@ -721,6 +721,35 @@ class PlanViewAsMemberTest(TestCase):
         self.assertContains(workspace, 'You are logged in as member-view-as@test.com')
         self.assertContains(workspace, 'Return to your account')
 
+    def test_return_to_account_restores_staff_and_stays_on_member_plan(self):
+        self.client.login(email='staff-view-as@test.com', password='pw')
+        response = self.client.post(self._url())
+        plan_url = response['Location']
+
+        workspace = self.client.get(f'{plan_url}?week=2')
+        self.assertEqual(workspace.status_code, 200)
+        self.assertContains(
+            workspace,
+            f'name="next" value="{plan_url}?week=2"',
+        )
+
+        stop = self.client.post(
+            '/studio/impersonate/stop/',
+            {'next': f'{plan_url}?week=2'},
+        )
+
+        self.assertEqual(stop.status_code, 302)
+        self.assertEqual(stop['Location'], f'{plan_url}?week=2')
+        restored_workspace = self.client.get(stop['Location'])
+        self.assertEqual(restored_workspace.status_code, 200)
+        self.assertEqual(restored_workspace.wsgi_request.user, self.staff)
+        self.assertNotContains(restored_workspace, 'Return to your account')
+        self.assertNotIn('_impersonator_id', self.client.session)
+
+        studio_plan = self.client.get(f'/studio/plans/{self.plan.pk}/')
+        self.assertEqual(studio_plan.status_code, 200)
+        self.assertEqual(studio_plan.wsgi_request.user, self.staff)
+
     def test_get_returns_405_and_keeps_staff_session(self):
         self.client.login(email='staff-view-as@test.com', password='pw')
 

@@ -87,10 +87,67 @@ class StopImpersonationTest(TestCase):
         # Stop impersonation
         response = self.client.post('/studio/impersonate/stop/')
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, '/studio/users/')
+        self.assertEqual(response.url, '/')
         # Verify we are back to admin
         response = self.client.get('/')
         self.assertEqual(response.wsgi_request.user, self.staff)
+
+    def test_stop_impersonation_redirects_to_safe_next(self):
+        self.client.login(email='admin@test.com', password='testpass')
+        self.client.post(f'/studio/impersonate/{self.target.pk}/')
+
+        response = self.client.post(
+            '/studio/impersonate/stop/',
+            {'next': '/sprints/demo/plan/123?week=2'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/sprints/demo/plan/123?week=2')
+        restored = self.client.get('/')
+        self.assertEqual(restored.wsgi_request.user, self.staff)
+
+    def test_stop_impersonation_rejects_unsafe_next(self):
+        unsafe_values = [
+            'https://evil.example.com/phish',
+            '//evil.example.com/phish',
+            '/foo\\bar',
+            '/foo\nbar',
+        ]
+        for unsafe_next in unsafe_values:
+            with self.subTest(unsafe_next=unsafe_next):
+                self.client.login(email='admin@test.com', password='testpass')
+                self.client.post(f'/studio/impersonate/{self.target.pk}/')
+
+                response = self.client.post(
+                    '/studio/impersonate/stop/',
+                    {'next': unsafe_next},
+                )
+
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(response.url, '/')
+                self.client.logout()
+
+    def test_stop_impersonation_rejects_sensitive_surface_next(self):
+        disallowed_values = [
+            '/studio/users/',
+            '/admin/',
+            '/account/',
+            '/accounts/login/',
+            '/notifications',
+        ]
+        for next_url in disallowed_values:
+            with self.subTest(next_url=next_url):
+                self.client.login(email='admin@test.com', password='testpass')
+                self.client.post(f'/studio/impersonate/{self.target.pk}/')
+
+                response = self.client.post(
+                    '/studio/impersonate/stop/',
+                    {'next': next_url},
+                )
+
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(response.url, '/')
+                self.client.logout()
 
     def test_stop_impersonation_clears_session_key(self):
         """After stopping, _impersonator_id is removed from session."""
@@ -106,11 +163,45 @@ class StopImpersonationTest(TestCase):
         self.assertEqual(response.status_code, 405)
 
     def test_stop_without_impersonation_redirects(self):
-        """Stopping when not impersonating just redirects to the users page."""
+        """Stopping when not impersonating redirects to the safe fallback."""
         self.client.login(email='admin@test.com', password='testpass')
         response = self.client.post('/studio/impersonate/stop/')
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, '/studio/users/')
+        self.assertEqual(response.url, '/')
+
+    def test_stop_with_deleted_impersonator_logs_out_and_redirects_home(self):
+        self.client.login(email='admin@test.com', password='testpass')
+        self.client.post(f'/studio/impersonate/{self.target.pk}/')
+        self.staff.delete()
+
+        response = self.client.post(
+            '/studio/impersonate/stop/',
+            {'next': '/sprints/demo/plan/123'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/')
+        home = self.client.get('/')
+        self.assertFalse(home.wsgi_request.user.is_authenticated)
+
+    def test_stop_with_non_staff_impersonator_id_logs_out(self):
+        other = User.objects.create_user(
+            email='other@test.com', password='testpass',
+        )
+        self.client.force_login(self.target)
+        session = self.client.session
+        session['_impersonator_id'] = other.pk
+        session.save()
+
+        response = self.client.post(
+            '/studio/impersonate/stop/',
+            {'next': '/sprints/demo/plan/123'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/')
+        home = self.client.get('/')
+        self.assertFalse(home.wsgi_request.user.is_authenticated)
 
 
 class ImpersonationBannerTest(TestCase):
@@ -132,6 +223,32 @@ class ImpersonationBannerTest(TestCase):
         response = self.client.get('/')
         self.assertContains(response, 'You are logged in as target@test.com')
         self.assertContains(response, 'Return to your account')
+
+    def test_banner_form_includes_next_for_safe_page(self):
+        self.client.login(email='admin@test.com', password='testpass')
+        self.client.post(f'/studio/impersonate/{self.target.pk}/')
+
+        response = self.client.get('/about?source=impersonation')
+
+        self.assertContains(response, 'Return to your account')
+        self.assertContains(
+            response,
+            'name="next" value="/about?source=impersonation"',
+        )
+
+    def test_banner_form_omits_next_for_sensitive_page(self):
+        self.client.login(email='admin@test.com', password='testpass')
+        self.client.post(f'/studio/impersonate/{self.target.pk}/')
+
+        response = self.client.get('/account/')
+
+        self.assertContains(response, 'Return to your account')
+        content = response.content.decode()
+        banner_start = content.index('id="impersonation-banner"')
+        form_start = content.index('<form', banner_start)
+        form_end = content.index('</form>', form_start)
+        banner_form = content[form_start:form_end]
+        self.assertNotIn('name="next"', banner_form)
 
     def test_banner_not_shown_normally(self):
         """The banner is not visible during normal browsing."""

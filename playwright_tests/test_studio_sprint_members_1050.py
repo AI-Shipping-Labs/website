@@ -176,10 +176,11 @@ class TestStudioPlanViewAsMember:
             wait_until="domcontentloaded",
         )
         page.get_by_test_id("studio-plan-view-as-member").click()
-        page.wait_for_url(
+        member_plan_url = (
             f"{django_server}/sprints/{data['sprint_slug']}/plan/"
-            f"{data['shared_plan_id']}",
+            f"{data['shared_plan_id']}"
         )
+        page.wait_for_url(member_plan_url)
 
         page.locator("#impersonation-banner").wait_for(state="visible")
         assert "with-plan@test.com" in page.locator("#impersonation-banner").inner_text()
@@ -187,7 +188,9 @@ class TestStudioPlanViewAsMember:
         assert "/plans/" not in page.url
 
         page.get_by_role("button", name="Return to your account").click()
-        page.wait_for_url(f"{django_server}/studio/users/")
+        page.wait_for_url(member_plan_url)
+        assert page.locator("#impersonation-banner").count() == 0
+
         page.goto(
             f"{django_server}/studio/plans/{data['shared_plan_id']}/",
             wait_until="domcontentloaded",

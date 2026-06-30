@@ -565,6 +565,20 @@ class PlanQuerySet(models.QuerySet):
         )
         return base.filter(owner_q | cohort_q).distinct()
 
+    def owner_workspace_for_viewer(self, *, plan_id, sprint_slug, viewer):
+        """Plan visible on the owner workspace URL for ``viewer``.
+
+        The owner workspace remains owner-first, but staff operators who
+        return from Studio's "View as member" flow need the same URL to
+        render after their staff session is restored.
+        """
+        if not is_authenticated_user(viewer):
+            return self.none()
+        base = self.filter(pk=plan_id, sprint__slug=sprint_slug)
+        if viewer.is_staff:
+            return base
+        return base.filter(member=viewer)
+
 
 class Plan(TimestampedModelMixin, models.Model):
     """One plan per member per sprint.

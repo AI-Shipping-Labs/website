@@ -55,6 +55,74 @@ def _clear_plans_data():
 
 
 @pytest.mark.django_db(transaction=True)
+class TestViewAsMemberReturnToPlan:
+    """Staff returns from impersonated plan view to the same plan URL."""
+
+    @pytest.mark.core
+    def test_staff_returns_to_same_member_plan_after_view_as_member(
+        self, django_server, browser,
+    ):
+        from accounts.models import User
+        from plans.models import Plan, Sprint
+
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user(
+            "member@test.com",
+            tier_slug="free",
+            email_verified=True,
+        )
+        member = User.objects.get(email="member@test.com")
+        sprint = Sprint.objects.create(
+            name="Return Sprint",
+            slug="return-sprint",
+            start_date="2026-05-01",
+            duration_weeks=6,
+        )
+        plan = Plan.objects.create(member=member, sprint=sprint)
+        plan_pk = plan.pk
+        connection.close()
+
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+
+        page.goto(
+            f"{django_server}/studio/plans/{plan_pk}/",
+            wait_until="domcontentloaded",
+        )
+        page.locator('[data-testid="studio-plan-view-as-member"]').click()
+        member_plan_url = (
+            f"{django_server}/sprints/return-sprint/plan/{plan_pk}"
+        )
+        page.wait_for_url(member_plan_url, timeout=10000)
+        page.locator("#impersonation-banner").wait_for(state="visible")
+        assert "member@test.com" in page.locator(
+            "#impersonation-banner"
+        ).inner_text()
+
+        with page.expect_navigation(
+            url=member_plan_url,
+            wait_until="domcontentloaded",
+            timeout=10000,
+        ):
+            page.get_by_role("button", name="Return to your account").click()
+
+        assert page.url == member_plan_url
+        assert page.locator("#impersonation-banner").count() == 0
+
+        page.goto(
+            f"{django_server}/studio/plans/{plan_pk}/",
+            wait_until="domcontentloaded",
+        )
+        page.locator('[data-testid="studio-plan-view-as-member"]').wait_for(
+            state="visible",
+        )
+
+        context.close()
+
+
+@pytest.mark.django_db(transaction=True)
 class TestStaffCreatesSprintAndPlanFromSidebar:
     """Sidebar navigation + create flow for sprints and plans."""
 

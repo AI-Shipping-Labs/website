@@ -92,7 +92,19 @@ def _resolve_secret_key(*, debug, env=None):
 
 
 DEBUG = _bool_env('DEBUG', default=True)
-TESTING = 'test' in sys.argv
+def _is_test_command(argv=None):
+    """Return True for Django's test runner and pytest entrypoints."""
+    argv = sys.argv if argv is None else argv
+    command_names = {Path(arg).name for arg in argv}
+    return (
+        'test' in argv
+        or 'pytest' in command_names
+        or 'py.test' in command_names
+        or ('-m' in argv and 'pytest' in argv)
+    )
+
+
+TESTING = _is_test_command()
 
 SECRET_KEY = _resolve_secret_key(debug=DEBUG)
 

@@ -15,6 +15,7 @@ from django.urls import reverse
 
 from accounts.return_context import (
     append_next,
+    sanitize_next_url,
     should_skip_logout_redirect,
 )
 from accounts.utils.display import display_name as _display_name
@@ -209,3 +210,15 @@ def login_url(context):
     if current == "/" or should_skip_logout_redirect(current):
         return base
     return append_next(base, current)
+
+
+@register.simple_tag(takes_context=True)
+def impersonation_return_next(context):
+    """Return a safe hidden ``next`` value for the impersonation banner."""
+    request = context.get("request")
+    if request is None:
+        return ""
+    current = sanitize_next_url(request.get_full_path(), default="")
+    if not current or current == "/" or should_skip_logout_redirect(current):
+        return ""
+    return current

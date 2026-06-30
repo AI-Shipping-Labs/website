@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import (
@@ -97,15 +98,8 @@ def _get_tag_rules_for_tags(tags):
     return result
 
 
-def _get_activity_sprints(user):
-    """Return public activity-hub sprint summaries for the current viewer."""
-    statuses = ['active']
-    if user.is_authenticated and user.is_staff:
-        statuses.append('draft')
-
-    sprints = Sprint.objects.filter(status__in=statuses).order_by(
-        'start_date', 'name',
-    )
+def _build_sprint_summaries(sprints, user):
+    """Return card presentation summaries for ``sprints`` and ``user``."""
     user_level = get_user_level(user) if user.is_authenticated else 0
 
     summaries = []
@@ -159,6 +153,70 @@ def _get_activity_sprints(user):
     return summaries
 
 
+def _get_activity_sprints(user):
+    """Return public activity-hub sprint summaries for the current viewer."""
+    statuses = ['active']
+    if user.is_authenticated and user.is_staff:
+        statuses.append('draft')
+
+    sprints = Sprint.objects.filter(status__in=statuses).order_by(
+        'start_date', 'name',
+    )
+    return _build_sprint_summaries(sprints, user)
+
+
+def _sprint_section_title(label, count):
+    noun = 'sprint' if count == 1 else 'sprints'
+    return f'{label} {noun}'
+
+
+def _build_sprints_index_sections(user):
+    """Return date-derived Current/Future/Past sections for ``/sprints``."""
+    statuses = ['active', 'completed']
+    if user.is_authenticated and user.is_staff:
+        statuses.append('draft')
+
+    sprints = list(Sprint.objects.filter(status__in=statuses))
+    today = timezone.localdate()
+
+    current = []
+    future = []
+    past = []
+    for sprint in sprints:
+        if sprint.start_date <= today <= sprint.end_date:
+            current.append(sprint)
+        elif today < sprint.start_date:
+            future.append(sprint)
+        elif today > sprint.end_date:
+            past.append(sprint)
+
+    current.sort(key=lambda sprint: (sprint.start_date, sprint.name, sprint.id))
+    future.sort(key=lambda sprint: (sprint.start_date, sprint.name, sprint.id))
+    past.sort(
+        key=lambda sprint: (
+            -sprint.end_date.toordinal(),
+            -sprint.start_date.toordinal(),
+            sprint.name,
+            sprint.id,
+        )
+    )
+
+    section_defs = [
+        ('current', 'Current', 'No sprint is running right now.', current),
+        ('future', 'Future', 'No future sprints are scheduled yet.', future),
+        ('past', 'Past', 'No past sprints yet.', past),
+    ]
+    return [
+        {
+            'key': key,
+            'title': _sprint_section_title(label, len(section_sprints)),
+            'empty_message': empty_message,
+            'items': _build_sprint_summaries(section_sprints, user),
+        }
+        for key, label, empty_message, section_sprints in section_defs
+    ]
+
+
 def about(request):
     """About page."""
     return render(request, 'content/about.html')
@@ -189,8 +247,12 @@ def activities(request):
 
 def sprints_index(request):
     """Public community sprints discovery page."""
+    sprint_sections = _build_sprints_index_sections(request.user)
     context = {
-        'activity_sprints': _get_activity_sprints(request.user),
+        'sprint_sections': sprint_sections,
+        'has_visible_sprints': any(
+            section['items'] for section in sprint_sections
+        ),
     }
     return render(request, 'content/sprints_index.html', context)
 

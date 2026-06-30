@@ -68,7 +68,8 @@ def _create_task(success=False, result=None, **kwargs):
 
 
 def _enqueue_ormq(name='sync-content-blog', func='integrations.services.github.sync_content_source',
-                  args=(1, 'two'), kwargs=None, lock_age_seconds=12):
+                  args=(1, 'two'), kwargs=None, lock_age_seconds=12,
+                  lock_now=None):
     """Write a real signed OrmQ row so the inspect view can decode it."""
     payload = {
         'id': uuid.uuid4().hex,
@@ -81,7 +82,7 @@ def _enqueue_ormq(name='sync-content-blog', func='integrations.services.github.s
     return OrmQ.objects.create(
         key='default',
         payload=signed,
-        lock=timezone.now() - timedelta(seconds=lock_age_seconds),
+        lock=(lock_now or timezone.now()) - timedelta(seconds=lock_age_seconds),
     )
 
 
@@ -211,16 +212,19 @@ class InspectQueuedTaskTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_inspect_shows_func_args_kwargs(self):
+        now = timezone.now()
         ormq = _enqueue_ormq(
             name='inspect-me',
             func='integrations.services.github.sync_content_source',
             args=('source-uuid-1', 'extra'),
             kwargs={'batch_id': 'b-1'},
             lock_age_seconds=42,
+            lock_now=now,
         )
-        response = self.client.get(
-            f'/studio/worker/queue/{ormq.pk}/inspect/',
-        )
+        with patch('studio.views.worker.timezone.now', return_value=now):
+            response = self.client.get(
+                f'/studio/worker/queue/{ormq.pk}/inspect/',
+            )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'inspect-me')
         self.assertContains(response, 'sync_content_source')
@@ -507,9 +511,11 @@ class WorkerDashboardRendersQueuedTasksTest(TestCase):
     def test_pending_tasks_section_lists_queued_tasks(self):
         # ``lock_age_seconds=7`` puts the lock 7s in the past — an expired
         # claim. The Lock-expires column should say so explicitly.
-        _enqueue_ormq(name='visible-task', lock_age_seconds=7)
+        now = timezone.now()
+        _enqueue_ormq(name='visible-task', lock_age_seconds=7, lock_now=now)
         with patch('studio.worker_health.Stat.get_all', return_value=[]):
-            response = self.client.get('/studio/worker/')
+            with patch('studio.views.worker.timezone.now', return_value=now):
+                response = self.client.get('/studio/worker/')
         self.assertContains(response, 'Pending Tasks (1)')
         self.assertContains(response, 'visible-task')
         self.assertContains(response, 'expired 7s ago')

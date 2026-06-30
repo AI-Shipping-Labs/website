@@ -215,10 +215,10 @@ def member_plan_detail(request, sprint_slug, plan_id):
 def _owner_plan_or_404(plan_id, sprint_slug, user):
     """Return an owner plan only when the URL slug matches its sprint."""
     return get_object_or_404(
-        Plan.objects.filter(
-            pk=plan_id,
-            member=user,
-            sprint__slug=sprint_slug,
+        Plan.objects.owner_workspace_for_viewer(
+            plan_id=plan_id,
+            sprint_slug=sprint_slug,
+            viewer=user,
         )
         .select_related('member', 'sprint')
         .prefetch_related(

@@ -116,11 +116,13 @@ class PendingTasksTableLockColumnTest(TestCase):
         self.assertContains(response, '—')
 
     def test_future_lock_renders_in_ns_never_negative(self):
+        now = timezone.now()
         _make_ormq(
-            lock=timezone.now() + timedelta(seconds=30),
+            lock=now + timedelta(seconds=30),
             name='locked-task',
         )
-        response = self._get_dashboard()
+        with patch('studio.views.worker.timezone.now', return_value=now):
+            response = self._get_dashboard()
         body = response.content.decode()
         self.assertIn('locked-task', body)
         self.assertIn('in 30s', body)
@@ -132,11 +134,13 @@ class PendingTasksTableLockColumnTest(TestCase):
         )
 
     def test_expired_lock_renders_expired_n_ago(self):
+        now = timezone.now()
         _make_ormq(
-            lock=timezone.now() - timedelta(seconds=20),
+            lock=now - timedelta(seconds=20),
             name='expired-task',
         )
-        response = self._get_dashboard()
+        with patch('studio.views.worker.timezone.now', return_value=now):
+            response = self._get_dashboard()
         self.assertContains(response, 'expired-task')
         self.assertContains(response, 'expired 20s ago')
 
@@ -154,13 +158,15 @@ class InspectViewLockColumnTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_inspect_future_lock_shows_in_ns(self):
+        now = timezone.now()
         ormq = _make_ormq(
-            lock=timezone.now() + timedelta(seconds=45),
+            lock=now + timedelta(seconds=45),
             name='inspect-future',
         )
-        response = self.client.get(
-            f'/studio/worker/queue/{ormq.pk}/inspect/',
-        )
+        with patch('studio.views.worker.timezone.now', return_value=now):
+            response = self.client.get(
+                f'/studio/worker/queue/{ormq.pk}/inspect/',
+            )
         self.assertContains(response, 'Lock expires')
         self.assertContains(response, 'in 45s')
 

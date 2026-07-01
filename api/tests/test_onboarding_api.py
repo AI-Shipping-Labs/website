@@ -18,6 +18,7 @@ from django.utils import timezone
 from accounts.models import Token
 from questionnaires.models import (
     Answer,
+    AnswerOptionText,
     Persona,
     Question,
     Questionnaire,
@@ -128,6 +129,20 @@ class PerMemberResponseTest(_OnboardingApiBase):
         )
         ans_single.selected_options.set([opt_a])
 
+        rq_other = cls._add_response_question(
+            cls.response, qtype="single_choice", prompt="Path?", order=6,
+        )
+        opt_other = cls._add_rq_option(rq_other, "Other", 0)
+        ans_other = Answer.objects.create(
+            response=cls.response, question=rq_other,
+        )
+        ans_other.selected_options.set([opt_other])
+        AnswerOptionText.objects.create(
+            answer=ans_other,
+            selected_option=opt_other,
+            text_value="Custom route",
+        )
+
         rq_multi = cls._add_response_question(
             cls.response, qtype="multiple_choice", prompt="Interests?", order=3,
         )
@@ -167,6 +182,11 @@ class PerMemberResponseTest(_OnboardingApiBase):
         self.assertEqual(by_order[1]["answer"], 3)
         self.assertEqual(by_order[2]["answer"], "Python")
         self.assertEqual(by_order[3]["answer"], ["LLM apps", "MLOps"])
+        self.assertEqual(by_order[6]["answer"], "Other")
+        self.assertEqual(
+            by_order[6]["answer_options"],
+            [{"label": "Other", "free_text": "Custom route"}],
+        )
 
     def test_unanswered_questions_included_with_empty_values(self):
         resp = self.client.get(
@@ -179,6 +199,7 @@ class PerMemberResponseTest(_OnboardingApiBase):
         # multiple_choice with no Answer -> []
         self.assertEqual(by_order[5]["question_type"], "multiple_choice")
         self.assertEqual(by_order[5]["answer"], [])
+        self.assertEqual(by_order[5]["answer_options"], [])
 
     def test_persona_resolves_for_specific_questionnaire(self):
         resp = self.client.get(
@@ -195,7 +216,7 @@ class PerMemberResponseTest(_OnboardingApiBase):
 
     def test_blank_text_answer_serializes_as_null(self):
         rq = self._add_response_question(
-            self.response, qtype="text", prompt="Blank?", order=6,
+            self.response, qtype="text", prompt="Blank?", order=7,
         )
         Answer.objects.create(
             response=self.response, question=rq, text_value="   ",
@@ -204,7 +225,7 @@ class PerMemberResponseTest(_OnboardingApiBase):
             f"/api/onboarding/responses/{self.member.email}", **self._auth(),
         )
         by_order = {q["order"]: q for q in resp.json()["questions"]}
-        self.assertIsNone(by_order[6]["answer"])
+        self.assertIsNone(by_order[7]["answer"])
 
 
 class GenericFallbackPersonaTest(_OnboardingApiBase):
@@ -449,7 +470,9 @@ class QuestionnairesDefinitionTest(_OnboardingApiBase):
             prompt="Interests?", order=1,
         )
         QuestionOption.objects.create(question=q_choice, label="LLM apps", order=0)
-        QuestionOption.objects.create(question=q_choice, label="MLOps", order=1)
+        QuestionOption.objects.create(
+            question=q_choice, label="Other", allows_free_text=True, order=1,
+        )
         cls.q_text = q_text
         # A feedback questionnaire for the purpose filter test.
         cls.fb = cls._make_questionnaire("t-sprint-fb", purpose="feedback")
@@ -475,8 +498,12 @@ class QuestionnairesDefinitionTest(_OnboardingApiBase):
 
         choice_q = eng["questions"][1]
         labels = [o["label"] for o in choice_q["options"]]
-        self.assertEqual(labels, ["LLM apps", "MLOps"])
+        self.assertEqual(labels, ["LLM apps", "Other"])
         self.assertEqual([o["order"] for o in choice_q["options"]], [0, 1])
+        self.assertEqual(
+            [o["allows_free_text"] for o in choice_q["options"]],
+            [False, True],
+        )
 
     def test_purpose_filter_excludes_others(self):
         resp = self.client.get(

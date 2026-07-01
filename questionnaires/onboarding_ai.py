@@ -526,22 +526,18 @@ def _answers_from_extraction(extraction, persona_catalog):
                 selected_labels=list(labels),
             ))
 
+    outcome = extraction.primary_goal or extraction.target_outcome
     add_text(
-        'What is the one concrete outcome you want by the end of the next '
-        '6 to 8 weeks?',
-        extraction.primary_goal,
+        'What would you like to have achieved 6 to 8 weeks from now?',
+        outcome,
     )
     add_number(
-        'How many hours per week can you realistically commit, consistently?',
+        'How many hours per week can you realistically commit?',
         extraction.time_commitment_hours_per_week,
     )
     add_text(
-        'Do you already have a project or idea, even if rough? Describe it.',
+        'Do you already have a project, idea, or direction in mind?',
         extraction.current_project or '',
-    )
-    add_text(
-        'What result would make the next 6-8 weeks worthwhile?',
-        extraction.target_outcome,
     )
     add_text(
         'Anything else we should know before preparing your plan?',

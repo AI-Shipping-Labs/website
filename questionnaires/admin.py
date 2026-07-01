@@ -9,6 +9,7 @@ from django.contrib import admin
 
 from questionnaires.models import (
     Answer,
+    AnswerOptionText,
     Persona,
     Question,
     Questionnaire,
@@ -42,7 +43,7 @@ class QuestionAdmin(admin.ModelAdmin):
 
 @admin.register(QuestionOption)
 class QuestionOptionAdmin(admin.ModelAdmin):
-    list_display = ['label', 'question', 'order']
+    list_display = ['label', 'question', 'allows_free_text', 'order']
     search_fields = ['label']
 
 
@@ -58,3 +59,9 @@ class ResponseAdmin(admin.ModelAdmin):
 class AnswerAdmin(admin.ModelAdmin):
     list_display = ['question', 'response', 'number_value']
     list_filter = ['response__status']
+
+
+@admin.register(AnswerOptionText)
+class AnswerOptionTextAdmin(admin.ModelAdmin):
+    list_display = ['answer', 'selected_option']
+    search_fields = ['text_value', 'selected_option__label']

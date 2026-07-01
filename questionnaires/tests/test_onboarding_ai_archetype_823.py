@@ -40,9 +40,9 @@ from questionnaires.onboarding_ai import (
 # migration so the test catalog matches what ships in production. Using
 # the real spine is what makes the shared-vs-delta factoring meaningful.
 _seed = __import__(
-    'questionnaires.migrations.0003_seed_personas_and_onboarding',
+    'questionnaires.migrations.0006_update_onboarding_questionnaire_copy_1099',
     fromlist=['COMMON_SPINE', 'ALEX_DELTAS', 'TAYLOR_DELTAS', 'PRIYA_DELTAS',
-              'SAM_DELTAS', 'PERSONAS'],
+              'SAM_DELTAS'],
 )
 COMMON_SPINE = _seed.COMMON_SPINE
 ALEX_DELTAS = _seed.ALEX_DELTAS
@@ -83,10 +83,14 @@ def _catalog_from_fixture(fixture):
 
 
 def _qs(specs):
-    return [
-        PersonaQuestion(prompt=prompt, question_type=qtype, options=opts)
-        for prompt, qtype, opts in specs
-    ]
+    questions = []
+    for spec in specs:
+        questions.append(PersonaQuestion(
+            prompt=spec['prompt'],
+            question_type=spec['question_type'],
+            options=[opt['label'] for opt in spec['options']],
+        ))
+    return questions
 
 
 def _persona(signal, archetype, deltas):
@@ -108,19 +112,18 @@ FULL_CATALOG = [
 ]
 
 # A few representative delta prompts to assert branching on.
-ALEX_DELTA_PROMPT = 'Which AI area first?'
-ALEX_DELTA_PROMPT_2 = 'Project-first or foundations-first?'
-TAYLOR_DELTA_PROMPT = 'Career direction?'
+ALEX_DELTA_PROMPT = 'Which AI area would you most like to focus on first?'
+ALEX_DELTA_PROMPT_2 = 'Which learning shape fits you best right now?'
+TAYLOR_DELTA_PROMPT = 'Which direction are you exploring?'
 TAYLOR_DELTA_PROMPT_2 = (
-    'Which pipeline part for hands-on production experience?'
+    'Which production skill would be most useful to practice hands-on?'
 )
 # A shared-spine prompt present for every archetype.
 SHARED_PROMPT = (
-    'What is the one concrete outcome you want by the end of the next '
-    '6 to 8 weeks?'
+    'What would you like to have achieved 6 to 8 weeks from now?'
 )
 SHARED_PROMPT_HOURS = (
-    'How many hours per week can you realistically commit, consistently?'
+    'How many hours per week can you realistically commit?'
 )
 
 

@@ -268,6 +268,45 @@ class OnboardingSubmitTest(TestCase):
         messages = [m.message for m in resp.context['messages']]
         self.assertTrue(any('plan' in m.lower() for m in messages))
 
+    def test_submit_requires_other_text_and_completion_displays_it(self):
+        path_rq = self.response.response_questions.get(
+            prompt='Which path best fits that goal?',
+        )
+        other = path_rq.options.get(label='Other')
+        required_field = f'question_{self.required.pk}'
+        path_field = f'question_{path_rq.pk}'
+        other_text_field = f'question_{path_rq.pk}_option_{other.pk}_text'
+
+        resp = self.client.post(
+            reverse('onboarding_submit', kwargs={'response_id': self.response.pk}),
+            {
+                required_field: 'done',
+                path_field: str(other.pk),
+                other_text_field: '',
+            },
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(
+            resp,
+            'Describe your &quot;Other&quot; answer.',
+            status_code=400,
+        )
+        self.response.refresh_from_db()
+        self.assertEqual(self.response.status, 'draft')
+
+        resp = self.client.post(
+            reverse('onboarding_submit', kwargs={'response_id': self.response.pk}),
+            {
+                required_field: 'done',
+                path_field: str(other.pk),
+                other_text_field: 'Help me choose between two project ideas',
+            },
+            follow=True,
+        )
+        self.response.refresh_from_db()
+        self.assertEqual(self.response.status, 'submitted')
+        self.assertContains(resp, 'Other: Help me choose between two project ideas')
+
 
 @override_settings(ONBOARDING_AI_ENABLED='false')
 class OnboardingResumeTest(TestCase):
@@ -303,6 +342,28 @@ class OnboardingResumeTest(TestCase):
         self.assertContains(resp, 'my draft answer')
         self.assertEqual(
             Response.objects.filter(respondent=self.member).count(), 1,
+        )
+
+    def test_save_draft_prefills_other_text(self):
+        path_rq = self.response.response_questions.get(
+            prompt='Which path best fits that goal?',
+        )
+        other = path_rq.options.get(label='Other')
+        self.client.post(
+            reverse('onboarding_fill', kwargs={'response_id': self.response.pk}),
+            {
+                f'question_{path_rq.pk}': str(other.pk),
+                f'question_{path_rq.pk}_option_{other.pk}_text': (
+                    'I need help choosing between two project ideas'
+                ),
+            },
+        )
+        resp = self.client.get(
+            reverse('onboarding_fill', kwargs={'response_id': self.response.pk}),
+        )
+        self.assertContains(
+            resp,
+            'I need help choosing between two project ideas',
         )
 
 
@@ -341,7 +402,7 @@ class OnboardingChangePersonaTest(TestCase):
     """#822: a member with a DRAFT can return and re-pick a persona."""
 
     WEEKLY_HOURS_PROMPT = (
-        'How many hours per week can you realistically commit, consistently?'
+        'How many hours per week can you realistically commit?'
     )
 
     @classmethod
@@ -426,6 +487,23 @@ class OnboardingChangePersonaTest(TestCase):
         new_hours_rq = self._rq(response, self.WEEKLY_HOURS_PROMPT)
         answer = Answer.objects.get(response=response, question=new_hours_rq)
         self.assertEqual(answer.number_value, 12)
+
+    def test_old_common_spine_answer_preserved_after_reselect(self):
+        self._identify(str(self.persona_a.pk))
+        response = Response.objects.get(respondent=self.member)
+        old_prompt = (
+            'How many hours per week can you realistically commit, consistently?'
+        )
+        hours_rq = self._rq(response, self.WEEKLY_HOURS_PROMPT)
+        hours_rq.prompt = old_prompt
+        hours_rq.save(update_fields=['prompt', 'updated_at'])
+        Answer.objects.create(response=response, question=hours_rq, number_value=8)
+
+        self._identify(str(self.persona_b.pk))
+        response.refresh_from_db()
+        new_hours_rq = self._rq(response, self.WEEKLY_HOURS_PROMPT)
+        answer = Answer.objects.get(response=response, question=new_hours_rq)
+        self.assertEqual(answer.number_value, 8)
 
     def test_switch_to_none_routes_to_generic_then_back_to_persona(self):
         self._identify(str(self.persona_a.pk))

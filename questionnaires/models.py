@@ -194,6 +194,7 @@ class QuestionOption(TimestampedModelMixin, models.Model):
         related_name='options',
     )
     label = models.CharField(max_length=300)
+    allows_free_text = models.BooleanField(default=False)
     order = models.PositiveIntegerField(default=0)
 
     class Meta:
@@ -322,6 +323,7 @@ class ResponseQuestionOption(TimestampedModelMixin, models.Model):
         blank=True,
     )
     label = models.CharField(max_length=300)
+    allows_free_text = models.BooleanField(default=False)
     order = models.PositiveIntegerField(default=0)
 
     class Meta:
@@ -378,13 +380,50 @@ class Answer(TimestampedModelMixin, models.Model):
         """
         qtype = self.question.question_type
         if qtype in _CHOICE_TYPES:
-            labels = [opt.label for opt in self.selected_options.all()]
+            option_texts = {
+                item.selected_option_id: item.text_value
+                for item in self.option_texts.all()
+            }
+            labels = []
+            for opt in self.selected_options.all():
+                free_text = (option_texts.get(opt.pk) or '').strip()
+                if free_text:
+                    labels.append(f'{opt.label}: {free_text}')
+                else:
+                    labels.append(opt.label)
             return ', '.join(labels)
         if qtype in ('scale', 'number'):
             if self.number_value is None:
                 return ''
             return str(self.number_value)
         return self.text_value or ''
+
+
+class AnswerOptionText(TimestampedModelMixin, models.Model):
+    """Free text attached to one selected choice option."""
+
+    answer = models.ForeignKey(
+        Answer,
+        on_delete=models.CASCADE,
+        related_name='option_texts',
+    )
+    selected_option = models.ForeignKey(
+        ResponseQuestionOption,
+        on_delete=models.CASCADE,
+        related_name='answer_texts',
+    )
+    text_value = models.TextField(blank=True, default='')
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['answer', 'selected_option'],
+                name='unique_text_per_answer_option',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Text for option {self.selected_option_id} on answer {self.answer_id}'
 
 
 class OnboardingConversation(TimestampedModelMixin, models.Model):

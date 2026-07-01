@@ -25,7 +25,12 @@ CRM detail page (#871) share a single source of truth; this module only
 adds the structured-list JSON wrapping on top of it.
 """
 
-from questionnaires.onboarding import normalize_answer as _normalize_answer
+from questionnaires.onboarding import (
+    normalize_answer as _normalize_answer,
+)
+from questionnaires.onboarding import (
+    normalize_answer_options as _normalize_answer_options,
+)
 
 
 def _isoformat_or_none(value):
@@ -39,7 +44,11 @@ def _isoformat_or_none(value):
 
 def serialize_question_option(option):
     """One base ``QuestionOption`` row -> ``{label, order}``."""
-    return {"label": option.label, "order": option.order}
+    return {
+        "label": option.label,
+        "order": option.order,
+        "allows_free_text": option.allows_free_text,
+    }
 
 
 def serialize_question(question):
@@ -96,6 +105,17 @@ def serialize_persona(persona):
 # ---- B. Member responses ---------------------------------------------------
 
 
+def _response_answers(response):
+    prefetched = getattr(response, "_prefetched_objects_cache", {})
+    if "answers" in prefetched:
+        return list(prefetched["answers"])
+    return list(
+        response.answers.prefetch_related(
+            "selected_options", "option_texts",
+        ).all()
+    )
+
+
 def serialize_response(response, *, persona):
     """The shared response-object shape for B1 (per-member) and B2 (bulk).
 
@@ -111,20 +131,21 @@ def serialize_response(response, *, persona):
     """
     answers_by_question = {
         answer.question_id: answer
-        for answer in response.answers.prefetch_related("selected_options").all()
+        for answer in _response_answers(response)
     }
 
     questions = []
     for rq in response.response_questions.all():
         answer = answers_by_question.get(rq.pk)
-        questions.append(
-            {
-                "prompt": rq.prompt,
-                "question_type": rq.question_type,
-                "order": rq.order,
-                "answer": _normalize_answer(rq, answer),
-            }
-        )
+        payload = {
+            "prompt": rq.prompt,
+            "question_type": rq.question_type,
+            "order": rq.order,
+            "answer": _normalize_answer(rq, answer),
+        }
+        if rq.question_type in {"single_choice", "multiple_choice"}:
+            payload["answer_options"] = _normalize_answer_options(rq, answer)
+        questions.append(payload)
 
     persona_payload = None
     if persona is not None:

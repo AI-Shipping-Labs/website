@@ -296,15 +296,40 @@ def _parse_optional_int(raw, *, label):
         return None, f'{label} must be a whole number.'
 
 
+_FREE_TEXT_SUFFIX = ' [free text]'
+
+
 def _parse_options(raw):
-    """Parse the one-per-line options textarea into a list of labels.
+    """Parse the one-per-line options textarea.
 
     Blank lines are skipped. Returns the ordered list of non-empty,
-    trimmed labels.
+    trimmed option dicts. Append ``[free text]`` to a line to allow an
+    attached member text field for that option.
     """
     if not raw:
         return []
-    return [line.strip() for line in raw.splitlines() if line.strip()]
+    options = []
+    for line in raw.splitlines():
+        value = line.strip()
+        if not value:
+            continue
+        allows_free_text = value.endswith(_FREE_TEXT_SUFFIX)
+        if allows_free_text:
+            value = value[:-len(_FREE_TEXT_SUFFIX)].strip()
+        if value:
+            options.append({
+                'label': value,
+                'allows_free_text': allows_free_text,
+            })
+    return options
+
+
+def _format_options(options):
+    lines = []
+    for opt in options:
+        suffix = _FREE_TEXT_SUFFIX if opt.allows_free_text else ''
+        lines.append(f'{opt.label}{suffix}')
+    return '\n'.join(lines)
 
 
 def _render_question_form(
@@ -351,9 +376,7 @@ def _question_form_data_from_question(question):
         'order': str(question.order),
         'scale_min': '' if question.scale_min is None else str(question.scale_min),
         'scale_max': '' if question.scale_max is None else str(question.scale_max),
-        'options': '\n'.join(
-            opt.label for opt in question.options.all()
-        ),
+        'options': _format_options(question.options.all()),
     }
 
 
@@ -439,9 +462,12 @@ def question_create(request, questionnaire_id):
     options = parsed.pop('options')
     question = Question.objects.create(questionnaire=questionnaire, **parsed)
     if question.is_choice_type:
-        for index, label in enumerate(options):
+        for index, option in enumerate(options):
             QuestionOption.objects.create(
-                question=question, label=label, order=index,
+                question=question,
+                label=option['label'],
+                allows_free_text=option['allows_free_text'],
+                order=index,
             )
     messages.success(request, 'Question added.')
     return redirect('studio_questionnaire_detail', questionnaire_id=questionnaire.pk)
@@ -481,9 +507,12 @@ def question_edit(request, questionnaire_id, question_id):
     # truth). Non-choice questions end up with zero options.
     question.options.all().delete()
     if question.is_choice_type:
-        for index, label in enumerate(options):
+        for index, option in enumerate(options):
             QuestionOption.objects.create(
-                question=question, label=label, order=index,
+                question=question,
+                label=option['label'],
+                allows_free_text=option['allows_free_text'],
+                order=index,
             )
 
     messages.success(request, 'Question updated.')
@@ -619,7 +648,9 @@ def questionnaire_response_detail(request, questionnaire_id, response_id):
     # unanswered questions rather than omitting them.
     answers_by_question = {
         answer.question_id: answer
-        for answer in response.answers.prefetch_related('selected_options').all()
+        for answer in response.answers.prefetch_related(
+            'selected_options', 'option_texts',
+        ).all()
     }
     rows = []
     for rq in response.response_questions.all():
@@ -699,8 +730,31 @@ def _response_question_form_data_from_rq(rq):
         'order': str(rq.order),
         'scale_min': '' if rq.scale_min is None else str(rq.scale_min),
         'scale_max': '' if rq.scale_max is None else str(rq.scale_max),
-        'options': '\n'.join(opt.label for opt in rq.options.all()),
+        'options': _format_options(rq.options.all()),
     }
+
+
+def _sync_response_question_options(rq, options):
+    """Update snapshot options while preserving same-label answer text."""
+    existing_by_label = {opt.label: opt for opt in rq.options.all()}
+    keep_ids = []
+    for index, option in enumerate(options):
+        existing = existing_by_label.get(option['label'])
+        if existing is None:
+            existing = ResponseQuestionOption.objects.create(
+                response_question=rq,
+                label=option['label'],
+                allows_free_text=option['allows_free_text'],
+                order=index,
+            )
+        else:
+            existing.allows_free_text = option['allows_free_text']
+            existing.order = index
+            existing.save(update_fields=[
+                'allows_free_text', 'order', 'updated_at',
+            ])
+        keep_ids.append(existing.pk)
+    rq.options.exclude(pk__in=keep_ids).delete()
 
 
 @staff_required
@@ -748,9 +802,12 @@ def response_question_create(request, questionnaire_id, response_id):
         response=response, source_question=None, **parsed,
     )
     if rq.is_choice_type:
-        for index, label in enumerate(options):
+        for index, option in enumerate(options):
             ResponseQuestionOption.objects.create(
-                response_question=rq, label=label, order=index,
+                response_question=rq,
+                label=option['label'],
+                allows_free_text=option['allows_free_text'],
+                order=index,
             )
     messages.success(request, 'Custom question added for this member.')
     return redirect(
@@ -791,13 +848,10 @@ def response_question_edit(request, questionnaire_id, response_id, rq_id):
         setattr(rq, field, value)
     rq.save()
 
-    # Replace the option set wholesale (textarea is the source of truth).
-    rq.options.all().delete()
     if rq.is_choice_type:
-        for index, label in enumerate(options):
-            ResponseQuestionOption.objects.create(
-                response_question=rq, label=label, order=index,
-            )
+        _sync_response_question_options(rq, options)
+    else:
+        rq.options.all().delete()
 
     messages.success(request, 'Question updated for this member.')
     return redirect(

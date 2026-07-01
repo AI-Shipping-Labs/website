@@ -403,6 +403,7 @@ def _onboarding_response_queryset():
         .prefetch_related(
             "response_questions",
             "answers__selected_options",
+            "answers__option_texts",
         )
     )
 

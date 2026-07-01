@@ -161,8 +161,7 @@ class CompletionRepointsToInferredPersonaTest(TestCase):
         # The extracted primary-goal spine answer lands on a ResponseQuestion
         # of the Taylor questionnaire.
         primary_prompt = (
-            'What is the one concrete outcome you want by the end of the next '
-            '6 to 8 weeks?'
+            'What would you like to have achieved 6 to 8 weeks from now?'
         )
         rq = response.response_questions.filter(prompt=primary_prompt).first()
         self.assertIsNotNone(rq)

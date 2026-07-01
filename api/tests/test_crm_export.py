@@ -652,7 +652,7 @@ class CrmExportQueryBudgetTest(CrmExportTestBase):
         # Warm the integration-settings config cache first so its one-off
         # stamp read does not perturb the count (it is otherwise stable).
         self.client.get(self.URL, **self._auth())
-        with self.assertNumQueries(62):
+        with self.assertNumQueries(57):
             response = self.client.get(self.URL, **self._auth())
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["count"], 3)

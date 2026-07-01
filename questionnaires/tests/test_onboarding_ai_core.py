@@ -61,8 +61,8 @@ CATALOG = [
         description='Strong eng, low AI',
         questions=[
             PersonaQuestion(
-                prompt='What is the one concrete outcome you want by the end '
-                       'of the next 6 to 8 weeks?',
+                prompt='What would you like to have achieved 6 to 8 weeks '
+                       'from now?',
                 question_type='long_text',
             ),
         ],
@@ -157,8 +157,7 @@ class RunOnboardingTurnTest(SimpleTestCase):
         # The primary-goal spine answer is mapped to a text answer.
         prompts = {a.prompt for a in result.answers}
         self.assertIn(
-            'What is the one concrete outcome you want by the end of the next '
-            '6 to 8 weeks?',
+            'What would you like to have achieved 6 to 8 weeks from now?',
             prompts,
         )
 

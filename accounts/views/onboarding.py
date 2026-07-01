@@ -194,7 +194,9 @@ def _read_only_rows(response):
     """Build read-only Q&A rows for a submitted onboarding response."""
     answers_by_question = {
         a.question_id: a
-        for a in response.answers.prefetch_related('selected_options').all()
+        for a in response.answers.prefetch_related(
+            'selected_options', 'option_texts',
+        ).all()
     }
     rows = []
     for rq in response.response_questions.all():
@@ -337,7 +339,9 @@ def onboarding_submit(request, response_id):
         return redirect('onboarding_start')
 
     try:
-        save_response_answers(response, request.POST)
+        save_response_answers(
+            response, request.POST, require_choice_free_text=True,
+        )
     except AnswerSaveError as exc:
         form_rows = build_response_form_rows(
             response, post_data=request.POST, field_errors=exc.field_errors,

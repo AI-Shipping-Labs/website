@@ -10,6 +10,7 @@ from django.test import TestCase
 
 from questionnaires.models import (
     Answer,
+    AnswerOptionText,
     Question,
     Questionnaire,
     QuestionOption,
@@ -63,6 +64,12 @@ class SaveResponseAnswersTest(TestCase):
         cls.opt_no = QuestionOption.objects.create(
             question=cls.q_choice, label='No', order=1,
         )
+        cls.opt_other = QuestionOption.objects.create(
+            question=cls.q_choice,
+            label='Other',
+            allows_free_text=True,
+            order=2,
+        )
 
     def setUp(self):
         self.response = Response.objects.create(
@@ -79,6 +86,7 @@ class SaveResponseAnswersTest(TestCase):
             source_question=self.q_choice,
         )
         self.opt_yes_rq = self.rq_choice.options.get(label='Yes')
+        self.opt_other_rq = self.rq_choice.options.get(label='Other')
 
     def test_saves_text_number_and_choice_answers(self):
         post = _FakePost({
@@ -96,6 +104,36 @@ class SaveResponseAnswersTest(TestCase):
             list(choice_answer.selected_options.values_list('label', flat=True)),
             ['Yes'],
         )
+
+    def test_saves_choice_option_free_text_on_draft(self):
+        post = _FakePost({
+            f'question_{self.rq_choice.pk}': str(self.opt_other_rq.pk),
+            (
+                f'question_{self.rq_choice.pk}_option_'
+                f'{self.opt_other_rq.pk}_text'
+            ): 'Something else',
+        })
+        save_response_answers(self.response, post)
+        answer = Answer.objects.get(response=self.response, question=self.rq_choice)
+        self.assertEqual(answer.display_value, 'Other: Something else')
+        self.assertEqual(
+            AnswerOptionText.objects.get(answer=answer).text_value,
+            'Something else',
+        )
+
+    def test_submit_requires_selected_free_text_option_text(self):
+        post = _FakePost({
+            f'question_{self.rq_choice.pk}': str(self.opt_other_rq.pk),
+        })
+        with self.assertRaises(AnswerSaveError) as ctx:
+            save_response_answers(
+                self.response, post, require_choice_free_text=True,
+            )
+        self.assertEqual(
+            ctx.exception.field_errors[self.rq_choice.pk],
+            'Describe your "Other" answer.',
+        )
+        self.assertFalse(Answer.objects.filter(response=self.response).exists())
 
     def test_save_is_repeatable_and_overwrites(self):
         save_response_answers(self.response, _FakePost({
@@ -185,6 +223,18 @@ class BuildResponseFormRowsTest(TestCase):
             questionnaire=cls.questionnaire, question_type='text',
             prompt='Name?', order=0,
         )
+        cls.q_choice = Question.objects.create(
+            questionnaire=cls.questionnaire,
+            question_type='single_choice',
+            prompt='Path?',
+            order=1,
+        )
+        QuestionOption.objects.create(
+            question=cls.q_choice,
+            label='Other',
+            allows_free_text=True,
+            order=0,
+        )
 
     def setUp(self):
         self.response = Response.objects.create(
@@ -201,3 +251,16 @@ class BuildResponseFormRowsTest(TestCase):
         }))
         rows = build_response_form_rows(self.response)
         self.assertEqual(rows[0]['text_value'], 'Alice')
+
+    def test_prefills_choice_option_free_text(self):
+        rq_choice = self.response.response_questions.get(
+            source_question=self.q_choice,
+        )
+        opt_other = rq_choice.options.get(label='Other')
+        save_response_answers(self.response, _FakePost({
+            f'question_{rq_choice.pk}': str(opt_other.pk),
+            f'question_{rq_choice.pk}_option_{opt_other.pk}_text': 'Custom path',
+        }))
+        rows = build_response_form_rows(self.response)
+        choice_row = next(row for row in rows if row['question'] == rq_choice)
+        self.assertEqual(choice_row['options'][0]['free_text_value'], 'Custom path')

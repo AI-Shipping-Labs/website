@@ -258,6 +258,7 @@ def _base_queryset():
             "questionnaire_responses__questionnaire",
             "questionnaire_responses__response_questions",
             "questionnaire_responses__answers__selected_options",
+            "questionnaire_responses__answers__option_texts",
             "crm_record__persona_ref",
             # Matched ordering so serialize_user_state's
             # ``email_aliases.order_by("email")`` reads the prefetch cache.

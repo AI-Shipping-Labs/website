@@ -21,6 +21,7 @@ from integrations.config import get_config
 from integrations.services import llm
 from questionnaires.models import (
     Answer,
+    AnswerOptionText,
     Persona,
     Questionnaire,
     Response,
@@ -34,6 +35,61 @@ _TEXT_TYPES = frozenset({'text', 'long_text'})
 _NUMBER_TYPES = frozenset({'scale', 'number'})
 _MULTIPLE_CHOICE = 'multiple_choice'
 _SINGLE_CHOICE = 'single_choice'
+
+_PROMPT_ALIASES = {
+    'What is the one concrete outcome you want by the end of the next '
+    '6 to 8 weeks?': 'What would you like to have achieved 6 to 8 weeks from now?',
+    'Which best describes that outcome?': 'Which path best fits that goal?',
+    'How many hours per week can you realistically commit, consistently?': (
+        'How many hours per week can you realistically commit?'
+    ),
+    'Will your weekly time be steady, or drop sharply some weeks?': (
+        'What should we know about your availability?'
+    ),
+    'What usually makes it hard to stay consistent or finish?': (
+        'What tends to slow you down or make projects stall?'
+    ),
+    'What kind of accountability helps you most?': (
+        'What kind of accountability would help you make progress?'
+    ),
+    'Do you already have a project or idea, even if rough? Describe it.': (
+        'Do you already have a project, idea, or direction in mind?'
+    ),
+    'What stage is it at?': 'What stage is your project or idea at?',
+    'What support from Alexey/community would be most useful now?': (
+        'What would you like us to help with while preparing your plan?'
+    ),
+}
+
+_OPTION_ALIASES = {
+    'Ship new project': 'Ship a new project',
+    'Improve/finish existing': 'Improve or finish an existing project',
+    'Strengthen eng skills': 'Build stronger AI engineering skills',
+    'Build foundations/learn': 'Learn foundations before choosing a project',
+    'Career/portfolio': 'Strengthen career or portfolio',
+    'Steady': 'Mostly steady',
+    'Drops some weeks': 'Some weeks will be lighter',
+    'One high week then much less': 'One intense week, then much less',
+    'Scoping': 'Scope gets too broad',
+    'Getting started': 'Hard to get started',
+    'Momentum': 'Losing momentum',
+    'Finishing last 20%': 'Finishing and polishing',
+    'Technical obstacles': 'Technical blockers',
+    'FOMO': 'Too many tools or options',
+    'Not enough time': 'Limited time',
+    'No feedback': 'Not enough feedback or accountability',
+    'Async Slack': 'Async Slack feedback',
+    'Partner pairing': 'Pair or partner work',
+    'Build-in-public': 'Public progress updates',
+    'Reflections': 'Reflection prompts',
+    'No idea': 'No idea yet',
+    'Built not deployed': 'Built locally but not deployed',
+    'Deployed needs hardening': 'Deployed and needs hardening',
+    'Eval plan': 'Evaluation plan',
+    'Portfolio/README': 'Portfolio or README',
+    'Career advice': 'Career positioning',
+    'Avoid overengineering': 'Keeping scope practical',
+}
 
 # Slug of the persona-agnostic onboarding questionnaire seeded by #801.
 GENERIC_ONBOARDING_SLUG = 'onboarding-general'
@@ -225,7 +281,7 @@ def _snapshot_answers_by_prompt(response):
     answers = (
         response.answers
         .select_related('question')
-        .prefetch_related('selected_options')
+        .prefetch_related('selected_options', 'option_texts')
     )
     for answer in answers:
         rq = answer.question
@@ -234,21 +290,40 @@ def _snapshot_answers_by_prompt(response):
             # An empty choice answer carries no information to preserve.
             if not labels:
                 continue
-            snapshot[rq.prompt] = {
+            option_texts = {
+                item.selected_option.label: item.text_value
+                for item in answer.option_texts.select_related('selected_option')
+            }
+            saved = {
                 'type': rq.question_type,
                 'labels': labels,
+                'option_texts': option_texts,
             }
+            _store_snapshot(snapshot, rq.prompt, saved)
         elif answer.text_value:
-            snapshot[rq.prompt] = {
+            _store_snapshot(snapshot, rq.prompt, {
                 'type': rq.question_type,
                 'text': answer.text_value,
-            }
+            })
         elif answer.number_value is not None:
-            snapshot[rq.prompt] = {
+            _store_snapshot(snapshot, rq.prompt, {
                 'type': rq.question_type,
                 'number': answer.number_value,
-            }
+            })
     return snapshot
+
+
+def _canonical_prompt(prompt):
+    return _PROMPT_ALIASES.get(prompt, prompt)
+
+
+def _canonical_option_label(label):
+    return _OPTION_ALIASES.get(label, label)
+
+
+def _store_snapshot(snapshot, prompt, saved):
+    snapshot.setdefault(prompt, saved)
+    snapshot.setdefault(_canonical_prompt(prompt), saved)
 
 
 def _restore_answers_by_prompt(response, snapshot):
@@ -260,7 +335,7 @@ def _restore_answers_by_prompt(response, snapshot):
     the new question is simply dropped (no orphan, no error).
     """
     for rq in response.response_questions.prefetch_related('options').all():
-        saved = snapshot.get(rq.prompt)
+        saved = snapshot.get(rq.prompt) or snapshot.get(_canonical_prompt(rq.prompt))
         if saved is None:
             continue
         if rq.question_type in _CHOICE_TYPES:
@@ -268,13 +343,30 @@ def _restore_answers_by_prompt(response, snapshot):
             # flipped type across questionnaires would not be a safe restore.
             if saved.get('type') not in _CHOICE_TYPES:
                 continue
+            saved_labels = {
+                _canonical_option_label(label) for label in saved['labels']
+            }
             matching = [
-                opt for opt in rq.options.all() if opt.label in saved['labels']
+                opt for opt in rq.options.all()
+                if _canonical_option_label(opt.label) in saved_labels
             ]
             if not matching:
                 continue
             answer = Answer.objects.create(response=response, question=rq)
             answer.selected_options.set(matching)
+            option_texts = saved.get('option_texts') or {}
+            for opt in matching:
+                text_value = (
+                    option_texts.get(opt.label)
+                    or option_texts.get(_canonical_option_label(opt.label))
+                    or ''
+                ).strip()
+                if text_value:
+                    AnswerOptionText.objects.create(
+                        answer=answer,
+                        selected_option=opt,
+                        text_value=text_value,
+                    )
         elif 'text' in saved:
             Answer.objects.create(
                 response=response, question=rq, text_value=saved['text'],
@@ -369,6 +461,24 @@ def normalize_answer(response_question, answer):
     return (answer.text_value or '').strip() or None
 
 
+def normalize_answer_options(response_question, answer):
+    """Return structured selected choice options with attached free text."""
+    if response_question.question_type not in _CHOICE_TYPES or answer is None:
+        return []
+
+    option_texts = {
+        item.selected_option_id: item.text_value
+        for item in answer.option_texts.all()
+    }
+    return [
+        {
+            'label': opt.label,
+            'free_text': (option_texts.get(opt.pk) or '').strip() or None,
+        }
+        for opt in answer.selected_options.all()
+    ]
+
+
 def _display_value(normalized):
     """Render a normalized answer as a human-readable string.
 
@@ -407,7 +517,9 @@ def flatten_response_answers(response):
     answers_by_question = {
         answer.question_id: answer
         for answer in (
-            response.answers.prefetch_related('selected_options').all()
+            response.answers.prefetch_related(
+                'selected_options', 'option_texts',
+            ).all()
         )
     }
 
@@ -415,7 +527,10 @@ def flatten_response_answers(response):
     for rq in response.response_questions.all():
         answer = answers_by_question.get(rq.pk)
         value = normalize_answer(rq, answer)
-        display = _display_value(value)
+        if answer is not None and rq.question_type in _CHOICE_TYPES:
+            display = answer.display_value
+        else:
+            display = _display_value(value)
         rows.append({
             'prompt': rq.prompt,
             'question_type': rq.question_type,

@@ -82,9 +82,9 @@
     <div class="mb-2">
       <label class="block text-sm font-medium text-foreground mb-1">Choice options</label>
       <textarea name="options" rows="4" data-testid="question-options-input"
-                placeholder="One option per line. Only used by single / multiple choice questions."
+                placeholder="One option per line. Add [free text] after options like Other."
                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.options }}</textarea>
-      <p class="text-xs text-muted-foreground mt-1">One option per line. Required for single / multiple choice; ignored for other types.</p>
+      <p class="text-xs text-muted-foreground mt-1">One option per line. Add <code>[free text]</code> after options that should collect attached text.</p>
     </div>
 
   </form>

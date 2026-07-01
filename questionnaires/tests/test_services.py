@@ -34,6 +34,9 @@ class BuildResponseQuestionsTest(TestCase):
         )
         QuestionOption.objects.create(question=cls.choice_q, label='RAG', order=0)
         QuestionOption.objects.create(question=cls.choice_q, label='Agents', order=1)
+        QuestionOption.objects.create(
+            question=cls.choice_q, label='Other', allows_free_text=True, order=2,
+        )
 
     def _make_response(self):
         return Response.objects.create(
@@ -64,9 +67,10 @@ class BuildResponseQuestionsTest(TestCase):
 
         choice_rq = response.response_questions.get(source_question=self.choice_q)
         labels = list(choice_rq.options.values_list('label', flat=True))
-        self.assertEqual(labels, ['RAG', 'Agents'])
+        self.assertEqual(labels, ['RAG', 'Agents', 'Other'])
         for opt in choice_rq.options.all():
             self.assertIsNotNone(opt.source_option)
+        self.assertTrue(choice_rq.options.get(label='Other').allows_free_text)
 
     def test_idempotent_does_not_duplicate(self):
         response = self._make_response()

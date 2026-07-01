@@ -8,6 +8,7 @@ question set. It is pure-Python and ORM-only -- no HTTP, no AI.
 
 from questionnaires.models import (
     Answer,
+    AnswerOptionText,
     ResponseQuestion,
     ResponseQuestionOption,
 )
@@ -58,6 +59,7 @@ def build_response_questions(response):
                 response_question=rq,
                 source_option=opt,
                 label=opt.label,
+                allows_free_text=opt.allows_free_text,
                 order=opt.order,
             )
         created.append(rq)
@@ -67,6 +69,11 @@ def build_response_questions(response):
 def _field_name(response_question):
     """The POST field name for a response-question's answer input."""
     return f'question_{response_question.pk}'
+
+
+def _option_text_field_name(response_question, option):
+    """The POST field name for free text attached to a choice option."""
+    return f'question_{response_question.pk}_option_{option.pk}_text'
 
 
 class AnswerSaveError(Exception):
@@ -101,6 +108,13 @@ def build_response_form_rows(response, *, post_data=None, field_errors=None):
         answer.question_id: answer
         for answer in response.answers.prefetch_related('selected_options').all()
     }
+    option_texts_by_answer = {}
+    if post_data is None:
+        for answer in response.answers.prefetch_related('option_texts').all():
+            option_texts_by_answer[answer.pk] = {
+                item.selected_option_id: item.text_value
+                for item in answer.option_texts.all()
+            }
     rows = []
     for rq in response.response_questions.prefetch_related('options').all():
         field_name = _field_name(rq)
@@ -124,10 +138,22 @@ def build_response_form_rows(response, *, post_data=None, field_errors=None):
             )
             selected_ids = {opt.pk for opt in existing.selected_options.all()}
 
-        options = [
-            {'option': opt, 'selected': opt.pk in selected_ids}
-            for opt in rq.options.all()
-        ]
+        options = []
+        existing_option_texts = (
+            option_texts_by_answer.get(existing.pk, {}) if existing else {}
+        )
+        for opt in rq.options.all():
+            free_text_name = _option_text_field_name(rq, opt)
+            if post_data is not None:
+                free_text_value = post_data.get(free_text_name, '')
+            else:
+                free_text_value = existing_option_texts.get(opt.pk, '')
+            options.append({
+                'option': opt,
+                'selected': opt.pk in selected_ids,
+                'free_text_name': free_text_name,
+                'free_text_value': free_text_value,
+            })
         rows.append({
             'question': rq,
             'field_name': field_name,
@@ -139,7 +165,7 @@ def build_response_form_rows(response, *, post_data=None, field_errors=None):
     return rows
 
 
-def save_response_answers(response, post_data):
+def save_response_answers(response, post_data, *, require_choice_free_text=False):
     """Upsert one ``Answer`` per ``ResponseQuestion`` from posted data.
 
     Shared by the save and the submit paths (#803, reusable by #802).
@@ -147,7 +173,8 @@ def save_response_answers(response, post_data):
     ``scale``/``number`` -> ``number_value`` (validated as an integer
     inside ``[scale_min, scale_max]`` when those bounds are set);
     ``single_choice`` -> one selected option; ``multiple_choice`` ->
-    zero-or-more selected options.
+    zero-or-more selected options. Choice options with ``allows_free_text``
+    store their attached text on ``AnswerOptionText``.
 
     Validation errors (non-integer / out-of-range numbers, unknown
     option ids) raise :class:`AnswerSaveError` BEFORE any write, so a bad
@@ -197,24 +224,42 @@ def save_response_answers(response, post_data):
             if unknown:
                 field_errors[rq.pk] = 'Pick a valid option.'
                 continue
-            staged.append((rq, 'choice', raw_ids))
+            option_texts = {}
+            for opt in rq.options.all():
+                if not opt.allows_free_text or opt.pk not in raw_ids:
+                    continue
+                text_value = post_data.get(
+                    _option_text_field_name(rq, opt), '',
+                ).strip()
+                if require_choice_free_text and not text_value:
+                    field_errors[rq.pk] = (
+                        f'Describe your "{opt.label}" answer.'
+                    )
+                    break
+                option_texts[opt.pk] = text_value
+            else:
+                staged.append((rq, 'choice', raw_ids, option_texts))
 
     if field_errors:
         raise AnswerSaveError(field_errors)
 
-    for rq, kind, value in staged:
+    for item in staged:
+        rq, kind, value = item[:3]
         answer, _ = Answer.objects.get_or_create(response=response, question=rq)
         if kind == 'text':
             answer.text_value = value
             answer.number_value = None
             answer.save(update_fields=['text_value', 'number_value', 'updated_at'])
             answer.selected_options.clear()
+            AnswerOptionText.objects.filter(answer=answer).delete()
         elif kind == 'number':
             answer.text_value = ''
             answer.number_value = value
             answer.save(update_fields=['text_value', 'number_value', 'updated_at'])
             answer.selected_options.clear()
+            AnswerOptionText.objects.filter(answer=answer).delete()
         else:  # choice
+            option_texts = item[3]
             answer.text_value = ''
             answer.number_value = None
             answer.save(update_fields=['text_value', 'number_value', 'updated_at'])
@@ -224,6 +269,21 @@ def save_response_answers(response, post_data):
                 )
             else:
                 answer.selected_options.clear()
+            AnswerOptionText.objects.filter(answer=answer).exclude(
+                selected_option_id__in=value,
+            ).delete()
+            for option_id, text_value in option_texts.items():
+                if text_value:
+                    AnswerOptionText.objects.update_or_create(
+                        answer=answer,
+                        selected_option_id=option_id,
+                        defaults={'text_value': text_value},
+                    )
+                else:
+                    AnswerOptionText.objects.filter(
+                        answer=answer,
+                        selected_option_id=option_id,
+                    ).delete()
 
 
 def find_unanswered_required(response):

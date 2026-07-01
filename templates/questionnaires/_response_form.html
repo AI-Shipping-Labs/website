@@ -46,21 +46,39 @@ sprint-specific copy lives here.
         {% elif row.question.question_type == 'single_choice' %}
           <div class="space-y-2" data-testid="questionnaire-input-single-choice">
             {% for opt in row.options %}
-            <label class="flex items-center gap-2 text-sm text-foreground">
-              <input type="radio" name="{{ row.field_name }}" value="{{ opt.option.pk }}"
-                     {% if opt.selected %}checked{% endif %}>
-              {{ opt.option.label }}
-            </label>
+            <div class="space-y-1">
+              <label class="flex items-center gap-2 text-sm text-foreground">
+                <input type="radio" name="{{ row.field_name }}" value="{{ opt.option.pk }}"
+                       {% if opt.selected %}checked{% endif %}>
+                {{ opt.option.label }}
+              </label>
+              {% if opt.option.allows_free_text %}
+              <input type="text" name="{{ opt.free_text_name }}"
+                     value="{{ opt.free_text_value }}"
+                     placeholder="Please describe"
+                     class="ml-6 w-full max-w-md rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                     data-testid="questionnaire-option-free-text">
+              {% endif %}
+            </div>
             {% endfor %}
           </div>
         {% elif row.question.question_type == 'multiple_choice' %}
           <div class="space-y-2" data-testid="questionnaire-input-multiple-choice">
             {% for opt in row.options %}
-            <label class="flex items-center gap-2 text-sm text-foreground">
-              <input type="checkbox" name="{{ row.field_name }}" value="{{ opt.option.pk }}"
-                     {% if opt.selected %}checked{% endif %}>
-              {{ opt.option.label }}
-            </label>
+            <div class="space-y-1">
+              <label class="flex items-center gap-2 text-sm text-foreground">
+                <input type="checkbox" name="{{ row.field_name }}" value="{{ opt.option.pk }}"
+                       {% if opt.selected %}checked{% endif %}>
+                {{ opt.option.label }}
+              </label>
+              {% if opt.option.allows_free_text %}
+              <input type="text" name="{{ opt.free_text_name }}"
+                     value="{{ opt.free_text_value }}"
+                     placeholder="Please describe"
+                     class="ml-6 w-full max-w-md rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                     data-testid="questionnaire-option-free-text">
+              {% endif %}
+            </div>
             {% endfor %}
           </div>
         {% else %}

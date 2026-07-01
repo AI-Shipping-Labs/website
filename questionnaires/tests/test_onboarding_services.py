@@ -9,6 +9,7 @@ from django.test import TestCase
 
 from questionnaires.models import (
     Answer,
+    AnswerOptionText,
     Persona,
     Questionnaire,
     Response,
@@ -32,10 +33,10 @@ User = get_user_model()
 # A common-spine number question, shared (same prompt) across every
 # persona questionnaire and the generic fallback.
 WEEKLY_HOURS_PROMPT = (
-    'How many hours per week can you realistically commit, consistently?'
+    'How many hours per week can you realistically commit?'
 )
 # A common-spine single-choice question, also shared everywhere.
-OUTCOME_PROMPT = 'Which best describes that outcome?'
+OUTCOME_PROMPT = 'Which path best fits that goal?'
 
 
 class SelfIdentificationOptionsTest(TestCase):
@@ -190,6 +191,24 @@ class RerouteOnboardingResponseTest(TestCase):
             {o.pk for o in new_answer.selected_options.all()} <= new_option_ids,
         )
 
+    def test_old_choice_answer_preserved_by_prompt_and_label_alias(self):
+        response = self._start_draft(self.q_a)
+        rq = self._rq(response, OUTCOME_PROMPT)
+        rq.prompt = 'Which best describes that outcome?'
+        rq.save(update_fields=['prompt', 'updated_at'])
+        chosen = rq.options.get(label='Improve or finish an existing project')
+        chosen.label = 'Improve/finish existing'
+        chosen.save(update_fields=['label', 'updated_at'])
+        answer = Answer.objects.create(response=response, question=rq)
+        answer.selected_options.set([chosen])
+
+        reroute_onboarding_response(response, self.q_b)
+
+        new_rq = self._rq(response, OUTCOME_PROMPT)
+        new_answer = Answer.objects.get(response=response, question=new_rq)
+        labels = [o.label for o in new_answer.selected_options.all()]
+        self.assertEqual(labels, ['Improve or finish an existing project'])
+
     def test_delta_answer_dropped_when_absent_in_new_questionnaire(self):
         # Answer a delta question unique to persona A, then switch to B.
         only_in_a = self._delta_prompts(self.q_a) - self._delta_prompts(self.q_b)
@@ -291,8 +310,17 @@ class FlattenResponseAnswersTest(TestCase):
         opt2 = ResponseQuestionOption.objects.create(
             response_question=rq_multi, label='Agents', order=1,
         )
+        opt_other = ResponseQuestionOption.objects.create(
+            response_question=rq_multi, label='Other',
+            allows_free_text=True, order=2,
+        )
         ans_multi = Answer.objects.create(response=response, question=rq_multi)
-        ans_multi.selected_options.set([opt1, opt2])
+        ans_multi.selected_options.set([opt1, opt2, opt_other])
+        AnswerOptionText.objects.create(
+            answer=ans_multi,
+            selected_option=opt_other,
+            text_value='Custom area',
+        )
 
         rows = flatten_response_answers(response)
         self.assertEqual([r['prompt'] for r in rows], ['Goals?', 'Confidence?', 'Areas?'])
@@ -300,8 +328,8 @@ class FlattenResponseAnswersTest(TestCase):
         self.assertEqual(rows[0]['display'], 'Switch careers')
         self.assertEqual(rows[1]['value'], 4)
         self.assertEqual(rows[1]['display'], '4')
-        self.assertEqual(rows[2]['value'], ['RAG', 'Agents'])
-        self.assertEqual(rows[2]['display'], 'RAG, Agents')
+        self.assertEqual(rows[2]['value'], ['RAG', 'Agents', 'Other'])
+        self.assertEqual(rows[2]['display'], 'RAG, Agents, Other: Custom area')
         self.assertTrue(all(r['answered'] for r in rows))
 
     def test_unanswered_question_is_present_and_marked_not_answered(self):

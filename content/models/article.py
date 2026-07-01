@@ -1,6 +1,8 @@
 import math
+import uuid
 
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 
 from content.access import VISIBILITY_CHOICES
@@ -82,6 +84,8 @@ class Article(
     )
     published = models.BooleanField(default=True)
     published_at = models.DateTimeField(null=True, blank=True)
+    preview_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
     class Meta:
         ordering = ['-date']
 
@@ -91,8 +95,18 @@ class Article(
     def get_absolute_url(self):
         return f'/blog/{self.slug}'
 
+    def get_preview_url(self):
+        return reverse(
+            'blog_preview',
+            kwargs={'preview_token': self.preview_token},
+        )
+
     def get_studio_edit_url(self):
         return f'/studio/articles/{self.pk}/edit'
+
+    def regenerate_preview_token(self):
+        self.preview_token = uuid.uuid4()
+        self.save(update_fields=['preview_token'])
 
     def formatted_date(self):
         return self.date.strftime('%B %d, %Y')

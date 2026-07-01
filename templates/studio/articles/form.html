@@ -25,9 +25,9 @@
         <span>Edit on GitHub</span>
       </a>
       {% endif %}
-      <a href="{{ article.get_absolute_url }}" target="_blank" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1" data-testid="view-on-site">
+      <a href="{% if article.published %}{{ article.get_absolute_url }}{% else %}{{ article.get_preview_url }}{% endif %}" target="_blank" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1" data-testid="{% if article.published %}view-on-site{% else %}preview-draft{% endif %}">
         <i data-lucide="external-link" class="w-4 h-4"></i>
-        <span>View on site</span>
+        <span>{% if article.published %}View on site{% else %}Preview draft{% endif %}</span>
       </a>
       {% if article.source_repo %}
       <form method="post"
@@ -137,6 +137,33 @@
       </div>
     </dl>
   </div>
+
+  {% if not article.published %}
+  <div class="bg-card border border-border rounded-lg p-4" data-testid="draft-preview-link-panel">
+    <h2 class="text-sm font-medium text-foreground mb-3">Draft preview link</h2>
+    <input type="url" readonly value="{{ preview_url }}"
+           class="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-xs text-foreground"
+           data-testid="draft-preview-url"
+           onclick="this.select()">
+    <div class="mt-3 flex flex-wrap gap-2">
+      <a href="{{ article.get_preview_url }}" target="_blank" rel="noopener noreferrer"
+         class="inline-flex items-center gap-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+         data-testid="draft-preview-open">
+        <i data-lucide="external-link" class="w-4 h-4"></i>
+        Preview draft
+      </a>
+      <form method="post" action="{{ preview_regenerate_url }}">
+        {% csrf_token %}
+        <button type="submit"
+                class="inline-flex items-center gap-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                data-testid="draft-preview-regenerate">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          Regenerate link
+        </button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
 
   {% if article.published %}
   {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True %}

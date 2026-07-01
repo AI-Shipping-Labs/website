@@ -3,6 +3,7 @@
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
+from django.views.decorators.http import require_POST
 
 from content.models import Article
 from studio.decorators import staff_required
@@ -79,6 +80,11 @@ def article_edit(request, article_id):
         'github_edit_url': get_github_edit_url(article),
         'notify_url': reverse('studio_article_notify', kwargs={'article_id': article.pk}),
         'announce_url': reverse('studio_article_announce_slack', kwargs={'article_id': article.pk}),
+        'preview_url': request.build_absolute_uri(article.get_preview_url()),
+        'preview_regenerate_url': reverse(
+            'studio_article_regenerate_preview_token',
+            kwargs={'article_id': article.pk},
+        ),
         # Issues #788/#931: banner / social-image panel.
         **banner_panel_context(
             content_type='article',
@@ -90,3 +96,12 @@ def article_edit(request, article_id):
         ),
     }
     return render(request, 'studio/articles/form.html', context)
+
+
+@staff_required
+@require_POST
+def article_regenerate_preview_token(request, article_id):
+    """Rotate an article's private draft preview URL."""
+    article = get_object_or_404(Article, pk=article_id)
+    article.regenerate_preview_token()
+    return redirect('studio_article_edit', article_id=article.pk)

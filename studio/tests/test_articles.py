@@ -75,6 +75,20 @@ class StudioArticleListTest(TestCase):
         self.assertContains(response, 'Python Guide')
         self.assertNotContains(response, 'Java Guide')
 
+    def test_list_uses_preview_action_for_drafts(self):
+        draft = Article.objects.create(
+            title='Previewable Draft',
+            slug='previewable-draft',
+            date=timezone.now().date(),
+            published=False,
+        )
+
+        response = self.client.get('/studio/articles/')
+
+        self.assertContains(response, 'Preview draft')
+        self.assertContains(response, draft.get_preview_url())
+        self.assertNotContains(response, 'href="/blog/previewable-draft"')
+
 
 class StudioArticleCreateRemovedTest(TestCase):
     """Test that article create URL has been removed."""
@@ -125,6 +139,25 @@ class StudioArticleEditTest(TestCase):
         response = self.client.get(f'/studio/articles/{self.article.pk}/edit')
         self.assertContains(response, 'Edit Me')
 
+    def test_edit_header_and_side_panel_show_draft_preview_link(self):
+        response = self.client.get(f'/studio/articles/{self.article.pk}/edit')
+
+        self.assertContains(response, 'Preview draft')
+        self.assertContains(response, 'data-testid="preview-draft"')
+        self.assertContains(response, 'Draft preview link')
+        self.assertContains(response, 'data-testid="draft-preview-url"')
+        self.assertContains(response, self.article.get_preview_url())
+        self.assertNotContains(response, 'data-testid="view-on-site"')
+
+    def test_published_edit_keeps_view_on_site_and_hides_preview_panel(self):
+        self.article.publish()
+
+        response = self.client.get(f'/studio/articles/{self.article.pk}/edit')
+
+        self.assertContains(response, 'data-testid="view-on-site"')
+        self.assertContains(response, 'View on site')
+        self.assertNotContains(response, 'data-testid="draft-preview-link-panel"')
+
     def test_edit_article_post(self):
         self.client.post(f'/studio/articles/{self.article.pk}/edit', {
             'title': 'Updated Article',
@@ -169,6 +202,24 @@ class StudioArticleEditTest(TestCase):
     def test_edit_nonexistent_article_returns_404(self):
         response = self.client.get('/studio/articles/99999/edit')
         self.assertEqual(response.status_code, 404)
+
+    def test_regenerate_preview_token_invalidates_old_link(self):
+        old_url = self.article.get_preview_url()
+        old_token = self.article.preview_token
+
+        response = self.client.post(
+            f'/studio/articles/{self.article.pk}/preview-token/regenerate',
+        )
+        self.assertRedirects(
+            response,
+            f'/studio/articles/{self.article.pk}/edit',
+            fetch_redirect_response=False,
+        )
+        self.article.refresh_from_db()
+
+        self.assertNotEqual(self.article.preview_token, old_token)
+        self.assertEqual(self.client.get(old_url).status_code, 404)
+        self.assertEqual(self.client.get(self.article.get_preview_url()).status_code, 200)
 
     def test_synced_article_shows_origin_panel(self):
         article = Article.objects.create(

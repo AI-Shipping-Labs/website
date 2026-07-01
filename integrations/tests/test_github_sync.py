@@ -594,6 +594,72 @@ class SyncArticlesTest(TestCase):
         self.assertEqual(article.source_path, 'my-article.md')
         self.assertTrue(article.published)
 
+    def test_sync_honors_draft_frontmatter_and_preserves_preview_token(self):
+        content_id = '11111111-1111-4111-8111-111111111111'
+        self._write_article(
+            'draft-article.md',
+            {
+                'content_id': content_id,
+                'title': 'Draft from Repo',
+                'slug': 'draft-from-repo',
+                'date': '2026-01-15',
+                'status': 'draft',
+            },
+            'Draft body.',
+        )
+        sync_repo(self.source, self.repo)
+        article = Article.objects.get(content_id=content_id)
+        original_token = article.preview_token
+        self.assertFalse(article.published)
+        self.assertEqual(article.status, 'draft')
+
+        self.repo.remove('draft-article.md')
+        self._write_article(
+            'renamed-draft.md',
+            {
+                'content_id': content_id,
+                'title': 'Draft from Repo Renamed',
+                'slug': 'draft-from-repo-renamed',
+                'date': '2026-01-15',
+                'published': False,
+            },
+            'Draft body updated.',
+        )
+        sync_repo(self.source, self.repo)
+        article.refresh_from_db()
+        self.assertEqual(article.slug, 'draft-from-repo-renamed')
+        self.assertFalse(article.published)
+        self.assertEqual(article.preview_token, original_token)
+
+    def test_sync_default_and_published_metadata_remain_published(self):
+        self._write_article(
+            'default-published.md',
+            {
+                'content_id': '22222222-2222-4222-8222-222222222222',
+                'title': 'Default Published',
+                'slug': 'default-published',
+                'date': '2026-01-15',
+            },
+            'Default body.',
+        )
+        self._write_article(
+            'explicit-published.md',
+            {
+                'content_id': '33333333-3333-4333-8333-333333333333',
+                'title': 'Explicit Published',
+                'slug': 'explicit-published',
+                'date': '2026-01-15',
+                'status': 'published',
+                'published': True,
+            },
+            'Explicit body.',
+        )
+
+        sync_repo(self.source, self.repo)
+
+        self.assertTrue(Article.objects.get(slug='default-published').published)
+        self.assertTrue(Article.objects.get(slug='explicit-published').published)
+
     def test_sync_updates_existing_article(self):
         Article.objects.create(
             title='Old Title', slug='my-article', date=date.today(),

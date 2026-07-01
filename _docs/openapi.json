@@ -39,6 +39,66 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/articles/{content_id}/preview-link": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preview URL for the synced article"
+          },
+          "401": {
+            "description": "Missing or invalid staff token"
+          },
+          "404": {
+            "description": "Article not found"
+          }
+        },
+        "summary": "Get article draft preview link",
+        "tags": [
+          "Articles"
+        ]
+      }
+    },
+    "/api/articles/{content_id}/preview-token/regenerate": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "New preview URL for the synced article"
+          },
+          "401": {
+            "description": "Missing or invalid staff token"
+          },
+          "404": {
+            "description": "Article not found"
+          }
+        },
+        "summary": "Regenerate article draft preview token",
+        "tags": [
+          "Articles"
+        ]
+      }
+    },
     "/api/campaigns": {
       "get": {
         "description": "Returns every ``EmailCampaign`` row ordered by ``-created_at``. Optional filters narrow the result.",

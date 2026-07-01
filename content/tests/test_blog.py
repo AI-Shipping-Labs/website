@@ -12,6 +12,7 @@ Covers:
 """
 
 from datetime import date
+from uuid import UUID
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, tag
@@ -64,6 +65,25 @@ class ArticleFieldsTest(TestCase):
             published=True,
         )
         self.assertEqual(article.tags, ['python', 'ai', 'mcp'])
+
+    def test_preview_token_generated_unique_and_stable_on_save(self):
+        first = Article.objects.create(
+            title='First', slug='preview-token-first', date=date(2025, 1, 1),
+        )
+        second = Article.objects.create(
+            title='Second', slug='preview-token-second', date=date(2025, 1, 1),
+        )
+
+        UUID(str(first.preview_token))
+        self.assertNotEqual(first.preview_token, second.preview_token)
+
+        original_token = first.preview_token
+        first.title = 'First renamed'
+        first.slug = 'preview-token-first-renamed'
+        first.save()
+        first.refresh_from_db()
+
+        self.assertEqual(first.preview_token, original_token)
 
 
 # --- Status/Published sync tests ---
@@ -702,6 +722,58 @@ class DraftArticleVisibilityTest(TestCase):
     def test_draft_returns_404_on_detail(self):
         response = self.client.get('/blog/draft-visibility')
         self.assertEqual(response.status_code, 404)
+
+    def test_draft_preview_token_renders_full_gated_article_for_anonymous(self):
+        self.draft.required_level = 10
+        self.draft.content_markdown = '# Private Draft\n\nFull draft body.'
+        self.draft.save()
+
+        response = self.client.get(self.draft.get_preview_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Draft preview')
+        self.assertContains(response, '<h1>Private Draft</h1>')
+        self.assertContains(response, 'Full draft body.')
+        self.assertNotContains(response, 'Upgrade to Basic')
+        self.assertEqual(
+            response.headers['X-Robots-Tag'],
+            'noindex, nofollow, noarchive',
+        )
+
+    def test_preview_page_omits_discovery_seo_for_draft(self):
+        response = self.client.get(self.draft.get_preview_url())
+        content = response.content.decode()
+
+        self.assertIn('name="robots" content="noindex,nofollow,noarchive"', content)
+        self.assertNotIn('<link rel="canonical"', content)
+        self.assertNotIn('property="og:url"', content)
+        self.assertNotIn('application/ld+json', content)
+        self.assertNotIn(str(self.draft.preview_token), self.client.get('/blog').content.decode())
+        self.assertNotIn(str(self.draft.preview_token), self.client.get('/sitemap.xml').content.decode())
+
+    def test_unknown_preview_token_404s(self):
+        response = self.client.get('/blog/preview/00000000-0000-4000-8000-000000000000')
+        self.assertEqual(response.status_code, 404)
+
+    def test_published_preview_token_redirects_to_canonical_article(self):
+        self.draft.publish()
+        response = self.client.get(self.draft.get_preview_url())
+        self.assertRedirects(
+            response,
+            '/blog/draft-visibility',
+            fetch_redirect_response=False,
+        )
+
+    def test_unpublishing_makes_existing_preview_token_work_again(self):
+        token = self.draft.preview_token
+        self.draft.publish()
+        self.draft.unpublish()
+        self.draft.refresh_from_db()
+
+        self.assertEqual(self.draft.preview_token, token)
+        self.assertEqual(self.client.get('/blog/draft-visibility').status_code, 404)
+        response = self.client.get(self.draft.get_preview_url())
+        self.assertEqual(response.status_code, 200)
 
 
 # --- Conversions from playwright_tests/test_seo_tags.py (issue #256) ---

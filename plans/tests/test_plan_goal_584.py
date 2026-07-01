@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import re
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -10,6 +11,14 @@ from django.urls import reverse
 from plans.models import Plan, Sprint, SprintEnrollment, Week
 
 User = get_user_model()
+
+
+def _detail_labels(body):
+    return re.findall(
+        r'<dt class="font-medium text-foreground" '
+        r'data-testid="plan-details-label">([^<]+)</dt>',
+        body,
+    )
 
 
 class PlanGoalModelTest(TestCase):
@@ -51,6 +60,10 @@ class PlanGoalRenderTest(TestCase):
             summary_current_situation='Current context',
             summary_goal='Long reflection...',
             summary_main_gap='Need ML chops',
+            summary_weekly_hours='6 hours',
+            summary_why_this_plan='Because momentum matters',
+            focus_main='Build the agent and demo it',
+            focus_supporting=['Keep notes', 'Record progress'],
         )
         Week.objects.create(plan=cls.plan, week_number=1, position=0)
 
@@ -89,8 +102,97 @@ class PlanGoalRenderTest(TestCase):
             response,
             "Only you can see this section. Use it for personal context that doesn't need to be shared.",
         )
-        self.assertContains(response, 'Goal (long-form)')
+        self.assertContains(response, 'Goal')
+        self.assertNotContains(response, 'Goal (long-form)')
         self.assertNotContains(response, 'Plan context')
+
+    def test_owner_details_rows_are_ordered_and_focus_is_not_duplicated(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(self._owner_url())
+        body = response.content.decode()
+
+        self.assertEqual(
+            _detail_labels(body),
+            [
+                'Goal',
+                'Focus',
+                'Current situation',
+                'Main gap',
+                'Weekly hours',
+                'Why this plan',
+            ],
+        )
+        details = body[
+            body.index('data-testid="plan-details"'):
+            body.index('</section>', body.index('data-testid="plan-details"'))
+        ]
+        self.assertNotIn('lg:grid-cols-2', details)
+        self.assertIn('Build the agent and demo it', details)
+        self.assertIn('Keep notes', details)
+        self.assertNotContains(response, 'data-testid="plan-focus"')
+
+    def test_owner_details_omits_empty_rows(self):
+        Plan.objects.filter(pk=self.plan.pk).update(
+            summary_current_situation='',
+            summary_goal='Only goal',
+            summary_main_gap='',
+            summary_weekly_hours='',
+            summary_why_this_plan='Only why',
+            focus_main='',
+            focus_supporting=[],
+        )
+        self.client.force_login(self.owner)
+
+        response = self.client.get(self._owner_url())
+        body = response.content.decode()
+
+        self.assertEqual(_detail_labels(body), ['Goal', 'Why this plan'])
+        for omitted_label in (
+            'Focus',
+            'Current situation',
+            'Main gap',
+            'Weekly hours',
+        ):
+            self.assertNotIn(omitted_label, _detail_labels(body))
+        self.assertNotIn('>-<', body)
+
+    def test_owner_omits_empty_details_shell(self):
+        Plan.objects.filter(pk=self.plan.pk).update(
+            summary_current_situation='',
+            summary_goal='',
+            summary_main_gap='',
+            summary_weekly_hours='',
+            summary_why_this_plan='',
+            focus_main='',
+            focus_supporting=[],
+        )
+        self.client.force_login(self.owner)
+
+        response = self.client.get(self._owner_url())
+
+        self.assertContains(response, 'data-testid="plan-weeks"')
+        self.assertNotContains(response, 'data-testid="plan-details"')
+        self.assertNotContains(response, 'data-testid="plan-summary"')
+
+    def test_owner_supporting_focus_without_main_still_renders_second(self):
+        Plan.objects.filter(pk=self.plan.pk).update(
+            summary_current_situation='',
+            summary_goal='Only goal',
+            summary_main_gap='',
+            summary_weekly_hours='',
+            summary_why_this_plan='',
+            focus_main='',
+            focus_supporting=['Supporting-only focus'],
+        )
+        self.client.force_login(self.owner)
+
+        response = self.client.get(self._owner_url())
+        body = response.content.decode()
+
+        self.assertEqual(_detail_labels(body), ['Goal', 'Focus'])
+        self.assertContains(response, 'Supporting-only focus')
+        self.assertNotContains(response, 'data-testid="plan-focus"')
 
     def test_owner_empty_goal_shows_placeholder_and_edit_controls(self):
         self.plan.goal = ''
@@ -119,6 +221,9 @@ class PlanGoalRenderTest(TestCase):
         self.assertNotContains(response, 'data-testid="plan-summary"')
         self.assertNotContains(response, 'Need ML chops')
         self.assertNotContains(response, 'Long reflection...')
+        self.assertNotContains(response, 'Because momentum matters')
+        self.assertContains(response, 'data-testid="plan-focus"')
+        self.assertContains(response, 'Build the agent and demo it')
 
     def test_teammate_does_not_see_empty_goal_section(self):
         self.plan.goal = ''

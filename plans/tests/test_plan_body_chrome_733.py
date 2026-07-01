@@ -200,14 +200,12 @@ class PlanBodyOwnerDeClutterTest(TestCase):
         self.assertNotIn('rounded-lg', opening)
         self.assertIn('mt-10', opening)
 
-    def test_focus_section_has_no_card_shell(self):
+    def test_owner_focus_is_folded_into_details(self):
         _, body = self._get_body()
-        section = _section_html(body, 'plan-focus')
-        opening = section[:section.find('>') + 1]
-        self.assertNotIn('bg-card', opening)
-        self.assertNotIn('border-border', opening)
-        self.assertNotIn('rounded-lg', opening)
-        self.assertIn('mt-10', opening)
+        self.assertNotIn('data-testid="plan-focus"', body)
+        section = _section_html(body, 'plan-summary')
+        self.assertIn('Focus', section)
+        self.assertIn('Build the agent and demo it', section)
 
     def test_accountability_section_has_no_card_shell(self):
         _, body = self._get_body()
@@ -359,9 +357,9 @@ class PlanBodyOwnerDeClutterTest(TestCase):
             section,
         )
 
-    def test_focus_heading_uses_section_scale(self):
+    def test_details_heading_uses_section_scale(self):
         _, body = self._get_body()
-        section = _section_html(body, 'plan-focus')
+        section = _section_html(body, 'plan-summary')
         self.assertIn(
             '<h2 class="text-2xl font-semibold tracking-tight',
             section,
@@ -483,6 +481,14 @@ class PlanBodyTeammateDeClutterTest(TestCase):
         opening = section[:section.find('>') + 1]
         self.assertNotIn('bg-card', opening)
         self.assertNotIn('border-border', opening)
+
+    def test_teammate_focus_section_has_no_card_shell(self):
+        _, body = self._get_body()
+        section = _section_html(body, 'plan-focus')
+        opening = section[:section.find('>') + 1]
+        self.assertNotIn('bg-card', opening)
+        self.assertNotIn('border-border', opening)
+        self.assertIn('mt-10', opening)
 
     def test_teammate_existing_visible_content_still_renders(self):
         response, _ = self._get_body()

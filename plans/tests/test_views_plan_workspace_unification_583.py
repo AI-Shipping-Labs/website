@@ -46,7 +46,10 @@ class UnifiedWorkspaceTemplateTest(TestCase):
             email='owner@test.com', password='pw',
         )
         cls.plan = Plan.objects.create(
-            member=cls.owner, sprint=cls.sprint, visibility='private',
+            member=cls.owner,
+            sprint=cls.sprint,
+            visibility='private',
+            summary_goal='Keep plan context below action items',
         )
         week = Week.objects.create(plan=cls.plan, week_number=1, position=0)
         Checkpoint.objects.create(

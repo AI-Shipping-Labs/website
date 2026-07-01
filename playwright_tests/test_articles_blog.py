@@ -13,6 +13,7 @@ import os
 import pytest
 
 from playwright_tests.conftest import auth_context as _auth_context
+from playwright_tests.conftest import create_staff_user as _create_staff_user
 from playwright_tests.conftest import ensure_tiers as _ensure_tiers
 
 # Playwright creates an async event loop internally. Django's async safety
@@ -169,6 +170,61 @@ class TestBlogBrowserSmoke:
         page.wait_for_load_state("domcontentloaded")
 
         assert "/pricing" in page.url
+
+    @pytest.mark.core
+    def test_staff_opens_draft_preview_link_from_studio(
+        self, django_server, browser,
+    ):
+        """Studio exposes a private draft link that anonymous reviewers can open."""
+        _clear_articles()
+        _create_staff_user("draft-preview-staff@test.com")
+        article = _create_article(
+            title="Private Draft Preview",
+            slug="private-draft-preview",
+            description="Draft description",
+            content_markdown="# Private Draft Preview\n\nReviewer-only body.",
+            author="Editor",
+            required_level=10,
+            published=False,
+            date=datetime.date(2026, 1, 4),
+        )
+
+        context = _auth_context(browser, "draft-preview-staff@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/studio/articles/", wait_until="domcontentloaded")
+
+        row = page.locator("tr", has_text="Private Draft Preview").first
+        assert row.get_by_text("Preview draft").is_visible()
+        assert row.get_by_text("View on site").count() == 0
+
+        page.goto(
+            f"{django_server}/studio/articles/{article.pk}/edit",
+            wait_until="domcontentloaded",
+        )
+        assert page.get_by_test_id("preview-draft").is_visible()
+        assert page.get_by_test_id("draft-preview-link-panel").is_visible()
+        preview_url = page.get_by_test_id("draft-preview-url").input_value()
+        assert f"/blog/preview/{article.preview_token}" in preview_url
+
+        anon_page = browser.new_page()
+        response = anon_page.goto(preview_url, wait_until="domcontentloaded")
+        assert response is not None
+        assert response.status == 200
+        assert anon_page.get_by_test_id("draft-preview-banner").is_visible()
+        assert anon_page.locator("h1").first.inner_text() == "Private Draft Preview"
+        assert "Reviewer-only body." in anon_page.content()
+        assert "Upgrade to Basic" not in anon_page.content()
+        assert anon_page.locator("[data-testid='studio-edit-button']").count() == 0
+
+        public_response = anon_page.goto(
+            f"{django_server}/blog/private-draft-preview",
+            wait_until="domcontentloaded",
+        )
+        assert public_response is not None
+        assert public_response.status == 404
+
+        anon_page.close()
+        context.close()
 
     def test_admin_article_form_slug_and_save(self, django_server, page):
         """Admin form slug prepopulation and save work in a real browser."""

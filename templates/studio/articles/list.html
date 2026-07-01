@@ -50,7 +50,11 @@
             {% else %}
             {% studio_list_action article_edit_url 'Edit' 'primary' %}
             {% endif %}
+            {% if article.published %}
             {% studio_list_action article.get_absolute_url 'View on site' 'secondary' True %}
+            {% else %}
+            {% studio_list_action article.get_preview_url 'Preview draft' 'secondary' True %}
+            {% endif %}
           </div>
         </td>
       </tr>

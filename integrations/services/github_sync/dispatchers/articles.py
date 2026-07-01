@@ -100,6 +100,10 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
             # Extract page_type and data from frontmatter
             page_type = metadata.get('page_type', 'blog')
             data = metadata.get('data', {})
+            published = True
+            status_value = str(metadata.get('status', '') or '').strip().lower()
+            if status_value == 'draft' or metadata.get('published') is False:
+                published = False
 
             defaults = {
                 'title': metadata.get('title', current_slug),
@@ -113,7 +117,7 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
                     known_images=known_images, errors=stats['errors'],
                 ),
                 'required_level': metadata.get('required_level', 0),
-                'published': True,
+                'published': published,
                 'source_repo': source.repo_name,
                 'source_path': rel_path,
                 'source_commit': commit_sha,
@@ -255,5 +259,4 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
     deleted_count = stale_articles.count()
     stale_articles.update(published=False, status='draft')
     stats['deleted'] += deleted_count
-
 

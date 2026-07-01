@@ -7,7 +7,11 @@ from studio.views.api_tokens import (
     studio_api_token_list,
     studio_api_token_revoke,
 )
-from studio.views.articles import article_edit, article_list
+from studio.views.articles import (
+    article_edit,
+    article_list,
+    article_regenerate_preview_token,
+)
 from studio.views.assistant import assistant
 from studio.views.banner_regenerate import (
     studio_article_regenerate_banner,
@@ -364,6 +368,11 @@ urlpatterns = [
     # Articles
     path('articles/', article_list, name='studio_article_list'),
     path('articles/<int:article_id>/edit', article_edit, name='studio_article_edit'),
+    path(
+        'articles/<int:article_id>/preview-token/regenerate',
+        article_regenerate_preview_token,
+        name='studio_article_regenerate_preview_token',
+    ),
     path('articles/<int:article_id>/notify', article_notify, name='studio_article_notify'),
     path('articles/<int:article_id>/announce-slack', article_announce_slack, name='studio_article_announce_slack'),
     path(

@@ -315,6 +315,27 @@ def blog_detail(request, slug):
     return render(request, 'content/blog_detail.html', context)
 
 
+def blog_preview(request, preview_token):
+    """Private draft article preview by high-entropy token."""
+    article = get_object_or_404(Article, preview_token=preview_token)
+    if article.published:
+        return redirect(article.get_absolute_url())
+
+    response = render(
+        request,
+        'content/blog_detail.html',
+        {
+            'article': article,
+            'related_articles': Article.objects.none(),
+            'tag_rules': _get_tag_rules_for_tags(article.tags),
+            'is_gated': False,
+            'draft_preview': True,
+        },
+    )
+    response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
+    return response
+
+
 def projects_list(request):
     """Projects listing page with optional difficulty and tag filtering."""
     projects = Project.objects.filter(published=True)

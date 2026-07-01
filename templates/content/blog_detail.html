@@ -6,9 +6,10 @@
 
 {% block title %}{{ article.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{{ article.description|strip_markdown|truncatechars:160 }}{% endblock %}
-{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ article.get_absolute_url }}">{% endblock %}
-{% block og_tags %}{% og_tags article %}{% endblock %}
-{% block structured_data %}{% structured_data article %}{% endblock %}
+{% block robots %}{% if draft_preview %}<meta name="robots" content="noindex,nofollow,noarchive">{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% block canonical %}{% if not draft_preview %}<link rel="canonical" href="{{ site_url }}{{ article.get_absolute_url }}">{% endif %}{% endblock %}
+{% block og_tags %}{% if not draft_preview %}{% og_tags article %}{% endif %}{% endblock %}
+{% block structured_data %}{% if not draft_preview %}{% structured_data article %}{% endif %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}
@@ -20,6 +21,13 @@
         <i data-lucide="arrow-left" class="h-4 w-4"></i>
         Back to Blog
       </a>
+
+      {% if draft_preview %}
+      <div class="mb-8 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4" data-testid="draft-preview-banner">
+        <p class="text-sm font-medium text-amber-200">Draft preview</p>
+        <p class="mt-1 text-sm text-muted-foreground">{{ article.title }} is currently {{ article.status }}.</p>
+      </div>
+      {% endif %}
 
       {% if article.cover_image_url %}
       <div class="mb-8">
@@ -112,4 +120,3 @@
 {% include "_partials/mermaid_script.html" %}
 {% include "_partials/event_widget_script.html" %}
 {% endblock %}
-

@@ -16,6 +16,10 @@ call.
 from django.urls import path
 
 from api.views.aliases import user_aliases_add, user_aliases_remove
+from api.views.articles import (
+    article_preview_link,
+    article_preview_token_regenerate,
+)
 from api.views.campaigns import campaign_detail, campaigns_collection
 from api.views.checkpoints import (
     checkpoint_detail,
@@ -187,6 +191,17 @@ urlpatterns = [
         "campaigns/<int:campaign_id>",
         campaign_detail,
         name="api_campaign_detail",
+    ),
+    # ---- Articles ------------------------------------------------------
+    path(
+        "articles/<uuid:content_id>/preview-link",
+        article_preview_link,
+        name="api_article_preview_link",
+    ),
+    path(
+        "articles/<uuid:content_id>/preview-token/regenerate",
+        article_preview_token_regenerate,
+        name="api_article_preview_token_regenerate",
     ),
     # ---- Events (issue #627) ------------------------------------------
     path(

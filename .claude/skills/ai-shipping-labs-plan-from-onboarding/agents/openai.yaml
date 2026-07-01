@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Shipping Labs Plan From Onboarding"
+  short_description: "Draft sprint plans from onboarding"
+  default_prompt: "Use $ai-shipping-labs-plan-from-onboarding to fetch production onboarding and CRM/user context, draft a member-specific sprint plan, dry-run the plan importer, import it through the production plans API, and verify the resulting plan."

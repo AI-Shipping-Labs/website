@@ -377,46 +377,66 @@ is already copied (count == 0) we show an "all caught up" notice instead.
 {% endif %}
 
 {% if plan_can_edit %}
+{% if plan.summary_goal or plan.focus_main or plan.focus_supporting or plan.summary_current_situation or plan.summary_main_gap or plan.summary_weekly_hours or plan.summary_why_this_plan %}
 <section class="mt-10" data-testid="plan-summary">
   <div data-testid="plan-details">
   <h2 class="text-2xl font-semibold tracking-tight text-foreground">Details</h2>
   <p class="mt-1 text-sm text-muted-foreground">Only you can see this section. Use it for personal context that doesn't need to be shared.</p>
-  <dl class="mt-4 grid grid-cols-1 gap-4 text-sm lg:grid-cols-2">
-    {% if plan.summary_current_situation %}
-    <div>
-      <dt class="text-muted-foreground">Current situation</dt>
-      <dd class="plan-markdown text-foreground mt-1">{{ plan.summary_current_situation|plan_markdown }}</dd>
+  <dl class="mt-4 divide-y divide-border text-sm">
+    {% if plan.summary_goal %}
+    <div class="py-4 first:pt-0" data-testid="plan-details-row">
+      <dt class="font-medium text-foreground" data-testid="plan-details-label">Goal</dt>
+      <dd class="plan-markdown mt-2 min-w-0 break-words text-foreground">{{ plan.summary_goal|plan_markdown }}</dd>
     </div>
     {% endif %}
-    {% if plan.summary_goal %}
-    <div>
-      <dt class="text-muted-foreground">Goal (long-form)</dt>
-      <dd class="plan-markdown text-foreground mt-1">{{ plan.summary_goal|plan_markdown }}</dd>
+    {% if plan.focus_main or plan.focus_supporting %}
+    <div class="py-4 first:pt-0" data-testid="plan-details-row">
+      <dt class="font-medium text-foreground" data-testid="plan-details-label">Focus</dt>
+      <dd class="mt-2 min-w-0 break-words text-foreground">
+        {% if plan.focus_main %}
+        <div class="plan-markdown" data-testid="plan-focus-main">{{ plan.focus_main|plan_markdown }}</div>
+        {% endif %}
+        {% if plan.focus_supporting %}
+        <ul class="{% if plan.focus_main %}mt-3 {% endif %}list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+          {% for item in plan.focus_supporting %}
+          <li><span class="plan-markdown inline-block align-top">{{ item|plan_markdown }}</span></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </dd>
+    </div>
+    {% endif %}
+    {% if plan.summary_current_situation %}
+    <div class="py-4 first:pt-0" data-testid="plan-details-row">
+      <dt class="font-medium text-foreground" data-testid="plan-details-label">Current situation</dt>
+      <dd class="plan-markdown mt-2 min-w-0 break-words text-foreground">{{ plan.summary_current_situation|plan_markdown }}</dd>
     </div>
     {% endif %}
     {% if plan.summary_main_gap %}
-    <div>
-      <dt class="text-muted-foreground">Main gap</dt>
-      <dd class="plan-markdown text-foreground mt-1">{{ plan.summary_main_gap|plan_markdown }}</dd>
+    <div class="py-4 first:pt-0" data-testid="plan-details-row">
+      <dt class="font-medium text-foreground" data-testid="plan-details-label">Main gap</dt>
+      <dd class="plan-markdown mt-2 min-w-0 break-words text-foreground">{{ plan.summary_main_gap|plan_markdown }}</dd>
     </div>
     {% endif %}
     {% if plan.summary_weekly_hours %}
-    <div>
-      <dt class="text-muted-foreground">Weekly hours</dt>
-      <dd class="text-foreground mt-1">{{ plan.summary_weekly_hours }}</dd>
+    <div class="py-4 first:pt-0" data-testid="plan-details-row">
+      <dt class="font-medium text-foreground" data-testid="plan-details-label">Weekly hours</dt>
+      <dd class="mt-2 min-w-0 break-words text-foreground">{{ plan.summary_weekly_hours }}</dd>
     </div>
     {% endif %}
     {% if plan.summary_why_this_plan %}
-    <div>
-      <dt class="text-muted-foreground">Why this plan</dt>
-      <dd class="plan-markdown text-foreground mt-1">{{ plan.summary_why_this_plan|plan_markdown }}</dd>
+    <div class="py-4 first:pt-0" data-testid="plan-details-row">
+      <dt class="font-medium text-foreground" data-testid="plan-details-label">Why this plan</dt>
+      <dd class="plan-markdown mt-2 min-w-0 break-words text-foreground">{{ plan.summary_why_this_plan|plan_markdown }}</dd>
     </div>
     {% endif %}
   </dl>
   </div>
 </section>
 {% endif %}
+{% endif %}
 
+{% if not plan_can_edit %}
 {% if plan.focus_main or plan.focus_supporting %}
 <section class="mt-10" data-testid="plan-focus">
   <h2 class="text-2xl font-semibold tracking-tight text-foreground">Focus</h2>
@@ -431,6 +451,7 @@ is already copied (count == 0) we show an "all caught up" notice instead.
   </ul>
   {% endif %}
 </section>
+{% endif %}
 {% endif %}
 
 {% if plan.accountability %}

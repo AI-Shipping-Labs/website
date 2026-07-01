@@ -47,7 +47,18 @@ def _clear_plan_data():
     connection.close()
 
 
-def _seed_goal_plan(*, goal='Ship one project', visibility='cohort'):
+def _seed_goal_plan(
+    *,
+    goal='Ship one project',
+    visibility='cohort',
+    summary_goal='Long reflection...',
+    summary_current_situation='Current context',
+    summary_main_gap='Need ML chops',
+    summary_weekly_hours='6 hours',
+    summary_why_this_plan='Because momentum matters',
+    focus_main='Build the agent and demo it',
+    focus_supporting=None,
+):
     from accounts.models import User
     from plans.models import Checkpoint, Deliverable, NextStep, Plan, Sprint, SprintEnrollment, Week
 
@@ -65,8 +76,13 @@ def _seed_goal_plan(*, goal='Ship one project', visibility='cohort'):
         sprint=sprint,
         visibility=visibility,
         goal=goal,
-        summary_goal='Long reflection...',
-        summary_main_gap='Need ML chops')
+        summary_goal=summary_goal,
+        summary_current_situation=summary_current_situation,
+        summary_main_gap=summary_main_gap,
+        summary_weekly_hours=summary_weekly_hours,
+        summary_why_this_plan=summary_why_this_plan,
+        focus_main=focus_main,
+        focus_supporting=focus_supporting or ['Keep notes'])
     week = Week.objects.create(plan=plan, week_number=1, position=0)
     Checkpoint.objects.create(week=week, description='Build skeleton', position=0)
     Deliverable.objects.create(plan=plan, description='Record demo', position=0)
@@ -98,7 +114,40 @@ class TestSprintPlanGoal584:
             expect(goal).to_contain_text('Ship one project')
             assert goal.bounding_box()['y'] < weeks.bounding_box()['y']
             expect(details).to_be_visible()
-            expect(details).to_contain_text('Goal (long-form)')
+            labels = details.locator('[data-testid="plan-details-label"]').all_inner_texts()
+            assert labels == [
+                'Goal',
+                'Focus',
+                'Current situation',
+                'Main gap',
+                'Weekly hours',
+                'Why this plan',
+            ]
+            expect(details).not_to_contain_text('Goal (long-form)')
+            expect(details).to_contain_text('Build the agent and demo it')
+            assert page.locator('[data-testid="plan-focus"]').count() == 0
+            assert (
+                details.locator('[data-testid="plan-details-label"]', has_text='Goal')
+                .bounding_box()['y']
+                < details.locator('[data-testid="plan-details-label"]', has_text='Focus')
+                .bounding_box()['y']
+            )
+            assert (
+                details.locator('[data-testid="plan-details-label"]', has_text='Focus')
+                .bounding_box()['y']
+                < details.locator(
+                    '[data-testid="plan-details-label"]',
+                    has_text='Current situation',
+                ).bounding_box()['y']
+            )
+            assert (
+                details.locator('[data-testid="plan-details-label"]', has_text='Focus')
+                .bounding_box()['y']
+                < details.locator(
+                    '[data-testid="plan-details-label"]',
+                    has_text='Why this plan',
+                ).bounding_box()['y']
+            )
             expect(details).to_contain_text(
                 "Only you can see this section. Use it for personal context that doesn't need to be shared.")
         finally:
@@ -123,6 +172,92 @@ class TestSprintPlanGoal584:
             assert page.locator('[data-testid="plan-details"]').count() == 0
             assert page.get_by_text('Need ML chops').count() == 0
             assert page.get_by_text('Long reflection...').count() == 0
+            assert page.get_by_text('Because momentum matters').count() == 0
+            expect(page.locator('[data-testid="plan-focus"]')).to_contain_text(
+                'Build the agent and demo it')
+        finally:
+            context.close()
+
+    def test_owner_reads_long_focus_on_mobile_without_layout_breakage(
+        self, django_server, browser):
+        _ensure_tiers()
+        _clear_plan_data()
+        _create_user('member@test.com', tier_slug='free', email_verified=True)
+        _create_user('teammate@test.com', tier_slug='free', email_verified=True)
+        long_focus = (
+            'Design a recipe and meal planner flow that can turn a messy fridge '
+            'inventory into a practical weekly plan with substitutions, constraints, '
+            'shopping-list follow-ups, and enough detail that the owner can scan it '
+            'comfortably on a narrow phone screen without losing context.'
+        )
+        data = _seed_goal_plan(
+            visibility='private',
+            summary_goal='Ship a useful planner',
+            focus_main=long_focus,
+        )
+
+        context = _auth_context(browser, 'member@test.com')
+        try:
+            page = context.new_page()
+            page.set_viewport_size({'width': 390, 'height': 844})
+            page.goto(
+                f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
+                wait_until='domcontentloaded')
+
+            details = page.locator('[data-testid="plan-details"]')
+            expect(details).to_be_visible()
+            expect(details).to_contain_text(long_focus)
+            labels = details.locator('[data-testid="plan-details-label"]')
+            assert labels.all_inner_texts() == [
+                'Goal',
+                'Focus',
+                'Current situation',
+                'Main gap',
+                'Weekly hours',
+                'Why this plan',
+            ]
+            focus_box = labels.filter(has_text='Focus').bounding_box()
+            current_box = labels.filter(has_text='Current situation').bounding_box()
+            why_box = labels.filter(has_text='Why this plan').bounding_box()
+            assert focus_box['y'] < current_box['y'] < why_box['y']
+            assert page.evaluate(
+                'document.documentElement.scrollWidth <= '
+                'document.documentElement.clientWidth'
+            )
+        finally:
+            context.close()
+
+    def test_owner_supporting_focus_without_main_still_sees_focus_second(
+        self, django_server, browser):
+        _ensure_tiers()
+        _clear_plan_data()
+        _create_user('member@test.com', tier_slug='free', email_verified=True)
+        _create_user('teammate@test.com', tier_slug='free', email_verified=True)
+        data = _seed_goal_plan(
+            visibility='private',
+            summary_goal='Ship a useful planner',
+            summary_current_situation='',
+            summary_main_gap='',
+            summary_weekly_hours='',
+            summary_why_this_plan='',
+            focus_main='',
+            focus_supporting=['Supporting-only focus item'],
+        )
+
+        context = _auth_context(browser, 'member@test.com')
+        try:
+            page = context.new_page()
+            page.goto(
+                f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
+                wait_until='domcontentloaded')
+
+            details = page.locator('[data-testid="plan-details"]')
+            expect(details).to_be_visible()
+            assert details.locator(
+                '[data-testid="plan-details-label"]'
+            ).all_inner_texts() == ['Goal', 'Focus']
+            expect(details).to_contain_text('Supporting-only focus item')
+            assert page.locator('[data-testid="plan-focus"]').count() == 0
         finally:
             context.close()
 

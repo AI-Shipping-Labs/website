@@ -14,6 +14,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
+from crm.models import CRMRecord
 from email_app.models import EmailLog
 from notifications.models import Notification
 from plans.models import (
@@ -24,6 +25,7 @@ from plans.models import (
     Sprint,
     SprintEnrollment,
 )
+from questionnaires.models import Questionnaire, Response
 
 User = get_user_model()
 
@@ -33,6 +35,20 @@ def _make_sprint(name='May 2026', slug='may-2026'):
         name=name, slug=slug,
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=6,
+    )
+
+
+def _submit_onboarding(member):
+    q = Questionnaire.objects.get(slug='onboarding-general')
+    return Response.objects.create(
+        questionnaire=q, respondent=member, status='submitted',
+    )
+
+
+def _draft_onboarding(member):
+    q = Questionnaire.objects.get(slug='onboarding-general')
+    return Response.objects.create(
+        questionnaire=q, respondent=member, status='draft',
     )
 
 
@@ -103,19 +119,23 @@ class PendingRequestsPanelRenderTest(TestCase):
         response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
         self.assertContains(response, '(no name)')
 
-    def test_panel_row_has_csrf_protected_post_form_to_create_plan(self):
+    def test_panel_row_links_to_prepare_flow_before_plan_creation(self):
         response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
         body = response.content.decode()
-        # The form points at the new endpoint with method=post.
-        expected_action = (
+        expected_href = (
             f'/studio/sprints/{self.sprint.pk}/plan-requests/'
-            f'{self.alice.pk}/create-plan/'
+            f'{self.alice.pk}/prepare/'
         )
-        self.assertIn(f'action="{expected_action}"', body)
-        self.assertIn('method="post"', body)
-        # CSRF input must be on the same form (the test client adds it
-        # via {% csrf_token %} in the template).
-        self.assertContains(response, 'csrfmiddlewaretoken')
+        self.assertIn(f'href="{expected_href}"', body)
+        self.assertContains(response, 'data-testid="sprint-pending-request-prepare-link"')
+        self.assertNotIn('/create-plan/', body)
+
+    def test_panel_row_shows_onboarding_state(self):
+        _submit_onboarding(self.alice)
+        _draft_onboarding(self.carol)
+        response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
+        self.assertContains(response, 'Submitted')
+        self.assertContains(response, 'Started but not submitted')
 
     def test_member_with_request_and_plan_not_in_panel(self):
         """Defence in depth: filter by JOIN, not by template ``{% if %}``."""
@@ -225,6 +245,91 @@ class CreatePlanFromRequestAccessControlTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class PlanRequestPrepareViewTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='pw', is_staff=True,
+        )
+        cls.member = User.objects.create_user(
+            email='alice@test.com', password='pw',
+            first_name='Alice', last_name='Brown',
+        )
+        cls.sprint = _make_sprint()
+        PlanRequest.objects.create(sprint=cls.sprint, member=cls.member)
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='pw')
+
+    def _url(self, member=None):
+        member = member or self.member
+        return (
+            f'/studio/sprints/{self.sprint.pk}/plan-requests/'
+            f'{member.pk}/prepare/'
+        )
+
+    def test_prepare_page_is_staff_only(self):
+        self.client.logout()
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+        non_staff = User.objects.create_user(
+            email='nonstaff@test.com', password='pw',
+        )
+        self.client.login(email=non_staff.email, password='pw')
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 403)
+
+    def test_prepare_page_shows_single_flow_and_locked_context(self):
+        _submit_onboarding(self.member)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="plan-request-summary"')
+        self.assertContains(response, 'data-testid="plan-request-readiness"')
+        self.assertContains(response, 'data-testid="plan-request-member-context"')
+        self.assertContains(response, 'data-testid="plan-request-create-action"')
+        self.assertContains(response, 'data-testid="request-member-locked"')
+        self.assertContains(response, 'data-testid="request-sprint-locked"')
+        self.assertNotContains(response, 'name="member-search"')
+        self.assertNotContains(response, 'name="sprint" required')
+
+    def test_prepare_page_uses_crm_link_when_present(self):
+        record = CRMRecord.objects.create(user=self.member, summary='CRM summary')
+        response = self.client.get(self._url())
+        self.assertContains(response, 'CRM record found')
+        self.assertContains(response, f'/studio/crm/{record.pk}/')
+        self.assertContains(response, 'CRM summary')
+
+    def test_prepare_page_uses_studio_user_fallback_without_crm(self):
+        response = self.client.get(self._url())
+        self.assertContains(response, 'No CRM record yet')
+        self.assertContains(response, f'/studio/users/{self.member.pk}/')
+
+    def test_prepare_without_request_returns_404(self):
+        other = User.objects.create_user(email='other@test.com', password='pw')
+        response = self.client.get(self._url(other))
+        self.assertEqual(response.status_code, 404)
+
+    def test_prepare_stale_existing_plan_redirects_to_editor(self):
+        plan = Plan.objects.create(sprint=self.sprint, member=self.member)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], f'/studio/plans/{plan.pk}/edit/')
+
+    def test_incomplete_onboarding_disables_create_action(self):
+        response = self.client.get(self._url())
+        self.assertContains(response, 'data-testid="request-onboarding-blocker"')
+        self.assertContains(response, 'data-testid="plan-request-create-disabled"')
+        self.assertNotContains(response, 'data-testid="plan-request-create-button"')
+
+    def test_submitted_onboarding_enables_create_action(self):
+        _submit_onboarding(self.member)
+        response = self.client.get(self._url())
+        self.assertContains(response, 'Submitted')
+        self.assertContains(response, 'data-testid="plan-request-create-button"')
+
+
 class CreatePlanFromRequestSubmitTest(TestCase):
     """Happy path: POST creates plan + enrollment, redirects, flashes."""
 
@@ -249,6 +354,7 @@ class CreatePlanFromRequestSubmitTest(TestCase):
         self.addCleanup(self.ses_patcher.stop)
         # One pending request as the inbox precondition.
         PlanRequest.objects.create(sprint=self.sprint, member=self.member)
+        _submit_onboarding(self.member)
 
     def _url(self):
         return (
@@ -269,6 +375,19 @@ class CreatePlanFromRequestSubmitTest(TestCase):
         self.assertEqual(enrollment.enrolled_by_id, self.staff.pk)
         # Weeks materialised by the service helper.
         self.assertEqual(plan.weeks.count(), self.sprint.duration_weeks)
+
+    def test_post_refuses_to_create_when_onboarding_incomplete(self):
+        Response.objects.filter(respondent=self.member).delete()
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response['Location'],
+            f'/studio/sprints/{self.sprint.pk}/plan-requests/'
+            f'{self.member.pk}/prepare/',
+        )
+        self.assertFalse(
+            Plan.objects.filter(sprint=self.sprint, member=self.member).exists(),
+        )
 
     def test_post_flashes_success_message(self):
         response = self.client.post(self._url(), follow=True)
@@ -373,36 +492,20 @@ class CreatePlanFromRequestSubmitTest(TestCase):
             msg=f'Expected "already has a plan" flash, got {flash_texts!r}',
         )
 
-    def test_race_condition_simulated_via_concurrent_create_paths(self):
-        """Simulate a race where ``create_plan_for_enrollment`` returns
-        an existing plan (the second concurrent path).
-
-        We patch the service helper to behave as if the first POST won
-        the race and the second POST sees ``created_now=False`` with
-        the same plan. The endpoint must redirect to that same plan
-        and flash the info message; it must NOT call the helper twice
-        in a way that creates a duplicate.
-        """
+    def test_stale_second_post_redirects_without_calling_create_helper(self):
         # First POST creates the plan normally.
         self.client.post(self._url())
         existing_plan = Plan.objects.get(
             sprint=self.sprint, member=self.member,
         )
-        existing_enrollment = SprintEnrollment.objects.get(
-            sprint=self.sprint, user=self.member,
-        )
 
-        # Second POST: patch the helper to simulate the race-loser
-        # path. We assert (a) the response redirects to the existing
-        # plan, (b) no new Plan or SprintEnrollment was materialised.
         before_plans = Plan.objects.count()
         before_enrollments = SprintEnrollment.objects.count()
         with patch(
             'studio.views.sprints.create_plan_for_enrollment',
-            return_value=(existing_plan, existing_enrollment, False),
         ) as mocked:
             response = self.client.post(self._url())
-        mocked.assert_called_once()
+        mocked.assert_not_called()
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             response['Location'],

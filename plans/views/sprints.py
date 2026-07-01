@@ -16,12 +16,11 @@ the JSON API mirror lives in ``api/views/enrollments.py``.
 
 import datetime
 import logging
-from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage
 from django.db import transaction
 from django.db.models import Prefetch
 from django.http import Http404
@@ -32,6 +31,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.utils.display import display_name
 from content.access import LEVEL_TO_TIER_NAME, get_user_level
+from crm.models import CRMRecord
 from events.models import Event
 from events.services.display_time import build_event_time_display
 from integrations.config import get_config, is_enabled, site_base_url
@@ -44,6 +44,7 @@ from plans.models import (
     SprintFeedbackRequest,
 )
 from questionnaires.models import Response
+from questionnaires.onboarding import get_onboarding_response
 from questionnaires.services import (
     AnswerSaveError,
     build_response_form_rows,
@@ -387,34 +388,61 @@ def _member_display_name(user):
     return display_name(user)
 
 
-def _member_admin_url(user):
-    """Absolute URL of the Django admin user-change page."""
-    user_admin_path = reverse(
-        'admin:accounts_user_change', args=[user.pk],
-    ) if _has_user_admin() else f'/admin/accounts/user/{user.pk}/change/'
-    return f'{site_base_url()}{user_admin_path}'
+def _member_staff_target_path(member):
+    """Studio CRM detail path for ``member`` when tracked, else user detail."""
+    record = CRMRecord.objects.filter(user=member).first()
+    if record is not None:
+        return reverse('studio_crm_detail', kwargs={'crm_id': record.pk})
+    return reverse('studio_user_detail', kwargs={'user_id': member.pk})
 
 
-def _has_user_admin():
-    """Whether the accounts.User model is registered with the admin.
-
-    Falls back to a hand-built URL if reverse fails. Wrapping in a tiny
-    helper keeps the call site readable and the assumption testable.
-    """
-    try:
-        reverse('admin:accounts_user_change', args=[1])
-        return True
-    except Exception:
-        return False
+def _member_staff_target_url(member):
+    return f'{site_base_url()}{_member_staff_target_path(member)}'
 
 
-def _post_plan_request_to_slack(*, member, sprint, board_url, admin_url):
+def _studio_plan_request_prepare_path(*, member, sprint):
+    return reverse(
+        'studio_sprint_plan_request_prepare',
+        kwargs={'sprint_id': sprint.pk, 'member_id': member.pk},
+    )
+
+
+def _studio_plan_request_prepare_url(*, member, sprint):
+    return f'{site_base_url()}{_studio_plan_request_prepare_path(member=member, sprint=sprint)}'
+
+
+def _onboarding_request_state(member):
+    response = get_onboarding_response(member)
+    if response is None:
+        return {
+            'key': 'not_started',
+            'label': 'Not started',
+            'is_submitted': False,
+            'is_incomplete': True,
+        }
+    if response.status == 'submitted':
+        return {
+            'key': 'submitted',
+            'label': 'Submitted',
+            'is_submitted': True,
+            'is_incomplete': False,
+        }
+    return {
+        'key': 'draft',
+        'label': 'Started but not submitted',
+        'is_submitted': False,
+        'is_incomplete': True,
+    }
+
+
+def _post_plan_request_to_slack(
+    *, member, sprint, prepare_url, staff_target_url, onboarding_state,
+):
     """Post a Block Kit plan-request message to the team-requests channel.
 
     Returns True if the request was posted (best effort -- network
-    failures log a warning and return False so the caller knows to fall
-    back to email). Returns False without trying when Slack is disabled
-    or no team-requests channel is configured.
+    failures log a warning and return False). Returns False without
+    trying when Slack is disabled or no team-requests channel is configured.
     """
     # Inline import keeps slack_config / requests off the module-level
     # import path so test runs that mock these don't have to patch the
@@ -435,22 +463,20 @@ def _post_plan_request_to_slack(*, member, sprint, board_url, admin_url):
 
     member_name = _member_display_name(member)
     text_fallback = f'Plan request: {member.email} for {sprint.name}'
+    staff_target_label = (
+        'Open CRM' if CRMRecord.objects.filter(user=member).exists()
+        else 'Open Studio user'
+    )
     blocks = [
         {
             'type': 'section',
             'text': {
                 'type': 'mrkdwn',
                 'text': (
-                    f'*Plan request* from <{admin_url}|{member_name}>'
-                    f' (`{member.email}`) in *{sprint.name}*.'
+                    f'*Plan request* from <{staff_target_url}|{member_name}>'
+                    f' (`{member.email}`) in *{sprint.name}*.\n'
+                    f'Onboarding: *{onboarding_state["label"]}*.'
                 ),
-            },
-        },
-        {
-            'type': 'section',
-            'text': {
-                'type': 'mrkdwn',
-                'text': f'<{board_url}|Open the cohort board>',
             },
         },
         {
@@ -460,10 +486,19 @@ def _post_plan_request_to_slack(*, member, sprint, board_url, admin_url):
                     'type': 'button',
                     'text': {
                         'type': 'plain_text',
-                        'text': 'Open user in admin',
+                        'text': 'Prepare request',
                     },
-                    'url': admin_url,
-                    'action_id': 'open_member_admin',
+                    'url': prepare_url,
+                    'action_id': 'prepare_plan_request',
+                },
+                {
+                    'type': 'button',
+                    'text': {
+                        'type': 'plain_text',
+                        'text': staff_target_label,
+                    },
+                    'url': staff_target_url,
+                    'action_id': 'open_member_context',
                 },
             ],
         },
@@ -495,59 +530,54 @@ def _post_plan_request_to_slack(*, member, sprint, board_url, admin_url):
         return False
 
 
-def _email_staff_about_plan_request(*, member, sprint, board_url, admin_url):
-    """Email every active staff user about a fresh plan request."""
-    recipients = list(
-        _staff_users().values_list('email', flat=True),
-    )
-    if not recipients:
-        return 0
+def _email_shared_plan_request_confirmation(
+    *, member, sprint, board_url, onboarding_url, onboarding_state,
+):
+    """Send the member-safe shared confirmation email for a fresh request."""
+    team_email = (get_config('STAFF_SIGNUP_NOTIFY_EMAIL', '') or '').strip()
+    if team_email:
+        to = [team_email]
+        cc = [member.email]
+    else:
+        to = [member.email]
+        cc = []
     subject = f'Plan request: {member.email} - {sprint.name}'
+    member_name = _member_display_name(member)
     body = (
-        f'{_member_display_name(member)} ({member.email}) is enrolled in '
-        f'sprint "{sprint.name}" but does not have a plan yet, and just '
-        f'asked the team to prepare one.\n\n'
+        f'{member_name} ({member.email}) asked the AI Shipping Labs team '
+        f'to prepare a plan for {sprint.name}.\n\n'
         f'Cohort board: {board_url}\n'
-        f'Open user in admin: {admin_url}\n'
     )
+    if onboarding_state['is_incomplete']:
+        body += (
+            '\nBefore the team can prepare the plan, please complete '
+            f'your onboarding: {onboarding_url}\n'
+        )
+    else:
+        body += '\nThe team has the request and will prepare the plan.\n'
+
     from_email = get_config('SES_FROM_EMAIL', 'community@aishippinglabs.com')
-    send_mail(
+    email = EmailMessage(
         subject=subject,
-        message=body,
+        body=body,
         from_email=from_email,
-        recipient_list=recipients,
-        fail_silently=True,
+        to=to,
+        cc=cc,
     )
-    return len(recipients)
-
-
-def _studio_plan_create_url(*, member, sprint):
-    """Build the Studio plan-create URL pre-filled for this (member, sprint).
-
-    Stop-gap destination for the ``plan_request`` in-app notification
-    (issue #719). The operator clicks the bell, lands on the Studio
-    create-plan form with both selects pre-selected, and one-clicks
-    "Create plan". When the sprint-first plan-creation flow ships
-    (issue #718), swap the reverse target and query-param shape here.
-    """
-    base = reverse('studio_plan_create')
-    query = urlencode({'user': member.pk, 'sprint': sprint.pk})
-    return f'{base}?{query}'
+    email.send(fail_silently=True)
+    return len(to) + len(cc)
 
 
 def _create_staff_plan_request_notifications(*, member, sprint):
     """Create one ``plan_request`` Notification per active staff user.
 
-    The notification's ``url`` points at the Studio create-plan form
-    pre-filled with ``?user=<pk>&sprint=<pk>`` so the operator lands
-    one click away from creating the plan (issue #719). Slack and the
-    staff email keep linking to the Django admin user-change page --
-    that's a deliberate secondary affordance and out of scope here.
+    The notification's ``url`` points at the locked request-preparation
+    flow so staff review onboarding/CRM context before creating a plan.
     """
     member_name = _member_display_name(member)
     title = f'Plan request from {member_name}'
     body = f'In sprint {sprint.name}'
-    studio_url = _studio_plan_create_url(member=member, sprint=sprint)
+    studio_url = _studio_plan_request_prepare_path(member=member, sprint=sprint)
     notifications = [
         Notification(
             user=staff,
@@ -574,8 +604,8 @@ def sprint_ask_team(request, sprint_slug):
 
     Rate-limited to one ping per ``(sprint, member)`` per 24 hours via
     ``PlanRequest`` rows. The first successful ping inside the window
-    creates one ``PlanRequest``, fans out a Slack post (when configured)
-    or a staff email (fallback), and ALWAYS creates one in-app
+    creates one ``PlanRequest``, sends the shared member-safe email,
+    posts staff-only Slack when configured, and creates one in-app
     ``Notification`` per active staff user. Re-pings inside the window
     are no-ops with an info-level success message redirected back to
     the cohort board.
@@ -606,26 +636,39 @@ def sprint_ask_team(request, sprint_slug):
         PlanRequest.objects.create(sprint=sprint, member=request.user)
 
     board_url = f'{site_base_url()}{board_path}'
-    admin_url = _member_admin_url(request.user)
-
-    posted_to_slack = _post_plan_request_to_slack(
+    onboarding_url = f'{site_base_url()}{reverse("onboarding_start")}'
+    onboarding_state = _onboarding_request_state(request.user)
+    prepare_url = _studio_plan_request_prepare_url(
         member=request.user, sprint=sprint,
-        board_url=board_url, admin_url=admin_url,
     )
-    if not posted_to_slack:
-        _email_staff_about_plan_request(
-            member=request.user, sprint=sprint,
-            board_url=board_url, admin_url=admin_url,
-        )
+    staff_target_url = _member_staff_target_url(request.user)
+
+    _email_shared_plan_request_confirmation(
+        member=request.user, sprint=sprint,
+        board_url=board_url, onboarding_url=onboarding_url,
+        onboarding_state=onboarding_state,
+    )
+    _post_plan_request_to_slack(
+        member=request.user, sprint=sprint,
+        prepare_url=prepare_url, staff_target_url=staff_target_url,
+        onboarding_state=onboarding_state,
+    )
 
     _create_staff_plan_request_notifications(
         member=request.user, sprint=sprint,
     )
 
-    messages.success(
-        request,
-        "Asked the team to plan with you. We'll be in touch.",
-    )
+    if onboarding_state['is_incomplete']:
+        messages.success(
+            request,
+            'Asked the team to plan with you. Please complete onboarding '
+            'before the team can prepare your plan.',
+        )
+    else:
+        messages.success(
+            request,
+            "Asked the team to plan with you. We'll be in touch.",
+        )
     return redirect(board_path)
 
 

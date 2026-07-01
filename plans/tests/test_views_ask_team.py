@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from notifications.models import Notification
 from plans.models import Plan, PlanRequest, Sprint, SprintEnrollment
+from questionnaires.models import Questionnaire, Response
 
 User = get_user_model()
 
@@ -39,6 +40,20 @@ def _make_member(email='alex@test.com'):
 def _make_staff(email='staff@test.com'):
     return User.objects.create_user(
         email=email, password='pw', is_staff=True,
+    )
+
+
+def _submit_onboarding(member):
+    q = Questionnaire.objects.get(slug='onboarding-general')
+    return Response.objects.create(
+        questionnaire=q, respondent=member, status='submitted',
+    )
+
+
+def _draft_onboarding(member):
+    q = Questionnaire.objects.get(slug='onboarding-general')
+    return Response.objects.create(
+        questionnaire=q, respondent=member, status='draft',
     )
 
 
@@ -115,6 +130,7 @@ class AskTeamHappyPathTest(TestCase):
     def setUp(self):
         self.sprint = _make_sprint()
         self.member = _make_member()
+        _submit_onboarding(self.member)
         SprintEnrollment.objects.create(sprint=self.sprint, user=self.member)
         self.staff_one = _make_staff('staff1@test.com')
         self.staff_two = _make_staff('staff2@test.com')
@@ -157,29 +173,20 @@ class AskTeamHappyPathTest(TestCase):
             {'staff1@test.com', 'staff2@test.com'},
         )
 
-    def test_first_ping_notification_links_to_studio_plan_create(self):
-        """Notification URL points at Studio plan-create with pre-fill.
-
-        Rewritten for issue #719: the in-app bell notification's ``url``
-        now lands the operator on the Studio create-plan form with the
-        requesting member and sprint pre-filled via query params --
-        NOT the Django admin user-change page. Slack and the staff
-        email keep linking to admin (separate regression tests below).
-        """
+    def test_first_ping_notification_links_to_request_prepare_flow(self):
+        """Notification URL points at the locked request-preparation flow."""
         self.client.post(self.url)
         notif = Notification.objects.filter(
             notification_type='plan_request',
         ).first()
         self.assertIsNotNone(notif)
-        # Studio destination -- NOT /admin/.
-        self.assertTrue(
-            notif.url.startswith('/studio/plans/new'),
-            f'Expected Studio URL, got {notif.url!r}',
+        self.assertEqual(
+            notif.url,
+            f'/studio/sprints/{self.sprint.pk}/plan-requests/'
+            f'{self.member.pk}/prepare/',
         )
         self.assertNotIn('/admin/', notif.url)
-        # Both pre-fill query params present with the right pks.
-        self.assertIn(f'user={self.member.pk}', notif.url)
-        self.assertIn(f'sprint={self.sprint.pk}', notif.url)
+        self.assertNotIn('/studio/plans/new', notif.url)
         # Title carries the member's display name.
         self.assertIn('Alex Member', notif.title)
 
@@ -202,29 +209,21 @@ class AskTeamHappyPathTest(TestCase):
         self.assertEqual(other.url, '/blog/some-article/')
         self.assertNotIn('/studio/plans/new', other.url)
 
-    def test_staff_email_still_links_to_admin(self):
-        """Regression for #719: staff email body keeps the admin URL.
-
-        Only the in-app Notification was retargeted to Studio. The
-        Slack "Open user in admin" button and the staff email's
-        "Open user in admin" line are deliberate secondary affordances
-        and must keep linking to the Django admin user-change page.
-        """
+    def test_shared_email_contains_no_staff_only_links_or_context(self):
         self.client.post(self.url)
         self.assertEqual(len(mail.outbox), 1)
         sent = mail.outbox[0]
-        self.assertIn(
-            f'/admin/accounts/user/{self.member.pk}/change/',
-            sent.body,
-        )
+        self.assertIn(self.member.email, sent.to)
+        self.assertIn(self.member.email, sent.subject)
+        self.assertIn(self.sprint.name, sent.body)
+        self.assertIn('/sprints/may-2026/board', sent.body)
+        for forbidden in [
+            '/studio/', '/admin/', 'CRM', 'internal note', 'onboarding answer',
+        ]:
+            self.assertNotIn(forbidden, sent.body)
 
     @override_settings(SLACK_ENABLED=True, SLACK_BOT_TOKEN='xoxb-fake')
-    def test_slack_post_still_links_to_admin(self):
-        """Regression for #719: Slack post body keeps the admin URL.
-
-        The Slack message text and the "Open user in admin" button
-        URL must still be the Django admin user-change page.
-        """
+    def test_slack_post_links_to_prepare_flow_and_studio_user_target(self):
         with patch(
             'community.slack_config.get_slack_team_requests_channel_id',
             return_value='C123',
@@ -234,33 +233,58 @@ class AskTeamHappyPathTest(TestCase):
                 self.client.post(self.url)
         self.assertEqual(mock_post.call_count, 1)
         payload = mock_post.call_args.kwargs['json']
-        # The blocks payload contains the admin URL both in the
-        # mrkdwn link and the action-button url.
+        # The blocks payload contains the prepare URL and the staff-only
+        # member context target, with no Django-admin URL.
         import json as _json
         serialized = _json.dumps(payload)
         self.assertIn(
-            f'/admin/accounts/user/{self.member.pk}/change/',
+            f'/studio/sprints/{self.sprint.pk}/plan-requests/'
+            f'{self.member.pk}/prepare/',
             serialized,
         )
-        # And the in-app Notification still points at Studio.
+        self.assertIn(f'/studio/users/{self.member.pk}/', serialized)
+        self.assertIn('Onboarding', serialized)
+        self.assertNotIn('/admin/', serialized)
+        # And the in-app Notification points at the same preparation flow.
         notif = Notification.objects.filter(
             notification_type='plan_request',
         ).first()
         self.assertIsNotNone(notif)
-        self.assertTrue(notif.url.startswith('/studio/plans/new'))
+        self.assertEqual(
+            notif.url,
+            f'/studio/sprints/{self.sprint.pk}/plan-requests/'
+            f'{self.member.pk}/prepare/',
+        )
 
-    def test_first_ping_emails_staff_when_slack_disabled(self):
-        # By default in tests SLACK_ENABLED is false, so the email
-        # fallback fires.
-        self.client.post(self.url)
+    def test_first_ping_sends_shared_email_to_team_and_member(self):
+        def cfg(key, default=None):
+            if key == 'STAFF_SIGNUP_NOTIFY_EMAIL':
+                return 'team@test.com'
+            return default
+
+        with patch('plans.views.sprints.get_config', side_effect=cfg):
+            self.client.post(self.url)
         self.assertEqual(len(mail.outbox), 1)
         sent = mail.outbox[0]
-        self.assertEqual(
-            set(sent.to), {'staff1@test.com', 'staff2@test.com'},
-        )
+        self.assertEqual(sent.to, ['team@test.com'])
+        self.assertEqual(sent.cc, [self.member.email])
+        self.assertEqual(sent.bcc, [])
         self.assertIn('Plan request', sent.subject)
         self.assertIn(self.member.email, sent.subject)
         self.assertIn(self.sprint.name, sent.subject)
+
+    def test_blank_team_mailbox_sends_shared_email_to_member_only(self):
+        def cfg(key, default=None):
+            if key == 'STAFF_SIGNUP_NOTIFY_EMAIL':
+                return ''
+            return default
+
+        with patch('plans.views.sprints.get_config', side_effect=cfg):
+            self.client.post(self.url)
+        self.assertEqual(len(mail.outbox), 1)
+        sent = mail.outbox[0]
+        self.assertEqual(sent.to, [self.member.email])
+        self.assertEqual(sent.cc, [])
 
     def test_first_ping_shows_success_message(self):
         response = self.client.post(self.url, follow=True)
@@ -269,6 +293,10 @@ class AskTeamHappyPathTest(TestCase):
         self.assertTrue(
             any("Asked the team" in m for m in msgs),
             f'Expected success message in {msgs!r}',
+        )
+        self.assertFalse(
+            any('complete onboarding' in m.lower() for m in msgs),
+            f'Did not expect onboarding guidance in {msgs!r}',
         )
 
     @override_settings(SLACK_ENABLED=True, SLACK_BOT_TOKEN='xoxb-fake')
@@ -285,8 +313,8 @@ class AskTeamHappyPathTest(TestCase):
         self.assertEqual(
             kwargs['json']['channel'], 'C123',
         )
-        # Email fallback NOT used when Slack succeeded.
-        self.assertEqual(len(mail.outbox), 0)
+        # Shared confirmation email still sends when Slack succeeds.
+        self.assertEqual(len(mail.outbox), 1)
         # Notifications still created for staff.
         self.assertEqual(
             Notification.objects.filter(
@@ -296,13 +324,13 @@ class AskTeamHappyPathTest(TestCase):
         )
 
     @override_settings(SLACK_ENABLED=True, SLACK_BOT_TOKEN='xoxb-fake')
-    def test_slack_no_channel_id_falls_back_to_email(self):
+    def test_slack_no_channel_id_still_sends_shared_email(self):
         with patch(
             'community.slack_config.get_slack_team_requests_channel_id',
             return_value='',
         ):
             self.client.post(self.url)
-        # Email fallback fires.
+        # Shared email is independent of Slack.
         self.assertEqual(len(mail.outbox), 1)
 
 
@@ -364,6 +392,64 @@ class AskTeamRateLimitTest(TestCase):
         self.assertEqual(PlanRequest.objects.count(), 2)
         # Email fanout fires again.
         self.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(SLACK_ENABLED=True, SLACK_BOT_TOKEN='xoxb-fake')
+    def test_repost_within_24h_does_not_create_second_slack_message(self):
+        with patch(
+            'community.slack_config.get_slack_team_requests_channel_id',
+            return_value='C123',
+        ):
+            with patch('requests.post') as mock_post:
+                mock_post.return_value.json.return_value = {'ok': True}
+                self.client.post(self.url)
+                self.client.post(self.url)
+        self.assertEqual(mock_post.call_count, 1)
+
+
+@override_settings(
+    EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+)
+class AskTeamOnboardingCopyTest(TestCase):
+    def setUp(self):
+        self.sprint = _make_sprint()
+        self.member = _make_member('incomplete@test.com')
+        SprintEnrollment.objects.create(sprint=self.sprint, user=self.member)
+        _make_staff('staff-onboarding@test.com')
+        self.client.force_login(self.member)
+        self.url = reverse(
+            'sprint_ask_team', kwargs={'sprint_slug': self.sprint.slug},
+        )
+
+    def test_incomplete_onboarding_success_copy_guides_member(self):
+        response = self.client.post(self.url, follow=True)
+        msgs = [str(m) for m in response.context['messages']]
+        self.assertTrue(
+            any('complete onboarding' in m.lower() for m in msgs),
+            f'Expected onboarding guidance in {msgs!r}',
+        )
+        self.assertEqual(
+            PlanRequest.objects.filter(
+                sprint=self.sprint, member=self.member,
+            ).count(),
+            1,
+        )
+
+    def test_incomplete_onboarding_email_links_member_onboarding_only(self):
+        self.client.post(self.url)
+        self.assertEqual(len(mail.outbox), 1)
+        body = mail.outbox[0].body
+        self.assertIn('/onboarding/', body)
+        self.assertNotIn('/studio/', body)
+        self.assertNotIn('/admin/', body)
+
+    def test_draft_onboarding_is_treated_as_incomplete(self):
+        _draft_onboarding(self.member)
+        response = self.client.post(self.url, follow=True)
+        msgs = [str(m) for m in response.context['messages']]
+        self.assertTrue(
+            any('complete onboarding' in m.lower() for m in msgs),
+            f'Expected onboarding guidance in {msgs!r}',
+        )
 
 
 class AskTeamCohortBoardIntegrationTest(TestCase):

@@ -336,6 +336,24 @@ class PlanCreateTest(TestCase):
             'Uncheck if this is only a draft.',
         )
 
+    def test_plan_create_query_prefill_remains_editable_manual_form(self):
+        response = self.client.get(
+            f'/studio/plans/new?user={self.member.pk}&sprint={self.sprint.pk}',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'New plan')
+        self.assertNotContains(response, 'Prepare plan request')
+        self.assertContains(response, 'id="plan-member-search"')
+        self.assertContains(response, 'name="sprint" required')
+        self.assertContains(
+            response,
+            f'<option value="{self.sprint.pk}" selected>{self.sprint.name}</option>',
+            html=True,
+        )
+        self.assertNotContains(response, 'data-testid="request-member-locked"')
+        self.assertNotContains(response, 'data-testid="request-sprint-locked"')
+
     def test_validation_error_preserves_unchecked_ready_email_choice(self):
         response = self.client.post('/studio/plans/new', {
             'member': '',

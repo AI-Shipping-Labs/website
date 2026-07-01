@@ -1,0 +1,115 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Prepare plan request{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_sprint_detail' sprint_id=sprint.pk %}#pending-requests" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to {{ sprint.name }}
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2" data-testid="plan-request-prepare-heading">
+    Prepare plan request
+  </h1>
+  <p class="text-sm text-muted-foreground mt-1">
+    Review the request, readiness, and member context before creating the plan.
+  </p>
+</div>
+
+<div class="space-y-8 max-w-5xl" data-testid="plan-request-prepare-flow">
+  <section class="bg-card border border-border rounded-lg p-6" data-testid="plan-request-summary">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Request summary</h2>
+    <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div>
+        <dt class="text-xs text-muted-foreground uppercase">Member</dt>
+        <dd class="mt-1 text-foreground" data-testid="request-member-locked">
+          {% if member.get_full_name %}{{ member.get_full_name }}{% else %}(no name){% endif %}
+          <span class="block text-xs text-muted-foreground">{{ member.email }}</span>
+        </dd>
+      </div>
+      <div>
+        <dt class="text-xs text-muted-foreground uppercase">Sprint</dt>
+        <dd class="mt-1 text-foreground" data-testid="request-sprint-locked">
+          {{ sprint.name }}
+          <span class="block text-xs text-muted-foreground font-mono">{{ sprint.slug }}</span>
+        </dd>
+      </div>
+      <div>
+        <dt class="text-xs text-muted-foreground uppercase">Requests</dt>
+        <dd class="mt-1 text-foreground" data-testid="request-count">
+          {{ request_summary.request_count }} request{{ request_summary.request_count|pluralize }}
+        </dd>
+      </div>
+      <div>
+        <dt class="text-xs text-muted-foreground uppercase">Latest request</dt>
+        <dd class="mt-1 text-foreground" data-testid="request-last-requested">
+          {{ request_summary.last_requested_at|operator_datetime }}
+        </dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="bg-card border border-border rounded-lg p-6" data-testid="plan-request-readiness">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+      <h2 class="text-lg font-semibold text-foreground">Readiness checklist</h2>
+      <a href="{{ member_context_target.url }}"
+         class="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:border-accent transition-colors"
+         data-testid="request-member-context-link">
+        {{ member_context_target.label }}
+      </a>
+    </div>
+    <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div class="rounded-lg border border-border bg-secondary/30 p-4" data-testid="request-crm-state">
+        <dt class="text-xs text-muted-foreground uppercase mb-1">CRM state</dt>
+        <dd class="text-foreground">
+          {% if member_context_target.has_crm_record %}CRM record found{% else %}No CRM record yet{% endif %}
+        </dd>
+      </div>
+      <div class="rounded-lg border border-border bg-secondary/30 p-4" data-testid="request-onboarding-state">
+        <dt class="text-xs text-muted-foreground uppercase mb-1">Onboarding state</dt>
+        <dd class="text-foreground">{{ onboarding_state.label }}</dd>
+      </div>
+    </dl>
+    {% if onboarding_state.is_incomplete %}
+    <div class="mt-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-100"
+         data-testid="request-onboarding-blocker">
+      Onboarding is incomplete. The request is recorded, but wait for the member to submit onboarding before creating a plan from it.
+    </div>
+    {% endif %}
+  </section>
+
+  <section data-testid="plan-request-member-context">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Member context</h2>
+    {% include "studio/plans/_member_profile_panel.html" with member_profile_full_width=True %}
+  </section>
+
+  <section class="bg-card border border-border rounded-lg p-6" data-testid="plan-request-create-action">
+    <h2 class="text-lg font-semibold text-foreground mb-3">Create-plan action</h2>
+    {% if onboarding_state.is_submitted %}
+    <p class="text-sm text-muted-foreground mb-4">
+      Member and sprint are locked for this request. The plan will be created for the member and sprint shown above.
+    </p>
+    <form method="post" action="{{ create_url }}" data-testid="plan-request-create-form">
+      {% csrf_token %}
+      <input type="hidden" name="member" value="{{ member.pk }}">
+      <input type="hidden" name="sprint" value="{{ sprint.pk }}">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+              data-testid="plan-request-create-button">
+        Create plan from request
+      </button>
+    </form>
+    {% else %}
+    <p class="text-sm text-muted-foreground mb-4">
+      The create action is unavailable until onboarding is submitted.
+    </p>
+    <button type="button"
+            class="bg-secondary border border-border text-muted-foreground px-4 py-2 rounded-lg text-sm font-medium cursor-not-allowed"
+            disabled
+            data-testid="plan-request-create-disabled">
+      Create plan from request unavailable
+    </button>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

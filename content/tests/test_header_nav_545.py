@@ -4,6 +4,7 @@ import re
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import resolve, reverse
+from django.utils import timezone
 
 from plans.models import Plan, Sprint
 
@@ -39,7 +40,8 @@ class HeaderTextNavigationIssue580Test(TestCase):
         cls.sprint = Sprint.objects.create(
             name='May 2026',
             slug='may-2026',
-            start_date=datetime.date(2026, 5, 1),
+            start_date=timezone.localdate() - datetime.timedelta(days=7),
+            status='active',
         )
 
     def _header_html(self, user=None):

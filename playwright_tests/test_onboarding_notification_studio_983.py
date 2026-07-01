@@ -3,8 +3,8 @@
 The ``onboarding_submitted`` staff notification deep-links to the member's
 CRM record when tracked (``/studio/crm/<id>/``), otherwise to the Studio
 user-detail page (``/studio/users/<pk>/``) -- never to the Django admin.
-The ``plan_request`` notification still routes to the Studio create-plan
-form (regression).
+The ``plan_request`` notification routes to the locked request-preparation
+flow rather than the generic Studio create-plan form.
 
 These tests build the real notifications through the production service
 helpers so the stored ``url`` is exactly what staff click in the bell and
@@ -221,13 +221,13 @@ class TestOnboardingNotificationRoutesToStudio:
 @pytest.mark.django_db(transaction=True)
 class TestPlanRequestNotificationRegression:
     @pytest.mark.core
-    def test_plan_request_notification_routes_to_studio_create_plan(
+    def test_plan_request_notification_routes_to_prepare_flow(
         self, django_server, browser,
     ):
-        """Plan-request notification still routes to the Studio create form."""
+        """Plan-request notification opens the locked preparation flow."""
         import datetime
 
-        from plans.models import Sprint
+        from plans.models import PlanRequest, Sprint
         from plans.views.sprints import (
             _create_staff_plan_request_notifications,
         )
@@ -245,6 +245,7 @@ class TestPlanRequestNotificationRegression:
         )
         member_pk = member.pk
         sprint_pk = sprint.pk
+        PlanRequest.objects.create(sprint=sprint, member=member)
         _create_staff_plan_request_notifications(member=member, sprint=sprint)
         connection.close()
 
@@ -264,17 +265,20 @@ class TestPlanRequestNotificationRegression:
             timeout=10000,
         )
 
-        link = page.locator(
-            '#notification-list a[href*="/studio/plans/new"]'
+        expected_path = (
+            f"/studio/sprints/{sprint_pk}/plan-requests/{member_pk}/prepare/"
         )
+        link = page.locator(f'#notification-list a[href*="{expected_path}"]')
         assert link.count() >= 1
         href = link.first.get_attribute("href")
-        assert f"user={member_pk}" in href
-        assert f"sprint={sprint_pk}" in href
+        assert expected_path in href
+        assert "/studio/plans/new" not in href
         assert "/admin/" not in href
 
         link.first.click()
-        page.wait_for_url("**/studio/plans/new**", timeout=10000)
-        assert "/studio/plans/new" in page.url
+        page.wait_for_url(f"**{expected_path}", timeout=10000)
+        assert expected_path in page.url
+        assert "/studio/plans/new" not in page.url
         assert "/admin/" not in page.url
+        page.get_by_test_id("plan-request-summary").wait_for(state="visible")
         context.close()

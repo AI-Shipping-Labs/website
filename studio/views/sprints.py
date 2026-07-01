@@ -23,7 +23,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import Count, Max
-from django.http import HttpResponseNotAllowed
+from django.http import Http404, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -32,6 +32,8 @@ from django.views.decorators.http import require_POST
 
 from content.access import LEVEL_MAIN
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
+from crm.models import CRMRecord
+from crm.services.member_profile import build_member_profile_context
 from events.models import EventSeries
 from integrations.config import get_config
 from integrations.services import llm
@@ -61,6 +63,7 @@ from plans.services import (
     send_plan_ready_emails,
 )
 from questionnaires.models import Questionnaire, Response
+from questionnaires.onboarding import get_onboarding_response
 from studio.decorators import staff_required
 
 User = get_user_model()
@@ -226,6 +229,52 @@ def _pending_request_member_ids(sprint):
     return sorted(requested_member_ids - members_with_plans)
 
 
+def _onboarding_state_for_member(member):
+    response = get_onboarding_response(member)
+    if response is None:
+        return {
+            'key': 'not_started',
+            'label': 'Not started',
+            'is_submitted': False,
+            'is_incomplete': True,
+        }
+    if response.status == 'submitted':
+        return {
+            'key': 'submitted',
+            'label': 'Submitted',
+            'is_submitted': True,
+            'is_incomplete': False,
+        }
+    return {
+        'key': 'draft',
+        'label': 'Started but not submitted',
+        'is_submitted': False,
+        'is_incomplete': True,
+    }
+
+
+def _member_context_target(member):
+    record = CRMRecord.objects.filter(user=member).first()
+    if record is not None:
+        return {
+            'label': 'Open CRM',
+            'url': reverse('studio_crm_detail', kwargs={'crm_id': record.pk}),
+            'has_crm_record': True,
+        }
+    return {
+        'label': 'Open Studio user',
+        'url': reverse('studio_user_detail', kwargs={'user_id': member.pk}),
+        'has_crm_record': False,
+    }
+
+
+def _plan_request_prepare_url(*, sprint, member):
+    return reverse(
+        'studio_sprint_plan_request_prepare',
+        kwargs={'sprint_id': sprint.pk, 'member_id': member.pk},
+    )
+
+
 @staff_required
 def sprint_list(request):
     """Table of sprints with status badge, start date, duration, plan count.
@@ -369,10 +418,15 @@ def _build_pending_plan_requests(sprint):
         member = members.get(agg['member_id'])
         if member is None:
             continue
+        onboarding_state = _onboarding_state_for_member(member)
         rows.append({
             'member': member,
             'request_count': agg['request_count'],
             'last_requested_at': agg['last_requested_at'],
+            'onboarding_state': onboarding_state,
+            'prepare_url': _plan_request_prepare_url(
+                sprint=sprint, member=member,
+            ),
         })
     # Most-recent-request-first.
     rows.sort(key=lambda r: r['last_requested_at'], reverse=True)
@@ -1089,6 +1143,48 @@ def sprint_add_member(request, sprint_id):
 
 
 @staff_required
+def sprint_plan_request_prepare(request, sprint_id, member_id):
+    """Locked staff workflow for preparing a requested member plan."""
+    if request.method != 'GET':
+        return HttpResponseNotAllowed(['GET'])
+
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    member = get_object_or_404(User, pk=member_id)
+    existing_plan = Plan.objects.filter(sprint=sprint, member=member).first()
+    if existing_plan is not None:
+        messages.info(
+            request,
+            f'{member.email} already has a plan in "{sprint.name}".',
+        )
+        return redirect('studio_plan_edit', plan_id=existing_plan.pk)
+
+    request_qs = PlanRequest.objects.filter(sprint=sprint, member=member)
+    if not request_qs.exists():
+        raise Http404('No outstanding plan request for this sprint member')
+
+    request_summary = request_qs.aggregate(
+        request_count=Count('id'),
+        last_requested_at=Max('created_at'),
+    )
+    onboarding_state = _onboarding_state_for_member(member)
+    target = _member_context_target(member)
+    member_profile = build_member_profile_context(member)
+
+    return render(request, 'studio/sprints/plan_request_prepare.html', {
+        'sprint': sprint,
+        'member': member,
+        'request_summary': request_summary,
+        'onboarding_state': onboarding_state,
+        'member_profile': member_profile,
+        'member_context_target': target,
+        'create_url': reverse(
+            'studio_sprint_plan_request_create_plan',
+            kwargs={'sprint_id': sprint.pk, 'member_id': member.pk},
+        ),
+    })
+
+
+@staff_required
 def sprint_plan_request_create_plan(request, sprint_id, member_id):
     """Inbox button: create a plan for a member who pinged for one.
 
@@ -1111,6 +1207,30 @@ def sprint_plan_request_create_plan(request, sprint_id, member_id):
 
     sprint = get_object_or_404(Sprint, pk=sprint_id)
     member = get_object_or_404(User, pk=member_id)
+
+    existing_plan = Plan.objects.filter(sprint=sprint, member=member).first()
+    if existing_plan is not None:
+        messages.info(
+            request,
+            f'{member.email} already has a plan in "{sprint.name}".',
+        )
+        return redirect('studio_plan_edit', plan_id=existing_plan.pk)
+
+    if not PlanRequest.objects.filter(sprint=sprint, member=member).exists():
+        raise Http404('No outstanding plan request for this sprint member')
+
+    onboarding_state = _onboarding_state_for_member(member)
+    if onboarding_state['is_incomplete']:
+        messages.error(
+            request,
+            'Onboarding is incomplete. Wait for the member to submit '
+            'onboarding before creating a plan from this request.',
+        )
+        return redirect(
+            'studio_sprint_plan_request_prepare',
+            sprint_id=sprint.pk,
+            member_id=member.pk,
+        )
 
     plan, _enrollment, created_now = create_plan_for_enrollment(
         sprint=sprint,

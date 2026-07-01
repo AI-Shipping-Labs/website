@@ -10,7 +10,7 @@ onboarding data, notes, or the CRM record. Staff-only (the parent view is
 Expects ``member_profile`` (the dict from
 ``crm.services.member_profile.build_member_profile_context``).
 {% endcomment %}
-<aside class="bg-card border border-border rounded-lg p-6 max-w-md" data-testid="member-profile-panel">
+<aside class="bg-card border border-border rounded-lg p-6 {% if member_profile_full_width %}w-full max-w-4xl{% else %}max-w-md{% endif %}" data-testid="member-profile-panel">
   <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
     <h2 class="text-lg font-semibold text-foreground">Member profile</h2>
     {% if member_profile.copy_text %}

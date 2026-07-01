@@ -25,6 +25,8 @@ def _seed_user_with_plan(db_blocker, email, **kwargs):
     with db_blocker.unblock():
         import datetime
 
+        from django.utils import timezone
+
         from plans.models import Plan, Sprint
 
         user = create_user(email=email, **kwargs)
@@ -32,7 +34,9 @@ def _seed_user_with_plan(db_blocker, email, **kwargs):
             slug=f"header-menu-{uuid.uuid4().hex[:8]}",
             defaults={
                 "name": "Header Menu Sprint",
-                "start_date": datetime.date(2026, 5, 1),
+                "start_date": timezone.localdate() - datetime.timedelta(days=7),
+                "duration_weeks": 4,
+                "status": "active",
             },
         )
         plan = Plan.objects.create(
@@ -41,6 +45,80 @@ def _seed_user_with_plan(db_blocker, email, **kwargs):
             visibility="private",
         )
         return user, plan
+
+
+def _create_sprint(slug_prefix, *, start_offset, duration_weeks=4, status="active"):
+    import datetime
+
+    from django.utils import timezone
+
+    from plans.models import Sprint
+
+    return Sprint.objects.create(
+        name=slug_prefix.replace("-", " ").title(),
+        slug=f"{slug_prefix}-{uuid.uuid4().hex[:8]}",
+        start_date=timezone.localdate() + datetime.timedelta(days=start_offset),
+        duration_weeks=duration_weeks,
+        status=status,
+    )
+
+
+def _set_plan_created_at(plan, *, days_ago):
+    import datetime
+
+    from django.utils import timezone
+
+    from plans.models import Plan
+
+    Plan.objects.filter(pk=plan.pk).update(
+        created_at=timezone.now() - datetime.timedelta(days=days_ago),
+    )
+    plan.refresh_from_db()
+    return plan
+
+
+def _seed_user_with_current_and_stale_ended_plan(db_blocker, email):
+    with db_blocker.unblock():
+        from django.db import connection
+
+        from plans.models import Plan
+
+        user = create_user(email=email, tier_slug="main", first_name="Current")
+        current = _create_sprint("header-current", start_offset=-7)
+        ended = _create_sprint(
+            "header-ended",
+            start_offset=-70,
+            duration_weeks=4,
+            status="completed",
+        )
+        current_plan = Plan.objects.create(member=user, sprint=current)
+        ended_plan = Plan.objects.create(member=user, sprint=ended)
+        _set_plan_created_at(current_plan, days_ago=30)
+        _set_plan_created_at(ended_plan, days_ago=1)
+        connection.close()
+        return current_plan, ended_plan
+
+
+def _seed_user_with_upcoming_and_stale_ended_plan(db_blocker, email):
+    with db_blocker.unblock():
+        from django.db import connection
+
+        from plans.models import Plan
+
+        user = create_user(email=email, tier_slug="main", first_name="Upcoming")
+        upcoming = _create_sprint("header-upcoming", start_offset=14)
+        ended = _create_sprint(
+            "header-upcoming-ended",
+            start_offset=-70,
+            duration_weeks=4,
+            status="completed",
+        )
+        upcoming_plan = Plan.objects.create(member=user, sprint=upcoming)
+        ended_plan = Plan.objects.create(member=user, sprint=ended)
+        _set_plan_created_at(upcoming_plan, days_ago=30)
+        _set_plan_created_at(ended_plan, days_ago=1)
+        connection.close()
+        return upcoming_plan, ended_plan
 
 
 def test_desktop_account_menu_opens_and_closes_by_keyboard(
@@ -169,6 +247,66 @@ def test_member_with_plan_desktop_account_menu_includes_plan_link(
     assert plan_link.get_attribute("href") == (
         f"/sprints/{plan.sprint.slug}/plan/{plan.pk}"
     )
+
+    context.close()
+
+
+@pytest.mark.core
+def test_desktop_account_menu_uses_next_upcoming_plan_over_stale_ended_plan(
+    django_server, browser, django_db_blocker
+):
+    email = _email("header-upcoming-plan")
+    upcoming_plan, ended_plan = _seed_user_with_upcoming_and_stale_ended_plan(
+        django_db_blocker,
+        email,
+    )
+    context = auth_context(browser, email)
+    page = context.new_page()
+    page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+    page.locator("#account-menu-trigger").click()
+    plan_link = page.locator("#account-menu-dropdown").locator(
+        '[data-testid="header-plan-link"]'
+    )
+    assert plan_link.inner_text().strip() == "Plan"
+    assert plan_link.get_attribute("href") == (
+        f"/sprints/{upcoming_plan.sprint.slug}/plan/{upcoming_plan.pk}"
+    )
+
+    plan_link.click()
+    assert f"/sprints/{upcoming_plan.sprint.slug}/plan/{upcoming_plan.pk}" in page.url
+    assert f"/sprints/{ended_plan.sprint.slug}/plan/{ended_plan.pk}" not in page.url
+    assert ended_plan.sprint.slug not in page.url
+
+    context.close()
+
+
+@pytest.mark.core
+def test_mobile_account_menu_uses_current_plan_over_stale_ended_plan(
+    django_server, browser, django_db_blocker
+):
+    email = _email("header-mobile-current")
+    current_plan, ended_plan = _seed_user_with_current_and_stale_ended_plan(
+        django_db_blocker,
+        email,
+    )
+    context = auth_context(browser, email)
+    page = context.new_page()
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+    page.locator("#mobile-menu-btn").click()
+    plan_link = page.locator('[data-testid="mobile-header-plan-link"]')
+    assert plan_link.is_visible()
+    assert plan_link.inner_text().strip() == "Plan"
+    assert plan_link.get_attribute("href") == (
+        f"/sprints/{current_plan.sprint.slug}/plan/{current_plan.pk}"
+    )
+
+    plan_link.click()
+    assert f"/sprints/{current_plan.sprint.slug}/plan/{current_plan.pk}" in page.url
+    assert f"/sprints/{ended_plan.sprint.slug}/plan/{ended_plan.pk}" not in page.url
+    assert ended_plan.sprint.slug not in page.url
 
     context.close()
 

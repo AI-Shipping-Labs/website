@@ -1,6 +1,6 @@
 {% load plan_nav %}
 {% load accounts_extras %}
-{% current_user_latest_plan as user_latest_plan %}
+{% current_user_sprint_shortcut as header_sprint_shortcut %}
 {% logout_url as header_logout_url %}
 {% login_url as header_login_url %}
 <header id="site-header" class="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
@@ -132,8 +132,8 @@
             <a href="{% url 'account' %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none">Account</a>
             {% if not is_newsletter_only %}
             <a href="/account/#profile" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none">Profile</a>
-            {% if user_latest_plan %}
-            <a href="{% url 'my_plan_detail' sprint_slug=user_latest_plan.sprint.slug plan_id=user_latest_plan.pk %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none" data-testid="header-plan-link">Plan</a>
+            {% if header_sprint_shortcut %}
+            <a href="{{ header_sprint_shortcut.href }}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none" data-testid="header-plan-link">{{ header_sprint_shortcut.label }}</a>
             {% endif %}
             {% endif %}
             {% if user.is_staff %}
@@ -247,9 +247,9 @@
         <a href="{% url 'account' %}" id="mobile-account-link" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Account
         </a>
-        {% if user_latest_plan and not is_newsletter_only %}
-        <a href="{% url 'my_plan_detail' sprint_slug=user_latest_plan.sprint.slug plan_id=user_latest_plan.pk %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-header-plan-link">
-          Plan
+        {% if header_sprint_shortcut and not is_newsletter_only %}
+        <a href="{{ header_sprint_shortcut.href }}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-header-plan-link">
+          {{ header_sprint_shortcut.label }}
         </a>
         {% endif %}
         {% if user.is_staff %}

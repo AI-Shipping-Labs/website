@@ -196,7 +196,10 @@ class MemberAPIKeyAuthHelperTest(TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertJSONEqual(
             response.content,
-            {"error": "Invalid member API key"},
+            {
+                "error": "Invalid member API key",
+                "code": "invalid_member_api_key",
+            },
         )
         self.assertFalse(hasattr(request, "member_api_key"))
 
@@ -222,7 +225,10 @@ class MemberAPIKeyAuthHelperTest(TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertJSONEqual(
             response.content,
-            {"error": "Member API key required"},
+            {
+                "error": "Member API key required",
+                "code": "member_api_key_required",
+            },
         )
 
         request = self.factory.get(

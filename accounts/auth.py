@@ -17,6 +17,10 @@ from accounts.models import MemberAPIKey, Token
 from accounts.utils.user_checks import is_authenticated_user, is_staff_user
 
 
+def _json_auth_error(message, code):
+    return JsonResponse({"error": message, "code": code}, status=401)
+
+
 def token_required(view_func):
     """Require a valid ``Authorization: Token <key>`` header.
 
@@ -175,9 +179,9 @@ def member_api_key_required(*required_scopes):
             header = request.headers.get("Authorization", "")
             parts = header.split(" ", 1)
             if len(parts) != 2 or parts[0] != "Token" or not parts[1].strip():
-                return JsonResponse(
-                    {"error": "Member API key required"},
-                    status=401,
+                return _json_auth_error(
+                    "Member API key required",
+                    "member_api_key_required",
                 )
 
             member_key = MemberAPIKey.authenticate(
@@ -185,7 +189,10 @@ def member_api_key_required(*required_scopes):
                 required_scopes=required_scopes,
             )
             if member_key is None:
-                return JsonResponse({"error": "Invalid member API key"}, status=401)
+                return _json_auth_error(
+                    "Invalid member API key",
+                    "invalid_member_api_key",
+                )
 
             member_key.mark_used(request)
             request.user = member_key.user

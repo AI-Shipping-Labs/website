@@ -28,6 +28,7 @@ urlpatterns = [
     path('api/', include(email_api_urlpatterns)),
     path('api/', include(notification_api_urlpatterns)),
     path('api/', include('api.urls')),
+    path('member-api/', include('member_api.urls')),
     path('', include(notification_page_urlpatterns)),
     path('register', signup_redirect_view, name='register_shortcut'),
     path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='sitemap'),

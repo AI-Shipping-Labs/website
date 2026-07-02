@@ -1,0 +1,291 @@
+{
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "properties": {
+          "code": {
+            "description": "Machine-readable error code",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "description": "Optional per-field error details",
+            "type": "object"
+          },
+          "error": {
+            "description": "Human-readable message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "code"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "tokenAuth": {
+        "description": "Send the header ``Authorization: Token <asl_member_...>``. Keys are member-owned, scoped to the owner's data, and cannot authenticate against the staff/operator ``/api/`` surface.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Member API for AI Shipping Labs. All endpoints accept JSON in and return JSON out. Authentication is via the ``Authorization: Token <key>`` header where ``<key>`` is a member-owned API key starting with ``asl_member_``. Member keys are scoped to the owner's data; plan endpoints only return or update plans owned by that key owner.",
+    "title": "AI Shipping Labs Member API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/member-api/v1/plans": {
+      "get": {
+        "description": "Lists plans owned by the authenticated member API key owner, newest first. Never returns other members' plans.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "plans": [
+                    {
+                      "created_at": "2026-05-01T10:00:00+00:00",
+                      "id": 12,
+                      "member": {
+                        "display_name": "Alice"
+                      },
+                      "progress": {
+                        "checkpoints_done": 1,
+                        "checkpoints_total": 4
+                      },
+                      "shared_at": null,
+                      "sprint": {
+                        "name": "May 2026",
+                        "slug": "may-2026"
+                      },
+                      "title": "Ship an eval toolkit",
+                      "updated_at": "2026-05-01T10:00:00+00:00",
+                      "visibility": "private"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Owned plan list."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid member API key."
+          }
+        },
+        "summary": "List owned plans",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}": {
+      "get": {
+        "description": "Returns one owned plan with member-safe nested content. Cohort visibility does not grant member API read access.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owned nested plan detail."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid member API key."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          }
+        },
+        "summary": "Get owned plan detail",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/markdown": {
+      "get": {
+        "description": "Returns the same member-safe Markdown export used by the browser owner download.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Markdown attachment."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid member API key."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          }
+        },
+        "summary": "Download owned plan Markdown",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/progress": {
+      "patch": {
+        "description": "Atomically toggles existing checkpoint, deliverable, and next-step completion state. Does not create, delete, reorder, rename, move, or edit descriptions.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "checkpoints": [
+                  {
+                    "done": true,
+                    "id": 123
+                  }
+                ],
+                "deliverables": [
+                  {
+                    "done": false,
+                    "id": 456
+                  }
+                ],
+                "next_steps": [
+                  {
+                    "done": true,
+                    "id": 789
+                  }
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "checkpoints": {
+                    "items": {
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "deliverables": {
+                    "items": {
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "next_steps": {
+                    "items": {
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated owned plan progress summary."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid member API key."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error; no partial writes."
+          }
+        },
+        "summary": "Update owned plan progress",
+        "tags": [
+          "Plans"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "tokenAuth": []
+    }
+  ]
+}

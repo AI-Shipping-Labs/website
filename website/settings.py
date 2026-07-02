@@ -167,6 +167,7 @@ INSTALLED_APPS = [
     'comments',
     'analytics',
     'api',
+    'member_api',
     'triggers.apps.TriggersConfig',
 ]
 

@@ -17,5 +17,6 @@ playwright_tests/
 # on legacy builders too, since a fully-excluded dir can't re-include a child.
 _docs/*
 !_docs/openapi.json
+!_docs/member-openapi.json
 specs/
 .claude/

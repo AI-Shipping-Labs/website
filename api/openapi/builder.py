@@ -52,7 +52,7 @@ _CONVERTER_TO_SCHEMA = {
 _PATH_CONVERTER_RE = re.compile(r"<(?:(?P<converter>[^:>]+):)?(?P<name>[^>]+)>")
 
 
-def _convert_django_path_to_openapi(django_path):
+def _convert_django_path_to_openapi(django_path, *, path_prefix="/api"):
     """Convert a Django path pattern to OpenAPI path-template form.
 
     Examples::
@@ -64,7 +64,8 @@ def _convert_django_path_to_openapi(django_path):
     converted = _PATH_CONVERTER_RE.sub(
         lambda m: "{" + m.group("name") + "}", django_path,
     )
-    return "/api/" + converted
+    prefix = path_prefix.rstrip("/")
+    return f"{prefix}/" + converted
 
 
 def _path_parameters(django_path):
@@ -203,7 +204,7 @@ def _operation_from_method_spec(method_meta, default_summary, tag):
     return operation
 
 
-def _iter_decorated_routes(urlpatterns):
+def _iter_decorated_routes(urlpatterns, *, docs_route_names=None):
     """Yield ``(django_path, callback, name, spec)`` for documented routes.
 
     Skips:
@@ -212,9 +213,10 @@ def _iter_decorated_routes(urlpatterns):
       enforces full coverage; the builder just renders what it sees).
     - Routes with no ``name`` (defensive -- shouldn't happen for our API).
     """
+    docs_route_names = set(docs_route_names or _DOCS_ROUTE_NAMES)
     for pattern in urlpatterns:
         name = getattr(pattern, "name", None)
-        if name in _DOCS_ROUTE_NAMES:
+        if name in docs_route_names:
             continue
         callback = getattr(pattern, "callback", None)
         if callback is None:
@@ -228,7 +230,16 @@ def _iter_decorated_routes(urlpatterns):
         yield django_path, callback, name, spec
 
 
-def build_spec(urlpatterns, *, title="AI Shipping Labs Operator API", version="1.0.0"):
+def build_spec(
+    urlpatterns,
+    *,
+    title="AI Shipping Labs Operator API",
+    version="1.0.0",
+    path_prefix="/api",
+    docs_route_names=None,
+    description=None,
+    token_description=None,
+):
     """Build and return an OpenAPI 3.1 document as a dict.
 
     The single source of truth for endpoints is the supplied
@@ -237,27 +248,35 @@ def build_spec(urlpatterns, *, title="AI Shipping Labs Operator API", version="1
     operation per HTTP method declared in the decorator's ``methods``
     dict.
     """
+    description = description or (
+        "Operator API for AI Shipping Labs. All endpoints accept "
+        "JSON in and return JSON out. Authentication is via the "
+        "``Authorization: Token <key>`` header where ``<key>`` is "
+        "a token owned by a staff user.\n\n"
+        "The spec endpoint ``/api/openapi.json`` itself accepts "
+        "the same ``Authorization: Token <key>`` header, so "
+        "OpenAPI tooling (Postman ``Import -> Link``, "
+        "``openapi-generator``, Swagger UI) can pull the spec "
+        "from the same base URL it then calls. Example:\n\n"
+        "```\n"
+        "curl -H \"Authorization: Token $API_TOKEN\" "
+        "https://aishippinglabs.com/api/openapi.json > spec.json\n"
+        "```"
+    )
+    token_description = token_description or (
+        "Send the header ``Authorization: Token <key>`` where "
+        "``<key>`` is a staff-owned token from the Studio "
+        "tokens page. The literal scheme name is ``Token``, "
+        "not ``Bearer`` (Swagger UI's authorize dialog renders "
+        "this as ``bearer`` but the wire format we accept is "
+        "``Token``)."
+    )
+
     spec = APISpec(
         title=title,
         version=version,
         openapi_version="3.1.0",
-        info={
-            "description": (
-                "Operator API for AI Shipping Labs. All endpoints accept "
-                "JSON in and return JSON out. Authentication is via the "
-                "``Authorization: Token <key>`` header where ``<key>`` is "
-                "a token owned by a staff user.\n\n"
-                "The spec endpoint ``/api/openapi.json`` itself accepts "
-                "the same ``Authorization: Token <key>`` header, so "
-                "OpenAPI tooling (Postman ``Import -> Link``, "
-                "``openapi-generator``, Swagger UI) can pull the spec "
-                "from the same base URL it then calls. Example:\n\n"
-                "```\n"
-                "curl -H \"Authorization: Token $API_TOKEN\" "
-                "https://aishippinglabs.com/api/openapi.json > spec.json\n"
-                "```"
-            ),
-        },
+        info={"description": description},
     )
 
     # Security scheme: declared once at the document level. We use the
@@ -270,14 +289,7 @@ def build_spec(urlpatterns, *, title="AI Shipping Labs Operator API", version="1
         {
             "type": "http",
             "scheme": "bearer",
-            "description": (
-                "Send the header ``Authorization: Token <key>`` where "
-                "``<key>`` is a staff-owned token from the Studio "
-                "tokens page. The literal scheme name is ``Token``, "
-                "not ``Bearer`` (Swagger UI's authorize dialog renders "
-                "this as ``bearer`` but the wire format we accept is "
-                "``Token``)."
-            ),
+            "description": token_description,
         },
     )
 
@@ -300,8 +312,14 @@ def build_spec(urlpatterns, *, title="AI Shipping Labs Operator API", version="1
         },
     )
 
-    for django_path, _callback, _name, view_spec in _iter_decorated_routes(urlpatterns):
-        openapi_path = _convert_django_path_to_openapi(django_path)
+    for django_path, _callback, _name, view_spec in _iter_decorated_routes(
+        urlpatterns,
+        docs_route_names=docs_route_names,
+    ):
+        openapi_path = _convert_django_path_to_openapi(
+            django_path,
+            path_prefix=path_prefix,
+        )
         path_params = _path_parameters(django_path)
 
         operations = {}

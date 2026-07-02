@@ -453,9 +453,9 @@ def event_join_redirect(request, slug, event_id=None):
 
     # Past events show an unavailable page. The "Back to event" link there
     # already surfaces the inline recording on /events/<slug>.
-    # Issue #713: gate on the time-derived ``is_past`` so a legacy
-    # ``status='upcoming'`` row whose ``end_datetime`` has passed is also
-    # treated as past without waiting for the daily cron.
+    # Gate on the time-derived ``is_past`` so a stale ``status='upcoming'``
+    # row whose ``end_datetime`` has passed is also treated as past without
+    # waiting for the daily completion task.
     if event.is_past:
         return render(request, 'events/join_unavailable.html', {
             'event': event,

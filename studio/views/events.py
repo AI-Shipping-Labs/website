@@ -70,9 +70,9 @@ def annotate_derived_status(event, now=None):
     the event-series detail view so both render the same
     ``{% studio_status_badge %}``.
 
-    Single-status precedence (#820): draft / cancelled win over the
-    time-based label; otherwise the label is purely time-derived, so a
-    legacy ``completed`` row with a future end reads Upcoming.
+    Single-status precedence (#820): draft / completed / cancelled win
+    over the time-based label; otherwise the label is time-derived so a
+    stale ``upcoming`` row with a past end reads Past.
     """
     if now is None:
         now = djtimezone.now()
@@ -84,6 +84,9 @@ def annotate_derived_status(event, now=None):
     if event.status == 'draft':
         event.derived_status = 'draft'
         event.derived_status_label = 'Draft'
+    elif event.status == 'completed':
+        event.derived_status = 'past'
+        event.derived_status_label = 'Past'
     elif event.status == 'cancelled':
         event.derived_status = 'cancelled'
         event.derived_status_label = 'Cancelled'
@@ -373,10 +376,9 @@ def _split_events_for_studio(events, user):
 
         _decorate_event_list_row(event, user, now=now)
 
-        # Grouping: cancelled always sits in Past (consistent with
-        # ``is_past``); everything else groups by the time comparison so
-        # draft rows still land in a logical section.
-        if event.status == 'cancelled':
+        # Grouping: completed/cancelled always sit in Past; otherwise group
+        # by time so stale upcoming rows move out of the future bucket.
+        if event.status in ('completed', 'cancelled'):
             past_events.append(event)
         elif is_future:
             upcoming_events.append(event)

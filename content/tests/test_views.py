@@ -239,17 +239,23 @@ class RecordingDetailViewTest(TestCase):
 
     def test_recording_detail_contains_content(self):
         # Issue #426: event detail does not render inline playback. Title and
-        # description still render. This fixture starts "now", so issue #1037
-        # post-event resources remain suppressed by the time-derived past gate.
+        # description still render. After issue #1017, stored ``completed``
+        # status is enough to classify the event as past even when the fixture
+        # starts "now", so issue #1037 post-event resources render.
         response = self.client.get(self.recording.get_absolute_url())
         self.assertEqual(response.context['event'], self.recording)
         self.assertContains(response, 'Workshop description')
-        self.assertNotContains(response, 'data-testid="event-post-resources"')
+        self.assertContains(response, 'data-testid="event-post-resources"')
+        self.assertContains(response, 'data-testid="event-recording-resource"')
+        self.assertContains(response, 'Watch recording')
+        self.assertContains(response, 'https://youtube.com/watch?v=test')
+        self.assertContains(response, 'data-testid="event-material-resource"')
+        self.assertContains(response, 'https://example.com/slides')
+        self.assertContains(response, 'Slides')
         self.assertNotContains(response, 'Core Tools')
         self.assertNotContains(response, 'Python')
         self.assertNotContains(response, 'Learn basics')
         self.assertNotContains(response, 'Build something')
-        self.assertNotContains(response, 'https://example.com/slides')
 
     def test_recording_detail_404(self):
         # Issue #673: unknown event id 404s on the canonical route.

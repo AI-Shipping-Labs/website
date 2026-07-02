@@ -73,16 +73,15 @@ class IsUpcomingTruthTableTest(TestCase):
         self.assertFalse(event.is_upcoming)
         self.assertTrue(event.is_past)
 
-    def test_completed_status_future_end_is_upcoming(self):
-        """Legacy ``completed`` with a future end: time wins."""
+    def test_completed_status_future_end_is_not_upcoming(self):
         event = _make_event(
-            'legacy-completed-future',
+            'completed-future',
             status='completed',
             start_offset=timedelta(hours=-1),
             end_offset=timedelta(hours=1),
         )
-        self.assertTrue(event.is_upcoming)
-        self.assertFalse(event.is_past)
+        self.assertFalse(event.is_upcoming)
+        self.assertTrue(event.is_past)
 
     def test_completed_status_past_end_is_past(self):
         event = _make_event(

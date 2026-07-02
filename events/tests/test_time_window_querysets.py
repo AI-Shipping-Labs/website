@@ -43,8 +43,8 @@ class EventTimeWindowQuerysetTest(TestCase):
             now=self.now,
             start_offset=timedelta(minutes=-30),
         )
-        stale_completed_future = _event(
-            'stale-completed-future',
+        completed_future = _event(
+            'completed-future',
             now=self.now,
             start_offset=timedelta(hours=3),
             end_offset=timedelta(hours=4),
@@ -93,7 +93,7 @@ class EventTimeWindowQuerysetTest(TestCase):
 
         self.assertEqual(
             upcoming_ids,
-            {future.id, null_end_live.id, stale_completed_future.id},
+            {future.id, null_end_live.id},
         )
         self.assertEqual(
             past_ids,
@@ -101,6 +101,7 @@ class EventTimeWindowQuerysetTest(TestCase):
         )
         self.assertNotIn(draft.id, upcoming_ids | past_ids)
         self.assertNotIn(cancelled.id, upcoming_ids | past_ids)
+        self.assertNotIn(completed_future.id, upcoming_ids | past_ids)
 
     def test_past_recording_helper_requires_published_non_empty_recording(self):
         recorded = _event(
@@ -208,7 +209,7 @@ class EventsListTimeWindowTest(TestCase):
         upcoming_ids = {e.id for e in response.context['upcoming_events']}
         past_ids = {e.id for e in response.context['past_events']}
 
-        self.assertEqual(upcoming_ids, {self.future.id, self.completed_future.id})
+        self.assertEqual(upcoming_ids, {self.future.id})
         self.assertEqual(
             past_ids,
             {
@@ -221,6 +222,7 @@ class EventsListTimeWindowTest(TestCase):
         self.assertTrue(response.context['show_past'])
         self.assertIn('upcoming_rows', response.context)
         self.assertIn('all_past_tags', response.context)
+        self.assertNotIn(self.completed_future.id, upcoming_ids | past_ids)
         self.assertNotIn(self.draft.id, upcoming_ids | past_ids)
         self.assertNotIn(self.cancelled.id, upcoming_ids | past_ids)
 
@@ -230,7 +232,7 @@ class EventsListTimeWindowTest(TestCase):
         upcoming_ids = {e.id for e in response.context['upcoming_events']}
         past_ids = {e.id for e in response.context['past_events']}
 
-        self.assertEqual(upcoming_ids, {self.future.id, self.completed_future.id})
+        self.assertEqual(upcoming_ids, {self.future.id})
         self.assertEqual(past_ids, set())
         self.assertTrue(response.context['show_upcoming'])
         self.assertFalse(response.context['show_past'])
@@ -305,5 +307,6 @@ class DashboardRegisteredUpcomingEventsTest(TestCase):
 
         self.assertEqual(
             [event.title for event in results],
-            ['Dash Completed Future', 'Dash Eligible 0', 'Dash Eligible 1'],
+            ['Dash Eligible 0', 'Dash Eligible 1', 'Dash Eligible 2'],
         )
+        self.assertNotIn(completed_future.id, [event.id for event in results])

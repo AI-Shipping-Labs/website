@@ -219,8 +219,8 @@ class StudioEventListStatusGroupingTest(StaffUserMixin, TestCase):
             start_datetime=now - timedelta(days=30, hours=1),
             end_datetime=now - timedelta(days=30),
         )
-        cls.legacy = Event.objects.create(
-            title='LegacyCompletedFuture', slug='legacy', status='completed',
+        cls.completed_future = Event.objects.create(
+            title='CompletedFuture', slug='completed-future', status='completed',
             start_datetime=now + timedelta(days=5),
             end_datetime=now + timedelta(days=5, hours=1),
         )
@@ -252,8 +252,8 @@ class StudioEventListStatusGroupingTest(StaffUserMixin, TestCase):
         upcoming = self._ctx(response, 'upcoming_events')
         self.assertIn(self.up_soon.pk, upcoming)
         self.assertIn(self.up_later.pk, upcoming)
-        self.assertIn(self.legacy.pk, upcoming)
         self.assertIn(self.draft.pk, upcoming)
+        self.assertNotIn(self.completed_future.pk, upcoming)
         self.assertNotIn(self.cancelled.pk, upcoming)
         self.assertNotIn(self.past_recent.pk, upcoming)
 
@@ -262,6 +262,7 @@ class StudioEventListStatusGroupingTest(StaffUserMixin, TestCase):
         past = self._ctx(response, 'past_events')
         self.assertIn(self.past_recent.pk, past)
         self.assertIn(self.past_old.pk, past)
+        self.assertIn(self.completed_future.pk, past)
         self.assertIn(self.cancelled.pk, past)
         self.assertNotIn(self.up_soon.pk, past)
 
@@ -283,14 +284,14 @@ class StudioEventListStatusGroupingTest(StaffUserMixin, TestCase):
             past.index(self.past_old.pk),
         )
 
-    def test_legacy_completed_future_labelled_upcoming(self):
-        response = self.client.get('/studio/events/')
+    def test_completed_future_labelled_past(self):
+        response = self.client.get('/studio/events/past/')
         event = next(
-            e for e in response.context['upcoming_events']
-            if e.pk == self.legacy.pk
+            e for e in response.context['past_events']
+            if e.pk == self.completed_future.pk
         )
-        self.assertEqual(event.derived_status, 'upcoming')
-        self.assertEqual(event.derived_status_label, 'Upcoming')
+        self.assertEqual(event.derived_status, 'past')
+        self.assertEqual(event.derived_status_label, 'Past')
 
     def test_draft_labelled_draft(self):
         response = self.client.get('/studio/events/')
@@ -321,11 +322,11 @@ class StudioEventListStatusGroupingTest(StaffUserMixin, TestCase):
 
     def test_section_headings_show_counts(self):
         response = self.client.get('/studio/events/')
-        self.assertEqual(response.context['upcoming_count'], 4)
-        self.assertEqual(response.context['past_count'], 3)
-        self.assertContains(response, 'Upcoming (4)')
+        self.assertEqual(response.context['upcoming_count'], 3)
+        self.assertEqual(response.context['past_count'], 4)
+        self.assertContains(response, 'Upcoming (3)')
         self.assertNotContains(response, 'data-testid="event-section-past"')
-        self.assertContains(response, 'Past events (3)')
+        self.assertContains(response, 'Past events (4)')
 
     def test_default_page_hides_past_section(self):
         response = self.client.get('/studio/events/')

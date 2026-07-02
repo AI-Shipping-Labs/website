@@ -653,14 +653,12 @@ class Event(
     def is_upcoming(self):
         """Return True when the event is still scheduled in the future.
 
-        Issue #713: time-derived. An event is "upcoming" only when it
-        is neither draft nor cancelled AND ``now`` is before
-        ``effective_end_datetime``. The legacy ``status='completed'``
-        flag is intentionally ignored — once an end time has passed an
-        event is past regardless of the stored status, and a legacy
-        ``completed`` row with a future end time renders upcoming.
+        An event is upcoming only while its stored status is
+        ``upcoming`` and ``now`` is before ``effective_end_datetime``.
+        The time check keeps stale upcoming rows out of future-facing
+        surfaces until the daily completion task flips their status.
         """
-        if self.status in ('draft', 'cancelled'):
+        if self.status != 'upcoming':
             return False
         return timezone.now() < self.effective_end_datetime
 
@@ -668,13 +666,12 @@ class Event(
     def is_past(self):
         """Return True when the event has finished or been cancelled.
 
-        Issue #713: time-derived. Cancelled events are always treated
-        as past so they never offer registration or join links.
-        Drafts return ``False`` (drafts are not in any state for
-        visitors — they 404 anyway). Otherwise an event is past once
-        ``now >= effective_end_datetime``.
+        Completed and cancelled events are past by status. Drafts are
+        not in any visitor-facing state. Upcoming events become past
+        once ``now >= effective_end_datetime`` so stale rows do not need
+        to wait for the daily completion task.
         """
-        if self.status == 'cancelled':
+        if self.status in ('completed', 'cancelled'):
             return True
         if self.status == 'draft':
             return False

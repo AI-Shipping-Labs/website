@@ -35,11 +35,11 @@ def _stale_upcoming(slug='stale-evt', **overrides):
     return Event.objects.create(slug=slug, **defaults)
 
 
-def _legacy_completed_future(slug='legacy-comp', **overrides):
-    """Event with stored ``status='completed'`` but a FUTURE end."""
+def _completed_future(slug='completed-future', **overrides):
+    """Event with stored ``status='completed'`` but a future end."""
     now = timezone.now()
     defaults = {
-        'title': overrides.pop('title', 'Legacy Completed Future'),
+        'title': overrides.pop('title', 'Completed Future'),
         'start_datetime': now + timedelta(hours=1),
         'end_datetime': now + timedelta(hours=2),
         'status': 'completed',
@@ -60,13 +60,13 @@ class EventDetailHeaderTest(TestCase):
         self.assertContains(response, 'Past')
         self.assertNotContains(response, 'Upcoming')
 
-    def test_legacy_completed_with_future_end_renders_upcoming_pill(self):
-        event = _legacy_completed_future()
+    def test_completed_with_future_end_renders_past_pill(self):
+        event = _completed_future()
         response = self.client.get(event.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="event-status-pill"')
-        self.assertContains(response, 'Upcoming')
-        self.assertNotContains(response, 'Past')
+        self.assertContains(response, 'Past')
+        self.assertNotContains(response, 'Upcoming')
 
 
 class EventDetailRegistrationCardTest(TestCase):
@@ -82,11 +82,10 @@ class EventDetailRegistrationCardTest(TestCase):
             response, 'data-testid="event-external-join-card"',
         )
 
-    def test_registration_card_visible_for_legacy_completed_future(self):
-        """Time wins over legacy ``status='completed'``."""
-        event = _legacy_completed_future()
+    def test_registration_card_hidden_for_completed_future(self):
+        event = _completed_future()
         response = self.client.get(event.get_absolute_url())
-        self.assertContains(
+        self.assertNotContains(
             response, 'data-testid="event-anonymous-email-form"',
         )
 
@@ -124,9 +123,9 @@ class EventsListSectionsTest(TestCase):
             end_datetime=now + timedelta(hours=2),
             status='upcoming',
         )
-        self.legacy_future = Event.objects.create(
-            slug='listed-legacy-completed',
-            title='Listed Legacy Future',
+        self.completed_future = Event.objects.create(
+            slug='listed-completed-future',
+            title='Listed Completed Future',
             start_datetime=now + timedelta(hours=3),
             end_datetime=now + timedelta(hours=4),
             status='completed',
@@ -136,7 +135,6 @@ class EventsListSectionsTest(TestCase):
         response = self.client.get('/events?filter=upcoming')
         body = response.content.decode()
         self.assertIn('Listed Future', body)
-        self.assertIn('Listed Legacy Future', body)
         # Stale event has ``end_datetime`` in the past -> NOT upcoming.
         upcoming_section_start = body.find(
             'data-testid="events-upcoming-section"',
@@ -145,6 +143,7 @@ class EventsListSectionsTest(TestCase):
         self.assertGreater(upcoming_section_start, -1)
         # Should not appear anywhere on the upcoming-only page.
         self.assertNotIn('Listed Stale', body)
+        self.assertNotIn('Listed Completed Future', body)
 
 
 class RegistrationApi409Test(TestCase):
@@ -255,9 +254,8 @@ class StudioStatusLegacyNoteTest(TestCase):
 class StudioListTimeGroupingTest(TestCase):
     """Studio events list groups rows by a single time-derived status.
 
-    A stale ``upcoming`` row lands in the dedicated Past view; a legacy
-    ``completed`` row with a future end remains on the default Upcoming
-    view.
+    A stale ``upcoming`` row lands in the dedicated Past view; a completed
+    row with a future end is not kept in the default Upcoming view.
     """
 
     def test_stale_upcoming_grouped_into_past(self):
@@ -273,20 +271,20 @@ class StudioListTimeGroupingTest(TestCase):
         row = next(e for e in response.context['past_events'] if e.pk == event.pk)
         self.assertEqual(row.derived_status_label, 'Past')
 
-    def test_legacy_completed_future_grouped_into_upcoming(self):
+    def test_completed_future_grouped_into_past(self):
         staff = User.objects.create_user(
             email='admin2@test.com', password='x', is_staff=True,
         )
-        event = _legacy_completed_future(slug='list-legacy')
+        event = _completed_future(slug='list-completed-future')
         client = Client()
         client.force_login(staff)
-        response = client.get('/studio/events/')
-        upcoming_pks = [e.pk for e in response.context['upcoming_events']]
-        self.assertIn(event.pk, upcoming_pks)
+        response = client.get('/studio/events/past/')
+        past_pks = [e.pk for e in response.context['past_events']]
+        self.assertIn(event.pk, past_pks)
         row = next(
-            e for e in response.context['upcoming_events'] if e.pk == event.pk
+            e for e in response.context['past_events'] if e.pk == event.pk
         )
-        self.assertEqual(row.derived_status_label, 'Upcoming')
+        self.assertEqual(row.derived_status_label, 'Past')
 
 
 class CancelByTokenStaleEventTest(TestCase):
@@ -316,17 +314,13 @@ class CancelByTokenStaleEventTest(TestCase):
 class DashboardExcludesPastFromUpcomingTest(TestCase):
     """Member dashboard ``_get_upcoming_events`` excludes past starts."""
 
-    def test_legacy_completed_with_future_start_is_returned(self):
-        """A legacy ``status='completed'`` row with a future start
-        should still appear in the user's upcoming registrations."""
+    def test_completed_with_future_start_is_excluded(self):
         from content.views.home import _get_upcoming_events
 
         user = User.objects.create_user(email='d@test.com', password='x')
-        event = _legacy_completed_future(slug='dash-future')
+        event = _completed_future(slug='dash-future')
         EventRegistration.objects.create(event=event, user=user)
-        results = _get_upcoming_events(user)
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].pk, event.pk)
+        self.assertEqual(_get_upcoming_events(user), [])
 
     def test_cancelled_event_is_excluded(self):
         from content.views.home import _get_upcoming_events

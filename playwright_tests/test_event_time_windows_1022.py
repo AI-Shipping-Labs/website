@@ -65,10 +65,17 @@ class TestVisitorEventTimeWindows1022:
         _clear_event_data()
         now = timezone.now()
         _create_event(
-            title='Completed Future Compatibility',
-            slug='completed-future-compatibility-1022',
+            title='Upcoming Workshop 1022',
+            slug='upcoming-workshop-1022',
             start_datetime=now + datetime.timedelta(days=3),
             end_datetime=now + datetime.timedelta(days=3, hours=1),
+            status='upcoming',
+        )
+        _create_event(
+            title='Completed Future Hidden 1022',
+            slug='completed-future-hidden-1022',
+            start_datetime=now + datetime.timedelta(days=4),
+            end_datetime=now + datetime.timedelta(days=4, hours=1),
             status='completed',
         )
         _create_event(
@@ -82,20 +89,23 @@ class TestVisitorEventTimeWindows1022:
 
         page.goto(f'{django_server}/events', wait_until='domcontentloaded')
         body = page.content()
-        assert 'Completed Future Compatibility' in body
+        assert 'Upcoming Workshop 1022' in body
+        assert 'Completed Future Hidden 1022' not in body
         assert 'Finished Recording 1022' in body
 
         page.locator('[data-testid="events-filter-upcoming"]').click()
         page.wait_for_load_state('domcontentloaded')
         body = page.content()
-        assert 'Completed Future Compatibility' in body
+        assert 'Upcoming Workshop 1022' in body
+        assert 'Completed Future Hidden 1022' not in body
         assert 'Finished Recording 1022' not in body
 
         page.locator('[data-testid="events-filter-past"]').click()
         page.wait_for_load_state('domcontentloaded')
         body = page.content()
         assert 'Finished Recording 1022' in body
-        assert 'Completed Future Compatibility' not in body
+        assert 'Upcoming Workshop 1022' not in body
+        assert 'Completed Future Hidden 1022' not in body
 
 
 @pytest.mark.django_db(transaction=True)
@@ -157,14 +167,13 @@ class TestDashboardEventTimeWindows1022:
         page.goto(f'{django_server}/', wait_until='domcontentloaded')
         body = page.content()
 
-        assert 'Completed Future Dashboard 1022' in body
         assert 'Soon Eligible 1022' in body
         assert 'Later Eligible 1022' in body
+        assert 'Completed Future Dashboard 1022' not in body
         assert 'Draft Hidden Dashboard 1022' not in body
         assert 'Cancelled Hidden Dashboard 1022' not in body
         assert 'Past Hidden Dashboard 1022' not in body
 
-        completed_pos = body.index('Completed Future Dashboard 1022')
         first_pos = body.index('Soon Eligible 1022')
         second_pos = body.index('Later Eligible 1022')
-        assert completed_pos < first_pos < second_pos
+        assert first_pos < second_pos

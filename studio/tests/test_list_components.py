@@ -217,7 +217,7 @@ class StudioListComponentRenderTest(TestCase):
         self.assertContains(response, 'whitespace-nowrap')
 
     def test_event_list_uses_compact_icons_and_actions(self):
-        response = self.client.get('/studio/events/')
+        response = self.client.get('/studio/events/past/')
         self.assertContains(response, 'data-testid="origin-github-icon"')
         self.assertContains(response, 'aria-label="Synced from GitHub"')
         self.assertNotContains(response, 'data-testid="origin-badge"')

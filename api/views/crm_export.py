@@ -38,7 +38,10 @@ unforgeable. A non-staff token cannot reach the endpoint at all (401).
 Scope / paging mirror ``users_collection`` / ``onboarding_responses_collection``:
 ``scope`` (``crm`` default / ``all``), ``limit`` (clamped to the
 configurable ``CRM_EXPORT_MAX_LIMIT`` ceiling), ``offset``, ``since``, and
-``q``. Deterministic ordering by ``User.id``.
+``q``. Deterministic ordering by ``User.id``. ``email`` is an exact,
+case-insensitive targeted lookup path that constrains to one user before
+any aggregate prefetch / serialization work; when present it wins over
+``q``.
 """
 
 from django.contrib.auth import get_user_model
@@ -456,7 +459,11 @@ def _serialize_member(
                 "to ``scope=crm`` (only members carrying CRM signal); pass "
                 "``scope=all`` for the full user table. Ordered by "
                 "``User.id``; ``count`` is the page size, ``total`` the full "
-                "match before slicing."
+                "match before slicing. Operator automation that needs one "
+                "user should pass ``email=`` for an exact, case-insensitive "
+                "lookup; this constrains the queryset before aggregate "
+                "serialization instead of scanning a broad export. When "
+                "``email`` and ``q`` are both supplied, ``email`` wins."
             ),
             "query": {
                 "scope": {
@@ -497,7 +504,19 @@ def _serialize_member(
                     "description": (
                         "Substring search across email / name / Stripe id / "
                         "Slack id / tags (same semantics as "
-                        "``GET /api/users``)."
+                        "``GET /api/users``). Ignored when ``email`` is "
+                        "supplied."
+                    ),
+                },
+                "email": {
+                    "type": "string",
+                    "required": False,
+                    "description": (
+                        "Exact case-insensitive user email lookup for fast "
+                        "targeted CRM automation. Surrounding whitespace is "
+                        "trimmed. Unknown users return 404 "
+                        "``user_not_found``. Use this instead of broad "
+                        "``scope=all`` exports when fetching one user."
                     ),
                 },
             },
@@ -519,6 +538,15 @@ def _serialize_member(
                             "value": "everyone",
                             "allowed": _VALID_SCOPES,
                         },
+                    },
+                },
+                404: {
+                    "description": (
+                        "``email`` was supplied but no exact user exists."
+                    ),
+                    "example": {
+                        "error": "User not found",
+                        "code": "user_not_found",
                     },
                 },
             },
@@ -555,13 +583,48 @@ def crm_export(request):
     q = (request.GET.get("q") or "").strip()
     q_lower = q.lower()
     q_normalized = normalize_tag(q) if q else ""
+    email = (request.GET.get("email") or "").strip()
 
     qs = _base_queryset()
-    if since is not None:
-        qs = qs.filter(date_joined__gte=since)
-
     bearer = request.user
     persona_by_questionnaire = _persona_map()
+
+    if email:
+        target_id = (
+            User.objects
+            .filter(email__iexact=email)
+            .values_list("id", flat=True)
+            .first()
+        )
+        if target_id is None:
+            return error_response(
+                "User not found", "user_not_found", status=404,
+            )
+
+        qs = qs.filter(pk=target_id)
+        if since is not None:
+            qs = qs.filter(date_joined__gte=since)
+        matched = list(qs)
+
+        if scope == "crm" and matched:
+            user = matched[0]
+            crm_record = getattr(user, "crm_record", None)
+            if not _has_crm_signal(user, crm_record):
+                matched = []
+
+        page = matched[offset:offset + limit]
+        return _export_response(
+            page=page,
+            total=len(matched),
+            limit=limit,
+            offset=offset,
+            scope=scope,
+            bearer=bearer,
+            persona_by_questionnaire=persona_by_questionnaire,
+        )
+
+    if since is not None:
+        qs = qs.filter(date_joined__gte=since)
 
     # Resolve the scope/filter match set once (the full ``total``), then
     # slice. ``_has_crm_signal`` and ``_q_matches`` read prefetched
@@ -579,6 +642,20 @@ def crm_export(request):
     total = len(matched)
     page = matched[offset:offset + limit]
 
+    return _export_response(
+        page=page,
+        total=total,
+        limit=limit,
+        offset=offset,
+        scope=scope,
+        bearer=bearer,
+        persona_by_questionnaire=persona_by_questionnaire,
+    )
+
+
+def _export_response(
+    *, page, total, limit, offset, scope, bearer, persona_by_questionnaire,
+):
     # Batch the two gated reads once for the whole page so the gate stays
     # the unforgeable boundary without an N+1 across members.
     notes_by_member = _gated_notes_by_member(bearer, page)

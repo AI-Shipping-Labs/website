@@ -551,6 +551,91 @@ class CrmExportSearchTest(CrmExportTestBase):
         self.assertEqual(emails, {"alpha-unique@test.com"})
 
 
+class CrmExportEmailLookupTest(CrmExportTestBase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.target = cls._make_member("target@example.com")
+        cls._give_crm_record(cls.target, summary="Target CRM")
+        cls._give_plan(cls.target)
+        cls._give_note(cls.target, body="target note")
+        cls._give_onboarding_response(cls.target)
+
+        cls.no_signal = cls._make_member("bare@example.com")
+
+        cls.q_match_only = cls._make_member("fragment-match@example.com")
+        cls.q_match_only.stripe_customer_id = "cus_should_not_win"
+        cls.q_match_only.save(update_fields=["stripe_customer_id"])
+
+    def _lookup(self, **params):
+        params.setdefault("scope", "all")
+        response = self.client.get(self.URL, params, **self._auth())
+        self.assertEqual(response.status_code, 200)
+        return response.json()
+
+    def test_scope_all_email_returns_exact_member(self):
+        body = self._lookup(email="target@example.com")
+
+        self.assertEqual(body["count"], 1)
+        self.assertEqual(body["total"], 1)
+        self.assertEqual(body["members"][0]["email"], "target@example.com")
+        self.assertEqual(body["members"][0]["crm_record"]["summary"], "Target CRM")
+        self.assertEqual(len(body["members"][0]["plans"]), 1)
+        self.assertEqual(len(body["members"][0]["notes"]), 1)
+        self.assertEqual(len(body["members"][0]["onboarding_responses"]), 1)
+
+    def test_email_matching_is_case_insensitive_and_trims_whitespace(self):
+        body = self._lookup(email="  TARGET@EXAMPLE.COM  ")
+
+        self.assertEqual(body["count"], 1)
+        self.assertEqual(body["total"], 1)
+        self.assertEqual(body["members"][0]["email"], "target@example.com")
+
+    def test_scope_all_email_returns_existing_no_signal_user(self):
+        body = self._lookup(email="bare@example.com")
+
+        self.assertEqual(body["count"], 1)
+        self.assertEqual(body["total"], 1)
+        item = body["members"][0]
+        self.assertEqual(item["email"], "bare@example.com")
+        self.assertIsNone(item["crm_record"])
+        self.assertEqual(item["notes"], [])
+        self.assertEqual(item["plans"], [])
+        self.assertEqual(item["onboarding_responses"], [])
+
+    def test_scope_crm_email_existing_no_signal_user_returns_empty_envelope(self):
+        body = self._lookup(scope="crm", email="bare@example.com")
+
+        self.assertEqual(body["members"], [])
+        self.assertEqual(body["count"], 0)
+        self.assertEqual(body["total"], 0)
+
+    def test_unknown_email_returns_404_user_not_found(self):
+        response = self.client.get(
+            self.URL,
+            {"scope": "all", "email": "missing@example.com"},
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 404)
+        body = response.json()
+        self.assertEqual(body["code"], "user_not_found")
+        self.assertNotIn("members", body)
+
+    def test_email_wins_over_q_when_both_are_supplied(self):
+        body = self._lookup(
+            email="target@example.com",
+            q="cus_should_not_win",
+        )
+
+        self.assertEqual(body["count"], 1)
+        self.assertEqual(body["total"], 1)
+        self.assertEqual(
+            [member["email"] for member in body["members"]],
+            ["target@example.com"],
+        )
+
+
 class CrmExportQueryBudgetTest(CrmExportTestBase):
     """No N+1 across a multi-user, multi-plan fixture.
 
@@ -657,6 +742,54 @@ class CrmExportQueryBudgetTest(CrmExportTestBase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["count"], 3)
 
+    def test_email_lookup_query_count_does_not_grow_with_unrelated_users(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        target = self._make_member("targeted-budget@example.com")
+        self._give_crm_record(target)
+        self.client.get(
+            self.URL,
+            {"scope": "all", "email": target.email},
+            **self._auth(),
+        )
+
+        with CaptureQueriesContext(connection) as base_ctx:
+            response = self.client.get(
+                self.URL,
+                {"scope": "all", "email": target.email},
+                **self._auth(),
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 1)
+
+        for i in range(20):
+            unrelated = self._make_member(f"unrelated-{i}@test.com")
+            self._give_crm_record(unrelated)
+            self._give_plan(unrelated)
+            self._give_note(unrelated, body=f"unrelated note {i}")
+            self._give_onboarding_response(unrelated)
+
+        with CaptureQueriesContext(connection) as grown_ctx:
+            response = self.client.get(
+                self.URL,
+                {"scope": "all", "email": target.email},
+                **self._auth(),
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 1)
+        self.assertEqual(len(grown_ctx.captured_queries), len(base_ctx.captured_queries))
+
+        user_selects = [
+            q["sql"] for q in grown_ctx.captured_queries
+            if 'FROM "accounts_user"' in q["sql"]
+        ]
+        unbounded_user_selects = [
+            sql for sql in user_selects
+            if "WHERE" not in sql
+        ]
+        self.assertEqual(unbounded_user_selects, [])
+
 
 class CrmExportOpenApiTest(CrmExportTestBase):
     def test_export_path_present_under_crm_tag(self):
@@ -667,6 +800,7 @@ class CrmExportOpenApiTest(CrmExportTestBase):
         operation = spec["paths"]["/api/crm/export"]["get"]
         self.assertIn("CRM", operation["tags"])
         param_names = {p["name"] for p in operation.get("parameters", [])}
-        for expected in ("scope", "limit", "offset", "since", "q"):
+        for expected in ("scope", "limit", "offset", "since", "q", "email"):
             self.assertIn(expected, param_names)
         self.assertIn("200", operation["responses"])
+        self.assertIn("404", operation["responses"])

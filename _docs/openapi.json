@@ -1225,7 +1225,7 @@
     },
     "/api/crm/export": {
       "get": {
-        "description": "Returns the complete per-user CRM aggregate (core user state, ``crm_record``, ``notes``, nested ``plans``, sprint and course enrollments, and ``onboarding_responses``) in a single response, reusing the per-resource serializers so the shapes are identical. Staff-token only. Internal-visibility notes ARE included (this is the staff CRM surface). Defaults to ``scope=crm`` (only members carrying CRM signal); pass ``scope=all`` for the full user table. Ordered by ``User.id``; ``count`` is the page size, ``total`` the full match before slicing.",
+        "description": "Returns the complete per-user CRM aggregate (core user state, ``crm_record``, ``notes``, nested ``plans``, sprint and course enrollments, and ``onboarding_responses``) in a single response, reusing the per-resource serializers so the shapes are identical. Staff-token only. Internal-visibility notes ARE included (this is the staff CRM surface). Defaults to ``scope=crm`` (only members carrying CRM signal); pass ``scope=all`` for the full user table. Ordered by ``User.id``; ``count`` is the page size, ``total`` the full match before slicing. Operator automation that needs one user should pass ``email=`` for an exact, case-insensitive lookup; this constrains the queryset before aggregate serialization instead of scanning a broad export. When ``email`` and ``q`` are both supplied, ``email`` wins.",
         "parameters": [
           {
             "in": "query",
@@ -1272,7 +1272,16 @@
             "name": "q",
             "required": false,
             "schema": {
-              "description": "Substring search across email / name / Stripe id / Slack id / tags (same semantics as ``GET /api/users``).",
+              "description": "Substring search across email / name / Stripe id / Slack id / tags (same semantics as ``GET /api/users``). Ignored when ``email`` is supplied.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "email",
+            "required": false,
+            "schema": {
+              "description": "Exact case-insensitive user email lookup for fast targeted CRM automation. Surrounding whitespace is trimmed. Unknown users return 404 ``user_not_found``. Use this instead of broad ``scope=all`` exports when fetching one user.",
               "type": "string"
             }
           }
@@ -1326,6 +1335,17 @@
               }
             },
             "description": "The per-user CRM aggregate page."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "``email`` was supplied but no exact user exists."
           },
           "422": {
             "content": {

@@ -49,12 +49,24 @@ def _ensure_tiers():
             "slug": "free",
             "name": "Free",
             "level": 0,
+            "price_eur_month": None,
+            "price_eur_year": None,
+            "description": (
+                "Subscribe to the newsletter and access open content. "
+                "No payment required."
+            ),
             "features": ["Newsletter emails", "Access to open content"],
         },
         {
             "slug": "basic",
             "name": "Basic",
             "level": 10,
+            "price_eur_month": 20,
+            "price_eur_year": 200,
+            "description": (
+                "Access curated educational content, tutorials, and research. "
+                "Perfect for self-directed builders who learn at their own pace."
+            ),
             "features": [
                 "Exclusive articles",
                 "Tutorials with code examples",
@@ -67,6 +79,12 @@ def _ensure_tiers():
             "slug": "main",
             "name": "Main",
             "level": 20,
+            "price_eur_month": 50,
+            "price_eur_year": 500,
+            "description": (
+                "Everything in Basic, plus the structure, accountability, "
+                "and peer support to ship your AI projects consistently."
+            ),
             "features": [
                 "Everything in Basic",
                 "Slack community access",
@@ -82,6 +100,12 @@ def _ensure_tiers():
             "slug": "premium",
             "name": "Premium",
             "level": 30,
+            "price_eur_month": 100,
+            "price_eur_year": 1000,
+            "description": (
+                "Everything in Main, plus structured learning paths through "
+                "mini-courses and personalized career guidance."
+            ),
             "features": [
                 "Everything in Main",
                 "All mini-courses",
@@ -91,11 +115,10 @@ def _ensure_tiers():
         },
     ]
     for tier_data in TIERS:
-
-        Tier.objects.get_or_create(
+        Tier.objects.update_or_create(
             slug=tier_data["slug"], defaults=tier_data
         )
-        connection.close()
+    connection.close()
 
 
 def _create_user(email, tier_slug="free", password=DEFAULT_PASSWORD):

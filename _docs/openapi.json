@@ -8911,6 +8911,172 @@
         ]
       }
     },
+    "/api/users/payment-mismatches": {
+      "get": {
+        "description": "Staff-token queue of Stripe checkout identity conflicts. Filters are optional and can be combined. This endpoint is diagnostic only and never merges accounts.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "open",
+                "resolved",
+                "ignored"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "email",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stripe_customer_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stripe_session_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "payment_mismatches": [
+                    {
+                      "candidate_user": {
+                        "email": "billing@example.com",
+                        "id": 8
+                      },
+                      "id": 42,
+                      "paid_user": {
+                        "email": "member@example.com",
+                        "id": 7
+                      },
+                      "reason": "primary_email_collision",
+                      "status": "open",
+                      "stripe_customer_id": "cus_123",
+                      "stripe_email": "billing@example.com",
+                      "stripe_session_id": "cs_123",
+                      "stripe_subscription_id": "sub_123"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Payment mismatch rows."
+          }
+        },
+        "summary": "List payment account mismatches",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users/payment-mismatches/{mismatch_id}": {
+      "patch": {
+        "description": "Non-destructive status update for a payment mismatch. Requires ``status`` of ``resolved`` or ``ignored`` and a non-empty ``resolution_note``. It never merges accounts.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mismatch_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "resolution_note": "Merged through safe merge preview.",
+                "status": "resolved"
+              },
+              "schema": {
+                "properties": {
+                  "resolution_note": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "resolved",
+                      "ignored"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "resolution_note"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": 42,
+                  "resolution_note": "Merged through safe merge preview.",
+                  "status": "resolved"
+                }
+              }
+            },
+            "description": "Updated mismatch row."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "not_found",
+                  "error": "Payment mismatch not found"
+                }
+              }
+            },
+            "description": "Mismatch not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "field": "resolution_note"
+                  },
+                  "error": "resolution_note is required"
+                }
+              }
+            },
+            "description": "Invalid status, unknown field, or empty note."
+          }
+        },
+        "summary": "Mark payment mismatch resolved or ignored",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
     "/api/users/{email}": {
       "get": {
         "parameters": [

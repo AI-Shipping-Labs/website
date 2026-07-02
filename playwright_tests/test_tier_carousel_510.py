@@ -12,6 +12,7 @@ import pytest
 from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
+    SETTLE_TIMEOUT_MS,
     auth_context,
     create_user,
     ensure_site_config_tiers,
@@ -170,6 +171,50 @@ def _assert_no_body_overflow(page):
         "() => document.documentElement.scrollWidth - document.documentElement.clientWidth"
     )
     assert overflow <= 1, f"body horizontally overflows by {overflow}px"
+
+
+def _carousel_centering_metrics(page, selector):
+    return page.evaluate(
+        """sel => {
+            const el = document.querySelector(sel);
+            if (!el) return null;
+            const main = el.querySelector('[data-tier-card="main"]');
+            if (!main) return null;
+            const er = el.getBoundingClientRect();
+            const mr = main.getBoundingClientRect();
+            return {
+                scrollLeft: el.scrollLeft,
+                scrollWidth: el.scrollWidth,
+                clientWidth: el.clientWidth,
+                delta: Math.abs(
+                    (mr.left + mr.width / 2) - (er.left + er.width / 2)
+                ),
+            };
+        }""",
+        selector,
+    )
+
+
+def _wait_for_recommended_tier_centered(page, selector, max_delta):
+    page.wait_for_function(
+        """({selector, maxDelta}) => {
+            const el = document.querySelector(selector);
+            if (!el) return false;
+            const main = el.querySelector('[data-tier-card="main"]');
+            if (!main) return false;
+            if (el.scrollWidth <= el.clientWidth || el.scrollLeft <= 0) {
+                return false;
+            }
+            const er = el.getBoundingClientRect();
+            const mr = main.getBoundingClientRect();
+            const delta = Math.abs(
+                (mr.left + mr.width / 2) - (er.left + er.width / 2)
+            );
+            return delta < maxDelta;
+        }""",
+        arg={"selector": selector, "maxDelta": max_delta},
+        timeout=SETTLE_TIMEOUT_MS,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -552,17 +597,13 @@ def test_main_auto_centered_on_mobile_load(django_server, page):
         ("/pricing", '[data-testid="pricing-tier-carousel"]'),
     ):
         page.goto(f"{django_server}{path}", wait_until="networkidle")
-        page.wait_for_timeout(400)
-        scroll_left = page.evaluate(
-            """sel => {
-                const c = document.querySelector(sel);
-                return c ? c.scrollLeft : 0;
-            }""",
-            selector,
-        )
-        assert scroll_left > 0, (
+        max_delta = 60
+        _wait_for_recommended_tier_centered(page, selector, max_delta)
+        metrics = _carousel_centering_metrics(page, selector)
+        assert metrics is not None, f"Tier carousel not found on {path}"
+        assert metrics["scrollLeft"] > 0, (
             f"Recommended-tier auto-centering must set scrollLeft > 0 on "
-            f"{path}, got {scroll_left}"
+            f"{path}, got {metrics['scrollLeft']}"
         )
 
         # And Main is roughly centered. Allow up to 60px slack — the centering
@@ -571,19 +612,7 @@ def test_main_auto_centered_on_mobile_load(django_server, page):
         # left-padding mean exact midline alignment can vary by tens of pixels.
         # The user-perceived test is "Main is the prominent card on screen" —
         # 60px on a 393px-wide viewport is still well within the centered band.
-        delta = page.evaluate(
-            """sel => {
-                const el = document.querySelector(sel);
-                const main = el.querySelector('[data-tier-card="main"]');
-                const er = el.getBoundingClientRect();
-                const mr = main.getBoundingClientRect();
-                return Math.abs(
-                    (mr.left + mr.width / 2) - (er.left + er.width / 2)
-                );
-            }""",
-            selector,
-        )
-        assert delta < 60, (
+        assert metrics["delta"] < max_delta, (
             f"Main not centered on {path}, delta from carousel midline = "
-            f"{delta}px"
+            f"{metrics['delta']}px"
         )

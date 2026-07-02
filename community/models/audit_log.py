@@ -47,6 +47,8 @@ class CommunityAuditLog(models.Model):
         # no-op attempts STILL write a row (the operator decision is logged).
         ("email_alias_added", "API: email alias added"),
         ("email_alias_removed", "API: email alias removed"),
+        ("payment_mismatch_recorded", "Payment mismatch recorded"),
+        ("payment_mismatch_updated", "Payment mismatch updated"),
         # Account merge via ``POST /api/users/merge`` (issue #841). One row per
         # real (non-dry-run) merge. The ``user`` FK is the SURVIVING canonical
         # account; ``details`` is a JSON summary of moved rows / reconciled

@@ -74,6 +74,10 @@ from api.views.onboarding import (
     onboarding_response_detail,
     onboarding_responses_collection,
 )
+from api.views.payment_mismatches import (
+    payment_mismatch_detail,
+    payment_mismatches_collection,
+)
 from api.views.plan_items import (
     deliverable_detail,
     next_step_detail,
@@ -619,6 +623,16 @@ urlpatterns = [
         "users/merge",
         merge_users,
         name="api_user_merge",
+    ),
+    path(
+        "users/payment-mismatches",
+        payment_mismatches_collection,
+        name="api_payment_mismatches_collection",
+    ),
+    path(
+        "users/payment-mismatches/<int:mismatch_id>",
+        payment_mismatch_detail,
+        name="api_payment_mismatch_detail",
     ),
     path(
         "users",

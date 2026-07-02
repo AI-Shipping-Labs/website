@@ -366,6 +366,13 @@ double-rendering. See issue #347.
                 <span>Merge accounts</span>
               </a>
             </li>
+            <li>
+              <a href="{% url 'studio_payment_mismatch_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/users/payment-mismatches' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="triangle-alert" class="w-4 h-4"></i>
+                <span>Payment mismatches</span>
+              </a>
+            </li>
             {% if request.user.is_superuser %}
             <li>
               <a href="{% url 'studio_user_create' %}"

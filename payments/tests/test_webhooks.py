@@ -21,9 +21,15 @@ from unittest.mock import MagicMock, patch
 from django.core import mail
 from django.test import TestCase, override_settings, tag
 
-from accounts.models import User
+from accounts.models import EmailAlias, User
+from community.models import CommunityAuditLog
 from payments.exceptions import WebhookPermanentError
-from payments.models import ConversionAttribution, Tier, WebhookEvent
+from payments.models import (
+    ConversionAttribution,
+    PaymentAccountMismatch,
+    Tier,
+    WebhookEvent,
+)
 from payments.services import (
     handle_checkout_completed,
     handle_invoice_payment_failed,
@@ -436,6 +442,145 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
 
         user.refresh_from_db()
         self.assertEqual(user.tier.slug, "basic")
+
+    def test_client_reference_fulfills_user_and_adds_unclaimed_stripe_alias(self):
+        """Differing unclaimed Stripe email becomes an alias on referenced user."""
+        user = User.objects.create_user(email="member@test.com")
+
+        session_data = {
+            "id": "cs_alias_1105",
+            "customer": "cus_alias_1105",
+            "customer_details": {"email": "Billing+Stripe@Test.com"},
+            "subscription": "sub_alias_1105",
+            "client_reference_id": str(user.pk),
+            "metadata": {"tier_slug": "premium"},
+        }
+
+        handle_checkout_completed(session_data)
+        handle_checkout_completed(session_data)
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "premium")
+        self.assertEqual(user.stripe_customer_id, "cus_alias_1105")
+        self.assertFalse(
+            User.objects.filter(email__iexact="billing+stripe@test.com")
+            .exclude(pk=user.pk)
+            .exists()
+        )
+        alias = EmailAlias.objects.get(email="billing+stripe@test.com")
+        self.assertEqual(alias.user, user)
+        self.assertEqual(alias.source, EmailAlias.SOURCE_STRIPE_RELAY)
+        self.assertIn("cs_alias_1105", alias.note)
+        self.assertEqual(
+            EmailAlias.objects.filter(email="billing+stripe@test.com").count(),
+            1,
+        )
+        self.assertEqual(
+            CommunityAuditLog.objects.filter(
+                user=user,
+                action="email_alias_added",
+                details__contains="cs_alias_1105",
+            ).count(),
+            1,
+        )
+        self.assertFalse(PaymentAccountMismatch.objects.exists())
+
+    def test_client_reference_primary_email_collision_records_mismatch(self):
+        paid_user = User.objects.create_user(email="member-collision@test.com")
+        candidate = User.objects.create_user(email="billing-collision@test.com")
+
+        session_data = {
+            "id": "cs_primary_collision_1105",
+            "customer": "cus_primary_collision",
+            "customer_details": {"email": candidate.email},
+            "subscription": "sub_primary_collision",
+            "client_reference_id": str(paid_user.pk),
+            "metadata": {"tier_slug": "main"},
+        }
+
+        handle_checkout_completed(session_data)
+        handle_checkout_completed(session_data)
+
+        paid_user.refresh_from_db()
+        candidate.refresh_from_db()
+        self.assertEqual(paid_user.tier.slug, "main")
+        self.assertEqual(paid_user.subscription_id, "sub_primary_collision")
+        self.assertEqual(candidate.tier.slug, "free")
+        self.assertFalse(EmailAlias.objects.filter(email=candidate.email).exists())
+        mismatch = PaymentAccountMismatch.objects.get(
+            stripe_session_id="cs_primary_collision_1105"
+        )
+        self.assertEqual(mismatch.status, PaymentAccountMismatch.STATUS_OPEN)
+        self.assertEqual(mismatch.reason, PaymentAccountMismatch.REASON_PRIMARY_EMAIL_COLLISION)
+        self.assertEqual(mismatch.paid_user, paid_user)
+        self.assertEqual(mismatch.candidate_user, candidate)
+        self.assertEqual(mismatch.stripe_email, candidate.email)
+        self.assertEqual(
+            PaymentAccountMismatch.objects.filter(
+                stripe_session_id="cs_primary_collision_1105"
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            CommunityAuditLog.objects.filter(
+                user=paid_user,
+                action="payment_mismatch_recorded",
+            ).count(),
+            1,
+        )
+
+    def test_client_reference_alias_collision_records_mismatch(self):
+        paid_user = User.objects.create_user(email="member-alias@test.com")
+        candidate = User.objects.create_user(email="candidate-alias@test.com")
+        EmailAlias.objects.create(
+            user=candidate,
+            email="relay-alias@test.com",
+            source=EmailAlias.SOURCE_MANUAL,
+        )
+
+        session_data = {
+            "id": "cs_alias_collision_1105",
+            "customer": "cus_alias_collision",
+            "customer_details": {"email": "relay-alias@test.com"},
+            "subscription": "sub_alias_collision",
+            "client_reference_id": str(paid_user.pk),
+            "metadata": {"tier_slug": "basic"},
+        }
+
+        handle_checkout_completed(session_data)
+
+        paid_user.refresh_from_db()
+        candidate.refresh_from_db()
+        self.assertEqual(paid_user.tier.slug, "basic")
+        self.assertEqual(candidate.tier.slug, "free")
+        alias = EmailAlias.objects.get(email="relay-alias@test.com")
+        self.assertEqual(alias.user, candidate)
+        mismatch = PaymentAccountMismatch.objects.get(
+            stripe_session_id="cs_alias_collision_1105"
+        )
+        self.assertEqual(mismatch.reason, PaymentAccountMismatch.REASON_ALIAS_COLLISION)
+        self.assertEqual(mismatch.paid_user, paid_user)
+        self.assertEqual(mismatch.candidate_user, candidate)
+
+    def test_invalid_client_reference_preserves_email_fallback(self):
+        """Stale client_reference_id does not block existing email resolution."""
+        user = User.objects.create_user(email="fallback-invalid-ref@test.com")
+
+        session_data = {
+            "id": "cs_invalid_ref_1105",
+            "customer": "cus_invalid_ref",
+            "customer_details": {"email": user.email},
+            "subscription": "sub_invalid_ref",
+            "client_reference_id": "999999",
+            "metadata": {"tier_slug": "basic"},
+        }
+
+        handle_checkout_completed(session_data)
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "basic")
+        self.assertEqual(user.stripe_customer_id, "cus_invalid_ref")
+        self.assertFalse(PaymentAccountMismatch.objects.exists())
 
     def test_creates_user_if_not_found(self):
         """A new user is created if no user matches the email."""

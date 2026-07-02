@@ -11,9 +11,9 @@ Covers:
 - Custom URL displayed on public event detail page via existing join link logic
 """
 
-from datetime import datetime, timedelta
-from datetime import timezone as dt_timezone
+from datetime import timedelta
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
@@ -94,7 +94,7 @@ class StudioEventEditPlatformTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     def _zoom_event(self, **overrides):
-        start = datetime(2026, 7, 1, 15, 0, tzinfo=dt_timezone.utc)
+        start = timezone.now() + timedelta(days=30)
         defaults = {
             'title': 'Zoom Sync',
             'slug': 'zoom-sync',
@@ -110,13 +110,16 @@ class StudioEventEditPlatformTest(TestCase):
         return Event.objects.create(**defaults)
 
     def _post_edit(self, event, *, follow=False, **overrides):
+        local_start = event.start_datetime.astimezone(
+            ZoneInfo(event.timezone or 'UTC'),
+        )
         data = {
             'title': event.title,
             'slug': event.slug,
             'description': event.description,
             'platform': event.platform,
-            'event_date': '01/07/2026',
-            'event_time': '17:00',
+            'event_date': local_start.strftime('%d/%m/%Y'),
+            'event_time': local_start.strftime('%H:%M'),
             'duration_hours': '1',
             'timezone': event.timezone,
             'status': event.status,
@@ -254,6 +257,7 @@ class StudioEventEditPlatformTest(TestCase):
 
     def test_edit_cancel_future_zoom_event_deletes_and_clears_fields(self):
         event = self._zoom_event(slug='zoom-cancel-sync')
+        self.assertGreater(event.start_datetime, timezone.now())
 
         with patch('events.services.zoom_lifecycle.delete_meeting') as delete_zoom:
             response = self._post_edit(event, status='cancelled')

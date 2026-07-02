@@ -84,6 +84,7 @@
       <span class="text-muted-foreground">Linked workshop:</span>
       <a href="{{ event.workshop.get_absolute_url }}" class="text-accent hover:underline ml-1">{{ event.workshop.title }}</a>
       <a href="{{ event.workshop.get_studio_edit_url }}" class="text-muted-foreground hover:text-foreground hover:underline ml-2">(edit in Studio)</a>
+      <a href="#workshop-ready-panel" class="text-muted-foreground hover:text-foreground hover:underline ml-2">notify registrants</a>
     </div>
     {% endif %}
 
@@ -520,6 +521,32 @@
   {% if event.status != 'draft' %}
   {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True notify_button_label="Notify eligible members in app" notify_sending_label="Creating..." notify_status_mode="in_app_eligible_members" %}
   {% endif %}
+
+  <div class="bg-card border border-border rounded-lg p-4" id="workshop-ready-panel" data-testid="workshop-ready-panel">
+    <h2 class="text-sm font-medium text-foreground mb-3">Workshop-ready broadcast</h2>
+    {% if workshop_ready_available %}
+      <form method="post" action="{{ notify_workshop_ready_url }}">
+        {% csrf_token %}
+        <button type="submit"
+                data-testid="notify-workshop-ready-button"
+                class="w-full bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-colors">
+          Notify registrants: workshop ready
+        </button>
+      </form>
+      <p class="text-xs text-muted-foreground mt-2">
+        Emails event registrants plus the host and creates in-app notifications for platform users. Re-runs skip recipients who already received this event-level workshop-ready broadcast.
+      </p>
+    {% else %}
+      <button type="button" disabled
+              data-testid="notify-workshop-ready-button-disabled"
+              class="w-full bg-secondary border border-border text-muted-foreground px-4 py-2 rounded-lg text-sm font-medium cursor-not-allowed opacity-60">
+        Notify registrants: workshop ready
+      </button>
+      <p class="text-xs text-muted-foreground mt-2" data-testid="workshop-ready-disabled-reason">
+        {{ workshop_ready_unavailable_reason|default:"A linked published workshop is required before notifying registrants." }}
+      </p>
+    {% endif %}
+  </div>
 
   {% comment %}
     Issue #680 / #713: manual "Send follow-up now" trigger. The button

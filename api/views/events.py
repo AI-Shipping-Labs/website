@@ -48,6 +48,10 @@ from events.services.calendar_lifecycle import (
 )
 from events.services.display_time import resolve_event_creation_timezone
 from events.services.host_registration import maybe_register_host_as_attendee
+from events.services.workshop_ready_notification import (
+    WorkshopReadyNotReady,
+    notify_workshop_ready,
+)
 from events.services.zoom_lifecycle import sync_or_delete_zoom_meeting
 from integrations.services.banner_generator import (
     is_enabled as banner_generator_is_enabled,
@@ -1198,3 +1202,87 @@ def event_regenerate_banner(request, slug):
         },
         status=202,
     )
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Events",
+    summary="Notify event registrants that the linked workshop is ready",
+    methods={
+        "POST": {
+            "summary": "Send workshop-ready broadcast",
+            "description": (
+                "Sends the event-level workshop-ready transactional email to "
+                "active event registrants plus host recipients, creates in-app "
+                "notifications for platform users, and skips recipients already "
+                "sent via the per-recipient idempotency key. The event must have "
+                "a linked published workshop."
+            ),
+            "responses": {
+                200: {
+                    "description": "Broadcast attempted.",
+                    "example": {
+                        "event": {
+                            "id": 42,
+                            "slug": "ai-agents-live",
+                            "title": "AI Agents Live",
+                        },
+                        "workshop": {
+                            "id": 9,
+                            "slug": "ai-agents",
+                            "title": "AI Agents",
+                            "url": "/workshops/ai-agents",
+                        },
+                        "emailed": 3,
+                        "notified": 2,
+                        "already_sent": 1,
+                        "failed": 0,
+                        "results": [],
+                    },
+                },
+                401: {
+                    "description": "Missing or invalid staff token.",
+                    "example": {
+                        "error": "Authentication required",
+                        "code": "authentication_required",
+                    },
+                },
+                404: {
+                    "description": "Event not found.",
+                    "example": {
+                        "error": "Event not found",
+                        "code": "unknown_event",
+                    },
+                },
+                422: {
+                    "description": "The event has no linked published workshop.",
+                    "example": {
+                        "error": "A linked published workshop is required.",
+                        "code": "workshop_not_ready",
+                    },
+                },
+            },
+        },
+    },
+)
+def event_notify_workshop_ready(request, slug):
+    """POST ``/api/events/<slug>/notify-workshop-ready``."""
+    event = Event.objects.filter(slug=slug).first()
+    if event is None:
+        return error_response(
+            "Event not found",
+            "unknown_event",
+            status=404,
+        )
+
+    try:
+        result = notify_workshop_ready(event)
+    except WorkshopReadyNotReady as exc:
+        return error_response(
+            str(exc),
+            "workshop_not_ready",
+            status=422,
+        )
+    return JsonResponse(result, status=200)

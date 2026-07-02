@@ -154,6 +154,9 @@
         <a href="{% url 'studio_event_edit' event_id=workshop.event_id %}"
            data-testid="edit-event-link"
            class="text-sm text-accent hover:underline">Edit event in Studio &rarr;</a>
+        <a href="{% url 'studio_event_edit' event_id=workshop.event_id %}#workshop-ready-panel"
+           data-testid="workshop-ready-event-workflow-link"
+           class="ml-4 text-sm text-accent hover:underline">Notify event registrants that the workshop is ready &rarr;</a>
       </div>
     </dl>
     {% else %}

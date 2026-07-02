@@ -56,6 +56,7 @@ from api.views.event_series import (
 )
 from api.views.events import (
     event_detail,
+    event_notify_workshop_ready,
     event_regenerate_banner,
     events_collection,
 )
@@ -217,6 +218,11 @@ urlpatterns = [
         "events/<slug:slug>/regenerate-banner",
         event_regenerate_banner,
         name="api_event_regenerate_banner",
+    ),
+    path(
+        "events/<slug:slug>/notify-workshop-ready",
+        event_notify_workshop_ready,
+        name="api_event_notify_workshop_ready",
     ),
     path(
         "events/<slug:slug>",

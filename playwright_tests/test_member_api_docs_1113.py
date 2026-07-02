@@ -55,10 +55,15 @@ class TestMemberApiDocs:
         page.goto(f"{django_server}/member-api/docs", wait_until="domcontentloaded")
 
         expect(page.locator('[data-testid="member-api-docs"]')).to_be_visible()
+        expect(page.locator('[data-testid="member-api-usage-guide-link"]')).to_have_attribute(
+            "href",
+            "https://github.com/AI-Shipping-Labs/website/blob/main/docs/member-api/plans.md",
+        )
         spec_response = context.request.get(f"{django_server}/member-api/openapi.json")
         assert spec_response.status == 200
         spec = spec_response.json()
         assert spec["info"]["title"] == "AI Shipping Labs Member API"
+        assert spec["externalDocs"]["url"].endswith("docs/member-api/plans.md")
         assert "/member-api/v1/plans" in spec["paths"]
         assert all(path.startswith("/member-api/v1/") for path in spec["paths"])
         assert not any(path.startswith("/api/") for path in spec["paths"])

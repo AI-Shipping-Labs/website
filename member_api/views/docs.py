@@ -10,11 +10,20 @@ from django.views.decorators.http import require_GET
 
 from accounts.auth import member_api_key_required
 
+MEMBER_API_USAGE_GUIDE_URL = (
+    "https://github.com/AI-Shipping-Labs/website/blob/main/"
+    "docs/member-api/plans.md"
+)
+
 
 @require_GET
 @login_required
 def docs_page(request):
-    return render(request, "member_api/docs.html")
+    return render(
+        request,
+        "member_api/docs.html",
+        {"member_api_usage_guide_url": MEMBER_API_USAGE_GUIDE_URL},
+    )
 
 
 @require_GET

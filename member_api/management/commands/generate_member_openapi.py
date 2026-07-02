@@ -11,6 +11,10 @@ from django.core.management.base import BaseCommand
 from api.openapi.builder import build_spec
 
 DEFAULT_OUTPUT_PATH = Path("_docs") / "member-openapi.json"
+MEMBER_API_USAGE_GUIDE_URL = (
+    "https://github.com/AI-Shipping-Labs/website/blob/main/"
+    "docs/member-api/plans.md"
+)
 
 MEMBER_API_DESCRIPTION = (
     "Member API for AI Shipping Labs. All endpoints accept JSON in and "
@@ -49,6 +53,10 @@ class Command(BaseCommand):
             description=MEMBER_API_DESCRIPTION,
             token_description=MEMBER_TOKEN_DESCRIPTION,
         )
+        document["externalDocs"] = {
+            "description": "Member Plans API usage guide",
+            "url": MEMBER_API_USAGE_GUIDE_URL,
+        }
         generated_bytes = self._serialize(document)
         output_path = Path(settings.BASE_DIR) / DEFAULT_OUTPUT_PATH
 

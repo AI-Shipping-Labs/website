@@ -104,8 +104,16 @@ class MemberOpenApiViewTest(TestCase):
 
         self.assertEqual(docs.status_code, 200)
         self.assertContains(docs, "/member-api/openapi.json")
+        self.assertContains(docs, "API usage guide")
+        self.assertContains(docs, "docs/member-api/plans.md")
         self.assertEqual(spec.status_code, 200)
-        self.assertEqual(spec.json()["info"]["title"], "AI Shipping Labs Member API")
+        document = spec.json()
+        self.assertEqual(document["info"]["title"], "AI Shipping Labs Member API")
+        self.assertEqual(
+            document["externalDocs"]["url"],
+            "https://github.com/AI-Shipping-Labs/website/blob/main/"
+            "docs/member-api/plans.md",
+        )
 
     def test_member_key_gets_spec_but_operator_token_does_not(self):
         member_response = self.client.get(

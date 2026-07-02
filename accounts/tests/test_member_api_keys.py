@@ -72,7 +72,10 @@ class MemberAPIKeyAccountViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="member-api-keys-section"')
         self.assertContains(response, 'data-testid="member-api-keys-empty"')
-        self.assertContains(response, "/member-api/docs")
+        self.assertContains(response, "API usage guide")
+        self.assertContains(response, "Download agent skill")
+        self.assertContains(response, "docs/member-api/plans.md")
+        self.assertContains(response, "skills/ai-shipping-labs-plans-api")
 
     def test_newsletter_only_account_does_not_show_api_keys(self):
         user = User.objects.create_user(

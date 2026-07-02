@@ -10,10 +10,31 @@
   >
   <style>
     body { margin: 0; }
+    .member-api-links {
+      align-items: center;
+      border-bottom: 1px solid #e5e7eb;
+      box-sizing: border-box;
+      display: flex;
+      font-family: sans-serif;
+      gap: 16px;
+      justify-content: space-between;
+      padding: 12px 24px;
+    }
+    .member-api-links a {
+      color: #2563eb;
+      font-size: 14px;
+      text-decoration: none;
+    }
+    .member-api-links a:hover { text-decoration: underline; }
+    .member-api-links span { color: #374151; font-size: 14px; }
     #swagger-ui { box-sizing: border-box; }
   </style>
 </head>
 <body>
+  <div class="member-api-links" data-testid="member-api-docs-links">
+    <span>Member Plans API</span>
+    <a href="{{ member_api_usage_guide_url }}" data-testid="member-api-usage-guide-link">API usage guide</a>
+  </div>
   <div id="swagger-ui" data-testid="member-api-docs"></div>
   <script
     src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"

@@ -27,6 +27,14 @@ class TestMemberAPIKeysAccountUI:
         page.goto(f"{django_server}/account/#api-keys", wait_until="domcontentloaded")
         expect(page.locator('[data-testid="member-api-keys-section"]')).to_be_visible()
         expect(page.locator('[data-testid="member-api-keys-empty"]')).to_be_visible()
+        expect(page.locator('[data-testid="member-api-usage-guide-link"]')).to_have_attribute(
+            "href",
+            "https://github.com/AI-Shipping-Labs/website/blob/main/docs/member-api/plans.md",
+        )
+        expect(page.locator('[data-testid="member-api-skill-link"]')).to_have_attribute(
+            "href",
+            "https://github.com/AI-Shipping-Labs/website/tree/main/skills/ai-shipping-labs-plans-api",
+        )
 
         page.locator('[data-testid="member-api-key-name-input"]').fill("local codex")
         page.locator('[data-testid="member-api-key-create-submit"]').click()

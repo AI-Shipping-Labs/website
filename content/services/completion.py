@@ -68,19 +68,10 @@ def mark_completed(user, item, *, when=None):
     when = when or timezone.now()
 
     if isinstance(item, Unit):
-        progress, created = UserCourseProgress.objects.get_or_create(
+        progress, _created = UserCourseProgress.objects.get_or_create(
             user=user, unit=item,
             defaults={'completed_at': when},
         )
-        if created:
-            # Brand-new row created above with the supplied timestamp;
-            # nothing more to do.
-            pass
-        elif progress.completed_at is None:
-            # Row existed (legacy code path) but was not yet marked
-            # completed — fill it in.
-            progress.completed_at = when
-            progress.save(update_fields=['completed_at'])
         # Auto-enroll regardless of whether the row was just created or
         # already existed — ensure_enrollment is itself idempotent.
         auto_enroll_on_progress(user, item.module.course)

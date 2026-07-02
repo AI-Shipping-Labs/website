@@ -32,6 +32,10 @@
       }
     }
   },
+  "externalDocs": {
+    "description": "Member Plans API usage guide",
+    "url": "https://github.com/AI-Shipping-Labs/website/blob/main/docs/member-api/plans.md"
+  },
   "info": {
     "description": "Member API for AI Shipping Labs. All endpoints accept JSON in and return JSON out. Authentication is via the ``Authorization: Token <key>`` header where ``<key>`` is a member-owned API key starting with ``asl_member_``. Member keys are scoped to the owner's data; plan endpoints only return or update plans owned by that key owner.",
     "title": "AI Shipping Labs Member API",

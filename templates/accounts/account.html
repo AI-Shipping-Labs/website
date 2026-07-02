@@ -227,12 +227,20 @@
               Create scoped member keys for plan tools. Keys cannot be used for Studio or staff API access.
             </p>
           </div>
-          <a href="{{ member_api_docs_url }}"
-             class="inline-flex items-center gap-2 text-sm text-accent hover:underline"
-             data-testid="member-api-docs-link">
-            <i data-lucide="book-open" class="h-4 w-4"></i>
-            API usage docs
-          </a>
+          <div class="flex flex-wrap gap-3">
+            <a href="{{ member_api_usage_guide_url }}"
+               class="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+               data-testid="member-api-usage-guide-link">
+              <i data-lucide="book-open" class="h-4 w-4"></i>
+              API usage guide
+            </a>
+            <a href="{{ member_api_skill_url }}"
+               class="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+               data-testid="member-api-skill-link">
+              <i data-lucide="download" class="h-4 w-4"></i>
+              Download agent skill
+            </a>
+          </div>
         </div>
 
         {% if created_member_api_key %}
@@ -342,7 +350,7 @@
         </div>
         {% else %}
         <div class="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground" data-testid="member-api-keys-empty">
-          No API keys exist yet. Read the <a href="{{ member_api_docs_url }}" class="text-accent hover:underline">member API usage docs</a>, then create a key when you are ready to connect a local tool.
+          No API keys exist yet. Read the <a href="{{ member_api_usage_guide_url }}" class="text-accent hover:underline">API usage guide</a>, then create a key when you are ready to connect a local tool.
         </div>
         {% endif %}
       </div>

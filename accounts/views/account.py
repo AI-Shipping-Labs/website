@@ -257,6 +257,14 @@ def _render_account_page(
         "member_api_key_name_error": member_api_key_name_error,
         "member_api_key_form_name": member_api_key_form_name,
         "member_api_docs_url": "/member-api/docs",
+        "member_api_usage_guide_url": (
+            "https://github.com/AI-Shipping-Labs/website/blob/main/"
+            "docs/member-api/plans.md"
+        ),
+        "member_api_skill_url": (
+            "https://github.com/AI-Shipping-Labs/website/tree/main/"
+            "skills/ai-shipping-labs-plans-api"
+        ),
     }
 
     # Issue #581: the Sprint plan card was removed from /account/. The

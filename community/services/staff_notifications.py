@@ -4,8 +4,7 @@ Replaces Valeriia's hand-written "welcome + intro" email and the implicit
 internal heads-up with a single orchestrating helper:
 
 - (A) Personalised co-founder welcome to the new paid user, addressed
-  To the member only. Staff visibility is handled by the separate
-  structured internal heads-up email and Slack post.
+  To the member with the staff mailbox hidden on BCC when configured.
 - (B) Structured internal heads-up to staff via email and Slack.
 
 The three sends are independent: a failure on one path NEVER blocks
@@ -64,7 +63,8 @@ def notify_paid_signup(
 
     Three independent best-effort sends:
 
-    1. Co-founder welcome email to ``user.email`` only.
+    1. Co-founder welcome email to ``user.email`` with a hidden staff
+       BCC when ``STAFF_SIGNUP_NOTIFY_EMAIL`` is set.
     2. Internal heads-up email to ``STAFF_SIGNUP_NOTIFY_EMAIL`` when set.
     3. Slack post to ``STAFF_SIGNUP_NOTIFY_CHANNEL_ID`` when set AND
        ``SLACK_ENABLED`` is true AND ``SLACK_BOT_TOKEN`` is configured.
@@ -125,11 +125,15 @@ def notify_paid_signup(
     )
 
     # (A) Co-founder welcome to the user. Independent try/except.
-    # Staff visibility uses the separate internal email/Slack paths below,
-    # so the member-facing welcome has no staff CC/BCC.
+    # Staff gets a hidden copy of the exact member-facing welcome, while
+    # replies continue through the single SES_WELCOME_REPLY_TO_EMAIL path.
     try:
         _send_cofounder_welcome(
-            user, tier, ctx, is_returning=is_returning,
+            user,
+            tier,
+            ctx,
+            is_returning=is_returning,
+            bcc=staff_email or None,
         )
     except Exception:
         # Broad catch by design: any failure inside EmailService /
@@ -660,13 +664,14 @@ def _welcome_template_for_tier(tier):
     return "cofounder_welcome"
 
 
-def _send_cofounder_welcome(user, tier, ctx, *, is_returning=False):
+def _send_cofounder_welcome(user, tier, ctx, *, is_returning=False, bcc=None):
     """Send (A) — the welcome to the paid user.
 
     The template is selected by the purchased tier so each paid tier gets
     exactly its own email (Basic / Main / Premium). The member-facing
-    welcome is addressed only to the member; staff visibility comes from
-    the separate structured internal heads-up email and Slack post. The
+    welcome is addressed visibly only to the member; when configured, staff
+    gets one hidden BCC copy of that exact welcome. The separate structured
+    internal heads-up email and Slack post still run independently. The
     EmailLog write is unchanged.
 
     Issue #976: when ``is_returning`` is ``True`` (a churned member is
@@ -685,7 +690,7 @@ def _send_cofounder_welcome(user, tier, ctx, *, is_returning=False):
         "user_first_name": ctx["first_name_raw"],
         "current_sprint_status_paragraph": _current_sprint_paragraph(),
     }
-    EmailService().send(user, template_slug, welcome_ctx)
+    EmailService().send(user, template_slug, welcome_ctx, bcc=bcc)
 
 
 def _send_staff_signup_notification(staff_email, ctx):

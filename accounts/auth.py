@@ -13,7 +13,7 @@ from django.contrib.auth.decorators import user_passes_test
 from django.http import HttpResponseForbidden, JsonResponse
 from django.utils import timezone
 
-from accounts.models import Token
+from accounts.models import MemberAPIKey, Token
 from accounts.utils.user_checks import is_authenticated_user, is_staff_user
 
 
@@ -158,3 +158,41 @@ def staff_session_or_token_required(view_func):
         return _session_view(request, *args, **kwargs)
 
     return wrapper
+
+
+def member_api_key_required(*required_scopes):
+    """Require a valid ``Authorization: Token <key>`` member API key.
+
+    This helper intentionally does not consult ``accounts.Token``. Staff
+    operator tokens therefore cannot authenticate against member API routes,
+    and member keys cannot authenticate against the existing staff ``/api/``
+    routes because those keep using ``token_required``.
+    """
+
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            header = request.headers.get("Authorization", "")
+            parts = header.split(" ", 1)
+            if len(parts) != 2 or parts[0] != "Token" or not parts[1].strip():
+                return JsonResponse(
+                    {"error": "Member API key required"},
+                    status=401,
+                )
+
+            member_key = MemberAPIKey.authenticate(
+                parts[1].strip(),
+                required_scopes=required_scopes,
+            )
+            if member_key is None:
+                return JsonResponse({"error": "Invalid member API key"}, status=401)
+
+            member_key.mark_used(request)
+            request.user = member_key.user
+            request.member_api_key = member_key
+            request.member_api_scopes = set(member_key.scopes or [])
+            return view_func(request, *args, **kwargs)
+
+        return wrapper
+
+    return decorator

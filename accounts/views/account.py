@@ -8,11 +8,18 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.http import HttpResponsePermanentRedirect, JsonResponse
-from django.shortcuts import redirect, render
+from django.http import (
+    HttpResponseForbidden,
+    HttpResponsePermanentRedirect,
+    JsonResponse,
+)
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
+
+from accounts.gating import is_newsletter_only_user
+from accounts.models import MemberAPIKey
 
 # Issue #448: per-user resend throttle for the account verification banner.
 RESEND_VERIFICATION_THROTTLE_SECONDS = 60
@@ -85,6 +92,9 @@ def _suppress_steady_state_plan_state(state, *, is_pending_cancellation):
 def _render_account_page(
     request,
     *,
+    created_member_api_key="",
+    member_api_key_name_error="",
+    member_api_key_form_name="",
     profile_error="",
     profile_form_first_name=None,
     profile_form_last_name=None,
@@ -242,6 +252,11 @@ def _render_account_page(
         "slack_join_url": slack_join_url,
         "slack_user_id": slack_user_id,
         "slack_profile_url": slack_profile_url,
+        "member_api_keys": MemberAPIKey.objects.filter(user=user),
+        "created_member_api_key": created_member_api_key,
+        "member_api_key_name_error": member_api_key_name_error,
+        "member_api_key_form_name": member_api_key_form_name,
+        "member_api_docs_url": "/member-api/docs",
     }
 
     # Issue #581: the Sprint plan card was removed from /account/. The
@@ -255,6 +270,57 @@ def _render_account_page(
 def account_view(request):
     """Render the account page showing tier, billing info, and actions."""
     return _render_account_page(request)
+
+
+@login_required
+@require_POST
+def member_api_key_create_view(request):
+    """Create a member-owned API key and show the plaintext value once."""
+    if is_newsletter_only_user(request.user):
+        return HttpResponseForbidden("API keys are not available for this account.")
+
+    name = (request.POST.get("name") or "").strip()
+    if not name:
+        return _render_account_page(
+            request,
+            member_api_key_name_error="Name is required.",
+            status=400,
+        )
+    if len(name) > 100:
+        return _render_account_page(
+            request,
+            member_api_key_name_error="Name must be 100 characters or fewer.",
+            member_api_key_form_name=name,
+            status=400,
+        )
+
+    _, plaintext_key = MemberAPIKey.create_for_user(
+        user=request.user,
+        name=name,
+    )
+    messages.success(request, "Member API key created.")
+    return _render_account_page(
+        request,
+        created_member_api_key=plaintext_key,
+        status=201,
+    )
+
+
+@login_required
+@require_POST
+def member_api_key_revoke_view(request, key_id):
+    """Soft-revoke one of the signed-in member's own API keys."""
+    if is_newsletter_only_user(request.user):
+        return HttpResponseForbidden("API keys are not available for this account.")
+
+    member_key = get_object_or_404(
+        MemberAPIKey,
+        pk=key_id,
+        user=request.user,
+    )
+    member_key.revoke()
+    messages.success(request, "Member API key revoked.")
+    return redirect("/account/#api-keys")
 
 
 @login_required

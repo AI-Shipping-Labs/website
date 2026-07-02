@@ -4,6 +4,8 @@ from accounts.views.account import (
     account_profile_post_view,
     account_view,
     email_preferences_view,
+    member_api_key_create_view,
+    member_api_key_revoke_view,
     resend_verification_view,
     theme_preference_view,
     timezone_preference_view,
@@ -101,6 +103,16 @@ onboarding_urlpatterns = [
 account_urlpatterns = [
     path('', account_view, name='account'),
     path('profile', account_profile_post_view, name='account_profile'),
+    path(
+        'api/member-api-keys',
+        member_api_key_create_view,
+        name='member_api_key_create',
+    ),
+    path(
+        'api/member-api-keys/<int:key_id>/revoke',
+        member_api_key_revoke_view,
+        name='member_api_key_revoke',
+    ),
     path('api/email-preferences', email_preferences_view, name='email_preferences'),
     path('api/timezone-preference', timezone_preference_view, name='timezone_preference'),
     path('api/change-password', change_password_api, name='account_change_password'),

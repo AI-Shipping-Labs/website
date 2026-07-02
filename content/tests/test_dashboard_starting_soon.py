@@ -158,17 +158,13 @@ class StartingSoonExcludedStatusesTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(user=self.user, event=event)
         self.assertIsNone(_get_starting_soon_event(self.user))
 
-    def test_legacy_completed_in_window_still_shows(self):
-        # Issue #713: a legacy ``status='completed'`` row scheduled
-        # for the future surfaces the card; time wins.
+    def test_completed_event_in_window_excluded(self):
         event = _make_event(
-            'legacy-completed', timezone.now() + timedelta(minutes=5),
+            'completed', timezone.now() + timedelta(minutes=5),
             status='completed',
         )
         EventRegistration.objects.create(user=self.user, event=event)
-        result = _get_starting_soon_event(self.user)
-        self.assertIsNotNone(result)
-        self.assertEqual(result['event'].pk, event.pk)
+        self.assertIsNone(_get_starting_soon_event(self.user))
 
     def test_draft_event_in_window_excluded(self):
         event = _make_event(

@@ -614,10 +614,8 @@ class EventJoinTimeWindowTest(TierSetupMixin, TestCase):
     def test_cancelled_event_still_unavailable_inside_window(self):
         """``status='cancelled'`` overrides the time-window logic.
 
-        Issue #713: legacy ``status='completed'`` alone is no longer
-        enough — past detection is time-driven. Cancellation still
-        wins over time so the join redirect still bails on a cancelled
-        event whose start window is open.
+        Cancellation still wins over time so the join redirect bails on a
+        cancelled event whose start window is open.
         """
         _move_event_to(
             self.event,

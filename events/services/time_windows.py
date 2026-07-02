@@ -56,7 +56,7 @@ def upcoming_events_queryset(queryset=None, *, now=None, public=True):
     queryset = queryset if queryset is not None else Event.objects.all()
     if public:
         queryset = public_events_queryset(queryset)
-    return queryset.filter(upcoming_window_q(now))
+    return queryset.filter(status='upcoming').filter(upcoming_window_q(now))
 
 
 def past_events_queryset(queryset=None, *, now=None, public=True):
@@ -99,6 +99,7 @@ def registered_upcoming_events(user, *, now=None, limit=3):
         EventRegistration.objects
         .filter(
             user=user,
+            event__status='upcoming',
             event__start_datetime__gt=now,
         )
         .filter(upcoming_window_q(now, field_prefix='event__'))

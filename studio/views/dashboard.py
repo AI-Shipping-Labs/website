@@ -11,6 +11,7 @@ from accounts.models import ImportBatch
 from content.models import Article, Course, Download, Project
 from email_app.models import EmailCampaign
 from events.models import Event
+from events.services.time_windows import upcoming_events_queryset
 from integrations.models import ContentSource
 from plans.models import Plan, Sprint
 from studio.decorators import staff_required
@@ -41,9 +42,7 @@ def _attention_item(label, count, url, icon, tone='warning', description=''):
 
 def _upcoming_event_queryset(now):
     """Events that count as upcoming for Studio dashboard summary surfaces."""
-    return Event.objects.filter(
-        start_datetime__gte=now,
-    ).exclude(status__in=['draft', 'cancelled'])
+    return upcoming_events_queryset(now=now)
 
 
 def _missing_zoom_join_url_count(now):
@@ -74,10 +73,6 @@ def dashboard(request):
         'published_articles': Article.objects.filter(published=True).count(),
         'active_subscribers': User.objects.filter(unsubscribed=False).count(),
         'total_subscribers': User.objects.count(),
-        # Issue #713: drop the stored ``status='upcoming'`` clause so a
-        # legacy ``status='completed'`` row scheduled in the future
-        # still counts. Exclude draft + cancelled — those should never
-        # appear in the upcoming bucket regardless of timestamps.
         'upcoming_events': _upcoming_event_queryset(now).count(),
         'total_events': Event.objects.count(),
         'total_recordings': Event.objects.filter(
@@ -113,8 +108,6 @@ def dashboard(request):
     pending_projects = Project.objects.filter(
         status='pending_review',
     ).order_by('-created_at')[:5]
-    # Issue #713: same translation as the ``stats['upcoming_events']``
-    # count above — time-driven, exclude draft + cancelled.
     upcoming_events = _upcoming_event_queryset(now).order_by('start_datetime')[:5]
     recent_users = User.objects.filter(is_staff=False).order_by('-date_joined')[:5]
     recent_articles = Article.objects.order_by('-updated_at')[:5]

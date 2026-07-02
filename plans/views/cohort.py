@@ -22,6 +22,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.http import (
     Http404,
+    HttpResponse,
     HttpResponseBadRequest,
     HttpResponseForbidden,
     HttpResponsePermanentRedirect,
@@ -34,6 +35,10 @@ from django.views.decorators.http import require_POST
 
 from plans.cohort_rows import build_progress_rows
 from plans.comments_permissions import composer_state_for_owner_view
+from plans.markdown_export import (
+    markdown_filename_for_plan,
+    render_plan_markdown_export,
+)
 from plans.models import (
     PLAN_VISIBILITY_CHOICES,
     Plan,
@@ -289,6 +294,20 @@ def my_plan_detail(request, sprint_slug, plan_id):
             'carry_over_unfinished_count': carry_over_unfinished_count,
         },
     )
+
+
+@login_required
+def my_plan_markdown_download(request, sprint_slug, plan_id):
+    """Owner-scoped Markdown attachment for a member's sprint plan."""
+    plan = _owner_plan_or_404(plan_id, sprint_slug, request.user)
+    response = HttpResponse(
+        render_plan_markdown_export(plan),
+        content_type='text/markdown; charset=utf-8',
+    )
+    response['Content-Disposition'] = (
+        f'attachment; filename="{markdown_filename_for_plan(plan)}"'
+    )
+    return response
 
 
 @login_required

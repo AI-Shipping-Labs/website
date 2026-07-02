@@ -13,6 +13,7 @@ from plans.views.cohort import (
     member_plan_detail,
     my_plan_detail,
     my_plan_edit_redirect,
+    my_plan_markdown_download,
     update_plan_goal,
     update_plan_visibility,
 )
@@ -87,6 +88,11 @@ urlpatterns = [
         'sprints/<slug:sprint_slug>/plan/<int:plan_id>',
         my_plan_detail,
         name='my_plan_detail',
+    ),
+    path(
+        'sprints/<slug:sprint_slug>/plan/<int:plan_id>/download.md',
+        my_plan_markdown_download,
+        name='my_plan_markdown_download',
     ),
     # Issue #583: the unified workspace at my_plan_detail handles both
     # view and inline edit, so the dedicated /edit URL now permanently

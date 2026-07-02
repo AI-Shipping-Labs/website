@@ -89,6 +89,59 @@ def _seed_plan_with_two_checkpoints(member_email, sprint=None):
     return plan_pk
 
 
+def _seed_markdown_download_plan(member_email):
+    from accounts.models import User
+    from plans.models import (
+        Checkpoint,
+        Deliverable,
+        InterviewNote,
+        NextStep,
+        Plan,
+        Resource,
+        Sprint,
+        Week,
+        WeekNote,
+    )
+
+    sprint = Sprint.objects.create(
+        name="Download Sprint",
+        slug="download-sprint",
+        start_date=datetime.date(2026, 5, 1),
+        duration_weeks=4)
+    member = User.objects.get(email=member_email)
+    plan = Plan.objects.create(
+        member=member,
+        sprint=sprint,
+        title="Portable download plan",
+        goal="Ship the markdown export",
+        summary_goal="Save a portable copy",
+        focus_main="Export useful content",
+        accountability="Review it weekly")
+    week = Week.objects.create(
+        plan=plan, week_number=1, theme="Export", position=0)
+    Checkpoint.objects.create(
+        week=week, description="Completed checkpoint",
+        done_at=datetime.datetime(2026, 5, 2, 12, tzinfo=datetime.UTC),
+        position=0)
+    Checkpoint.objects.create(
+        week=week, description="Open checkpoint", position=1)
+    WeekNote.objects.create(
+        week=week, author=member, body="Member-authored week note")
+    Resource.objects.create(
+        plan=plan, title="Export docs",
+        url="https://example.com/export", note="Read before shipping")
+    Deliverable.objects.create(
+        plan=plan, description="Downloadable file",
+        done_at=datetime.datetime(2026, 5, 3, 12, tzinfo=datetime.UTC))
+    NextStep.objects.create(plan=plan, description="Share with mentor")
+    InterviewNote.objects.create(
+        member=member, plan=plan, visibility="internal",
+        body="INTERNAL_PLAYWRIGHT_NOTE")
+    result = {"plan_id": plan.pk, "sprint_slug": sprint.slug}
+    connection.close()
+    return result
+
+
 @pytest.mark.django_db(transaction=True)
 class TestMemberOpensOwnPlan:
     """Member opens their own plan and the workspace renders fully."""
@@ -113,6 +166,50 @@ class TestMemberOpensOwnPlan:
         page.locator('[data-testid="plan-weeks"]').wait_for(state="visible")
         page.locator('[data-testid="plan-checkpoint"]').first.wait_for(
             state="visible")
+
+        context.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestMemberDownloadsMarkdownPlan:
+    @pytest.mark.core
+    def test_member_downloads_portable_markdown_file(
+        self, django_server, browser):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_user(
+            "member-download@test.com",
+            tier_slug="free",
+            email_verified=True,
+            first_name="Maya")
+        data = _seed_markdown_download_plan("member-download@test.com")
+
+        context = _auth_context(browser, "member-download@test.com")
+        page = context.new_page()
+
+        page.goto(
+            (
+                f"{django_server}/sprints/{data['sprint_slug']}"
+                f"/plan/{data['plan_id']}"
+            ),
+            wait_until="domcontentloaded")
+        button = page.get_by_role("link", name="Download Markdown")
+        button.wait_for(state="visible")
+
+        with page.expect_download() as download_info:
+            button.click()
+        download = download_info.value
+        assert download.suggested_filename == (
+            f"sprint-plan-download-sprint-{data['plan_id']}.md"
+        )
+        with open(download.path(), encoding="utf-8") as f:
+            markdown = f.read()
+
+        assert "# Portable download plan" in markdown
+        assert "- [x] Completed checkpoint" in markdown
+        assert "- [ ] Open checkpoint" in markdown
+        assert "Member-authored week note" in markdown
+        assert "INTERNAL_PLAYWRIGHT_NOTE" not in markdown
 
         context.close()
 

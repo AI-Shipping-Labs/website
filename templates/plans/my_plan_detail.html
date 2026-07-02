@@ -49,6 +49,10 @@
             <i data-lucide="users" class="h-4 w-4"></i>
             Cohort board
           </a>
+          <a href="{% url 'my_plan_markdown_download' sprint_slug=sprint.slug plan_id=plan.pk %}" class="{% button_classes 'secondary' %}" data-testid="download-plan-markdown">
+            <i data-lucide="download" class="h-4 w-4"></i>
+            Download Markdown
+          </a>
         </nav>
       </header>
 

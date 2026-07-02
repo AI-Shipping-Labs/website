@@ -26,7 +26,11 @@ from urllib.parse import urlencode
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.db.models import Q
-from django.http import HttpResponsePermanentRedirect, HttpResponseRedirect
+from django.http import (
+    HttpResponse,
+    HttpResponsePermanentRedirect,
+    HttpResponseRedirect,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.html import format_html
@@ -35,6 +39,10 @@ from django.views.decorators.http import require_POST
 from crm.services.member_profile import build_member_profile_context
 from crm.services.slack_updates import threads_for_plan
 from notifications.services.notification_service import NotificationService
+from plans.markdown_export import (
+    markdown_filename_for_plan,
+    render_plan_markdown_export,
+)
 from plans.models import (
     InterviewNote,
     NextSprintPlanDraft,
@@ -350,6 +358,31 @@ def plan_detail(request, plan_id):
         # Read-only #plan-sprints Slack ingest linked to this plan (#889).
         'slack_threads': threads_for_plan(plan),
     })
+
+
+@staff_required
+def plan_markdown_download(request, plan_id):
+    """Staff-only Markdown attachment using the member-safe exporter."""
+    plan = get_object_or_404(
+        Plan.objects
+        .select_related('member', 'sprint')
+        .prefetch_related(
+            'weeks__checkpoints',
+            'weeks__notes__author',
+            'resources',
+            'deliverables',
+            'next_steps',
+        ),
+        pk=plan_id,
+    )
+    response = HttpResponse(
+        render_plan_markdown_export(plan),
+        content_type='text/markdown; charset=utf-8',
+    )
+    response['Content-Disposition'] = (
+        f'attachment; filename="{markdown_filename_for_plan(plan)}"'
+    )
+    return response
 
 
 @staff_required

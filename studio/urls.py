@@ -172,6 +172,7 @@ from studio.views.plans import (
     plan_draft_next_sprint_dismiss,
     plan_edit,
     plan_list,
+    plan_markdown_download,
     plan_move_unfinished,
     plan_share,
     plan_view_as_member,
@@ -982,6 +983,11 @@ urlpatterns = [
     path('plans/', plan_list, name='studio_plan_list'),
     path('plans/new', plan_create, name='studio_plan_create'),
     path('plans/<int:plan_id>/', plan_detail, name='studio_plan_detail'),
+    path(
+        'plans/<int:plan_id>/download.md',
+        plan_markdown_download,
+        name='studio_plan_markdown_download',
+    ),
     path(
         'plans/<int:plan_id>/view-as-member/',
         plan_view_as_member,

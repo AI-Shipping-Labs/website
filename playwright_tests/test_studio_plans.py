@@ -54,6 +54,67 @@ def _clear_plans_data():
     connection.close()
 
 
+def _seed_studio_markdown_download_plan(member_email):
+    import datetime
+
+    from accounts.models import User
+    from plans.models import (
+        Checkpoint,
+        InterviewNote,
+        Plan,
+        Resource,
+        Sprint,
+        Week,
+        WeekNote,
+    )
+
+    member = User.objects.get(email=member_email)
+    sprint = Sprint.objects.create(
+        name="Studio Download Sprint",
+        slug="studio-download-sprint",
+        start_date=datetime.date(2026, 5, 1),
+        duration_weeks=4,
+    )
+    plan = Plan.objects.create(
+        member=member,
+        sprint=sprint,
+        title="Studio portable plan",
+        goal="Download from Studio",
+        summary_goal="Confirm staff uses safe Markdown",
+        focus_main="Keep internal notes out",
+    )
+    week = Week.objects.create(
+        plan=plan,
+        week_number=1,
+        theme="Studio export",
+        position=0,
+    )
+    Checkpoint.objects.create(
+        week=week,
+        description="Studio checkpoint",
+        position=0,
+    )
+    WeekNote.objects.create(
+        week=week,
+        author=member,
+        body="Studio-visible participant note",
+    )
+    Resource.objects.create(
+        plan=plan,
+        title="Studio docs",
+        url="https://example.com/studio",
+    )
+    InterviewNote.objects.create(
+        member=member,
+        plan=plan,
+        visibility="internal",
+        body="STUDIO_INTERNAL_PLAYWRIGHT_NOTE",
+    )
+    plan_pk = plan.pk
+    connection.close()
+    return plan_pk
+
+
 @pytest.mark.django_db(transaction=True)
 class TestViewAsMemberReturnToPlan:
     """Staff returns from impersonated plan view to the same plan URL."""
@@ -118,6 +179,50 @@ class TestViewAsMemberReturnToPlan:
         page.locator('[data-testid="studio-plan-view-as-member"]').wait_for(
             state="visible",
         )
+
+        context.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStudioDownloadsMarkdownPlan:
+    @pytest.mark.core
+    def test_staff_downloads_member_safe_markdown(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user(
+            "member-download@test.com",
+            tier_slug="free",
+            email_verified=True,
+        )
+        plan_pk = _seed_studio_markdown_download_plan(
+            "member-download@test.com",
+        )
+
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+
+        page.goto(
+            f"{django_server}/studio/plans/{plan_pk}/",
+            wait_until="domcontentloaded",
+        )
+        button = page.get_by_role("link", name="Download Markdown")
+        button.wait_for(state="visible")
+
+        with page.expect_download() as download_info:
+            button.click()
+        download = download_info.value
+        assert download.suggested_filename == (
+            f"sprint-plan-studio-download-sprint-{plan_pk}.md"
+        )
+        with open(download.path(), encoding="utf-8") as f:
+            markdown = f.read()
+
+        assert "# Studio portable plan" in markdown
+        assert "Studio-visible participant note" in markdown
+        assert "STUDIO_INTERNAL_PLAYWRIGHT_NOTE" not in markdown
 
         context.close()
 

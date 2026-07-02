@@ -602,6 +602,40 @@ class WorkshopSyncMissingRequiredFieldTest(_WorkshopSyncFixtureBase):
             f'Expected a "content_id"-related error, got: {sync_log.errors}',
         )
 
+    def test_missing_content_id_does_not_update_existing_same_slug_workshop(self):
+        folder = '2026/2026-04-21-demo'
+        existing_content_id = '11111111-1111-1111-1111-111111111111'
+        existing = Workshop.objects.create(
+            slug='demo',
+            title='Existing Workshop',
+            date='2026-04-21',
+            status='published',
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=10,
+            source_repo=self.source.repo_name,
+            source_path=folder,
+            content_id=existing_content_id,
+        )
+        self._write(
+            f'{folder}/workshop.yaml',
+            'slug: demo\n'
+            'title: Incoming Without Content ID\n'
+            'date: 2026-04-21\n'
+            'pages_required_level: 10\n',
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(Workshop.objects.count(), 1)
+        existing.refresh_from_db()
+        self.assertEqual(existing.title, 'Existing Workshop')
+        self.assertEqual(str(existing.content_id), existing_content_id)
+        self.assertTrue(
+            any('content_id' in err.get('error', '') for err in sync_log.errors),
+            f'Expected a "content_id"-related error, got: {sync_log.errors}',
+        )
+
     def test_missing_pages_required_level_logged(self):
         folder = '2026/2026-04-21-demo'
         self._write(
@@ -640,6 +674,80 @@ class WorkshopSyncMissingRequiredFieldTest(_WorkshopSyncFixtureBase):
         self.assertEqual(Workshop.objects.get().slug, 'good')
         # The bad one produced an error entry.
         self.assertGreater(len(sync_log.errors), 0)
+
+
+class WorkshopSyncContentIdIdentityTest(_WorkshopSyncFixtureBase):
+    """Workshop row identity comes only from ``content_id``."""
+
+    def test_changed_slug_with_same_content_id_updates_existing_workshop(self):
+        original_folder = '2026/2026-04-21-demo'
+        renamed_folder = '2026/2026-04-21-renamed-demo'
+        content_id = SAMPLE_WORKSHOP_UUID
+
+        self._write_workshop_yaml(
+            folder=original_folder, content_id=content_id,
+            slug='demo', title='Demo Workshop',
+        )
+        self._write_page(original_folder, '01-overview.md', title='Overview')
+        first_log = sync_repo(self.source, self.repo)
+        self.assertEqual(first_log.errors, [])
+
+        workshop = Workshop.objects.get(slug='demo')
+        workshop_pk = workshop.pk
+
+        shutil.move(
+            os.path.join(self.temp_dir, original_folder),
+            os.path.join(self.temp_dir, renamed_folder),
+        )
+        self._write_workshop_yaml(
+            folder=renamed_folder, content_id=content_id,
+            slug='renamed-demo', title='Renamed Demo Workshop',
+        )
+
+        second_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(second_log.errors, [])
+        self.assertEqual(Workshop.objects.count(), 1)
+        workshop.refresh_from_db()
+        self.assertEqual(workshop.pk, workshop_pk)
+        self.assertEqual(workshop.slug, 'renamed-demo')
+        self.assertEqual(workshop.title, 'Renamed Demo Workshop')
+        self.assertEqual(workshop.source_path, renamed_folder)
+        self.assertEqual(str(workshop.content_id), content_id)
+
+    def test_same_slug_with_different_content_id_does_not_slug_match(self):
+        folder = '2026/2026-04-21-demo'
+        original_content_id = '11111111-1111-1111-1111-111111111111'
+        incoming_content_id = '22222222-2222-2222-2222-222222222222'
+        existing = Workshop.objects.create(
+            slug='demo',
+            title='Existing Workshop',
+            date='2026-04-21',
+            status='published',
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=10,
+            source_repo=self.source.repo_name,
+            source_path=folder,
+            content_id=original_content_id,
+        )
+        self._write_workshop_yaml(
+            folder=folder, content_id=incoming_content_id,
+            slug='demo', title='Incoming Workshop',
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(Workshop.objects.count(), 1)
+        existing.refresh_from_db()
+        self.assertEqual(existing.title, 'Existing Workshop')
+        self.assertEqual(str(existing.content_id), original_content_id)
+        self.assertTrue(
+            any('Refusing to match by slug' in err.get('error', '')
+                for err in sync_log.errors),
+            f'Expected slug-match refusal error, got: {sync_log.errors}',
+        )
 
 
 class WorkshopSyncRecordingGateValidationTest(_WorkshopSyncFixtureBase):
@@ -781,6 +889,40 @@ class WorkshopSyncLandingGateValidationTest(_WorkshopSyncFixtureBase):
 
 class WorkshopSyncStaleCleanupTest(_WorkshopSyncFixtureBase):
     """Workshops whose source folder disappeared are marked draft."""
+
+    def test_stale_cleanup_only_marks_current_source_workshops(self):
+        Workshop.objects.create(
+            slug='owned-demo',
+            title='Owned Demo',
+            date='2026-04-21',
+            status='published',
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=10,
+            source_repo=self.source.repo_name,
+            source_path='2026/2026-04-21-owned-demo',
+            content_id='11111111-1111-1111-1111-111111111111',
+        )
+        Workshop.objects.create(
+            slug='other-demo',
+            title='Other Demo',
+            date='2026-04-22',
+            status='published',
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=10,
+            source_repo='AI-Shipping-Labs/other-workshops',
+            source_path='2026/2026-04-22-other-demo',
+            content_id='22222222-2222-2222-2222-222222222222',
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        self.assertEqual(Workshop.objects.get(slug='owned-demo').status, 'draft')
+        self.assertEqual(
+            Workshop.objects.get(slug='other-demo').status, 'published',
+        )
 
     def test_stale_workshop_set_to_draft(self):
         folder = '2026/2026-04-21-demo'

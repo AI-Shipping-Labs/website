@@ -411,6 +411,7 @@ def studio_sidebar_state(path):
     people_active = (
         p == '/studio/users/'
         or p == '/studio/users/export'
+        or '/studio/users/payment-mismatches' in p
         or '/studio/imports/' in p
         or 'tier-override' in p
         or 'tier_override' in p

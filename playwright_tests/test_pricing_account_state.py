@@ -122,17 +122,20 @@ def _tier_card(page, slug):
     return page.locator(f'[data-testid="pricing-tier-card"][data-tier-card="{slug}"]')
 
 
-def _assert_prefilled_payment_link(href, expected_base, email):
+def _assert_locked_payment_link(href, expected_base, *, email, user_id):
     assert href.startswith(expected_base)
     assert "/api/checkout/create" not in href
     parsed = urlparse(href)
-    assert parse_qs(parsed.query)["prefilled_email"] == [email]
+    query = parse_qs(parsed.query)
+    assert query["client_reference_id"] == [str(user_id)]
+    assert query["locked_prefilled_email"] == [email]
+    assert "prefilled_email" not in query
 
 
 @pytest.fixture
 def pricing_payment_link_user(django_server, django_db_blocker):
     with django_db_blocker.unblock():
-        _seed_pricing_user("pricing-free+links@test.com", "free")
+        return _seed_pricing_user("pricing-free+links@test.com", "free")
 
 
 @pytest.fixture
@@ -147,7 +150,7 @@ def paid_account_user(django_server, django_db_blocker):
 
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
-def test_signed_in_pricing_uses_payment_links_with_prefilled_email(
+def test_signed_in_pricing_uses_payment_links_with_locked_email_and_user_reference(
     django_server,
     browser,
     django_db_blocker,
@@ -165,19 +168,21 @@ def test_signed_in_pricing_uses_payment_links_with_prefilled_email(
         for tier_slug in ("basic", "main", "premium"):
             cta = _tier_card(page, tier_slug).locator(".tier-cta-link")
             assert cta.inner_text().strip() == "Upgrade"
-            _assert_prefilled_payment_link(
+            _assert_locked_payment_link(
                 cta.get_attribute("href"),
                 settings.STRIPE_PAYMENT_LINKS[tier_slug]["annual"],
-                email,
+                email=email,
+                user_id=pricing_payment_link_user.pk,
             )
 
         page.locator("#billing-toggle").click()
         for tier_slug in ("basic", "main", "premium"):
             cta = _tier_card(page, tier_slug).locator(".tier-cta-link")
-            _assert_prefilled_payment_link(
+            _assert_locked_payment_link(
                 cta.get_attribute("href"),
                 settings.STRIPE_PAYMENT_LINKS[tier_slug]["monthly"],
-                email,
+                email=email,
+                user_id=pricing_payment_link_user.pk,
             )
     finally:
         context.close()

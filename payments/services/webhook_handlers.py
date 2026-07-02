@@ -26,13 +26,13 @@ from smtplib import SMTPException
 import stripe
 from django.core.mail import BadHeaderError
 
-from accounts.models import User
-from accounts.services.email_resolution import resolve_user_by_email
+from accounts.models import EmailAlias, User
+from accounts.services.email_resolution import normalize_email, resolve_user_by_email
 from accounts.utils.names import set_name_from_external
 from community.models import CommunityAuditLog
 from payments import services as _services
 from payments.exceptions import WebhookPermanentError
-from payments.models import Tier
+from payments.models import PaymentAccountMismatch, Tier
 from payments.services.import_stripe import (
     CONFIGURATION_ERRORS,
     _price_to_tier_map,
@@ -66,8 +66,13 @@ def handle_checkout_completed(session_data):
     # Look up user: first by client_reference_id (user PK), then by email
     user = None
     was_new_user = False
+    user_resolved_by_client_reference = False
     if client_reference_id:
-        user = User.objects.filter(pk=client_reference_id).first()
+        user = User.objects.filter(
+            pk=client_reference_id,
+            is_active=True,
+        ).first()
+        user_resolved_by_client_reference = user is not None
     if user is None and customer_email:
         user = User.objects.filter(email=customer_email).first()
     if user is None and customer_email:
@@ -112,6 +117,13 @@ def handle_checkout_completed(session_data):
             session_data.get("id"),
         )
         return
+
+    if user_resolved_by_client_reference:
+        _reconcile_checkout_billing_email(
+            user=user,
+            customer_email=customer_email,
+            session_data=session_data,
+        )
 
     # Look up the purchased tier. Session-metadata ``tier_slug`` keeps
     # precedence (today's behaviour); the resolver below is a fallback
@@ -351,6 +363,146 @@ def handle_checkout_completed(session_data):
                 user.email,
                 session_id,
             )
+
+
+def _reconcile_checkout_billing_email(*, user, customer_email, session_data):
+    """Attach or flag a differing Stripe billing email for a client-ref checkout."""
+    normalized = normalize_email(customer_email)
+    user_email = normalize_email(user.email)
+    if not normalized or normalized == user_email:
+        return
+
+    session_id = session_data.get("id", "") or ""
+    customer_id = session_data.get("customer", "") or ""
+    subscription_id = session_data.get("subscription", "") or ""
+    details = {
+        "stripe_session_id": session_id,
+        "stripe_customer_id": customer_id,
+        "stripe_subscription_id": subscription_id,
+        "client_reference_id": session_data.get("client_reference_id") or "",
+        "paid_user_email": user.email,
+        "stripe_email": normalized,
+    }
+
+    primary_owner = User.objects.filter(
+        email__iexact=normalized,
+        is_active=True,
+    ).first()
+    if primary_owner is not None and primary_owner.pk != user.pk:
+        _record_payment_account_mismatch(
+            paid_user=user,
+            candidate_user=primary_owner,
+            stripe_email=normalized,
+            reason=PaymentAccountMismatch.REASON_PRIMARY_EMAIL_COLLISION,
+            details=details,
+        )
+        return
+
+    alias = EmailAlias.objects.select_related("user").filter(
+        email=normalized,
+    ).first()
+    if alias is not None:
+        if alias.user_id != user.pk:
+            _record_payment_account_mismatch(
+                paid_user=user,
+                candidate_user=alias.user,
+                stripe_email=normalized,
+                reason=PaymentAccountMismatch.REASON_ALIAS_COLLISION,
+                details=details,
+            )
+        return
+
+    note = (
+        "Added from Stripe checkout billing email; "
+        f"session={session_id}; customer={customer_id}; "
+        f"subscription={subscription_id}"
+    )
+    alias, created = EmailAlias.objects.get_or_create(
+        email=normalized,
+        defaults={
+            "user": user,
+            "source": EmailAlias.SOURCE_STRIPE_RELAY,
+            "note": note,
+            "created_by": None,
+        },
+    )
+    if not created:
+        return
+
+    CommunityAuditLog.objects.create(
+        user=user,
+        action="email_alias_added",
+        details=(
+            f"added alias {normalized!r} from Stripe checkout; "
+            f"session={session_id}; customer={customer_id}; "
+            f"subscription={subscription_id}; actor=system"
+        ),
+    )
+    _services.logger.info(
+        "checkout.session.completed: added Stripe billing alias email=%s "
+        "to user=%s session=%s",
+        normalized,
+        user.email,
+        session_id,
+    )
+
+
+def _record_payment_account_mismatch(
+    *,
+    paid_user,
+    candidate_user,
+    stripe_email,
+    reason,
+    details,
+):
+    session_id = details.get("stripe_session_id", "") or ""
+    if not session_id:
+        _services.logger.warning(
+            "checkout.session.completed: cannot record payment mismatch "
+            "without Stripe session id for paid_user=%s stripe_email=%s",
+            paid_user.email,
+            stripe_email,
+        )
+        return
+
+    defaults = {
+        "stripe_customer_id": details.get("stripe_customer_id", "") or "",
+        "stripe_subscription_id": details.get("stripe_subscription_id", "") or "",
+        "stripe_email": stripe_email,
+        "paid_user": paid_user,
+        "candidate_user": candidate_user,
+        "reason": reason,
+        "details": details,
+    }
+    mismatch, created = PaymentAccountMismatch.objects.update_or_create(
+        stripe_session_id=session_id,
+        defaults=defaults,
+    )
+    if created:
+        CommunityAuditLog.objects.create(
+            user=paid_user,
+            action="payment_mismatch_recorded",
+            details=json.dumps({
+                "stripe_session_id": session_id,
+                "stripe_email": stripe_email,
+                "reason": reason,
+                "candidate_user_id": candidate_user.pk if candidate_user else None,
+                "candidate_user_email": (
+                    candidate_user.email if candidate_user else ""
+                ),
+                "actor": "system",
+            }, sort_keys=True),
+        )
+    _services.logger.warning(
+        "checkout.session.completed: payment account mismatch %s "
+        "paid_user=%s candidate_user=%s stripe_email=%s reason=%s",
+        "created" if created else "updated",
+        paid_user.email,
+        candidate_user.email if candidate_user else "",
+        stripe_email,
+        reason,
+    )
+    return mismatch
 
 
 def _send_payment_notification_email(

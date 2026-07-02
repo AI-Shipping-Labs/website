@@ -1,0 +1,114 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Payment Mismatches{% endblock %}
+
+{% block studio_content %}
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Payment mismatches</h1>
+    <p class="text-muted-foreground mt-1 hidden md:block">Stripe checkout identity conflicts that need operator review.</p>
+  </div>
+  <a href="{% url 'studio_user_list' %}" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2">
+    <i data-lucide="users" class="h-4 w-4"></i>
+    <span>Users</span>
+  </a>
+</div>
+
+<div class="mb-6 flex flex-wrap items-center gap-2">
+  {% with chip_base="px-4 py-1.5 rounded-full text-sm border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
+  <a href="?status={{ status_open }}" class="{{ chip_base }} {% if active_status == status_open %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Open</a>
+  <a href="?status={{ status_resolved }}" class="{{ chip_base }} {% if active_status == status_resolved %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Resolved</a>
+  <a href="?status={{ status_ignored }}" class="{{ chip_base }} {% if active_status == status_ignored %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Ignored</a>
+  <a href="?status=all" class="{{ chip_base }} {% if active_status == 'all' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">All</a>
+  {% endwith %}
+</div>
+
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="payment-mismatch-list">
+  <table class="w-full table-fixed">
+    <colgroup>
+      <col class="w-[20%]">
+      <col class="w-[22%]">
+      <col class="w-[22%]">
+      <col class="w-[18%]">
+      <col class="w-[18%]">
+    </colgroup>
+    <thead class="border-b border-border">
+      <tr class="text-left text-xs uppercase tracking-wide text-muted-foreground">
+        <th class="px-4 py-3 font-medium">Stripe</th>
+        <th class="px-4 py-3 font-medium">Paid account</th>
+        <th class="px-4 py-3 font-medium">Candidate</th>
+        <th class="px-4 py-3 font-medium">Reason</th>
+        <th class="px-4 py-3 font-medium text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for row in rows %}
+      {% with mismatch=row.mismatch %}
+      <tr data-testid="payment-mismatch-row">
+        <td class="px-4 py-3 align-top" data-label="Stripe">
+          <div class="space-y-1 text-sm">
+            <p class="font-mono text-foreground break-all">{{ mismatch.stripe_session_id }}</p>
+            <p class="font-mono text-xs text-muted-foreground break-all">{{ mismatch.stripe_email }}</p>
+            <p class="text-xs text-muted-foreground">{{ mismatch.created_at|operator_datetime }} UTC</p>
+            {% if row.stripe_customer_url %}
+            <a href="{{ row.stripe_customer_url }}" target="_blank" rel="noopener" class="inline-flex text-xs text-accent hover:underline">Stripe customer</a>
+            {% elif mismatch.stripe_customer_id %}
+            <p class="font-mono text-xs text-muted-foreground break-all">{{ mismatch.stripe_customer_id }}</p>
+            {% endif %}
+          </div>
+        </td>
+        <td class="px-4 py-3 align-top" data-label="Paid account">
+          <a href="{% url 'studio_user_detail' row.paid_user.pk %}" class="text-sm text-accent hover:underline break-all">{{ row.paid_user.email }}</a>
+          <p class="text-xs text-muted-foreground mt-1">{{ row.paid_user.tier.name }}</p>
+        </td>
+        <td class="px-4 py-3 align-top" data-label="Candidate">
+          {% if row.candidate_user %}
+          <a href="{% url 'studio_user_detail' row.candidate_user.pk %}" class="text-sm text-accent hover:underline break-all">{{ row.candidate_user.email }}</a>
+          {% if row.merge_preview_url %}
+          <p class="mt-1">
+            <a href="{{ row.merge_preview_url }}" data-testid="payment-mismatch-merge-preview" class="text-xs text-accent hover:underline">Merge preview</a>
+          </p>
+          {% endif %}
+          {% else %}
+          <span class="text-sm text-muted-foreground">No candidate</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 align-top" data-label="Reason">
+          <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">{{ mismatch.reason }}</span>
+          <p class="text-xs text-muted-foreground mt-2">{{ mismatch.status }}</p>
+        </td>
+        <td class="px-4 py-3 align-top text-right studio-actions-cell" data-label="Actions">
+          {% if mismatch.status == status_open %}
+          <div class="space-y-2">
+            <form method="post" action="{% url 'studio_payment_mismatch_mark' mismatch.pk 'resolve' %}" class="space-y-2" data-testid="payment-mismatch-resolve-form">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <input type="text" name="resolution_note" placeholder="Resolution note" class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+              <button type="submit" class="w-full bg-accent text-accent-foreground px-3 py-2 rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">Mark resolved</button>
+            </form>
+            <form method="post" action="{% url 'studio_payment_mismatch_mark' mismatch.pk 'ignore' %}" class="space-y-2" data-testid="payment-mismatch-ignore-form">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <input type="text" name="resolution_note" placeholder="Ignore note" class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+              <button type="submit" class="w-full border border-border text-foreground px-3 py-2 rounded-lg text-xs font-medium hover:bg-secondary transition-colors">Ignore</button>
+            </form>
+          </div>
+          {% else %}
+          <p class="text-xs text-muted-foreground text-left">{{ mismatch.resolution_note }}</p>
+          {% if mismatch.resolved_by %}
+          <p class="text-xs text-muted-foreground text-left mt-1">by {{ mismatch.resolved_by.email }}</p>
+          {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endwith %}
+      {% empty %}
+      <tr>
+        <td colspan="5" class="px-4 py-10 text-center text-sm text-muted-foreground">No payment mismatches found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

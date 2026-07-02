@@ -54,6 +54,60 @@
   </a>
 </div>
 
+{% if open_payment_mismatches %}
+<section class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-5 mb-8 max-w-4xl"
+         data-testid="payment-mismatch-warning">
+  <div class="flex items-start gap-3">
+    <i data-lucide="triangle-alert" class="w-5 h-5 text-amber-300 mt-0.5"></i>
+    <div class="min-w-0 flex-1">
+      <h2 class="text-base font-semibold text-foreground">Open payment account mismatch</h2>
+      <p class="text-sm text-muted-foreground mt-1">
+        Review this before account consolidation. Preview the merge only when both accounts are the same person; add an alias only when the email is not an existing primary; do not force merge unrelated users.
+      </p>
+      <div class="mt-4 space-y-4">
+        {% for row in open_payment_mismatches %}
+        {% with mismatch=row.mismatch %}
+        <div class="border-t border-amber-500/20 pt-4 first:border-t-0 first:pt-0" data-testid="payment-mismatch-warning-card">
+          <div class="grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <p class="text-xs text-muted-foreground">Stripe email</p>
+              <p class="font-mono text-foreground break-all">{{ mismatch.stripe_email }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-muted-foreground">Reason</p>
+              <p class="text-foreground">{{ mismatch.reason }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-muted-foreground">Paid account</p>
+              <a href="{% url 'studio_user_detail' row.paid_user.pk %}" class="text-accent hover:underline break-all">{{ row.paid_user.email }}</a>
+            </div>
+            <div>
+              <p class="text-xs text-muted-foreground">Candidate</p>
+              {% if row.candidate_user %}
+              <a href="{% url 'studio_user_detail' row.candidate_user.pk %}" class="text-accent hover:underline break-all">{{ row.candidate_user.email }}</a>
+              {% else %}
+              <span class="text-muted-foreground">No candidate</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <a href="{% url 'studio_payment_mismatch_list' %}" class="inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary transition-colors">Queue</a>
+            {% if row.merge_preview_url %}
+            <a href="{{ row.merge_preview_url }}" class="inline-flex items-center rounded-lg bg-accent px-3 py-2 text-xs font-medium text-accent-foreground hover:opacity-90 transition-opacity">Merge preview</a>
+            {% endif %}
+            {% if row.stripe_customer_url %}
+            <a href="{{ row.stripe_customer_url }}" target="_blank" rel="noopener" class="inline-flex items-center rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary transition-colors">Stripe customer</a>
+            {% endif %}
+          </div>
+        </div>
+        {% endwith %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
 <!-- Profile / contact context -->
 <section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-detail-profile-section">
   <h2 class="text-lg font-semibold text-foreground mb-4">Profile</h2>

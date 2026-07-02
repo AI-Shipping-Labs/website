@@ -249,6 +249,8 @@ from studio.views.user_imports import (
     import_schedule_toggle,
 )
 from studio.views.users import (
+    payment_mismatch_list,
+    payment_mismatch_mark,
     user_create,
     user_create_done,
     user_detail,
@@ -685,6 +687,16 @@ urlpatterns = [
     # Users list + CSV export (issue #271)
     path('users/', user_list, name='studio_user_list'),
     path('users/export', user_export_csv, name='studio_user_export'),
+    path(
+        'users/payment-mismatches/',
+        payment_mismatch_list,
+        name='studio_payment_mismatch_list',
+    ),
+    path(
+        'users/payment-mismatches/<int:mismatch_id>/<str:action>',
+        payment_mismatch_mark,
+        name='studio_payment_mismatch_mark',
+    ),
 
     # External user-import pipeline (issue #317)
     path('imports/', import_batch_list, name='studio_import_batch_list'),

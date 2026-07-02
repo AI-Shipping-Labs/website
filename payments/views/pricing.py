@@ -29,9 +29,9 @@ def pricing(request):
     )
     active_override = get_active_override(user)
 
-    prefilled_email = ""
+    locked_prefilled_email = ""
     if user.is_authenticated:
-        prefilled_email = user.email
+        locked_prefilled_email = user.email
 
     tiers_data = []
     for tier in tiers:
@@ -39,8 +39,11 @@ def pricing(request):
         monthly_link = payment_links.get("monthly", "#")
         annual_link = payment_links.get("annual", "#")
 
-        if prefilled_email:
-            prefilled_query = urlencode({"prefilled_email": prefilled_email})
+        if locked_prefilled_email and tier.level > 0:
+            prefilled_query = urlencode({
+                "client_reference_id": str(user.pk),
+                "locked_prefilled_email": locked_prefilled_email,
+            })
             if monthly_link and monthly_link != "#":
                 sep = "&" if "?" in monthly_link else "?"
                 monthly_link = f"{monthly_link}{sep}{prefilled_query}"
@@ -59,7 +62,7 @@ def pricing(request):
         "tiers_data": tiers_data,
         "stripe_checkout_enabled": False,
         "is_paid_member": is_paid_member,
-        "prefilled_email": prefilled_email,
+        "prefilled_email": locked_prefilled_email,
         "stripe_customer_portal_url": get_config("STRIPE_CUSTOMER_PORTAL_URL", ""),
     }
     # Issue #652: anonymous visitors see the free-tier card render its

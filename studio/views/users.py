@@ -26,6 +26,7 @@ import csv
 import datetime
 import re
 import secrets
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -51,11 +52,12 @@ from accounts.utils.tags import (
 from accounts.utils.tags import (
     remove_tag as _remove_tag_from_user,
 )
+from community.models import CommunityAuditLog
 from community.services.slack_links import build_slack_profile_url
 from content.models import Enrollment, UserCourseProgress
 from crm.models import CRMRecord
 from integrations.config import get_config
-from payments.models import Tier
+from payments.models import PaymentAccountMismatch, Tier
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from studio.decorators import staff_required, superuser_required
 from studio.utils import coerce_page_number
@@ -1009,6 +1011,118 @@ def _build_activity_timeline(user):
     return build_activity_context(user, limit=USER_ACTIVITY_DISPLAY_LIMIT)
 
 
+def _payment_mismatch_queryset():
+    return (
+        PaymentAccountMismatch.objects
+        .select_related('paid_user', 'candidate_user', 'resolved_by')
+        .order_by('-created_at')
+    )
+
+
+def _stripe_dashboard_url(account_id, resource, object_id):
+    if not account_id or not object_id:
+        return ''
+    return f'https://dashboard.stripe.com/{account_id}/{resource}/{object_id}'
+
+
+def _payment_mismatch_rows(mismatches, stripe_account_id):
+    rows = []
+    for mismatch in mismatches:
+        candidate = mismatch.candidate_user
+        merge_preview_url = ''
+        if candidate is not None:
+            query = urlencode({
+                'canonical': mismatch.paid_user.email,
+                'secondary': candidate.email,
+            })
+            merge_preview_url = f"{reverse('studio_user_merge')}?{query}"
+        rows.append({
+            'mismatch': mismatch,
+            'paid_user': mismatch.paid_user,
+            'candidate_user': candidate,
+            'stripe_customer_url': _stripe_dashboard_url(
+                stripe_account_id,
+                'customers',
+                mismatch.stripe_customer_id,
+            ),
+            'stripe_subscription_url': _stripe_dashboard_url(
+                stripe_account_id,
+                'subscriptions',
+                mismatch.stripe_subscription_id,
+            ),
+            'merge_preview_url': merge_preview_url,
+        })
+    return rows
+
+
+@staff_required
+def payment_mismatch_list(request):
+    status = request.GET.get('status') or PaymentAccountMismatch.STATUS_OPEN
+    if status not in {
+        PaymentAccountMismatch.STATUS_OPEN,
+        PaymentAccountMismatch.STATUS_RESOLVED,
+        PaymentAccountMismatch.STATUS_IGNORED,
+        'all',
+    }:
+        status = PaymentAccountMismatch.STATUS_OPEN
+
+    qs = _payment_mismatch_queryset()
+    if status != 'all':
+        qs = qs.filter(status=status)
+
+    stripe_account_id = get_config('STRIPE_DASHBOARD_ACCOUNT_ID', '')
+    rows = _payment_mismatch_rows(qs[:100], stripe_account_id)
+    return render(request, 'studio/users/payment_mismatches.html', {
+        'rows': rows,
+        'active_status': status,
+        'status_open': PaymentAccountMismatch.STATUS_OPEN,
+        'status_resolved': PaymentAccountMismatch.STATUS_RESOLVED,
+        'status_ignored': PaymentAccountMismatch.STATUS_IGNORED,
+        'stripe_account_id': stripe_account_id,
+    })
+
+
+@staff_required
+@require_POST
+def payment_mismatch_mark(request, mismatch_id, action):
+    mismatch = get_object_or_404(
+        _payment_mismatch_queryset(),
+        pk=mismatch_id,
+    )
+    if action == 'resolve':
+        status = PaymentAccountMismatch.STATUS_RESOLVED
+    elif action == 'ignore':
+        status = PaymentAccountMismatch.STATUS_IGNORED
+    else:
+        messages.error(request, 'Unknown mismatch action.')
+        return redirect('studio_payment_mismatch_list')
+
+    note = (request.POST.get('resolution_note') or '').strip()
+    if not note:
+        messages.error(request, 'Resolution note is required.')
+        return redirect(request.POST.get('next') or 'studio_payment_mismatch_list')
+
+    mismatch.mark_terminal(status=status, note=note, actor=request.user)
+    mismatch.save(update_fields=[
+        'status',
+        'resolution_note',
+        'resolved_by',
+        'resolved_at',
+        'updated_at',
+    ])
+    CommunityAuditLog.objects.create(
+        user=mismatch.paid_user,
+        action='payment_mismatch_updated',
+        details=(
+            f"status={status}; mismatch_id={mismatch.pk}; "
+            f"stripe_session_id={mismatch.stripe_session_id}; "
+            f"actor={request.user.email}; note={note}"
+        ),
+    )
+    messages.success(request, f'Payment mismatch marked {status}.')
+    return redirect(request.POST.get('next') or 'studio_payment_mismatch_list')
+
+
 @staff_required
 def user_detail(request, user_id):
     """Staff-only user detail page focused on account-level data.
@@ -1023,6 +1137,12 @@ def user_detail(request, user_id):
     crm_record = CRMRecord.objects.filter(user=user).first()
     course_enrollments = _build_course_enrollments(user)
     activity_timeline = _build_activity_timeline(user)
+    open_payment_mismatches = list(
+        _payment_mismatch_queryset().filter(
+            Q(status=PaymentAccountMismatch.STATUS_OPEN),
+            Q(paid_user=user) | Q(candidate_user=user),
+        )
+    )
 
     # Inline tier-override block (issue #562). Reuses the same business
     # rules as the standalone /studio/users/tier-override/ page: only
@@ -1117,6 +1237,10 @@ def user_detail(request, user_id):
         'is_highest_tier': is_highest_tier,
         'override_duration_labels': [label for label, _ in DURATION_CHOICES],
         'tier_source': _tier_source(user, has_override),
+        'open_payment_mismatches': _payment_mismatch_rows(
+            open_payment_mismatches,
+            stripe_account_id,
+        ),
     }
     return render(request, 'studio/users/detail.html', context)
 

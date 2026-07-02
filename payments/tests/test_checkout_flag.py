@@ -66,6 +66,13 @@ class PricingPaymentLinksTest(TierSetupMixin, TestCase):
                 item = tiers_data[tier_slug]
                 self.assertEqual(item["payment_link_monthly"], links["monthly"])
                 self.assertEqual(item["payment_link_annual"], links["annual"])
+                for period in ("monthly", "annual"):
+                    query = parse_qs(
+                        urlparse(item[f"payment_link_{period}"]).query
+                    )
+                    self.assertNotIn("client_reference_id", query)
+                    self.assertNotIn("locked_prefilled_email", query)
+                    self.assertNotIn("prefilled_email", query)
                 self.assertContains(
                     response,
                     f'data-link-monthly="{links["monthly"]}"',
@@ -76,8 +83,8 @@ class PricingPaymentLinksTest(TierSetupMixin, TestCase):
                 )
                 self.assertContains(response, f'href="{links["annual"]}"')
 
-    def test_logged_in_user_gets_url_encoded_prefilled_email(self):
-        User.objects.create_user(
+    def test_logged_in_user_gets_client_reference_and_locked_email(self):
+        user = User.objects.create_user(
             email="prefill+stripe@test.com",
             password="testpass123",
         )
@@ -95,11 +102,16 @@ class PricingPaymentLinksTest(TierSetupMixin, TestCase):
                     link = item[f"payment_link_{period}"]
                     query = parse_qs(urlparse(link).query)
                     self.assertEqual(
-                        query["prefilled_email"],
+                        query["client_reference_id"],
+                        [str(user.pk)],
+                    )
+                    self.assertEqual(
+                        query["locked_prefilled_email"],
                         ["prefill+stripe@test.com"],
                     )
+                    self.assertNotIn("prefilled_email", query)
                     self.assertIn(
-                        "prefilled_email=prefill%2Bstripe%40test.com",
+                        "locked_prefilled_email=prefill%2Bstripe%40test.com",
                         link,
                     )
 

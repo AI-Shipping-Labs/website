@@ -512,6 +512,7 @@ class TestPlanningSection:
             "Imports",
             "Tier overrides",
             "Merge accounts",
+            "Payment mismatches",
             "New user",
             "CRM",
             "AI Assistant",

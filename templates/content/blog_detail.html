@@ -9,7 +9,7 @@
 {% block robots %}{% if draft_preview %}<meta name="robots" content="noindex,nofollow,noarchive">{% else %}{{ block.super }}{% endif %}{% endblock %}
 {% block canonical %}{% if not draft_preview %}<link rel="canonical" href="{{ site_url }}{{ article.get_absolute_url }}">{% endif %}{% endblock %}
 {% block og_tags %}{% if not draft_preview %}{% og_tags article %}{% endif %}{% endblock %}
-{% block structured_data %}{% if not draft_preview %}{% structured_data article %}{% endif %}{% endblock %}
+{% block structured_data %}{% if not draft_preview %}{% if article.page_type == 'learning_path' %}{% course_learning_path_structured_data article.title article.description learning_stages %}{% else %}{% structured_data article %}{% endif %}{% endif %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

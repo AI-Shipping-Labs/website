@@ -6,6 +6,7 @@ import os
 import re
 import uuid
 
+from django.db import transaction
 from django.utils import timezone
 
 from integrations.services.github_sync.common import INSTRUCTOR_ID_RE, GitHubSyncError, logger
@@ -146,66 +147,72 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
             if not defaults['description'] and body:
                 defaults['description'] = body[:200]
 
-            # Idempotent lookup: prefer content_id within this source's
-            # repo (issue #311 / #310), fall back to slug, then to
-            # source_path. This lets authors rename articles without
-            # triggering a duplicate insert.
-            article = Article.objects.filter(
-                content_id=content_id,
-                source_repo=source.repo_name,
-            ).first()
-            if article is None:
+            with transaction.atomic():
+                # Idempotent lookup: prefer content_id within this source's
+                # repo (issue #311 / #310), fall back to slug, then to
+                # source_path. This lets authors rename articles without
+                # triggering a duplicate insert.
                 article = Article.objects.filter(
-                    slug=current_slug,
+                    content_id=content_id,
                     source_repo=source.repo_name,
                 ).first()
-            if article is None:
-                article = Article.objects.filter(
-                    source_repo=source.repo_name,
-                    source_path=rel_path,
-                ).first()
+                if article is None:
+                    article = Article.objects.filter(
+                        slug=current_slug,
+                        source_repo=source.repo_name,
+                    ).first()
+                if article is None:
+                    article = Article.objects.filter(
+                        source_repo=source.repo_name,
+                        source_path=rel_path,
+                    ).first()
 
-            if article is None:
-                article = Article(
-                    slug=current_slug, **defaults,
-                )
-                article.save()
-                created = True
-                changed = True
-            else:
-                identity_changed = (
-                    article.slug != current_slug
-                    or article.source_path != rel_path
-                )
-                if identity_changed or _defaults_differ(article, defaults):
-                    article.slug = current_slug
-                    for k, v in defaults.items():
-                        setattr(article, k, v)
+                if article is None:
+                    article = Article(
+                        slug=current_slug, **defaults,
+                    )
                     article.save()
-                    created = False
+                    created = True
                     changed = True
                 else:
-                    created = False
-                    changed = False
+                    identity_changed = (
+                        article.slug != current_slug
+                        or article.source_path != rel_path
+                    )
+                    if identity_changed or _defaults_differ(article, defaults):
+                        article.slug = current_slug
+                        for k, v in defaults.items():
+                            setattr(article, k, v)
+                        article.save()
+                        created = False
+                        changed = True
+                    else:
+                        created = False
+                        changed = False
 
-            # Expand widgets after save (save already rendered markdown to HTML)
-            # Only re-run when we actually saved — for an unchanged row the
-            # rendered HTML is already correct.
-            if changed and article.data_json:
-                from content.utils.widgets import expand_widgets
-                expanded = expand_widgets(article.content_html, article.data_json)
-                Article.objects.filter(pk=article.pk).update(content_html=expanded)
-                article.content_html = expanded
+                # Expand content-owned HTML includes after save (save already
+                # rendered markdown to HTML). Only re-run when we actually saved —
+                # for an unchanged row the rendered HTML is already correct.
+                if changed and '<!-- include:' in article.content_html:
+                    from content.utils.includes import expand_content_includes
+                    expanded = expand_content_includes(
+                        article.content_html,
+                        repo_dir=repo_dir,
+                        base_dir=os.path.dirname(filepath),
+                        context={'data': article.data_json},
+                    )
+                    Article.objects.filter(pk=article.pk).update(content_html=expanded)
+                    article.content_html = expanded
 
-            # Issue #595: warn (don't block) when the rendered HTML still
-            # links to a retired URL prefix (e.g. /event-recordings/...).
-            # Only check on a write — unchanged rows already passed this
-            # gate during their own sync.
-            if changed:
-                from content.utils.legacy_urls import detect_legacy_urls
-                detect_legacy_urls(
-                    article.content_html, rel_path, stats['errors'],
-                )
+                # Issue #595: warn (don't block) when the rendered HTML still
+                # links to a retired URL prefix (e.g. /event-recordings/...).
+                # Only check on a write — unchanged rows already passed this
+                # gate during their own sync.
+                if changed:
+                    from content.utils.legacy_urls import detect_legacy_urls
+                    detect_legacy_urls(
+                        article.content_html, rel_path, stats['errors'],
+                    )
 
             if not changed:
                 stats['unchanged'] += 1
@@ -259,4 +266,3 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
     deleted_count = stale_articles.count()
     stale_articles.update(published=False, status='draft')
     stats['deleted'] += deleted_count
-

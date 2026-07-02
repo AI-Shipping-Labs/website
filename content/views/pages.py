@@ -287,26 +287,13 @@ def blog_detail(request, slug):
     """Blog post detail page with related articles."""
     article = get_object_or_404(Article, slug=slug, published=True)
 
-    if article.page_type == 'learning_path':
-        # Record the resource view for learning-path reads too (issue
-        # #773) before the early return, gated on authenticated + access.
-        _record_resource_view_if_accessible(
-            request, article, 'article', article.slug, 'blog_detail', slug,
-        )
-        context = {
-            'article': article,
-            'title': article.title,
-            'description': article.description,
-            'learning_stages': article.data_json.get('learning_stages', []),
-        }
-        return render(request, 'content/learning_path_detail.html', context)
-
     related_articles = article.get_related_articles(limit=3)
     tag_rules = _get_tag_rules_for_tags(article.tags)
     context = {
         'article': article,
         'related_articles': related_articles,
         'tag_rules': tag_rules,
+        'learning_stages': article.data_json.get('learning_stages', []),
     }
     context.update(build_gating_context(request.user, article, 'article'))
     _record_resource_view_if_accessible(

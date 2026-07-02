@@ -115,6 +115,20 @@ data: {...}        # optional structured payload for rich pages
 markdown body
 ```
 
+Article markdown can include trusted content-repo HTML snippets with
+`<!-- include:PATH -->`. During sync the snippet is rendered with the article
+frontmatter payload available as `data`, then stored in `Article.content_html`.
+
+Path resolution is explicit:
+
+- `<!-- include:widgets/name.html -->` resolves from the content repo root,
+  for shared article snippets such as `widgets/learning_stages.html`.
+- Other include paths resolve relative to the article source file directory.
+
+Shared article snippets should read structured frontmatter as `{{ data.KEY }}`,
+for example `{{ data.learning_stages }}` or `{{ data.skill_categories }}`.
+The legacy `<!-- widget:... -->` marker is not supported.
+
 ### Project
 
 `projects/<slug>.md`. One file per project showcase.

@@ -10,9 +10,14 @@ def _resolve_include_path(include_path, base_dir, repo_dir):
     """Resolve an include path without allowing escapes outside the repo."""
     if os.path.isabs(include_path):
         raise ValueError(f'Include path must be relative: {include_path}')
+    if '..' in include_path.split('/'):
+        raise ValueError(f'Include path escapes content repo: {include_path}')
 
     root = os.path.realpath(repo_dir)
-    candidate = os.path.realpath(os.path.join(base_dir, include_path))
+    if include_path.startswith('widgets/'):
+        candidate = os.path.realpath(os.path.join(root, include_path))
+    else:
+        candidate = os.path.realpath(os.path.join(base_dir, include_path))
     if os.path.commonpath([root, candidate]) != root:
         raise ValueError(f'Include path escapes content repo: {include_path}')
     if not os.path.isfile(candidate):

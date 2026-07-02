@@ -1,7 +1,6 @@
-"""Tests for learning path rendered as Article with page_type='learning_path'."""
+"""Tests for learning path articles and content-owned include expansion."""
 
 import os
-import shutil
 import tempfile
 from datetime import date
 
@@ -21,7 +20,7 @@ class LearningPathArticleModelTest(TestCase):
             title='AI Engineer Learning Path',
             slug='ai-engineer-learning-path',
             description='A visual learning path.',
-            content_markdown='## Stages\n\n<!-- widget:learning_stages data=learning_stages -->',
+            content_markdown='## Stages\n\nRendered content.',
             page_type='learning_path',
             data_json={
                 'learning_stages': [
@@ -74,37 +73,30 @@ class LearningPathViewTest(TestCase):
         response = self.client.get('/blog/ai-engineer-learning-path')
         self.assertEqual(response.status_code, 200)
 
-    def test_uses_learning_path_template(self):
+    def test_uses_shared_blog_detail_template(self):
         response = self.client.get('/blog/ai-engineer-learning-path')
-        self.assertTemplateUsed(response, 'content/learning_path_detail.html')
+        self.assertTemplateUsed(response, 'content/blog_detail.html')
+        self.assertTemplateNotUsed(response, 'content/learning_path_detail.html')
 
-    def test_shows_title(self):
+    def test_shows_title_description_and_content(self):
         response = self.client.get('/blog/ai-engineer-learning-path')
         self.assertContains(response, 'AI Engineer Learning Path')
-
-    def test_shows_description(self):
-        response = self.client.get('/blog/ai-engineer-learning-path')
         self.assertContains(response, 'A visual learning path for AI engineers.')
-
-    def test_renders_content_html(self):
-        response = self.client.get('/blog/ai-engineer-learning-path')
         self.assertContains(response, 'Some learning path content here.')
 
-    def test_context_has_learning_stages(self):
+    def test_context_has_learning_stages_for_jsonld(self):
         response = self.client.get('/blog/ai-engineer-learning-path')
         self.assertEqual(len(response.context['learning_stages']), 1)
 
-    def test_has_structured_data(self):
+    def test_has_learning_path_structured_data(self):
         response = self.client.get('/blog/ai-engineer-learning-path')
         self.assertContains(response, 'application/ld+json')
-
-    def test_shows_learning_path_label(self):
-        response = self.client.get('/blog/ai-engineer-learning-path')
-        self.assertContains(response, 'Learning Path')
+        self.assertContains(response, '"@type": "Course"')
+        self.assertContains(response, '"name": "AI Engineer Learning Path"')
 
 
 class LearningPathRedirectTest(TestCase):
-    """Test that the old URL redirects to the new article URL."""
+    """Test that the legacy URL redirects to the article URL."""
 
     def test_old_url_returns_301(self):
         response = self.client.get('/learning-path/ai-engineer')
@@ -176,33 +168,33 @@ class RegularBlogUnaffectedTest(TestCase):
 
 
 class SyncLearningPathArticleTest(TestCase):
-    """Test that the sync pipeline handles learning_path page_type articles."""
+    """Test article sync include expansion for learning path content."""
 
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
         )
-        self.temp_dir = tempfile.mkdtemp()
-        self.blog_dir = os.path.join(self.temp_dir, 'blog')
-        os.makedirs(self.blog_dir)
 
-    def tearDown(self):
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    def _write_md(self, subdir, filename, content):
-        dirpath = os.path.join(self.blog_dir, subdir)
-        os.makedirs(dirpath, exist_ok=True)
-        with open(os.path.join(dirpath, filename), 'w') as f:
+    def _write(self, root, rel_path, content):
+        path = os.path.join(root, rel_path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
 
-    def test_sync_creates_article_with_page_type(self):
-        self._write_md('ai-engineer-learning-path', 'index.md', (
+    def _article_frontmatter(
+        self,
+        *,
+        content_id='00000000-0000-4000-8000-000000000001',
+        slug='ai-engineer-learning-path',
+        title='AI Engineer Learning Path',
+    ):
+        return (
             '---\n'
-            'title: "AI Engineer Learning Path"\n'
-            'slug: "ai-engineer-learning-path"\n'
+            f'title: "{title}"\n'
+            f'slug: "{slug}"\n'
             'description: "A visual learning path."\n'
             'date: "2026-01-15"\n'
-            'content_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"\n'
+            f'content_id: "{content_id}"\n'
             'page_type: learning_path\n'
             'data:\n'
             '  learning_stages:\n'
@@ -210,57 +202,6 @@ class SyncLearningPathArticleTest(TestCase):
             '      title: "Foundations"\n'
             '      items:\n'
             '        - "Python fluency"\n'
-            '---\n'
-            '\n'
-            '## Learning Stages\n'
-            '\n'
-            '<!-- widget:learning_stages data=learning_stages -->\n'
-        ))
-
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
-        self.assertEqual(sync_log.status, 'success')
-        self.assertEqual(sync_log.items_created, 1)
-
-        article = Article.objects.get(slug='ai-engineer-learning-path')
-        self.assertEqual(article.page_type, 'learning_path')
-        self.assertIn('learning_stages', article.data_json)
-        # Widget should be expanded in content_html
-        self.assertIn('Foundations', article.content_html)
-        self.assertIn('Python fluency', article.content_html)
-        # Widget marker should be replaced
-        self.assertNotIn('<!-- widget:', article.content_html)
-
-    def test_sync_regular_article_unaffected(self):
-        self._write_md('', 'regular.md', (
-            '---\n'
-            'title: "Regular Post"\n'
-            'slug: "regular-post"\n'
-            'date: "2026-02-01"\n'
-            'content_id: "b2c3d4e5-f6a7-8901-bcde-f12345678901"\n'
-            '---\n'
-            '\n'
-            '# Hello\n'
-            '\n'
-            'Normal content.\n'
-        ))
-
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
-        self.assertEqual(sync_log.status, 'success')
-
-        article = Article.objects.get(slug='regular-post')
-        self.assertEqual(article.page_type, 'blog')
-        self.assertEqual(article.data_json, {})
-        self.assertIn('Normal content', article.content_html)
-
-    def test_sync_stores_data_json(self):
-        self._write_md('', 'lp.md', (
-            '---\n'
-            'title: "LP"\n'
-            'slug: "lp-test"\n'
-            'date: "2026-01-15"\n'
-            'content_id: "c3d4e5f6-a7b8-9012-cdef-123456789012"\n'
-            'page_type: learning_path\n'
-            'data:\n'
             '  skill_categories:\n'
             '    - label: "GenAI"\n'
             '      description: "Core skills"\n'
@@ -268,37 +209,216 @@ class SyncLearningPathArticleTest(TestCase):
             '        - name: "RAG"\n'
             '          pct: 35.9\n'
             '          priority: essential\n'
-            '---\n'
-            '\n'
-            '## Skills\n'
-            '\n'
-            '<!-- widget:skill_chart data=skill_categories -->\n'
-        ))
+            '  tool_categories:\n'
+            '    - label: "LLM Providers"\n'
+            '      tools:\n'
+            '        - name: "OpenAI API"\n'
+            '          pct: 8.7\n'
+            '  responsibilities:\n'
+            '    core:\n'
+            '      - title: "Build AI Systems"\n'
+            '        description: "Ship useful systems."\n'
+            '  portfolio_projects:\n'
+            '    - number: "01"\n'
+            '      title: "Production RAG System"\n'
+            '      difficulty: Foundational\n'
+            '      description: "Build a real RAG app."\n'
+            '---\n\n'
+        )
 
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+    def test_sync_expands_content_owned_shared_widgets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(
+                tmp,
+                'widgets/learning_stages.html',
+                (
+                    '<section id="stages">'
+                    '{% for stage in data.learning_stages %}'
+                    '<h3>{{ stage.title }}</h3>'
+                    '{% for item in stage.items %}<p>{{ item }}</p>{% endfor %}'
+                    '{% endfor %}'
+                    '</section>'
+                ),
+            )
+            self._write(
+                tmp,
+                'blog/ai-engineer-learning-path/index.md',
+                self._article_frontmatter()
+                + '## Learning Stages\n\n'
+                + '<!-- include:widgets/learning_stages.html -->\n',
+            )
 
-        article = Article.objects.get(slug='lp-test')
-        self.assertEqual(article.data_json['skill_categories'][0]['label'], 'GenAI')
-        self.assertIn('RAG', article.content_html)
-        self.assertIn('35.9%', article.content_html)
+            sync_log = sync_content_source(self.source, repo_dir=tmp)
 
-    def test_sync_logs_error_for_missing_widget_data_key(self):
-        self._write_md('', 'bad-lp.md', (
-            '---\n'
-            'title: "Bad LP"\n'
-            'slug: "bad-lp"\n'
-            'date: "2026-01-15"\n'
-            'content_id: "d4e5f6a7-b8c9-0123-defa-234567890123"\n'
-            'page_type: learning_path\n'
-            'data:\n'
-            '  other_key: []\n'
-            '---\n'
-            '\n'
-            '<!-- widget:skill_chart data=missing_key -->\n'
-        ))
+        self.assertEqual(sync_log.status, 'success')
+        self.assertEqual(sync_log.errors, [])
+        article = Article.objects.get(slug='ai-engineer-learning-path')
+        self.assertEqual(article.page_type, 'learning_path')
+        self.assertIn('learning_stages', article.data_json)
+        self.assertIn('Foundations', article.content_html)
+        self.assertIn('Python fluency', article.content_html)
+        self.assertNotIn('<!-- include:', article.content_html)
+        self.assertNotIn('<!-- widget:', article.content_html)
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
-        # The error should be logged, not silently swallowed
-        self.assertTrue(len(sync_log.errors) > 0)
+    def test_article_include_receives_full_frontmatter_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            templates = {
+                'widgets/skill_chart.html': (
+                    '{% for category in data.skill_categories %}'
+                    '<p>{{ category.label }} {{ category.skills.0.name }} '
+                    '{{ category.skills.0.pct }}%</p>{% endfor %}'
+                ),
+                'widgets/tool_chart.html': (
+                    '{% for category in data.tool_categories %}'
+                    '<p>{{ category.label }} {{ category.tools.0.name }}</p>'
+                    '{% endfor %}'
+                ),
+                'widgets/responsibilities.html': (
+                    '{% for item in data.responsibilities.core %}'
+                    '<p>{{ item.title }} {{ item.description }}</p>{% endfor %}'
+                ),
+                'widgets/project_grid.html': (
+                    '{% for project in data.portfolio_projects %}'
+                    '<p>{{ project.number }} {{ project.title }}</p>{% endfor %}'
+                ),
+            }
+            for rel_path, body in templates.items():
+                self._write(tmp, rel_path, body)
+            self._write(
+                tmp,
+                'blog/ai-engineer-learning-path/index.md',
+                self._article_frontmatter()
+                + '<!-- include:widgets/skill_chart.html -->\n'
+                + '<!-- include:widgets/tool_chart.html -->\n'
+                + '<!-- include:widgets/responsibilities.html -->\n'
+                + '<!-- include:widgets/project_grid.html -->\n',
+            )
+
+            sync_log = sync_content_source(self.source, repo_dir=tmp)
+
+        self.assertEqual(sync_log.errors, [])
+        article = Article.objects.get(slug='ai-engineer-learning-path')
+        self.assertIn('GenAI RAG 35.9%', article.content_html)
+        self.assertIn('LLM Providers OpenAI API', article.content_html)
+        self.assertIn('Build AI Systems Ship useful systems.', article.content_html)
+        self.assertIn('01 Production RAG System', article.content_html)
+        self.assertNotIn('items', article.content_html)
+
+    def test_source_relative_article_include_still_works_outside_widget_namespace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp, 'partials/callout.html', '<p>Wrong root callout</p>')
+            self._write(
+                tmp,
+                'blog/example/partials/callout.html',
+                '<aside>Article-local callout</aside>',
+            )
+            self._write(
+                tmp,
+                'blog/example/index.md',
+                (
+                    '---\n'
+                    'title: "Example"\n'
+                    'slug: "example"\n'
+                    'date: "2026-02-01"\n'
+                    'content_id: "11111111-1111-4111-8111-111111111111"\n'
+                    '---\n\n'
+                    '<!-- include:partials/callout.html -->\n'
+                ),
+            )
+
+            sync_log = sync_content_source(self.source, repo_dir=tmp)
+
+        self.assertEqual(sync_log.errors, [])
+        article = Article.objects.get(slug='example')
+        self.assertIn('Article-local callout', article.content_html)
+        self.assertNotIn('Wrong root callout', article.content_html)
+
+    def test_shared_widget_namespace_does_not_fallback_to_article_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(
+                tmp,
+                'blog/example/widgets/learning_stages.html',
+                '<p>Should not render</p>',
+            )
+            self._write(
+                tmp,
+                'blog/example/index.md',
+                (
+                    '---\n'
+                    'title: "Example"\n'
+                    'slug: "example"\n'
+                    'date: "2026-02-01"\n'
+                    'content_id: "22222222-2222-4222-8222-222222222222"\n'
+                    '---\n\n'
+                    '<!-- include:widgets/learning_stages.html -->\n'
+                ),
+            )
+
+            sync_log = sync_content_source(self.source, repo_dir=tmp)
+
+        self.assertEqual(sync_log.status, 'partial')
+        self.assertIn('widgets/learning_stages.html', str(sync_log.errors))
+        self.assertFalse(Article.objects.filter(slug='example').exists())
+
+    def test_bad_article_include_fails_visibly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(
+                tmp,
+                'blog/missing/index.md',
+                (
+                    '---\n'
+                    'title: "Missing Include"\n'
+                    'slug: "missing-include"\n'
+                    'date: "2026-02-01"\n'
+                    'content_id: "33333333-3333-4333-8333-333333333333"\n'
+                    '---\n\n'
+                    '<!-- include:partials/missing.html -->\n'
+                ),
+            )
+            self._write(
+                tmp,
+                'blog/traversal/index.md',
+                (
+                    '---\n'
+                    'title: "Traversal Include"\n'
+                    'slug: "traversal-include"\n'
+                    'date: "2026-02-02"\n'
+                    'content_id: "44444444-4444-4444-8444-444444444444"\n'
+                    '---\n\n'
+                    '<!-- include:../secret.html -->\n'
+                ),
+            )
+
+            sync_log = sync_content_source(self.source, repo_dir=tmp)
+
+        self.assertEqual(sync_log.status, 'partial')
         error_text = str(sync_log.errors)
-        self.assertIn('missing_key', error_text)
+        self.assertIn('Include file not found: partials/missing.html', error_text)
+        self.assertIn('Include path escapes content repo: ../secret.html', error_text)
+        self.assertFalse(Article.objects.filter(slug='missing-include').exists())
+        self.assertFalse(Article.objects.filter(slug='traversal-include').exists())
+
+    def test_sync_regular_article_unaffected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(
+                tmp,
+                'blog/regular.md',
+                (
+                    '---\n'
+                    'title: "Regular Post"\n'
+                    'slug: "regular-post"\n'
+                    'date: "2026-02-01"\n'
+                    'content_id: "55555555-5555-4555-8555-555555555555"\n'
+                    '---\n\n'
+                    '# Hello\n\n'
+                    'Normal content.\n'
+                ),
+            )
+
+            sync_log = sync_content_source(self.source, repo_dir=tmp)
+
+        self.assertEqual(sync_log.status, 'success')
+        article = Article.objects.get(slug='regular-post')
+        self.assertEqual(article.page_type, 'blog')
+        self.assertEqual(article.data_json, {})
+        self.assertIn('Normal content', article.content_html)

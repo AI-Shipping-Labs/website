@@ -217,7 +217,10 @@ class ScheduleLabelTest(TestCase):
         ]):
             self._occurrence(series, dt, position=i + 1)
         label = series.schedule_label
-        self.assertEqual(label, '6 sessions · Jun 15, 2026 – Aug 03, 2026')
+        self.assertEqual(
+            label,
+            '6 sessions · Mon, Jun 15, 2026 – Mon, Aug 03, 2026',
+        )
         self.assertNotIn('Weekly', label)
         self.assertNotIn('Monday', label)
 
@@ -225,7 +228,7 @@ class ScheduleLabelTest(TestCase):
         series = self._series()
         self._occurrence(series, datetime(2026, 6, 15, 18, 0), position=1)
         label = series.schedule_label
-        self.assertEqual(label, '1 session · Jun 15, 2026')
+        self.assertEqual(label, '1 session · Mon, Jun 15, 2026')
         self.assertNotIn('–', label)
         self.assertNotIn('Weekly', label)
 
@@ -827,8 +830,8 @@ class UpcomingSeriesCardCadenceTest(TestCase):
             )
         # Expected range label, computed from the same dates the model formats.
         cls.irregular_range = (
-            f'{cls.irregular_dates[0].strftime("%b %d, %Y")} '
-            f'– {cls.irregular_dates[-1].strftime("%b %d, %Y")}'
+            f'{cls.irregular_dates[0].strftime("%a, %b %d, %Y")} '
+            f'– {cls.irregular_dates[-1].strftime("%a, %b %d, %Y")}'
         )
 
     def _meta(self, response, series_slug):

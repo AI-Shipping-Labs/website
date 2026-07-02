@@ -286,6 +286,86 @@ class EventsListPageTest(TestCase):
         self.assertContains(response, 'Zoom')
 
 
+class EventsListDefaultPastPaginationTest(TestCase):
+    """Default ``/events`` paginates Past while keeping Upcoming visible."""
+
+    @classmethod
+    def setUpTestData(cls):
+        now = timezone.now()
+        cls.upcoming_event = Event.objects.create(
+            title='Upcoming Visible',
+            slug='upcoming-visible-1039',
+            start_datetime=now + timedelta(days=3),
+            end_datetime=now + timedelta(days=3, hours=1),
+            status='upcoming',
+        )
+        for index in range(25):
+            Event.objects.create(
+                title=f'History Event {index:02d}',
+                slug=f'history-event-1039-{index:02d}',
+                start_datetime=now - timedelta(days=index + 1),
+                end_datetime=now - timedelta(days=index + 1, hours=-1),
+                status='completed',
+            )
+
+    def test_default_view_caps_past_section_and_renders_pager(self):
+        response = self.client.get('/events')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Upcoming Visible')
+        self.assertContains(response, 'Page 1 of 2')
+        self.assertContains(response, 'data-testid="events-past-pagination"')
+        self.assertEqual(len(response.context['past_events']), 20)
+        self.assertContains(response, 'History Event 00')
+        self.assertNotContains(response, 'History Event 20')
+
+    def test_default_page_two_keeps_upcoming_and_shows_next_past_slice(self):
+        first_response = self.client.get('/events')
+        second_response = self.client.get('/events?page=2')
+
+        first_titles = {event.title for event in first_response.context['past_events']}
+        second_titles = {
+            event.title for event in second_response.context['past_events']
+        }
+
+        self.assertEqual(second_response.status_code, 200)
+        self.assertContains(second_response, 'Upcoming Visible')
+        self.assertContains(second_response, 'Page 2 of 2')
+        self.assertTrue(second_titles)
+        self.assertFalse(first_titles & second_titles)
+        self.assertContains(second_response, 'History Event 20')
+        self.assertNotContains(second_response, 'History Event 00')
+
+    def test_default_bad_page_values_clamp_to_valid_pages(self):
+        not_number = self.client.get('/events?page=not-a-number')
+        out_of_range = self.client.get('/events?page=9999')
+
+        self.assertEqual(not_number.status_code, 200)
+        self.assertEqual(not_number.context['page_obj'].number, 1)
+        self.assertEqual(out_of_range.status_code, 200)
+        self.assertEqual(out_of_range.context['page_obj'].number, 2)
+
+    def test_upcoming_filter_does_not_render_past_or_pager(self):
+        response = self.client.get('/events?filter=upcoming')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Upcoming Visible')
+        self.assertNotContains(response, 'History Event 00')
+        self.assertNotContains(response, 'data-testid="events-past-section"')
+        self.assertNotContains(response, 'data-testid="events-past-pagination"')
+
+
+class EventsListPublicEmptyStatesTest(TestCase):
+    """Public ``/events`` keeps both default empty states visible."""
+
+    def test_default_view_renders_upcoming_and_past_empty_states(self):
+        response = self.client.get('/events')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No upcoming events scheduled.')
+        self.assertContains(response, 'No past events yet')
+
+
 class EventsListMarkdownRenderingTest(TestCase):
     """Regression tests for issue #707.
 

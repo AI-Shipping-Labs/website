@@ -578,7 +578,7 @@ class TestMobileSidebarScrollAffordance:
 
 @pytest.mark.django_db(transaction=True)
 class TestSidebarNavOrder:
-    """The reorganised Studio nav renders its seven
+    """The reorganised Studio nav renders its eight
     collapsible section headers in the expected order. Per-link order
     inside each section is covered by ``studio/tests/test_sidebar.py``
     and by ``test_studio_sidebar_reorg.py``."""
@@ -613,6 +613,7 @@ class TestSidebarNavOrder:
             "Content",
             "People",
             "Planning",
+            "Onboarding & intake",
             "Communication",
             "Tracking",
             "Operations",

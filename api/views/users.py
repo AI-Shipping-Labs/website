@@ -62,6 +62,7 @@ from api.serializers.users import (
     serialize_user_state,
 )
 from api.utils import parse_json_body, require_methods
+from api.views._permissions import bearer_is_admin
 from community.models import CommunityAuditLog
 from crm.models import CRMRecord
 from crm.services.activity_context import (
@@ -679,7 +680,7 @@ def user_crm_record(request, email):
             user=locked,
             defaults={
                 "status": "active",
-                "created_by": actor if getattr(actor, "is_staff", False) else None,
+                "created_by": actor if bearer_is_admin(actor) else None,
             },
         )
         CommunityAuditLog.objects.create(

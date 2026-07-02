@@ -4,8 +4,8 @@ Covers the helper that fires three independent best-effort sends on
 every paid checkout (Basic+):
 
 - (A) Personalised co-founder welcome to the new user, addressed To the
-  member, CC'ing the configured staff mailbox (issue #977; reverts the
-  #950 BCC decision, which had reverted the original #703 CC).
+  member only. Staff visibility comes from the separate internal email
+  and Slack paths.
 - (B1) Structured internal heads-up email to staff.
 - (B2) Plain mrkdwn Slack post to the staff channel.
 
@@ -74,7 +74,7 @@ class NotifyPaidSignupHelperTest(TestCase):
     # ------------------------------------------------------------------
     # Happy path: all three sends fire and carry the right payload.
     # ------------------------------------------------------------------
-    def test_happy_path_fires_welcome_with_cc_staff_email_and_slack(self):
+    def test_happy_path_fires_welcome_staff_email_and_slack(self):
         from community.services import staff_notifications
 
         with patch(
@@ -105,10 +105,9 @@ class NotifyPaidSignupHelperTest(TestCase):
                 billing_period="monthly",
             )
 
-        # Issue #977: welcome called with cc=staff email (not bcc).
         mock_welcome.assert_called_once()
         welcome_kwargs = mock_welcome.call_args.kwargs
-        self.assertEqual(welcome_kwargs.get("cc"), self.STAFF_EMAIL)
+        self.assertNotIn("cc", welcome_kwargs)
         self.assertNotIn("bcc", welcome_kwargs)
 
         # Internal email sent to the staff mailbox.
@@ -126,10 +125,10 @@ class NotifyPaidSignupHelperTest(TestCase):
         self.assertIn("basic", slack_payload["text"].lower())
 
     # ------------------------------------------------------------------
-    # STAFF_SIGNUP_NOTIFY_EMAIL empty: welcome still goes, no CC, no
+    # STAFF_SIGNUP_NOTIFY_EMAIL empty: welcome still goes, no
     # staff email.
     # ------------------------------------------------------------------
-    def test_no_staff_email_setting_drops_cc_and_staff_email(self):
+    def test_no_staff_email_setting_skips_staff_email(self):
         from community.services import staff_notifications
 
         with patch(
@@ -160,9 +159,10 @@ class NotifyPaidSignupHelperTest(TestCase):
                 billing_period="monthly",
             )
 
-        # Welcome still went, but without a cc.
+        # Welcome still went, with no staff copy args.
         mock_welcome.assert_called_once()
-        self.assertIsNone(mock_welcome.call_args.kwargs.get("cc"))
+        self.assertNotIn("cc", mock_welcome.call_args.kwargs)
+        self.assertNotIn("bcc", mock_welcome.call_args.kwargs)
 
         # Staff email path did NOT run.
         mock_staff_email.assert_not_called()
@@ -433,10 +433,9 @@ class NotifyPaidSignupHelperTest(TestCase):
 class NotifyPaidSignupEndToEndTest(TestCase):
     """Tests through ``handle_checkout_completed`` (real EmailService).
 
-    Uses Django's locmem mail backend (SES is disabled in test
-    settings) to assert that the welcome email actually lands in
-    ``mail.outbox`` with the right CC, that the internal email also
-    lands, and that the Slack post fires.
+    Uses the real webhook path to assert that the paid welcome log is
+    written and the Slack post fires while staff visibility stays on the
+    separate notification paths.
     """
 
     STAFF_EMAIL = "founders-e2e@aishippinglabs.test"
@@ -476,7 +475,7 @@ class NotifyPaidSignupEndToEndTest(TestCase):
             "metadata": {"tier_slug": "basic", "user_id": str(user.pk)},
         }
 
-    def test_paid_checkout_sends_welcome_with_cc_and_staff_email(self):
+    def test_paid_checkout_sends_welcome_and_staff_notification(self):
         user = User.objects.create_user(
             email="endtoend@test.com",
             first_name="Riley",
@@ -501,7 +500,7 @@ class NotifyPaidSignupEndToEndTest(TestCase):
 
             handle_checkout_completed(self._basic_session(user))
 
-        # Two emails landed: welcome (with CC) and staff notification.
+        # Two email paths ran: welcome and staff notification.
         # PAYMENT_NOTIFICATION_EMAIL was empty so the legacy ping is
         # skipped. SES is disabled in tests so EmailService routes
         # through django.core.mail when wired up — but the actual SES
@@ -1704,9 +1703,7 @@ class PaidSignupRealAmountAndLinksTest(TestCase):
 @tag('core')
 @override_settings(SES_ENABLED=True)
 class PaidWelcomeSESDestinationTest(TestCase):
-    """Issue #977: the paid-signup welcome is addressed To the member with
-    the staff mailbox on CC (a visible copy), never To team@ and never on
-    BCC; From and Reply-To resolve to ``welcome@`` for the welcome types.
+    """Paid-signup welcomes are addressed To the member only.
 
     Drives the real ``notify_paid_signup`` / ``_send_cofounder_welcome`` ->
     ``EmailService`` path with a mocked SES (``boto3``) client so we can
@@ -1722,6 +1719,8 @@ class PaidWelcomeSESDestinationTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.basic_tier = Tier.objects.get(slug="basic")
+        cls.main_tier = Tier.objects.get(slug="main")
+        cls.premium_tier = Tier.objects.get(slug="premium")
 
     def setUp(self):
         from integrations.config import clear_config_cache
@@ -1740,7 +1739,7 @@ class PaidWelcomeSESDestinationTest(TestCase):
             key=key, defaults={"value": value, "group": group},
         )
 
-    def _run_welcome(self):
+    def _run_welcome(self, *, tier=None, is_returning=False):
         """Run notify_paid_signup with a mocked SES client; return the
         ``send_email`` call kwargs of the (A) member welcome send.
 
@@ -1770,12 +1769,13 @@ class PaidWelcomeSESDestinationTest(TestCase):
 
             staff_notifications.notify_paid_signup(
                 user=self.user,
-                tier=self.basic_tier,
+                tier=tier or self.basic_tier,
                 previous_tier=None,
                 was_new_user=True,
                 stripe_customer_id="cus_977",
                 session_id="cs_977",
                 billing_period="monthly",
+                is_returning=is_returning,
             )
 
         return [c.kwargs for c in mock_client.send_email.call_args_list]
@@ -1791,26 +1791,48 @@ class PaidWelcomeSESDestinationTest(TestCase):
             f"{[c['Destination'].get('ToAddresses') for c in calls]}"
         )
 
-    # -- Scenario 1: To member, CC team@, no BCC -----------------------
-    def test_welcome_to_member_with_team_on_cc_and_no_bcc(self):
-        self._set("STAFF_SIGNUP_NOTIFY_EMAIL", self.STAFF_EMAIL)
-
-        welcome = self._welcome_call(self._run_welcome())
-
+    def assert_member_only_destination(self, welcome):
         destination = welcome["Destination"]
         self.assertEqual(destination["ToAddresses"], [self.user.email])
-        self.assertEqual(destination["CcAddresses"], [self.STAFF_EMAIL])
+        self.assertNotIn(self.STAFF_EMAIL, destination.get("ToAddresses", []))
+        self.assertNotIn(self.STAFF_EMAIL, destination.get("CcAddresses", []))
+        self.assertNotIn(self.STAFF_EMAIL, destination.get("BccAddresses", []))
+        self.assertNotIn("CcAddresses", destination)
         self.assertNotIn("BccAddresses", destination)
 
-    # -- Scenario 2: never addressed to team@ --------------------------
-    def test_welcome_is_never_addressed_to_team(self):
+    # -- Scenario 1: paid welcomes go To the member only ---------------
+    def test_basic_welcome_to_member_only_with_no_staff_copy(self):
         self._set("STAFF_SIGNUP_NOTIFY_EMAIL", self.STAFF_EMAIL)
 
         welcome = self._welcome_call(self._run_welcome())
 
-        self.assertNotIn(self.STAFF_EMAIL, welcome["Destination"]["ToAddresses"])
+        self.assert_member_only_destination(welcome)
 
-    # -- Scenario 3: blank staff mailbox => no CC, no BCC --------------
+    def test_main_welcome_to_member_only_with_no_staff_copy(self):
+        self._set("STAFF_SIGNUP_NOTIFY_EMAIL", self.STAFF_EMAIL)
+
+        welcome = self._welcome_call(self._run_welcome(tier=self.main_tier))
+
+        self.assert_member_only_destination(welcome)
+
+    def test_premium_welcome_to_member_only_with_no_staff_copy(self):
+        self._set("STAFF_SIGNUP_NOTIFY_EMAIL", self.STAFF_EMAIL)
+
+        welcome = self._welcome_call(self._run_welcome(tier=self.premium_tier))
+
+        self.assert_member_only_destination(welcome)
+
+    def test_returning_welcome_back_to_member_only_with_no_staff_copy(self):
+        self._set("STAFF_SIGNUP_NOTIFY_EMAIL", self.STAFF_EMAIL)
+
+        welcome = self._welcome_call(
+            self._run_welcome(tier=self.main_tier, is_returning=True),
+        )
+
+        self.assert_member_only_destination(welcome)
+        self.assertEqual(welcome["ReplyToAddresses"], [self.WELCOME_FROM])
+
+    # -- Scenario 2: blank staff mailbox => no CC, no BCC --------------
     def test_no_staff_mailbox_member_gets_welcome_with_no_cc_or_bcc(self):
         self._set("STAFF_SIGNUP_NOTIFY_EMAIL", "")
 
@@ -1821,7 +1843,7 @@ class PaidWelcomeSESDestinationTest(TestCase):
         self.assertNotIn("CcAddresses", destination)
         self.assertNotIn("BccAddresses", destination)
 
-    # -- Scenario 4: From + Reply-To resolve to welcome@ ---------------
+    # -- Scenario 3: From + Reply-To resolve to welcome@ ---------------
     def test_welcome_from_and_reply_to_resolve_to_welcome(self):
         self._set("STAFF_SIGNUP_NOTIFY_EMAIL", self.STAFF_EMAIL)
 
@@ -1829,6 +1851,17 @@ class PaidWelcomeSESDestinationTest(TestCase):
 
         self.assertEqual(welcome["FromEmailAddress"], self.WELCOME_FROM)
         self.assertEqual(welcome["ReplyToAddresses"], [self.WELCOME_FROM])
+        self.assert_member_only_destination(welcome)
+
+    def test_welcome_reply_to_uses_configured_alternate_without_staff_copy(self):
+        alternate = "support@aishippinglabs.com"
+        self._set("STAFF_SIGNUP_NOTIFY_EMAIL", self.STAFF_EMAIL)
+        self._set("SES_WELCOME_REPLY_TO_EMAIL", alternate, group="ses")
+
+        welcome = self._welcome_call(self._run_welcome())
+
+        self.assertEqual(welcome["ReplyToAddresses"], [alternate])
+        self.assert_member_only_destination(welcome)
 
     def test_welcome_from_stays_welcome_even_with_stray_legacy_from(self):
         # A stray legacy SES_FROM_EMAIL=noreply@ must NOT pull the welcome
@@ -1841,12 +1874,15 @@ class PaidWelcomeSESDestinationTest(TestCase):
 
         self.assertEqual(welcome["FromEmailAddress"], self.WELCOME_FROM)
         self.assertEqual(welcome["ReplyToAddresses"], [self.WELCOME_FROM])
+        self.assert_member_only_destination(welcome)
 
-    # -- Scenario 5: staff heads-up (B1) is its own To send ------------
+    # -- Scenario 4: staff heads-up (B1) is its own To send ------------
     def test_staff_headsup_is_addressed_to_team_not_a_cc_of_welcome(self):
         self._set("STAFF_SIGNUP_NOTIFY_EMAIL", self.STAFF_EMAIL)
 
         calls = self._run_welcome()
+        welcome = self._welcome_call(calls)
+        self.assert_member_only_destination(welcome)
 
         # The (B1) heads-up is a separate SES send addressed To team@.
         staff_sends = [
@@ -1856,13 +1892,13 @@ class PaidWelcomeSESDestinationTest(TestCase):
         self.assertEqual(
             len(staff_sends), 1,
             "Expected exactly one SES send addressed To the staff mailbox "
-            "(the B1 heads-up), distinct from the member welcome's CC.",
+            "(the B1 heads-up), distinct from the member welcome.",
         )
         # And that heads-up does NOT carry the welcome on CC/BCC.
         self.assertNotIn("CcAddresses", staff_sends[0]["Destination"])
         self.assertNotIn("BccAddresses", staff_sends[0]["Destination"])
 
-    # -- Scenario 6: welcome failure does not break heads-up ----------
+    # -- Scenario 5: welcome failure does not break heads-up ----------
     def test_welcome_failure_does_not_block_staff_email_or_slack(self):
         from community.services import staff_notifications
 

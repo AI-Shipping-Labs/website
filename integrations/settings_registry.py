@@ -432,10 +432,10 @@ INTEGRATION_GROUPS = [
                 'key': 'STAFF_SIGNUP_NOTIFY_EMAIL',
                 'is_secret': False,
                 'description': (
-                    'Single staff mailbox put on CC of the co-founder welcome '
-                    'email AND used as the To address on the structured '
-                    'internal heads-up email. Leave blank to skip both staff '
-                    'emails; the user still receives the welcome (without CC).'
+                    'Single staff mailbox that receives the structured '
+                    'internal paid-signup heads-up email. Leave blank to skip '
+                    'that staff email; the user still receives the welcome '
+                    'directly, and Slack still runs when configured.'
                 ),
                 'optional': True,
                 'docs_url': '_docs/integrations/site.md#staff_signup_notify_email',

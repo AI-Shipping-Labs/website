@@ -249,11 +249,11 @@ Test vs live: n/a beyond per-environment override.
 
 ## SES_WELCOME_REPLY_TO_EMAIL
 
-Purpose: Reply-To address set on the five welcome types (`welcome`,
+Purpose: Reply-To address set on the welcome types (`welcome`,
 `cofounder_welcome`, `basic_welcome`, `premium_welcome`,
-`welcome_imported`). A member who hits Reply on a welcome email reaches
-this monitored inbox instead of the send-only `welcome@` / `noreply@`
-mailbox. Default: `welcome@aishippinglabs.com`, which the inbound
+`welcome_imported`, `welcome_back`). A member who hits Reply on a welcome
+email reaches this monitored inbox instead of the send-only `welcome@` /
+`noreply@` mailbox. Default: `welcome@aishippinglabs.com`, which the inbound
 `email-forwarder` Lambda (see `ai-shipping-labs-infra/email.tf`) forwards
 to both founders, so welcome replies land in a human inbox.
 

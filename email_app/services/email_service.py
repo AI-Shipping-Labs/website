@@ -127,15 +127,12 @@ class EmailService:
             context: Dict of template variables to render the template with.
             cc: Optional CC recipient(s). Either a single string email
                 address or a list/tuple of strings. ``None`` or empty
-                values send without a CC. Issue #977 (reverting #950 back
-                to the original #703 behaviour): the co-founder welcome
-                puts the staff mailbox on CC so the new member sees the
-                team is copied and can Reply-All to reach both the member
-                and the monitored welcome@/team@ inbox.
+                values send without a CC. This is generic plumbing for
+                callers that intentionally need visible copies; paid
+                welcomes do not pass staff here.
             bcc: Optional BCC recipient(s). Same shape rules as ``cc``.
-                Retained for general callers; the co-founder welcome no
-                longer uses BCC (see ``cc`` — issue #977 moved it back to
-                CC).
+                Retained for general callers; paid welcomes do not pass
+                staff here.
 
         Returns:
             EmailLog instance for the sent email.

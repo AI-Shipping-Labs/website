@@ -134,7 +134,11 @@ class CompletionServiceDispatchTest(TierSetupMixin, TestCase):
         cls.workshop, cls.pages = _make_workshop()
 
     def test_mark_completed_unit_writes_user_course_progress(self):
-        completion_service.mark_completed(self.user, self.unit)
+        when = timezone.now()
+        progress = completion_service.mark_completed(
+            self.user, self.unit, when=when,
+        )
+        self.assertEqual(progress.completed_at, when)
         self.assertTrue(
             UserCourseProgress.objects.filter(
                 user=self.user, unit=self.unit, completed_at__isnull=False,
@@ -144,6 +148,40 @@ class CompletionServiceDispatchTest(TierSetupMixin, TestCase):
         self.assertFalse(
             UserContentCompletion.objects.filter(user=self.user).exists(),
         )
+
+    def test_mark_completed_unit_is_idempotent(self):
+        first_when = timezone.now()
+        second_when = first_when + timedelta(hours=1)
+
+        first = completion_service.mark_completed(
+            self.user, self.unit, when=first_when,
+        )
+        second = completion_service.mark_completed(
+            self.user, self.unit, when=second_when,
+        )
+
+        self.assertEqual(first.pk, second.pk)
+        second.refresh_from_db()
+        self.assertEqual(second.completed_at, first_when)
+        self.assertEqual(
+            UserCourseProgress.objects.filter(
+                user=self.user, unit=self.unit,
+            ).count(),
+            1,
+        )
+
+    def test_mark_completed_unit_does_not_upgrade_null_completed_row(self):
+        progress = UserCourseProgress.objects.create(
+            user=self.user,
+            unit=self.unit,
+            completed_at=None,
+        )
+
+        result = completion_service.mark_completed(self.user, self.unit)
+
+        self.assertEqual(result.pk, progress.pk)
+        result.refresh_from_db()
+        self.assertIsNone(result.completed_at)
 
     def test_mark_completed_unit_auto_enrolls(self):
         # Pre-condition: not enrolled.

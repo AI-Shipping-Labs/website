@@ -22,10 +22,13 @@ from questionnaires.models import Questionnaire, Response
 User = get_user_model()
 
 
-def _make_sprint():
+def _make_sprint(*, start_date=None, duration_weeks=6, slug='may-2026'):
+    if start_date is None:
+        start_date = timezone.localdate() - datetime.timedelta(days=7)
     return Sprint.objects.create(
-        name='May 2026', slug='may-2026',
-        start_date=datetime.date(2026, 5, 1),
+        name='May 2026', slug=slug,
+        start_date=start_date,
+        duration_weeks=duration_weeks,
         status='active', min_tier_level=0,
     )
 
@@ -108,6 +111,28 @@ class AskTeamAccessControlTest(TestCase):
         response = self.client.post(url)
         self.assertEqual(response.status_code, 404)
         self.assertEqual(PlanRequest.objects.count(), 0)
+
+    def test_ended_sprint_rejects_request_without_side_effects(self):
+        ended = _make_sprint(
+            start_date=timezone.localdate() - datetime.timedelta(weeks=8),
+            slug='ended-2026',
+        )
+        member = _make_member('ended@test.com')
+        SprintEnrollment.objects.create(sprint=ended, user=member)
+        self.client.force_login(member)
+        url = reverse(
+            'sprint_ask_team', kwargs={'sprint_slug': ended.slug},
+        )
+
+        response = self.client.post(url)
+
+        self.assertRedirects(
+            response,
+            reverse('cohort_board', kwargs={'sprint_slug': ended.slug}),
+        )
+        self.assertEqual(PlanRequest.objects.count(), 0)
+        self.assertEqual(Notification.objects.count(), 0)
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_get_method_not_allowed(self):
         """The endpoint is POST-only; GET returns 405."""
@@ -493,6 +518,22 @@ class AskTeamCohortBoardIntegrationTest(TestCase):
         response = self.client.get(self.board_url)
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="ask-team-button"')
+
+    def test_board_does_not_render_ask_team_button_for_ended_sprint(self):
+        self.sprint.start_date = timezone.localdate() - datetime.timedelta(
+            weeks=8,
+        )
+        self.sprint.save(update_fields=['start_date', 'updated_at'])
+
+        response = self.client.get(self.board_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="ask-team-closed"')
+        self.assertNotContains(response, 'data-testid="ask-team-button"')
+        self.assertNotContains(
+            response,
+            f'action="{reverse("sprint_ask_team", kwargs={"sprint_slug": self.sprint.slug})}"',
+        )
 
     def test_board_does_not_render_button_on_other_members_no_plan_rows(self):
         """Other members' no_plan rows must not show the ping button."""

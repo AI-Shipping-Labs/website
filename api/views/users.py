@@ -46,10 +46,12 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Q
 from django.http import JsonResponse
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from accounts.services.email_resolution import resolve_user_by_email
 from accounts.utils.bounce import mark_permanent_bounce, record_soft_bounce
 from accounts.utils.tags import add_tag, normalize_tag, remove_tag
 from api.openapi import openapi_spec
@@ -73,6 +75,7 @@ from crm.services.activity_context import (
     serialize_activity_for_api,
 )
 from email_app.models import EmailLog, SesEvent
+from questionnaires.onboarding import get_onboarding_response
 
 User = get_user_model()
 
@@ -197,6 +200,18 @@ def serialize_crm_record_summary(record):
         "id": record.pk,
         "status": record.status,
         "persona": resolve_crm_persona(record),
+    }
+
+
+def serialize_crm_record_for_operator(record):
+    """CRM record payload with the Studio URL operators need next."""
+    if record is None:
+        return None
+    path = reverse("studio_crm_detail", kwargs={"crm_id": record.pk})
+    return {
+        **serialize_crm_record_summary(record),
+        "studio_url": path,
+        "onboarding_url": f"{path}#onboarding",
     }
 
 
@@ -577,6 +592,114 @@ def user_detail(request, email):
         user = locked
 
     return JsonResponse(serialize_user_state(user), status=200)
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Users",
+    summary="Create or reuse a user's CRM record from submitted onboarding",
+    methods={
+        "POST": {
+            "summary": "Ensure CRM record",
+            "description": (
+                "Staff-token repair/automation endpoint. Resolves the path "
+                "email through primary email or email aliases, refuses users "
+                "without submitted onboarding, then creates or reuses the "
+                "single ``CRMRecord`` for the canonical user. This is meant "
+                "for pre-existing onboarding submissions and account-merge "
+                "repairs, not arbitrary CRM imports."
+            ),
+            "responses": {
+                200: {
+                    "description": "Existing CRM record reused.",
+                    "example": {
+                        "email": "alice@example.com",
+                        "created": False,
+                        "crm_record": {
+                            "id": 42,
+                            "status": "active",
+                            "persona": "",
+                            "studio_url": "/studio/crm/42/",
+                            "onboarding_url": "/studio/crm/42/#onboarding",
+                        },
+                    },
+                },
+                201: {
+                    "description": "CRM record created.",
+                    "example": {
+                        "email": "alice@example.com",
+                        "created": True,
+                        "crm_record": {
+                            "id": 42,
+                            "status": "active",
+                            "persona": "",
+                            "studio_url": "/studio/crm/42/",
+                            "onboarding_url": "/studio/crm/42/#onboarding",
+                        },
+                    },
+                },
+                404: {
+                    "description": "Unknown primary email or alias.",
+                    "example": {
+                        "error": "User not found",
+                        "code": "user_not_found",
+                    },
+                },
+                409: {
+                    "description": "No submitted onboarding exists.",
+                    "example": {
+                        "error": "Submitted onboarding is required",
+                        "code": "onboarding_not_submitted",
+                    },
+                },
+            },
+        },
+    },
+)
+def user_crm_record(request, email):
+    """``POST /api/users/<email>/crm-record``."""
+    user = resolve_user_by_email(email)
+    if user is None:
+        return _user_not_found_response()
+    onboarding_response = get_onboarding_response(user)
+    if onboarding_response is None or onboarding_response.status != "submitted":
+        return error_response(
+            "Submitted onboarding is required",
+            "onboarding_not_submitted",
+            status=409,
+            details={"email": user.email},
+        )
+
+    actor = getattr(request, "user", None)
+    with transaction.atomic():
+        locked = User.objects.select_for_update().get(pk=user.pk)
+        record, created = CRMRecord.objects.get_or_create(
+            user=locked,
+            defaults={
+                "status": "active",
+                "created_by": actor if getattr(actor, "is_staff", False) else None,
+            },
+        )
+        CommunityAuditLog.objects.create(
+            user=locked,
+            action="api_crm_record",
+            details=(
+                f"{'created' if created else 'reused'} CRM record "
+                f"{record.pk}; actor_token={_actor_label(request)}; "
+                f"source=submitted_onboarding"
+            ),
+        )
+
+    return JsonResponse(
+        {
+            "email": user.email,
+            "created": created,
+            "crm_record": serialize_crm_record_for_operator(record),
+        },
+        status=201 if created else 200,
+    )
 
 
 _ACTIVITY_EXAMPLE = {

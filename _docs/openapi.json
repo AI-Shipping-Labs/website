@@ -9295,6 +9295,85 @@
         ]
       }
     },
+    "/api/users/{email}/crm-record": {
+      "post": {
+        "description": "Staff-token repair/automation endpoint. Resolves the path email through primary email or email aliases, refuses users without submitted onboarding, then creates or reuses the single ``CRMRecord`` for the canonical user. This is meant for pre-existing onboarding submissions and account-merge repairs, not arbitrary CRM imports.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": false,
+                  "crm_record": {
+                    "id": 42,
+                    "onboarding_url": "/studio/crm/42/#onboarding",
+                    "persona": "",
+                    "status": "active",
+                    "studio_url": "/studio/crm/42/"
+                  },
+                  "email": "alice@example.com"
+                }
+              }
+            },
+            "description": "Existing CRM record reused."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": true,
+                  "crm_record": {
+                    "id": 42,
+                    "onboarding_url": "/studio/crm/42/#onboarding",
+                    "persona": "",
+                    "status": "active",
+                    "studio_url": "/studio/crm/42/"
+                  },
+                  "email": "alice@example.com"
+                }
+              }
+            },
+            "description": "CRM record created."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown primary email or alias."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "onboarding_not_submitted",
+                  "error": "Submitted onboarding is required"
+                }
+              }
+            },
+            "description": "No submitted onboarding exists."
+          }
+        },
+        "summary": "Ensure CRM record",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
     "/api/users/{email}/email-log": {
       "get": {
         "description": "Newest-first list of ``EmailLog`` rows for the user. Each row carries the raw timing fields plus a derived ``disposition`` reflecting the strongest signal in the order ``sent < delivered < opened < clicked < bounced < complained``. ``kind`` filters on ``email_type`` exact match -- unknown values are valid (they simply return an empty page) since ``email_type`` is not a closed enum at the model layer.",

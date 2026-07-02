@@ -82,6 +82,12 @@ def _create_sprint(slug, name, start_date):
     return sprint
 
 
+def _active_sprint_date():
+    from django.utils import timezone
+
+    return timezone.localdate() - datetime.timedelta(days=7)
+
+
 def _enroll(email, sprint_slug):
     from accounts.models import User
     from plans.models import Sprint, SprintEnrollment
@@ -167,7 +173,7 @@ class TestStuckMemberAsksTeamFromBoard:
         _create_staff_user('staff-585@test.com')
 
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', _active_sprint_date(),
         )
         _enroll('alex@test.com', sprint.slug)
 
@@ -245,7 +251,7 @@ class TestRateLimitedMember:
         _clear_plans_data()
         _create_user('alex@test.com', tier_slug='premium')
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', _active_sprint_date(),
         )
         _enroll('alex@test.com', sprint.slug)
         _create_plan_request('alex@test.com', sprint.slug)
@@ -281,7 +287,7 @@ class TestMemberWithPlanSeesNoAskButton:
         _clear_plans_data()
         _create_user('alex@test.com', tier_slug='premium')
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', _active_sprint_date(),
         )
         _create_plan(
             member_email='alex@test.com',
@@ -340,7 +346,7 @@ class TestStaffSeesPlanRequestNotification:
 
         _create_staff_user('staff-585@test.com')
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', _active_sprint_date(),
         )
         _enroll('alex@test.com', sprint.slug)
 
@@ -418,7 +424,7 @@ class TestLeaveFromCohortBoardWithConfirm:
         _clear_plans_data()
         _create_user('alex@test.com', tier_slug='premium')
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', _active_sprint_date(),
         )
         plan = _create_plan(
             member_email='alex@test.com',
@@ -475,7 +481,7 @@ class TestLeaveCancelDialog:
         _clear_plans_data()
         _create_user('alex@test.com', tier_slug='premium')
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', _active_sprint_date(),
         )
         _enroll('alex@test.com', sprint.slug)
 
@@ -527,7 +533,7 @@ class TestStaffDoesNotSeePlanAdminActions:
         _create_staff_user('staff-585@test.com')
 
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', _active_sprint_date(),
         )
         plan = _create_plan(
             member_email='alex@test.com',
@@ -578,7 +584,7 @@ class TestNonStaffNeverSeesAdminLink:
         _set_user_name('alex@test.com', 'Alex', 'Member')
         _set_user_name('bob@test.com', 'Bob', 'Buddy')
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', _active_sprint_date(),
         )
         alex_plan = _create_plan(
             member_email='alex@test.com',
@@ -642,7 +648,7 @@ class TestAnonymousCannotPing:
         _ensure_tiers()
         _clear_plans_data()
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', _active_sprint_date(),
         )
 
         context = browser.new_context(
@@ -695,7 +701,7 @@ class TestNonEnrolledCannotPing:
         _clear_plans_data()
         _create_user('alex@test.com', tier_slug='premium')
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', _active_sprint_date(),
         )
         # NOT enrolling Alex.
 

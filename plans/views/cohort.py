@@ -110,6 +110,7 @@ def cohort_board(request, sprint_slug):
         raise Http404('Not enrolled in this sprint')
 
     viewer_plan = _viewer_plan_for_sprint(sprint, request.user)
+    sprint_has_ended = sprint.has_ended()
 
     plans = list(
         Plan.objects.cohort_progress_rows(
@@ -162,6 +163,7 @@ def cohort_board(request, sprint_slug):
             'sprint': sprint,
             'progress_rows': progress_rows,
             'viewer_plan': viewer_plan,
+            'sprint_has_ended': sprint_has_ended,
             'viewer_pinged_recently': viewer_pinged_recently,
         },
     )

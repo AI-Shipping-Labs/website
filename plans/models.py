@@ -204,6 +204,15 @@ class Sprint(TimestampedModelMixin, models.Model):
             return None
         return self.start_date + timedelta(weeks=self.duration_weeks)
 
+    def has_ended(self, today=None):
+        """True once the sprint window is over."""
+        end = self.end_date
+        if end is None:
+            return False
+        if today is None:
+            today = timezone.localdate()
+        return today >= end
+
     @staticmethod
     def _badge_window_days():
         """Resolve the badge window ``W`` from config (issue #979).

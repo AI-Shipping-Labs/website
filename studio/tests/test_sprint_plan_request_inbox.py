@@ -30,11 +30,21 @@ from questionnaires.models import Questionnaire, Response
 User = get_user_model()
 
 
-def _make_sprint(name='May 2026', slug='may-2026'):
+def _make_sprint(name='May 2026', slug='may-2026', *, start_date=None):
+    if start_date is None:
+        start_date = timezone.localdate() - datetime.timedelta(days=7)
     return Sprint.objects.create(
         name=name, slug=slug,
-        start_date=datetime.date(2026, 5, 1),
+        start_date=start_date,
         duration_weeks=6,
+    )
+
+
+def _make_ended_sprint(name='Ended sprint', slug='ended-sprint'):
+    return _make_sprint(
+        name=name,
+        slug=slug,
+        start_date=timezone.localdate() - datetime.timedelta(days=60),
     )
 
 
@@ -181,6 +191,19 @@ class PendingRequestsEmptyStateTest(TestCase):
     def test_section_anchor_present_even_when_empty(self):
         response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
         self.assertContains(response, 'id="pending-requests"')
+
+    def test_ended_sprint_hides_pending_audit_rows(self):
+        ended = _make_ended_sprint()
+        member = User.objects.create_user(email='ended-request@test.com')
+        PlanRequest.objects.create(sprint=ended, member=member)
+
+        response = self.client.get(f'/studio/sprints/{ended.pk}/')
+
+        self.assertEqual(response.context['pending_plan_requests'], [])
+        self.assertContains(response, 'No pending plan requests for this sprint.')
+        self.assertTrue(
+            PlanRequest.objects.filter(sprint=ended, member=member).exists(),
+        )
 
 
 class CreatePlanFromRequestAccessControlTest(TestCase):
@@ -329,6 +352,24 @@ class PlanRequestPrepareViewTest(TestCase):
         self.assertContains(response, 'Submitted')
         self.assertContains(response, 'data-testid="plan-request-create-button"')
 
+    def test_prepare_for_ended_sprint_redirects_to_inbox_anchor(self):
+        ended = _make_ended_sprint(
+            name='Ended requested sprint',
+            slug='ended-requested-sprint',
+        )
+        PlanRequest.objects.create(sprint=ended, member=self.member)
+
+        response = self.client.get(
+            f'/studio/sprints/{ended.pk}/plan-requests/'
+            f'{self.member.pk}/prepare/',
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response['Location'],
+            f'/studio/sprints/{ended.pk}/#pending-requests',
+        )
+
 
 class CreatePlanFromRequestSubmitTest(TestCase):
     """Happy path: POST creates plan + enrollment, redirects, flashes."""
@@ -375,6 +416,27 @@ class CreatePlanFromRequestSubmitTest(TestCase):
         self.assertEqual(enrollment.enrolled_by_id, self.staff.pk)
         # Weeks materialised by the service helper.
         self.assertEqual(plan.weeks.count(), self.sprint.duration_weeks)
+
+    def test_post_refuses_ended_sprint_request_without_side_effects(self):
+        self.sprint.start_date = timezone.localdate() - datetime.timedelta(days=60)
+        self.sprint.duration_weeks = 6
+        self.sprint.save(update_fields=['start_date', 'duration_weeks'])
+
+        response = self.client.post(self._url())
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response['Location'],
+            f'/studio/sprints/{self.sprint.pk}/#pending-requests',
+        )
+        self.assertFalse(
+            Plan.objects.filter(sprint=self.sprint, member=self.member).exists(),
+        )
+        self.assertFalse(
+            SprintEnrollment.objects.filter(
+                sprint=self.sprint, user=self.member,
+            ).exists(),
+        )
 
     def test_post_refuses_to_create_when_onboarding_incomplete(self):
         Response.objects.filter(respondent=self.member).delete()

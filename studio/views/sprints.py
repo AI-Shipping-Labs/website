@@ -76,6 +76,13 @@ logger = logging.getLogger(__name__)
 _VALID_TIER_LEVELS = {value for value, _label in TIER_LEVEL_CHOICES}
 
 
+def _pending_requests_anchor(sprint):
+    return (
+        f'{reverse("studio_sprint_detail", kwargs={"sprint_id": sprint.pk})}'
+        '#pending-requests'
+    )
+
+
 def _parse_min_tier_level(raw):
     """Parse the ``min_tier_level`` form field. ``(value, error)``."""
     if raw in (None, ''):
@@ -203,11 +210,15 @@ def _pending_request_member_ids(sprint):
 
     A request is "outstanding" iff the member has at least one
     :class:`PlanRequest` row for the sprint AND no :class:`Plan` row
-    yet. The set is computed as a SQL left-anti-join in two steps:
+    yet, and the sprint is still open for plan preparation. The set is
+    computed as a SQL left-anti-join in two steps:
 
     1. distinct member ids that requested in this sprint, then
     2. exclude any whose pk has a Plan row in the sprint.
     """
+    if sprint.has_ended():
+        return []
+
     # ``order_by()`` with no args clears the model's default ordering
     # by ``-created_at`` so ``DISTINCT`` operates on ``member_id``
     # alone -- otherwise PostgreSQL would distinct on the (member_id,
@@ -1150,6 +1161,13 @@ def sprint_plan_request_prepare(request, sprint_id, member_id):
 
     sprint = get_object_or_404(Sprint, pk=sprint_id)
     member = get_object_or_404(User, pk=member_id)
+    if sprint.has_ended():
+        messages.info(
+            request,
+            'This sprint has ended, so plan requests are closed.',
+        )
+        return redirect(_pending_requests_anchor(sprint))
+
     existing_plan = Plan.objects.filter(sprint=sprint, member=member).first()
     if existing_plan is not None:
         messages.info(
@@ -1207,6 +1225,12 @@ def sprint_plan_request_create_plan(request, sprint_id, member_id):
 
     sprint = get_object_or_404(Sprint, pk=sprint_id)
     member = get_object_or_404(User, pk=member_id)
+    if sprint.has_ended():
+        messages.info(
+            request,
+            'This sprint has ended, so plan requests are closed.',
+        )
+        return redirect(_pending_requests_anchor(sprint))
 
     existing_plan = Plan.objects.filter(sprint=sprint, member=member).first()
     if existing_plan is not None:

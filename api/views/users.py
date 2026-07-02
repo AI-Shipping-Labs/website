@@ -76,6 +76,7 @@ from crm.services.activity_context import (
     serialize_activity_for_api,
 )
 from email_app.models import EmailLog, SesEvent
+from questionnaires.models import Persona
 from questionnaires.onboarding import get_onboarding_response
 
 User = get_user_model()
@@ -213,6 +214,24 @@ def serialize_crm_record_for_operator(record):
         **serialize_crm_record_summary(record),
         "studio_url": path,
         "onboarding_url": f"{path}#onboarding",
+    }
+
+
+def _crm_persona_defaults(onboarding_response):
+    """CRM persona fields inferred from the submitted onboarding response."""
+    persona = (
+        Persona.objects.filter(
+            default_questionnaire=onboarding_response.questionnaire,
+            is_active=True,
+        )
+        .order_by("order", "name")
+        .first()
+    )
+    if persona is None:
+        return {}
+    return {
+        "persona": persona.display_label[:120],
+        "persona_ref": persona,
     }
 
 
@@ -674,6 +693,7 @@ def user_crm_record(request, email):
         )
 
     actor = getattr(request, "user", None)
+    persona_defaults = _crm_persona_defaults(onboarding_response)
     with transaction.atomic():
         locked = User.objects.select_for_update().get(pk=user.pk)
         record, created = CRMRecord.objects.get_or_create(
@@ -681,8 +701,19 @@ def user_crm_record(request, email):
             defaults={
                 "status": "active",
                 "created_by": actor if bearer_is_admin(actor) else None,
+                **persona_defaults,
             },
         )
+        if not created and persona_defaults:
+            update_fields = []
+            if not record.persona:
+                record.persona = persona_defaults["persona"]
+                update_fields.append("persona")
+            if record.persona_ref_id is None:
+                record.persona_ref = persona_defaults["persona_ref"]
+                update_fields.append("persona_ref")
+            if update_fields:
+                record.save(update_fields=update_fields)
         CommunityAuditLog.objects.create(
             user=locked,
             action="api_crm_record",

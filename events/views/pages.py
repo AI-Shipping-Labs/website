@@ -50,6 +50,7 @@ from events.services.time_windows import (
 )
 
 VALID_EVENTS_FILTERS = {'all', 'upcoming', 'past'}
+PUBLIC_EVENTS_PER_PAGE = 20
 _validate_resource_url = URLValidator(schemes=['http', 'https'])
 
 
@@ -71,6 +72,15 @@ def _filter_by_tags(queryset, selected_tags):
         if all(tag in obj_tags for tag in selected_tags):
             matching_ids.append(obj.pk)
     return queryset.filter(pk__in=matching_ids)
+
+
+def _pagination_query_prefix(request):
+    query = request.GET.copy()
+    query.pop('page', None)
+    encoded = query.urlencode()
+    if not encoded:
+        return ''
+    return f'{encoded}&'
 
 
 def _clean_event_materials(materials):
@@ -352,17 +362,15 @@ def events_list(request):
     # Apply tag filtering only on past-with-recording list.
     past_filtered = _filter_by_tags(past_with_recording_qs, selected_tags)
 
-    # Paginate the past-with-recording list (20 per page) when filter=past.
+    # Paginate the public Past section in every mode that renders it.
     page_obj = None
     is_paginated = False
-    if filter_mode == 'past':
-        paginator = Paginator(past_filtered, 20)
-        page_number = request.GET.get('page')
-        page_obj = paginator.get_page(page_number)
+    if filter_mode in ('all', 'past'):
+        past_queryset = past_filtered if filter_mode == 'past' else past_all_qs
+        paginator = Paginator(past_queryset, PUBLIC_EVENTS_PER_PAGE)
+        page_obj = paginator.get_page(request.GET.get('page'))
         is_paginated = page_obj.has_other_pages()
         past_events = page_obj
-    elif filter_mode == 'all':
-        past_events = past_all_qs
     else:
         # upcoming: we don't render past section
         past_events = past_all_qs.none()
@@ -397,6 +405,7 @@ def events_list(request):
         'past_events': past_events,
         'page_obj': page_obj,
         'is_paginated': is_paginated,
+        'pagination_query_prefix': _pagination_query_prefix(request),
         'all_past_tags': all_past_tags,
         'selected_tags': selected_tags,
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',

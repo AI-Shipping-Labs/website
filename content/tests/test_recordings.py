@@ -294,11 +294,34 @@ class RecordingsListPaginationTest(TestCase):
         content = response.content.decode()
         self.assertIn('tag=python', content)
 
+    def test_pagination_preserves_repeated_tag_filters(self):
+        Event.objects.all().delete()
+        for i in range(25):
+            _create_recording_event(
+                f'multi-tagged-rec-{i:02d}',
+                tags=['python', 'agents'],
+            )
+
+        response = self.client.get('/events?filter=past&tag=python&tag=agents')
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn(
+            'href="?filter=past&amp;tag=python&amp;tag=agents&amp;page=2"',
+            content,
+        )
+
     def test_invalid_page_number_shows_last(self):
         response = self.client.get('/events?filter=past&page=999')
         self.assertEqual(response.status_code, 200)
         page_obj = response.context['page_obj']
         self.assertEqual(page_obj.number, 2)
+
+    def test_non_numeric_page_number_shows_first(self):
+        response = self.client.get('/events?filter=past&page=not-a-number')
+        self.assertEqual(response.status_code, 200)
+        page_obj = response.context['page_obj']
+        self.assertEqual(page_obj.number, 1)
 
 
 # --- Recordings list display tests ---

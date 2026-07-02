@@ -173,30 +173,6 @@
           {% endfor %}
         </div>
 
-        {% if is_paginated %}
-        <nav class="mt-12 flex flex-wrap items-center justify-center gap-2" aria-label="Pagination">
-          {% if page_obj.has_previous %}
-          <a href="?filter=past{% for tag in selected_tags %}&amp;tag={{ tag }}{% endfor %}&amp;page={{ page_obj.previous_page_number }}"
-             class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground min-h-[44px]">
-            <i data-lucide="chevron-left" class="h-4 w-4"></i>
-            Previous
-          </a>
-          {% endif %}
-
-          <span class="px-4 py-2 text-sm text-muted-foreground">
-            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
-          </span>
-
-          {% if page_obj.has_next %}
-          <a href="?filter=past{% for tag in selected_tags %}&amp;tag={{ tag }}{% endfor %}&amp;page={{ page_obj.next_page_number }}"
-             class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground min-h-[44px]">
-            Next
-            <i data-lucide="chevron-right" class="h-4 w-4"></i>
-          </a>
-          {% endif %}
-        </nav>
-        {% endif %}
-
         {% else %}
         <!-- Compact past list for the default "all" view -->
         <div class="space-y-4">
@@ -250,6 +226,32 @@
           </article>
           {% endfor %}
         </div>
+        {% endif %}
+
+        {% if is_paginated %}
+        <nav class="mt-12 flex flex-wrap items-center justify-center gap-2" aria-label="Past pagination" data-testid="events-past-pagination">
+          {% if page_obj.has_previous %}
+          <a href="?{{ pagination_query_prefix }}page={{ page_obj.previous_page_number }}"
+             data-testid="events-past-pagination-previous"
+             class="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground">
+            <i data-lucide="chevron-left" class="h-4 w-4"></i>
+            Previous
+          </a>
+          {% endif %}
+
+          <span class="px-4 py-2 text-sm text-muted-foreground">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+          </span>
+
+          {% if page_obj.has_next %}
+          <a href="?{{ pagination_query_prefix }}page={{ page_obj.next_page_number }}"
+             data-testid="events-past-pagination-next"
+             class="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground">
+            Next
+            <i data-lucide="chevron-right" class="h-4 w-4"></i>
+          </a>
+          {% endif %}
+        </nav>
         {% endif %}
 
         {% else %}

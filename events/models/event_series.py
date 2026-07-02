@@ -274,9 +274,9 @@ class EventSeries(TimestampedModelMixin, models.Model):
             zoneinfo.ZoneInfo(occurrences[-1].timezone)
         )
         noun = 'session' if count == 1 else 'sessions'
-        first_str = first.strftime('%b %d, %Y')
+        first_str = first.strftime('%a, %b %d, %Y')
         if count == 1:
             return f'{count} {noun} · {first_str}'
-        last_str = last.strftime('%b %d, %Y')
+        last_str = last.strftime('%a, %b %d, %Y')
         # En dash between the first and last date.
         return f'{count} {noun} · {first_str} – {last_str}'

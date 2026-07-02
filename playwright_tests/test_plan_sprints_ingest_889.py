@@ -34,6 +34,7 @@ SLACK_SETTINGS = dict(
     SLACK_BOT_TOKEN="xoxb-e2e",
     SLACK_ENVIRONMENT="test",
     SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID=CHANNEL,
+    LLM_API_KEY="",
 )
 
 
@@ -65,13 +66,18 @@ class _FakeSlackService:
 
 def _run_ingest(service):
     """Run the real ingest task against a stub Slack service."""
+    from django.db import connection
+
     from crm.tasks import ingest_plan_sprints
 
-    with patch(
-        "crm.tasks.ingest_plan_sprints.SlackCommunityService",
-        return_value=service,
-    ):
-        return ingest_plan_sprints()
+    try:
+        with patch(
+            "crm.tasks.ingest_plan_sprints.SlackCommunityService",
+            return_value=service,
+        ):
+            return ingest_plan_sprints()
+    finally:
+        connection.close()
 
 
 def _make_member_with_plan(email, slack_user_id, *, active=True):

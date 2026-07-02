@@ -432,10 +432,12 @@ INTEGRATION_GROUPS = [
                 'key': 'STAFF_SIGNUP_NOTIFY_EMAIL',
                 'is_secret': False,
                 'description': (
-                    'Single staff mailbox that receives the structured '
-                    'internal paid-signup heads-up email. Leave blank to skip '
-                    'that staff email; the user still receives the welcome '
-                    'directly, and Slack still runs when configured.'
+                    'Single staff mailbox used for paid signups: hidden BCC '
+                    'on the member-facing paid welcome, plus the structured '
+                    'internal heads-up email. Leave blank to skip both email '
+                    'staff copies; the member welcome still sends and Slack '
+                    'still runs when configured. Replies still route only via '
+                    'SES_WELCOME_REPLY_TO_EMAIL.'
                 ),
                 'optional': True,
                 'docs_url': '_docs/integrations/site.md#staff_signup_notify_email',

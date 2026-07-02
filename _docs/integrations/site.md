@@ -180,8 +180,13 @@ non-production checkout test events routed to a different inbox.
 
 ## STAFF_SIGNUP_NOTIFY_EMAIL
 
-Purpose: Single staff mailbox that receives the structured internal
-heads-up email on every paid signup (Basic and above).
+Purpose: Single staff mailbox used for two paid-signup email routes
+(Basic and above):
+
+- Hidden BCC on the actual member-facing paid welcome/invite email.
+- Separate structured internal paid-signup heads-up email addressed To
+  staff.
+
 Read by `community/services/staff_notifications.py::notify_paid_signup`.
 Distinct from `PAYMENT_NOTIFICATION_EMAIL` — the latter is the
 short operator audit ping; this one drives the founder-led
@@ -191,6 +196,11 @@ Without it (blank): The co-founder welcome still goes to the new
 user without any staff CC/BCC, and the structured staff heads-up
 email is skipped. The Slack post still fires if
 `STAFF_SIGNUP_NOTIFY_CHANNEL_ID` is set.
+
+Reply rule: Do not use this setting as Reply-To and do not visible-CC
+staff on paid welcomes. Member replies go only to
+`SES_WELCOME_REPLY_TO_EMAIL` so there is one monitored conversation
+path.
 
 Where to find it: This is operator intent — pick the mailbox the
 founders read. A shared list address (`founders@<your-domain>`) so

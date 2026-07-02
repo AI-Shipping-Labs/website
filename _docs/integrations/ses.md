@@ -220,9 +220,9 @@ Test vs live: n/a beyond per-environment override.
 
 ## SES_WELCOME_FROM_EMAIL
 
-Purpose: Dedicated sender address for welcome emails — the five welcome
+Purpose: Dedicated sender address for welcome emails — the welcome
 types `welcome`, `cofounder_welcome`, `basic_welcome`, `premium_welcome`,
-and `welcome_imported`. Selected by
+`welcome_imported`, and `welcome_back`. Selected by
 `email_app/services/email_classification.py` via the per-type override in
 `get_sender_for_email_type` (issue #937). Default:
 `welcome@aishippinglabs.com`.
@@ -256,6 +256,17 @@ email reaches this monitored inbox instead of the send-only `welcome@` /
 `noreply@` mailbox. Default: `welcome@aishippinglabs.com`, which the inbound
 `email-forwarder` Lambda (see `ai-shipping-labs-infra/email.tf`) forwards
 to both founders, so welcome replies land in a human inbox.
+
+Paid checkout welcomes additionally hide-copy `STAFF_SIGNUP_NOTIFY_EMAIL`
+on BCC when that site setting is configured. That BCC gives staff the exact
+member-facing Basic/Main/Premium/fallback/`welcome_back` email body without
+making staff visible to the member or adding staff to Reply All. It is
+separate from both the structured staff heads-up email, which is sent To
+`STAFF_SIGNUP_NOTIFY_EMAIL`, and this Reply-To setting.
+
+Duplicate-reply rule: `SES_WELCOME_REPLY_TO_EMAIL` is the only Reply-To path
+for welcome emails. Do not append `STAFF_SIGNUP_NOTIFY_EMAIL` as a second
+Reply-To and do not visible-CC staff on the member welcome.
 
 Without it: Leaving this blank omits the `Reply-To` header entirely —
 welcome emails then reply to the From address. Only welcome types get a

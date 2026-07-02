@@ -131,8 +131,8 @@ class EmailService:
                 callers that intentionally need visible copies; paid
                 welcomes do not pass staff here.
             bcc: Optional BCC recipient(s). Same shape rules as ``cc``.
-                Retained for general callers; paid welcomes do not pass
-                staff here.
+                Paid checkout welcomes use this for the hidden staff copy;
+                other callers may use it for their own hidden-copy needs.
 
         Returns:
             EmailLog instance for the sent email.

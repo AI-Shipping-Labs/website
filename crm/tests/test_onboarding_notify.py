@@ -4,8 +4,8 @@ Mirrors the plan-request fan-out: a member who submits onboarding (via the
 #802 form OR the #804 AI chat) notifies every active staff user three ways
 -- a best-effort Slack post OR (when Slack did not post) a staff email, and
 ALWAYS one in-app ``onboarding_submitted`` Notification per active staff
-user. The in-app notification deep-links to the member's CRM record when
-tracked, else the Studio user-detail page (``/studio/users/<pk>/``).
+user. The in-app notification deep-links to the member's CRM onboarding
+section, creating the CRM record if needed.
 
 These tests exercise the real submission views (form path) and the shared
 ``finalize_conversation`` finalizer (chat path) so the single notification
@@ -94,33 +94,68 @@ class OnboardingFormNotifiesStaffTest(TestCase):
         ).first()
         self.assertIn('Alice', notif.title)
 
-    def test_links_to_studio_user_detail_when_no_crm_record(self):
+    def test_submit_auto_creates_crm_record_and_links_to_onboarding_anchor(self):
+        self.assertFalse(CRMRecord.objects.filter(user=self.member).exists())
         self._submit()
+        record = CRMRecord.objects.get(user=self.member)
+        self.assertEqual(record.status, 'active')
+        self.assertIsNone(record.created_by)
+
         notif = Notification.objects.filter(
             notification_type='onboarding_submitted',
         ).first()
         self.assertIn(
-            f'/studio/users/{self.member.pk}/',
+            f'/studio/crm/{record.pk}/#onboarding',
             notif.url,
         )
         # Never routes staff to the Django admin.
         self.assertNotIn('/admin/', notif.url)
 
-    def test_email_links_to_studio_not_admin_when_no_crm_record(self):
+    def test_email_links_to_crm_onboarding_not_admin_when_created(self):
         self._submit()
+        record = CRMRecord.objects.get(user=self.member)
         self.assertEqual(len(mail.outbox), 1)
         body = mail.outbox[0].body
-        self.assertIn(f'/studio/users/{self.member.pk}/', body)
+        self.assertIn(f'/studio/crm/{record.pk}/#onboarding', body)
+        self.assertIn('Open onboarding in CRM', body)
         self.assertNotIn('/admin/', body)
 
-    def test_links_to_crm_record_when_tracked(self):
-        record = CRMRecord.objects.create(user=self.member)
+    def test_existing_crm_record_is_reused_and_curated_fields_preserved(self):
+        record = CRMRecord.objects.create(
+            user=self.member,
+            status='active',
+            persona='Curated persona',
+            summary='Curated summary',
+            next_steps='Curated next steps',
+        )
         self._submit()
+        record.refresh_from_db()
+        self.assertEqual(record.persona, 'Curated persona')
+        self.assertEqual(record.summary, 'Curated summary')
+        self.assertEqual(record.next_steps, 'Curated next steps')
+        self.assertEqual(CRMRecord.objects.filter(user=self.member).count(), 1)
         notif = Notification.objects.filter(
             notification_type='onboarding_submitted',
         ).first()
-        self.assertIn(f'/studio/crm/{record.pk}/', notif.url)
+        self.assertIn(f'/studio/crm/{record.pk}/#onboarding', notif.url)
         self.assertNotIn('/admin/', notif.url)
+
+    def test_archived_crm_record_is_reused_without_reactivation(self):
+        record = CRMRecord.objects.create(
+            user=self.member,
+            status='archived',
+            summary='Keep archived context',
+        )
+        self._submit()
+        record.refresh_from_db()
+        self.assertEqual(record.status, 'archived')
+        self.assertEqual(record.summary, 'Keep archived context')
+        self.assertEqual(CRMRecord.objects.filter(user=self.member).count(), 1)
+
+        notif = Notification.objects.filter(
+            notification_type='onboarding_submitted',
+        ).first()
+        self.assertIn(f'/studio/crm/{record.pk}/#onboarding', notif.url)
 
     def test_emails_staff_when_slack_disabled(self):
         # SLACK_ENABLED is false by default in tests -> email fallback.
@@ -141,6 +176,7 @@ class OnboardingFormNotifiesStaffTest(TestCase):
 
     def test_resubmit_does_not_double_notify(self):
         self._submit()
+        record = CRMRecord.objects.get(user=self.member)
         baseline = Notification.objects.filter(
             notification_type='onboarding_submitted',
         ).count()
@@ -158,6 +194,8 @@ class OnboardingFormNotifiesStaffTest(TestCase):
             2,
         )
         self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(CRMRecord.objects.filter(user=self.member).count(), 1)
+        self.assertEqual(CRMRecord.objects.get(user=self.member).pk, record.pk)
 
 
 @override_settings(
@@ -206,6 +244,7 @@ class OnboardingSlackChannelTest(TestCase):
         payload = mock_post.call_args.kwargs['json']
         self.assertEqual(payload['channel'], 'C123')
         self.assertIn('onboarding', json.dumps(payload).lower())
+        self.assertIn('Open onboarding in CRM', json.dumps(payload))
         # Slack succeeded -> email fallback NOT used.
         self.assertEqual(len(mail.outbox), 0)
         # In-app notification ALWAYS created.
@@ -277,6 +316,36 @@ class OnboardingNotifyBestEffortTest(TestCase):
         msgs = [m.message for m in resp.context['messages']]
         self.assertTrue(any('plan' in m.lower() for m in msgs))
 
+    def test_crm_create_failure_logs_and_falls_back_to_user_detail(self):
+        with self.assertLogs(
+            'crm.services.onboarding_notify', level='ERROR',
+        ) as logs:
+            with patch(
+                'crm.services.onboarding_notify.ensure_onboarding_crm_record',
+                side_effect=RuntimeError('crm down'),
+            ):
+                resp = self.client.post(
+                    reverse(
+                        'onboarding_submit',
+                        kwargs={'response_id': self.response.pk},
+                    ),
+                    {f'question_{self.required.pk}': 'a'},
+                    follow=True,
+                )
+
+        self.response.refresh_from_db()
+        self.assertEqual(self.response.status, 'submitted')
+        msgs = [m.message for m in resp.context['messages']]
+        self.assertTrue(any('plan' in m.lower() for m in msgs))
+        self.assertFalse(CRMRecord.objects.filter(user=self.member).exists())
+        self.assertTrue(any('Failed to auto-create/find CRM record' in line for line in logs.output))
+        notif = Notification.objects.get(
+            notification_type='onboarding_submitted',
+            user=self.staff,
+        )
+        self.assertIn(f'/studio/users/{self.member.pk}/', notif.url)
+        self.assertNotIn('/admin/', notif.url)
+
 
 class OnboardingChatFinalizeNotifiesStaffTest(TestCase):
     """The AI-chat finalizer is the same single notification site (#882)."""
@@ -317,8 +386,10 @@ class OnboardingChatFinalizeNotifiesStaffTest(TestCase):
 
         response.refresh_from_db()
         self.assertEqual(response.status, 'submitted')
+        record = CRMRecord.objects.get(user=self.member)
         notifs = Notification.objects.filter(
             notification_type='onboarding_submitted', user=self.staff,
         )
         self.assertEqual(notifs.count(), 1)
         self.assertIn('Dana', notifs.first().title)
+        self.assertIn(f'/studio/crm/{record.pk}/#onboarding', notifs.first().url)

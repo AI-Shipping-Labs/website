@@ -1,9 +1,9 @@
 """End-to-end tests for the reorganised Studio sidebar (issues #570, #576).
 
 The Studio sidebar is split into a small top utility row
-(``Back to website`` + theme toggle), a Dashboard link, and seven
-collapsible sections — Events, Content, People, Planning, Communication,
-Tracking, Operations.
+(``Back to website`` + theme toggle), a Dashboard link, and eight
+collapsible sections — Events, Content, People, Planning, Onboarding & intake,
+Communication, Tracking, Operations.
 The section that contains the current page auto-expands server-side; on
 the dashboard only Events is open (#576 moved Events to the top and
 flipped the dashboard default from Content to Events).
@@ -124,6 +124,7 @@ class TestStaffLandsInStudio:
                 "content",
                 "people",
                 "planning",
+                "onboarding",
                 "communication",
                 "tracking",
                 "operations",
@@ -141,9 +142,9 @@ class TestStaffLandsInStudio:
             assert link.count() == 1
             assert link.is_visible(), f"{label!r} should be visible in expanded Events"
 
-        # The other six sections are collapsed — their <ul> bodies are not visible.
+        # The other seven sections are collapsed — their <ul> bodies are not visible.
         for slug in (
-            "content", "people", "planning",
+            "content", "people", "planning", "onboarding",
             "communication", "tracking", "operations",
         ):
             ul = _section_list(page, slug)
@@ -257,7 +258,7 @@ class TestPeopleAutoExpands:
         # All other sections collapsed — Events also collapses now that
         # another section is active (#576).
         for slug in (
-            "content", "events", "planning",
+            "content", "events", "planning", "onboarding",
             "communication", "tracking", "operations",
         ):
             assert not _section_list(page, slug).is_visible()
@@ -449,9 +450,10 @@ class TestPlanningSection:
 
         people_y = _section_button(page, "people").bounding_box()["y"]
         planning_y = planning_button.bounding_box()["y"]
+        onboarding_y = _section_button(page, "onboarding").bounding_box()["y"]
         communication_y = _section_button(page, "communication").bounding_box()["y"]
         tracking_y = _section_button(page, "tracking").bounding_box()["y"]
-        assert people_y < planning_y < communication_y < tracking_y
+        assert people_y < planning_y < onboarding_y < communication_y < tracking_y
 
     def test_plans_deep_link_expands_planning_and_highlights_plans(
         self, django_server, browser
@@ -477,7 +479,7 @@ class TestPlanningSection:
         assert "bg-secondary" in (plans_link.get_attribute("class") or "")
         assert not _section_list(page, "people").is_visible()
 
-    def test_dashboard_shows_planning_between_people_and_communication(
+    def test_dashboard_shows_planning_and_onboarding_between_people_and_communication(
         self, django_server, browser
     ):
         _ensure_tiers()
@@ -489,14 +491,18 @@ class TestPlanningSection:
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
 
         planning = _section_button(page, "planning")
+        onboarding = _section_button(page, "onboarding")
         assert planning.get_attribute("aria-expanded") == "false"
         assert not _section_list(page, "planning").is_visible()
+        assert onboarding.get_attribute("aria-expanded") == "false"
+        assert not _section_list(page, "onboarding").is_visible()
 
         people_y = _section_button(page, "people").bounding_box()["y"]
         planning_y = planning.bounding_box()["y"]
+        onboarding_y = onboarding.bounding_box()["y"]
         communication_y = _section_button(page, "communication").bounding_box()["y"]
         tracking_y = _section_button(page, "tracking").bounding_box()["y"]
-        assert people_y < planning_y < communication_y < tracking_y
+        assert people_y < planning_y < onboarding_y < communication_y < tracking_y
 
         _section_button(page, "people").click()
         people_labels = page.locator("#studio-section-people a span").all_inner_texts()
@@ -518,9 +524,40 @@ class TestPlanningSection:
         assert [label.strip() for label in planning_labels if label.strip()] == [
             "Sprints",
             "Plans",
+        ]
+
+        onboarding.click()
+        onboarding_labels = page.locator(
+            "#studio-section-onboarding a span"
+        ).all_inner_texts()
+        assert [label.strip() for label in onboarding_labels if label.strip()] == [
             "Questionnaires",
             "Personas",
         ]
+
+        page.locator(
+            '#studio-section-onboarding a[href="/studio/questionnaires/"]'
+        ).click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/studio/questionnaires/" in page.url
+        assert _section_button(page, "onboarding").get_attribute(
+            "aria-expanded"
+        ) == "true"
+        assert page.locator(
+            '[data-testid="questionnaires-header"]'
+        ).is_visible()
+
+        page.locator(
+            '#studio-section-onboarding a[href="/studio/personas/"]'
+        ).click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/studio/personas/" in page.url
+        assert _section_button(page, "onboarding").get_attribute(
+            "aria-expanded"
+        ) == "true"
+        assert page.locator(
+            '[data-testid="personas-header"]'
+        ).is_visible()
 
 
 # ---------------------------------------------------------------------------
@@ -760,7 +797,7 @@ class TestKeyboardSectionToggle:
         page.keyboard.press("Enter")
         assert content_button.get_attribute("aria-expanded") == "true"
         assert content_ul.is_visible()
-        # The six children are in the tab order (visible + focusable).
+        # The Content children are in the tab order (visible + focusable).
         for label in ["Articles", "Courses", "Projects", "Workshops", "Recordings", "Downloads"]:
             link = page.locator(
                 f'#studio-section-content a:has(span:text-is("{label}"))'
@@ -820,7 +857,7 @@ class TestEventsAsDashboardDefault:
             "aria-expanded"
         ) == "true"
         for slug in (
-            "content", "people", "planning",
+            "content", "people", "planning", "onboarding",
             "communication", "tracking", "operations",
         ):
             assert _section_button(page, slug).get_attribute(
@@ -868,9 +905,10 @@ class TestContentPageCollapsesEvents:
             '#studio-section-events a[href="/studio/events/"]'
         ).is_visible()
 
-        # People, Planning, Communication, Tracking, Operations are collapsed.
+        # People, Planning, Onboarding, Communication, Tracking, Operations are collapsed.
         for slug in (
-            "people", "planning", "communication", "tracking", "operations",
+            "people", "planning", "onboarding",
+            "communication", "tracking", "operations",
         ):
             assert not _section_list(page, slug).is_visible()
 
@@ -912,7 +950,7 @@ class TestEventsPageKeepsEventsExpanded:
         )
 
         for slug in (
-            "content", "people", "planning",
+            "content", "people", "planning", "onboarding",
             "communication", "tracking", "operations",
         ):
             assert not _section_list(page, slug).is_visible()

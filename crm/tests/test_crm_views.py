@@ -498,7 +498,11 @@ class CRMOnboardingSectionTest(CRMViewsBase):
 
         response = self.client.get(f'/studio/crm/{record.pk}/')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="crm-onboarding-section"')
+        self.assertContains(
+            response,
+            'id="onboarding" class="bg-card border border-border rounded-lg '
+            'p-6 mb-8 max-w-4xl" data-testid="crm-onboarding-section"',
+        )
         self.assertContains(response, 'What are your goals?')
         self.assertContains(
             response, 'Build an AI portfolio and switch careers',

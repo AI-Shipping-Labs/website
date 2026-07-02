@@ -16,6 +16,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import Token
+from crm.models import CRMRecord
 from questionnaires.models import (
     Answer,
     AnswerOptionText,
@@ -173,6 +174,7 @@ class PerMemberResponseTest(_OnboardingApiBase):
         self.assertEqual(data["questionnaire_slug"], "t-engineer")
         self.assertEqual(data["status"], "submitted")
         self.assertIsNotNone(data["submitted_at"])
+        self.assertIsNone(data["crm_record"])
 
         orders = [q["order"] for q in data["questions"]]
         self.assertEqual(orders, sorted(orders))
@@ -226,6 +228,30 @@ class PerMemberResponseTest(_OnboardingApiBase):
         )
         by_order = {q["order"]: q for q in resp.json()["questions"]}
         self.assertIsNone(by_order[7]["answer"])
+
+    def test_crm_record_relationship_serializes_when_present(self):
+        record = CRMRecord.objects.create(user=self.member, status="active")
+        resp = self.client.get(
+            f"/api/onboarding/responses/{self.member.email}", **self._auth(),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.json()["crm_record"],
+            {
+                "id": record.pk,
+                "status": "active",
+                "studio_url": f"/studio/crm/{record.pk}/#onboarding",
+            },
+        )
+
+    def test_archived_crm_record_relationship_preserves_status(self):
+        record = CRMRecord.objects.create(user=self.member, status="archived")
+        resp = self.client.get(
+            f"/api/onboarding/responses/{self.member.email}", **self._auth(),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["crm_record"]["id"], record.pk)
+        self.assertEqual(resp.json()["crm_record"]["status"], "archived")
 
 
 class GenericFallbackPersonaTest(_OnboardingApiBase):
@@ -351,11 +377,22 @@ class BulkFeedTest(_OnboardingApiBase):
         return r
 
     def test_default_excludes_draft(self):
+        record = CRMRecord.objects.create(user=self.r2.respondent)
         resp = self.client.get("/api/onboarding/responses", **self._auth())
         data = resp.json()
         self.assertEqual(data["count"], 3)
-        emails = {r["email"] for r in data["responses"]}
+        by_email = {r["email"]: r for r in data["responses"]}
+        emails = set(by_email)
         self.assertNotIn("d@test.com", emails)
+        self.assertIsNone(by_email["m1@test.com"]["crm_record"])
+        self.assertEqual(
+            by_email["m2@test.com"]["crm_record"],
+            {
+                "id": record.pk,
+                "status": "active",
+                "studio_url": f"/studio/crm/{record.pk}/#onboarding",
+            },
+        )
 
     def test_status_all_includes_draft(self):
         resp = self.client.get(
@@ -669,3 +706,30 @@ class OpenApiSyncTest(_OnboardingApiBase):
             self.assertIn(path, paths)
             self.assertIn("get", paths[path])
             self.assertEqual(paths[path]["get"]["tags"], ["Onboarding"])
+
+    def test_onboarding_response_examples_include_crm_record_relationship(self):
+        from api.openapi import build_spec
+        from api.urls import urlpatterns
+
+        spec = build_spec(urlpatterns)
+        detail_example = (
+            spec["paths"]["/api/onboarding/responses/{email}"]["get"]
+            ["responses"]["200"]["content"]["application/json"]["example"]
+        )
+        self.assertEqual(
+            detail_example["crm_record"],
+            {
+                "id": 42,
+                "status": "active",
+                "studio_url": "/studio/crm/42/#onboarding",
+            },
+        )
+
+        bulk_example = (
+            spec["paths"]["/api/onboarding/responses"]["get"]
+            ["responses"]["200"]["content"]["application/json"]["example"]
+        )
+        self.assertEqual(
+            bulk_example["responses"][0]["crm_record"],
+            detail_example["crm_record"],
+        )

@@ -25,6 +25,9 @@ CRM detail page (#871) share a single source of truth; this module only
 adds the structured-list JSON wrapping on top of it.
 """
 
+from django.urls import reverse
+
+from crm.models import CRMRecord
 from questionnaires.onboarding import (
     normalize_answer as _normalize_answer,
 )
@@ -37,6 +40,20 @@ def _isoformat_or_none(value):
     if value is None:
         return None
     return value.isoformat()
+
+
+def _serialize_crm_record(response):
+    """Compact CRM relationship for an onboarding response payload."""
+    try:
+        record = response.respondent.crm_record
+    except CRMRecord.DoesNotExist:
+        return None
+    path = reverse('studio_crm_detail', kwargs={'crm_id': record.pk})
+    return {
+        "id": record.pk,
+        "status": record.status,
+        "studio_url": f"{path}#onboarding",
+    }
 
 
 # ---- A. Survey definition --------------------------------------------------
@@ -161,5 +178,6 @@ def serialize_response(response, *, persona):
         "status": response.status,
         "submitted_at": _isoformat_or_none(response.submitted_at),
         "persona": persona_payload,
+        "crm_record": _serialize_crm_record(response),
         "questions": questions,
     }

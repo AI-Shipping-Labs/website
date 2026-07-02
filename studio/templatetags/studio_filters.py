@@ -421,7 +421,10 @@ def studio_sidebar_state(path):
         or '/studio/call-hosts' in p
     )
     planning_active = (
-        '/sprints' in p or '/plans' in p or '/questionnaires' in p
+        '/sprints' in p or '/plans' in p
+    )
+    onboarding_active = (
+        '/questionnaires' in p or '/personas' in p
     )
     events_active = (
         '/events/' in p
@@ -457,6 +460,7 @@ def studio_sidebar_state(path):
         content_active
         or people_active
         or planning_active
+        or onboarding_active
         or communication_active
         or tracking_active
         or operations_active
@@ -467,6 +471,7 @@ def studio_sidebar_state(path):
         'content_active': content_active,
         'people_active': people_active,
         'planning_active': planning_active,
+        'onboarding_active': onboarding_active,
         'events_active': events_active,
         'events_expanded': events_expanded,
         'communication_active': communication_active,

@@ -182,6 +182,7 @@ class StudioDashboardTest(TestCase):
             'people',
             'events',
             'planning',
+            'onboarding',
             'communication',
             'tracking',
             'operations',

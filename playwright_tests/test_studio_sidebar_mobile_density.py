@@ -9,9 +9,10 @@ on a 412 px-wide phone:
 2. The mobile sidebar toggle pill used non-token ``bg-gray-800``
    colors that floated as a dark island on the near-white page in light
    mode.
-3. The seven section-header toggles (Events / Content / People / Planning /
-   Communication / Tracking / Operations) used ``text-muted-foreground`` on the
-   ``bg-card`` panel — read as disabled metadata in light mode.
+3. The section-header toggles (Events / Content / People / Planning /
+   Onboarding & intake / Communication / Tracking / Operations) used
+   ``text-muted-foreground`` on the ``bg-card`` panel — read as disabled
+   metadata in light mode.
 4. The Users sub-row was the only split-button pattern in the sidebar
    — separate ``<a>`` and ``<button>`` halves with their own hover
    surfaces and a small ``px-2`` chevron tap target.
@@ -201,13 +202,13 @@ class TestTogglePillLightMode:
 
 @pytest.mark.django_db(transaction=True)
 class TestSectionHeaderContrastAndTapTarget:
-    """All seven section toggle buttons should carry ``text-foreground/70``
+    """All section toggle buttons should carry ``text-foreground/70``
     (lifted contrast vs. the previous ``text-muted-foreground``),
     ``font-semibold`` (lifted weight vs. ``font-medium``), and
     ``min-h-[44px]`` (44 px minimum tap target)."""
 
     SECTIONS = (
-        "events", "content", "people", "planning",
+        "events", "content", "people", "planning", "onboarding",
         "communication", "tracking", "operations",
     )
 

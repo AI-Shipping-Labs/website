@@ -1,8 +1,8 @@
 """Playwright E2E for onboarding-notification routing into Studio (issue #983).
 
 The ``onboarding_submitted`` staff notification deep-links to the member's
-CRM record when tracked (``/studio/crm/<id>/``), otherwise to the Studio
-user-detail page (``/studio/users/<pk>/``) -- never to the Django admin.
+CRM onboarding section (``/studio/crm/<id>/#onboarding``), auto-creating the
+CRM record when needed -- never to the Django admin.
 The ``plan_request`` notification routes to the locked request-preparation
 flow rather than the generic Studio create-plan form.
 
@@ -88,21 +88,63 @@ def _notify_onboarding(member):
     connection.close()
 
 
+def _submit_onboarding_response(member, *, prompt="What are your goals?", answer="Ship an AI project"):
+    """Create a submitted onboarding response with one visible Q/A row."""
+    from django.utils import timezone
+
+    from questionnaires.models import Answer, Questionnaire, Response, ResponseQuestion
+
+    questionnaire, _ = Questionnaire.objects.get_or_create(
+        slug="onboarding-general",
+        defaults={
+            "title": "General onboarding",
+            "purpose": "onboarding",
+            "is_active": True,
+        },
+    )
+    response = Response.objects.create(
+        questionnaire=questionnaire,
+        respondent=member,
+        status="submitted",
+        submitted_at=timezone.now(),
+    )
+    question = ResponseQuestion.objects.create(
+        response=response,
+        source_question=None,
+        question_type="long_text",
+        prompt=prompt,
+        order=0,
+    )
+    Answer.objects.create(
+        response=response,
+        question=question,
+        text_value=answer,
+    )
+    connection.close()
+    return response
+
+
 @pytest.mark.django_db(transaction=True)
 class TestOnboardingNotificationRoutesToStudio:
     @pytest.mark.core
-    def test_untracked_member_notification_lands_on_studio_user_detail(
+    def test_untracked_member_notification_auto_creates_crm_and_lands_on_answers(
         self, django_server, browser,
     ):
-        """Bell click for an untracked onboarder lands on Studio user detail."""
+        """Bell click for an untracked onboarder lands on CRM onboarding."""
+        from crm.models import CRMRecord
+
         _ensure_tiers()
         _wipe_state()
         _create_staff_user(STAFF_EMAIL)
         newbie = _create_user(
             NEWBIE_EMAIL, tier_slug="free", first_name="Newbie",
         )
+        _submit_onboarding_response(newbie)
         _point_site_base_url_at(django_server)
         _notify_onboarding(newbie)
+        record = CRMRecord.objects.get(user=newbie)
+        record_pk = record.pk
+        connection.close()
 
         context = _auth_context(browser, STAFF_EMAIL)
         page = context.new_page()
@@ -125,27 +167,23 @@ class TestOnboardingNotificationRoutesToStudio:
         assert "Onboarding completed by" in dropdown_text
         assert "Tier: Free" in dropdown_text
 
-        # The href targets Studio user detail, not the Django admin.
+        # The href targets CRM onboarding, not the Django admin.
         link = page.locator(
-            f'#notification-list a[href*="/studio/users/{newbie.pk}/"]'
+            f'#notification-list a[href*="/studio/crm/{record_pk}/#onboarding"]'
         )
         assert link.count() >= 1
         link.first.click()
 
-        page.wait_for_url(f"**/studio/users/{newbie.pk}/**", timeout=10000)
-        assert f"/studio/users/{newbie.pk}/" in page.url
+        page.wait_for_url(f"**/studio/crm/{record_pk}/#onboarding", timeout=10000)
+        assert f"/studio/crm/{record_pk}/#onboarding" in page.url
         assert "/admin/" not in page.url
 
-        # The Studio page shows the member's email, tier, and a Track CTA.
-        assert NEWBIE_EMAIL in page.locator(
-            '[data-testid="user-detail-email"]'
-        ).inner_text()
-        assert "Free" in page.locator(
-            '[data-testid="user-detail-tier"]'
-        ).inner_text()
-        assert page.locator(
-            '[data-testid="user-crm-cta-track"]'
-        ).is_visible()
+        assert NEWBIE_EMAIL in page.locator("body").inner_text()
+        onboarding = page.locator('[data-testid="crm-onboarding-section"]')
+        assert onboarding.is_visible()
+        assert "What are your goals?" in onboarding.inner_text()
+        assert "Ship an AI project" in onboarding.inner_text()
+        assert CRMRecord.objects.filter(user=newbie).count() == 1
         context.close()
 
     @pytest.mark.core
@@ -161,6 +199,11 @@ class TestOnboardingNotificationRoutesToStudio:
         tracked = _create_user(
             TRACKED_EMAIL, tier_slug="free", first_name="Tracked",
         )
+        _submit_onboarding_response(
+            tracked,
+            prompt="Which outcome matters most?",
+            answer="Finish the first sprint",
+        )
         record = CRMRecord.objects.create(user=tracked)
         record_pk = record.pk
         connection.close()
@@ -174,16 +217,19 @@ class TestOnboardingNotificationRoutesToStudio:
         )
 
         link = page.locator(
-            f'main a[href*="/studio/crm/{record_pk}/"]'
+            f'main a[href*="/studio/crm/{record_pk}/#onboarding"]'
         )
         assert link.count() >= 1
         href = link.first.get_attribute("href")
         assert "/admin/" not in href
         link.first.click()
 
-        page.wait_for_url(f"**/studio/crm/{record_pk}/**", timeout=10000)
-        assert f"/studio/crm/{record_pk}/" in page.url
+        page.wait_for_url(f"**/studio/crm/{record_pk}/#onboarding", timeout=10000)
+        assert f"/studio/crm/{record_pk}/#onboarding" in page.url
         assert "/admin/" not in page.url
+        onboarding = page.locator('[data-testid="crm-onboarding-section"]')
+        assert "Which outcome matters most?" in onboarding.inner_text()
+        assert "Finish the first sprint" in onboarding.inner_text()
         context.close()
 
     @pytest.mark.core

@@ -19,14 +19,15 @@ NEVER breaks the member's submission (the member's action is the source of
 truth, mirroring the plan-request / payment precedent).
 
 The in-app notification's ``url`` deep-links to the member's CRM record at
-``/studio/crm/<id>/`` when a :class:`~crm.models.CRMRecord` exists, else to
-the Studio user-detail page (``/studio/users/<pk>/``). A CRMRecord is NOT
-auto-created here -- tracking is an explicit staff action (issue #560).
+``/studio/crm/<id>/#onboarding``. Onboarding completion creates that
+CRMRecord when one does not exist; if CRM create/find fails, the fan-out
+falls back to the Studio user-detail page (``/studio/users/<pk>/``).
 """
 
 import logging
 
 from django.core.mail import send_mail
+from django.db import IntegrityError
 from django.urls import reverse
 
 from content.access import LEVEL_TO_TIER_NAME, get_user_level
@@ -41,12 +42,30 @@ from plans.views.sprints import _member_display_name, _staff_users
 logger = logging.getLogger(__name__)
 
 
-def _member_crm_path(member):
-    """Studio CRM detail path for ``member`` when tracked, else ``None``."""
-    record = CRMRecord.objects.filter(user=member).first()
-    if record is None:
-        return None
-    return reverse('studio_crm_detail', kwargs={'crm_id': record.pk})
+def ensure_onboarding_crm_record(member):
+    """Return ``member``'s CRM record, creating a minimal one when absent.
+
+    Onboarding auto-create is intentionally minimal: the member answers
+    remain canonical on ``questionnaires.Response`` and curated CRM fields
+    stay untouched. Existing archived records are reused as-is.
+    """
+    try:
+        record, _created = CRMRecord.objects.get_or_create(
+            user=member,
+            defaults={'status': 'active'},
+        )
+        return record
+    except IntegrityError:
+        # A concurrent retry may have inserted the one allowed row between
+        # the get and create. Re-read the invariant row instead of surfacing
+        # the race to the member-facing submission.
+        return CRMRecord.objects.get(user=member)
+
+
+def _crm_onboarding_path(record):
+    """Studio CRM onboarding-section path for ``record``."""
+    path = reverse('studio_crm_detail', kwargs={'crm_id': record.pk})
+    return f'{path}#onboarding'
 
 
 def _member_studio_user_url(member):
@@ -58,15 +77,20 @@ def _member_studio_user_url(member):
 def _member_target_url(member):
     """Absolute URL the staff notification should open for ``member``.
 
-    The member's CRM record when one exists (``/studio/crm/<id>/``),
-    otherwise the Studio user-detail page (``/studio/users/<pk>/``).
-    Never routes staff to the Django admin and never auto-creates a
-    CRMRecord.
+    The member's CRM record when CRM create/find succeeds
+    (``/studio/crm/<id>/#onboarding``), otherwise the Studio user-detail
+    page (``/studio/users/<pk>/``). Never routes staff to the Django admin.
     """
-    crm_path = _member_crm_path(member)
-    if crm_path is not None:
-        return f'{site_base_url()}{crm_path}'
-    return _member_studio_user_url(member)
+    try:
+        record = ensure_onboarding_crm_record(member)
+    except Exception:
+        logger.exception(
+            'Failed to auto-create/find CRM record for onboarding submission '
+            'by %s',
+            getattr(member, 'email', member),
+        )
+        return _member_studio_user_url(member)
+    return f'{site_base_url()}{_crm_onboarding_path(record)}'
 
 
 def _member_tier_name(member):
@@ -118,10 +142,10 @@ def _post_onboarding_to_slack(*, member, target_url):
                     'type': 'button',
                     'text': {
                         'type': 'plain_text',
-                        'text': 'Open member in Studio',
+                        'text': 'Open onboarding in CRM',
                     },
                     'url': target_url,
-                    'action_id': 'open_member_studio',
+                    'action_id': 'open_onboarding_crm',
                 },
             ],
         },
@@ -163,7 +187,7 @@ def _email_staff_about_onboarding(*, member, target_url):
     subject = f'Onboarding completed: {member.email}'
     body = (
         f'{member_name} ({member.email}) just completed onboarding.\n\n'
-        f'Open member: {target_url}\n'
+        f'Open onboarding in CRM: {target_url}\n'
     )
     from_email = get_config('SES_FROM_EMAIL', 'community@aishippinglabs.com')
     send_mail(

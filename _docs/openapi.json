@@ -4771,7 +4771,7 @@
     },
     "/api/onboarding/responses": {
       "get": {
-        "description": "Lists onboarding responses (the shared response object per item) for batch plan generation. Defaults to ``status=submitted`` (only finished responses); pass ``status=draft`` or ``status=all`` to widen. ``since`` is an inclusive lower bound on ``submitted_at`` when filtering submitted, else on ``created_at``. ``persona`` filters by resolved persona ``slug`` (or the literal ``none`` for responses with no resolved persona). ``count`` is the TOTAL matching set BEFORE slicing.",
+        "description": "Lists onboarding responses (the shared response object per item) for batch plan generation. Defaults to ``status=submitted`` (only finished responses); pass ``status=draft`` or ``status=all`` to widen. ``since`` is an inclusive lower bound on ``submitted_at`` when filtering submitted, else on ``created_at``. ``persona`` filters by resolved persona ``slug`` (or the literal ``none`` for responses with no resolved persona). Each item includes an additive ``crm_record`` relationship when a CRM record exists. ``count`` is the TOTAL matching set BEFORE slicing.",
         "parameters": [
           {
             "in": "query",
@@ -4829,6 +4829,11 @@
                   "offset": 0,
                   "responses": [
                     {
+                      "crm_record": {
+                        "id": 42,
+                        "status": "active",
+                        "studio_url": "/studio/crm/42/#onboarding"
+                      },
                       "email": "alex@example.com",
                       "persona": {
                         "archetype": "The Engineer transitioning to AI",
@@ -4903,7 +4908,7 @@
     },
     "/api/onboarding/responses/{email}": {
       "get": {
-        "description": "Returns the member's single onboarding ``Response`` (draft OR submitted -- ``status`` / ``submitted_at`` tell which) as the shared response object: ``email``, ``questionnaire_slug``, ``status``, ``submitted_at``, resolved ``persona`` (or ``null``), and an ordered flat ``questions`` Q&A list read from the SNAPSHOT (``ResponseQuestion`` / ``Answer`` / ``ResponseQuestionOption``), never the base ``Question``. Email lookup is case-insensitive.",
+        "description": "Returns the member's single onboarding ``Response`` (draft OR submitted -- ``status`` / ``submitted_at`` tell which) as the shared response object: ``email``, ``questionnaire_slug``, ``status``, ``submitted_at``, resolved ``persona`` (or ``null``), additive ``crm_record`` relationship (or ``null``), and an ordered flat ``questions`` Q&A list read from the SNAPSHOT (``ResponseQuestion`` / ``Answer`` / ``ResponseQuestionOption``), never the base ``Question``. Email lookup is case-insensitive.",
         "parameters": [
           {
             "in": "path",
@@ -4919,6 +4924,11 @@
             "content": {
               "application/json": {
                 "example": {
+                  "crm_record": {
+                    "id": 42,
+                    "status": "active",
+                    "studio_url": "/studio/crm/42/#onboarding"
+                  },
                   "email": "alex@example.com",
                   "persona": {
                     "archetype": "The Engineer transitioning to AI",

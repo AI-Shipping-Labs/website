@@ -4,7 +4,7 @@ Covers the structural expectations the spec calls out:
 
 - Top utility row order (``Back to website`` then theme toggle), placed
   above the section groups.
-- The seven collapsible sections render in the expected order with the
+- The eight collapsible sections render in the expected order with the
   expected labels.
 - Every existing nav link is still present and points at the same URL,
   identified by ``href`` plus link text.
@@ -97,7 +97,7 @@ class StudioSidebarStructureTest(TestCase):
     # Section order + labels
     # ------------------------------------------------------------------
 
-    def test_seven_section_headers_render_in_expected_order(self):
+    def test_eight_section_headers_render_in_expected_order(self):
         response = self._get_studio_dashboard()
         body = response.content.decode()
 
@@ -109,6 +109,7 @@ class StudioSidebarStructureTest(TestCase):
             'aria-controls="studio-section-content"',
             'aria-controls="studio-section-people"',
             'aria-controls="studio-section-planning"',
+            'aria-controls="studio-section-onboarding"',
             'aria-controls="studio-section-communication"',
             'aria-controls="studio-section-tracking"',
             'aria-controls="studio-section-operations"',
@@ -167,6 +168,9 @@ class StudioSidebarStructureTest(TestCase):
         # Planning
         ('/studio/sprints/', 'Sprints'),
         ('/studio/plans/', 'Plans'),
+        # Onboarding & intake
+        ('/studio/questionnaires/', 'Questionnaires'),
+        ('/studio/personas/', 'Personas'),
         # Events
         ('/studio/events/', 'Events'),
         ('/studio/event-series/', 'Event series'),
@@ -288,11 +292,11 @@ class StudioSidebarStructureTest(TestCase):
 
         # Events' <ul> is un-hidden on the dashboard (default open section).
         self.assertIn('id="studio-section-events" class="space-y-1 mt-1"', body)
-        # The other six sections render with the ``hidden`` class on
+        # The other seven sections render with the ``hidden`` class on
         # /studio/ (which is not in any section's deep path).
         for slug in (
             'content', 'people', 'planning',
-            'communication', 'tracking', 'operations',
+            'onboarding', 'communication', 'tracking', 'operations',
         ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
@@ -309,10 +313,10 @@ class StudioSidebarStructureTest(TestCase):
             'aria-expanded="true"\n                  aria-controls="studio-section-events"',
             body,
         )
-        # The six collapsed sections render aria-expanded="false".
+        # The seven collapsed sections render aria-expanded="false".
         for slug in (
             'content', 'people', 'planning',
-            'communication', 'tracking', 'operations',
+            'onboarding', 'communication', 'tracking', 'operations',
         ):
             self.assertIn(
                 f'aria-expanded="false"\n                  aria-controls="studio-section-{slug}"',
@@ -336,7 +340,7 @@ class StudioSidebarStructureTest(TestCase):
         # Events no longer stays open once another section is active.
         for slug in (
             'content', 'events', 'planning',
-            'communication', 'tracking', 'operations',
+            'onboarding', 'communication', 'tracking', 'operations',
         ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
@@ -355,7 +359,7 @@ class StudioSidebarStructureTest(TestCase):
         # section now (Events is only the dashboard default).
         for slug in (
             'events', 'people', 'planning',
-            'communication', 'tracking', 'operations',
+            'onboarding', 'communication', 'tracking', 'operations',
         ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
@@ -374,7 +378,7 @@ class StudioSidebarStructureTest(TestCase):
         # All other sections are collapsed.
         for slug in (
             'content', 'people', 'planning',
-            'communication', 'tracking', 'operations',
+            'onboarding', 'communication', 'tracking', 'operations',
         ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
@@ -401,7 +405,10 @@ class StudioSidebarStructureTest(TestCase):
         self.assertIn(
             'id="studio-section-communication" class="space-y-1 mt-1"', body,
         )
-        for slug in ('content', 'people', 'planning', 'events', 'tracking', 'operations'):
+        for slug in (
+            'content', 'people', 'planning', 'onboarding',
+            'events', 'tracking', 'operations',
+        ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -416,7 +423,7 @@ class StudioSidebarStructureTest(TestCase):
         self.assertIn('id="studio-section-tracking" class="space-y-1 mt-1"', body)
         for slug in (
             'content', 'people', 'planning',
-            'events', 'communication', 'operations',
+            'onboarding', 'events', 'communication', 'operations',
         ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
@@ -447,7 +454,7 @@ class StudioSidebarStructureTest(TestCase):
         )
         for slug in (
             'content', 'people', 'events',
-            'communication', 'tracking', 'operations',
+            'onboarding', 'communication', 'tracking', 'operations',
         ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
@@ -467,7 +474,32 @@ class StudioSidebarStructureTest(TestCase):
         )
         for slug in (
             'content', 'people', 'events',
-            'communication', 'tracking', 'operations',
+            'onboarding', 'communication', 'tracking', 'operations',
+        ):
+            self.assertIn(
+                f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
+                body,
+            )
+
+    def test_visiting_questionnaires_expands_onboarding_section(self):
+        self.client.login(email='staff@test.com', password='pw')
+        response = self.client.get('/studio/questionnaires/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+
+        self.assertIn('id="studio-section-onboarding" class="space-y-1 mt-1"', body)
+        self.assertIn(
+            'aria-expanded="true"\n                  aria-controls="studio-section-onboarding"',
+            body,
+        )
+        onboarding_start = body.index('id="studio-section-onboarding"')
+        onboarding_end = body.index('id="studio-section-communication"')
+        onboarding = body[onboarding_start:onboarding_end]
+        self.assertIn('<span>Questionnaires</span>', onboarding)
+        self.assertIn('<span>Personas</span>', onboarding)
+        for slug in (
+            'content', 'people', 'events',
+            'planning', 'communication', 'tracking', 'operations',
         ):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
@@ -510,11 +542,12 @@ class StudioSidebarStructureTest(TestCase):
         self.assertNotIn('<span>Sprints</span>', people)
         self.assertNotIn('<span>Plans</span>', people)
 
-    def test_studio_sidebar_state_assigns_people_and_planning(self):
+    def test_studio_sidebar_state_assigns_people_planning_and_onboarding(self):
         for path in ('/studio/sprints/', '/studio/plans/'):
             with self.subTest(path=path):
                 state = studio_sidebar_state(path)
                 self.assertTrue(state['planning_active'])
+                self.assertFalse(state['onboarding_active'])
                 self.assertFalse(state['people_active'])
                 self.assertNotIn('users_row_active', state)
                 self.assertNotIn('users_children_active', state)
@@ -533,6 +566,14 @@ class StudioSidebarStructureTest(TestCase):
                 state = studio_sidebar_state(path)
                 self.assertTrue(state['people_active'])
                 self.assertFalse(state['planning_active'])
+                self.assertFalse(state['onboarding_active'])
+
+        for path in ('/studio/questionnaires/', '/studio/personas/'):
+            with self.subTest(path=path):
+                state = studio_sidebar_state(path)
+                self.assertTrue(state['onboarding_active'])
+                self.assertFalse(state['planning_active'])
+                self.assertFalse(state['people_active'])
 
     # ------------------------------------------------------------------
     # Footer

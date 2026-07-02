@@ -362,6 +362,11 @@ _RESPONSE_EXAMPLE = {
         "name": "Priya",
         "archetype": "The Engineer transitioning to AI",
     },
+    "crm_record": {
+        "id": 42,
+        "status": "active",
+        "studio_url": "/studio/crm/42/#onboarding",
+    },
     "questions": [
         {
             "prompt": "What is your current role?",
@@ -399,7 +404,7 @@ def _onboarding_response_queryset():
     """
     return (
         Response.objects.filter(questionnaire__purpose="onboarding")
-        .select_related("respondent", "questionnaire")
+        .select_related("respondent", "respondent__crm_record", "questionnaire")
         .prefetch_related(
             "response_questions",
             "answers__selected_options",
@@ -425,7 +430,8 @@ def _onboarding_response_queryset():
                 "OR submitted -- ``status`` / ``submitted_at`` tell which) as "
                 "the shared response object: ``email``, "
                 "``questionnaire_slug``, ``status``, ``submitted_at``, "
-                "resolved ``persona`` (or ``null``), and an ordered flat "
+                "resolved ``persona`` (or ``null``), additive ``crm_record`` "
+                "relationship (or ``null``), and an ordered flat "
                 "``questions`` Q&A list read from the SNAPSHOT "
                 "(``ResponseQuestion`` / ``Answer`` / "
                 "``ResponseQuestionOption``), never the base ``Question``. "
@@ -494,8 +500,9 @@ def onboarding_response_detail(request, email):
                 "an inclusive lower bound on ``submitted_at`` when filtering "
                 "submitted, else on ``created_at``. ``persona`` filters by "
                 "resolved persona ``slug`` (or the literal ``none`` for "
-                "responses with no resolved persona). ``count`` is the TOTAL "
-                "matching set BEFORE slicing."
+                "responses with no resolved persona). Each item includes an "
+                "additive ``crm_record`` relationship when a CRM record "
+                "exists. ``count`` is the TOTAL matching set BEFORE slicing."
             ),
             "query": {
                 "status": {

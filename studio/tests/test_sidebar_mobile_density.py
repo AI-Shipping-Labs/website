@@ -106,10 +106,13 @@ class StudioSidebarMobileFixesTest(TestCase):
 
     # ------------------------------------------------------------------
     # Fix 3: section toggles use text-foreground/70, font-semibold,
-    # and min-h-[44px] — all six sections.
+    # and min-h-[44px] — all sections.
     # ------------------------------------------------------------------
 
-    SECTIONS = ('events', 'content', 'people', 'planning', 'communication', 'tracking', 'operations')
+    SECTIONS = (
+        'events', 'content', 'people', 'planning', 'onboarding',
+        'communication', 'tracking', 'operations',
+    )
 
     def test_each_section_toggle_uses_lifted_contrast_and_44px(self):
         body = self._dashboard_body()

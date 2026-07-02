@@ -315,14 +315,12 @@ class TestMemberWithPlanSeesNoAskButton:
 class TestStaffSeesPlanRequestNotification:
     """Staff sees the in-app notification and clicks through to Studio.
 
-    Per issue #719, the in-app ``plan_request`` notification CTA points
-    at the Studio create-plan form pre-filled with the (member, sprint)
-    pair -- NOT the Django admin user-change page. The admin URL is
-    still used in the Slack post + staff email fanout as a secondary
-    affordance, but the bell link lands on Studio.
+    The in-app ``plan_request`` notification CTA points at the locked
+    Studio request-preparation flow for the (member, sprint) pair -- NOT
+    the generic plan-create form and NOT the Django admin user-change page.
     """
 
-    def test_staff_notification_links_to_studio_plan_create(
+    def test_staff_notification_links_to_request_prepare_flow(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -376,15 +374,29 @@ class TestStaffSeesPlanRequestNotification:
             assert 'Plan request from' in body_text
             assert 'Alex Member' in body_text
 
-            # Per #719: the bell CTA points at the Studio create-plan
-            # form pre-filled with this (member, sprint). Verify URL
-            # path and both query params.
-            link = page.locator(
-                'a[href*="/studio/plans/new"]'
-                f'[href*="user={alex_user.pk}"]'
-                f'[href*="sprint={sprint.pk}"]',
-            ).first
+            expected_href = (
+                f'/studio/sprints/{sprint.pk}/plan-requests/'
+                f'{alex_user.pk}/prepare/'
+            )
+            assert page.locator('a[href*="/studio/plans/new"]').count() == 0
+            assert page.locator('a[href*="/admin/"]').count() == 0
+
+            link = page.locator(f'a[href="{expected_href}"]').first
             link.wait_for(state='visible')
+            link.click()
+            page.wait_for_url(f'{django_server}{expected_href}')
+            page.locator(
+                '[data-testid="plan-request-prepare-flow"]',
+            ).wait_for(state='visible')
+            assert page.locator(
+                '[data-testid="plan-request-prepare-heading"]',
+            ).inner_text() == 'Prepare plan request'
+            assert 'Alex Member' in page.locator(
+                '[data-testid="request-member-locked"]',
+            ).inner_text()
+            assert 'May 2026' in page.locator(
+                '[data-testid="request-sprint-locked"]',
+            ).inner_text()
         finally:
             staff_context.close()
 

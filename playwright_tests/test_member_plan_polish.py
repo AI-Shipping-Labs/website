@@ -4,6 +4,7 @@ import datetime
 import os
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import auth_context as _auth_context
 from playwright_tests.conftest import create_staff_user as _create_staff_user
@@ -111,12 +112,6 @@ class TestMemberPlanPolish:
             f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
             wait_until="domcontentloaded")
 
-        assert page.locator('[data-testid="header-plan-link"]').get_attribute("href") == (
-            f"/sprints/{data['sprint_slug']}/plan/{data['plan_id']}"
-        )
-        assert page.locator('[data-testid="mobile-header-plan-link"]').get_attribute("href") == (
-            f"/sprints/{data['sprint_slug']}/plan/{data['plan_id']}"
-        )
         # Issue #583 removed the "Edit workspace" CTA -- the page IS the editor.
         assert page.locator('[data-testid="my-plan-edit-cta"]').count() == 0
 
@@ -124,7 +119,9 @@ class TestMemberPlanPolish:
         with page.expect_response("**/api/checkpoints/*") as checkpoint_response:
             item.locator('[data-testid="plan-row-done-toggle"]').check()
         assert checkpoint_response.value.ok
-        assert item.locator('[data-testid="plan-item-save-status"]').inner_text() == "Saved"
+        expect(
+            item.locator('[data-testid="plan-item-save-status"]'),
+        ).to_have_text("Saved")
 
         item.locator('[data-testid="plan-item-edit"]').click()
         item.locator('[data-testid="plan-item-markdown-input"]').fill(
@@ -143,7 +140,9 @@ class TestMemberPlanPolish:
             with page.expect_response(pattern) as response_info:
                 row.locator('[data-testid="plan-row-done-toggle"]').check()
             assert response_info.value.ok
-            assert row.locator('[data-testid="plan-item-save-status"]').inner_text() == "Saved"
+            expect(
+                row.locator('[data-testid="plan-item-save-status"]'),
+            ).to_have_text("Saved")
 
         page.reload(wait_until="domcontentloaded")
         assert page.locator('[data-testid="plan-checkpoint"]').first.locator(

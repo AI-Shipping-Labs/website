@@ -64,7 +64,7 @@ class FeedbackAttachTest(_FeedbackStudioMixin, TestCase):
         self.assertEqual(fr.created_by, self.staff)
 
     def test_attach_picker_only_offers_active_feedback_questionnaires(self):
-        Questionnaire.objects.create(
+        onboarding = Questionnaire.objects.create(
             title='Onboarding', slug='onb', purpose='onboarding',
         )
         Questionnaire.objects.create(
@@ -74,7 +74,9 @@ class FeedbackAttachTest(_FeedbackStudioMixin, TestCase):
         self.client.force_login(self.staff)
         page = self.client.get(self._detail_url())
         self.assertContains(page, 'May Sprint Feedback')
-        self.assertNotContains(page, 'Onboarding')
+        self.assertNotContains(
+            page, f'<option value="{onboarding.pk}">Onboarding</option>',
+        )
         self.assertNotContains(page, 'Inactive FB')
 
     def test_attach_non_feedback_questionnaire_rejected_400_no_row(self):

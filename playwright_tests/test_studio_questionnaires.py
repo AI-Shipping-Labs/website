@@ -77,7 +77,7 @@ class TestStaffAuthorsQuestionnaire:
         page = context.new_page()
 
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
-        _expand_studio_sidebar_section(page, "planning")
+        _expand_studio_sidebar_section(page, "onboarding")
         page.locator(
             '#studio-sidebar-nav a[href="/studio/questionnaires/"]'
         ).click()

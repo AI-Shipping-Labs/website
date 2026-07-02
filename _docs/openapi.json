@@ -3051,6 +3051,85 @@
         ]
       }
     },
+    "/api/events/{slug}/notify-workshop-ready": {
+      "post": {
+        "description": "Sends the event-level workshop-ready transactional email to active event registrants plus host recipients, creates in-app notifications for platform users, and skips recipients already sent via the per-recipient idempotency key. The event must have a linked published workshop.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "already_sent": 1,
+                  "emailed": 3,
+                  "event": {
+                    "id": 42,
+                    "slug": "ai-agents-live",
+                    "title": "AI Agents Live"
+                  },
+                  "failed": 0,
+                  "notified": 2,
+                  "results": [],
+                  "workshop": {
+                    "id": 9,
+                    "slug": "ai-agents",
+                    "title": "AI Agents",
+                    "url": "/workshops/ai-agents"
+                  }
+                }
+              }
+            },
+            "description": "Broadcast attempted."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "authentication_required",
+                  "error": "Authentication required"
+                }
+              }
+            },
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_event",
+                  "error": "Event not found"
+                }
+              }
+            },
+            "description": "Event not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "workshop_not_ready",
+                  "error": "A linked published workshop is required."
+                }
+              }
+            },
+            "description": "The event has no linked published workshop."
+          }
+        },
+        "summary": "Send workshop-ready broadcast",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
     "/api/events/{slug}/regenerate-banner": {
       "post": {
         "description": "Force-enqueues a banner-generator render for an existing event and returns the django-q task id. The render runs as a background task; the resolved banner_url stays empty until the worker finishes, so poll GET /api/worker/tasks/<task_id> (or re-GET the event for banner_url). Regeneration is ALLOWED for synced/GitHub-origin events: the PATCH read-only rule protects content fields owned by the source repo, but the auto-banner is derived presentation state the platform owns regardless of origin (the sync pipeline itself enqueues renders for synced records), so there is no 409 here. Returns 422 banner_generator_not_configured (no enqueue) when the generator is not configured.",

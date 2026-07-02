@@ -62,6 +62,9 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # Issue #1075: internal host/operator heads-up that a Zoom recording
     # has been uploaded and is ready for Studio review.
     "event_recording_ready",
+    # Issue #1118: event-specific workshop-ready broadcast. Transactional
+    # because the recipient explicitly registered for this event.
+    "event_workshop_ready",
     # Issue #732: staff explicitly shared a sprint plan with the
     # member. Transactional because the recipient is a named paid
     # sprint participant and the email is about an artefact created

@@ -92,6 +92,9 @@
         <dd class="text-foreground mt-1">
           <a href="{{ workshop.event.get_absolute_url }}" class="text-accent hover:underline">{{ workshop.event.title }}</a>
           <a href="{{ workshop.event.get_studio_edit_url }}" class="text-muted-foreground hover:text-foreground hover:underline ml-2">(edit in Studio)</a>
+          <a href="{{ workshop.event.get_studio_edit_url }}#workshop-ready-panel"
+             data-testid="workshop-ready-event-workflow-link"
+             class="text-muted-foreground hover:text-foreground hover:underline ml-2">notify registrants</a>
         </dd>
       </div>
       {% endif %}

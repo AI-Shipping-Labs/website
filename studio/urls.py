@@ -118,6 +118,7 @@ from studio.views.events import (
     event_edit,
     event_list,
     event_list_past,
+    event_notify_workshop_ready,
     event_registrations_csv,
     event_send_followup,
 )
@@ -431,6 +432,11 @@ urlpatterns = [
         'events/<int:event_id>/send-followup',
         event_send_followup,
         name='studio_event_send_followup',
+    ),
+    path(
+        'events/<int:event_id>/notify-workshop-ready',
+        event_notify_workshop_ready,
+        name='studio_event_notify_workshop_ready',
     ),
     path(
         'events/<int:event_id>/regenerate-banner',

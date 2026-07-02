@@ -31,6 +31,11 @@ from events.services.calendar_lifecycle import (
 )
 from events.services.display_time import resolve_event_creation_timezone
 from events.services.host_registration import maybe_register_host_as_attendee
+from events.services.workshop_ready_notification import (
+    WorkshopReadyNotReady,
+    assert_workshop_ready,
+    notify_workshop_ready,
+)
 from events.services.zoom_lifecycle import sync_or_delete_zoom_meeting
 from events.tasks.send_post_event_followup import enqueue_post_event_followup
 from integrations.services.banner_generator.dispatch import enqueue_if_missing
@@ -285,6 +290,23 @@ def _apply_host_context(context, selected_host_ids=None):
     )
     context['host_options'] = _host_options(selected_host_ids)
     context['selected_host_ids'] = selected_host_ids
+    return context
+
+
+def _apply_workshop_ready_context(context, event):
+    """Attach Studio action state for the event-level workshop-ready broadcast."""
+    context['notify_workshop_ready_url'] = reverse(
+        'studio_event_notify_workshop_ready',
+        kwargs={'event_id': event.pk},
+    )
+    try:
+        assert_workshop_ready(event)
+    except WorkshopReadyNotReady as exc:
+        context['workshop_ready_available'] = False
+        context['workshop_ready_unavailable_reason'] = str(exc)
+    else:
+        context['workshop_ready_available'] = True
+        context['workshop_ready_unavailable_reason'] = ''
     return context
 
 
@@ -682,6 +704,7 @@ def event_edit(request, event_id):
             context['timezone_options'] = build_timezone_options()
             context['tz_settings_link'] = _should_autodetect_tz(request.user)
             _apply_host_context(context, selected_host_ids)
+            _apply_workshop_ready_context(context, event)
             return render(request, 'studio/events/form.html', context)
         if synced:
             # Synced events: only allow operational fields
@@ -777,6 +800,7 @@ def event_edit(request, event_id):
                 context['timezone_options'] = build_timezone_options()
                 context['tz_settings_link'] = _should_autodetect_tz(request.user)
                 _apply_host_context(context, selected_host_ids)
+                _apply_workshop_ready_context(context, event)
                 return render(request, 'studio/events/form.html', context)
             start_dt, end_dt = _parse_event_datetime(request.POST, posted_tz)
             # The Studio picker has minute precision. Preserve stored
@@ -881,6 +905,7 @@ def event_edit(request, event_id):
         f"{reverse('studio_campaign_create')}"
         f"?event={event.pk}&template=recording_available"
     )
+    _apply_workshop_ready_context(context, event)
     # ``form_values`` and ``errors`` are only meaningful on the create flow
     # (issue #574). Provide empty defaults here so the shared template's
     # ``form_values.foo`` lookups resolve cleanly when rendering edit.
@@ -1079,6 +1104,32 @@ def event_send_followup(request, event_id):
         f'Follow-up email queued for {registration_count} {label}.',
     )
     return redirect('studio_event_edit', event_id=event.pk)
+
+
+@staff_required
+@require_POST
+def event_notify_workshop_ready(request, event_id):
+    """Send the linked-workshop-ready broadcast to event registrants and hosts."""
+    event = get_object_or_404(
+        Event.objects.select_related('workshop'),
+        pk=event_id,
+    )
+    try:
+        result = notify_workshop_ready(event)
+    except WorkshopReadyNotReady as exc:
+        messages.error(request, str(exc))
+        return redirect(f"{event.get_studio_edit_url()}#workshop-ready-panel")
+
+    messages.success(
+        request,
+        (
+            'Workshop-ready broadcast complete: '
+            f"{result['emailed']} emailed, {result['notified']} in-app "
+            f"notifications, {result['already_sent']} already sent, "
+            f"{result['failed']} failed. Audience: event registrants plus host."
+        ),
+    )
+    return redirect(f"{event.get_studio_edit_url()}#workshop-ready-panel")
 
 
 @staff_required

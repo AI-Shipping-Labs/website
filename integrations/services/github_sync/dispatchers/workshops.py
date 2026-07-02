@@ -384,17 +384,20 @@ def _sync_single_workshop(
             'content_id': workshop_content_id,
         }
 
-        # Find by content_id (stable) first, then slug (backward compat).
+        # Find by content_id only. Workshop content_id is mandatory and is
+        # the stable sync identity across slug/source-path changes.
         workshop = find_synced_object((
             lambda: Workshop.objects.filter(
                 content_id=workshop_content_id,
                 source_repo=source.repo_name,
             ).first(),
-            lambda: Workshop.objects.filter(
-                slug=slug,
-                source_repo=source.repo_name,
-            ).first(),
         ))
+        if workshop is None and Workshop.objects.filter(slug=slug).exists():
+            raise ValueError(
+                f"Workshop slug '{slug}' already exists with a different "
+                'content_id. Refusing to match by slug; fix the incoming '
+                'workshop.yaml content_id or choose a new slug.'
+            )
 
         result = upsert_synced_object(
             model=Workshop,

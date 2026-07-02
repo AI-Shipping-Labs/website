@@ -645,7 +645,7 @@ class StudioEventSeriesCadenceLabelTest(StaffMixin, TestCase):
         response = self.client.get('/studio/event-series/')
         html = response.content.decode()
         cell = self._cell(html, 'Cadence', '/irregular-series')
-        self.assertEqual(cell, '3 sessions · Jun 15, 2026 – Jun 29, 2026')
+        self.assertEqual(cell, '3 sessions · Mon, Jun 15, 2026 – Mon, Jun 29, 2026')
         self.assertNotIn('Weekly on', cell)
 
     def test_list_empty_series_cadence_cell_is_blank(self):
@@ -675,7 +675,7 @@ class StudioEventSeriesCadenceLabelTest(StaffMixin, TestCase):
         header = self._cadence_header(self.irregular)
         self.assertEqual(
             header,
-            '3 sessions · Jun 15, 2026 – Jun 29, 2026 — 3 occurrences',
+            '3 sessions · Mon, Jun 15, 2026 – Mon, Jun 29, 2026 — 3 occurrences',
         )
         self.assertNotIn('Weekly on', header)
 

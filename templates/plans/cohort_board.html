@@ -69,7 +69,12 @@
             Your plan is being prepared. You can still see other members' plans here.
           </p>
           <div class="flex flex-wrap items-center gap-3">
-            {% if viewer_pinged_recently %}
+            {% if sprint_has_ended %}
+            <span class="{% button_classes 'secondary' extra='!bg-secondary/40 !text-muted-foreground cursor-not-allowed' %}"
+                  data-testid="ask-team-closed">
+              Plan requests are closed
+            </span>
+            {% elif viewer_pinged_recently %}
             <button type="button" disabled
                     class="{% button_classes 'secondary' extra='!bg-secondary/40 !text-muted-foreground cursor-not-allowed' %}"
                     data-testid="ask-team-button">
@@ -178,7 +183,9 @@
                   This mirrors the Studio compact-row-action convention.
                   {% endcomment %}
                   {% if row.is_self %}
-                    {% if viewer_pinged_recently %}
+                    {% if sprint_has_ended %}
+                    <span class="text-sm text-muted-foreground" data-testid="ask-team-closed">Plan requests are closed</span>
+                    {% elif viewer_pinged_recently %}
                     <button type="button" disabled
                             class="{% button_classes 'secondary' size='sm' extra='!bg-secondary/40 !text-muted-foreground cursor-not-allowed' %}"
                             data-testid="ask-team-button">

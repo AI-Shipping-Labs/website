@@ -118,6 +118,7 @@ from api.views.triggers import (
 from api.views.user_merge import merge_users
 from api.views.users import (
     user_activity,
+    user_crm_record,
     user_detail,
     user_email_log,
     user_mark_bounced,
@@ -617,6 +618,11 @@ urlpatterns = [
         "users",
         users_collection,
         name="api_users_collection",
+    ),
+    path(
+        "users/<path:email>/crm-record",
+        user_crm_record,
+        name="api_user_crm_record",
     ),
     path(
         "users/<path:email>",

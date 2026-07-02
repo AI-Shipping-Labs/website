@@ -619,6 +619,12 @@ def sprint_ask_team(request, sprint_slug):
     board_path = reverse(
         'cohort_board', kwargs={'sprint_slug': sprint.slug},
     )
+    if sprint.has_ended():
+        messages.info(
+            request,
+            'This sprint has ended, so new plan requests are closed.',
+        )
+        return redirect(board_path)
 
     cutoff = timezone.now() - PLAN_REQUEST_RATE_LIMIT
     recent_exists = PlanRequest.objects.filter(

@@ -478,6 +478,104 @@
   </div>
 </section>
 
+<section class="mb-6" data-testid="partner-intro-email-panel">
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+      <div>
+        <h2 class="text-lg font-semibold text-foreground">Send partner intro emails</h2>
+        <p class="text-sm text-muted-foreground mt-1" data-testid="partner-intro-email-helper">
+          {% if partner_intro_email_preview.send_ready and partner_intro_email_preview.eligible_count %}
+            Sprint is ready. Emails go to enrolled members who have not received their partner intro yet.
+          {% elif partner_intro_email_preview.send_ready %}
+            All partner intro emails have already been sent.
+          {% elif partner_intro_email_preview.sprint.status != 'active' %}
+            Partner intro emails are only available for active sprints.
+          {% elif partner_intro_email_preview.total_enrolled < 2 %}
+            At least two enrolled members are required.
+          {% elif partner_intro_email_preview.missing_plan_count %}
+            Create sprint plans for every enrolled member before sending.
+          {% elif partner_intro_email_preview.missing_partner_count %}
+            Assign accountability partners for every enrolled member before sending.
+          {% else %}
+            Resolve the blockers below before sending partner intro emails.
+          {% endif %}
+        </p>
+      </div>
+      <form method="post"
+            action="{% url 'studio_sprint_send_partner_intro_emails' sprint_id=sprint.pk %}"
+            {% if partner_intro_email_preview.send_ready and partner_intro_email_preview.eligible_count %}onsubmit="return confirm('Send partner intro emails to {{ partner_intro_email_preview.eligible_count }} eligible member{{ partner_intro_email_preview.eligible_count|pluralize }}?');"{% endif %}
+            data-testid="partner-intro-email-form">
+        {% csrf_token %}
+        <button type="submit"
+                class="{% if partner_intro_email_preview.send_ready and partner_intro_email_preview.eligible_count %}bg-accent text-accent-foreground hover:opacity-90{% else %}bg-secondary text-muted-foreground cursor-not-allowed{% endif %} px-4 py-2 rounded-lg text-sm font-medium transition-opacity"
+                data-testid="partner-intro-email-button"
+                {% if not partner_intro_email_preview.send_ready or not partner_intro_email_preview.eligible_count %}disabled{% endif %}>
+          Send partner intro emails
+        </button>
+      </form>
+    </div>
+
+    <dl class="mt-5 grid grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
+      <div>
+        <dt class="text-xs uppercase text-muted-foreground">Enrolled</dt>
+        <dd class="mt-1 text-2xl font-semibold text-foreground" data-testid="partner-intro-total-count">{{ partner_intro_email_preview.total_enrolled }}</dd>
+      </div>
+      <div>
+        <dt class="text-xs uppercase text-muted-foreground">Eligible</dt>
+        <dd class="mt-1 text-2xl font-semibold text-foreground" data-testid="partner-intro-eligible-count">{{ partner_intro_email_preview.eligible_count }}</dd>
+      </div>
+      <div>
+        <dt class="text-xs uppercase text-muted-foreground">Already emailed</dt>
+        <dd class="mt-1 text-2xl font-semibold text-foreground" data-testid="partner-intro-already-count">{{ partner_intro_email_preview.already_sent_count }}</dd>
+      </div>
+      <div>
+        <dt class="text-xs uppercase text-muted-foreground">Missing plans</dt>
+        <dd class="mt-1 text-2xl font-semibold text-foreground" data-testid="partner-intro-missing-plan-count">{{ partner_intro_email_preview.missing_plan_count }}</dd>
+      </div>
+      <div>
+        <dt class="text-xs uppercase text-muted-foreground">Missing partners</dt>
+        <dd class="mt-1 text-2xl font-semibold text-foreground" data-testid="partner-intro-missing-partner-count">{{ partner_intro_email_preview.missing_partner_count }}</dd>
+      </div>
+    </dl>
+
+    {% if partner_intro_email_preview.missing_plan %}
+    <div class="mt-5 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3" data-testid="partner-intro-missing-plan-list">
+      <h3 class="text-sm font-medium text-red-200">Missing sprint plans</h3>
+      <ul class="mt-2 space-y-1 text-sm text-red-100/90">
+        {% for row in partner_intro_email_preview.missing_plan %}
+        <li>{{ row.member_name }} &lt;{{ row.member_email }}&gt;</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if partner_intro_email_preview.missing_partner %}
+    <div class="mt-5 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3" data-testid="partner-intro-missing-partner-list">
+      <h3 class="text-sm font-medium text-red-200">Missing accountability partners</h3>
+      <ul class="mt-2 space-y-1 text-sm text-red-100/90">
+        {% for row in partner_intro_email_preview.missing_partner %}
+        <li>{{ row.member_name }} &lt;{{ row.member_email }}&gt;</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if partner_intro_email_preview.missing_slack_links %}
+    <div class="mt-5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3" data-testid="partner-intro-slack-warning-list">
+      <h3 class="text-sm font-medium text-amber-200">Missing Slack profile links</h3>
+      <p class="mt-1 text-sm text-amber-100/80">
+        These are warnings only. The email still includes partner names, email addresses, and any Slack identity.
+      </p>
+      <ul class="mt-2 space-y-1 text-sm text-amber-100/90">
+        {% for warning in partner_intro_email_preview.missing_slack_links %}
+        <li>{{ warning.partner_name }} &lt;{{ warning.partner_email }}&gt; for {{ warning.member_email }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
 <section class="mt-8 mb-8" data-testid="sprint-members-section">
   <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
     <div>

@@ -80,6 +80,16 @@ PLAN_READY_EMAIL_STATUS_CHOICES = [
     (PLAN_READY_EMAIL_STATUS_FAILED, 'Failed'),
 ]
 
+PARTNER_INTRO_EMAIL_STATUS_SENDING = 'sending'
+PARTNER_INTRO_EMAIL_STATUS_SENT = 'sent'
+PARTNER_INTRO_EMAIL_STATUS_FAILED = 'failed'
+
+PARTNER_INTRO_EMAIL_STATUS_CHOICES = [
+    (PARTNER_INTRO_EMAIL_STATUS_SENDING, 'Sending'),
+    (PARTNER_INTRO_EMAIL_STATUS_SENT, 'Sent'),
+    (PARTNER_INTRO_EMAIL_STATUS_FAILED, 'Failed'),
+]
+
 KIND_CHOICES = [
     ('persona', 'Persona'),
     ('background', 'Background'),
@@ -876,6 +886,64 @@ class PlanReadyEmailLog(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return f'PlanReadyEmailLog(plan={self.plan_id}, status={self.status})'
+
+
+class SprintPartnerIntroEmailLog(TimestampedModelMixin, models.Model):
+    """Durable per-recipient guard for sprint partner intro emails."""
+
+    sprint = models.ForeignKey(
+        Sprint,
+        on_delete=models.CASCADE,
+        related_name='partner_intro_email_logs',
+    )
+    member = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sprint_partner_intro_email_logs',
+    )
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    email_log = models.ForeignKey(
+        'email_app.EmailLog',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=PARTNER_INTRO_EMAIL_STATUS_CHOICES,
+        default=PARTNER_INTRO_EMAIL_STATUS_SENDING,
+        db_index=True,
+    )
+    sent_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, default='')
+    partner_snapshot = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sprint', 'member'],
+                name='unique_sprint_partner_intro_email_recipient',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['sprint', 'status']),
+            models.Index(fields=['member', 'status']),
+        ]
+
+    def __str__(self):
+        return (
+            'SprintPartnerIntroEmailLog('
+            f'sprint={self.sprint_id}, member={self.member_id}, '
+            f'status={self.status})'
+        )
 
 
 class Week(TimestampedModelMixin, models.Model):

@@ -53,6 +53,7 @@ from plans.services import (
     MoveUnfinishedItemsError,
     draft_next_sprint_plan,
     move_unfinished_items_to_sprint,
+    send_partner_intro_emails,
     send_plan_ready_email_for_plan,
     send_plan_ready_emails,
 )
@@ -1521,6 +1522,146 @@ def sprint_plans_send_ready_emails(request, slug):
         actor=request.user,
         dry_run=dry_run,
     )
+    return JsonResponse(summary, status=200)
+
+
+@token_required_any_user
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Sprints",
+    summary="Send partner intro emails for a sprint",
+    methods={
+        "POST": {
+            "summary": "Send partner intro emails (staff-only)",
+            "description": (
+                "Staff-token-only. Uses the same idempotent partner-intro "
+                "email service as Studio. ``dry_run=true`` returns readiness "
+                "counts, blockers, warnings, and recipient rows without "
+                "sending email or writing partner-intro logs."
+            ),
+            "request_body": {
+                "properties": {
+                    "dry_run": {"type": "boolean"},
+                },
+                "example": {"dry_run": True},
+            },
+            "responses": {
+                200: {
+                    "description": "Preview or successful send summary.",
+                    "example": {
+                        "dry_run": True,
+                        "send_ready": True,
+                        "total_enrolled": 2,
+                        "eligible_count": 2,
+                        "already_sent_count": 0,
+                        "missing_plan_count": 0,
+                        "missing_partner_count": 0,
+                        "missing_slack_link_count": 1,
+                        "sent_count": 0,
+                        "skipped_already_sent_count": 0,
+                        "failed_count": 0,
+                        "blockers": [],
+                        "eligible": [
+                            {
+                                "member_email": "alice@example.com",
+                                "partners": [
+                                    {
+                                        "name": "Bob",
+                                        "email": "bob@example.com",
+                                        "slack_identity": "UBOB",
+                                        "slack_profile_url": "",
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                },
+                400: {
+                    "description": (
+                        "Invalid JSON body or non-object JSON body."
+                    ),
+                    "example": {
+                        "error": "Body must be a JSON object",
+                        "code": "invalid_type",
+                    },
+                },
+                403: {
+                    "description": "Non-staff bearer token.",
+                    "example": {
+                        "error": "Partner intro email send is staff-only",
+                        "code": "forbidden_staff_only",
+                    },
+                },
+                404: {
+                    "description": "Sprint not found.",
+                    "example": {
+                        "error": "Sprint not found",
+                        "code": "unknown_sprint",
+                    },
+                },
+                422: {
+                    "description": "Invalid dry_run value or sprint not ready.",
+                    "example": {
+                        "error": "Sprint is not ready for partner intro emails",
+                        "code": "validation_error",
+                    },
+                },
+            },
+        },
+    },
+)
+def sprint_partner_intro_emails(request, slug):
+    """``POST /api/sprints/<slug>/partner-intro-emails``."""
+    sprint = Sprint.objects.filter(slug=slug).first()
+    if sprint is None:
+        return error_response(
+            "Sprint not found",
+            "unknown_sprint",
+            status=404,
+        )
+
+    if not bearer_is_admin(request.user):
+        return error_response(
+            "Partner intro email send is staff-only",
+            "forbidden_staff_only",
+            status=403,
+        )
+
+    if request.body:
+        data, parse_error = parse_json_body(request)
+        if parse_error is not None:
+            return parse_error
+    else:
+        data = {}
+    if not isinstance(data, dict):
+        return error_response(
+            "Body must be a JSON object",
+            "invalid_type",
+            details={"field": "body", "expected": "object"},
+        )
+
+    dry_run = data.get("dry_run", False)
+    if not isinstance(dry_run, bool):
+        return error_response(
+            "dry_run must be a boolean",
+            "validation_error",
+            status=422,
+            details={"field": "dry_run", "expected": "boolean"},
+        )
+
+    summary = send_partner_intro_emails(
+        sprint=sprint,
+        actor=request.user,
+        dry_run=dry_run,
+    )
+    if not dry_run and not summary["send_ready"]:
+        return error_response(
+            "Sprint is not ready for partner intro emails",
+            "validation_error",
+            status=422,
+            details={"summary": summary},
+        )
     return JsonResponse(summary, status=200)
 
 

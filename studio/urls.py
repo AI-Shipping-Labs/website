@@ -222,6 +222,7 @@ from studio.views.sprints import (
     sprint_list,
     sprint_plan_request_create_plan,
     sprint_plan_request_prepare,
+    sprint_send_partner_intro_emails,
     sprint_send_plan_ready_emails,
     sprint_unenroll,
 )
@@ -919,6 +920,11 @@ urlpatterns = [
         'sprints/<int:sprint_id>/send-plan-ready-emails/',
         sprint_send_plan_ready_emails,
         name='studio_sprint_send_plan_ready_emails',
+    ),
+    path(
+        'sprints/<int:sprint_id>/send-partner-intro-emails/',
+        sprint_send_partner_intro_emails,
+        name='studio_sprint_send_partner_intro_emails',
     ),
     # Sprint feedback (issue #803). POST-only action verbs, no trailing
     # slash, matching the other sprint action convention.

@@ -61,9 +61,11 @@ from plans.services import (
     clear_accountability_for_member,
     create_plan_for_enrollment,
     distribute_sprint_feedback,
+    preview_partner_intro_emails,
     preview_plan_ready_emails,
     randomize_accountability_partners,
     remove_accountability_partners,
+    send_partner_intro_emails,
     send_plan_ready_email_for_plan,
     send_plan_ready_emails,
 )
@@ -556,6 +558,7 @@ def sprint_detail(request, sprint_id):
     pending_plan_requests = _build_pending_plan_requests(sprint)
     feedback_context = _build_sprint_feedback_context(sprint)
     plan_ready_email_preview = preview_plan_ready_emails(sprint)
+    partner_intro_email_preview = preview_partner_intro_emails(sprint)
     return render(request, 'studio/sprints/detail.html', {
         'sprint': sprint,
         'plans': plans,
@@ -567,6 +570,7 @@ def sprint_detail(request, sprint_id):
         'event_series_events': event_series_events,
         'pending_plan_requests': pending_plan_requests,
         'plan_ready_email_preview': plan_ready_email_preview,
+        'partner_intro_email_preview': partner_intro_email_preview,
         **feedback_context,
     })
 
@@ -741,6 +745,52 @@ def sprint_send_plan_ready_emails(request, sprint_id):
             request,
             (
                 'All plan-ready emails have already been sent. '
+                f'{summary["skipped_already_sent_count"]} skipped.'
+            ),
+        )
+    return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+
+@staff_required
+@require_POST
+def sprint_send_partner_intro_emails(request, sprint_id):
+    """Send idempotent bulk accountability partner intro emails."""
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    summary = send_partner_intro_emails(
+        sprint=sprint,
+        actor=request.user,
+        dry_run=False,
+    )
+    if not summary['send_ready']:
+        messages.error(
+            request,
+            'Partner intro emails were not sent because the sprint is not ready.',
+        )
+    elif summary['failed_count']:
+        messages.warning(
+            request,
+            (
+                'Partner intro emails sent: '
+                f'{summary["sent_count"]} sent, '
+                f'{summary["skipped_already_sent_count"]} skipped, '
+                f'{summary["failed_count"]} failed.'
+            ),
+        )
+    elif summary['sent_count']:
+        messages.success(
+            request,
+            (
+                'Partner intro emails sent: '
+                f'{summary["sent_count"]} sent, '
+                f'{summary["skipped_already_sent_count"]} skipped, '
+                '0 failed.'
+            ),
+        )
+    else:
+        messages.info(
+            request,
+            (
+                'All partner intro emails have already been sent. '
                 f'{summary["skipped_already_sent_count"]} skipped.'
             ),
         )

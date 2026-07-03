@@ -91,6 +91,7 @@ from api.views.plans import (
     plan_detail,
     plan_draft_next_sprint,
     plan_move_unfinished,
+    sprint_partner_intro_emails,
     sprint_plans_bulk_import,
     sprint_plans_collection,
     sprint_plans_send_ready_emails,
@@ -465,6 +466,11 @@ urlpatterns = [
         "sprints/<slug:slug>/plans/send-ready-emails",
         sprint_plans_send_ready_emails,
         name="api_sprint_plans_send_ready_emails",
+    ),
+    path(
+        "sprints/<slug:slug>/partner-intro-emails",
+        sprint_partner_intro_emails,
+        name="api_sprint_partner_intro_emails",
     ),
     path(
         "sprints/<slug:slug>/plans",

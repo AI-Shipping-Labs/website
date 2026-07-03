@@ -7639,6 +7639,123 @@
         ]
       }
     },
+    "/api/sprints/{slug}/partner-intro-emails": {
+      "post": {
+        "description": "Staff-token-only. Uses the same idempotent partner-intro email service as Studio. ``dry_run=true`` returns readiness counts, blockers, warnings, and recipient rows without sending email or writing partner-intro logs.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "dry_run": true
+              },
+              "schema": {
+                "properties": {
+                  "dry_run": {
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "already_sent_count": 0,
+                  "blockers": [],
+                  "dry_run": true,
+                  "eligible": [
+                    {
+                      "member_email": "alice@example.com",
+                      "partners": [
+                        {
+                          "email": "bob@example.com",
+                          "name": "Bob",
+                          "slack_identity": "UBOB",
+                          "slack_profile_url": ""
+                        }
+                      ]
+                    }
+                  ],
+                  "eligible_count": 2,
+                  "failed_count": 0,
+                  "missing_partner_count": 0,
+                  "missing_plan_count": 0,
+                  "missing_slack_link_count": 1,
+                  "send_ready": true,
+                  "sent_count": 0,
+                  "skipped_already_sent_count": 0,
+                  "total_enrolled": 2
+                }
+              }
+            },
+            "description": "Preview or successful send summary."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_type",
+                  "error": "Body must be a JSON object"
+                }
+              }
+            },
+            "description": "Invalid JSON body or non-object JSON body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "forbidden_staff_only",
+                  "error": "Partner intro email send is staff-only"
+                }
+              }
+            },
+            "description": "Non-staff bearer token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_sprint",
+                  "error": "Sprint not found"
+                }
+              }
+            },
+            "description": "Sprint not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "error": "Sprint is not ready for partner intro emails"
+                }
+              }
+            },
+            "description": "Invalid dry_run value or sprint not ready."
+          }
+        },
+        "summary": "Send partner intro emails (staff-only)",
+        "tags": [
+          "Sprints"
+        ]
+      }
+    },
     "/api/sprints/{slug}/plans": {
       "get": {
         "description": "Returns plans visible to the bearer (via ``visible_plans_for``), ordered by ``-created_at``.",

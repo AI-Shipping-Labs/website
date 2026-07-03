@@ -1,0 +1,7 @@
+interface:
+  display_name: "AI Shipping Labs Plan/Event Ops"
+  short_description: "Update plans and inspect event signups"
+  default_prompt: "Use $ai-shipping-labs-plan-event-ops to update sprint plans from meeting notes and check event registrations."
+
+policy:
+  allow_implicit_invocation: true

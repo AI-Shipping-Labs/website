@@ -154,9 +154,6 @@ Validation error:
 
 The status code is `422`.
 
-## Data Boundaries
-
-The member Plans API does not expose internal notes, CRM notes, onboarding answers, staff context, or other members' data. Cohort visibility in the website does not grant API access to a teammate's plan.
 
 ## V1 Limitations
 

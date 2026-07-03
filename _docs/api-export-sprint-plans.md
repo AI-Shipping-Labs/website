@@ -120,6 +120,23 @@ fully connected three-person pod. The response includes `assigned_pair_count`,
 `unassigned_count`, `preserved_manual_count`, `random_edges_count`, and the
 refreshed member list.
 
+### Preview or send partner intro emails
+
+```bash
+curl -sL -X POST \
+  -H "Authorization: Token $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"dry_run": true}' \
+  https://aishippinglabs.com/api/sprints/<slug>/partner-intro-emails \
+  | python3 -m json.tool
+```
+
+`dry_run: true` returns the same readiness counts, blockers, Slack-link
+warnings, and recipient rows shown in Studio without sending email or writing
+logs. `dry_run: false` sends the transactional partner intro email to eligible
+enrolled members, skips already-sent members, retries failed rows, and returns
+`sent_count`, `skipped_already_sent_count`, and `failed_count`.
+
 ## Step 3: Fetch full plan details
 
 Each plan's nested detail (goal, summary, focus, weeks, checkpoints, singleton
@@ -247,6 +264,7 @@ diff <(jq . plan81.json) <(curl -sL \
 | `/api/sprints/<slug>/accountability-partners` | POST | Manually assign reciprocal accountability partners |
 | `/api/sprints/<slug>/accountability-partners` | DELETE | Remove a reciprocal accountability partner assignment |
 | `/api/sprints/<slug>/accountability-partners/randomize` | POST | Randomize unpartnered members while preserving manual pairs |
+| `/api/sprints/<slug>/partner-intro-emails` | POST | Preview or send sprint partner intro emails |
 | `/api/sprints/<slug>/plans` | GET | List plans in a sprint (flat) |
 | `/api/plans/<id>` | GET | Full nested plan detail |
 | `/api/plans/<id>` | PATCH | Update top-level fields and/or reconcile nested children (issue #734) |

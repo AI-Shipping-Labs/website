@@ -22,6 +22,10 @@ from plans.services.accountability import (
     remove_accountability_partners,
 )
 from plans.services.next_sprint_draft_service import draft_next_sprint_plan
+from plans.services.partner_intro_emails import (
+    preview_partner_intro_emails,
+    send_partner_intro_emails,
+)
 
 # Re-export the model names the original ``plans/services.py`` carried in
 # its namespace so existing patch targets like
@@ -74,9 +78,11 @@ __all__ = [
     'find_carry_over_source_plan',
     'move_unfinished_items_to_sprint',
     'preview_plan_ready_emails',
+    'preview_partner_intro_emails',
     'randomize_accountability_partners',
     'remove_accountability_partners',
     'send_plan_ready_email_for_plan',
     'send_plan_ready_emails',
+    'send_partner_intro_emails',
     'unfinished_plan_item_counts',
 ]

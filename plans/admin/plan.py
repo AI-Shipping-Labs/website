@@ -15,6 +15,7 @@ from plans.models import (
     SprintAccountabilityPartner,
     SprintEnrollment,
     SprintFeedbackRequest,
+    SprintPartnerIntroEmailLog,
 )
 from studio.admin_links import studio_link
 
@@ -92,6 +93,17 @@ class PlanReadyEmailLogAdmin(admin.ModelAdmin):
         'plan', 'sprint', 'member', 'triggered_by', 'notification',
         'email_log',
     ]
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(SprintPartnerIntroEmailLog)
+class SprintPartnerIntroEmailLogAdmin(admin.ModelAdmin):
+    list_display = [
+        'sprint', 'member', 'status', 'sent_at', 'triggered_by', 'updated_at',
+    ]
+    list_filter = ['status', 'sprint']
+    search_fields = ['member__email', 'sprint__name', 'sprint__slug']
+    raw_id_fields = ['sprint', 'member', 'triggered_by', 'email_log']
     readonly_fields = ['created_at', 'updated_at']
 
 

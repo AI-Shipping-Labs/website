@@ -71,6 +71,10 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # for them; unsubscribed users still receive it (same policy as
     # event_registration / event_reminder).
     "plan_shared",
+    # Issue #1124: staff explicitly launches a sprint and introduces
+    # enrolled members to their accountability partners. Transactional
+    # because it is operational information for named sprint participants.
+    "sprint_partner_intro",
     # Issue #960: Maven cohort auto-onboarding. The course welcome is
     # transactional — a Maven enrollee receives it as part of enrolling,
     # so an unsubscribed user still gets it. The removal heads-up is an

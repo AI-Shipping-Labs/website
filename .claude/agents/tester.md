@@ -60,8 +60,8 @@ Verify against the spec:
 - [ ] Model tests: object creation, field validation, custom methods (e.g. markdown rendering)
 - [ ] View tests: status codes, templates, context data for each page added/modified
 - [ ] Access control tests (if gating is involved): anonymous, free, and paid users
-- [ ] All Django tests pass: `make test`
-- [ ] Django coverage passes: `make coverage` (85% minimum under the configured runtime-code scope)
+- [ ] Focused Django tests for the changed modules pass locally
+- [ ] Full Django suite / coverage is deferred to CI unless Alexey explicitly asks for a local full-suite run
 - [ ] Playwright E2E tests pass: `make test-playwright-core` (default per-issue) or `make test-playwright` (full, when escalated)
 - [ ] Report test counts by type: unit, integration, E2E (Playwright) — and which Playwright subset (`core` vs `full`) ran
 
@@ -84,11 +84,8 @@ This runs `uv sync`, installs Playwright browsers, migrates, and loads content. 
 #### Run tests
 
 ```bash
-# Django unit/integration tests
-make test
-
-# Coverage (must be 85%+)
-make coverage
+# Focused Django unit/integration tests for the changed modules
+uv run python manage.py test {changed_app_or_test_modules}
 
 # Playwright E2E tests — core subset (default for per-issue work)
 make test-playwright-core
@@ -99,8 +96,11 @@ make test-playwright-core
 # will tell you when to escalate)
 make test-playwright
 
-# All tests
-make test-all
+# Exhaustive full-suite/coverage commands are CI-only by default.
+# Do not run these locally during per-issue review unless Alexey explicitly asks:
+# make test
+# make coverage
+# make test-all
 ```
 
 Default to `make test-playwright-core` for per-issue runs. The core subset
@@ -111,19 +111,11 @@ gating. The full suite runs every 3 hours via the
 locally is only needed when the diff plausibly affects long-tail tests
 (shared fixtures, conftest, access matrix, payments).
 
-`make coverage` is the authoritative Django coverage gate. It erases stale
-coverage data, runs the full Django unit/integration suite under Coverage.py,
-and fails if total coverage is below 85%. The configured scope measures
-first-party runtime/application code and excludes Django test modules,
-Playwright test modules, migrations, and generated/local artifacts. Playwright
-browser scenarios are validated separately by `make playwright`; do not fail an
-issue because `playwright_tests/` files are absent from the Django coverage
-report.
-
-After this coverage fix, a failing `make coverage` is a test failure. If the
-failure appears to be unrelated pre-existing global coverage debt, document that
-with evidence from focused coverage on the Python paths changed by the issue,
-then still report the global gate result clearly.
+`make coverage`, `make test`, and `make test-all` are exhaustive local gates and
+are CI-only by default for per-issue tester review. Do not run them locally
+unless Alexey explicitly asks for a local full-suite/coverage run. If they are
+deferred, say so clearly in the QA report and list the focused Django tests that
+were run locally.
 
 #### Verify server starts
 
@@ -175,9 +167,9 @@ gh issue comment {NUMBER} --repo AI-Shipping-Labs/website --body "$(cat <<'COMME
 ## QA Review
 
 ### Test Summary
-- Unit tests: X passed / Y failed
+- Focused Django tests: X passed / Y failed
 - Playwright E2E tests (core / full): X passed / Y failed
-- Coverage: X%
+- Full-suite/coverage: deferred to CI unless explicitly requested locally
 
 ### Acceptance Criteria
 - [x] PASS: ...
@@ -265,7 +257,7 @@ PASS — approve for commit: Confirm all acceptance criteria met. Tell the orche
 
 When the software engineer applies fixes (still uncommitted):
 1. Review the changed files again
-2. Run tests: `uv run python manage.py test`
+2. Run focused tests for the changed modules
 3. Check only the specific issues you flagged
 4. Verify the fixes don't break anything else
 5. Report updated results
@@ -276,7 +268,11 @@ Repeat until all acceptance criteria pass.
 
 Never mark an acceptance criterion as "CANNOT VERIFY". If it's in the acceptance criteria, you MUST verify it by actually running the command. If a command fails, that's a FAIL — not "cannot verify".
 
-You have access to Bash. Use it. Run the server, run the tests, run coverage, run Playwright. If something doesn't work, report it as a failure.
+You have access to Bash. Use it. Run the server when needed, run focused local
+tests, run the required Playwright subset, and capture screenshots. Do not run
+exhaustive coverage/full-suite commands locally unless Alexey explicitly asks.
+If something in the scoped local verification doesn't work, report it as a
+failure.
 
 Exception: Some criteria require human verification (e.g. OAuth login flow, visual inspection). These will be clearly marked in the issue with `[HUMAN]`. Skip those and note them as "Awaiting human verification" in your report. Everything else you must verify yourself.
 
@@ -303,7 +299,7 @@ Exception: Some criteria require human verification (e.g. OAuth login flow, visu
 
 ## Approving
 
-Only approve if ALL tests pass (0 failures) and ALL acceptance criteria are verified. Any failure = FAIL the review.
+Only approve if all scoped local tests pass (0 failures), required screenshots are inspected, and all acceptance criteria are verified. Any scoped local failure = FAIL the review. Full-suite/coverage remains a CI gate unless Alexey explicitly requested it locally.
 
 When all acceptance criteria pass, report to the orchestrator:
 
@@ -315,10 +311,9 @@ All acceptance criteria verified:
 - [x] ...
 
 ### Test Summary
-- Unit tests: X passed / 0 failed
-- Integration tests: X passed / 0 failed
+- Focused Django tests: X passed / 0 failed
 - Playwright E2E tests (core / full): X passed / 0 failed
-- Coverage: X%
+- Full-suite/coverage: deferred to CI unless explicitly requested locally
 
-IF all tests pass => Approved. Software engineer should commit and push.
+IF scoped local tests and screenshots pass => Approved. Software engineer should commit and push.
 ```

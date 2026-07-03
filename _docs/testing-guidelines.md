@@ -604,10 +604,15 @@ GitHub). Even then, pin the arg shape that proves the call was correct.
 
 ## Coverage gate (`make coverage`)
 
-`make coverage` is the local Django coverage gate. It starts from clean coverage
-data, runs the full Django unit/integration suite with Coverage.py, and reports
-against the project coverage configuration in `pyproject.toml`. The command
-must pass with at least 85% total coverage.
+`make coverage` is the exhaustive Django coverage gate. It starts from clean
+coverage data, runs the full Django unit/integration suite with Coverage.py,
+and reports against the project coverage configuration in `pyproject.toml`.
+The command must pass with at least 85% total coverage in CI.
+
+For per-issue local review, do not run `make coverage` by default. It is
+CI-only unless Alexey explicitly asks for a local full-suite/coverage run. Local
+tester review should run focused Django tests for the changed modules plus the
+appropriate Playwright subset.
 
 The coverage scope is first-party runtime/application code: Django apps plus the
 project package. Django test modules, Playwright test modules, migrations,
@@ -617,7 +622,7 @@ the percentage. Do not exclude runtime code solely to raise the reported total.
 Playwright E2E tests are a separate validation gate:
 
 ```bash
-make coverage      # Django/runtime coverage, 85% minimum
+make coverage      # CI/default exhaustive Django/runtime coverage, 85% minimum
 make playwright    # browser E2E scenarios
 ```
 

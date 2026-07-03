@@ -3,6 +3,7 @@
 ## Development Process
 
 - Before continuing development work, read `_docs/PROCESS.md` and follow the issue pipeline documented there.
+- Treat feature requests for this repo as permission to launch the role subagents required by `_docs/PROCESS.md` (PM, software engineer, tester, PM acceptance, on-call) unless the user explicitly asks not to.
 - Treat "continue where we stopped" as a prompt to check `_docs/PROCESS.md`, inspect the current issue/worktree/process state, and resume the next pipeline step.
 - When launching subagents for this workflow, use high-capability/high-reasoning model settings by default unless the user explicitly asks for a cheaper or lower-reasoning run.
 

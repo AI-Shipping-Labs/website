@@ -71,6 +71,21 @@ cover_image: "images/building-ai-agents-with-mcp/architecture.png"
 Article body in markdown...
 ```
 
+Article draft/publish state uses the optional `status` field only:
+
+- Omit `status` to publish the article.
+- Use `status: published` to publish explicitly.
+- Use `status: draft` to keep the article out of public discovery and detail
+  routes while keeping its generated preview URL available.
+
+Do not use `published: false` or `published: true` in article frontmatter.
+Those keys are not synced article authoring syntax. To test a draft article
+from a local content checkout, run:
+
+```bash
+uv run python manage.py sync_content --from-disk <content-repo-path>
+```
+
 Images are referenced with relative paths: `![diagram](images/building-ai-agents-with-mcp/architecture.png)`. The sync process uploads images to platform storage (S3) and rewrites URLs.
 
 ### Courses Repo (`AI-Shipping-Labs/courses`)

@@ -27,6 +27,24 @@ from integrations.services.github_sync.repo import derive_slug, extract_sort_ord
 
 from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
 
+_ARTICLE_STATUS_VALUES = {'draft', 'published'}
+
+
+def _published_from_article_status(metadata, rel_path):
+    """Return the published flag from article author-facing status."""
+    raw_status = metadata.get('status', None)
+    if raw_status is None or raw_status == '':
+        return True
+
+    status = str(raw_status).strip().lower()
+    if status not in _ARTICLE_STATUS_VALUES:
+        raise ValueError(
+            f"Unsupported article status in {rel_path}: {raw_status!r}. "
+            "Allowed values are 'draft', 'published', or omitted."
+        )
+    return status == 'published'
+
+
 def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
                        known_images=None):
     """Walker dispatch handler: process article markdown files.
@@ -101,10 +119,7 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
             # Extract page_type and data from frontmatter
             page_type = metadata.get('page_type', 'blog')
             data = metadata.get('data', {})
-            published = True
-            status_value = str(metadata.get('status', '') or '').strip().lower()
-            if status_value == 'draft' or metadata.get('published') is False:
-                published = False
+            published = _published_from_article_status(metadata, rel_path)
 
             defaults = {
                 'title': metadata.get('title', current_slug),

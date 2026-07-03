@@ -115,6 +115,65 @@ data: {...}        # optional structured payload for rich pages
 markdown body
 ```
 
+Article publish state is controlled by one optional frontmatter field:
+`status`.
+
+Supported article states:
+
+| Frontmatter | Result |
+|-------------|--------|
+| `status` omitted | Published |
+| `status: published` | Published |
+| `status: draft` | Draft/unpublished |
+
+Draft example:
+
+```markdown
+---
+content_id: <UUID>
+title: Draft AI Engineering Notes
+author: Alexey Grigorev
+date: '2026-07-03'
+status: draft
+---
+draft body
+```
+
+Implicit published example, with `status` omitted:
+
+```markdown
+---
+content_id: <UUID>
+title: Published AI Engineering Notes
+author: Alexey Grigorev
+date: '2026-07-03'
+---
+published body
+```
+
+Explicit published example:
+
+```markdown
+---
+content_id: <UUID>
+title: Published AI Engineering Notes
+author: Alexey Grigorev
+date: '2026-07-03'
+status: published
+---
+published body
+```
+
+Do not use `published: false` or `published: true` for synced article state.
+Those keys are not article authoring syntax. Use `status: draft` for drafts,
+or omit `status` for the default published state.
+
+To test a draft locally before pushing the content repo, run:
+
+```bash
+uv run python manage.py sync_content --from-disk <content-repo-path>
+```
+
 Article markdown can include trusted content-repo HTML snippets with
 `<!-- include:PATH -->`. During sync the snippet is rendered with the article
 frontmatter payload available as `data`, then stored in `Article.content_html`.

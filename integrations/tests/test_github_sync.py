@@ -621,7 +621,7 @@ class SyncArticlesTest(TestCase):
                 'title': 'Draft from Repo Renamed',
                 'slug': 'draft-from-repo-renamed',
                 'date': '2026-01-15',
-                'published': False,
+                'status': 'draft',
             },
             'Draft body updated.',
         )
@@ -631,7 +631,7 @@ class SyncArticlesTest(TestCase):
         self.assertFalse(article.published)
         self.assertEqual(article.preview_token, original_token)
 
-    def test_sync_default_and_published_metadata_remain_published(self):
+    def test_sync_default_and_status_published_remain_published(self):
         self._write_article(
             'default-published.md',
             {
@@ -650,7 +650,6 @@ class SyncArticlesTest(TestCase):
                 'slug': 'explicit-published',
                 'date': '2026-01-15',
                 'status': 'published',
-                'published': True,
             },
             'Explicit body.',
         )
@@ -658,7 +657,79 @@ class SyncArticlesTest(TestCase):
         sync_repo(self.source, self.repo)
 
         self.assertTrue(Article.objects.get(slug='default-published').published)
-        self.assertTrue(Article.objects.get(slug='explicit-published').published)
+        explicit = Article.objects.get(slug='explicit-published')
+        self.assertTrue(explicit.published)
+        self.assertEqual(explicit.status, 'published')
+
+    def test_sync_ignores_legacy_published_false_article_frontmatter(self):
+        self._write_article(
+            'legacy-published-false.md',
+            {
+                'content_id': '44444444-4444-4444-8444-444444444444',
+                'title': 'Legacy Published False',
+                'slug': 'legacy-published-false',
+                'date': '2026-01-15',
+                'published': False,
+            },
+            'Legacy body.',
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.status, 'success')
+        article = Article.objects.get(slug='legacy-published-false')
+        self.assertTrue(article.published)
+        self.assertEqual(article.status, 'published')
+
+    def test_sync_status_published_wins_over_legacy_published_false(self):
+        self._write_article(
+            'status-published-legacy-false.md',
+            {
+                'content_id': '55555555-5555-4555-8555-555555555555',
+                'title': 'Status Published Legacy False',
+                'slug': 'status-published-legacy-false',
+                'date': '2026-01-15',
+                'status': 'published',
+                'published': False,
+            },
+            'Published body.',
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.status, 'success')
+        article = Article.objects.get(slug='status-published-legacy-false')
+        self.assertTrue(article.published)
+        self.assertEqual(article.status, 'published')
+
+    def test_sync_rejects_unsupported_article_status(self):
+        self._write_article(
+            'misspelled-status.md',
+            {
+                'content_id': '66666666-6666-4666-8666-666666666666',
+                'title': 'Misspelled Status',
+                'slug': 'misspelled-status',
+                'date': '2026-01-15',
+                'status': 'drafft',
+            },
+            'Should not publish.',
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.status, 'partial')
+        self.assertFalse(Article.objects.filter(slug='misspelled-status').exists())
+        self.assertTrue(
+            any(
+                error.get('file') == 'misspelled-status.md'
+                and (
+                    'Unsupported article status in misspelled-status.md'
+                    in error.get('error', '')
+                )
+                and "'draft', 'published', or omitted" in error.get('error', '')
+                for error in sync_log.errors
+            ),
+        )
 
     def test_sync_updates_existing_article(self):
         Article.objects.create(

@@ -207,6 +207,9 @@ from studio.views.settings import (
 )
 from studio.views.signup_analytics import signup_analytics_dashboard
 from studio.views.sprints import (
+    sprint_accountability_add,
+    sprint_accountability_randomize,
+    sprint_accountability_remove,
     sprint_add_member,
     sprint_cancel,
     sprint_create,
@@ -869,6 +872,21 @@ urlpatterns = [
         'sprints/<int:sprint_id>/enrollments/<int:enrollment_id>/unenroll',
         sprint_unenroll,
         name='studio_sprint_unenroll',
+    ),
+    path(
+        'sprints/<int:sprint_id>/accountability/add',
+        sprint_accountability_add,
+        name='studio_sprint_accountability_add',
+    ),
+    path(
+        'sprints/<int:sprint_id>/accountability/remove',
+        sprint_accountability_remove,
+        name='studio_sprint_accountability_remove',
+    ),
+    path(
+        'sprints/<int:sprint_id>/accountability/randomize',
+        sprint_accountability_randomize,
+        name='studio_sprint_accountability_randomize',
     ),
     # Bulk enroll (issue #443). Staff-only; enrolls members from a
     # textarea of emails. Allows under-tier with a warning per the spec.

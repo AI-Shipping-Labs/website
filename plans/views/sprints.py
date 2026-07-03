@@ -43,6 +43,7 @@ from plans.models import (
     SprintEnrollment,
     SprintFeedbackRequest,
 )
+from plans.services.accountability import accountability_partners_by_user
 from questionnaires.models import Response
 from questionnaires.onboarding import get_onboarding_response
 from questionnaires.services import (
@@ -149,6 +150,11 @@ def sprint_detail(request, sprint_slug):
     enrolled = _is_enrolled(sprint, user)
     viewer_plan = _viewer_plan(sprint, user)
     required_tier_name = LEVEL_TO_TIER_NAME.get(sprint.min_tier_level, 'Premium')
+    accountability_partners = []
+    if enrolled:
+        accountability_partners = accountability_partners_by_user(sprint).get(
+            user.pk, [],
+        )
 
     event_series = sprint.event_series
     event_series_events = (
@@ -172,6 +178,7 @@ def sprint_detail(request, sprint_slug):
             'event_series_events': event_series_events,
             'sprint_call_entries': sprint_call_entries,
             'feedback_response': feedback_response,
+            'accountability_partners': accountability_partners,
         },
     )
 

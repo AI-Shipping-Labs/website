@@ -365,6 +365,73 @@ class SprintEnrollment(TimestampedModelMixin, models.Model):
         return f'{self.user} in {self.sprint}'
 
 
+ACCOUNTABILITY_SOURCE_MANUAL = 'manual'
+ACCOUNTABILITY_SOURCE_RANDOM = 'random'
+
+ACCOUNTABILITY_SOURCE_CHOICES = [
+    (ACCOUNTABILITY_SOURCE_MANUAL, 'Manual'),
+    (ACCOUNTABILITY_SOURCE_RANDOM, 'Random'),
+]
+
+
+class SprintAccountabilityPartner(TimestampedModelMixin, models.Model):
+    """Directed accountability partner edge for one sprint member.
+
+    Partnering is reciprocal in service/view code: assigning Alice to Bob
+    writes Alice -> Bob and Bob -> Alice. Keeping the stored rows directed
+    makes the member-facing lookup cheap and allows each member to have one
+    or more partners.
+    """
+
+    sprint = models.ForeignKey(
+        Sprint,
+        on_delete=models.CASCADE,
+        related_name='accountability_partners',
+    )
+    member = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sprint_accountability_partners',
+    )
+    partner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sprint_accountability_partner_for',
+    )
+    source = models.CharField(
+        max_length=20,
+        choices=ACCOUNTABILITY_SOURCE_CHOICES,
+        default=ACCOUNTABILITY_SOURCE_MANUAL,
+    )
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+
+    class Meta:
+        ordering = ['created_at', 'pk']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sprint', 'member', 'partner'],
+                name='unique_sprint_accountability_partner',
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(member=models.F('partner')),
+                name='sprint_accountability_no_self_partner',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['sprint', 'member']),
+            models.Index(fields=['sprint', 'partner']),
+        ]
+
+    def __str__(self):
+        return f'{self.member} -> {self.partner} in {self.sprint}'
+
+
 class SprintFeedbackRequest(TimestampedModelMixin, models.Model):
     """Associates a feedback questionnaire with a sprint (issue #803).
 

@@ -107,6 +107,29 @@
       </div>
       {% endif %}
 
+      {% if enrolled %}
+      <section class="mb-6 rounded-lg border border-border bg-card p-6" data-testid="sprint-accountability-partners">
+        <p class="text-sm uppercase tracking-wide text-muted-foreground">Accountability</p>
+        <h2 class="mt-1 text-xl font-semibold text-foreground">Your partners</h2>
+        {% if accountability_partners %}
+        <ul class="mt-4 space-y-3" data-testid="sprint-accountability-partner-list">
+          {% for partner in accountability_partners %}
+          <li class="rounded-lg border border-border bg-background/60 p-4" data-testid="sprint-accountability-partner">
+            <div class="font-medium text-foreground">
+              {% if partner.get_full_name %}{{ partner.get_full_name }}{% else %}{{ partner.email }}{% endif %}
+            </div>
+            <div class="text-sm text-muted-foreground">{{ partner.email }}</div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="mt-3 text-sm text-muted-foreground" data-testid="sprint-accountability-empty">
+          Partners have not been assigned yet.
+        </p>
+        {% endif %}
+      </section>
+      {% endif %}
+
       <section class="mb-6 rounded-lg border border-border bg-card p-6" data-testid="sprint-meeting-schedule">
         <div class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>

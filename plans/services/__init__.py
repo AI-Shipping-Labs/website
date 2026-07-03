@@ -14,6 +14,13 @@ to import the callable — the seam is about what the callable itself
 imports, not about who imports it.
 """
 
+from plans.services.accountability import (
+    accountability_partners_by_user,
+    assign_accountability_partners,
+    clear_accountability_for_member,
+    randomize_accountability_partners,
+    remove_accountability_partners,
+)
 from plans.services.next_sprint_draft_service import draft_next_sprint_plan
 
 # Re-export the model names the original ``plans/services.py`` carried in
@@ -54,7 +61,10 @@ __all__ = [
     'SprintEnrollment',
     'Week',
     'annotate_plan_progress',
+    'accountability_partners_by_user',
+    'assign_accountability_partners',
     'carry_over_unfinished_tasks',
+    'clear_accountability_for_member',
     'count_total_unfinished',
     'count_unfinished_carry_over_items',
     'create_plan_for_enrollment',
@@ -64,6 +74,8 @@ __all__ = [
     'find_carry_over_source_plan',
     'move_unfinished_items_to_sprint',
     'preview_plan_ready_emails',
+    'randomize_accountability_partners',
+    'remove_accountability_partners',
     'send_plan_ready_email_for_plan',
     'send_plan_ready_emails',
     'unfinished_plan_item_counts',

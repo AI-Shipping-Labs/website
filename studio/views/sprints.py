@@ -56,9 +56,14 @@ from plans.models import (
     SprintFeedbackSummary,
 )
 from plans.services import (
+    accountability_partners_by_user,
+    assign_accountability_partners,
+    clear_accountability_for_member,
     create_plan_for_enrollment,
     distribute_sprint_feedback,
     preview_plan_ready_emails,
+    randomize_accountability_partners,
+    remove_accountability_partners,
     send_plan_ready_email_for_plan,
     send_plan_ready_emails,
 )
@@ -491,6 +496,27 @@ def _build_sprint_member_rows(*, sprint, enrollments, plans):
     )
 
 
+def _attach_accountability_context(sprint, rows, enrollments):
+    partners_by_user = accountability_partners_by_user(sprint)
+    enrolled_users = [enrollment.user for enrollment in enrollments]
+    for row in rows:
+        partners = partners_by_user.get(row['member'].pk, [])
+        partner_ids = {partner.pk for partner in partners}
+        row['accountability_partners'] = partners
+        row['accountability_partner_options'] = [
+            user for user in enrolled_users
+            if user.pk != row['member'].pk and user.pk not in partner_ids
+        ]
+
+
+def _post_user_or_404(request, field_name):
+    try:
+        user_id = int(request.POST.get(field_name))
+    except (TypeError, ValueError):
+        raise Http404('User not found')
+    return get_object_or_404(User, pk=user_id)
+
+
 @staff_required
 def sprint_detail(request, sprint_id):
     """Sprint metadata + pending request inbox + merged member rows.
@@ -521,6 +547,7 @@ def sprint_detail(request, sprint_id):
         enrollments=enrollments,
         plans=plans,
     )
+    _attach_accountability_context(sprint, sprint_member_rows, enrollments)
     event_series = sprint.event_series
     event_series_events = (
         list(event_series.events.all().order_by('start_datetime'))
@@ -542,6 +569,85 @@ def sprint_detail(request, sprint_id):
         'plan_ready_email_preview': plan_ready_email_preview,
         **feedback_context,
     })
+
+
+@staff_required
+@require_POST
+def sprint_accountability_add(request, sprint_id):
+    """Manually assign two enrolled sprint members as partners."""
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    member = _post_user_or_404(request, 'member_id')
+    partner = _post_user_or_404(request, 'partner_id')
+    try:
+        created = assign_accountability_partners(
+            sprint=sprint,
+            member=member,
+            partner=partner,
+            assigned_by=request.user,
+        )
+    except ValidationError as exc:
+        messages.error(request, exc.messages[0])
+    else:
+        if created:
+            messages.success(
+                request,
+                f'Assigned {member.email} and {partner.email} as partners.',
+            )
+        else:
+            messages.info(
+                request,
+                f'{member.email} and {partner.email} are already partners.',
+            )
+    return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+
+@staff_required
+@require_POST
+def sprint_accountability_remove(request, sprint_id):
+    """Remove a reciprocal accountability partner assignment."""
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    member = _post_user_or_404(request, 'member_id')
+    partner = _post_user_or_404(request, 'partner_id')
+    deleted = remove_accountability_partners(
+        sprint=sprint,
+        member=member,
+        partner=partner,
+    )
+    if deleted:
+        messages.success(
+            request,
+            f'Removed partner assignment for {member.email} and {partner.email}.',
+        )
+    else:
+        messages.info(request, 'That partner assignment was already removed.')
+    return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+
+@staff_required
+@require_POST
+def sprint_accountability_randomize(request, sprint_id):
+    """Reroll random accountability partners while preserving manual picks."""
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    summary = randomize_accountability_partners(
+        sprint=sprint,
+        assigned_by=request.user,
+    )
+    assigned = summary['assigned_pair_count']
+    unassigned = summary['unassigned_count']
+    if assigned:
+        messages.success(
+            request,
+            f'Randomly assigned {assigned} partner pair'
+            f'{"s" if assigned != 1 else ""}.',
+        )
+    elif unassigned:
+        messages.info(
+            request,
+            'Random assignment needs at least two members without partners.',
+        )
+    else:
+        messages.info(request, 'No members needed random partner assignment.')
+    return redirect('studio_sprint_detail', sprint_id=sprint.pk)
 
 
 def _attach_plan_ready_email_state(plans):
@@ -1350,6 +1456,7 @@ def sprint_unenroll(request, sprint_id, enrollment_id):
     email = user.email
     has_plan = Plan.objects.filter(sprint=sprint, member=user).exists()
 
+    clear_accountability_for_member(sprint=sprint, member=user)
     enrollment.delete()
     logger.info(
         'studio.sprint_unenroll actor=%s sprint_id=%s user_id=%s plan_kept=%s',

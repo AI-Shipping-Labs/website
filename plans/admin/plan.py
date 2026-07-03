@@ -12,6 +12,7 @@ from plans.models import (
     PlanReadyEmailLog,
     PlanRequest,
     Sprint,
+    SprintAccountabilityPartner,
     SprintEnrollment,
     SprintFeedbackRequest,
 )
@@ -44,6 +45,17 @@ class SprintEnrollmentAdmin(admin.ModelAdmin):
     list_filter = ['sprint']
     search_fields = ['user__email', 'sprint__name', 'sprint__slug']
     raw_id_fields = ['user', 'enrolled_by']
+
+
+@admin.register(SprintAccountabilityPartner)
+class SprintAccountabilityPartnerAdmin(admin.ModelAdmin):
+    list_display = ['member', 'partner', 'sprint', 'source', 'assigned_by']
+    list_filter = ['sprint', 'source']
+    search_fields = [
+        'member__email', 'partner__email', 'sprint__name', 'sprint__slug',
+    ]
+    raw_id_fields = ['member', 'partner', 'assigned_by']
+    readonly_fields = ['created_at', 'updated_at']
 
 
 @admin.register(Plan)

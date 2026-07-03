@@ -42,10 +42,6 @@ Use `PATCH /progress` only to set `done` on existing checkpoints, deliverables, 
 }
 ```
 
-## Forbidden Surfaces
-
-Do not call `/api/`, `/studio/`, Django admin, CRM, staff APIs, operator APIs, or staff/operator documentation. Do not infer, request, or expose internal notes, CRM notes, onboarding answers, staff context, or other members' data.
-
 ## Workflow
 
 1. Resolve the key from `AI_SHIPPING_LABS_MEMBER_API_KEY` or ask the user to provide it privately.

@@ -186,7 +186,7 @@ Report:
 - Every criterion must be testable — the tester agent must be able to verify it by running a command or checking the code
 - Use specific values, not vague descriptions: "shows last 5 articles" not "shows recent articles"
 - Include negative cases: "anonymous users are redirected to /login" not just "page requires auth"
-- For most Studio create/update/operator actions and Studio-visible operator data, include API acceptance criteria as part of the same issue. The PM ultimately decides whether API support is needed, but the default is yes when the capability is useful for automation, imports, CRM workflows, Slack/context ingestion, bulk operations, event/content management, or production support. Destructive deletes are excluded from this default and should be API-scoped only when explicitly needed. If API support is not appropriate, state why in Scope or Out of scope so the omission is intentional.
+- For Studio create/update/operator actions and Studio-visible operator data, API support is part of the acceptance criteria by default. Include authenticated production API acceptance criteria in the same issue whenever the capability is useful for automation, imports, CRM workflows, Slack/context ingestion, bulk operations, event/content management, or production support. Destructive deletes are excluded from this default and should be API-scoped only when explicitly needed. If API support is not appropriate, state why in Scope or Out of scope so the omission is intentional and testable.
 - Mark `[HUMAN]` only for things that truly can't be automated: OAuth redirects to external providers, visual design judgment, external webhook delivery
 - Each criterion maps to one or more tests
 

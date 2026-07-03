@@ -44,6 +44,9 @@ LEGITIMATE_DELETE_HANDLERS = {
     # 2. Relationship / attribute removal
     "aliases.user_aliases_remove": "relationship/attribute removal: EmailAlias mapping",
     "users.user_tags_remove": "relationship/attribute removal: tag from user.tags",
+    "sprints.sprint_accountability_partners": (
+        "relationship/assignment removal: reciprocal SprintAccountabilityPartner edges"
+    ),
     # 3. Soft-delete
     "course_enrollments.course_enrollment_detail": "soft-delete: sets unenrolled_at",
     # 4. Member-owned plan structure edits

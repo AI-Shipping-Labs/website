@@ -80,6 +80,32 @@ class BuildSpecTest(TestCase):
             {"get", "patch", "delete"},
         )
 
+    def test_sprint_accountability_partner_paths_present(self):
+        self.assertIn(
+            "/api/sprints/{slug}/accountability-partners",
+            self.document["paths"],
+        )
+        self.assertEqual(
+            set(
+                self.document["paths"][
+                    "/api/sprints/{slug}/accountability-partners"
+                ]
+            ),
+            {"get", "post", "delete"},
+        )
+        self.assertIn(
+            "/api/sprints/{slug}/accountability-partners/randomize",
+            self.document["paths"],
+        )
+        self.assertEqual(
+            set(
+                self.document["paths"][
+                    "/api/sprints/{slug}/accountability-partners/randomize"
+                ]
+            ),
+            {"post"},
+        )
+
     def test_week_note_singular_path_present(self):
         self.assertIn("/api/weeks/{week_id}/note", self.document["paths"])
         operations = self.document["paths"]["/api/weeks/{week_id}/note"]
@@ -170,6 +196,8 @@ class SprintsModuleHasOpenApiSpecTest(TestCase):
         view_names = [
             "sprints_collection",
             "sprint_detail",
+            "sprint_accountability_partners",
+            "sprint_accountability_randomize",
             "sprint_progress_evidence",
         ]
         for name in view_names:
@@ -210,6 +238,21 @@ class SprintsModuleHasOpenApiSpecTest(TestCase):
             OPENAPI_SPEC_ATTR,
         )
         self.assertEqual(set(spec["methods"].keys()), {"GET"})
+
+    def test_methods_match_require_methods_for_sprint_accountability(self):
+        import api.views.sprints as sprints_module
+
+        spec = getattr(
+            sprints_module.sprint_accountability_partners,
+            OPENAPI_SPEC_ATTR,
+        )
+        self.assertEqual(set(spec["methods"].keys()), {"GET", "POST", "DELETE"})
+
+        spec = getattr(
+            sprints_module.sprint_accountability_randomize,
+            OPENAPI_SPEC_ATTR,
+        )
+        self.assertEqual(set(spec["methods"].keys()), {"POST"})
 
 
 class AllApiViewsHaveOpenApiSpecTest(TestCase):

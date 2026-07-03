@@ -47,6 +47,7 @@ content survives. Idempotent and audited where applicable.
 | --- | --- |
 | `api/views/aliases.py` (`user_aliases_remove`) | one `EmailAlias` mapping; account untouched |
 | `api/views/users.py` (`user_tags_remove`) | one tag from the `user.tags` JSON list |
+| `api/views/sprints.py` (`sprint_accountability_partners`) | reciprocal `SprintAccountabilityPartner` assignment edges between two enrolled sprint members; sprint and users untouched |
 
 ### 3. Soft-delete (legitimate — keep)
 
@@ -102,8 +103,9 @@ be changed with `PATCH status=...`); only the hard-`DELETE` is blocked.
    silently reintroduced.
 
 Current classification (issue #864, after the 2026-06-13 human decision, plus
-issue #1045's singleton week-note clear route): 12 forbidden (405-protected) +
-10 legitimate = 22 `DELETE` handlers in `api/views/`.
+issue #1045's singleton week-note clear route and issue #1123's accountability
+partner assignment removal): 12 forbidden (405-protected) + 11 legitimate = 23
+`DELETE` handlers in `api/views/`.
 
 When you add or change a `DELETE` handler, update both this document and the
 classification in `api/delete_policy.py`.

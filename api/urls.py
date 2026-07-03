@@ -102,6 +102,8 @@ from api.views.redirects import (
 )
 from api.views.ses_events_list import ses_events_dispatch
 from api.views.sprints import (
+    sprint_accountability_partners,
+    sprint_accountability_randomize,
     sprint_detail,
     sprint_progress_evidence,
     sprints_collection,
@@ -396,6 +398,16 @@ urlpatterns = [
         "sprints/<slug:slug>/progress-evidence",
         sprint_progress_evidence,
         name="api_sprint_progress_evidence",
+    ),
+    path(
+        "sprints/<slug:slug>/accountability-partners/randomize",
+        sprint_accountability_randomize,
+        name="api_sprint_accountability_randomize",
+    ),
+    path(
+        "sprints/<slug:slug>/accountability-partners",
+        sprint_accountability_partners,
+        name="api_sprint_accountability_partners",
     ),
     path(
         "sprints/<slug:slug>",

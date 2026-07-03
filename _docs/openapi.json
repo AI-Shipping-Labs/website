@@ -7161,6 +7161,319 @@
         ]
       }
     },
+    "/api/sprints/{slug}/accountability-partners": {
+      "delete": {
+        "description": "Deletes both directed edges for a pair. Repeating the same removal is a successful no-op.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "member_email": "alice@example.com",
+                "partner_email": "bob@example.com"
+              },
+              "schema": {
+                "properties": {
+                  "member_email": {
+                    "format": "email",
+                    "type": "string"
+                  },
+                  "partner_email": {
+                    "format": "email",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "member_email",
+                  "partner_email"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "deleted_edges": 2,
+                  "removed": true
+                }
+              }
+            },
+            "description": "Idempotent remove result."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Sprint not found."
+          },
+          "422": {
+            "description": "Missing field, unknown user, or self-pair."
+          }
+        },
+        "summary": "Remove an accountability partner pair",
+        "tags": [
+          "Sprints"
+        ]
+      },
+      "get": {
+        "description": "Staff-token-only roster of enrolled sprint members and their current accountability partners. Non-enrolled users are never included.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "members": [
+                    {
+                      "display_name": "Alice Example",
+                      "partners": [
+                        {
+                          "assigned_by": "staff@example.com",
+                          "created_at": "2026-07-03T10:00:00+00:00",
+                          "display_name": "Bob Example",
+                          "source": "manual",
+                          "updated_at": "2026-07-03T10:00:00+00:00",
+                          "user_email": "bob@example.com"
+                        }
+                      ],
+                      "user_email": "alice@example.com"
+                    }
+                  ],
+                  "sprint": {
+                    "name": "May 2026",
+                    "slug": "may-2026"
+                  }
+                }
+              }
+            },
+            "description": "Sprint member partner roster."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_sprint",
+                  "error": "Sprint not found"
+                }
+              }
+            },
+            "description": "Sprint not found."
+          }
+        },
+        "summary": "List sprint accountability partners",
+        "tags": [
+          "Sprints"
+        ]
+      },
+      "post": {
+        "description": "Creates reciprocal manual partner edges for two enrolled members. Reposting an existing pair is idempotent and returns ``created: false``. If the pair was random, both directed rows are upgraded to ``source: manual`` and ``assigned_by`` becomes the bearer staff user.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "member_email": "alice@example.com",
+                "partner_email": "bob@example.com"
+              },
+              "schema": {
+                "properties": {
+                  "member_email": {
+                    "format": "email",
+                    "type": "string"
+                  },
+                  "partner_email": {
+                    "format": "email",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "member_email",
+                  "partner_email"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": false,
+                  "created_edges": 0,
+                  "member_email": "alice@example.com",
+                  "partner_email": "bob@example.com"
+                }
+              }
+            },
+            "description": "Pair already existed or was promoted."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": true,
+                  "created_edges": 2,
+                  "member_email": "alice@example.com",
+                  "partner_email": "bob@example.com"
+                }
+              }
+            },
+            "description": "New reciprocal assignment created."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Sprint not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_user",
+                  "details": {
+                    "partner_email": "Unknown user"
+                  },
+                  "error": "Unknown user"
+                }
+              }
+            },
+            "description": "Missing field, unknown user, self-partnering, or non-enrolled participant."
+          }
+        },
+        "summary": "Manually assign accountability partners",
+        "tags": [
+          "Sprints"
+        ]
+      }
+    },
+    "/api/sprints/{slug}/accountability-partners/randomize": {
+      "post": {
+        "description": "Runs the same randomization rules as Studio: prior random assignments are cleared, manual assignments are preserved, unpartnered enrolled members are paired, and a final odd pool of three becomes a fully connected pod.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {},
+              "schema": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "assigned_pair_count": 1,
+                  "members": [
+                    {
+                      "display_name": "Alice Example",
+                      "partners": [
+                        {
+                          "assigned_by": "staff@example.com",
+                          "created_at": "2026-07-03T10:00:00+00:00",
+                          "display_name": "Bob Example",
+                          "source": "manual",
+                          "updated_at": "2026-07-03T10:00:00+00:00",
+                          "user_email": "bob@example.com"
+                        }
+                      ],
+                      "user_email": "alice@example.com"
+                    }
+                  ],
+                  "preserved_manual_count": 2,
+                  "random_edges_count": 2,
+                  "sprint": {
+                    "name": "May 2026",
+                    "slug": "may-2026"
+                  },
+                  "unassigned_count": 0
+                }
+              }
+            },
+            "description": "Randomization summary and refreshed roster."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_sprint",
+                  "error": "Sprint not found"
+                }
+              }
+            },
+            "description": "Sprint not found."
+          }
+        },
+        "summary": "Randomize accountability partners",
+        "tags": [
+          "Sprints"
+        ]
+      }
+    },
     "/api/sprints/{slug}/enrollments": {
       "get": {
         "description": "Staff sees every enrollment in the sprint; non-staff sees only their own row.",

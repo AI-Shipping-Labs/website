@@ -1,6 +1,6 @@
 """Sprint endpoints for the plans API (issue #433).
 
-Six endpoints:
+Core sprint endpoints:
 
 - ``GET /api/sprints/`` -- list, optional ``status`` filter
 - ``POST /api/sprints/`` -- create (staff-only)
@@ -12,6 +12,8 @@ Six endpoints:
 
 from datetime import date
 
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db.models import Prefetch
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -29,15 +31,26 @@ from api.utils import (
 from api.views._permissions import bearer_is_admin, visible_plans_for
 from crm.models import SlackMessage, SlackThread
 from plans.models import (
+    ACCOUNTABILITY_SOURCE_MANUAL,
+    ACCOUNTABILITY_SOURCE_RANDOM,
     SPRINT_STATUS_CHOICES,
     Checkpoint,
     Deliverable,
     NextStep,
     Plan,
     Sprint,
+    SprintAccountabilityPartner,
     SprintEnrollment,
 )
+from plans.services.accountability import (
+    accountability_partners_by_user,
+    assign_accountability_partners,
+    randomize_accountability_partners,
+    remove_accountability_partners,
+)
 from studio.views.sprints import _parse_event_series
+
+User = get_user_model()
 
 VALID_SPRINT_STATUSES = {choice for choice, _label in SPRINT_STATUS_CHOICES}
 
@@ -127,6 +140,38 @@ _PROGRESS_EVIDENCE_EXAMPLE = {
             "evidence_reasons": ["app_progress"],
         },
     ],
+}
+
+_ACCOUNTABILITY_PARTNERS_EXAMPLE = {
+    "sprint": {"slug": "may-2026", "name": "May 2026"},
+    "members": [
+        {
+            "user_email": "alice@example.com",
+            "display_name": "Alice Example",
+            "partners": [
+                {
+                    "user_email": "bob@example.com",
+                    "display_name": "Bob Example",
+                    "source": "manual",
+                    "assigned_by": "staff@example.com",
+                    "created_at": "2026-07-03T10:00:00+00:00",
+                    "updated_at": "2026-07-03T10:00:00+00:00",
+                },
+            ],
+        },
+    ],
+}
+
+_ACCOUNTABILITY_PAIR_REQUEST_BODY = {
+    "required": ["member_email", "partner_email"],
+    "properties": {
+        "member_email": {"type": "string", "format": "email"},
+        "partner_email": {"type": "string", "format": "email"},
+    },
+    "example": {
+        "member_email": "alice@example.com",
+        "partner_email": "bob@example.com",
+    },
 }
 
 # Shared request-body documentation for the ``event_series`` link.
@@ -448,6 +493,158 @@ def _target_row(target_sprint, member, target_enrollments, target_plans):
         "plan_id": plan.id if plan else None,
         "plan_exists": plan is not None,
     }
+
+
+def _serialize_accountability_partner(assignment):
+    partner = assignment.partner
+    return {
+        "user_email": partner.email,
+        "display_name": display_name(partner),
+        "source": assignment.source,
+        "assigned_by": (
+            assignment.assigned_by.email
+            if assignment.assigned_by_id else None
+        ),
+        "created_at": _isoformat_or_none(assignment.created_at),
+        "updated_at": _isoformat_or_none(assignment.updated_at),
+    }
+
+
+def _serialize_accountability_roster(sprint):
+    enrollments = (
+        SprintEnrollment.objects.filter(sprint=sprint)
+        .select_related("user")
+        .order_by("user__email", "id")
+    )
+    partners_by_user = accountability_partners_by_user(sprint)
+    assignments = (
+        SprintAccountabilityPartner.objects.filter(sprint=sprint)
+        .select_related("partner", "assigned_by")
+    )
+    assignments_by_pair = {
+        (assignment.member_id, assignment.partner_id): assignment
+        for assignment in assignments
+    }
+    enrolled_user_ids = {enrollment.user_id for enrollment in enrollments}
+    members = []
+    for enrollment in enrollments:
+        member = enrollment.user
+        partner_rows = []
+        for partner in partners_by_user.get(member.id, []):
+            if partner.id not in enrolled_user_ids:
+                continue
+            assignment = assignments_by_pair.get((member.id, partner.id))
+            if assignment is not None:
+                partner_rows.append(_serialize_accountability_partner(assignment))
+        members.append({
+            "user_email": member.email,
+            "display_name": display_name(member),
+            "partners": partner_rows,
+        })
+    return {
+        "sprint": {"slug": sprint.slug, "name": sprint.name},
+        "members": members,
+    }
+
+
+def _resolve_sprint(slug):
+    sprint = Sprint.objects.filter(slug=slug).first()
+    if sprint is None:
+        return None, error_response(
+            "Sprint not found",
+            "unknown_sprint",
+            status=404,
+        )
+    return sprint, None
+
+
+def _parse_accountability_pair_request(request):
+    data, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return None, None, parse_error
+    if not isinstance(data, dict):
+        return None, None, error_response(
+            "Body must be a JSON object",
+            "invalid_type",
+            details={"field": "body", "expected": "object"},
+        )
+
+    users = {}
+    for field in ("member_email", "partner_email"):
+        raw = data.get(field)
+        if raw in (None, ""):
+            return None, None, error_response(
+                f"Missing required field: {field}",
+                "missing_field",
+                status=422,
+                details={"field": field},
+            )
+        if not isinstance(raw, str):
+            return None, None, error_response(
+                f"{field} must be an email string",
+                "validation_error",
+                status=422,
+                details={field: "Must be an email string"},
+            )
+        email = raw.strip()
+        if not email:
+            return None, None, error_response(
+                f"Missing required field: {field}",
+                "missing_field",
+                status=422,
+                details={"field": field},
+            )
+        user = User.objects.filter(email__iexact=email).first()
+        if user is None:
+            return None, None, error_response(
+                "Unknown user",
+                "unknown_user",
+                status=422,
+                details={field: "Unknown user"},
+            )
+        users[field] = user
+
+    member = users["member_email"]
+    partner = users["partner_email"]
+    if member.pk == partner.pk:
+        return None, None, error_response(
+            "A member cannot be their own partner.",
+            "validation_error",
+            status=422,
+            details={"partner_email": "Must be different from member_email"},
+        )
+    return member, partner, None
+
+
+def _validate_accountability_pair_enrolled(*, sprint, member, partner):
+    enrolled_ids = set(
+        SprintEnrollment.objects.filter(
+            sprint=sprint,
+            user_id__in=[member.pk, partner.pk],
+        ).values_list("user_id", flat=True)
+    )
+    if member.pk in enrolled_ids and partner.pk in enrolled_ids:
+        return None
+    return error_response(
+        "Accountability partners must both be enrolled in this sprint.",
+        "validation_error",
+        status=422,
+        details={
+            "participants": (
+                "Accountability partners must both be enrolled in this sprint."
+            ),
+        },
+    )
+
+
+def _validation_error_response(exc):
+    message = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+    return error_response(
+        message,
+        "validation_error",
+        status=422,
+        details={"participants": message},
+    )
 
 
 @token_required
@@ -813,6 +1010,238 @@ def sprint_detail(request, slug):
         sprint.save(update_fields=update_fields + ["updated_at"])
 
     return JsonResponse(serialize_sprint(sprint), status=200)
+
+
+@token_required
+@csrf_exempt
+@require_methods("GET", "POST", "DELETE")
+@openapi_spec(
+    tag="Sprints",
+    summary="List, assign, or remove sprint accountability partners",
+    methods={
+        "GET": {
+            "summary": "List sprint accountability partners",
+            "description": (
+                "Staff-token-only roster of enrolled sprint members and "
+                "their current accountability partners. Non-enrolled users "
+                "are never included."
+            ),
+            "responses": {
+                200: {
+                    "description": "Sprint member partner roster.",
+                    "example": _ACCOUNTABILITY_PARTNERS_EXAMPLE,
+                },
+                401: {"description": "Missing or invalid staff token."},
+                404: {
+                    "description": "Sprint not found.",
+                    "example": {
+                        "error": "Sprint not found",
+                        "code": "unknown_sprint",
+                    },
+                },
+            },
+        },
+        "POST": {
+            "summary": "Manually assign accountability partners",
+            "description": (
+                "Creates reciprocal manual partner edges for two enrolled "
+                "members. Reposting an existing pair is idempotent and "
+                "returns ``created: false``. If the pair was random, both "
+                "directed rows are upgraded to ``source: manual`` and "
+                "``assigned_by`` becomes the bearer staff user."
+            ),
+            "request_body": _ACCOUNTABILITY_PAIR_REQUEST_BODY,
+            "responses": {
+                201: {
+                    "description": "New reciprocal assignment created.",
+                    "example": {
+                        "created": True,
+                        "created_edges": 2,
+                        "member_email": "alice@example.com",
+                        "partner_email": "bob@example.com",
+                    },
+                },
+                200: {
+                    "description": "Pair already existed or was promoted.",
+                    "example": {
+                        "created": False,
+                        "created_edges": 0,
+                        "member_email": "alice@example.com",
+                        "partner_email": "bob@example.com",
+                    },
+                },
+                400: {"description": "Invalid JSON body."},
+                401: {"description": "Missing or invalid staff token."},
+                404: {"description": "Sprint not found."},
+                422: {
+                    "description": (
+                        "Missing field, unknown user, self-partnering, or "
+                        "non-enrolled participant."
+                    ),
+                    "example": {
+                        "error": "Unknown user",
+                        "code": "unknown_user",
+                        "details": {"partner_email": "Unknown user"},
+                    },
+                },
+            },
+        },
+        "DELETE": {
+            "summary": "Remove an accountability partner pair",
+            "description": (
+                "Deletes both directed edges for a pair. Repeating the "
+                "same removal is a successful no-op."
+            ),
+            "request_body": _ACCOUNTABILITY_PAIR_REQUEST_BODY,
+            "responses": {
+                200: {
+                    "description": "Idempotent remove result.",
+                    "example": {"removed": True, "deleted_edges": 2},
+                },
+                400: {"description": "Invalid JSON body."},
+                401: {"description": "Missing or invalid staff token."},
+                404: {"description": "Sprint not found."},
+                422: {"description": "Missing field, unknown user, or self-pair."},
+            },
+        },
+    },
+)
+def sprint_accountability_partners(request, slug):
+    """``GET / POST / DELETE /api/sprints/<slug>/accountability-partners``."""
+    sprint, sprint_error = _resolve_sprint(slug)
+    if sprint_error is not None:
+        return sprint_error
+
+    if request.method == "GET":
+        return JsonResponse(_serialize_accountability_roster(sprint), status=200)
+
+    member, partner, request_error = _parse_accountability_pair_request(request)
+    if request_error is not None:
+        return request_error
+
+    if request.method == "POST":
+        try:
+            created_edges = assign_accountability_partners(
+                sprint=sprint,
+                member=member,
+                partner=partner,
+                assigned_by=request.user,
+            )
+        except ValidationError as exc:
+            return _validation_error_response(exc)
+        return JsonResponse(
+            {
+                "created": created_edges > 0,
+                "created_edges": created_edges,
+                "member_email": member.email,
+                "partner_email": partner.email,
+            },
+            status=201 if created_edges else 200,
+        )
+
+    enrollment_error = _validate_accountability_pair_enrolled(
+        sprint=sprint,
+        member=member,
+        partner=partner,
+    )
+    if enrollment_error is not None:
+        return enrollment_error
+
+    deleted_edges = remove_accountability_partners(
+        sprint=sprint,
+        member=member,
+        partner=partner,
+    )
+    return JsonResponse(
+        {
+            "removed": deleted_edges > 0,
+            "deleted_edges": deleted_edges,
+        },
+        status=200,
+    )
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Sprints",
+    summary="Randomize sprint accountability partners",
+    methods={
+        "POST": {
+            "summary": "Randomize accountability partners",
+            "description": (
+                "Runs the same randomization rules as Studio: prior random "
+                "assignments are cleared, manual assignments are preserved, "
+                "unpartnered enrolled members are paired, and a final odd "
+                "pool of three becomes a fully connected pod."
+            ),
+            "request_body": {
+                "properties": {},
+                "example": {},
+            },
+            "responses": {
+                200: {
+                    "description": "Randomization summary and refreshed roster.",
+                    "example": {
+                        "assigned_pair_count": 1,
+                        "unassigned_count": 0,
+                        "preserved_manual_count": 2,
+                        "random_edges_count": 2,
+                        **_ACCOUNTABILITY_PARTNERS_EXAMPLE,
+                    },
+                },
+                400: {"description": "Invalid JSON body."},
+                401: {"description": "Missing or invalid staff token."},
+                404: {
+                    "description": "Sprint not found.",
+                    "example": {
+                        "error": "Sprint not found",
+                        "code": "unknown_sprint",
+                    },
+                },
+            },
+        },
+    },
+)
+def sprint_accountability_randomize(request, slug):
+    """``POST /api/sprints/<slug>/accountability-partners/randomize``."""
+    sprint, sprint_error = _resolve_sprint(slug)
+    if sprint_error is not None:
+        return sprint_error
+
+    data, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return parse_error
+    if not isinstance(data, dict):
+        return error_response(
+            "Body must be a JSON object",
+            "invalid_type",
+            details={"field": "body", "expected": "object"},
+        )
+
+    summary = randomize_accountability_partners(
+        sprint=sprint,
+        assigned_by=request.user,
+    )
+    roster = _serialize_accountability_roster(sprint)
+    preserved_manual_count = SprintAccountabilityPartner.objects.filter(
+        sprint=sprint,
+        source=ACCOUNTABILITY_SOURCE_MANUAL,
+    ).count()
+    random_edges_count = SprintAccountabilityPartner.objects.filter(
+        sprint=sprint,
+        source=ACCOUNTABILITY_SOURCE_RANDOM,
+    ).count()
+    return JsonResponse(
+        {
+            **summary,
+            "preserved_manual_count": preserved_manual_count,
+            "random_edges_count": random_edges_count,
+            **roster,
+        },
+        status=200,
+    )
 
 
 @token_required

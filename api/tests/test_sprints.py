@@ -9,7 +9,15 @@ from django.test import TestCase
 from accounts.models import Token
 from api.serializers.plans import serialize_sprint
 from events.models.event_series import EventSeries
-from plans.models import Plan, Sprint
+from plans.models import (
+    ACCOUNTABILITY_SOURCE_MANUAL,
+    ACCOUNTABILITY_SOURCE_RANDOM,
+    Plan,
+    Sprint,
+    SprintAccountabilityPartner,
+    SprintEnrollment,
+)
+from plans.services.accountability import assign_accountability_partners
 
 User = get_user_model()
 
@@ -184,6 +192,496 @@ class SprintsAuthTest(SprintApiTestBase):
         response = self.client.put(
             "/api/sprints", **self._auth(),
         )
+        self.assertEqual(response.status_code, 405)
+
+
+class SprintAccountabilityPartnersApiTest(SprintApiTestBase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.alice = User.objects.create_user(
+            email="alice@example.com",
+            password="pw",
+            first_name="Alice",
+            last_name="Example",
+        )
+        cls.bob = User.objects.create_user(
+            email="bob@example.com",
+            password="pw",
+            first_name="Bob",
+            last_name="Example",
+        )
+        cls.cara = User.objects.create_user(
+            email="cara@example.com",
+            password="pw",
+            first_name="Cara",
+            last_name="Example",
+        )
+        cls.dana = User.objects.create_user(
+            email="dana@example.com",
+            password="pw",
+            first_name="Dana",
+            last_name="Example",
+        )
+        cls.outsider = User.objects.create_user(
+            email="outsider@example.com",
+            password="pw",
+        )
+        for user in (cls.alice, cls.bob, cls.cara, cls.dana):
+            SprintEnrollment.objects.create(
+                sprint=cls.sprint_active,
+                user=user,
+                enrolled_by=cls.staff,
+            )
+        cls.non_staff_token = Token(
+            key="non-staff-accountability-token",
+            user=cls.member,
+            name="legacy-non-staff",
+        )
+        Token.objects.bulk_create([cls.non_staff_token])
+
+    def _accountability_url(self):
+        return "/api/sprints/may-2026/accountability-partners"
+
+    def _randomize_url(self):
+        return "/api/sprints/may-2026/accountability-partners/randomize"
+
+    def _post_pair(self, member_email, partner_email, *, token=None):
+        return self.client.post(
+            self._accountability_url(),
+            data=json.dumps({
+                "member_email": member_email,
+                "partner_email": partner_email,
+            }),
+            content_type="application/json",
+            **self._auth(token),
+        )
+
+    def _delete_pair(self, member_email, partner_email, *, token=None):
+        return self.client.delete(
+            self._accountability_url(),
+            data=json.dumps({
+                "member_email": member_email,
+                "partner_email": partner_email,
+            }),
+            content_type="application/json",
+            **self._auth(token),
+        )
+
+    def _partner_emails_for(self, body, user_email):
+        row = next(
+            member
+            for member in body["members"]
+            if member["user_email"] == user_email
+        )
+        return [partner["user_email"] for partner in row["partners"]]
+
+    def test_list_returns_enrolled_members_and_partner_metadata(self):
+        assign_accountability_partners(
+            sprint=self.sprint_active,
+            member=self.alice,
+            partner=self.bob,
+            assigned_by=self.staff,
+        )
+
+        response = self.client.get(self._accountability_url(), **self._auth())
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(
+            body["sprint"],
+            {"slug": "may-2026", "name": "May 2026"},
+        )
+        member_emails = [member["user_email"] for member in body["members"]]
+        self.assertEqual(
+            member_emails,
+            [
+                "alice@example.com",
+                "bob@example.com",
+                "cara@example.com",
+                "dana@example.com",
+            ],
+        )
+        self.assertNotIn("outsider@example.com", member_emails)
+        alice_partner = body["members"][0]["partners"][0]
+        self.assertEqual(alice_partner["user_email"], "bob@example.com")
+        self.assertEqual(alice_partner["display_name"], "Bob Example")
+        self.assertEqual(alice_partner["source"], ACCOUNTABILITY_SOURCE_MANUAL)
+        self.assertEqual(alice_partner["assigned_by"], "staff@test.com")
+        self.assertIsNotNone(alice_partner["created_at"])
+        self.assertIsNotNone(alice_partner["updated_at"])
+
+    def test_list_omits_stale_partner_assignments_to_unenrolled_users(self):
+        assign_accountability_partners(
+            sprint=self.sprint_active,
+            member=self.alice,
+            partner=self.bob,
+            assigned_by=self.staff,
+        )
+        SprintEnrollment.objects.filter(
+            sprint=self.sprint_active,
+            user=self.bob,
+        ).delete()
+
+        response = self.client.get(self._accountability_url(), **self._auth())
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        member_emails = [member["user_email"] for member in body["members"]]
+        self.assertNotIn("bob@example.com", member_emails)
+        self.assertEqual(
+            self._partner_emails_for(body, "alice@example.com"),
+            [],
+        )
+
+    def test_manual_assign_creates_reciprocal_edges_and_records_bearer(self):
+        response = self._post_pair(
+            " Alice@Example.com ",
+            "BOB@example.com",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["created"], True)
+        self.assertEqual(response.json()["created_edges"], 2)
+        self.assertEqual(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+                source=ACCOUNTABILITY_SOURCE_MANUAL,
+                assigned_by=self.staff,
+            ).count(),
+            2,
+        )
+        self.assertTrue(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+                member=self.alice,
+                partner=self.bob,
+            ).exists()
+        )
+        self.assertTrue(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+                member=self.bob,
+                partner=self.alice,
+            ).exists()
+        )
+
+    def test_manual_assign_is_idempotent(self):
+        self._post_pair("alice@example.com", "bob@example.com")
+
+        response = self._post_pair("alice@example.com", "bob@example.com")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["created"], False)
+        self.assertEqual(response.json()["created_edges"], 0)
+        self.assertEqual(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+                member__in=[self.alice, self.bob],
+                partner__in=[self.alice, self.bob],
+            ).count(),
+            2,
+        )
+
+    def test_manual_assign_promotes_existing_random_pair_to_manual(self):
+        assign_accountability_partners(
+            sprint=self.sprint_active,
+            member=self.alice,
+            partner=self.bob,
+            assigned_by=self.staff,
+            source=ACCOUNTABILITY_SOURCE_RANDOM,
+        )
+
+        response = self._post_pair("alice@example.com", "bob@example.com")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["created"])
+        self.assertEqual(
+            set(
+                SprintAccountabilityPartner.objects.filter(
+                    sprint=self.sprint_active,
+                    member__in=[self.alice, self.bob],
+                ).values_list("source", flat=True)
+            ),
+            {ACCOUNTABILITY_SOURCE_MANUAL},
+        )
+        self.assertFalse(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+                source=ACCOUNTABILITY_SOURCE_RANDOM,
+            ).exists()
+        )
+
+    def test_delete_removes_pair_without_affecting_other_partners(self):
+        assign_accountability_partners(
+            sprint=self.sprint_active,
+            member=self.alice,
+            partner=self.bob,
+            assigned_by=self.staff,
+        )
+        assign_accountability_partners(
+            sprint=self.sprint_active,
+            member=self.alice,
+            partner=self.cara,
+            assigned_by=self.staff,
+        )
+
+        response = self._delete_pair("alice@example.com", "bob@example.com")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"removed": True, "deleted_edges": 2})
+        self.assertFalse(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+                member=self.alice,
+                partner=self.bob,
+            ).exists()
+        )
+        self.assertTrue(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+                member=self.alice,
+                partner=self.cara,
+            ).exists()
+        )
+        self.assertTrue(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+                member=self.cara,
+                partner=self.alice,
+            ).exists()
+        )
+
+    def test_delete_is_idempotent_when_pair_absent(self):
+        response = self._delete_pair("alice@example.com", "bob@example.com")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"removed": False, "deleted_edges": 0},
+        )
+        self.assertFalse(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+            ).exists()
+        )
+
+    def test_randomize_preserves_manual_pairs_and_returns_counts(self):
+        assign_accountability_partners(
+            sprint=self.sprint_active,
+            member=self.alice,
+            partner=self.bob,
+            assigned_by=self.staff,
+        )
+
+        response = self.client.post(
+            self._randomize_url(),
+            data=json.dumps({}),
+            content_type="application/json",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["assigned_pair_count"], 1)
+        self.assertEqual(body["unassigned_count"], 0)
+        self.assertEqual(body["preserved_manual_count"], 2)
+        self.assertEqual(body["random_edges_count"], 2)
+        self.assertEqual(
+            self._partner_emails_for(body, "alice@example.com"),
+            ["bob@example.com"],
+        )
+        self.assertEqual(
+            set(self._partner_emails_for(body, "cara@example.com")),
+            {"dana@example.com"},
+        )
+        self.assertEqual(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+                source=ACCOUNTABILITY_SOURCE_MANUAL,
+                member__in=[self.alice, self.bob],
+            ).count(),
+            2,
+        )
+
+    def test_randomize_assigns_odd_pool_as_three_person_pod(self):
+        SprintEnrollment.objects.filter(
+            sprint=self.sprint_active,
+            user=self.dana,
+        ).delete()
+
+        response = self.client.post(
+            self._randomize_url(),
+            data=json.dumps({}),
+            content_type="application/json",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["assigned_pair_count"], 3)
+        self.assertEqual(body["unassigned_count"], 0)
+        self.assertEqual(body["random_edges_count"], 6)
+        for email in (
+            "alice@example.com",
+            "bob@example.com",
+            "cara@example.com",
+        ):
+            self.assertEqual(len(self._partner_emails_for(body, email)), 2)
+
+    def test_unknown_sprint_returns_404(self):
+        response = self.client.get(
+            "/api/sprints/nope/accountability-partners",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["code"], "unknown_sprint")
+
+    def test_unknown_user_returns_422_without_writes(self):
+        response = self._post_pair(
+            "alice@example.com",
+            "missing@example.com",
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "unknown_user")
+        self.assertEqual(
+            response.json()["details"],
+            {"partner_email": "Unknown user"},
+        )
+        self.assertFalse(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+            ).exists()
+        )
+
+    def test_self_partnering_returns_422_without_writes(self):
+        response = self._post_pair("alice@example.com", "ALICE@example.com")
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "validation_error")
+        self.assertFalse(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+            ).exists()
+        )
+
+    def test_non_enrolled_participant_returns_422_without_writes(self):
+        response = self._post_pair(
+            "alice@example.com",
+            "outsider@example.com",
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "validation_error")
+        self.assertFalse(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+            ).exists()
+        )
+
+    def test_delete_rejects_non_enrolled_participant(self):
+        response = self._delete_pair(
+            "alice@example.com",
+            "outsider@example.com",
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "validation_error")
+
+    def test_missing_field_returns_422(self):
+        response = self.client.post(
+            self._accountability_url(),
+            data=json.dumps({"member_email": "alice@example.com"}),
+            content_type="application/json",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "missing_field")
+        self.assertEqual(response.json()["details"]["field"], "partner_email")
+
+    def test_blank_email_returns_missing_field(self):
+        response = self._post_pair("alice@example.com", "   ")
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "missing_field")
+        self.assertEqual(response.json()["details"]["field"], "partner_email")
+
+    def test_invalid_json_returns_existing_parse_error(self):
+        response = self.client.post(
+            self._accountability_url(),
+            data="{",
+            content_type="application/json",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "Invalid JSON"})
+
+    def test_non_object_body_returns_structured_error(self):
+        response = self.client.post(
+            self._randomize_url(),
+            data=json.dumps([]),
+            content_type="application/json",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "invalid_type")
+
+    def test_auth_matrix_rejects_missing_bogus_and_non_staff_tokens(self):
+        requests = [
+            lambda headers: self.client.get(self._accountability_url(), **headers),
+            lambda headers: self.client.post(
+                self._accountability_url(),
+                data=json.dumps({
+                    "member_email": "alice@example.com",
+                    "partner_email": "bob@example.com",
+                }),
+                content_type="application/json",
+                **headers,
+            ),
+            lambda headers: self.client.delete(
+                self._accountability_url(),
+                data=json.dumps({
+                    "member_email": "alice@example.com",
+                    "partner_email": "bob@example.com",
+                }),
+                content_type="application/json",
+                **headers,
+            ),
+            lambda headers: self.client.post(
+                self._randomize_url(),
+                data=json.dumps({}),
+                content_type="application/json",
+                **headers,
+            ),
+        ]
+
+        for make_request in requests:
+            for headers in (
+                {},
+                {"HTTP_AUTHORIZATION": "Token does-not-exist"},
+                {"HTTP_AUTHORIZATION": "Bearer nope"},
+                self._auth(self.non_staff_token),
+            ):
+                with self.subTest(headers=headers):
+                    response = make_request(headers)
+                    self.assertEqual(response.status_code, 401)
+
+        self.assertFalse(
+            SprintAccountabilityPartner.objects.filter(
+                sprint=self.sprint_active,
+            ).exists()
+        )
+
+    def test_wrong_methods_return_405_for_staff_token(self):
+        response = self.client.put(self._accountability_url(), **self._auth())
+        self.assertEqual(response.status_code, 405)
+
+        response = self.client.get(self._randomize_url(), **self._auth())
         self.assertEqual(response.status_code, 405)
 
 

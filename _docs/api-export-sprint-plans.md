@@ -53,6 +53,73 @@ curl -sL -H "Authorization: Token $API_TOKEN" \
 
 This returns a flat list with `id` and `user_email` for each plan.
 
+## Sprint Accountability Partners
+
+Staff operators can automate the same accountability partner workflow that
+Studio exposes for sprint operations. All endpoints use the slashless `/api/`
+style and require `Authorization: Token <key>` from a staff user.
+
+### List partner assignments
+
+```bash
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  https://aishippinglabs.com/api/sprints/<slug>/accountability-partners \
+  | python3 -m json.tool
+```
+
+The response includes the sprint summary plus every enrolled member. Each member
+has a `partners` array with partner email, display name, assignment source
+(`manual` or `random`), assigning staff email, and timestamps. Users outside the
+sprint roster are not included.
+
+### Manually assign a pair
+
+```bash
+curl -sL -X POST \
+  -H "Authorization: Token $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"member_email": "alice@example.com", "partner_email": "bob@example.com"}' \
+  https://aishippinglabs.com/api/sprints/<slug>/accountability-partners \
+  | python3 -m json.tool
+```
+
+The API writes reciprocal manual edges and records the bearer staff user as
+`assigned_by`. Repeating the same pair is idempotent and returns
+`{"created": false}`. Manually assigning a previous random pair upgrades both
+rows to `source: "manual"` so future randomization preserves the pair.
+
+### Remove a pair
+
+```bash
+curl -sL -X DELETE \
+  -H "Authorization: Token $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"member_email": "alice@example.com", "partner_email": "bob@example.com"}' \
+  https://aishippinglabs.com/api/sprints/<slug>/accountability-partners \
+  | python3 -m json.tool
+```
+
+Removal is idempotent. A present pair returns `removed: true` and
+`deleted_edges: 2`; an already-absent pair returns `removed: false` and
+`deleted_edges: 0`.
+
+### Randomize unpartnered members
+
+```bash
+curl -sL -X POST \
+  -H "Authorization: Token $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  https://aishippinglabs.com/api/sprints/<slug>/accountability-partners/randomize \
+  | python3 -m json.tool
+```
+
+Randomization clears only prior random assignments, preserves manual pairs, and
+uses the Studio rule that a final pool of three unpartnered members becomes a
+fully connected three-person pod. The response includes `assigned_pair_count`,
+`unassigned_count`, `preserved_manual_count`, `random_edges_count`, and the
+refreshed member list.
+
 ## Step 3: Fetch full plan details
 
 Each plan's nested detail (goal, summary, focus, weeks, checkpoints, singleton
@@ -176,6 +243,10 @@ diff <(jq . plan81.json) <(curl -sL \
 |----------|--------|-------------|
 | `/api/sprints` | GET | List all sprints (optional `?status=active` filter) |
 | `/api/sprints/<slug>` | GET | Sprint detail |
+| `/api/sprints/<slug>/accountability-partners` | GET | List sprint member accountability partners |
+| `/api/sprints/<slug>/accountability-partners` | POST | Manually assign reciprocal accountability partners |
+| `/api/sprints/<slug>/accountability-partners` | DELETE | Remove a reciprocal accountability partner assignment |
+| `/api/sprints/<slug>/accountability-partners/randomize` | POST | Randomize unpartnered members while preserving manual pairs |
 | `/api/sprints/<slug>/plans` | GET | List plans in a sprint (flat) |
 | `/api/plans/<id>` | GET | Full nested plan detail |
 | `/api/plans/<id>` | PATCH | Update top-level fields and/or reconcile nested children (issue #734) |

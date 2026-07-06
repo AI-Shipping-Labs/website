@@ -96,7 +96,7 @@
     },
     "/member-api/v1/plans/{plan_id}": {
       "get": {
-        "description": "Returns one owned plan with member-safe nested content. Cohort visibility does not grant member API read access.",
+        "description": "Returns one owned plan with member-safe nested content. Cohort visibility does not grant member API read access. Requires the ``plans:read`` scope.",
         "parameters": [
           {
             "in": "path",
@@ -119,7 +119,7 @@
                 }
               }
             },
-            "description": "Missing or invalid member API key."
+            "description": "Missing key or missing ``plans:read`` scope."
           },
           "404": {
             "content": {
@@ -133,6 +133,487 @@
           }
         },
         "summary": "Get owned plan detail",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "patch": {
+        "description": "Partially updates plan-level fields (title, goal, summary.*, focus.*, accountability, visibility). Only supplied keys change. ``visibility`` accepts ``private`` or ``cohort``; ``public`` is reserved and rejected. Requires the ``plans:write`` scope. Returns the full plan detail.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "focus": {
+                  "main": "Evaluation",
+                  "supporting": [
+                    "Tracing"
+                  ]
+                },
+                "summary": {
+                  "goal": "A reusable eval harness for my agent"
+                },
+                "title": "Ship an eval harness",
+                "visibility": "cohort"
+              },
+              "schema": {
+                "properties": {
+                  "accountability": {
+                    "type": "string"
+                  },
+                  "focus": {
+                    "type": "object"
+                  },
+                  "goal": {
+                    "maxLength": 280,
+                    "type": "string"
+                  },
+                  "summary": {
+                    "type": "object"
+                  },
+                  "title": {
+                    "maxLength": 280,
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "enum": [
+                      "private",
+                      "cohort"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated owned plan detail."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error; no partial writes."
+          }
+        },
+        "summary": "Edit owned plan narrative fields",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/checkpoints/{checkpoint_id}": {
+      "delete": {
+        "description": "Deletes an owned checkpoint. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "checkpoint_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Checkpoint deleted."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Checkpoint does not belong to this plan."
+          }
+        },
+        "summary": "Delete a checkpoint",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "patch": {
+        "description": "Updates ``description`` / ``position`` / ``done`` on an owned checkpoint. Supplying ``week_id`` (a week of the same plan) moves it to that week. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "checkpoint_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "Refine the eval rubric",
+                "done": true
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "done": {
+                    "type": "boolean"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "week_id": {
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated checkpoint."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error or checkpoint/week not in plan."
+          }
+        },
+        "summary": "Update or move a checkpoint",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/deliverables": {
+      "post": {
+        "description": "Adds a plan-level deliverable. ``description`` is required. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "A working eval harness"
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "done": {
+                    "type": "boolean"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "description"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created deliverable."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error."
+          }
+        },
+        "summary": "Create a deliverable",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/deliverables/{deliverable_id}": {
+      "delete": {
+        "description": "Deletes an owned deliverable. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "deliverable_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deliverable deleted."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Deliverable does not belong to this plan."
+          }
+        },
+        "summary": "Delete a deliverable",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "patch": {
+        "description": "Updates ``description`` / ``position`` / ``done`` on an owned deliverable. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "deliverable_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "done": true
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "done": {
+                    "type": "boolean"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated deliverable."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error or deliverable not in plan."
+          }
+        },
+        "summary": "Update a deliverable",
         "tags": [
           "Plans"
         ]
@@ -177,6 +658,251 @@
           }
         },
         "summary": "Download owned plan Markdown",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/next-steps": {
+      "post": {
+        "description": "Adds a plan-level next step. ``description`` is required. ``kind`` is ``pre_sprint`` (default) or ``next_step``. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "Read the tracing docs",
+                "kind": "pre_sprint"
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "done": {
+                    "type": "boolean"
+                  },
+                  "kind": {
+                    "enum": [
+                      "pre_sprint",
+                      "next_step"
+                    ],
+                    "type": "string"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "description"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created next step."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error (e.g. invalid kind)."
+          }
+        },
+        "summary": "Create a next step",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/next-steps/{next_step_id}": {
+      "delete": {
+        "description": "Deletes an owned next step. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "next_step_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Next step deleted."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Next step does not belong to this plan."
+          }
+        },
+        "summary": "Delete a next step",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "patch": {
+        "description": "Updates ``description`` / ``kind`` / ``position`` / ``done`` on an owned next step. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "next_step_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "done": true,
+                "kind": "next_step"
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "done": {
+                    "type": "boolean"
+                  },
+                  "kind": {
+                    "enum": [
+                      "pre_sprint",
+                      "next_step"
+                    ],
+                    "type": "string"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated next step."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error or next step not in plan."
+          }
+        },
+        "summary": "Update a next step",
         "tags": [
           "Plans"
         ]
@@ -281,6 +1007,715 @@
           }
         },
         "summary": "Update owned plan progress",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/resources": {
+      "post": {
+        "description": "Adds a plan-level resource link. ``title`` is required. ``url`` is optional but must be a valid URL. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "title": "Tracing docs",
+                "url": "https://example.com/tracing"
+              },
+              "schema": {
+                "properties": {
+                  "note": {
+                    "type": "string"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "title": {
+                    "maxLength": 300,
+                    "type": "string"
+                  },
+                  "url": {
+                    "maxLength": 600,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created resource."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error (e.g. invalid url)."
+          }
+        },
+        "summary": "Create a resource",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/resources/{resource_id}": {
+      "delete": {
+        "description": "Deletes an owned resource. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "resource_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resource deleted."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Resource does not belong to this plan."
+          }
+        },
+        "summary": "Delete a resource",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "patch": {
+        "description": "Updates ``title`` / ``url`` / ``note`` / ``position`` on an owned resource. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "resource_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "note": "Skim sections 2-4"
+              },
+              "schema": {
+                "properties": {
+                  "note": {
+                    "type": "string"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "title": {
+                    "maxLength": 300,
+                    "type": "string"
+                  },
+                  "url": {
+                    "maxLength": 600,
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated resource."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error or resource not in plan."
+          }
+        },
+        "summary": "Update a resource",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/weeks": {
+      "post": {
+        "description": "Adds a week to the owned plan. ``week_number`` is required, a positive integer, and unique per plan. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "theme": "Build the harness",
+                "week_number": 1
+              },
+              "schema": {
+                "properties": {
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "theme": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "week_number": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "week_number"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created week."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error (e.g. duplicate week number)."
+          }
+        },
+        "summary": "Create a week",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/weeks/{week_id}": {
+      "delete": {
+        "description": "Deletes an owned week and cascades its checkpoints and week note. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "week_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Week deleted."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Week does not belong to this plan."
+          }
+        },
+        "summary": "Delete a week",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "patch": {
+        "description": "Updates ``week_number`` / ``theme`` / ``position`` on an owned week. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "week_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "position": 2,
+                "theme": "Ship v1"
+              },
+              "schema": {
+                "properties": {
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "theme": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "week_number": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated week."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error or week not in this plan."
+          }
+        },
+        "summary": "Update a week",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/weeks/{week_id}/checkpoints": {
+      "post": {
+        "description": "Adds a checkpoint to an owned week. ``description`` is required. An optional ``done`` sets initial completion. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "week_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "Draft the eval rubric",
+                "position": 0
+              },
+              "schema": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "done": {
+                    "type": "boolean"
+                  },
+                  "position": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "description"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created checkpoint."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error or week not in this plan."
+          }
+        },
+        "summary": "Create a checkpoint in a week",
+        "tags": [
+          "Plans"
+        ]
+      }
+    },
+    "/member-api/v1/plans/{plan_id}/weeks/{week_id}/note": {
+      "delete": {
+        "description": "Removes the week's note if present. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "week_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Week note deleted (idempotent)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Week does not belong to this plan."
+          }
+        },
+        "summary": "Delete the week note",
+        "tags": [
+          "Plans"
+        ]
+      },
+      "put": {
+        "description": "Creates or replaces the singleton note for an owned week and sets the key owner as author. ``body`` is required. Requires ``plans:write``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "week_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "Shipped the harness; blocked on flaky evals."
+              },
+              "schema": {
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "body"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Upserted week note."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing key or missing ``plans:write`` scope."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Plan not found for this member."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation error or week not in this plan."
+          }
+        },
+        "summary": "Upsert the week note",
         "tags": [
           "Plans"
         ]

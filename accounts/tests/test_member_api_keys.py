@@ -39,7 +39,7 @@ class MemberAPIKeyModelTest(TestCase):
         self.assertEqual(member_key.masked_prefix, f"{plaintext[:24]}...")
         self.assertEqual(
             member_key.scopes,
-            ["plans:read", "plans:write_progress"],
+            ["plans:read", "plans:write", "plans:write_progress"],
         )
 
     def test_rejects_unsupported_scope(self):

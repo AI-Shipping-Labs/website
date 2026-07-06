@@ -214,148 +214,6 @@
       </div>
       {% endif %}{# /not is_newsletter_only — Membership #}
 
-      {% if not is_newsletter_only %}
-      <!-- Member API Keys Section (issue #1111) -->
-      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mb-8" id="api-keys" data-testid="member-api-keys-section">
-        <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 class="text-xl font-semibold flex items-center gap-2">
-              <i data-lucide="key-round" class="h-5 w-5 text-accent"></i>
-              API keys
-            </h2>
-            <p class="mt-2 text-sm text-muted-foreground">
-              Create scoped member keys for plan tools. Keys cannot be used for Studio or staff API access.
-            </p>
-          </div>
-          <div class="flex flex-wrap gap-3">
-            <a href="{{ member_api_usage_guide_url }}"
-               class="inline-flex items-center gap-2 text-sm text-accent hover:underline"
-               data-testid="member-api-usage-guide-link">
-              <i data-lucide="book-open" class="h-4 w-4"></i>
-              API usage guide
-            </a>
-            <a href="{{ member_api_skill_url }}"
-               class="inline-flex items-center gap-2 text-sm text-accent hover:underline"
-               data-testid="member-api-skill-link">
-              <i data-lucide="download" class="h-4 w-4"></i>
-              Download agent skill
-            </a>
-          </div>
-        </div>
-
-        {% if created_member_api_key %}
-        <div class="mb-6 rounded-lg border border-accent/30 bg-accent/10 p-4" data-testid="member-api-key-created">
-          <div class="mb-3 flex items-start gap-3">
-            <i data-lucide="alert-triangle" class="mt-0.5 h-5 w-5 shrink-0 text-accent"></i>
-            <div>
-              <p class="text-sm font-medium text-foreground">Copy this key now.</p>
-              <p class="mt-1 text-sm text-muted-foreground">
-                This is the only time the plaintext key will be shown. Store it in your local tool or password manager.
-              </p>
-            </div>
-          </div>
-          <div class="flex flex-col gap-3 sm:flex-row">
-            <code class="min-w-0 flex-1 overflow-x-auto rounded-md border border-border bg-background px-3 py-2 font-mono text-sm text-foreground" data-testid="member-api-key-plaintext">{{ created_member_api_key }}</code>
-            <button type="button"
-                    class="{% button_classes 'secondary' %}"
-                    data-copy-member-api-key
-                    data-member-api-key="{{ created_member_api_key }}"
-                    data-testid="member-api-key-copy">
-              <i data-lucide="copy" class="h-4 w-4"></i>
-              Copy
-            </button>
-          </div>
-        </div>
-        {% endif %}
-
-        <form method="post" action="{% url 'member_api_key_create' %}" class="mb-6 rounded-lg border border-border bg-secondary/20 p-4" data-testid="member-api-key-create-form">
-          {% csrf_token %}
-          <label for="member-api-key-name" class="block text-sm font-medium text-foreground mb-1">New key name</label>
-          <div class="flex flex-col gap-3 sm:flex-row">
-            <input type="text"
-                   id="member-api-key-name"
-                   name="name"
-                   value="{{ member_api_key_form_name }}"
-                   maxlength="100"
-                   required
-                   placeholder="local codex"
-                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-                   data-testid="member-api-key-name-input">
-            <button type="submit"
-                    class="{% button_classes 'primary' %}"
-                    data-testid="member-api-key-create-submit">
-              <i data-lucide="plus" class="h-4 w-4"></i>
-              New key
-            </button>
-          </div>
-          {% if member_api_key_name_error %}
-          <p class="mt-2 text-sm text-red-400" data-testid="member-api-key-name-error">{{ member_api_key_name_error }}</p>
-          {% endif %}
-          <p class="mt-3 text-xs text-muted-foreground">
-            Scope: <span class="font-mono">plans:read</span> and <span class="font-mono">plans:write_progress</span>.
-          </p>
-        </form>
-
-        {% if member_api_keys %}
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-border text-left text-sm" data-testid="member-api-key-table">
-            <thead class="text-xs uppercase text-muted-foreground">
-              <tr>
-                <th scope="col" class="py-3 pr-4 font-medium">Name</th>
-                <th scope="col" class="px-4 py-3 font-medium">Prefix</th>
-                <th scope="col" class="px-4 py-3 font-medium">Scopes</th>
-                <th scope="col" class="px-4 py-3 font-medium">Created</th>
-                <th scope="col" class="px-4 py-3 font-medium">Last used</th>
-                <th scope="col" class="py-3 pl-4 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              {% for key in member_api_keys %}
-              <tr data-testid="member-api-key-row">
-                <td class="py-3 pr-4 font-medium text-foreground">{{ key.name }}</td>
-                <td class="px-4 py-3 font-mono text-xs text-muted-foreground" data-testid="member-api-key-prefix">{{ key.masked_prefix }}</td>
-                <td class="px-4 py-3">
-                  <div class="flex flex-wrap gap-2">
-                    {% for scope in key.scopes %}
-                    <span class="rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-muted-foreground">{{ scope }}</span>
-                    {% endfor %}
-                  </div>
-                </td>
-                <td class="px-4 py-3 text-muted-foreground">{{ key.created_at|member_short_datetime }}</td>
-                <td class="px-4 py-3 text-muted-foreground">
-                  {% if key.last_used_at %}{{ key.last_used_at|member_short_datetime }}{% else %}Never{% endif %}
-                </td>
-                <td class="py-3 pl-4">
-                  {% if key.revoked_at %}
-                  <span class="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground" data-testid="member-api-key-revoked">
-                    <i data-lucide="ban" class="h-3.5 w-3.5"></i>
-                    Revoked
-                  </span>
-                  {% else %}
-                  <form method="post" action="{% url 'member_api_key_revoke' key.id %}" data-testid="member-api-key-revoke-form">
-                    {% csrf_token %}
-                    <button type="submit"
-                            class="{% button_classes 'secondary' %}"
-                            data-testid="member-api-key-revoke">
-                      <i data-lucide="ban" class="h-4 w-4"></i>
-                      Revoke
-                    </button>
-                  </form>
-                  {% endif %}
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-        <div class="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground" data-testid="member-api-keys-empty">
-          No API keys exist yet. Read the <a href="{{ member_api_usage_guide_url }}" class="text-accent hover:underline">API usage guide</a>, then create a key when you are ready to connect a local tool.
-        </div>
-        {% endif %}
-      </div>
-      {% endif %}
-
       <!-- Email Preferences Section -->
       <div class="rounded-lg border border-border bg-card p-5 sm:p-6" id="email-preferences-section">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
@@ -489,6 +347,164 @@
             Update Password
           </button>
         </form>
+      </div>
+
+      <!-- Member API Keys Section (issue #1111; redesigned + moved below
+           Email Preferences in #1127). One calm card: only the outer card
+           and the one-time key callout carry visible chrome. -->
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mt-8" id="api-keys" data-testid="member-api-keys-section">
+        <div class="mb-6">
+          <h2 class="text-xl font-semibold flex items-center gap-2">
+            <i data-lucide="key-round" class="h-5 w-5 text-accent"></i>
+            API keys
+          </h2>
+          <p class="mt-2 text-sm text-muted-foreground">
+            Create scoped member keys for plan tools. Keys cannot be used for Studio or staff API access.
+          </p>
+        </div>
+
+        {% if created_member_api_key %}
+        <div class="mb-6 rounded-lg border border-accent/30 bg-accent/10 p-4" data-testid="member-api-key-created">
+          <div class="mb-3 flex items-start gap-3">
+            <i data-lucide="alert-triangle" class="mt-0.5 h-5 w-5 shrink-0 text-accent"></i>
+            <div>
+              <p class="text-sm font-medium text-foreground">Copy this key now.</p>
+              <p class="mt-1 text-sm text-muted-foreground">
+                This is the only time the plaintext key will be shown. Store it in your local tool or password manager.
+              </p>
+            </div>
+          </div>
+          <div class="flex flex-col gap-3 sm:flex-row">
+            <code class="min-w-0 flex-1 overflow-x-auto rounded-md border border-border bg-background px-3 py-2 font-mono text-sm text-foreground" data-testid="member-api-key-plaintext">{{ created_member_api_key }}</code>
+            <button type="button"
+                    class="{% button_classes 'secondary' %}"
+                    data-copy-member-api-key
+                    data-member-api-key="{{ created_member_api_key }}"
+                    data-testid="member-api-key-copy">
+              <i data-lucide="copy" class="h-4 w-4"></i>
+              Copy
+            </button>
+          </div>
+        </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'member_api_key_create' %}" class="mb-6" data-testid="member-api-key-create-form">
+          {% csrf_token %}
+          <label for="member-api-key-name" class="block text-sm font-medium text-foreground mb-1">New key name</label>
+          <div class="flex flex-col gap-3 sm:flex-row">
+            <input type="text"
+                   id="member-api-key-name"
+                   name="name"
+                   value="{{ member_api_key_form_name }}"
+                   maxlength="100"
+                   required
+                   placeholder="local codex"
+                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                   data-testid="member-api-key-name-input">
+            <button type="submit"
+                    class="{% button_classes 'primary' %}"
+                    data-testid="member-api-key-create-submit">
+              <i data-lucide="plus" class="h-4 w-4"></i>
+              New key
+            </button>
+          </div>
+          {% if member_api_key_name_error %}
+          <p class="mt-2 text-sm text-red-400" data-testid="member-api-key-name-error">{{ member_api_key_name_error }}</p>
+          {% endif %}
+        </form>
+
+        {% if member_api_keys %}
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-border text-left text-sm" data-testid="member-api-key-table">
+            <thead class="text-xs uppercase text-muted-foreground">
+              <tr>
+                <th scope="col" class="py-3 pr-4 font-medium">Name</th>
+                <th scope="col" class="px-4 py-3 font-medium">Prefix</th>
+                <th scope="col" class="px-4 py-3 font-medium">Scopes</th>
+                <th scope="col" class="px-4 py-3 font-medium">Created</th>
+                <th scope="col" class="px-4 py-3 font-medium">Last used</th>
+                <th scope="col" class="py-3 pl-4 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {% for key in member_api_keys %}
+              <tr data-testid="member-api-key-row">
+                <td class="py-3 pr-4 font-medium text-foreground">{{ key.name }}</td>
+                <td class="px-4 py-3 font-mono text-xs text-muted-foreground" data-testid="member-api-key-prefix">{{ key.masked_prefix }}</td>
+                <td class="px-4 py-3">
+                  <div class="flex flex-wrap gap-2">
+                    {% for scope in key.scopes %}
+                    <span class="rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-muted-foreground">{{ scope }}</span>
+                    {% endfor %}
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-muted-foreground">{{ key.created_at|member_short_datetime }}</td>
+                <td class="px-4 py-3 text-muted-foreground">
+                  {% if key.last_used_at %}{{ key.last_used_at|member_short_datetime }}{% else %}Never{% endif %}
+                </td>
+                <td class="py-3 pl-4">
+                  {% if key.revoked_at %}
+                  <div class="flex items-center gap-3">
+                    <span class="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground" data-testid="member-api-key-revoked">
+                      <i data-lucide="ban" class="h-3.5 w-3.5"></i>
+                      Revoked
+                    </span>
+                    <form method="post"
+                          action="{% url 'member_api_key_delete' key.id %}"
+                          onsubmit="return confirm('Delete this API key permanently? This cannot be undone.')"
+                          data-testid="member-api-key-delete-form">
+                      {% csrf_token %}
+                      <button type="submit"
+                              class="{% button_classes 'destructive' size='sm' %}"
+                              data-testid="member-api-key-delete">
+                        <i data-lucide="trash-2" class="h-4 w-4"></i>
+                        Delete
+                      </button>
+                    </form>
+                  </div>
+                  {% else %}
+                  <form method="post" action="{% url 'member_api_key_revoke' key.id %}" data-testid="member-api-key-revoke-form">
+                    {% csrf_token %}
+                    <button type="submit"
+                            class="{% button_classes 'secondary' size='sm' %}"
+                            data-testid="member-api-key-revoke">
+                      <i data-lucide="ban" class="h-4 w-4"></i>
+                      Revoke
+                    </button>
+                  </form>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-sm text-muted-foreground" data-testid="member-api-keys-empty">
+          No API keys exist yet. Read the <a href="{{ member_api_usage_guide_url }}" target="_blank" rel="noopener" class="text-accent hover:underline">API usage guide</a>, then create a key when you are ready to connect a local tool.
+        </p>
+        {% endif %}
+
+        <div class="mt-6 flex flex-col gap-2">
+          <div>
+            <a href="{{ member_api_usage_guide_url }}"
+               target="_blank" rel="noopener"
+               class="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+               data-testid="member-api-usage-guide-link">
+              <i data-lucide="book-open" class="h-4 w-4"></i>
+              API usage guide
+            </a>
+          </div>
+          <div>
+            <a href="{{ member_api_skill_url }}"
+               target="_blank" rel="noopener"
+               class="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+               data-testid="member-api-skill-link">
+              <i data-lucide="download" class="h-4 w-4"></i>
+              Download agent skill
+            </a>
+          </div>
+        </div>
       </div>
 
       <!-- Account Info Section -->

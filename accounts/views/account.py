@@ -257,10 +257,10 @@ def _render_account_page(
         "member_api_key_name_error": member_api_key_name_error,
         "member_api_key_form_name": member_api_key_form_name,
         "member_api_docs_url": "/member-api/docs",
-        "member_api_usage_guide_url": (
-            "https://github.com/AI-Shipping-Labs/website/blob/main/"
-            "docs/member-api/plans.md"
-        ),
+        # Issue #1127: the "API usage guide" link points at the on-site
+        # member API docs page (login-gated, and the account viewer is
+        # already logged in) rather than the raw GitHub blob.
+        "member_api_usage_guide_url": "/member-api/docs",
         "member_api_skill_url": (
             "https://github.com/AI-Shipping-Labs/website/tree/main/"
             "skills/ai-shipping-labs-plans-api"
@@ -328,6 +328,37 @@ def member_api_key_revoke_view(request, key_id):
     )
     member_key.revoke()
     messages.success(request, "Member API key revoked.")
+    return redirect("/account/#api-keys")
+
+
+@login_required
+@require_POST
+def member_api_key_delete_view(request, key_id):
+    """Hard-delete one of the signed-in member's own revoked API keys.
+
+    Issue #1127: deletion is a deliberate two-step (revoke -> delete)
+    safety pattern, so an active key cannot be deleted directly. The row
+    is scoped to the signed-in member (a cross-member id 404s) and only
+    already-revoked keys are removed; posting delete for an active key
+    leaves the row intact with an error flash.
+    """
+    if is_newsletter_only_user(request.user):
+        return HttpResponseForbidden("API keys are not available for this account.")
+
+    member_key = get_object_or_404(
+        MemberAPIKey,
+        pk=key_id,
+        user=request.user,
+    )
+    if member_key.revoked_at is None:
+        messages.error(
+            request,
+            "Revoke this API key before deleting it.",
+        )
+        return redirect("/account/#api-keys")
+
+    member_key.delete()
+    messages.success(request, "Member API key deleted.")
     return redirect("/account/#api-keys")
 
 

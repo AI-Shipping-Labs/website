@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
 {% load member_empty_state %}
+{% load member_badges %}
 {% load teaser_tags %}
 {% load sprint_extras %}
 
@@ -38,8 +39,8 @@
     </div>
 
     {% if show_onboarding_prompt %}
-    <!-- Onboarding prompt banner (issue #802) -->
-    <div class="mb-6 rounded-xl border border-accent/40 bg-accent/10 p-5" data-testid="onboarding-prompt">
+    <!-- Onboarding prompt banner (issue #802). Dismiss control: issue #1129. -->
+    <div class="mb-6 rounded-xl border border-accent/40 bg-accent/10 p-5" data-testid="onboarding-prompt" data-dismiss-card-container>
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex items-start gap-3">
           <i data-lucide="sparkles" class="h-5 w-5 text-accent shrink-0 mt-0.5"></i>
@@ -48,11 +49,20 @@
             <p class="text-xs text-muted-foreground mt-1">It takes a few minutes and helps us prepare the right plan for you.</p>
           </div>
         </div>
-        <a href="{% url 'onboarding_start' %}"
-           class="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
-           data-testid="onboarding-prompt-cta">
-          Start onboarding
-        </a>
+        <div class="flex shrink-0 items-center gap-3">
+          <a href="{% url 'onboarding_start' %}"
+             class="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
+             data-testid="onboarding-prompt-cta">
+            Start onboarding
+          </a>
+          <button type="button"
+                  class="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Dismiss"
+                  data-testid="onboarding-prompt-dismiss"
+                  data-dismiss-card="onboarding_prompt">
+            <i data-lucide="x" class="h-4 w-4"></i>
+          </button>
+        </div>
       </div>
     </div>
     {% endif %}
@@ -61,16 +71,28 @@
     <!-- Sprint Plan Section (issue #442) -->
     <section class="mb-8">
       <div class="rounded-lg border border-border bg-card p-5 sm:p-6" id="sprint-plan-section" data-testid="account-sprint-plan-card">
-        <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+        <h2 class="text-xl font-semibold mb-4 flex items-center gap-2" data-testid="account-sprint-plan-heading">
           <i data-lucide="map" class="h-5 w-5 text-accent"></i>
-          Your sprint plan
+          {% comment %}
+            Issue #1129: an ended sprint is a past plan, not the current one —
+            reframe the heading to past tense so it no longer reads as the
+            member's live plan. Lifecycle is date-derived on the sprint.
+          {% endcomment %}
+          {% if plan.sprint.has_ended %}Your latest sprint plan{% else %}Your sprint plan{% endif %}
         </h2>
         <p class="text-sm text-muted-foreground" data-testid="account-sprint-plan-name">
           {{ plan.sprint.name }}
         </p>
-        <p class="text-sm text-muted-foreground mt-1" data-testid="account-sprint-plan-meta">
+        <p class="text-sm text-muted-foreground mt-1 flex items-center gap-2" data-testid="account-sprint-plan-meta">
           <span data-testid="account-sprint-plan-dates">{% sprint_date_range plan.sprint %}</span>
-          &middot; <span data-testid="account-sprint-plan-status">{{ plan.get_status_display }}</span>
+          {% comment %}
+            Issue #1129: the old {{ plan.get_status_display }} rendered empty
+            (Plan has no ``status`` field). Use the date-derived sprint badge
+            as the single source of truth so the status line shows the real
+            lifecycle label (Ended / Active / Ending soon / ...).
+          {% endcomment %}
+          &middot;
+          {% member_status_badge plan.sprint.sprint_badge_current.label size="xs" extra_class=plan.sprint.sprint_badge_current.css_class testid="account-sprint-plan-status" %}
         </p>
         {% if plan_progress_total %}
         <p class="text-sm text-foreground mt-3" data-testid="account-sprint-plan-progress">
@@ -476,6 +498,54 @@
       history.replaceState(null, '', url.pathname + url.search + url.hash);
     });
   }
+})();
+
+// Persisted per-user dashboard card dismissals (issue #1129). Each dismiss
+// control carries data-dismiss-card="<key>"; clicking it POSTs the key to
+// /account/api/dismiss-card and, on success, removes the enclosing
+// [data-dismiss-card-container] from the DOM. State is server-side, so a
+// full reload keeps the card hidden without any localStorage.
+(function() {
+  function getCsrfToken() {
+    var cookies = document.cookie.split(';');
+    for (var i = 0; i < cookies.length; i++) {
+      var cookie = cookies[i].trim();
+      if (cookie.startsWith('csrftoken=')) {
+        return cookie.substring('csrftoken='.length);
+      }
+    }
+    return '';
+  }
+
+  var buttons = document.querySelectorAll('[data-dismiss-card]');
+  buttons.forEach(function(button) {
+    button.addEventListener('click', function() {
+      var card = button.getAttribute('data-dismiss-card');
+      var container = button.closest('[data-dismiss-card-container]');
+      button.disabled = true;
+      fetch('/account/api/dismiss-card', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({ card: card }),
+      })
+      .then(function(resp) { return resp.json().then(function(data) { return { ok: resp.ok, data: data }; }); })
+      .then(function(result) {
+        if (result.ok && result.data.status === 'ok') {
+          if (container) {
+            container.remove();
+          }
+        } else {
+          button.disabled = false;
+        }
+      })
+      .catch(function() {
+        button.disabled = false;
+      });
+    });
+  });
 })();
 </script>
 {% endblock %}

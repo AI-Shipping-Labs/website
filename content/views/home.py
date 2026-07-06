@@ -316,8 +316,15 @@ def _dashboard(request):
     # Issue #358: gate on the verified ``slack_member`` boolean rather
     # than ``slack_user_id`` (which is populated by Slack OAuth even
     # for users who never joined the workspace).
+    # Issue #1129: a persisted per-user dismissal hides the Join-Slack card
+    # on every future dashboard load (any device). Dashboard-only — the
+    # /account/ Slack card ignores this flag.
+    slack_join_dismissed = "slack_join" in user.dashboard_dismissals
     show_slack_join = bool(
-        slack_invite_configured and has_qualifying_tier and not user.slack_member
+        slack_invite_configured
+        and has_qualifying_tier
+        and not user.slack_member
+        and not slack_join_dismissed
     )
     slack_connected = bool(has_qualifying_tier and user.slack_member)
     # Issue #700: surface the user's Slack ID + deep-link to their Slack
@@ -336,9 +343,17 @@ def _dashboard(request):
     # no extra DB query — it is the same threshold the shared
     # ``can_access_onboarding`` predicate applies (``get_user_level >=
     # LEVEL_BASIC``).
+    # Issue #1129: a persisted dismissal hides the nudge for good, even
+    # while onboarding stays incomplete (the member keeps other onboarding
+    # entry points).
     from content.access import LEVEL_BASIC
+    onboarding_prompt_dismissed = (
+        "onboarding_prompt" in user.dashboard_dismissals
+    )
     show_onboarding_prompt = (
-        not onboarding_complete and user_level >= LEVEL_BASIC
+        not onboarding_complete
+        and user_level >= LEVEL_BASIC
+        and not onboarding_prompt_dismissed
     )
 
     context = {
@@ -359,6 +374,10 @@ def _dashboard(request):
         'slack_join_url': slack_join_url,
         'slack_user_id': slack_user_id,
         'slack_profile_url': slack_profile_url,
+        # Issue #1129: only the dashboard rendering of the shared Slack
+        # partial gets a dismiss control. /account/ never sets this flag,
+        # so its Join-Slack card stays un-dismissable.
+        'slack_card_dismissable': True,
     }
     # Sprint plan card (issue #442). Same context keys as the Account
     # page so the duplicated card markup reads identically.

@@ -3,6 +3,7 @@ from django.urls import include, path
 from accounts.views.account import (
     account_profile_post_view,
     account_view,
+    dismiss_dashboard_card,
     email_preferences_view,
     member_api_key_create_view,
     member_api_key_revoke_view,
@@ -115,6 +116,8 @@ account_urlpatterns = [
     ),
     path('api/email-preferences', email_preferences_view, name='email_preferences'),
     path('api/timezone-preference', timezone_preference_view, name='timezone_preference'),
+    # Per-user dashboard card dismissals (issue #1129).
+    path('api/dismiss-card', dismiss_dashboard_card, name='dismiss_dashboard_card'),
     path('api/change-password', change_password_api, name='account_change_password'),
     path(
         'api/resend-verification',

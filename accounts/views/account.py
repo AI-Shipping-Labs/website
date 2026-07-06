@@ -378,6 +378,48 @@ def email_preferences_view(request):
     return JsonResponse(response)
 
 
+# Allow-list of dismissable dashboard card keys (issue #1129). A dismiss
+# POST is accepted only for these stable keys; anything else is a 400. The
+# readers (content/views/home.py) branch on the same keys.
+DISMISSABLE_DASHBOARD_CARDS = frozenset({"onboarding_prompt", "slack_join"})
+
+
+@login_required
+@require_POST
+def dismiss_dashboard_card(request):
+    """Persist a per-user dashboard card dismissal (issue #1129).
+
+    POST /account/api/dismiss-card with JSON body ``{"card": "<key>"}``.
+
+    Member self-service preference (each member dismisses their own
+    cards), so it is stored on the user row rather than through the
+    operator-facing ``IntegrationSetting`` framework. Modeled on
+    ``email_preferences_view``:
+
+    - Validates ``card`` against :data:`DISMISSABLE_DASHBOARD_CARDS`;
+      an unknown or missing key returns ``400`` with an ``error`` and
+      does not modify ``dashboard_dismissals``.
+    - Idempotent: adds the key only if absent, so dismissing an
+      already-dismissed card is a no-op that still returns ``200``.
+    - Anonymous callers are redirected to login by ``@login_required``.
+    """
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    card = data.get("card") if isinstance(data, dict) else None
+    if card not in DISMISSABLE_DASHBOARD_CARDS:
+        return JsonResponse({"error": "Unknown card"}, status=400)
+
+    user = request.user
+    if card not in user.dashboard_dismissals:
+        user.dashboard_dismissals.append(card)
+        user.save(update_fields=["dashboard_dismissals"])
+
+    return JsonResponse({"status": "ok", "card": card})
+
+
 @login_required
 @require_POST
 def timezone_preference_view(request):

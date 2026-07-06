@@ -51,14 +51,24 @@ class TestMemberApiUsageDocsLinks:
         page.goto(f"{django_server}/account/#api-keys", wait_until="domcontentloaded")
         expect(page.locator('[data-testid="member-api-keys-section"]')).to_be_visible()
 
-        page.locator('[data-testid="member-api-usage-guide-link"]').click()
-        page.wait_for_url(re.compile(r".*/docs/member-api/plans\.md$"))
-        assert page.url == GITHUB_USAGE_GUIDE_URL
+        # Issue #1127: the account "API usage guide" link now points at the
+        # on-site docs page and opens in a new tab, and the skill link opens
+        # the GitHub tree in a new tab. Both are target="_blank", so assert
+        # their hrefs/targets rather than same-page navigation.
+        guide_link = page.locator('[data-testid="member-api-usage-guide-link"]')
+        expect(guide_link).to_have_attribute("href", "/member-api/docs")
+        expect(guide_link).to_have_attribute("target", "_blank")
 
-        page.goto(f"{django_server}/account/#api-keys", wait_until="domcontentloaded")
-        page.locator('[data-testid="member-api-skill-link"]').click()
-        page.wait_for_url(re.compile(r".*/skills/ai-shipping-labs-plans-api$"))
-        assert page.url == GITHUB_SKILL_URL
+        skill_link = page.locator('[data-testid="member-api-skill-link"]')
+        expect(skill_link).to_have_attribute("href", GITHUB_SKILL_URL)
+        expect(skill_link).to_have_attribute("target", "_blank")
+
+        # The on-site docs page the guide link targets actually loads.
+        docs_response = page.goto(
+            f"{django_server}/member-api/docs", wait_until="domcontentloaded"
+        )
+        assert docs_response is not None
+        assert docs_response.status == 200
 
         context.close()
 

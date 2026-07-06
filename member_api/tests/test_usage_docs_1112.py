@@ -81,7 +81,11 @@ class MemberApiUsageDocsLinkTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "API usage guide")
         self.assertContains(response, "Download agent skill")
-        self.assertContains(
+        # Issue #1127: the account "API usage guide" link now points at the
+        # on-site docs page, not the raw GitHub blob. The skill tree link
+        # stays (the directory was restored).
+        self.assertContains(response, 'href="/member-api/docs"')
+        self.assertNotContains(
             response,
             "https://github.com/AI-Shipping-Labs/website/blob/main/"
             "docs/member-api/plans.md",

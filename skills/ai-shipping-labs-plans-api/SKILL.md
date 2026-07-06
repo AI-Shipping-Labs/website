@@ -5,17 +5,7 @@ description: Work with the AI Shipping Labs member Plans API from local tools or
 
 # AI Shipping Labs Plans API
 
-Use the member API only. The base URL is:
-
-```text
-https://aishippinglabs.com/member-api/v1
-```
-
-Authenticate every request with:
-
-```text
-Authorization: Token <asl_member_...>
-```
+Use the member API via the `asl` CLI (member scope). The CLI handles the base URL (`https://aishippinglabs.com/member-api/v1`) and token resolution.
 
 ## Key Handling
 
@@ -27,12 +17,12 @@ Authorization: Token <asl_member_...>
 
 ## Allowed Operations
 
-- List plans: `GET /member-api/v1/plans`.
-- Fetch one plan: `GET /member-api/v1/plans/{plan_id}`.
-- Download Markdown: `GET /member-api/v1/plans/{plan_id}/markdown`.
-- Update progress: `PATCH /member-api/v1/plans/{plan_id}/progress`.
+- List plans: `uv run asl member-api-plans`
+- Fetch one plan: `uv run asl member-api-plan-get <plan_id>`
+- Download Markdown: `uv run asl member-api-plan-markdown <plan_id>`
+- Update progress: `uv run asl member-api-plan-progress <plan_id> '<json>'`
 
-Use `PATCH /progress` only to set `done` on existing checkpoints, deliverables, and next steps:
+Use progress update only to set `done` on existing checkpoints, deliverables, and next steps:
 
 ```json
 {
@@ -45,31 +35,11 @@ Use `PATCH /progress` only to set `done` on existing checkpoints, deliverables, 
 ## Workflow
 
 1. Resolve the key from `AI_SHIPPING_LABS_MEMBER_API_KEY` or ask the user to provide it privately.
-2. Set `BASE_URL=https://aishippinglabs.com/member-api/v1`.
-3. Make the requested member API call with `Authorization: Token <key>`.
-4. For progress updates, fetch the plan first when item IDs are unknown.
-5. Treat `401` as a missing, revoked, or invalid key; ask the user for a fresh key.
-6. Treat `404` as "this key owner cannot access that plan".
-7. Treat `422` as a validation error and fix the payload before retrying.
-
-## Examples
-
-List plans:
-
-```bash
-curl -sS \
-  -H "Authorization: Token $AI_SHIPPING_LABS_MEMBER_API_KEY" \
-  https://aishippinglabs.com/member-api/v1/plans
-```
-
-Download Markdown:
-
-```bash
-curl -sS \
-  -H "Authorization: Token $AI_SHIPPING_LABS_MEMBER_API_KEY" \
-  -o plan.md \
-  https://aishippinglabs.com/member-api/v1/plans/12/markdown
-```
+2. Make the requested member API call via `asl member-api ...`.
+3. For progress updates, fetch the plan first when item IDs are unknown.
+4. Treat `401` as a missing, revoked, or invalid key; ask the user for a fresh key.
+5. Treat `404` as "this key owner cannot access that plan".
+6. Treat `422` as a validation error and fix the payload before retrying.
 
 ## Contributions
 

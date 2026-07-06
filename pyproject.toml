@@ -93,6 +93,7 @@ exclude_lines = [
 # excluded from the prod image (Dockerfile uses `uv sync --no-dev --frozen`).
 [dependency-groups]
 dev = [
+    "asl-cli",                 # local CLI for the production API — editable from ./asl_cli (uv run asl ...)
     "coverage>=7.13.4",        # test coverage measurement (make coverage)
     "freezegun>=1.5.5",        # freezes time in unit tests (reminders, tier overrides, etc.)
     "honcho>=2.0.0",           # runs Procfile.dev (web + qcluster) for local development
@@ -103,6 +104,11 @@ dev = [
     "ruff>=0.11.0",            # linter/formatter (make lint, CI)
     "tblib>=3.2.2",            # serializes tracebacks across processes for --parallel test runs
 ]
+
+[tool.uv.sources]
+# Local CLI package — installed editable from ./asl_cli so `uv run asl ...`
+# works from the repo root. Separate sub-project with its own pyproject.toml.
+asl-cli = { path = "asl_cli", editable = true }
 
 [tool.ruff]
 target-version = "py313"

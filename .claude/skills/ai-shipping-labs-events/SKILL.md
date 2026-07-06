@@ -14,24 +14,16 @@ Two distinct surfaces, do not confuse them:
 
 ## Auth
 
-All API calls use the shared production token. See `ai-shipping-labs-prod-api` for the full auth, base URL, and safe-write protocol. Read the token inline without echoing it:
-
-```bash
-cd /home/alexey/git/ai-shipping-labs
-TOKEN=$(grep -E '^API_SHIPPING_LABS_API_TOKEN=' .env | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r')
-curl -s -H "Authorization: Token $TOKEN" https://aishippinglabs.com/api/events | python3 -m json.tool | head
-```
-
-Base URL `https://aishippinglabs.com/api`, header `Authorization: Token <key>`, no trailing slash. GET-before, write, GET-after.
+All API calls use the `asl` CLI, which resolves the token from `.env` automatically. See `ai-shipping-labs-prod-api` for full auth, base URL, and safe-write protocol. GET-before, write, GET-after.
 
 ## Events
 
-- `GET /api/events` — list. Supports a `status` filter (`draft` / `upcoming` / `completed` / `cancelled`).
-- `GET /api/events/<slug>` — detail.
-- `POST /api/events` — create a Studio-origin event.
-- `PATCH /api/events/<slug>` — update.
+- `asl events-list [--status draft|upcoming|completed|cancelled]` — list.
+- `asl events-get <slug>` — detail.
+- `asl events-create '<json>'` — create a Studio-origin event.
+- `asl events-update <slug> '<json>'` — update.
 
-GitHub-origin / synced events are inspectable but read-only here (`editable: false` in the serialized object); only Studio/API-origin events can be created and patched. Studio source means server-assigned ids/slugs are fine — you do not need a stable content-derived URL the way git content does.
+GitHub-origin / synced events are inspectable but read-only here (`editable: false` in the serialized object); only Studio/API-origin events can be created and patched. Studio source means server-assigned ids/slugs are fine.
 
 ### Event fields
 
@@ -65,71 +57,56 @@ Required on create: `title`, `start_datetime`.
 
 Creating (or publishing) a non-draft upcoming event via the API auto-registers the platform user resolved from `host_email` as a normal event attendee. That host receives the normal `event_registration` email, `.ics` attachment, reminders, and reschedule notices through the same registration paths as attendees; the registration and reschedule emails include host-only management links for the resolved host registration. `host_ids` and `Host.email` are only for public event-host display/contact info and are never used for email delivery. Blank or non-resolvable `host_email` values do not create a registration or send email; the save still succeeds.
 
-Note: an older example in the code uses `status: scheduled`, but that value is NOT in the model's status choices — use `upcoming`. Verify the live enum from the spec if unsure (`GET /api/openapi.json`, path `/api/events`).
-
 ### Create example
 
 ```bash
-curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
-  https://aishippinglabs.com/api/events \
-  -d '{
-    "title": "Office Hours: May 5",
-    "description": "Open Q&A.",
-    "kind": "standard",
-    "platform": "zoom",
-    "start_datetime": "2026-05-05T17:00:00+02:00",
-    "end_datetime": "2026-05-05T18:00:00+02:00",
-    "timezone": "Europe/Berlin",
-    "required_level": 0,
-    "status": "upcoming",
-    "published": true,
-    "host_email": "host@example.com",
-    "host_ids": [1, 2],
-    "tags": ["sprint:may-2026"]
-  }'
+uv run asl events-create '{
+  "title": "Office Hours: May 5",
+  "description": "Open Q&A.",
+  "kind": "standard",
+  "platform": "zoom",
+  "start_datetime": "2026-05-05T17:00:00+02:00",
+  "end_datetime": "2026-05-05T18:00:00+02:00",
+  "timezone": "Europe/Berlin",
+  "required_level": 0,
+  "status": "upcoming",
+  "published": true,
+  "host_email": "host@example.com",
+  "host_ids": [1, 2],
+  "tags": ["sprint:may-2026"]
+}'
 ```
 
 Update via slug, e.g. cancel an event:
 
 ```bash
-curl -s -X PATCH -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
-  https://aishippinglabs.com/api/events/office-hours-2026-05-05 \
-  -d '{"status": "cancelled"}'
+uv run asl events-update office-hours-2026-05-05 '{"status": "cancelled"}'
 ```
 
-Create a Zoom event and provision a real Zoom meeting in one call by adding
-`"create_zoom": true` (only valid when `platform` is `zoom`):
+Create a Zoom event and provision a real Zoom meeting in one call by adding `"create_zoom": true` (only valid when `platform` is `zoom`):
 
 ```bash
-curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
-  https://aishippinglabs.com/api/events \
-  -d '{
-    "title": "Office Hours: May 5",
-    "platform": "zoom",
-    "start_datetime": "2026-05-05T17:00:00+02:00",
-    "status": "upcoming",
-    "published": true,
-    "create_zoom": true
-  }'
-# -> 201 with "zoom_join_url": "https://zoom.us/j/88899900011" populated.
+uv run asl events-create '{
+  "title": "Office Hours: May 5",
+  "platform": "zoom",
+  "start_datetime": "2026-05-05T17:00:00+02:00",
+  "status": "upcoming",
+  "published": true,
+  "create_zoom": true
+}'
 ```
 
-The create-event call is the primary action and never rolls back on a Zoom
-problem: if Zoom is unconfigured or its API fails, the event is still created
-(`201`/`200`) and the response carries a non-fatal `zoom_error` string instead
-of a join URL. Because `create_zoom` is idempotent, you can safely retry later
-with `PATCH /api/events/<slug> -d '{"create_zoom": true}'` once Zoom is
-working — it will not overwrite an existing meeting.
+The create-event call is the primary action and never rolls back on a Zoom problem: if Zoom is unconfigured or its API fails, the event is still created (`201`/`200`) and the response carries a non-fatal `zoom_error` string instead of a join URL. Because `create_zoom` is idempotent, you can safely retry later with `"create_zoom": true` via `asl events-update` once Zoom is working.
 
 ## Event series
 
 A series is the recurring template; its occurrences are individual `Event` rows linked back to it (`event_series` FK, `series_position`). The series carries the cadence; the occurrences carry the actual datetimes.
 
-- `GET /api/event-series` — list. `GET /api/event-series/<id>` — detail.
-- `POST /api/event-series` — create.
-- `PATCH /api/event-series/<id>` — update.
-- `POST /api/event-series/<id>/occurrences/bulk` — ADD missing occurrences (additive; never deletes).
-- `PUT /api/event-series/<id>/occurrences` — EXACT-SET: declares the full desired occurrence set in one atomic call (creates missing, reuses existing, cancels extras).
+- `asl event-series-list` — list. `asl event-series-get <id>` — detail.
+- `asl event-series-create '<json>'` — create.
+- `asl event-series-update <id> '<json>'` — update.
+- `asl event-series-occurrences-bulk <id> '<json>'` — ADD missing occurrences (additive; never deletes).
+- `asl event-series-occurrences-reconcile <id> '<json>'` — EXACT-SET: declares the full desired occurrence set in one atomic call (creates missing, reuses existing, cancels extras).
 
 Series create fields — required: `name`, `day_of_week`, `start_time`.
 
@@ -147,67 +124,53 @@ Series create fields — required: `name`, `day_of_week`, `start_time`.
 Create a weekly series, then add its occurrences:
 
 ```bash
-# 1. Create the series
-SERIES=$(curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
-  https://aishippinglabs.com/api/event-series \
-  -d '{"name":"Weekly Office Hours","cadence":"weekly","day_of_week":1,"start_time":"17:00:00","timezone":"Europe/Berlin","required_level":0}')
+SERIES=$(uv run asl event-series-create '{"name":"Weekly Office Hours","cadence":"weekly","day_of_week":1,"start_time":"17:00:00","timezone":"Europe/Berlin","required_level":0}')
 SERIES_ID=$(echo "$SERIES" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
 
-# 2. Bulk-add occurrences (only start_datetime is required per row; title/slug optional)
-curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
-  "https://aishippinglabs.com/api/event-series/$SERIES_ID/occurrences/bulk" \
-  -d '{"occurrences":[
-        {"start_datetime":"2026-05-05T17:00:00+02:00"},
-        {"start_datetime":"2026-05-12T17:00:00+02:00"},
-        {"start_datetime":"2026-05-19T17:00:00+02:00"}
-      ]}'
+uv run asl event-series-occurrences-bulk "$SERIES_ID" '{"occurrences":[
+  {"start_datetime":"2026-05-05T17:00:00+02:00"},
+  {"start_datetime":"2026-05-12T17:00:00+02:00"},
+  {"start_datetime":"2026-05-19T17:00:00+02:00"}
+]}'
 ```
 
-Cancel one occurrence with a PATCH to that occurrence's event slug (`{"status": "cancelled"}`) — this can send cancellation emails to registrants.
+Cancel one occurrence with `asl events-update <slug> '{"status": "cancelled"}'` — this can send cancellation emails to registrants.
 
 ## Zoom meetings
 
 Zoom is the default `platform`. There are two wired auto-creation paths.
 
-Single event — pass `"create_zoom": true` on `POST /api/events` or `PATCH /api/events/<slug>`. When the event's `platform` is `zoom` and it has no existing `zoom_meeting_id`, the API calls the same `create_meeting` service the series path uses and stores `zoom_meeting_id` + `zoom_join_url`. It is idempotent (re-requesting on an event that already has a meeting is a no-op, never an overwrite) and fails soft (a Zoom outage still returns the event with a `zoom_error` key — see the create example above). Passing `create_zoom: true` with `platform: custom` is rejected `422`.
+Single event — pass `"create_zoom": true` on create/update. When the event's `platform` is `zoom` and it has no existing `zoom_meeting_id`, the API calls the same `create_meeting` service the series path uses and stores `zoom_meeting_id` + `zoom_join_url`. It is idempotent (re-requesting on an event that already has a meeting is a no-op, never an overwrite) and fails soft (a Zoom outage still returns the event with a `zoom_error` key).
 
 Series (bulk) — the explicit series action remains the path for provisioning every occurrence at once:
 
-- `POST /api/event-series/<id>/zoom-meetings` — create a Zoom meeting for every eligible occurrence in the series. Eligible = future (`is_upcoming`), `platform == "zoom"`, and no existing `zoom_meeting_id`. Past / cancelled / draft / `custom`-platform occurrences are skipped.
-- Body `{"dry_run": true}` returns a preview: `{"dry_run": true, "eligible_count": N, ...}` with no Zoom calls or enqueues.
+- `asl event-series-zoom-meetings <id> [--dry-run]` — create a Zoom meeting for every eligible occurrence in the series. Eligible = future (`is_upcoming`), `platform == "zoom"`, and no existing `zoom_meeting_id`. Past / cancelled / draft / `custom`-platform occurrences are skipped.
+- `--dry-run` returns a preview with no Zoom calls or enqueues.
 - A real run enqueues a background worker and returns `200` with a `status` of `enqueued` (or `noop` when nothing is eligible) plus a `task_id`.
-- It is idempotent per occurrence: occurrences that already carry a `zoom_meeting_id` are skipped (`#859`), so a re-POST after a successful run is a noop. Each `create_meeting` call is wrapped so one Zoom error (e.g. a 429) does not abort the batch; a structured summary is persisted to `series.zoom_meetings_last_run`.
+- It is idempotent per occurrence: occurrences that already carry a `zoom_meeting_id` are skipped.
 
-Track the run via `GET /api/worker/tasks` (see `ai-shipping-labs-prod-api`) and re-`GET` the series — `zoom_meetings_last_run` holds `created` / `skipped_ineligible` counts. Each created occurrence's event gets `zoom_meeting_id` + `zoom_join_url` populated.
+Track the run via `asl worker-tasks-list` (see `ai-shipping-labs-prod-api`) and re-`GET` the series — `zoom_meetings_last_run` holds `created` / `skipped_ineligible` counts.
 
 Preview, then create:
 
 ```bash
-curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
-  "https://aishippinglabs.com/api/event-series/$SERIES_ID/zoom-meetings" \
-  -d '{"dry_run": true}'
-
-curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
-  "https://aishippinglabs.com/api/event-series/$SERIES_ID/zoom-meetings" -d '{}'
+uv run asl event-series-zoom-meetings "$SERIES_ID" --dry-run
+uv run asl event-series-zoom-meetings "$SERIES_ID"
 ```
 
 ## Banner image
 
 Every event has one 1200x630 image that serves as both the on-page banner and the social `og:image` / `twitter:image`. The API renders it through the banner-generator pipeline as a background task.
 
-Auto-generation on create. `POST /api/events` auto-generates the banner by default — `generate_banner` is treated as `true` when omitted. Pass `generate_banner: false` to opt out (e.g. when a `cover_image_url` from git already wins). The render runs async, so `banner_url` is empty in the create response and fills in once the worker finishes; the response carries a `banner_task_id` to poll.
+Auto-generation on create. `asl events-create` auto-generates the banner by default — `generate_banner` is treated as `true` when omitted. Pass `"generate_banner": false` to opt out. The render runs async, so `banner_url` is empty in the create response and fills in once the worker finishes; the response carries a `banner_task_id` to poll.
 
-Regenerate an existing event. `POST /api/events/<slug>/regenerate-banner` force-enqueues a fresh render and returns the task id. This is allowed for synced/GitHub-origin events too (the auto-banner is derived presentation state the platform owns, so there is no `409` here).
+Regenerate an existing event. `asl events-regenerate-banner <slug>` force-enqueues a fresh render and returns the task id. This is allowed for synced/GitHub-origin events too.
 
 ```bash
-curl -s -X POST -H "Authorization: Token $TOKEN" \
-  "https://aishippinglabs.com/api/events/$SLUG/regenerate-banner"
-# 202 {"status": "queued", "event_id": 33, "slug": "...", "task_id": "a1b2c3..."}
+uv run asl events-regenerate-banner "$SLUG"
 ```
 
-Async poll. The render is a background task, so poll `GET /api/worker/tasks/<task_id>` (using the `banner_task_id` from create or the `task_id` from regenerate) or just re-`GET` the event and read `banner_url` once it is non-empty.
-
-Soft-fail. When the banner generator is not configured, create still returns `201` (the event persists) and the body carries a non-fatal `banner_error` string instead of `banner_task_id`; the regenerate endpoint returns `422 banner_generator_not_configured` without enqueuing.
+Async poll. The render is a background task, so poll `asl worker-task-get <task_id>` (using the `banner_task_id` from create or the `task_id` from regenerate) or just re-run `asl events-get <slug>` and read `banner_url` once it is non-empty.
 
 ## Workshops
 
@@ -216,18 +179,18 @@ Workshops are NOT created through the events API. They are git content:
 - Workshop markdown lives in the `AI-Shipping-Labs/workshops-content` repo and is synced into the Django DB by the content-sync pipeline (parse markdown/YAML, upload images to S3, upsert).
 - Each workshop needs the required frontmatter, including a stable `content_id` — the URL must be derivable from content, never a server-assigned auto-id (the opposite of Studio events).
 - To add or update a workshop: edit the markdown in `workshops-content` (frontmatter + body), commit/push, then trigger a content sync so prod picks it up.
-- Trigger a sync via `POST /api/sync/sources/<uuid>/trigger` (or the Studio "Force resync" button at `/studio/sync/`). See `ai-shipping-labs-prod-api` for the sync source list and trigger command, and for watching the resulting background task.
+- Trigger a sync via `asl sync-source-trigger <uuid>` (or the Studio "Force resync" button at `/studio/sync/`). See `ai-shipping-labs-prod-api` for the sync source list and trigger command, and for watching the resulting background task.
 
 Events vs workshops, crisply:
 
-- Event = Studio/API surface, mutable via POST/PATCH, server-assigned ids/slugs are fine.
+- Event = Studio/API surface, mutable via create/update, server-assigned ids/slugs are fine.
 - Workshop = git content, edited in `workshops-content`, URLs must be content-derivable; the only "publish" action over the API is triggering a sync.
 
 ## Verify
 
 After any write, follow the safe-write protocol:
 
-- Event: `GET /api/events/<slug>` and confirm the fields you set, then check it renders at `https://aishippinglabs.com/events/<id>/<slug>` (published `upcoming` events are publicly visible).
-- Series: `GET /api/event-series/<id>` and confirm cadence/occurrences; check the public series page.
-- Zoom: re-`GET` the series for `zoom_meetings_last_run`, and `GET /api/worker/tasks` for the worker outcome.
-- Workshop: after `trigger`, watch `GET /api/worker/tasks` for the sync task, then load the workshop page.
+- Event: `asl events-get <slug>` and confirm the fields you set, then check it renders at `https://aishippinglabs.com/events/<id>/<slug>` (published `upcoming` events are publicly visible).
+- Series: `asl event-series-get <id>` and confirm cadence/occurrences; check the public series page.
+- Zoom: re-run `asl event-series-get <id>` for `zoom_meetings_last_run`, and `asl worker-tasks-list` for the worker outcome.
+- Workshop: after `trigger`, watch `asl worker-tasks-list` for the sync task, then load the workshop page.

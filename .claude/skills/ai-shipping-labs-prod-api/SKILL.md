@@ -21,21 +21,31 @@ This is the foundational skill: authentication, config, endpoint discovery, the 
 - The token authenticates as a staff user; missing/invalid token returns JSON `401`.
 - Path style: no trailing slash (`/api/events`, not `/api/events/`).
 
-Read the token without echoing it:
+### Use the `asl` CLI
+
+All API calls should go through the `asl` CLI (editable dev dependency in `asl_cli/`). It handles token resolution from `.env` automatically — no manual `grep`/`curl` needed. Run from the repo root:
 
 ```bash
-cd /home/alexey/git/ai-shipping-labs
-TOKEN=$(grep -E '^API_SHIPPING_LABS_API_TOKEN=' .env | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r')
-curl -s -H "Authorization: Token $TOKEN" https://aishippinglabs.com/api/events | python3 -m json.tool | head
+uv run asl events-list
 ```
+
+The CLI resolves the token from `ASL_API_TOKEN` env var, then `API_SHIPPING_LABS_API_TOKEN` in `.env`, then prompts. Override the base URL with `ASL_BASE_URL`.
+
+If you must call an endpoint the CLI does not yet wrap, use the escape hatch:
+
+```bash
+uv run asl raw GET /api/events -p status=upcoming
+uv run asl raw POST /api/integrations/settings '{"updates":[...]}'
+```
+
+Run `uv run asl --help` for the full command list.
 
 ## Discover the full surface: the OpenAPI spec
 
-The complete, always-current endpoint list lives in the generated OpenAPI document. Fetch it with the token (the spec route accepts the same `Token` header):
+The complete, always-current endpoint list lives in the generated OpenAPI document:
 
 ```bash
-curl -s -H "Authorization: Token $TOKEN" https://aishippinglabs.com/api/openapi.json \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); [print(m.upper(), p) for p,ops in sorted(d['paths'].items()) for m in ops]"
+uv run asl openapi | python3 -c "import sys,json; d=json.load(sys.stdin); [print(m.upper(), p) for p,ops in sorted(d['paths'].items()) for m in ops]"
 ```
 
 - Human Swagger UI: open `https://aishippinglabs.com/api/docs` in a browser (it prompts for the token).
@@ -57,24 +67,24 @@ This is how you set or inspect runtime config (the `IntegrationSetting` framewor
 Inspect which keys are set and where they resolve from:
 
 ```bash
-curl -s -H "Authorization: Token $TOKEN" https://aishippinglabs.com/api/integrations/settings \
-  | python3 -c "import sys,json;[print(f\"{e['key']:38} configured={e['configured']} source={e['source']}\") for e in json.load(sys.stdin)['settings']]"
+uv run asl integrations-settings-list --format table
 ```
 
-Set one or more values (example — CDN base):
+Set one or more values:
 
 ```bash
-curl -s -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
-  https://aishippinglabs.com/api/integrations/settings \
-  -d '{"updates":[{"key":"CONTENT_CDN_BASE","value":"https://cdn.aishippinglabs.com"}]}'
+uv run asl integrations-settings-set '{"updates":[{"key":"CONTENT_CDN_BASE","value":"https://cdn.aishippinglabs.com"}]}'
 ```
-
-To set secret values (tokens, URLs) without exposing them in your shell history or the command line, read them from a source file/env into the JSON body via a small `python3` heredoc rather than inlining the literal.
 
 ### Content sync (`/api/sync/sources`)
 
 - `GET /api/sync/sources` — list registered content sources (with UUIDs).
 - `POST /api/sync/sources/<uuid>/trigger` — kick off a sync for one source (same as the Studio "Force resync" button / the GitHub push webhook). Use this to make content/banner/workshop changes take effect in prod.
+
+```bash
+uv run asl sync-sources-list
+uv run asl sync-source-trigger <uuid>
+```
 
 ### Background task observability (`/api/worker/tasks`)
 
@@ -83,6 +93,12 @@ Invaluable for debugging async work (content sync, banner renders, emails, Zoom 
 - `GET /api/worker/tasks` — recent tasks with `name`, `success`, `result`, timing.
 - `GET /api/worker/tasks/failed` — failed tasks only.
 - `GET /api/worker/tasks/<task_id>` — one task's detail.
+
+```bash
+uv run asl worker-tasks-list --format table
+uv run asl worker-tasks-failed
+uv run asl worker-task-get <task_id>
+```
 
 Caveat: a task that catches its own error and returns `None` shows `success=True` with `result=None` — it will NOT appear in `failed`. Inspect `result` to spot silently-swallowed failures (this is exactly how a timed-out banner render hides).
 
@@ -97,7 +113,10 @@ These are not covered by a specialized skill; read the OpenAPI spec for exact re
 - Onboarding read API (`/api/onboarding/...`).
 - SES events (`/api/ses-events`, `/api/users/<email>/ses-events`).
 
+All of these have `asl` subcommands — run `uv run asl --help` and search for the resource name.
+
 ## Notes
 
 - The API runs against PRODUCTION. Treat writes as outward-facing prod changes — confirm intent, GET-before/after, and report what changed.
 - New keys/endpoints appear automatically: the settings endpoint reads `integrations/settings_registry.py`, and the OpenAPI spec is generated from the routes. When unsure, fetch the spec.
+- For endpoints not yet wrapped by the CLI, use `asl raw <METHOD> <path>`.

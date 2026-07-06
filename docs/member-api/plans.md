@@ -154,6 +154,18 @@ Validation error:
 
 The status code is `422`.
 
+## Data Boundaries
+
+The member API is scoped to the signed-in key owner's own plans, and this holds for the write surface too: progress updates only ever touch the caller's own plan items.
+
+The API never exposes or lets you modify internal notes, CRM notes, onboarding answers, staff context, or other members' data:
+
+- other members' data — you cannot read, list, or update another member's plan, even a cohort teammate's. Cohort visibility on the website does not grant API access to a teammate's plan.
+- internal notes and CRM notes — staff-facing notes attached to a member or plan are never returned by any endpoint.
+- onboarding answers — the answers a member gives during signup are never surfaced through the API.
+- staff context — reviewer comments, moderation state, and other staff-only fields are stripped from every response.
+
+Writes stay deliberately narrow: the progress endpoint only toggles the done state of checkpoints, deliverables, and next steps that already belong to the caller's plan. It cannot reach any of the records or fields listed above.
 
 ## V1 Limitations
 

@@ -175,6 +175,18 @@ class User(AbstractUser):
         help_text="User email preferences as a JSON object.",
     )
 
+    # Per-user dismissed dashboard cards (issue #1129). A list of stable
+    # card-key strings (e.g. "onboarding_prompt", "slack_join"). Persisted
+    # server-side so a dismissal survives across devices/sessions rather
+    # than living only in the browser's localStorage. Mirrors the existing
+    # per-user JSONField patterns (email_preferences, tags). Unknown keys
+    # are ignored by the readers; the write endpoint allow-lists keys.
+    dashboard_dismissals = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Dismissed dashboard card keys (per-user member state).",
+    )
+
     # Payment fields (spec 02)
     stripe_customer_id = models.CharField(
         max_length=255,

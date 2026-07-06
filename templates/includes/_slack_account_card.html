@@ -20,7 +20,13 @@
 {% endcomment %}
 {% load accounts_extras %}
 {% if show_slack_join %}
-<section class="mb-8" data-testid="slack-account-card">
+{% comment %}
+  Issue #1129: the dismiss control is added ONLY when the dashboard passes
+  ``slack_card_dismissable`` (never on /account/, which does not set the
+  flag) and only on this Join-Slack branch — never on the slack_connected
+  state below.
+{% endcomment %}
+<section class="mb-8" data-testid="slack-account-card"{% if slack_card_dismissable %} data-dismiss-card-container{% endif %}>
   <div class="rounded-lg border border-border bg-card p-5 sm:p-6">
     <div class="flex flex-col sm:flex-row sm:items-center gap-4">
       <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-secondary">
@@ -35,6 +41,15 @@
         <i data-lucide="message-square" class="h-4 w-4"></i>
         Join Slack
       </a>
+      {% if slack_card_dismissable %}
+      <button type="button"
+              class="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Dismiss"
+              data-testid="slack-account-card-dismiss"
+              data-dismiss-card="slack_join">
+        <i data-lucide="x" class="h-4 w-4"></i>
+      </button>
+      {% endif %}
     </div>
   </div>
 </section>

@@ -42,6 +42,7 @@ class WeekNoteSingletonMigrationTest(TransactionTestCase):
             "email_verified": True,
             "unsubscribed": False,
             "email_preferences": json.dumps({}),
+            "dashboard_dismissals": json.dumps([]),
             "stripe_customer_id": "",
             "subscription_id": "",
             "slack_user_id": "",

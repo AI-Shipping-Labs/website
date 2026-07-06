@@ -1462,14 +1462,16 @@ class EventsSkillDocSyncTest(TestCase):
             / "SKILL.md"
         )
         text = skill_path.read_text(encoding="utf-8")
-        # Fields table row.
-        self.assertIn("| `create_zoom` |", text)
-        # Zoom-meetings section mentions the new single-event trigger.
-        self.assertIn('"create_zoom": true', text)
+        # Per-event Zoom provisioning is taught via the CLI flag (post-#1125).
+        self.assertIn("--create-zoom", text)
+        # Series Zoom provisioning is documented.
+        self.assertIn("event-series create-zoom", text)
+        # Non-fatal Zoom failure: event still created, retry is idempotent.
         self.assertIn("zoom_error", text)
+        self.assertIn("idempotent", text)
+        self.assertIn("Retry with `asl events update <slug> --create-zoom`", text)
         # The stale "no fully-automatic per-event Zoom creation" wording is gone.
         self.assertNotIn("no fully-automatic per-event Zoom creation", text)
-        # host_email field and host auto-registration are documented.
-        self.assertIn("| `host_email` |", text)
-        self.assertIn("Host auto-registration", text)
-        self.assertIn("platform user", text)
+        # Host auto-registration is documented via the --host-email flag.
+        self.assertIn("--host-email", text)
+        self.assertIn("auto-registers", text)

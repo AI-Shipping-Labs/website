@@ -8,27 +8,25 @@ from asl_cli.commands._shared import emit, format_option, get_client
 
 API = "/api"
 
-commands = []
+
+@click.group()
+def sync():
+    """Manage content sync."""
 
 
-@click.command("sync-sources-list")
+@sync.command("sources")
 @format_option
-def sync_sources_list(fmt):
+def sync_sources(fmt):
     """List registered content sync sources."""
-    data = get_client().get(f"{API}/sync/sources")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/sync/sources"), fmt)
 
 
-commands.append(sync_sources_list)
-
-
-@click.command("sync-source-trigger")
+@sync.command("trigger")
 @click.argument("source_id")
 @format_option
-def sync_source_trigger(source_id, fmt):
+def sync_trigger(source_id, fmt):
     """Trigger a content sync for one source."""
-    data = get_client().post(f"{API}/sync/sources/{source_id}/trigger")
-    emit(data, fmt)
+    emit(get_client().post(f"{API}/sync/sources/{source_id}/trigger"), fmt)
 
 
-commands.append(sync_source_trigger)
+groups = [sync]

@@ -5,41 +5,41 @@ description: Work with the AI Shipping Labs member Plans API from local tools or
 
 # AI Shipping Labs Plans API
 
-Use the member API via the `asl` CLI (member scope). The CLI handles the base URL (`https://aishippinglabs.com/member-api/v1`) and token resolution.
+Use the member API via the `asl` CLI (member scope). The CLI handles the base URL and token resolution.
+
+## Discovering commands
+
+```bash
+uv run asl member-api --help
+uv run asl member-api plans --help
+```
 
 ## Key Handling
 
 - Ask the user for a member API key when no local key is available.
 - Prefer reading `AI_SHIPPING_LABS_MEMBER_API_KEY` from the local environment.
-- Never hard-code a key.
-- Never write a key into repo files, logs, issue comments, commits, or generated docs.
+- Never hard-code a key. Never write a key into repo files, logs, issue comments, commits, or generated docs.
 - Never ask the user to commit or store a key in the repository.
 
 ## Allowed Operations
 
-- List plans: `uv run asl member-api-plans`
-- Fetch one plan: `uv run asl member-api-plan-get <plan_id>`
-- Download Markdown: `uv run asl member-api-plan-markdown <plan_id>`
-- Update progress: `uv run asl member-api-plan-progress <plan_id> '<json>'`
+- List plans: `uv run asl member-api plans list`
+- Fetch one plan: `uv run asl member-api plans get <plan_id>`
+- Download Markdown: `uv run asl member-api plans markdown <plan_id>`
+- Update progress: `uv run asl member-api plans progress <plan_id> --data '{"checkpoints":[{"id":123,"done":true}],...}'`
 
-Use progress update only to set `done` on existing checkpoints, deliverables, and next steps:
+Use the progress command only to set `done` on existing checkpoints, deliverables, and next steps. The `--data` payload accepts arrays of `{"id": N, "done": true/false}` for each key.
 
-```json
-{
-  "checkpoints": [{"id": 123, "done": true}],
-  "deliverables": [{"id": 456, "done": false}],
-  "next_steps": [{"id": 789, "done": true}]
-}
-```
+## Forbidden Surfaces
 
-## Workflow
+Do not call `/api/`, `/studio/`, Django admin, CRM, staff APIs, operator APIs, or staff/operator documentation. Do not infer, request, or expose internal notes, CRM notes, onboarding answers, staff context, or other members' data.
+
+## Error Handling
 
 1. Resolve the key from `AI_SHIPPING_LABS_MEMBER_API_KEY` or ask the user to provide it privately.
-2. Make the requested member API call via `asl member-api ...`.
-3. For progress updates, fetch the plan first when item IDs are unknown.
-4. Treat `401` as a missing, revoked, or invalid key; ask the user for a fresh key.
-5. Treat `404` as "this key owner cannot access that plan".
-6. Treat `422` as a validation error and fix the payload before retrying.
+2. Treat `401` as a missing, revoked, or invalid key; ask the user for a fresh key.
+3. Treat `404` as "this key owner cannot access that plan".
+4. Treat `422` as a validation error and fix the payload before retrying.
 
 ## Contributions
 

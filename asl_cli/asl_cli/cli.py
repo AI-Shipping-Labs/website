@@ -1,7 +1,7 @@
-"""CLI entry point and shared option handling.
+"""CLI entry point.
 
-Defines the root ``asl`` command group and common options (``--format``,
-``--base-url``). Subcommands are registered from the ``commands`` package.
+Defines the root ``asl`` command group and registers all subgroups
+from the commands package.
 """
 
 from __future__ import annotations
@@ -12,32 +12,11 @@ import click
 
 from asl_cli import __version__
 from asl_cli.client import APIError
-from asl_cli.commands import (
-    campaigns,
-    contacts,
-    event_series,
-    events,
-    integrations,
-    member_api,
-    misc,
-    onboarding,
-    plans,
-    raw,
-    redirects,
-    sprints,
-    sync,
-    triggers,
-    users,
-    utm_campaigns,
-    worker,
-)
-
-
-FORMAT_CHOICES = ["json", "table", "raw"]
+from asl_cli.commands import groups
 
 
 class AslGroup(click.Group):
-    """Custom group that pretty-prints the help text."""
+    """Custom group with a short header above the standard help."""
 
     def format_help(self, ctx, formatter):
         formatter.write_heading("asl -- AI Shipping Labs CLI")
@@ -45,25 +24,10 @@ class AslGroup(click.Group):
         formatter.write_text(
             "Command-line client for the production API "
             "(https://aishippinglabs.com/api). "
-            "All commands output JSON unless --format=table or --format=raw."
+            "Run 'asl <group> --help' to see subcommands, "
+            "and 'asl <group> <command> --help' for flags."
         )
         super().format_help(ctx, formatter)
-
-
-def handle_api_error(func):
-    """Decorate a command function to print APIError as a clean message."""
-
-    import functools
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except APIError as exc:
-            click.echo(f"Error: {exc}", err=True)
-            sys.exit(1)
-
-    return wrapper
 
 
 @click.group(cls=AslGroup)
@@ -72,32 +36,16 @@ def cli():
     """AI Shipping Labs production API CLI."""
 
 
-# Register command groups
-for _module in [
-    users,
-    events,
-    event_series,
-    plans,
-    sprints,
-    contacts,
-    campaigns,
-    integrations,
-    sync,
-    worker,
-    triggers,
-    onboarding,
-    redirects,
-    utm_campaigns,
-    member_api,
-    misc,
-    raw,
-]:
-    for _cmd in _module.commands:
-        cli.add_command(_cmd)
+for _group in groups:
+    cli.add_command(_group)
 
 
 def main():
-    cli()
+    try:
+        cli()
+    except APIError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

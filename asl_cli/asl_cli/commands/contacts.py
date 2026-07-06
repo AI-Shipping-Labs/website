@@ -4,58 +4,54 @@ from __future__ import annotations
 
 import click
 
-from asl_cli.commands._shared import emit, format_option, get_client, json_arg
+from asl_cli.commands._shared import comma_list, emit, format_option, get_client, json_option
 
 API = "/api"
 
-commands = []
+
+@click.group()
+def contacts():
+    """Manage contacts and tier overrides."""
 
 
-@click.command("contacts-import")
-@json_arg("data", required=True)
+@contacts.command("import")
+@json_option("data", required=True,
+             help_text='JSON with "contacts" array, "default_tag", "default_tier".')
 @format_option
 def contacts_import(data, fmt):
-    """Bulk-import contacts (JSON body with 'contacts' list)."""
-    result = get_client().post(f"{API}/contacts/import", json_body=data)
-    emit(result, fmt)
+    """Bulk-import contacts."""
+    emit(get_client().post(f"{API}/contacts/import", json_body=data), fmt)
 
 
-commands.append(contacts_import)
-
-
-@click.command("contacts-export")
+@contacts.command("export")
 @click.option("--format", "output_format", type=click.Choice(["json", "csv"]), default="json")
 @format_option
 def contacts_export(output_format, fmt):
     """Export all contacts."""
-    params = {"format": output_format}
-    data = get_client().get(f"{API}/contacts/export", params=params)
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/contacts/export", params={"format": output_format}), fmt)
 
 
-commands.append(contacts_export)
-
-
-@click.command("contacts-set-tags")
+@contacts.command("set-tags")
 @click.argument("email")
-@json_arg("data", required=True)
+@comma_list("tags", "Comma-separated tags, e.g. sprint:may-2026,workshop")
 @format_option
-def contacts_set_tags(email, data, fmt):
-    """Replace a contact's tag set (JSON body with 'tags' list)."""
-    result = get_client().post(f"{API}/contacts/{email}/tags", json_body=data)
-    emit(result, fmt)
+def contacts_set_tags(email, tags, fmt):
+    """Replace a contact's tag set (not additive)."""
+    body = {"tags": tags}
+    emit(get_client().post(f"{API}/contacts/{email}/tags", json_body=body), fmt)
 
 
-commands.append(contacts_set_tags)
-
-
-@click.command("tier-overrides-grant")
-@json_arg("data", required=True)
+@contacts.command("grant-tier")
+@click.option("--emails", required=True, help="Comma-separated emails.")
+@click.option("--tier", required=True, help="Tier slug, e.g. main, premium.")
 @format_option
-def tier_overrides_grant(data, fmt):
-    """Grant a tier override (JSON body)."""
-    result = get_client().post(f"{API}/tier-overrides", json_body=data)
-    emit(result, fmt)
+def contacts_grant_tier(emails, tier, fmt):
+    """Grant a tier override."""
+    body = {
+        "emails": [e.strip() for e in emails.split(",") if e.strip()],
+        "tier": tier,
+    }
+    emit(get_client().post(f"{API}/tier-overrides", json_body=body), fmt)
 
 
-commands.append(tier_overrides_grant)
+groups = [contacts]

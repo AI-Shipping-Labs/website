@@ -8,10 +8,18 @@ from asl_cli.commands._shared import emit, format_option, get_client
 
 API = "/api"
 
-commands = []
+
+@click.group()
+def worker():
+    """Observe background tasks."""
 
 
-@click.command("worker-tasks-list")
+@worker.group("tasks")
+def worker_tasks():
+    """List background tasks."""
+
+
+@worker_tasks.command("list")
 @format_option
 def worker_tasks_list(fmt):
     """List recent background tasks."""
@@ -23,27 +31,19 @@ def worker_tasks_list(fmt):
         emit(data, fmt)
 
 
-commands.append(worker_tasks_list)
-
-
-@click.command("worker-tasks-failed")
+@worker_tasks.command("failed")
 @format_option
 def worker_tasks_failed(fmt):
     """List failed background tasks."""
-    data = get_client().get(f"{API}/worker/tasks/failed")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/worker/tasks/failed"), fmt)
 
 
-commands.append(worker_tasks_failed)
-
-
-@click.command("worker-task-get")
+@worker_tasks.command("get")
 @click.argument("task_id")
 @format_option
 def worker_task_get(task_id, fmt):
     """Get a single background task."""
-    data = get_client().get(f"{API}/worker/tasks/{task_id}")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/worker/tasks/{task_id}"), fmt)
 
 
-commands.append(worker_task_get)
+groups = [worker]

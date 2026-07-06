@@ -1,4 +1,8 @@
-"""Command modules for the asl CLI."""
+"""Command modules for the asl CLI.
+
+Each module exposes a ``groups`` list of top-level click.Group (or
+click.Command) objects. The CLI entry point iterates and registers them.
+"""
 
 from asl_cli.commands import (
     campaigns,
@@ -20,7 +24,6 @@ from asl_cli.commands import (
     worker,
 )
 
-# Module-level list so ``cli.py`` can iterate and register every command.
 _all_modules = [
     campaigns,
     contacts,
@@ -41,7 +44,6 @@ _all_modules = [
     worker,
 ]
 
-# Collect ``commands`` attribute lists from each module (see any module below).
-commands = []
+groups = []
 for _mod in _all_modules:
-    commands.extend(getattr(_mod, "commands", []))
+    groups.extend(getattr(_mod, "groups", []))

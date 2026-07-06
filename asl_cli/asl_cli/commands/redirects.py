@@ -4,68 +4,74 @@ from __future__ import annotations
 
 import click
 
-from asl_cli.commands._shared import emit, format_option, get_client, json_arg
+from asl_cli.commands._shared import collect_flags, emit, format_option, get_client, json_option
 
 API = "/api"
 
-commands = []
+
+@click.group()
+def redirects():
+    """Manage URL redirects."""
 
 
-@click.command("redirects-list")
+@redirects.command("list")
 @format_option
 def redirects_list(fmt):
     """List URL redirects."""
-    data = get_client().get(f"{API}/redirects")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/redirects"), fmt)
 
 
-commands.append(redirects_list)
-
-
-@click.command("redirects-get")
+@redirects.command("get")
 @click.argument("redirect_id", type=int)
 @format_option
 def redirects_get(redirect_id, fmt):
     """Get a single redirect."""
-    data = get_client().get(f"{API}/redirects/{redirect_id}")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/redirects/{redirect_id}"), fmt)
 
 
-commands.append(redirects_get)
+REDIRECT_FLAGS = [
+    click.option("--source-path", default=None),
+    click.option("--target-path", default=None),
+    click.option("--redirect-type", type=click.Choice(["301", "302"]), default=None),
+    click.option("--is-active/--no-is-active", default=None),
+]
 
 
-@click.command("redirects-create")
-@json_arg("data", required=True)
+def apply_redirect_flags(func):
+    for decorator in reversed(REDIRECT_FLAGS):
+        func = decorator(func)
+    return func
+
+
+@redirects.command("create")
+@apply_redirect_flags
 @format_option
-def redirects_create(data, fmt):
-    """Create a redirect (JSON body)."""
-    result = get_client().post(f"{API}/redirects", json_body=data)
-    emit(result, fmt)
+def redirects_create(fmt, **kwargs):
+    """Create a redirect. Use --help to see all flags."""
+    body = collect_flags(click.get_current_context())
+    if "redirect_type" in body:
+        body["redirect_type"] = int(body["redirect_type"])
+    emit(get_client().post(f"{API}/redirects", json_body=body), fmt)
 
 
-commands.append(redirects_create)
-
-
-@click.command("redirects-update")
+@redirects.command("update")
 @click.argument("redirect_id", type=int)
-@json_arg("data", required=True)
+@apply_redirect_flags
 @format_option
-def redirects_update(redirect_id, data, fmt):
-    """Update a redirect (JSON body)."""
-    result = get_client().patch(f"{API}/redirects/{redirect_id}", json_body=data)
-    emit(result, fmt)
+def redirects_update(redirect_id, fmt, **kwargs):
+    """Update a redirect. Use --help to see all flags."""
+    body = collect_flags(click.get_current_context())
+    if "redirect_type" in body:
+        body["redirect_type"] = int(body["redirect_type"])
+    emit(get_client().patch(f"{API}/redirects/{redirect_id}", json_body=body), fmt)
 
 
-commands.append(redirects_update)
-
-
-@click.command("redirects-bulk-upsert")
-@json_arg("data", required=True)
+@redirects.command("bulk-upsert")
+@json_option("data", required=True, help_text='JSON with "redirects" array.')
 @format_option
 def redirects_bulk_upsert(data, fmt):
-    """Bulk upsert redirects (JSON body)."""
-    result = get_client().post(f"{API}/redirects/bulk", json_body=data)
-    emit(result, fmt)
+    """Bulk upsert redirects."""
+    emit(get_client().post(f"{API}/redirects/bulk", json_body=data), fmt)
 
 
-commands.append(redirects_bulk_upsert)
+groups = [redirects]

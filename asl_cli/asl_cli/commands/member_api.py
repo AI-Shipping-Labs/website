@@ -5,37 +5,37 @@ from __future__ import annotations
 import click
 
 from asl_cli.client import member_client
-from asl_cli.commands._shared import emit, format_option, json_arg
+from asl_cli.commands._shared import emit, format_option, json_option
 
 MEMBER_API = "/member-api/v1"
 
-commands = []
+
+@click.group(name="member-api")
+def member_api():
+    """Member API (plans owned by the authenticated member)."""
 
 
-@click.command("member-api-plans")
+@member_api.group("plans")
+def member_plans():
+    """Manage member plans."""
+
+
+@member_plans.command("list")
 @format_option
 def member_api_plans(fmt):
     """List the authenticated member's plans."""
-    data = member_client().get(f"{MEMBER_API}/plans")
-    emit(data, fmt)
+    emit(member_client().get(f"{MEMBER_API}/plans"), fmt)
 
 
-commands.append(member_api_plans)
-
-
-@click.command("member-api-plan-get")
+@member_plans.command("get")
 @click.argument("plan_id", type=int)
 @format_option
 def member_api_plan_get(plan_id, fmt):
     """Get a single plan."""
-    data = member_client().get(f"{MEMBER_API}/plans/{plan_id}")
-    emit(data, fmt)
+    emit(member_client().get(f"{MEMBER_API}/plans/{plan_id}"), fmt)
 
 
-commands.append(member_api_plan_get)
-
-
-@click.command("member-api-plan-markdown")
+@member_plans.command("markdown")
 @click.argument("plan_id", type=int)
 @format_option
 def member_api_plan_markdown(plan_id, fmt):
@@ -44,17 +44,14 @@ def member_api_plan_markdown(plan_id, fmt):
     click.echo(data)
 
 
-commands.append(member_api_plan_markdown)
-
-
-@click.command("member-api-plan-progress")
+@member_plans.command("progress")
 @click.argument("plan_id", type=int)
-@json_arg("data", required=True)
+@json_option("data", required=True,
+             help_text='JSON with "checkpoints"/"deliverables"/"next_steps" arrays.')
 @format_option
 def member_api_plan_progress(plan_id, data, fmt):
-    """Update progress on a plan (JSON body with checkpoints/deliverables/next_steps)."""
-    result = member_client().patch(f"{MEMBER_API}/plans/{plan_id}/progress", json_body=data)
-    emit(result, fmt)
+    """Update progress on a plan."""
+    emit(member_client().patch(f"{MEMBER_API}/plans/{plan_id}/progress", json_body=data), fmt)
 
 
-commands.append(member_api_plan_progress)
+groups = [member_api]

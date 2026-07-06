@@ -4,81 +4,98 @@ from __future__ import annotations
 
 import click
 
-from asl_cli.commands._shared import emit, format_option, get_client, json_arg
+from asl_cli.commands._shared import collect_flags, emit, format_option, get_client
 
 API = "/api"
 
-commands = []
+
+@click.group(name="utm-campaigns")
+def utm_campaigns():
+    """Manage UTM campaigns and tracked links."""
 
 
-@click.command("utm-campaigns-list")
+@utm_campaigns.command("list")
+@click.option("--is-archived", type=click.Choice(["true", "false"]), default=None)
+@click.option("-q", "--query", default=None)
 @format_option
-def utm_campaigns_list(fmt):
+def utm_campaigns_list(is_archived, query, fmt):
     """List UTM campaigns."""
-    data = get_client().get(f"{API}/utm-campaigns")
-    emit(data, fmt)
+    params = {}
+    if is_archived:
+        params["is_archived"] = is_archived
+    if query:
+        params["q"] = query
+    emit(get_client().get(f"{API}/utm-campaigns", params=params or None), fmt)
 
 
-commands.append(utm_campaigns_list)
-
-
-@click.command("utm-campaigns-get")
+@utm_campaigns.command("get")
 @click.argument("campaign_id", type=int)
 @format_option
 def utm_campaigns_get(campaign_id, fmt):
-    """Get a single UTM campaign."""
-    data = get_client().get(f"{API}/utm-campaigns/{campaign_id}")
-    emit(data, fmt)
+    """Get a single UTM campaign with links."""
+    emit(get_client().get(f"{API}/utm-campaigns/{campaign_id}"), fmt)
 
 
-commands.append(utm_campaigns_get)
+UTM_FLAGS = [
+    click.option("--name", default=None),
+    click.option("--slug", default=None),
+    click.option("--default-source", default=None, help="Default utm_source."),
+    click.option("--default-medium", default=None, help="Default utm_medium."),
+    click.option("--notes", default=None),
+    click.option("--is-archived/--no-is-archived", default=None),
+]
 
 
-@click.command("utm-campaigns-create")
-@json_arg("data", required=True)
+def apply_utm_flags(func):
+    for decorator in reversed(UTM_FLAGS):
+        func = decorator(func)
+    return func
+
+
+@utm_campaigns.command("create")
+@apply_utm_flags
 @format_option
-def utm_campaigns_create(data, fmt):
-    """Create a UTM campaign (JSON body)."""
-    result = get_client().post(f"{API}/utm-campaigns", json_body=data)
-    emit(result, fmt)
+def utm_campaigns_create(fmt, **kwargs):
+    """Create a UTM campaign. Use --help to see all flags."""
+    body = collect_flags(click.get_current_context())
+    emit(get_client().post(f"{API}/utm-campaigns", json_body=body), fmt)
 
 
-commands.append(utm_campaigns_create)
-
-
-@click.command("utm-campaigns-update")
+@utm_campaigns.command("update")
 @click.argument("campaign_id", type=int)
-@json_arg("data", required=True)
+@apply_utm_flags
 @format_option
-def utm_campaigns_update(campaign_id, data, fmt):
-    """Update a UTM campaign (JSON body)."""
-    result = get_client().patch(f"{API}/utm-campaigns/{campaign_id}", json_body=data)
-    emit(result, fmt)
+def utm_campaigns_update(campaign_id, fmt, **kwargs):
+    """Update a UTM campaign. Use --help to see all flags."""
+    body = collect_flags(click.get_current_context())
+    emit(get_client().patch(f"{API}/utm-campaigns/{campaign_id}", json_body=body), fmt)
 
 
-commands.append(utm_campaigns_update)
+# -- links (nested) ----------------------------------------------------------
+
+@click.group(name="links")
+def utm_links():
+    """Manage tracked links."""
 
 
-@click.command("utm-campaign-links")
+@utm_links.command("list")
 @click.argument("campaign_id", type=int)
 @format_option
 def utm_campaign_links(campaign_id, fmt):
     """List tracked links for a UTM campaign."""
-    data = get_client().get(f"{API}/utm-campaigns/{campaign_id}/links")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/utm-campaigns/{campaign_id}/links"), fmt)
 
 
-commands.append(utm_campaign_links)
-
-
-@click.command("utm-campaign-link-get")
+@utm_links.command("get")
 @click.argument("campaign_id", type=int)
 @click.argument("link_id", type=int)
 @format_option
 def utm_campaign_link_get(campaign_id, link_id, fmt):
     """Get a single tracked link."""
-    data = get_client().get(f"{API}/utm-campaigns/{campaign_id}/links/{link_id}")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/utm-campaigns/{campaign_id}/links/{link_id}"), fmt)
 
 
-commands.append(utm_campaign_link_get)
+utm_campaigns.add_command(utm_links)
+
+
+groups = [utm_campaigns]

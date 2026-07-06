@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import click
 
-from asl_cli.commands._shared import emit, format_option, get_client, json_arg
+from asl_cli.commands._shared import emit, format_option, get_client, json_option
 
-commands = []
+groups = []
 
 
 @click.command("raw")
 @click.argument("method", type=click.Choice(["GET", "POST", "PATCH", "PUT", "DELETE"], case_sensitive=False))
 @click.argument("path")
-@json_arg("data", required=False)
-@click.option("--param", "-p", "params", multiple=True, help="Query params as key=value (repeatable).")
-@click.option("--raw-output", is_flag=True, default=False, help="Return raw text instead of parsing JSON.")
+@json_option("data", required=False)
+@click.option("-p", "--param", "params", multiple=True, help="Query params as key=value (repeatable).")
+@click.option("--raw-output", is_flag=True, default=False, help="Return raw text instead of JSON.")
 @format_option
 def raw(method, path, data, params, raw_output, fmt):
     """Call any API path directly.
@@ -25,8 +25,8 @@ def raw(method, path, data, params, raw_output, fmt):
     Examples:
 
       asl raw GET /api/events
-      asl raw GET /api/users -q email=someone@example.com
-      asl raw POST /api/integrations/settings '{"updates":[...]}'
+      asl raw GET /api/users -p email=someone@example.com
+      asl raw POST /api/integrations/settings --data '{"updates":[...]}'
     """
     query = {}
     for p in params:
@@ -36,8 +36,7 @@ def raw(method, path, data, params, raw_output, fmt):
         else:
             query[p] = ""
 
-    client = get_client()
-    result = client.request(
+    result = get_client().request(
         method.upper(),
         path,
         params=query or None,
@@ -50,4 +49,4 @@ def raw(method, path, data, params, raw_output, fmt):
         emit(result, fmt)
 
 
-commands.append(raw)
+groups.append(raw)

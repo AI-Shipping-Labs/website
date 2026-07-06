@@ -4,96 +4,113 @@ from __future__ import annotations
 
 import click
 
-from asl_cli.commands._shared import emit, format_option, get_client, json_arg
+from asl_cli.commands._shared import (
+    TierLevel,
+    collect_flags,
+    emit,
+    format_option,
+    get_client,
+    json_option,
+)
 
 API = "/api"
 
-commands = []
+
+@click.group(name="event-series")
+def event_series():
+    """Manage event series."""
 
 
-@click.command("event-series-list")
+@event_series.command("list")
+@click.option("--is-active", type=click.Choice(["true", "false"]), default=None)
+@click.option("-q", "--query", default=None)
 @format_option
-def event_series_list(fmt):
+def event_series_list(is_active, query, fmt):
     """List event series."""
-    data = get_client().get(f"{API}/event-series")
-    emit(data, fmt)
+    params = {}
+    if is_active:
+        params["is_active"] = is_active
+    if query:
+        params["q"] = query
+    emit(get_client().get(f"{API}/event-series", params=params or None), fmt)
 
 
-commands.append(event_series_list)
-
-
-@click.command("event-series-get")
+@event_series.command("get")
 @click.argument("series_id", type=int)
 @format_option
 def event_series_get(series_id, fmt):
-    """Get a single event series."""
-    data = get_client().get(f"{API}/event-series/{series_id}")
-    emit(data, fmt)
+    """Get a single event series with occurrences."""
+    emit(get_client().get(f"{API}/event-series/{series_id}"), fmt)
 
 
-commands.append(event_series_get)
+SERIES_FLAGS = [
+    click.option("--name", default=None),
+    click.option("--slug", default=None),
+    click.option("--description", default=None),
+    click.option("--cadence", type=click.Choice(["weekly"]), default=None),
+    click.option("--day-of-week", type=click.IntRange(0, 6), default=None,
+                 help="0=Monday through 6=Sunday."),
+    click.option("--start-time", default=None, help="HH:MM or HH:MM:SS."),
+    click.option("--timezone", default=None, help="IANA timezone."),
+    click.option("--required-level", type=TierLevel(), default=None,
+                 help="open, registered, basic, main, premium (or integer)."),
+    click.option("--is-active/--no-is-active", default=None),
+]
 
 
-@click.command("event-series-create")
-@json_arg("data", required=True)
+def apply_series_flags(func):
+    for decorator in reversed(SERIES_FLAGS):
+        func = decorator(func)
+    return func
+
+
+@event_series.command("create")
+@apply_series_flags
 @format_option
-def event_series_create(data, fmt):
-    """Create an event series (JSON body)."""
-    result = get_client().post(f"{API}/event-series", json_body=data)
-    emit(result, fmt)
+def event_series_create(fmt, **kwargs):
+    """Create an event series."""
+    body = collect_flags(click.get_current_context())
+    emit(get_client().post(f"{API}/event-series", json_body=body), fmt)
 
 
-commands.append(event_series_create)
-
-
-@click.command("event-series-update")
+@event_series.command("update")
 @click.argument("series_id", type=int)
-@json_arg("data", required=True)
+@apply_series_flags
 @format_option
-def event_series_update(series_id, data, fmt):
-    """Update an event series (JSON body)."""
-    result = get_client().patch(f"{API}/event-series/{series_id}", json_body=data)
-    emit(result, fmt)
+def event_series_update(series_id, fmt, **kwargs):
+    """Update an event series."""
+    body = collect_flags(click.get_current_context())
+    emit(get_client().patch(f"{API}/event-series/{series_id}", json_body=body), fmt)
 
 
-commands.append(event_series_update)
-
-
-@click.command("event-series-occurrences-bulk")
+@event_series.command("occurrences-bulk")
 @click.argument("series_id", type=int)
-@json_arg("data", required=True)
+@json_option("data", required=True,
+             help_text='JSON with "occurrences" array, e.g. {\"occurrences\":[{\"start_datetime\":\"...\"}]}')
 @format_option
 def event_series_occurrences_bulk(series_id, data, fmt):
-    """Bulk-add occurrences to a series (JSON body with 'occurrences' list)."""
-    result = get_client().post(f"{API}/event-series/{series_id}/occurrences/bulk", json_body=data)
-    emit(result, fmt)
+    """Bulk-add occurrences (additive, never deletes)."""
+    emit(get_client().post(f"{API}/event-series/{series_id}/occurrences/bulk", json_body=data), fmt)
 
 
-commands.append(event_series_occurrences_bulk)
-
-
-@click.command("event-series-occurrences-reconcile")
+@event_series.command("occurrences-reconcile")
 @click.argument("series_id", type=int)
-@json_arg("data", required=True)
+@json_option("data", required=True,
+             help_text="JSON with full desired occurrence set (exact-set, atomic).")
 @format_option
 def event_series_occurrences_reconcile(series_id, data, fmt):
-    """Exact-set occurrences for a series (PUT, JSON body)."""
-    result = get_client().put(f"{API}/event-series/{series_id}/occurrences", json_body=data)
-    emit(result, fmt)
+    """Exact-set occurrences (creates missing, cancels extras)."""
+    emit(get_client().put(f"{API}/event-series/{series_id}/occurrences", json_body=data), fmt)
 
 
-commands.append(event_series_occurrences_reconcile)
-
-
-@click.command("event-series-zoom-meetings")
+@event_series.command("zoom-meetings")
 @click.argument("series_id", type=int)
 @click.option("--dry-run", is_flag=True, default=False)
 @format_option
 def event_series_zoom_meetings(series_id, dry_run, fmt):
     """Provision Zoom meetings for eligible occurrences."""
     body = {"dry_run": True} if dry_run else {}
-    data = get_client().post(f"{API}/event-series/{series_id}/zoom-meetings", json_body=body)
-    emit(data, fmt)
+    emit(get_client().post(f"{API}/event-series/{series_id}/zoom-meetings", json_body=body), fmt)
 
 
-commands.append(event_series_zoom_meetings)
+groups = [event_series]

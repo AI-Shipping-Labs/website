@@ -1,121 +1,162 @@
-"""``asl sprints`` -- sprint list/detail, enrollments, accountability."""
+"""``asl sprints`` -- sprint list/detail, enrollments, accountability, plans."""
 
 from __future__ import annotations
 
 import click
 
-from asl_cli.commands._shared import emit, format_option, get_client
+from asl_cli.commands._shared import emit, format_option, get_client, json_option
 
 API = "/api"
 
-commands = []
+
+@click.group()
+def sprints():
+    """Manage sprints."""
 
 
-@click.command("sprints-list")
+@sprints.command("list")
 @format_option
 def sprints_list(fmt):
     """List sprints."""
-    data = get_client().get(f"{API}/sprints")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/sprints"), fmt)
 
 
-commands.append(sprints_list)
-
-
-@click.command("sprints-get")
+@sprints.command("get")
 @click.argument("slug")
 @format_option
 def sprints_get(slug, fmt):
     """Get a single sprint."""
-    data = get_client().get(f"{API}/sprints/{slug}")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/sprints/{slug}"), fmt)
 
 
-commands.append(sprints_get)
+# -- enrollments (nested) ----------------------------------------------------
+
+@click.group(name="enrollments")
+def sprints_enrollments():
+    """Manage sprint enrollments."""
 
 
-@click.command("sprints-enrollments")
+@sprints_enrollments.command("list")
 @click.argument("slug")
 @format_option
-def sprints_enrollments(slug, fmt):
+def sprints_enrollments_list(slug, fmt):
     """List enrollments for a sprint."""
-    data = get_client().get(f"{API}/sprints/{slug}/enrollments")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/sprints/{slug}/enrollments"), fmt)
 
 
-commands.append(sprints_enrollments)
-
-
-@click.command("sprints-enrollment-get")
+@sprints_enrollments.command("get")
 @click.argument("slug")
 @click.argument("email")
 @format_option
 def sprints_enrollment_get(slug, email, fmt):
     """Get a single enrollment."""
-    data = get_client().get(f"{API}/sprints/{slug}/enrollments/{email}")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/sprints/{slug}/enrollments/{email}"), fmt)
 
 
-commands.append(sprints_enrollment_get)
+sprints.add_command(sprints_enrollments)
 
 
-@click.command("sprints-accountability-partners")
+# -- accountability (nested) -------------------------------------------------
+
+@click.group(name="accountability")
+def sprints_accountability():
+    """Manage accountability partners."""
+
+
+@sprints_accountability.command("list")
 @click.argument("slug")
 @format_option
-def sprints_accountability_partners(slug, fmt):
+def sprints_accountability_list(slug, fmt):
     """List accountability partners for a sprint."""
-    data = get_client().get(f"{API}/sprints/{slug}/accountability-partners")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/sprints/{slug}/accountability-partners"), fmt)
 
 
-commands.append(sprints_accountability_partners)
-
-
-@click.command("sprints-accountability-randomize")
+@sprints_accountability.command("randomize")
 @click.argument("slug")
 @format_option
 def sprints_accountability_randomize(slug, fmt):
-    """Randomize accountability partners for a sprint."""
-    data = get_client().post(f"{API}/sprints/{slug}/accountability-partners/randomize")
-    emit(data, fmt)
+    """Randomize accountability partners."""
+    emit(get_client().post(f"{API}/sprints/{slug}/accountability-partners/randomize"), fmt)
 
 
-commands.append(sprints_accountability_randomize)
+sprints.add_command(sprints_accountability)
 
 
-@click.command("sprints-progress-evidence")
+@sprints.command("progress-evidence")
 @click.argument("slug")
 @format_option
 def sprints_progress_evidence(slug, fmt):
     """Get progress evidence for a sprint."""
-    data = get_client().get(f"{API}/sprints/{slug}/progress-evidence")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/sprints/{slug}/progress-evidence"), fmt)
 
 
-commands.append(sprints_progress_evidence)
+# -- plans (nested) ----------------------------------------------------------
+
+@click.group(name="plans")
+def sprints_plans():
+    """Manage sprint plans."""
 
 
-# -- course enrollments / certificates ---------------------------------------
+@sprints_plans.command("list")
+@click.argument("slug")
+@format_option
+def sprint_plans_list(slug, fmt):
+    """List plans for a sprint."""
+    emit(get_client().get(f"{API}/sprints/{slug}/plans"), fmt)
 
-@click.command("course-enrollments")
+
+@sprints_plans.command("bulk-import")
+@click.argument("slug")
+@json_option("data", required=True)
+@format_option
+def sprint_plans_bulk_import(slug, data, fmt):
+    """Bulk-import plans for a sprint."""
+    emit(get_client().post(f"{API}/sprints/{slug}/plans/bulk-import", json_body=data), fmt)
+
+
+@sprints_plans.command("send-ready-emails")
+@click.argument("slug")
+@format_option
+def sprint_plans_send_ready_emails(slug, fmt):
+    """Send ready-plan emails."""
+    emit(get_client().post(f"{API}/sprints/{slug}/plans/send-ready-emails"), fmt)
+
+
+@sprints_plans.command("partner-intro-emails")
+@click.argument("slug")
+@format_option
+def sprint_partner_intro_emails(slug, fmt):
+    """Send accountability partner intro emails."""
+    emit(get_client().post(f"{API}/sprints/{slug}/partner-intro-emails"), fmt)
+
+
+sprints.add_command(sprints_plans)
+
+
+# -- courses (nested) --------------------------------------------------------
+
+@click.group(name="courses")
+def sprints_courses():
+    """Course enrollments and certificates."""
+
+
+@sprints_courses.command("enrollments")
 @click.argument("slug")
 @format_option
 def course_enrollments(slug, fmt):
     """List enrollments for a course."""
-    data = get_client().get(f"{API}/courses/{slug}/enrollments")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/courses/{slug}/enrollments"), fmt)
 
 
-commands.append(course_enrollments)
-
-
-@click.command("course-certificates")
+@sprints_courses.command("certificates")
 @click.argument("slug")
 @format_option
 def course_certificates(slug, fmt):
     """List certificates for a course."""
-    data = get_client().get(f"{API}/courses/{slug}/certificates")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/courses/{slug}/certificates"), fmt)
 
 
-commands.append(course_certificates)
+sprints.add_command(sprints_courses)
+
+
+groups = [sprints]

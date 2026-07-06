@@ -4,95 +4,77 @@ from __future__ import annotations
 
 import click
 
-from asl_cli.commands._shared import emit, format_option, get_client, json_arg
+from asl_cli.commands._shared import emit, format_option, get_client, json_option
 
 API = "/api"
 
-commands = []
+
+@click.group()
+def triggers():
+    """Manage event triggers."""
 
 
-# -- subscriptions -----------------------------------------------------------
+@triggers.group("subscriptions")
+def trig_subscriptions():
+    """Trigger subscriptions."""
 
-@click.command("trigger-subscriptions")
+
+@trig_subscriptions.command("list")
 @format_option
 def trigger_subscriptions(fmt):
     """List trigger subscriptions."""
-    data = get_client().get(f"{API}/triggers/subscriptions")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/triggers/subscriptions"), fmt)
 
 
-commands.append(trigger_subscriptions)
-
-
-@click.command("trigger-subscription-get")
+@trig_subscriptions.command("get")
 @click.argument("subscription_id", type=int)
 @format_option
 def trigger_subscription_get(subscription_id, fmt):
     """Get a single trigger subscription."""
-    data = get_client().get(f"{API}/triggers/subscriptions/{subscription_id}")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/triggers/subscriptions/{subscription_id}"), fmt)
 
 
-commands.append(trigger_subscription_get)
-
-
-@click.command("trigger-subscription-update")
+@trig_subscriptions.command("update")
 @click.argument("subscription_id", type=int)
-@json_arg("data", required=True)
+@json_option("data", required=True)
 @format_option
 def trigger_subscription_update(subscription_id, data, fmt):
-    """Update a trigger subscription (JSON body)."""
-    result = get_client().patch(f"{API}/triggers/subscriptions/{subscription_id}", json_body=data)
-    emit(result, fmt)
+    """Update a trigger subscription."""
+    emit(get_client().patch(f"{API}/triggers/subscriptions/{subscription_id}", json_body=data), fmt)
 
 
-commands.append(trigger_subscription_update)
+@triggers.group("widgets")
+def trig_widgets():
+    """Trigger widgets."""
 
 
-# -- widgets -----------------------------------------------------------------
-
-@click.command("trigger-widgets")
+@trig_widgets.command("list")
 @format_option
 def trigger_widgets(fmt):
     """List trigger widgets."""
-    data = get_client().get(f"{API}/triggers/widgets")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/triggers/widgets"), fmt)
 
 
-commands.append(trigger_widgets)
-
-
-@click.command("trigger-widget-get")
+@trig_widgets.command("get")
 @click.argument("widget_id", type=int)
 @format_option
 def trigger_widget_get(widget_id, fmt):
     """Get a single trigger widget."""
-    data = get_client().get(f"{API}/triggers/widgets/{widget_id}")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/triggers/widgets/{widget_id}"), fmt)
 
 
-commands.append(trigger_widget_get)
-
-
-# -- emissions / deliveries --------------------------------------------------
-
-@click.command("trigger-emissions")
+@triggers.command("emissions")
 @format_option
 def trigger_emissions(fmt):
     """List trigger emissions."""
-    data = get_client().get(f"{API}/triggers/emissions")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/triggers/emissions"), fmt)
 
 
-commands.append(trigger_emissions)
-
-
-@click.command("trigger-deliveries")
+@triggers.command("deliveries")
 @format_option
 def trigger_deliveries(fmt):
     """List trigger deliveries."""
-    data = get_client().get(f"{API}/triggers/deliveries")
-    emit(data, fmt)
+    emit(get_client().get(f"{API}/triggers/deliveries"), fmt)
 
 
-commands.append(trigger_deliveries)
+groups = [triggers]

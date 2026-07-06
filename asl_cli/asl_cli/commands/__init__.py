@@ -1,8 +1,4 @@
-"""Command modules for the asl CLI.
-
-Each module exposes a ``groups`` list of top-level click.Group (or
-click.Command) objects. The CLI entry point iterates and registers them.
-"""
+"""Command modules for the asl CLI."""
 
 from asl_cli.commands import (
     campaigns,
@@ -10,7 +6,6 @@ from asl_cli.commands import (
     event_series,
     events,
     integrations,
-    member_api,
     misc,
     onboarding,
     plans,
@@ -18,6 +13,7 @@ from asl_cli.commands import (
     redirects,
     sprints,
     sync,
+    tier_overrides,
     triggers,
     users,
     utm_campaigns,
@@ -30,7 +26,6 @@ _all_modules = [
     event_series,
     events,
     integrations,
-    member_api,
     misc,
     onboarding,
     plans,
@@ -38,6 +33,7 @@ _all_modules = [
     redirects,
     sprints,
     sync,
+    tier_overrides,
     triggers,
     users,
     utm_campaigns,

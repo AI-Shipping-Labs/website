@@ -1,4 +1,4 @@
-"""``asl triggers`` -- event triggers: subscriptions, widgets, emissions."""
+"""``asl triggers`` -- event triggers."""
 
 from __future__ import annotations
 
@@ -14,51 +14,41 @@ def triggers():
     """Manage event triggers."""
 
 
-@triggers.group("subscriptions")
-def trig_subscriptions():
-    """Trigger subscriptions."""
-
-
-@trig_subscriptions.command("list")
+@triggers.command("subscriptions")
 @format_option
 def trigger_subscriptions(fmt):
     """List trigger subscriptions."""
     emit(get_client().get(f"{API}/triggers/subscriptions"), fmt)
 
 
-@trig_subscriptions.command("get")
+@triggers.command("subscription")
 @click.argument("subscription_id", type=int)
 @format_option
-def trigger_subscription_get(subscription_id, fmt):
+def trigger_subscription(subscription_id, fmt):
     """Get a single trigger subscription."""
     emit(get_client().get(f"{API}/triggers/subscriptions/{subscription_id}"), fmt)
 
 
-@trig_subscriptions.command("update")
+@triggers.command("update-subscription")
 @click.argument("subscription_id", type=int)
 @json_option("data", required=True)
 @format_option
-def trigger_subscription_update(subscription_id, data, fmt):
+def trigger_update_subscription(subscription_id, data, fmt):
     """Update a trigger subscription."""
     emit(get_client().patch(f"{API}/triggers/subscriptions/{subscription_id}", json_body=data), fmt)
 
 
-@triggers.group("widgets")
-def trig_widgets():
-    """Trigger widgets."""
-
-
-@trig_widgets.command("list")
+@triggers.command("widgets")
 @format_option
 def trigger_widgets(fmt):
     """List trigger widgets."""
     emit(get_client().get(f"{API}/triggers/widgets"), fmt)
 
 
-@trig_widgets.command("get")
+@triggers.command("widget")
 @click.argument("widget_id", type=int)
 @format_option
-def trigger_widget_get(widget_id, fmt):
+def trigger_widget(widget_id, fmt):
     """Get a single trigger widget."""
     emit(get_client().get(f"{API}/triggers/widgets/{widget_id}"), fmt)
 

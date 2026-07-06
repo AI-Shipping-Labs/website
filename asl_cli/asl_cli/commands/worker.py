@@ -14,14 +14,9 @@ def worker():
     """Observe background tasks."""
 
 
-@worker.group("tasks")
-def worker_tasks():
-    """List background tasks."""
-
-
-@worker_tasks.command("list")
+@worker.command("tasks")
 @format_option
-def worker_tasks_list(fmt):
+def worker_tasks(fmt):
     """List recent background tasks."""
     data = get_client().get(f"{API}/worker/tasks")
     if fmt == "table":
@@ -31,17 +26,17 @@ def worker_tasks_list(fmt):
         emit(data, fmt)
 
 
-@worker_tasks.command("failed")
+@worker.command("failed-tasks")
 @format_option
-def worker_tasks_failed(fmt):
+def worker_failed_tasks(fmt):
     """List failed background tasks."""
     emit(get_client().get(f"{API}/worker/tasks/failed"), fmt)
 
 
-@worker_tasks.command("get")
+@worker.command("task")
 @click.argument("task_id")
 @format_option
-def worker_task_get(task_id, fmt):
+def worker_task(task_id, fmt):
     """Get a single background task."""
     emit(get_client().get(f"{API}/worker/tasks/{task_id}"), fmt)
 

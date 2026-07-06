@@ -1,5 +1,4 @@
-"""Smaller surfaces: hosts, articles, tier-reconcile, ses-events,
-crm-export, cleanup-gates, openapi."""
+"""Smaller surfaces: hosts, articles, tier-reconcile, diagnostics, openapi."""
 
 from __future__ import annotations
 
@@ -112,12 +111,12 @@ groups.append(crm_export)
 
 @click.command("cleanup-gates")
 @format_option
-def cleanup_gates_diagnostics(fmt):
+def cleanup_gates(fmt):
     """Cleanup-gate diagnostics (blocked row counts)."""
     emit(get_client().get(f"{API}/diagnostics/cleanup-gates"), fmt)
 
 
-groups.append(cleanup_gates_diagnostics)
+groups.append(cleanup_gates)
 
 
 @click.command("openapi")

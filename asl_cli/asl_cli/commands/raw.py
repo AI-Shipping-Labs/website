@@ -20,7 +20,6 @@ def raw(method, path, data, params, raw_output, fmt):
     """Call any API path directly.
 
     PATH is the full path after the base URL, e.g. /api/events.
-    METHOD is GET/POST/PATCH/PUT/DELETE.
 
     Examples:
 
@@ -37,11 +36,7 @@ def raw(method, path, data, params, raw_output, fmt):
             query[p] = ""
 
     result = get_client().request(
-        method.upper(),
-        path,
-        params=query or None,
-        json_body=data,
-        raw=raw_output,
+        method.upper(), path, params=query or None, json_body=data, raw=raw_output,
     )
     if raw_output:
         click.echo(result)

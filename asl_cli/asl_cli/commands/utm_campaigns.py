@@ -56,7 +56,7 @@ def apply_utm_flags(func):
 @apply_utm_flags
 @format_option
 def utm_campaigns_create(fmt, **kwargs):
-    """Create a UTM campaign. Use --help to see all flags."""
+    """Create a UTM campaign."""
     body = collect_flags(click.get_current_context())
     emit(get_client().post(f"{API}/utm-campaigns", json_body=body), fmt)
 
@@ -66,19 +66,12 @@ def utm_campaigns_create(fmt, **kwargs):
 @apply_utm_flags
 @format_option
 def utm_campaigns_update(campaign_id, fmt, **kwargs):
-    """Update a UTM campaign. Use --help to see all flags."""
+    """Update a UTM campaign."""
     body = collect_flags(click.get_current_context())
     emit(get_client().patch(f"{API}/utm-campaigns/{campaign_id}", json_body=body), fmt)
 
 
-# -- links (nested) ----------------------------------------------------------
-
-@click.group(name="links")
-def utm_links():
-    """Manage tracked links."""
-
-
-@utm_links.command("list")
+@utm_campaigns.command("links")
 @click.argument("campaign_id", type=int)
 @format_option
 def utm_campaign_links(campaign_id, fmt):
@@ -86,16 +79,13 @@ def utm_campaign_links(campaign_id, fmt):
     emit(get_client().get(f"{API}/utm-campaigns/{campaign_id}/links"), fmt)
 
 
-@utm_links.command("get")
+@utm_campaigns.command("link")
 @click.argument("campaign_id", type=int)
 @click.argument("link_id", type=int)
 @format_option
-def utm_campaign_link_get(campaign_id, link_id, fmt):
+def utm_campaign_link(campaign_id, link_id, fmt):
     """Get a single tracked link."""
     emit(get_client().get(f"{API}/utm-campaigns/{campaign_id}/links/{link_id}"), fmt)
-
-
-utm_campaigns.add_command(utm_links)
 
 
 groups = [utm_campaigns]

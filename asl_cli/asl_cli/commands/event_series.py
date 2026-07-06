@@ -1,4 +1,4 @@
-"""``asl event-series`` -- series CRUD, occurrences, Zoom provisioning."""
+"""``asl event-series`` -- series CRUD, occurrences, Zoom."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import click
 
 from asl_cli.commands._shared import (
     TierLevel,
+    TIER_HELP,
     collect_flags,
     emit,
     format_option,
@@ -48,12 +49,10 @@ SERIES_FLAGS = [
     click.option("--slug", default=None),
     click.option("--description", default=None),
     click.option("--cadence", type=click.Choice(["weekly"]), default=None),
-    click.option("--day-of-week", type=click.IntRange(0, 6), default=None,
-                 help="0=Monday through 6=Sunday."),
+    click.option("--day-of-week", type=click.IntRange(0, 6), default=None, help="0=Mon..6=Sun."),
     click.option("--start-time", default=None, help="HH:MM or HH:MM:SS."),
     click.option("--timezone", default=None, help="IANA timezone."),
-    click.option("--required-level", type=TierLevel(), default=None,
-                 help="open, registered, basic, main, premium (or integer)."),
+    click.option("--required-level", type=TierLevel(), default=None, help=TIER_HELP),
     click.option("--is-active/--no-is-active", default=None),
 ]
 
@@ -83,31 +82,31 @@ def event_series_update(series_id, fmt, **kwargs):
     emit(get_client().patch(f"{API}/event-series/{series_id}", json_body=body), fmt)
 
 
-@event_series.command("occurrences-bulk")
+@event_series.command("add-occurrences")
 @click.argument("series_id", type=int)
 @json_option("data", required=True,
-             help_text='JSON with "occurrences" array, e.g. {\"occurrences\":[{\"start_datetime\":\"...\"}]}')
+             help_text='JSON {"occurrences":[{"start_datetime":"..."}]}')
 @format_option
-def event_series_occurrences_bulk(series_id, data, fmt):
+def event_series_add_occurrences(series_id, data, fmt):
     """Bulk-add occurrences (additive, never deletes)."""
     emit(get_client().post(f"{API}/event-series/{series_id}/occurrences/bulk", json_body=data), fmt)
 
 
-@event_series.command("occurrences-reconcile")
+@event_series.command("set-occurrences")
 @click.argument("series_id", type=int)
 @json_option("data", required=True,
              help_text="JSON with full desired occurrence set (exact-set, atomic).")
 @format_option
-def event_series_occurrences_reconcile(series_id, data, fmt):
+def event_series_set_occurrences(series_id, data, fmt):
     """Exact-set occurrences (creates missing, cancels extras)."""
     emit(get_client().put(f"{API}/event-series/{series_id}/occurrences", json_body=data), fmt)
 
 
-@event_series.command("zoom-meetings")
+@event_series.command("create-zoom")
 @click.argument("series_id", type=int)
 @click.option("--dry-run", is_flag=True, default=False)
 @format_option
-def event_series_zoom_meetings(series_id, dry_run, fmt):
+def event_series_create_zoom(series_id, dry_run, fmt):
     """Provision Zoom meetings for eligible occurrences."""
     body = {"dry_run": True} if dry_run else {}
     emit(get_client().post(f"{API}/event-series/{series_id}/zoom-meetings", json_body=body), fmt)

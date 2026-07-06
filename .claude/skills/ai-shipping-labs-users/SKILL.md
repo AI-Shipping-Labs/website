@@ -7,49 +7,42 @@ metadata:
 
 # Users + CRM
 
-Read and write the AI Shipping Labs user/CRM surface over the production HTTP API: user state, tags, member notes, aliases, account merges, deliverability, and bulk contacts.
-
-## Auth
-
-All calls go through the `asl` CLI, which resolves the token from `.env` automatically. See `ai-shipping-labs-prod-api` for full auth and the safe-write protocol (GET-before, write, GET-after).
+Read and write the AI Shipping Labs user/CRM surface. See `ai-shipping-labs-prod-api` for auth and the safe-write protocol.
 
 ## Discovering commands
 
 ```bash
-uv run asl users --help                # see all subcommands
-uv run asl users notes add --help      # see flags for any specific command
+uv run asl users --help            # all subcommands
+uv run asl users tag --help        # flags for a specific command
 ```
 
 ## User lookup
 
 - `asl users list -q <substring>` — search over email, name, Stripe id, Slack id, tags.
-- `asl users get <email>` — full state: tier, tier_override, stripe/bounce/slack state, tags, aliases, etc.
+- `asl users get <email>` — full state: tier, override, stripe/bounce/slack state, tags, aliases.
+- `asl users patch <email> --unsubscribed` / `--email-verified` — safe writes (email_verified can only be set true).
 
-A `404` means there is no platform account for that email — surface it, do not invent one.
+A `404` means there is no platform account for that email.
 
-- `asl users patch <email> --unsubscribed` / `--email-verified` — safe writes (email_verified can only be set to true).
+## Tags
 
-## Tags (`asl users tags --help`)
+- `asl users tag <email> <tag>` — add a tag.
+- `asl users untag <email> <tag>` — remove a tag.
 
-- `asl users tags add <email> <tag>`
-- `asl users tags remove <email> <tag>`
+Cohort convention: `llm-zoomcamp-2026` for committed members, `llm-zoomcamp-2026-interested` for tentative.
 
-Cohort-tag conventions: use a tag like `llm-zoomcamp-2026` for committed members, and a `-interested` variant (e.g. `llm-zoomcamp-2026-interested`) for tentative people, so the committed group filters cleanly.
+## Notes
 
-## Notes (`asl users notes --help`)
+- `asl users notes <email>` — list member notes (returns `{"interview_notes":[...]}`).
+- `asl users add-note <email> --body "..." [--kind ...] [--visibility internal|external] [--plan-id N]`
 
-- `asl users notes list <email>` — returns `{"interview_notes":[...]}`, NOT `notes` / `results`.
-- `asl users notes add <email> --body "..." [--kind <kind>] [--visibility internal|external] [--plan-id N]`
-- `kind` enum: `action_item`, `background`, `general`, `intake`, `meeting`, `persona`, `recommendation`, `source`.
-- Use `visibility internal` for CRM/operator notes. Always cite the source and quote the person's own words in `body`.
+## Aliases and merge
 
-## Aliases and merge (`asl users aliases --help`, `asl users merge --help`)
-
-- `asl users aliases add <email> --alias-email <alias> [--note "..."]` — an alias routes future mail / Stripe events to the canonical user.
-- `asl users aliases remove <email> <alias>`
+- `asl users add-alias <email> --alias-email <alias> [--note "..."]`
+- `asl users remove-alias <email> <alias>`
 - `asl users merge --canonical-email <email> --merge-email <email> [--dry-run] [--force]`
 
-Merging is hard to reverse. Always `--dry-run` first and confirm identity before a real merge. Confirm both rows are the same person (same Slack id, Stripe id, or name) before folding.
+Always `--dry-run` a merge first and confirm identity (same Slack/Stripe id or name).
 
 ## Deliverability
 
@@ -57,14 +50,13 @@ Merging is hard to reverse. Always `--dry-run` first and confirm identity before
 - `asl users email-log <email> [--limit N] [--kind ...]`
 - `asl users ses-events <email> [--limit N] [--type ...]`
 
-## Contacts (bulk)
+## Contacts
 
-- `asl contacts import --data '{"contacts":[...], "default_tag":"...", "default_tier":"..."}'` — bulk upsert. Watch for duplicates.
+- `asl contacts import --data '{"contacts":[...]}'` — bulk upsert.
 - `asl contacts export [--format json|csv]`
-- `asl contacts set-tags <email> --tags tag1,tag2` — replaces the tag set (not additive).
+- `asl contacts set-tags <email> --tags tag1,tag2` — replaces (not additive).
 
 ## Recording people from Slack
 
-- The end-to-end thread->CRM flow (read thread, classify intent, write notes + tags): `slack-thread-to-crm`.
-- Resolving Slack handles / display names to emails: `ai-shipping-labs-slack`.
-- This skill is the CRM write/read surface those recipes call.
+- End-to-end flow: `slack-thread-to-crm`.
+- Resolving Slack handles: `ai-shipping-labs-slack`.

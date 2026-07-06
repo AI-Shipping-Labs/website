@@ -1,4 +1,4 @@
-"""``asl sync`` -- content sync sources and triggers."""
+"""``asl sync`` -- content sync sources, triggers, Slack plan-sprints ingest."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ API = "/api"
 
 @click.group()
 def sync():
-    """Manage content sync."""
+    """Manage content sync and ingestion."""
 
 
 @sync.command("sources")
@@ -27,6 +27,20 @@ def sync_sources(fmt):
 def sync_trigger(source_id, fmt):
     """Trigger a content sync for one source."""
     emit(get_client().post(f"{API}/sync/sources/{source_id}/trigger"), fmt)
+
+
+@sync.command("plan-sprints")
+@click.option("--since", default=None, help="ISO timestamp for retroactive backfill.")
+@click.option("--dry-run", is_flag=True, default=False)
+@format_option
+def sync_plan_sprints(since, dry_run, fmt):
+    """Trigger Slack plan-sprints capture/parse/apply."""
+    body: dict = {}
+    if since:
+        body["since"] = since
+    if dry_run:
+        body["dry_run"] = True
+    emit(get_client().post(f"{API}/integrations/slack/plan-sprints/ingest", json_body=body), fmt)
 
 
 groups = [sync]

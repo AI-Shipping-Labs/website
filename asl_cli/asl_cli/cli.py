@@ -1,8 +1,4 @@
-"""CLI entry point.
-
-Defines the root ``asl`` command group and registers all subgroups
-from the commands package.
-"""
+"""CLI entry point."""
 
 from __future__ import annotations
 
@@ -24,8 +20,7 @@ class AslGroup(click.Group):
         formatter.write_text(
             "Command-line client for the production API "
             "(https://aishippinglabs.com/api). "
-            "Run 'asl <group> --help' to see subcommands, "
-            "and 'asl <group> <command> --help' for flags."
+            "Run 'asl <group> --help' to see commands and flags."
         )
         super().format_help(ctx, formatter)
 

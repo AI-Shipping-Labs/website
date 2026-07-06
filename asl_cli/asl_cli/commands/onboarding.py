@@ -38,7 +38,7 @@ def onboarding_responses(fmt):
 @onboarding.command("response")
 @click.argument("email")
 @format_option
-def onboarding_response_get(email, fmt):
+def onboarding_response(email, fmt):
     """Get onboarding responses for a user."""
     emit(get_client().get(f"{API}/onboarding/responses/{email}"), fmt)
 

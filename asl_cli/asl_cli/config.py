@@ -1,13 +1,9 @@
-"""Configuration: token + base-URL resolution.
+"""Configuration: token + base-URL resolution (staff/admin scope only).
 
 Resolution order for the staff API token:
   1. ``ASL_API_TOKEN`` environment variable.
-  2. ``API_SHIPPING_LABS_API_TOKEN`` key in the repo ``.env`` file
-     (searched upward from the cwd).
-  3. Interactive prompt (only in a TTY).
-
-The member API key resolves analogously from ``ASL_MEMBER_API_KEY``
-then ``AI_SHIPPING_LABS_MEMBER_API_KEY``.
+  2. ``API_SHIPPING_LABS_API_TOKEN`` key in the repo ``.env`` file.
+  3. Interactive prompt (TTY only).
 
 Base URL: ``ASL_BASE_URL`` env var, default ``https://aishippinglabs.com``.
 """
@@ -21,7 +17,6 @@ from pathlib import Path
 DEFAULT_BASE_URL = "https://aishippinglabs.com"
 
 _STAFF_ENV_KEYS = ("ASL_API_TOKEN", "API_SHIPPING_LABS_API_TOKEN")
-_MEMBER_ENV_KEYS = ("ASL_MEMBER_API_KEY", "AI_SHIPPING_LABS_MEMBER_API_KEY")
 
 
 def _find_env_file() -> Path | None:
@@ -68,14 +63,6 @@ def resolve_staff_token() -> str:
     return _prompt("Staff API token")
 
 
-def resolve_member_token() -> str:
-    """Resolve the member API key or prompt for it."""
-    token = _read_env_value(_MEMBER_ENV_KEYS)
-    if token:
-        return token
-    return _prompt("Member API key")
-
-
 def resolve_base_url() -> str:
     """Return the configured base URL (no trailing slash)."""
     return os.environ.get("ASL_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
@@ -85,7 +72,7 @@ def _prompt(label: str) -> str:
     if not sys.stdin.isatty():
         raise RuntimeError(
             f"{label} not found in env or .env, and stdin is not a TTY. "
-            "Set ASL_API_TOKEN (or ASL_MEMBER_API_KEY) in your environment."
+            "Set ASL_API_TOKEN in your environment."
         )
     import getpass
 

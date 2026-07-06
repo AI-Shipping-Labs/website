@@ -14,8 +14,6 @@ def users():
     """Manage users and CRM."""
 
 
-# -- list / get / patch ------------------------------------------------------
-
 @users.command("list")
 @click.option("-q", "--query", default="", help="Substring search.")
 @click.option("--limit", type=int, default=50)
@@ -44,8 +42,7 @@ def users_get(email, fmt):
 @users.command("patch")
 @click.argument("email")
 @click.option("--unsubscribed/--no-unsubscribed", default=None)
-@click.option("--email-verified/--no-email-verified", default=None,
-              help="Can only be set to true (verify).")
+@click.option("--email-verified/--no-email-verified", default=None, help="Can only set to true.")
 @format_option
 def users_patch(email, unsubscribed, email_verified, fmt):
     """Patch a user (unsubscribed / email_verified)."""
@@ -57,82 +54,61 @@ def users_patch(email, unsubscribed, email_verified, fmt):
     emit(get_client().patch(f"{API}/users/{email}", json_body=body), fmt)
 
 
-# -- tags --------------------------------------------------------------------
+# -- tags (flat verbs) ------------------------------------------------------
 
-@click.group(name="tags")
-def users_tags():
-    """Manage user tags."""
-
-
-@users_tags.command("add")
+@users.command("tag")
 @click.argument("email")
 @click.argument("tag")
 @format_option
-def users_tags_add(email, tag, fmt):
-    """Add a tag."""
+def users_tag(email, tag, fmt):
+    """Add a tag to a user."""
     emit(get_client().post(f"{API}/users/{email}/tags", json_body={"tag": tag}), fmt)
 
 
-@users_tags.command("remove")
+@users.command("untag")
 @click.argument("email")
 @click.argument("tag")
 @format_option
-def users_tags_remove(email, tag, fmt):
-    """Remove a tag."""
+def users_untag(email, tag, fmt):
+    """Remove a tag from a user."""
     emit(get_client().delete(f"{API}/users/{email}/tags/{tag}"), fmt)
 
 
-users.add_command(users_tags)
+# -- aliases (flat verbs) ---------------------------------------------------
 
-
-# -- aliases -----------------------------------------------------------------
-
-@click.group(name="aliases")
-def users_aliases():
-    """Manage email aliases."""
-
-
-@users_aliases.command("add")
+@users.command("add-alias")
 @click.argument("email")
 @click.option("--alias-email", required=True)
 @click.option("--note", default=None)
 @format_option
-def users_aliases_add(email, alias_email, note, fmt):
-    """Add an email alias."""
+def users_add_alias(email, alias_email, note, fmt):
+    """Add an email alias to a user."""
     body = {"alias_email": alias_email}
     if note:
         body["note"] = note
     emit(get_client().post(f"{API}/users/{email}/aliases", json_body=body), fmt)
 
 
-@users_aliases.command("remove")
+@users.command("remove-alias")
 @click.argument("email")
 @click.argument("alias_email")
 @format_option
-def users_aliases_remove(email, alias_email, fmt):
+def users_remove_alias(email, alias_email, fmt):
     """Remove an email alias."""
     emit(get_client().delete(f"{API}/users/{email}/aliases/{alias_email}"), fmt)
 
 
-users.add_command(users_aliases)
+# -- notes (flat verbs) -----------------------------------------------------
 
-
-# -- notes -------------------------------------------------------------------
-
-@click.group(name="notes")
-def users_notes():
-    """Manage member notes."""
-
-
-@users_notes.command("list")
+@users.command("notes")
 @click.argument("email")
 @format_option
-def users_notes_list(email, fmt):
+def users_notes(email, fmt):
     """List member notes for a user."""
     emit(get_client().get(f"{API}/users/{email}/notes"), fmt)
 
 
-@users_notes.command("add")
+@users.command("add-note")
 @click.argument("email")
 @click.option("--body", required=True, help="Note body text.")
 @click.option("--kind", type=click.Choice([
@@ -142,7 +118,7 @@ def users_notes_list(email, fmt):
 @click.option("--visibility", type=click.Choice(["internal", "external"]), default="internal")
 @click.option("--plan-id", type=int, default=None)
 @format_option
-def users_notes_add(email, body, kind, visibility, plan_id, fmt):
+def users_add_note(email, body, kind, visibility, plan_id, fmt):
     """Add a member note."""
     payload = {"user_email": email, "body": body, "kind": kind, "visibility": visibility}
     if plan_id is not None:
@@ -150,10 +126,7 @@ def users_notes_add(email, body, kind, visibility, plan_id, fmt):
     emit(get_client().post(f"{API}/member-notes", json_body=payload), fmt)
 
 
-users.add_command(users_notes)
-
-
-# -- merge -------------------------------------------------------------------
+# -- merge ------------------------------------------------------------------
 
 @users.command("merge")
 @click.option("--canonical-email", required=True, help="Account to keep.")
@@ -163,16 +136,15 @@ users.add_command(users_notes)
 @format_option
 def users_merge(canonical_email, merge_email, dry_run, force, fmt):
     """Merge a duplicate account into the canonical one."""
-    body = {
+    emit(get_client().post(f"{API}/users/merge", json_body={
         "canonical_email": canonical_email,
         "merge_email": merge_email,
         "dry_run": dry_run,
         "force": force,
-    }
-    emit(get_client().post(f"{API}/users/merge", json_body=body), fmt)
+    }), fmt)
 
 
-# -- deliverability ----------------------------------------------------------
+# -- deliverability ---------------------------------------------------------
 
 @users.command("mark-bounced")
 @click.argument("email")
@@ -215,8 +187,6 @@ def users_ses_events(email, limit, event_type, fmt):
         params["type"] = event_type
     emit(get_client().get(f"{API}/users/{email}/ses-events", params=params), fmt)
 
-
-# -- activity / crm ----------------------------------------------------------
 
 @users.command("activity")
 @click.argument("email")

@@ -6,8 +6,8 @@ import click
 
 from asl_cli.commands._shared import (
     TierLevel,
+    TIER_HELP,
     collect_flags,
-    comma_list,
     emit,
     format_option,
     get_client,
@@ -22,7 +22,7 @@ def campaigns():
 
 
 @campaigns.command("list")
-@click.option("--status", default=None, help="Filter by status.")
+@click.option("--status", default=None)
 @click.option("--archived", type=click.Choice(["true", "false"]), default=None)
 @format_option
 def campaigns_list(status, archived, fmt):
@@ -46,13 +46,12 @@ def campaigns_get(campaign_id, fmt):
 CAMPAIGN_FLAGS = [
     click.option("--subject", default=None),
     click.option("--body", default=None),
-    click.option("--target-min-level", type=TierLevel(), default=None,
-                 help="open, basic, main, premium (or integer)."),
+    click.option("--target-min-level", type=TierLevel(), default=None, help=TIER_HELP),
     click.option("--target-tags-any", default=None, help="Comma-separated tags."),
     click.option("--target-tags-none", default=None, help="Comma-separated tags."),
     click.option("--slack-filter", default=None),
     click.option("--audience-verification", default=None),
-    click.option("--target-event", type=int, default=None, help="Event id or omit."),
+    click.option("--target-event", type=int, default=None, help="Event id."),
     click.option("--is-archived/--no-is-archived", default=None),
 ]
 
@@ -67,9 +66,8 @@ def apply_campaign_flags(func):
 @apply_campaign_flags
 @format_option
 def campaigns_create(fmt, **kwargs):
-    """Create a campaign draft. Use --help to see all flags."""
+    """Create a campaign draft."""
     body = collect_flags(click.get_current_context())
-    # Split comma-separated tag lists.
     for key in ("target_tags_any", "target_tags_none"):
         if key in body and isinstance(body[key], str):
             body[key] = [t.strip() for t in body[key].split(",") if t.strip()]
@@ -81,7 +79,7 @@ def campaigns_create(fmt, **kwargs):
 @apply_campaign_flags
 @format_option
 def campaigns_update(campaign_id, fmt, **kwargs):
-    """Update a campaign. Use --help to see all flags."""
+    """Update a campaign."""
     body = collect_flags(click.get_current_context())
     for key in ("target_tags_any", "target_tags_none"):
         if key in body and isinstance(body[key], str):

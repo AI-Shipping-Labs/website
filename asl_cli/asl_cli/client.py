@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 
-from asl_cli.config import resolve_base_url, resolve_member_token, resolve_staff_token
+from asl_cli.config import resolve_base_url, resolve_staff_token
 
 
 @dataclass
@@ -32,28 +32,17 @@ class APIError(Exception):
 
 
 class Client:
-    """Authenticated HTTP client.
+    """Authenticated staff HTTP client targeting ``/api``."""
 
-    ``scope`` is ``"staff"`` or ``"member"`` — determines which token
-    resolution path is used. The staff scope targets ``/api``, the
-    member scope targets ``/member-api/v1``.
-    """
-
-    def __init__(self, scope: str = "staff", *, base_url: str | None = None):
+    def __init__(self, *, base_url: str | None = None):
         self.base_url = base_url or resolve_base_url()
-        if scope == "member":
-            self._token = resolve_member_token()
-        else:
-            self._token = resolve_staff_token()
-        self._scope = scope
+        self._token = resolve_staff_token()
         self._http = httpx.Client(
             base_url=self.base_url,
             headers={"Authorization": f"Token {self._token}"},
             timeout=30.0,
             follow_redirects=True,
         )
-
-    # -- low-level request --------------------------------------------------
 
     def request(
         self,
@@ -64,12 +53,7 @@ class Client:
         json_body: Any | None = None,
         raw: bool = False,
     ) -> Any:
-        """Send a request and return decoded JSON (or raw text if ``raw``).
-
-        Raises ``APIError`` on non-2xx responses.
-        """
-        # Normalize: paths for the staff API are given as /api/...;
-        # for the member API the caller passes /member-api/v1/...
+        """Send a request and return decoded JSON (or raw text if ``raw``)."""
         # No trailing slashes — the site middleware 301s them.
         if path != "/" and path.endswith("/"):
             path = path.rstrip("/")
@@ -118,10 +102,5 @@ class Client:
 
 
 def staff_client() -> Client:
-    """Convenience factory for the staff/admin API scope."""
-    return Client(scope="staff")
-
-
-def member_client() -> Client:
-    """Convenience factory for the member API scope."""
-    return Client(scope="member")
+    """Convenience factory for the staff API client."""
+    return Client()

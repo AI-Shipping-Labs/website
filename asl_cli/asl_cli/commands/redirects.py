@@ -47,7 +47,7 @@ def apply_redirect_flags(func):
 @apply_redirect_flags
 @format_option
 def redirects_create(fmt, **kwargs):
-    """Create a redirect. Use --help to see all flags."""
+    """Create a redirect."""
     body = collect_flags(click.get_current_context())
     if "redirect_type" in body:
         body["redirect_type"] = int(body["redirect_type"])
@@ -59,7 +59,7 @@ def redirects_create(fmt, **kwargs):
 @apply_redirect_flags
 @format_option
 def redirects_update(redirect_id, fmt, **kwargs):
-    """Update a redirect. Use --help to see all flags."""
+    """Update a redirect."""
     body = collect_flags(click.get_current_context())
     if "redirect_type" in body:
         body["redirect_type"] = int(body["redirect_type"])
@@ -67,7 +67,7 @@ def redirects_update(redirect_id, fmt, **kwargs):
 
 
 @redirects.command("bulk-upsert")
-@json_option("data", required=True, help_text='JSON with "redirects" array.')
+@json_option("data", required=True, help_text='JSON {"redirects":[...]}')
 @format_option
 def redirects_bulk_upsert(data, fmt):
     """Bulk upsert redirects."""

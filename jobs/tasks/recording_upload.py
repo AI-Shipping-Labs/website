@@ -11,6 +11,7 @@ import logging
 
 import requests
 
+from integrations.config import recording_auto_publish_on_s3_upload_enabled
 from jobs.tasks.recordings_s3 import (
     build_recording_s3_key,
     get_recordings_s3_config,
@@ -68,9 +69,20 @@ def upload_recording_to_s3(event_id, download_url):
 
     s3_url = upload_recording_mp4(file_data, s3_config, s3_key)
 
-    # Store S3 URL on event
+    # Store S3 URL on event. Issue #1134 (Phase B): when auto-publish is
+    # enabled (default on), flip the event live in the same save so entitled
+    # members can watch immediately and the host "available to watch"
+    # notification is truthful. The model's save() syncs published_at.
     event.recording_s3_url = s3_url
-    event.save(update_fields=['recording_s3_url', 'updated_at'])
+    update_fields = ['recording_s3_url', 'updated_at']
+    if recording_auto_publish_on_s3_upload_enabled() and not event.published:
+        event.published = True
+        update_fields += ['published', 'published_at']
+        logger.info(
+            'Auto-publishing event "%s" after successful S3 recording upload',
+            event.title,
+        )
+    event.save(update_fields=update_fields)
 
     logger.info(
         'Successfully uploaded recording for event "%s" to S3: %s',

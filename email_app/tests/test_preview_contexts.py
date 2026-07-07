@@ -105,3 +105,37 @@ class CalendarInviteWeekdayPreviewContextTest(TestCase):
         self.assertTrue(ctx['changed_occurrence'])
         self.assertIn('Thursday, ', ctx['occurrences_list'])
         self.assertIn('(was ', ctx['occurrences_list'])
+
+
+class RecordingReadyPreviewContextTest(TestCase):
+    """Issue #1134 (Phase B): the recording-ready preview renders the new
+    "available to watch" watch-link variant without error."""
+
+    def test_preview_context_has_watch_link_keys(self):
+        ctx = PREVIEW_CONTEXTS['event_recording_ready']
+        self.assertTrue(ctx['is_available_to_watch'])
+        self.assertIn('/workshops/', ctx['watch_url'])
+        self.assertIn('/video', ctx['watch_url'])
+        self.assertNotIn('amazonaws', ctx['watch_url'])
+
+    def test_preview_renders_watch_link_as_real_anchor(self):
+        from types import SimpleNamespace
+
+        from email_app.services.email_service import EmailService
+
+        user = SimpleNamespace(
+            email='host@example.com',
+            first_name='Ada',
+            last_name='',
+            email_verified=True,
+        )
+        ctx = PREVIEW_CONTEXTS['event_recording_ready']
+        subject, body_html = EmailService()._render_template(
+            'event_recording_ready', user, ctx,
+        )
+
+        self.assertIn('available to watch', subject.lower())
+        self.assertIn(f'href="{ctx["watch_url"]}"', body_html)
+        self.assertIn('available to watch', body_html.lower())
+        # No raw markdown link syntax may leak into the delivered HTML.
+        self.assertNotIn('](', body_html)

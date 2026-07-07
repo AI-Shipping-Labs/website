@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q
 from django.template.loader import render_to_string
@@ -218,6 +219,26 @@ def _render_user(recipient):
     )
 
 
+def _resolve_watch_url(event):
+    """Return the site-absolute URL of a surface that actually plays the recording.
+
+    Issue #1134 (Phase B), per the PM watch-link caveat: the "available to
+    watch" link must point at a page that renders the in-app player. For a
+    workshop-kind event that is the linked, published workshop's ``/video``
+    page — NOT the announcement-only event-detail page (``event.get_absolute_url``)
+    and never the raw/presigned S3 URL. Returns ``''`` when there is no
+    watchable surface (no linked workshop, or the workshop is unpublished), so
+    the caller falls back to the "ready for review/publishing" framing.
+    """
+    try:
+        workshop = event.workshop
+    except ObjectDoesNotExist:
+        return ''
+    if workshop is None or getattr(workshop, 'status', '') != 'published':
+        return ''
+    return f'{site_base_url()}{workshop.get_absolute_url()}/video'
+
+
 def _build_context(event):
     studio_event_url = f'{site_base_url()}{event.get_studio_edit_url()}'
     event_datetime = format_event_time_range(
@@ -225,7 +246,18 @@ def _build_context(event):
         event.end_datetime,
         event.timezone or 'Europe/Berlin',
     )
-    if event.published:
+    # Issue #1134 (Phase B): the recording is "available to watch" only when
+    # the event is published AND there is a surface that renders the player.
+    # Otherwise keep the existing review-first framing + Studio link.
+    watch_url = _resolve_watch_url(event)
+    is_available_to_watch = bool(event.published and watch_url)
+    if is_available_to_watch:
+        publish_state = 'Published and available to watch'
+        publish_copy = (
+            'The recording is now available to watch. Members with access can '
+            'watch it right away on the workshop video page.'
+        )
+    elif event.published:
         publish_state = 'Uploaded and currently published'
         publish_copy = (
             'The event is currently published. Review the uploaded recording '
@@ -250,6 +282,8 @@ def _build_context(event):
         'event_datetime': event_datetime,
         'publish_state': publish_state,
         'publish_copy': publish_copy,
+        'is_available_to_watch': is_available_to_watch,
+        'watch_url': watch_url,
         'studio_event_url': studio_event_url,
         'zoom_recording_url': (event.recording_url or '').strip(),
         'campaign_prefill_url': campaign_prefill_url,

@@ -233,6 +233,25 @@ INTEGRATION_GROUPS = [
         'keys': [
             {'key': 'AWS_S3_RECORDINGS_BUCKET', 'is_secret': False, 'description': 'S3 bucket where event recordings are uploaded after processing.', 'docs_url': '_docs/integrations/s3_recordings.md#aws_s3_recordings_bucket'},
             {'key': 'AWS_S3_RECORDINGS_REGION', 'is_secret': False, 'description': 'AWS region of the recordings bucket (e.g. eu-west-1).', 'docs_url': '_docs/integrations/s3_recordings.md#aws_s3_recordings_region'},
+            {
+                'key': 'RECORDING_PRESIGNED_URL_TTL_SECONDS',
+                'is_secret': False,
+                'optional': True,
+                'default': '900',
+                'description': (
+                    'Lifetime (in seconds) of the short-lived presigned S3 '
+                    'GetObject URL the access-controlled recording serving '
+                    'endpoint redirects to (issue #1134). Default 900 (15 '
+                    'minutes). The presigned URL is never rendered into HTML — '
+                    'the in-page video player points at the authenticated '
+                    'serving endpoint, which re-checks access and mints a '
+                    'fresh presigned URL on every request. Keep this long '
+                    'enough that a member can watch/seek without the URL '
+                    'expiring mid-playback, but short enough that a leaked URL '
+                    'is quickly useless.'
+                ),
+                'docs_url': '_docs/integrations/s3_recordings.md#recording_presigned_url_ttl_seconds',
+            },
         ],
     },
     {

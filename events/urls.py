@@ -19,6 +19,7 @@ from events.views.pages import (
     events_calendar_feed,
     events_list,
 )
+from events.views.recording import event_recording_stream
 
 urlpatterns = [
     path('events', events_list, name='events_list'),
@@ -97,6 +98,16 @@ urlpatterns = [
         'events/<int:event_id>/<slug:slug>/feedback',
         event_feedback_submit,
         name='event_feedback_submit',
+    ),
+    # Issue #1134: access-controlled recording serving endpoint. The URL
+    # MUST end in ``.mp4`` so ``detect_video_source`` classifies the
+    # serving-endpoint URL as ``self_hosted`` and the player renders a
+    # ``<video>``. The view enforces ``can_access`` then 302-redirects to a
+    # short-lived presigned S3 URL — the presigned URL never appears in HTML.
+    path(
+        'events/<int:event_id>/<slug:slug>/recording.mp4',
+        event_recording_stream,
+        name='event_recording_stream',
     ),
     # Issue #673: canonical event detail. ``event_id`` is the lookup key;
     # ``slug`` is purely cosmetic. The view verifies the slug matches the

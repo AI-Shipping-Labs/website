@@ -1,5 +1,16 @@
 {% load video_tags %}
-{% if event.recording_url %}
+{% comment %}
+  Issue #1134: prefer the access-controlled S3 serving endpoint. The view
+  sets recording_playback_url (reverse of event_recording_stream, ending in
+  .mp4) only when recording_s3_url is set AND the viewer has access, so the
+  video_player tag renders a self-hosted <video>. The raw S3 URL and the
+  presigned URL are never emitted here. Falls back to the legacy YouTube/Loom
+  (recording_url) and Google Drive (recording_embed_url) branches so existing
+  events keep playing.
+{% endcomment %}
+{% if recording_playback_url %}
+  {% video_player video_url=recording_playback_url timestamps=recording_timestamps|default:event.timestamps start_seconds=embed_start_seconds %}
+{% elif event.recording_url %}
   {% video_player video_url=event.recording_url timestamps=recording_timestamps|default:event.timestamps start_seconds=embed_start_seconds %}
 {% elif event.recording_embed_url %}
 <div class="aspect-video rounded-lg overflow-hidden border border-border bg-black">

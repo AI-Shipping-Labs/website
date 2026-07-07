@@ -8,6 +8,7 @@ from events.models import Event
 from integrations.config import clear_config_cache
 from jobs.tasks.recordings_s3 import (
     RecordingsS3Config,
+    build_recording_presigned_url,
     build_recording_s3_key,
     build_recording_s3_url,
     extract_s3_key,
@@ -73,6 +74,38 @@ class RecordingsS3HelperTest(TestCase):
             mock_s3.upload_fileobj.call_args.kwargs['ExtraArgs']['ContentType'],
             'video/mp4',
         )
+
+    @patch('jobs.tasks.recordings_s3.get_recordings_s3_client')
+    def test_presigned_url_targets_correct_key_and_ttl(self, mock_get_client):
+        config = RecordingsS3Config(
+            bucket='helper-bucket',
+            region='eu-central-1',
+            access_key_id='key',
+            secret_access_key='secret',
+        )
+        mock_s3 = MagicMock()
+        mock_s3.generate_presigned_url.return_value = (
+            'https://helper-bucket.s3.eu-central-1.amazonaws.com/'
+            'recordings/2025/some-workshop.mp4?X-Amz-Signature=abc'
+        )
+        mock_get_client.return_value = mock_s3
+
+        url = build_recording_presigned_url(
+            'https://helper-bucket.s3.eu-central-1.amazonaws.com/'
+            'recordings/2025/some-workshop.mp4',
+            900,
+            config=config,
+        )
+
+        mock_s3.generate_presigned_url.assert_called_once()
+        args, kwargs = mock_s3.generate_presigned_url.call_args
+        self.assertEqual(args[0], 'get_object')
+        self.assertEqual(kwargs['Params']['Bucket'], 'helper-bucket')
+        self.assertEqual(
+            kwargs['Params']['Key'], 'recordings/2025/some-workshop.mp4',
+        )
+        self.assertEqual(kwargs['ExpiresIn'], 900)
+        self.assertIn('X-Amz-Signature', url)
 
     def test_s3_key_extraction_keeps_standard_and_fallback_behavior(self):
         standard = extract_s3_key(

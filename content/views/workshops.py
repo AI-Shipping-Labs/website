@@ -28,6 +28,7 @@ from urllib.parse import urlencode
 
 from django.http import Http404, HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
@@ -464,8 +465,25 @@ def workshop_video(request, slug):
     video_id = None
     video_source_type = None
     recording_embed_url_with_start = ''
+    # Issue #1134: when the event has an S3 recording and this viewer has
+    # access, point the player at the access-controlled serving endpoint
+    # (a stable ``.mp4`` URL) instead of the raw/presigned S3 URL. The
+    # partial prefers this over the legacy YouTube/Drive branches.
+    recording_playback_url = ''
 
     if context['can_access_recording'] and event:
+        if event.recording_s3_url:
+            # Build an ABSOLUTE serving-endpoint URL: ``detect_video_source``
+            # only classifies a URL as ``self_hosted`` when it carries an
+            # http(s):// scheme (SELF_HOSTED_PATTERN). The host is our own
+            # site, never S3 — the presigned URL stays out of the HTML.
+            recording_playback_url = request.build_absolute_uri(
+                reverse(
+                    'event_recording_stream',
+                    kwargs={'event_id': event.id, 'slug': event.slug},
+                )
+            )
+
         raw_t = request.GET.get('t', '')
         if raw_t:
             try:
@@ -498,6 +516,7 @@ def workshop_video(request, slug):
 
     context.update({
         'embed_start_seconds': embed_start_seconds,
+        'recording_playback_url': recording_playback_url,
         'recording_timestamps': timestamps_with_pages,
         'timestamps_with_pages': timestamps_with_pages,
         'video_id': video_id,

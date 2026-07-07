@@ -936,7 +936,7 @@ class TestWorkshopMaterialsUnification:
         materials as structured external resource links, not playback UI."""
         from django.utils import timezone
 
-        from events.models import Event
+        from events.models import Event, EventFeedback
 
         _clear_workshops()
         event = Event.objects.create(
@@ -960,6 +960,14 @@ class TestWorkshopMaterialsUnification:
             core_tools=['Hidden Tool'],
             learning_objectives=['Hidden objective'],
             outcome='Hidden outcome',
+        )
+        # Issue #1137: the feedback card only renders when it has content.
+        # Give the event a rating so the (anonymous) viewer sees the section
+        # and we can assert resources render before it.
+        EventFeedback.objects.create(
+            event=event,
+            user=_create_user('rater-resources@test.com', tier_slug='free'),
+            rating=4,
         )
         connection.close()
 
@@ -1049,7 +1057,7 @@ class TestWorkshopMaterialsUnification:
         feedback card."""
         from django.utils import timezone
 
-        from events.models import Event
+        from events.models import Event, EventFeedback
 
         _clear_workshops()
         event = Event.objects.create(
@@ -1059,6 +1067,13 @@ class TestWorkshopMaterialsUnification:
             start_datetime=timezone.now() - datetime.timedelta(days=4),
             end_datetime=timezone.now() - datetime.timedelta(days=4, hours=-1),
             status='completed',
+        )
+        # Issue #1137: render the feedback card by giving the event a rating
+        # so we can measure the gap above it for a short description-only body.
+        EventFeedback.objects.create(
+            event=event,
+            user=_create_user('rater-gap@test.com', tier_slug='free'),
+            rating=4,
         )
         connection.close()
 

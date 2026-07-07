@@ -394,6 +394,73 @@ class EventDetailFeedbackTemplateTest(TestCase):
         response = self.client.get(event.get_absolute_url())
         self.assertNotContains(response, 'data-testid="event-feedback-section"')
 
+    def test_anonymous_past_event_zero_ratings_no_section(self):
+        """Issue #1137: an anonymous visitor on a past event with zero
+        ratings must see NO feedback card — the wrapping section is absent
+        so no empty bordered "Feedback" card leaks."""
+        event = _make_past_event()
+        # No registrations, no feedback rows at all.
+        response = self.client.get(event.get_absolute_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(
+            response, 'data-testid="event-feedback-section"',
+        )
+        self.assertNotContains(
+            response, 'data-testid="event-feedback-aggregate"',
+        )
+        self.assertNotContains(
+            response, 'data-testid="event-feedback-disclosure"',
+        )
+
+    def test_non_attendee_past_event_zero_ratings_no_section(self):
+        """Issue #1137: a logged-in member who did NOT register for a past
+        event with zero ratings also sees no feedback card."""
+        event = _make_past_event()
+        # ``attendee`` exists but is not registered for this event.
+        self.client.login(email='att@test.com', password='pw')
+        response = self.client.get(event.get_absolute_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(
+            response, 'data-testid="event-feedback-section"',
+        )
+        self.assertNotContains(
+            response, 'data-testid="event-feedback-disclosure"',
+        )
+
+    def test_anonymous_past_event_with_rating_still_shows_section(self):
+        """Issue #1137: the empty-card guard must not hide the aggregate
+        badge — a past event with >=1 rating still renders the section for
+        an anonymous viewer."""
+        event = _make_past_event()
+        EventFeedback.objects.create(
+            event=event,
+            user=User.objects.create_user(email='r1@t.com', password='pw'),
+            rating=4,
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, 'data-testid="event-feedback-section"')
+        self.assertContains(response, 'data-testid="event-feedback-aggregate"')
+
+    def test_feedback_buttons_use_public_primary_hover(self):
+        """Issue #1137: both feedback CTAs route through
+        ``{% button_classes 'primary' %}`` — they carry the public
+        ``hover:bg-accent/90`` and never the Studio ``hover:opacity-90``."""
+        event = _make_past_event()
+        EventRegistration.objects.create(event=event, user=self.attendee)
+        self.client.login(email='att@test.com', password='pw')
+        response = self.client.get(event.get_absolute_url())
+        # Both the reveal <summary> and the submit <button> are visible.
+        self.assertContains(response, 'data-testid="event-feedback-reveal"')
+        self.assertContains(response, 'data-testid="event-feedback-submit"')
+        # Public primary hover is present; Studio hover is gone entirely.
+        self.assertContains(response, 'hover:bg-accent/90')
+        self.assertNotContains(response, 'hover:opacity-90')
+        # The <summary> keeps its details-specific utilities. The ``&`` in
+        # the arbitrary variant is HTML-escaped in the rendered attribute
+        # (browsers decode it back to ``&``).
+        self.assertContains(response, 'list-none')
+        self.assertContains(response, '[&amp;::-webkit-details-marker]:hidden')
+
     def test_past_event_zero_ratings_no_badge(self):
         event = _make_past_event()
         EventRegistration.objects.create(event=event, user=self.attendee)

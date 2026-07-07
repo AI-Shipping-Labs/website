@@ -720,6 +720,17 @@ def event_detail(request, event_id, slug):
         user_feedback = feedback_qs.filter(user=user).first()
     can_submit_feedback = is_effectively_registered and event_is_past
     feedback_thanks = request.GET.get('feedback') == 'thanks'
+    # Issue #1137: only render the wrapping feedback card when at least one
+    # inner block will appear — otherwise a past event with zero ratings,
+    # viewed by an anonymous/non-attendee visitor, leaves an empty bordered
+    # "Feedback" card. Computed here (not in the template) because Django's
+    # ``{% if %}`` has no parentheses: the naive
+    # ``event_is_past and can_submit_feedback or feedback_count >= 1``
+    # mis-parses and leaks the count clause outside the past-event gate.
+    # ``can_submit_feedback`` already implies ``event_is_past``.
+    show_feedback_section = event_is_past and (
+        can_submit_feedback or feedback_count >= 1
+    )
     post_event_resources = _build_event_post_resources(
         event,
         has_access=has_access,
@@ -770,6 +781,9 @@ def event_detail(request, event_id, slug):
         'user_feedback': user_feedback,
         'can_submit_feedback': can_submit_feedback,
         'feedback_thanks': feedback_thanks,
+        # Issue #1137: gate the wrapping feedback card on this pre-computed
+        # boolean so the empty-card case never renders.
+        'show_feedback_section': show_feedback_section,
         # Issue #1037: structured post-event resource links for standalone
         # completed events. No description scraping, no inline playback UI.
         'post_event_resources': post_event_resources,

@@ -9,7 +9,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
 
-from integrations.config import get_config, is_enabled
+from integrations.config import get_config, s3_content_upload_enabled
 from integrations.services.github_sync.common import IMAGE_EXTENSIONS, logger
 
 
@@ -169,17 +169,21 @@ def upload_images_to_s3(content_dir, source):
     # the "non-empty Access Key" warning the legacy code path emitted, and
     # integration tests exercise this function many times per file.
     #
-    # Issue #1068: S3_ENABLED is now a registered IntegrationSetting resolved
-    # via ``is_enabled()`` (DB override -> env -> default 'false'). When the
-    # skip is due to TESTING, return a clean no-op so test assertions stay
-    # clean. When the skip is due to S3_ENABLED being false in a non-test
-    # environment, surface a structured error so the SyncLog shows 'partial'
-    # and the dashboard makes the misconfiguration visible instead of silent.
+    # Issue #1068 / #1131: S3_ENABLED is a registered IntegrationSetting.
+    # It is resolved via ``s3_content_upload_enabled()`` which reads
+    # ``get_config('S3_ENABLED', 'true')`` — default-ON so a missing or drifted
+    # env var (as happened in the prod worker container) can no longer silently
+    # disable uploads; only an explicit falsey value (DB/settings/env) turns it
+    # off. When the skip is due to TESTING, return a clean no-op so test
+    # assertions stay clean. When the skip is due to S3_ENABLED being explicitly
+    # false in a non-test environment, surface a structured error so the SyncLog
+    # shows 'partial' and the dashboard makes the misconfiguration visible
+    # instead of silent.
     is_testing = getattr(settings, 'TESTING', False)
-    if is_testing or not is_enabled('S3_ENABLED'):
+    if is_testing or not s3_content_upload_enabled():
         logger.info(
             'S3 image upload skipped for %s (TESTING=%s, S3_ENABLED resolved=%s)',
-            source.repo_name, is_testing, is_enabled('S3_ENABLED'),
+            source.repo_name, is_testing, s3_content_upload_enabled(),
         )
         if is_testing:
             return {'uploaded': 0, 'skipped': 0, 'errors': []}

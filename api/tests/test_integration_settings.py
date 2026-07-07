@@ -517,7 +517,7 @@ class IntegrationSettingsGetApiTest(TestCase):
         self.assertNotIn("value", entry)
 
     def test_get_s3_enabled_source_is_default(self):
-        """S3_ENABLED defaults to false with source default when unset."""
+        """S3_ENABLED source is 'default' when unset (default-on since #1131)."""
         response = self._get()
         body = response.json()
         entry = self._entry_for(body, "S3_ENABLED")

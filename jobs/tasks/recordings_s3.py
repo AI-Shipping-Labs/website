@@ -83,3 +83,28 @@ def extract_s3_key(s3_url, bucket, region):
 
     parsed = urlparse(s3_url)
     return parsed.path.lstrip('/')
+
+
+def build_recording_presigned_url(s3_url, ttl_seconds, config=None):
+    """Return a short-lived presigned ``GetObject`` URL for a recording.
+
+    Resolves the object key from ``s3_url`` (the value stored on
+    ``Event.recording_s3_url``) via :func:`extract_s3_key`, then mints a
+    presigned URL through the same boto3 client the upload path uses. The
+    app IAM role already holds ``s3:GetObject`` on the recordings bucket,
+    so no new credentials are needed.
+
+    The presigned URL is short-lived (``ttl_seconds``) and MUST only ever
+    be used as the redirect target of the authenticated serving endpoint —
+    never rendered into HTML. Presigned S3 URLs support HTTP Range requests
+    natively, so ``<video>`` scrubbing/seeking works against the redirect.
+    """
+    if config is None:
+        config = get_recordings_s3_config()
+    key = extract_s3_key(s3_url, config.bucket, config.region)
+    s3_client = get_recordings_s3_client(config)
+    return s3_client.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': config.bucket, 'Key': key},
+        ExpiresIn=ttl_seconds,
+    )

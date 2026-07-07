@@ -1,5 +1,7 @@
 """Shared markdown rendering helpers for content and event models."""
 
+import re
+
 import markdown as markdown_lib
 import nh3
 
@@ -38,6 +40,64 @@ _SANITIZE_ATTRIBUTES = {
     'td': {'align'},
     'th': {'align'},
 }
+
+
+# Matches a line of the form ``<lead>: - <item1> - <item2>[ - <itemN>]`` where
+# the colon is immediately followed by ` - ` (space, hyphen, space). ``lead`` is
+# captured non-greedily so it ends at the *first* colon that is trailed by the
+# ` - ` marker, and ``rest`` holds the dash-run of items. The mandatory spaces
+# around the hyphen mean hyphenated words (``domain-specific``), em/en dashes
+# (``—``/``–``), and colons that are not followed by ` - ` never match.
+_INLINE_BULLET_RE = re.compile(r'^(?P<lead>.*?:) - (?P<rest>.+)$')
+
+
+def normalize_inline_bullets(text):
+    """Rewrite inline dash-run lists into real markdown list items.
+
+    Event / email descriptions are frequently authored with the whole list on
+    one line — ``We will focus on: - a - b - c`` — which Python-Markdown renders
+    as a single run-on paragraph with literal ``-`` characters, because a list
+    only forms when each ``-`` item sits on its own line after a blank line
+    (issue #1126). This pre-parse pass converts such a line into::
+
+        We will focus on:
+
+        - a
+        - b
+        - c
+
+    so the parser emits a clean ``<ul>``. It is deliberately conservative:
+
+    - The separator is ` - ` (space, hyphen, space), so hyphenated words
+      (``domain-specific``, ``state-of-the-art``) and em/en dashes are left
+      intact.
+    - The line must have a colon directly followed by ` - `, and the dash-run
+      must contain two or more items — a single isolated ` - ` (e.g.
+      ``Score was 3 - 1``) is never converted.
+    - Already-correct multiline lists contain no matching lines, so the pass is
+      a no-op on them and is idempotent (running it on its own output is
+      unchanged).
+
+    The stored source text is never mutated; this runs only at render time.
+    """
+    if not text or ' - ' not in text:
+        return text
+
+    out = []
+    for line in text.split('\n'):
+        match = _INLINE_BULLET_RE.match(line)
+        if match:
+            items = [item.strip() for item in match.group('rest').split(' - ')]
+            if len(items) >= 2 and all(items):
+                if out and out[-1].strip():
+                    out.append('')
+                out.append(match.group('lead'))
+                out.append('')
+                out.extend(f'- {item}' for item in items)
+                out.append('')
+                continue
+        out.append(line)
+    return '\n'.join(out)
 
 
 def sanitize_html(html):
@@ -153,7 +213,7 @@ def render_email_markdown(text):
     point; no email path should call the ``markdown`` library directly.
     """
     return render_markdown(
-        text,
+        normalize_inline_bullets(text),
         include_mermaid=False,
         include_codehilite=False,
         # The claim widget needs the site's JS hydration runtime, which an
@@ -173,4 +233,4 @@ def render_description_html(text):
     """
     if not text:
         return ''
-    return sanitize_html(linkify_urls(render_markdown(text)))
+    return sanitize_html(linkify_urls(render_markdown(normalize_inline_bullets(text))))

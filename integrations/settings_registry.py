@@ -246,12 +246,13 @@ INTEGRATION_GROUPS = [
                 'key': 'S3_ENABLED',
                 'is_secret': False,
                 'is_boolean': True,
-                'default': 'false',
+                'default': 'true',
                 'description': (
                     'Master switch for content-image uploads to S3 during '
-                    'content sync. When off, image URLs are still rewritten '
-                    'to CDN paths but no objects are uploaded, so images 403 '
-                    'in production. Must be on in production.'
+                    'content sync. On by default; set explicitly to false to '
+                    'disable content-image uploads. When off, image URLs are '
+                    'still rewritten to CDN paths but no objects are uploaded, '
+                    'so images 403 in production. Leave on in production.'
                 ),
                 'docs_url': '_docs/integrations/s3_content.md#s3_enabled',
             },

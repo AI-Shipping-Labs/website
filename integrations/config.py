@@ -198,6 +198,25 @@ def site_base_url():
     return get_config('SITE_BASE_URL', settings.SITE_BASE_URL)
 
 
+def s3_content_upload_enabled():
+    """True when content-image S3 uploads are enabled (issue #1131).
+
+    Default-on: a missing or drifted ``S3_ENABLED`` env var (as happened in
+    the prod worker container) must NOT silently disable uploads. Reads via
+    ``get_config('S3_ENABLED', 'true')`` so the DB -> settings -> env -> default
+    chain resolves to ``True`` when the key is unset everywhere, mirroring the
+    canonical default-on pattern in ``questionnaires/onboarding.py``.
+
+    Unlike :func:`is_enabled`, which hardcodes a ``'false'`` fallback, this
+    helper defaults the flag on so only an explicit falsey value (DB override,
+    Django setting, or env var) disables uploads.
+    """
+    raw = get_config('S3_ENABLED', 'true')
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('true', '1', 'yes')
+
+
 def is_enabled(key):
     """Check if a config flag is enabled (handles both bool and string values).
 

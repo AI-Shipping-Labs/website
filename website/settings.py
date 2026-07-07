@@ -600,17 +600,20 @@ if not SES_ENABLED:
     AWS_ACCESS_KEY_ID = ''
     AWS_SECRET_ACCESS_KEY = ''
 
-# S3 content-image uploads (issues #532, #1068)
-# S3_ENABLED is now a registered IntegrationSetting in
+# S3 content-image uploads (issues #532, #1068, #1131)
+# S3_ENABLED is a registered IntegrationSetting in
 # integrations/settings_registry.py (s3_content group), resolved at runtime
-# via ``integrations.config.is_enabled('S3_ENABLED')`` (DB override -> env ->
-# default 'false'). It is no longer read from settings here — the gate lives
-# in ``integrations/services/github_sync/media.py:upload_images_to_s3``.
+# via ``integrations.config.s3_content_upload_enabled()`` (DB override ->
+# settings -> env -> default 'true'). Since #1131 it is default-ON so a
+# missing/drifted env var in the prod worker container can no longer silently
+# disable uploads; only an explicit falsey value turns it off. It is no longer
+# read from settings here — the gate lives in
+# ``integrations/services/github_sync/media.py:upload_images_to_s3``.
 #
 # The AWS access-key blanking below stays as a belt-and-suspenders defence:
 # when SES_ENABLED is False the keys are already blanked above, but this
 # keeps the blanking idempotent so any code path that slips past the
-# ``is_enabled('S3_ENABLED')`` gate still cannot authenticate against AWS
+# ``s3_content_upload_enabled()`` gate still cannot authenticate against AWS
 # with leaked env credentials. (When SES_ENABLED is True the keys are
 # populated and S3_ENABLED controls whether the content pipeline uses them.)
 #

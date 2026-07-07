@@ -40,19 +40,21 @@ Never use local SQLite, Django shell data, fixtures, or a remote DB tunnel as pr
 
 ## Useful Commands
 
+Use the `asl` CLI for production API calls. It resolves the staff token
+(`ASL_API_TOKEN` -> `.env` `API_SHIPPING_LABS_API_TOKEN` -> prompt), the base URL,
+and output format; never print the token. Run `uv run asl <group> <command> --help`
+for flags.
+
 Read production plan summaries:
 
 ```bash
-TOKEN=$(grep -E '^API_SHIPPING_LABS_API_TOKEN=' .env | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r')
-curl -s -H "Authorization: Token $TOKEN" \
-  https://aishippinglabs.com/api/sprints/july-2026/plans
+uv run asl sprints plans july-2026
 ```
 
 Read one detailed plan:
 
 ```bash
-curl -s -H "Authorization: Token $TOKEN" \
-  https://aishippinglabs.com/api/plans/<plan_id> | python3 -m json.tool
+uv run asl plans get <plan_id>
 ```
 
 Import a missing markdown plan:
@@ -73,15 +75,13 @@ Then repeat without `--dry-run` after inspection.
 First resolve the event from production:
 
 ```bash
-curl -s -H "Authorization: Token $TOKEN" \
-  "https://aishippinglabs.com/api/events?status=upcoming" | python3 -m json.tool
+uv run asl events list --status upcoming
 ```
 
 Then read the current OpenAPI spec before assuming a registrant-list endpoint exists:
 
 ```bash
-curl -s -H "Authorization: Token $TOKEN" \
-  https://aishippinglabs.com/api/openapi.json \
+uv run asl openapi --format raw \
   | python3 -c "import json,sys; d=json.load(sys.stdin); [print(p) for p in sorted(d['paths']) if 'registr' in p.lower()]"
 ```
 

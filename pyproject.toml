@@ -154,6 +154,11 @@ select = ["F", "I", "PLC0415"]
 "content/access.py" = ["PLC0415"]
 "content/tier_config.py" = ["PLC0415"]
 "payments/services/__init__.py" = ["PLC0415"]
+# asl-cli sub-project: deferred imports keep cost off the hot path — the
+# getpass prompt (only on interactive TTY) and lazy json/pathlib in a Click
+# callback. Same rationale as the services/commands exemptions above.
+"asl_cli/asl_cli/config.py" = ["PLC0415"]
+"asl_cli/asl_cli/commands/_shared.py" = ["PLC0415"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["content", "accounts", "payments", "studio", "integrations", "events", "community", "notifications", "voting", "email_app", "jobs"]

@@ -111,6 +111,21 @@ jobs:
           end=$(date +%s)
           echo "CI_TIMING phase=django_check seconds=$((end - start))"
 
+      # Issue #1125: offline pytest unit tests for the `asl` CLI sub-project.
+      # No network, no prod token, no browser — they cannot ride the
+      # core-marker-filtered Playwright shard, so they gate deploy here in the
+      # fast checks job. Env token/`.env` are cleared so the suite proves it
+      # resolves cleanly without any ambient credentials.
+      - name: Run asl-cli offline unit tests
+        env:
+          ASL_API_TOKEN: ""
+          API_SHIPPING_LABS_API_TOKEN: ""
+        run: |
+          start=$(date +%s)
+          uv run python -m pytest asl_cli/ -q
+          end=$(date +%s)
+          echo "CI_TIMING phase=asl_cli_pytest seconds=$((end - start))"
+
       - name: Report total job timing
         if: always()
         run: |

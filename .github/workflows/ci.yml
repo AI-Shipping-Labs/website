@@ -307,4 +307,8 @@ jobs:
         run: uv run playwright install --with-deps chromium
 
       - name: Run Playwright tests
-        run: uv run pytest -m "not manual_visual and not visual_regression" playwright_tests/ -v
+        # asl_cli/ holds offline pytest unit tests for the `asl` CLI (no
+        # network, no prod token, no browser). This is the repo's only pytest
+        # shard, so the CLI tests ride along here rather than in a separate
+        # opt-in job (issue #1125).
+        run: uv run pytest -m "not manual_visual and not visual_regression" playwright_tests/ asl_cli/ -v

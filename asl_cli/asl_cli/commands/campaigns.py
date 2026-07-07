@@ -5,8 +5,8 @@ from __future__ import annotations
 import click
 
 from asl_cli.commands._shared import (
-    TierLevel,
     TIER_HELP,
+    TierLevel,
     collect_flags,
     emit,
     format_option,

@@ -12,7 +12,7 @@ Use production APIs only; never use local SQLite as production truth.
 
 Identify these before writing:
 
-- Member email. Resolve fuzzy names with `GET /api/users?q=...`.
+- Member email. Resolve fuzzy names with `uv run asl users list --query <name>`.
 - Sprint slug. If absent, inspect current/upcoming sprints and missing-plan rows with `scripts/find_missing_sprint_plans.py`.
 - Source context: submitted onboarding response, CRM/user detail, existing notes/plans, and any explicit user request.
 
@@ -21,42 +21,36 @@ Read `ai-shipping-labs-plan-import` before importing a markdown plan.
 
 ## Fetch Context
 
-Load the API token inline from `.env`; do not print it.
-
-```bash
-TOKEN=$(grep -E '^API_SHIPPING_LABS_API_TOKEN=' .env | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r')
-```
+Use the `asl` CLI for production API calls. It resolves the staff token
+(`ASL_API_TOKEN` -> `.env` `API_SHIPPING_LABS_API_TOKEN` -> prompt) and the base URL;
+do not print the token.
 
 Find the member:
 
 ```bash
-curl -s -H "Authorization: Token $TOKEN" \
-  "https://aishippinglabs.com/api/users?q=Pavlo&limit=10" | python3 -m json.tool
+uv run asl users list --query Pavlo --limit 10
 ```
 
 Fetch onboarding:
 
 ```bash
-curl -s -H "Authorization: Token $TOKEN" \
-  "https://aishippinglabs.com/api/onboarding/responses/member@example.com" \
-  | python3 -m json.tool
+uv run asl onboarding response member@example.com
 ```
 
 Fetch user detail:
 
 ```bash
-curl -s -H "Authorization: Token $TOKEN" \
-  "https://aishippinglabs.com/api/users/member@example.com" | python3 -m json.tool
+uv run asl users get member@example.com
 ```
 
-For CRM aggregate lookup, prefer the fast filtered endpoint once available:
+For CRM aggregate lookup, use the fast filtered endpoint:
 
 ```bash
-curl -s -H "Authorization: Token $TOKEN" \
-  "https://aishippinglabs.com/api/crm/export?email=member@example.com"
+uv run asl raw GET /api/crm/export -p email=member@example.com
 ```
 
-Until that ships, avoid broad `scope=all&count=5000` exports unless the user explicitly needs a bulk export.
+For a single member, the typed alternative is `uv run asl users crm-record member@example.com`.
+Avoid broad `scope=all&count=5000` exports unless the user explicitly needs a bulk export.
 
 ## Draft The Plan
 
@@ -107,7 +101,7 @@ python scripts/import_sprint_plan_markdown.py \
   --create-if-missing
 ```
 
-Verify after write with `GET /api/plans/<id>` or rerun the importer dry-run and inspect the existing plan.
+Verify after write with `uv run asl plans get <id>` or rerun the importer dry-run and inspect the existing plan.
 
 ## Guardrails
 

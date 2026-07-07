@@ -491,11 +491,13 @@ class SettingsDashboardViewTest(TestCase):
         # MAVEN_ENROLLMENT_ENABLED default ('false', a set value) but no
         # shared secret (issue #960), S3 Content Images has the
         # S3_ENABLED default ('true' since #1131, a set value) but no
-        # bucket/CDN (issue #1068), and Site has the
-        # ONBOARDING_REMINDER_ENABLED default ('true', a set value) but
-        # its other required keys (SITE_BASE_URL etc.) unset here
+        # bucket/CDN (issue #1068), S3 Recordings has the
+        # RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD default ('true' since #1134, a
+        # set boolean value) but its required bucket/region unset, and Site
+        # has the ONBOARDING_REMINDER_ENABLED default ('true', a set value)
+        # but its other required keys (SITE_BASE_URL etc.) unset here
         # (issue #1133).
-        self.assertEqual(summary['partial_count'], 8)
+        self.assertEqual(summary['partial_count'], 9)
         self.assertEqual(
             summary['missing_count'],
             expected_total_items - summary['configured_count'] - summary['partial_count'],

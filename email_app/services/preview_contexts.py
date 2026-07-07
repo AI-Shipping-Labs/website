@@ -138,11 +138,16 @@ PREVIEW_CONTEXTS = {
         'user_name': 'Ada',
         'event_title': 'AI Shipping Workshop',
         'event_datetime': 'March 21, 2026, 18:00-19:00 Europe/Berlin',
-        'publish_state': 'Ready for review/publishing',
+        # Issue #1134 (Phase B): preview the "available to watch" variant so
+        # the watch-link path renders in the Studio email preview. The watch
+        # link points at the workshop video page, never a raw S3 URL.
+        'publish_state': 'Published and available to watch',
         'publish_copy': (
-            'The event is not public yet. Review the upload, then publish '
-            'and send the attendee follow-up when ready.'
+            'The recording is now available to watch. Members with access can '
+            'watch it right away on the workshop video page.'
         ),
+        'is_available_to_watch': True,
+        'watch_url': 'https://aishippinglabs.com/workshops/ai-shipping-workshop/video',
         'studio_event_url': 'https://aishippinglabs.com/studio/events/42/edit',
         'zoom_recording_url': 'https://zoom.us/rec/play/preview',
     },

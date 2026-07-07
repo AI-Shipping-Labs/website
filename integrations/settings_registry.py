@@ -252,6 +252,25 @@ INTEGRATION_GROUPS = [
                 ),
                 'docs_url': '_docs/integrations/s3_recordings.md#recording_presigned_url_ttl_seconds',
             },
+            {
+                'key': 'RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD',
+                'is_secret': False,
+                'is_boolean': True,
+                'default': 'true',
+                'description': (
+                    'When on, a successful Zoom -> S3 recording upload '
+                    'auto-publishes the event so entitled members can watch '
+                    'the recording right away, and the host notification says '
+                    'the recording is available to watch with a link to the '
+                    'workshop video page (issue #1134, Phase B). On by default '
+                    'per the product decision that the recording should be '
+                    'watchable immediately. Turn it off to keep the '
+                    'review-first flow: the event stays unpublished after '
+                    'upload and the host email keeps the "ready for '
+                    'review/publishing" framing with a Studio link.'
+                ),
+                'docs_url': '_docs/integrations/s3_recordings.md#recording_auto_publish_on_s3_upload',
+            },
         ],
     },
     {

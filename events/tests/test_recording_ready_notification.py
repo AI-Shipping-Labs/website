@@ -212,3 +212,93 @@ class RecordingReadyNotificationSendTest(TestCase):
         self.assertEqual(result['status'], 'skipped')
         self.assertEqual(result['skipped_reason'], 'no_recording_s3_url')
         self.assertFalse(EmailLog.objects.exists())
+
+
+class RecordingAvailableToWatchCopyTest(TestCase):
+    """Phase B (#1134): published + workshop video surface => "available to watch"."""
+
+    def _make_workshop_event(self, published, workshop_status='published'):
+        from content.models import Workshop
+
+        event = make_event(
+            host_email='external-host@example.com',
+            published=published,
+            kind='workshop',
+        )
+        Workshop.objects.create(
+            slug=f'ws-{uuid4().hex}',
+            title='S3 Recording Workshop',
+            date=event.start_datetime.date(),
+            status=workshop_status,
+            event=event,
+        )
+        event.refresh_from_db()
+        return event
+
+    @patch('events.services.recording_ready_notification.EmailService._send_ses')
+    def test_published_workshop_email_says_available_to_watch_with_video_link(
+        self, mock_send,
+    ):
+        mock_send.return_value = 'ses-watch'
+        event = self._make_workshop_event(published=True)
+        workshop_slug = event.workshop.slug
+
+        result = notify_recording_ready(event)
+
+        self.assertEqual(result['status'], 'sent')
+        subject = mock_send.call_args.args[1]
+        html = mock_send.call_args.args[2]
+
+        # Copy leads with "available to watch".
+        self.assertIn('available to watch', subject.lower())
+        self.assertIn('available to watch', html.lower())
+
+        # The watch link points at the workshop /video page (the surface that
+        # renders the player), rendered as a real <a href> — not markdown.
+        self.assertIn(
+            f'href="https://aishippinglabs.com/workshops/{workshop_slug}/video"',
+            html,
+        )
+        self.assertNotIn('](', html)
+
+        # It must NOT be the announcement-only event-detail page, nor any raw
+        # or presigned S3 URL.
+        self.assertNotIn(event.get_absolute_url(), html)
+        self.assertNotIn('amazonaws.com', html)
+        self.assertNotIn(event.recording_s3_url, html)
+
+    @patch('events.services.recording_ready_notification.EmailService._send_ses')
+    def test_unpublished_workshop_event_keeps_ready_for_review_copy(
+        self, mock_send,
+    ):
+        mock_send.return_value = 'ses-review'
+        event = self._make_workshop_event(published=False)
+
+        notify_recording_ready(event)
+
+        subject = mock_send.call_args.args[1]
+        html = mock_send.call_args.args[2]
+        self.assertIn('ready for review', subject.lower())
+        self.assertIn('Ready for review/publishing', html)
+        self.assertNotIn('available to watch', html.lower())
+        # Falls back to the Studio review link, not a watch link.
+        self.assertIn(f'/studio/events/{event.pk}/edit', html)
+        self.assertNotIn('/video"', html)
+
+    @patch('events.services.recording_ready_notification.EmailService._send_ses')
+    def test_published_but_no_watchable_surface_keeps_review_framing(
+        self, mock_send,
+    ):
+        """Published event whose workshop is a draft has no watchable surface,
+        so the email must not claim "available to watch"."""
+        mock_send.return_value = 'ses-draft-ws'
+        event = self._make_workshop_event(
+            published=True, workshop_status='draft',
+        )
+
+        notify_recording_ready(event)
+
+        html = mock_send.call_args.args[2]
+        self.assertNotIn('available to watch', html.lower())
+        self.assertIn(f'/studio/events/{event.pk}/edit', html)
+        self.assertNotIn('/video"', html)

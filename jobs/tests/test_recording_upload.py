@@ -252,7 +252,11 @@ class UploadRecordingToS3Test(TestCase):
 
         self.event.refresh_from_db()
         self.assertTrue(self.event.recording_s3_url)
-        self.assertFalse(self.event.published)
+        # Issue #1134 (Phase B): auto-publish defaults ON, so a successful
+        # upload flips the event live (and stamps published_at) before the
+        # host notification fires.
+        self.assertTrue(self.event.published)
+        self.assertIsNotNone(self.event.published_at)
 
         self.assertEqual(
             EmailLog.objects.filter(
@@ -268,6 +272,104 @@ class UploadRecordingToS3Test(TestCase):
                 email_type='post_event_followup',
             ).exists()
         )
+
+    def _run_upload_with_mocks(self, mock_zoom_post, mock_requests_get,
+                               mock_boto_client):
+        """Wire the standard Zoom/download/S3 mocks and run the upload task."""
+        from jobs.tasks.recording_upload import upload_recording_to_s3
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'test-token',
+            'expires_in': 3600,
+        }
+        mock_zoom_post.return_value = token_response
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.iter_content.return_value = [b'fake-video-data']
+        mock_response.raise_for_status = MagicMock()
+        mock_requests_get.return_value = mock_response
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+
+        return upload_recording_to_s3(
+            self.recording.id,
+            'https://zoom.us/rec/download/abc123',
+        )
+
+    @patch('jobs.tasks.recordings_s3.boto3.client')
+    @patch('jobs.tasks.recording_upload.requests.get')
+    @patch('integrations.services.zoom.requests.post')
+    def test_auto_publish_enabled_by_default_publishes_event_on_upload(
+        self,
+        mock_zoom_post,
+        mock_requests_get,
+        mock_boto_client,
+    ):
+        """Issue #1134: with the flag unset (default ON), a successful upload
+        publishes the previously-unpublished event and stamps published_at."""
+        self.assertFalse(self.event.published)
+
+        with patch(
+            'events.services.recording_ready_notification.notify_recording_ready',
+        ) as mock_notify:
+            mock_notify.return_value = {
+                'status': 'sent', 'recipient_count': 1,
+                'attempted_recipient_count': 1, 'skipped_reason': '',
+                'email_log_ids': [], 'results': [],
+            }
+            result = self._run_upload_with_mocks(
+                mock_zoom_post, mock_requests_get, mock_boto_client,
+            )
+
+        self.assertEqual(result['status'], 'ok')
+        mock_notify.assert_called_once()
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.published)
+        self.assertIsNotNone(self.event.published_at)
+
+    @patch('jobs.tasks.recordings_s3.boto3.client')
+    @patch('jobs.tasks.recording_upload.requests.get')
+    @patch('integrations.services.zoom.requests.post')
+    def test_auto_publish_disabled_preserves_review_flow(
+        self,
+        mock_zoom_post,
+        mock_requests_get,
+        mock_boto_client,
+    ):
+        """Issue #1134: with the flag explicitly off, a successful upload
+        leaves the event unpublished so the review-first flow is preserved."""
+        IntegrationSetting.objects.update_or_create(
+            key='RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD',
+            defaults={
+                'value': 'false',
+                'is_secret': False,
+                'group': 's3_recordings',
+            },
+        )
+        clear_config_cache()
+        self.addCleanup(clear_config_cache)
+        self.assertFalse(self.event.published)
+
+        with patch(
+            'events.services.recording_ready_notification.notify_recording_ready',
+        ) as mock_notify:
+            mock_notify.return_value = {
+                'status': 'sent', 'recipient_count': 1,
+                'attempted_recipient_count': 1, 'skipped_reason': '',
+                'email_log_ids': [], 'results': [],
+            }
+            result = self._run_upload_with_mocks(
+                mock_zoom_post, mock_requests_get, mock_boto_client,
+            )
+
+        self.assertEqual(result['status'], 'ok')
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.published)
+        self.assertIsNone(self.event.published_at)
 
     @patch('jobs.tasks.recordings_s3.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')

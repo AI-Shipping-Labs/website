@@ -217,6 +217,27 @@ def s3_content_upload_enabled():
     return str(raw).strip().lower() in ('true', '1', 'yes')
 
 
+def recording_auto_publish_on_s3_upload_enabled():
+    """True when a successful S3 recording upload should auto-publish the event.
+
+    Issue #1134 (Phase B). Default-on per the product decision: the recording
+    should be watchable right away, so entitled members can watch as soon as
+    the upload finishes. Reads via
+    ``get_config('RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD', 'true')`` so the
+    DB -> settings -> env -> default chain resolves to True when the key is
+    unset everywhere, mirroring :func:`s3_content_upload_enabled`.
+
+    Unlike :func:`is_enabled`, which hardcodes a ``'false'`` fallback, this
+    helper defaults the flag on so only an explicit falsey value (a DB override
+    set from Studio, a Django setting, or an env var) restores the review-first
+    flow.
+    """
+    raw = get_config('RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD', 'true')
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('true', '1', 'yes')
+
+
 def is_enabled(key):
     """Check if a config flag is enabled (handles both bool and string values).
 

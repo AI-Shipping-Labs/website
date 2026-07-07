@@ -13,7 +13,8 @@
   - A green confirmation block renders when ``feedback_thanks`` is set
     (the submit view appends ``?feedback=thanks`` on redirect).
 {% endcomment %}
-{% if event_is_past %}
+{% load accounts_extras %}
+{% if show_feedback_section %}
 <section class="mt-12 mb-12 rounded-lg border border-border bg-card p-6"
          data-testid="event-feedback-section">
   <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -40,7 +41,7 @@
   <details class="group"
            data-testid="event-feedback-disclosure"
            data-event-feedback-disclosure>
-    <summary class="inline-flex cursor-pointer list-none items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background [&::-webkit-details-marker]:hidden"
+    <summary class="{% button_classes 'primary' extra='cursor-pointer list-none [&::-webkit-details-marker]:hidden' %}"
              data-testid="event-feedback-reveal"
              data-event-feedback-toggle
              aria-controls="event-feedback-form"
@@ -99,7 +100,7 @@
       </div>
 
       <button type="submit"
-              class="inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
+              class="{% button_classes 'primary' %}"
               data-testid="event-feedback-submit">
         {% if user_feedback %}Update feedback{% else %}Submit feedback{% endif %}
       </button>

@@ -24,7 +24,12 @@ from django.utils import timezone
 
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import Instructor, Workshop
-from events.models import Event, EventInstructor, EventRegistration
+from events.models import (
+    Event,
+    EventFeedback,
+    EventInstructor,
+    EventRegistration,
+)
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -887,6 +892,14 @@ class EventDetailRecordingRemovedTest(TestCase):
             recording_url='',
             materials=[],
             description='Short.',
+        )
+        # Issue #1137: the wrapping card only renders when it has content.
+        # Give the event a rating so an anonymous viewer sees the section
+        # and we can assert its intentional top gap after a short body.
+        EventFeedback.objects.create(
+            event=event,
+            user=User.objects.create_user(email='rater@t.com', password='pw'),
+            rating=4,
         )
         response = self.client.get(event.get_absolute_url())
         self.assertContains(response, 'Short.')

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
 {% load member_badges %}
+{% load member_empty_state %}
 {% load sprint_extras %}
 {% load static %}
 
@@ -16,7 +17,7 @@
     <div class="relative mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
 
       <header class="mb-6">
-        <p class="text-sm uppercase tracking-wide text-muted-foreground">Sprint</p>
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Sprint</p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl" data-testid="sprint-detail-name">{{ sprint.name }}</h1>
         <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span data-testid="sprint-date-range">{% sprint_date_range sprint %}</span>
@@ -109,8 +110,8 @@
 
       {% if enrolled %}
       <section class="mb-6 rounded-lg border border-border bg-card p-6" data-testid="sprint-accountability-partners">
-        <p class="text-sm uppercase tracking-wide text-muted-foreground">Accountability</p>
-        <h2 class="mt-1 text-xl font-semibold text-foreground">Your partners</h2>
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Accountability</p>
+        <h2 class="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Your partners</h2>
         {% if accountability_partners %}
         <ul class="mt-4 space-y-3" data-testid="sprint-accountability-partner-list">
           {% for partner in accountability_partners %}
@@ -133,8 +134,8 @@
       <section class="mb-6 rounded-lg border border-border bg-card p-6" data-testid="sprint-meeting-schedule">
         <div class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p class="text-sm uppercase tracking-wide text-muted-foreground">Calls</p>
-            <h2 class="text-xl font-semibold text-foreground">Sprint calls</h2>
+            <p class="text-sm font-medium uppercase tracking-widest text-accent">Calls</p>
+            <h2 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Sprint calls</h2>
           </div>
           {% if event_series %}
           <p class="text-sm text-muted-foreground">{{ event_series.name }}</p>
@@ -199,10 +200,7 @@
           {% endfor %}
         </ul>
         {% else %}
-        <div class="rounded-lg border border-dashed border-border bg-background/40 p-5 text-sm text-muted-foreground"
-             data-testid="sprint-calls-empty">
-          No calls scheduled yet — we'll post the schedule here once it's set.
-        </div>
+        {% member_empty_state title='No calls scheduled yet' body="We'll post the schedule here once it's set." icon='video' kind='fresh' testid='sprint-calls-empty' %}
         {% endif %}
       </section>
 
@@ -229,7 +227,7 @@
           takes a couple of minutes.
         </p>
         <a href="{% url 'sprint_feedback_fill' sprint_slug=sprint.slug response_id=feedback_response.pk %}"
-           class="inline-flex items-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
+           class="{% button_classes 'primary' %}"
            data-testid="sprint-feedback-cta-link">
           Share your sprint feedback
         </a>

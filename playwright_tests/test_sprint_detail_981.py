@@ -110,6 +110,40 @@ def _enroll(email, sprint):
     connection.close()
 
 
+def _create_pending_feedback_response(sprint, email="main@test.com"):
+    """Distribute a feedback questionnaire and return the member's pending Response id."""
+    from django.db import connection
+
+    from accounts.models import User
+    from plans.models import SprintFeedbackRequest
+    from plans.services import distribute_sprint_feedback
+    from questionnaires.models import Question, Questionnaire, Response
+
+    questionnaire = Questionnaire.objects.create(
+        title="Sprint feedback",
+        slug=f"{sprint.slug}-feedback",
+        purpose="feedback",
+    )
+    Question.objects.create(
+        questionnaire=questionnaire,
+        question_type="long_text",
+        prompt="How did this sprint go for you?",
+        order=0,
+        is_required=True,
+    )
+    request = SprintFeedbackRequest.objects.create(
+        sprint=sprint, questionnaire=questionnaire,
+    )
+    distribute_sprint_feedback(request)
+    response = Response.objects.get(
+        questionnaire=questionnaire,
+        respondent=User.objects.get(email=email),
+    )
+    response_id = response.pk
+    connection.close()
+    return response_id
+
+
 def _create_event(series, *, title, slug, start, end=None, zoom_url=""):
     from django.db import connection
 
@@ -373,4 +407,152 @@ class TestSprintDetailRedesign981:
         page.goto(f"{django_server}/sprints/{sprint_slug}", wait_until="domcontentloaded")
         assert page.locator('[data-testid="sprint-cta-enrolled"]').is_visible()
         assert page.locator('[data-testid="sprint-calls-empty"]').is_visible()
+        ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestSprintDetailDesignSystem1138:
+    """Design-system alignment for the sprint detail page (#1138)."""
+
+    def test_empty_calls_state_renders_shared_component(
+        self, django_server, browser, django_db_blocker
+    ):
+        with django_db_blocker.unblock():
+            ensure_tiers()
+            ensure_site_config_tiers()
+            _clear_sprint_detail_data()
+            _create_member()
+            sprint = _create_sprint()
+            _enroll("main@test.com", sprint)
+            sprint_slug = sprint.slug
+
+        ctx = _auth_context(browser, "main@test.com")
+        page = ctx.new_page()
+        page.goto(f"{django_server}/sprints/{sprint_slug}", wait_until="domcontentloaded")
+
+        empty = page.locator('[data-testid="sprint-calls-empty"]')
+        assert empty.is_visible()
+        # Shared component card look: bg-card + centered, not the old dashed box.
+        card_class = empty.get_attribute("class")
+        assert "bg-card" in card_class
+        assert "border-dashed" not in card_class
+        assert empty.get_attribute("data-empty-kind") == "fresh"
+        assert empty.locator('[data-lucide]').count() >= 1
+        assert "No calls scheduled yet" in empty.inner_text()
+        assert "post the schedule here" in empty.inner_text()
+        # Inner regression marker exposed by the shared component.
+        assert page.locator('[data-testid="member-empty-state"]').count() >= 1
+        ctx.close()
+
+    def test_eyebrows_use_accent_class(
+        self, django_server, browser, django_db_blocker
+    ):
+        with django_db_blocker.unblock():
+            ensure_tiers()
+            ensure_site_config_tiers()
+            _clear_sprint_detail_data()
+            _create_member()
+            sprint = _create_sprint()
+            _enroll("main@test.com", sprint)
+            sprint_slug = sprint.slug
+
+        ctx = _auth_context(browser, "main@test.com")
+        page = ctx.new_page()
+        page.goto(f"{django_server}/sprints/{sprint_slug}", wait_until="domcontentloaded")
+
+        for label in ["Sprint", "Accountability", "Calls"]:
+            eyebrow = page.get_by_text(label, exact=True).first
+            cls = eyebrow.get_attribute("class")
+            assert "text-accent" in cls, f"{label} eyebrow missing text-accent: {cls}"
+            assert "tracking-widest" in cls, f"{label} eyebrow missing tracking-widest: {cls}"
+            assert "font-medium" in cls, f"{label} eyebrow missing font-medium: {cls}"
+            assert "text-muted-foreground" not in cls
+            assert "tracking-wide " not in f"{cls} " or "tracking-widest" in cls
+        ctx.close()
+
+    def test_section_titles_use_smaller_section_scale(
+        self, django_server, browser, django_db_blocker
+    ):
+        with django_db_blocker.unblock():
+            ensure_tiers()
+            ensure_site_config_tiers()
+            _clear_sprint_detail_data()
+            _create_member()
+            sprint = _create_sprint()
+            _enroll("main@test.com", sprint)
+            sprint_slug = sprint.slug
+
+        ctx = _auth_context(browser, "main@test.com")
+        page = ctx.new_page()
+        page.goto(f"{django_server}/sprints/{sprint_slug}", wait_until="domcontentloaded")
+
+        for title in ["Sprint calls", "Your partners"]:
+            heading = page.get_by_role("heading", name=title, exact=True).first
+            cls = heading.get_attribute("class")
+            assert "text-2xl" in cls, f"{title} missing text-2xl: {cls}"
+            assert "sm:text-3xl" in cls, f"{title} missing sm:text-3xl: {cls}"
+            assert "tracking-tight" in cls
+            assert "text-xl" not in cls
+        ctx.close()
+
+    @freeze_time(FROZEN_CALL_NOW)
+    def test_populated_calls_list_not_regressed(
+        self, django_server, browser, django_db_blocker
+    ):
+        start = datetime.datetime(2026, 6, 20, 18, 0, tzinfo=datetime.timezone.utc)
+        with django_db_blocker.unblock():
+            ensure_tiers()
+            ensure_site_config_tiers()
+            _clear_sprint_detail_data()
+            _create_member()
+            series = _create_series()
+            sprint = _create_sprint(series=series)
+            _enroll("main@test.com", sprint)
+            _create_event(
+                series,
+                title="Upcoming sprint call",
+                slug="upcoming-sprint-call",
+                start=start,
+                end=start + datetime.timedelta(hours=1),
+            )
+            sprint_slug = sprint.slug
+
+        ctx = _auth_context(browser, "main@test.com")
+        page = ctx.new_page()
+        page.goto(f"{django_server}/sprints/{sprint_slug}", wait_until="domcontentloaded")
+
+        assert page.locator('[data-testid="sprint-call-entry"]').count() >= 1
+        assert page.locator('[data-testid="sprint-calls-empty"]').count() == 0
+        assert page.locator('[data-testid="sprint-call-details"]').first.get_attribute("href")
+        ctx.close()
+
+    def test_feedback_cta_is_canonical_primary_button(
+        self, django_server, browser, django_db_blocker
+    ):
+        with django_db_blocker.unblock():
+            ensure_tiers()
+            ensure_site_config_tiers()
+            _clear_sprint_detail_data()
+            _create_member()
+            sprint = _create_sprint()
+            _enroll("main@test.com", sprint)
+            response_id = _create_pending_feedback_response(sprint)
+            sprint_slug = sprint.slug
+
+        ctx = _auth_context(browser, "main@test.com")
+        page = ctx.new_page()
+        page.goto(f"{django_server}/sprints/{sprint_slug}", wait_until="domcontentloaded")
+
+        cta = page.locator('[data-testid="sprint-feedback-cta-link"]')
+        assert cta.is_visible()
+        cls = cta.get_attribute("class")
+        assert "bg-accent" in cls
+        assert "hover:bg-accent/90" in cls
+        assert "hover:opacity-90" not in cls
+        assert cta.inner_text().strip() == "Share your sprint feedback"
+        assert f"/sprints/{sprint_slug}/feedback/{response_id}" in cta.get_attribute("href")
+
+        cta.click()
+        page.wait_for_url(f"**/sprints/{sprint_slug}/feedback/{response_id}**")
+        assert "How did this sprint go for you?" in page.content()
         ctx.close()

@@ -489,10 +489,12 @@ class SettingsDashboardViewTest(TestCase):
         # Observability has the LOGFIRE_ENABLED default ('false', a set
         # value) but no token (issue #813), Maven has the
         # MAVEN_ENROLLMENT_ENABLED default ('false', a set value) but no
-        # shared secret (issue #960), and S3 Content Images has the
+        # shared secret (issue #960), S3 Content Images has the
         # S3_ENABLED default ('false', a set value) but no bucket/CDN
-        # (issue #1068).
-        self.assertEqual(summary['partial_count'], 7)
+        # (issue #1068), and Site has the ONBOARDING_REMINDER_ENABLED
+        # default ('true', a set value) but its other required keys
+        # (SITE_BASE_URL etc.) unset here (issue #1133).
+        self.assertEqual(summary['partial_count'], 8)
         self.assertEqual(
             summary['missing_count'],
             expected_total_items - summary['configured_count'] - summary['partial_count'],

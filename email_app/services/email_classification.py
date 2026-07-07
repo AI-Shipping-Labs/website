@@ -82,6 +82,13 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # staff_signup_notification.
     "maven_welcome",
     "maven_cohort_removal_notification",
+    # Issue #1133: one-week reminder nudging a paid member who received
+    # their onboarding-link welcome but has not completed onboarding.
+    # Transactional for the same reason as the welcomes and event_reminder
+    # — the recipient is a paying member and this is an operational nudge,
+    # so an unsubscribed paid member still receives it. It is NOT a welcome
+    # type, so it sends from the transactional sender, not welcome@.
+    "onboarding_reminder",
 }
 
 PROMOTIONAL_EMAIL_TYPES = {

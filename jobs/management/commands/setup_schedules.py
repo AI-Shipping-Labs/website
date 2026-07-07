@@ -147,4 +147,18 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: ingest-plan-sprints (daily at 05:00 UTC)'))
 
+        # One-week onboarding reminder sweep (issue #1133). Runs daily at
+        # 06:30 UTC, an off-peak slot clear of the 03:00-05:00 import/ingest
+        # jobs, the 06:00 Slack-membership refresh, and the 07:00-08:00
+        # unverified-user sweep. The sweep is idempotent (EmailLog-based, one
+        # reminder per member ever), so a daily re-tick never double-sends.
+        # update_or_create on the schedule name updates an existing row's
+        # cron in place on the next setup_schedules run.
+        schedule(
+            'accounts.tasks.remind_onboarding.remind_onboarding_incomplete',
+            cron='30 6 * * *',
+            name='onboarding-reminders',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: onboarding-reminders (daily at 06:30 UTC)'))
+
         self.stdout.write(self.style.SUCCESS('All default schedules registered.'))

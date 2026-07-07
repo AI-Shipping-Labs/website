@@ -204,6 +204,14 @@ PREVIEW_CONTEXTS = {
         'user_first_name': 'Ada',
         'site_url': 'https://aishippinglabs.com',
     },
+    # Issue #1133: one-week onboarding reminder. The real send passes no
+    # extra context; EmailService auto-injects ``user_name`` and
+    # ``site_url``. Mirror both so the Studio preview renders the greeting
+    # and the ``/onboarding/`` link instead of leaving them blank.
+    'onboarding_reminder': {
+        'user_name': 'Ada',
+        'site_url': 'https://aishippinglabs.com',
+    },
     'welcome_imported': {
         'user_name': 'Ada',
         'source_label': 'DataTalks Club',

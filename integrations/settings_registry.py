@@ -433,14 +433,44 @@ INTEGRATION_GROUPS = [
                 'is_secret': False,
                 'description': (
                     'Single staff mailbox used for paid signups: hidden BCC '
-                    'on the member-facing paid welcome, plus the structured '
-                    'internal heads-up email. Leave blank to skip both email '
-                    'staff copies; the member welcome still sends and Slack '
-                    'still runs when configured. Replies still route only via '
-                    'SES_WELCOME_REPLY_TO_EMAIL.'
+                    'on the member-facing paid welcome, the structured '
+                    'internal heads-up email, and (issue #1133) the hidden '
+                    'BCC on the one-week onboarding reminder. Leave blank to '
+                    'skip these staff copies; the member welcome and reminder '
+                    'still send and Slack still runs when configured. Replies '
+                    'still route only via SES_WELCOME_REPLY_TO_EMAIL.'
                 ),
                 'optional': True,
                 'docs_url': '_docs/integrations/site.md#staff_signup_notify_email',
+            },
+            {
+                'key': 'ONBOARDING_REMINDER_ENABLED',
+                'is_secret': False,
+                'is_boolean': True,
+                'default': 'true',
+                'description': (
+                    'Master switch for the one-week onboarding reminder sweep '
+                    '(issue #1133). When on, a daily job emails paid members '
+                    'who received their onboarding-link welcome but have not '
+                    'completed onboarding after ONBOARDING_REMINDER_DELAY_DAYS. '
+                    'When off, the sweep is a no-op (no emails, no logs). '
+                    'Defaults on; switchable without a redeploy.'
+                ),
+                'docs_url': '_docs/integrations/site.md#onboarding_reminder_enabled',
+            },
+            {
+                'key': 'ONBOARDING_REMINDER_DELAY_DAYS',
+                'is_secret': False,
+                'optional': True,
+                'default': '7',
+                'description': (
+                    'Days after the onboarding-link welcome email before the '
+                    'reminder is due (issue #1133). A member whose earliest '
+                    'welcome is older than this and who has not onboarded is '
+                    'reminded once. Default 7. A blank, non-numeric, or '
+                    'non-positive override falls back to 7.'
+                ),
+                'docs_url': '_docs/integrations/site.md#onboarding_reminder_delay_days',
             },
             {
                 'key': 'SPRINT_BADGE_WINDOW_DAYS',

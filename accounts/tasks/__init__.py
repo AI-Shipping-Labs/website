@@ -25,6 +25,7 @@ from .imports import (
     run_scheduled_import,
 )
 from .purge_unverified_users import purge_unverified_users
+from .remind_onboarding import remind_onboarding_incomplete
 from .remind_unverified_users import remind_unverified_users
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "SCHEDULE_NAME_BY_SOURCE",
     "purge_unverified_users",
     "remind_unverified_users",
+    "remind_onboarding_incomplete",
 ]

@@ -235,6 +235,7 @@ class SetupSchedulesCommandTest(TestCase):
             'remind-unverified-users',
             'purge-unverified-users',
             'ingest-plan-sprints',
+            'onboarding-reminders',
         }
         self.assertEqual(names, expected)
 

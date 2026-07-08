@@ -1,4 +1,4 @@
-.PHONY: run run2 worker dev migrate qcache sync seed test test-core test-judge coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift clean
+.PHONY: run run2 worker dev migrate qcache sync seed test test-core test-judge coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift boot-profile clean
 
 # Default SITE_BASE_URL for local dev so generated links (unsubscribe,
 # calendar invites, password resets, share URLs) point at the running
@@ -137,6 +137,25 @@ lint-advisory:
 # ``uv run python manage.py generate_openapi``.
 check-openapi-drift:
 	uv run python manage.py generate_openapi --check
+
+# Local Docker boot-profiling harness (issue #1143). Reproduces the Fargate-dev
+# cold-start under --cpus=0.25 --memory=512m, runs the REAL instrumented boot
+# (Dockerfile -> entrypoint.sh -> scripts/entrypoint_init.py) against a
+# THROWAWAY isolated Postgres (compose project aisl-bootprofile, torn down with
+# down -v), and prints the BOOT_TIMING per-phase min/median plus the Logfire
+# off-vs-on django_setup delta. Dev tooling only — no change to production boot.
+# See _docs/boot-profiling.md for usage and the faithfulness caveats.
+# Knobs:
+#   BOOT_PROFILE_ITERATIONS   warm-boot repeats per Logfire mode (default 3)
+#   BOOT_PROFILE_LOGFIRE      off | on | both (default both)
+#   BOOT_PROFILE_PHASE_A      1 to also capture the cold first-migrate boot
+# Example: BOOT_PROFILE_ITERATIONS=5 BOOT_PROFILE_LOGFIRE=both make boot-profile
+BOOT_PROFILE_ITERATIONS ?= 3
+BOOT_PROFILE_LOGFIRE ?= both
+boot-profile:
+	BOOT_PROFILE_ITERATIONS=$(BOOT_PROFILE_ITERATIONS) \
+	BOOT_PROFILE_LOGFIRE=$(BOOT_PROFILE_LOGFIRE) \
+	bash scripts/boot_profile.sh
 
 # Clean generated files
 clean:

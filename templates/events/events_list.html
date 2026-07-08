@@ -22,8 +22,8 @@
 
       <!-- View Toggle (List / Calendar) + Subscribe CTA (issue #578) -->
       <div class="flex flex-wrap items-center gap-2 mb-6" data-testid="events-view-toggle-row">
-        <a href="{% url 'events_list' %}" class="px-3 py-1 rounded bg-accent text-accent-foreground text-sm">List</a>
-        <a href="{% url 'events_calendar' %}" class="px-3 py-1 rounded bg-secondary text-muted-foreground text-sm hover:bg-secondary/80 transition-colors">Calendar</a>
+        <a href="{% url 'events_list' %}" class="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-colors min-h-[44px] bg-accent text-accent-foreground">List</a>
+        <a href="{% url 'events_calendar' %}" class="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-colors min-h-[44px] bg-secondary text-muted-foreground hover:bg-secondary/80">Calendar</a>
 
         {% include "events/_subscribe_popover.html" %}
       </div>
@@ -142,9 +142,9 @@
                       Hosted on {{ event.external_host }}
                     </span>
                     {% endif %}
-                    <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
+                    <h3 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
                       {% if event.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ event.title }}
-                    </h2>
+                    </h3>
                   </div>
                   {% if event.description_html %}
                   <p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description_html|striptags|truncatechars:200 }}</p>

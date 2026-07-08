@@ -72,7 +72,7 @@ def _emit_timing(phase, seconds):
     print(f"BOOT_TIMING phase={phase} seconds={seconds:.3f}", flush=True)
 
 
-def _timed(phase, fn):
+def _timed(phase, fn, record=None):
     """Run ``fn()``, emit its elapsed ``BOOT_TIMING`` line, return its result.
 
     Purely additive observability: it does NOT change ordering, behavior, or
@@ -82,12 +82,61 @@ def _timed(phase, fn):
     value is passed straight through to the caller.
 
     Uses ``time.perf_counter()`` for a monotonic wall-clock measurement.
+
+    The elapsed value is computed exactly once. When ``record`` is a dict, the
+    same number that ``_emit_timing`` prints is stored under ``phase`` so the
+    persisted boot-timing payload (issue #1142) is the single source of truth
+    -- there is no recomputation. See ``persist_boot_timing``.
     """
     start = time.perf_counter()
     try:
         return fn()
     finally:
-        _emit_timing(phase, time.perf_counter() - start)
+        elapsed = time.perf_counter() - start
+        _emit_timing(phase, elapsed)
+        if record is not None:
+            record[phase] = elapsed
+
+
+def persist_boot_timing(role, phases):
+    """Persist one boot-timing payload for ``role`` to the shared cache.
+
+    Issue #1142: writes ``{tag, recorded_at, role, phases}`` to the shared
+    ``django_q`` ``DatabaseCache`` (``django_q_cache`` table) under
+    ``boot_timing:<role>`` with ``timeout=None`` so the web diagnostics
+    endpoint can read the latest numbers for BOTH tiers (the worker's numbers
+    are produced in a different container; the per-process ``default``
+    ``LocMemCache`` cannot carry them across the container boundary).
+
+    The build ``tag`` comes from the ``VERSION`` env var
+    (``{DATE}-{SHORT_SHA}``, set by ``deploy/update_task_def.py``), falling
+    back to ``"unknown"`` for local runs.
+
+    Fail-safe: the entire write is wrapped in a broad ``except`` that logs the
+    traceback and swallows it -- exactly the discipline ``_register_schedules``
+    uses. A store/cache failure at boot (e.g. the ``django_q_cache`` table not
+    yet created on a first-ever deploy) must NEVER crash the container or halt
+    a rollout; the worst case is that this one boot's numbers are missing and
+    the endpoint returns ``null`` for that tier until the next boot.
+    """
+    try:
+        from django.core.cache import caches
+        from django.utils import timezone
+
+        payload = {
+            "tag": os.environ.get("VERSION") or "unknown",
+            "recorded_at": timezone.now().isoformat(),
+            "role": role,
+            "phases": dict(phases),
+        }
+        caches["django_q"].set(
+            f"boot_timing:{role}", payload, timeout=None,
+        )
+    except Exception:
+        # Log the traceback but keep booting. Persisting diagnostics is
+        # non-critical for serving requests or running the qcluster; a bad
+        # cache/DB state cannot be allowed to take a tier down.
+        logger.exception("persist_boot_timing failed during entrypoint boot")
 
 
 def _register_schedules():
@@ -118,10 +167,15 @@ def main():
     # negligible relative to the per-phase seconds we are measuring.
     boot_start = time.perf_counter()
 
+    # Issue #1142: accumulate the per-phase elapsed seconds captured by
+    # ``_timed`` (the same numbers ``_emit_timing`` prints, single source of
+    # truth) so the whole boot can be persisted once at the end.
+    phases = {}
+
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "website.settings")
     # Time settings import + app registry population (incl.
     # integrations.apps.ready() -> Logfire). See issue #1141 Phase 1.
-    _timed("django_setup", django.setup)
+    _timed("django_setup", django.setup, record=phases)
 
     from django.core.management import call_command
 
@@ -138,6 +192,7 @@ def main():
         _timed(
             "migrate",
             lambda: call_command("migrate", interactive=False, verbosity=1),
+            record=phases,
         )
         print("Database migrations applied successfully.", flush=True)
     else:
@@ -156,18 +211,30 @@ def main():
     # ``django_q_cache`` table) before any future check that hits the ORM
     # runs.
     print("Run Django system checks (fail on Error level)", flush=True)
-    _timed("check", lambda: call_command("check", "--fail-level", "ERROR"))
+    _timed(
+        "check",
+        lambda: call_command("check", "--fail-level", "ERROR"),
+        record=phases,
+    )
 
     # Issue #708: register the django-q schedules (including
     # ``complete-finished-events``) on every boot for both web and worker.
     # Idempotent; failures are logged and swallowed so a bad schedule
     # cannot crash the container.
-    _timed("setup_schedules", _register_schedules)
+    _timed("setup_schedules", _register_schedules, record=phases)
 
     # Issue #1141 Phase 1: total pre-serve path (process start -> just
     # before the gunicorn/qcluster handoff). This also captures the
     # "time to Starting server / Starting django-q cluster" handoff figure.
-    _emit_timing("total", time.perf_counter() - boot_start)
+    total = time.perf_counter() - boot_start
+    _emit_timing("total", total)
+    phases["total"] = total
+
+    # Issue #1142: persist the captured per-phase numbers to the shared
+    # ``django_q`` cache BEFORE the blocking gunicorn/qcluster handoff so the
+    # boot-timing diagnostics endpoint can read them. Fail-safe: a store
+    # failure is logged and swallowed and never crashes the container.
+    persist_boot_timing("web" if run_migrations else "worker", phases)
 
     if run_migrations:
         # Web container -> hand off to gunicorn IN THIS PROCESS.

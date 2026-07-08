@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 import sys
 
 ALLOWED_HOSTS_BY_ENV = {
@@ -52,17 +53,24 @@ def _set_env_var(environment, name, value):
     environment.append({"name": name, "value": value})
 
 
+def _remove_env_var(environment, name):
+    environment[:] = [env_var for env_var in environment if env_var["name"] != name]
+
+
+def _predeploy_migrate_check_enabled():
+    value = os.environ.get("PREDEPLOY_MIGRATE_CHECK_ENABLED", "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _run_migrations_for_container(container_name):
     # entrypoint.sh runs `manage.py migrate` only when RUN_MIGRATIONS=true.
     # Two containers in the same task race on migrations with mixed DDL +
     # data steps and deadlock (issue #336). Pick the web container as the
     # single migrator; everything else (workers, sidecars) skips.
     #
-    # Issue #1141 Phase 2A: RUN_MIGRATIONS is kept ONLY for the legacy
-    # BOOT_MODE-absent fallback in scripts/entrypoint_init.py, so a partial
-    # rollout can never leave the DB un-migrated. The serving containers set
-    # BOOT_MODE (below) and skip migrate; the pre-deploy one-off task is the
-    # real single migrator.
+    # Issue #1141 Phase 2A keeps RUN_MIGRATIONS for the legacy BOOT_MODE-absent
+    # path. While aws-infra#12 is not applied, deploys intentionally use that
+    # legacy path so they do not need ecs:RunTask.
     if container_name and container_name.endswith("-worker"):
         return "false"
     return "true"
@@ -165,6 +173,8 @@ def update_task_definition(
 
         _apply_role(task_def, role)
 
+        predeploy_enabled = _predeploy_migrate_check_enabled()
+
         for container_def in task_def["containerDefinitions"]:
             if "image" in container_def:
                 base_image, _ = container_def["image"].split(":")
@@ -193,11 +203,14 @@ def update_task_definition(
                 "RUN_MIGRATIONS",
                 _run_migrations_for_container(container_def.get("name")),
             )
-            _set_env_var(
-                environment,
-                "BOOT_MODE",
-                _boot_mode_for_container(container_def.get("name")),
-            )
+            if predeploy_enabled:
+                _set_env_var(
+                    environment,
+                    "BOOT_MODE",
+                    _boot_mode_for_container(container_def.get("name")),
+                )
+            else:
+                _remove_env_var(environment, "BOOT_MODE")
             _set_env_var(
                 environment,
                 "GUNICORN_WORKERS",

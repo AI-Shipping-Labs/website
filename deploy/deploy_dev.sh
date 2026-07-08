@@ -26,6 +26,17 @@ elif [ "${ENV}" = "prod" ]; then
     DEPLOY_HOST="https://aishippinglabs.com"
 fi
 
+predeploy_migrate_check_enabled() {
+    case "${PREDEPLOY_MIGRATE_CHECK_ENABLED:-}" in
+        1|true|TRUE|yes|YES|on|ON)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 # Diagnostics for failed deploys — surfaces the real reason a steady-state
 # wait timed out instead of "service did not stabilize" with no detail.
 diagnose_service_failure() {
@@ -146,7 +157,11 @@ register_task_def() {
     REGISTERED_TASK_DEF_ARN="${NEW_TASK_DEF_ARN}"
 }
 
-# Issue #1141 Phase 2A — pre-deploy gate. Run migrate + `check --fail-level
+# Issue #1141 Phase 2A — pre-deploy gate. Disabled by default until
+# DataTalksClub/aws-infra#12 grants ecs:RunTask to the deploy role. Enable by
+# setting PREDEPLOY_MIGRATE_CHECK_ENABLED=true in the deploy environment.
+#
+# Run migrate + `check --fail-level
 # ERROR` ONCE in a one-off ECS task (BOOT_MODE=predeploy) BEFORE any service
 # is rolled, using the SAME registered task-def ARN that the service will run
 # (same image, secrets, DEBUG/SES_ENABLED/ALLOWED_HOSTS). This:
@@ -348,7 +363,13 @@ deploy_service() {
     register_task_def "${SERVICE}" "${ROLE}"
     local NEW_TASK_DEF_ARN="${REGISTERED_TASK_DEF_ARN}"
 
-    run_predeploy_migrate_check "${SERVICE}" "${NEW_TASK_DEF_ARN}"
+    if predeploy_migrate_check_enabled; then
+        run_predeploy_migrate_check "${SERVICE}" "${NEW_TASK_DEF_ARN}"
+    else
+        echo ""
+        echo "=== Pre-deploy migrate + check gate disabled ==="
+        echo "PREDEPLOY_MIGRATE_CHECK_ENABLED is not true; using legacy RUN_MIGRATIONS serving-container path."
+    fi
 
     roll_service "${SERVICE}" "${ROLE}" "${NEW_TASK_DEF_ARN}"
 }
@@ -359,7 +380,7 @@ deploy_service() {
 # the single-migrator invariant (#336) and migrate-before-serve for both
 # services. Worker is rolled first so its replacement is already running
 # before the web rollout drops the old sidecar.
-if [ "${ENV}" = "prod" ]; then
+if [ "${ENV}" = "prod" ] && predeploy_migrate_check_enabled; then
     WEB_SERVICE="ai-shipping-labs-${ENV}"
     WORKER_SERVICE="ai-shipping-labs-worker-${ENV}"
 
@@ -375,6 +396,9 @@ if [ "${ENV}" = "prod" ]; then
 
     roll_service "${WORKER_SERVICE}" "worker" "${WORKER_TASK_DEF_ARN}"
     roll_service "${WEB_SERVICE}" "web" "${WEB_TASK_DEF_ARN}"
+elif [ "${ENV}" = "prod" ]; then
+    deploy_service "ai-shipping-labs-worker-${ENV}" "worker"
+    deploy_service "ai-shipping-labs-${ENV}" "web"
 else
     deploy_service "ai-shipping-labs-${ENV}" "combined"
 fi

@@ -165,7 +165,7 @@ class PredeployGateTextOrderTest(SimpleTestCase):
 class PredeployGateExecutionTest(SimpleTestCase):
     """Run the real script with a stubbed ``aws`` to prove fail-closed."""
 
-    def _run_deploy(self, tmpdir, predeploy_exit):
+    def _run_deploy(self, tmpdir, predeploy_exit="0", *, enable_gate=True):
         bindir = Path(tmpdir) / "bin"
         bindir.mkdir()
         aws_path = bindir / "aws"
@@ -178,6 +178,10 @@ class PredeployGateExecutionTest(SimpleTestCase):
         env["PATH"] = f"{bindir}{os.pathsep}{env['PATH']}"
         env["FAKE_AWS_LOG"] = str(log_path)
         env["FAKE_PREDEPLOY_EXIT"] = predeploy_exit
+        if enable_gate:
+            env["PREDEPLOY_MIGRATE_CHECK_ENABLED"] = "true"
+        else:
+            env.pop("PREDEPLOY_MIGRATE_CHECK_ENABLED", None)
 
         result = subprocess.run(
             ["bash", str(DEPLOY_SCRIPT_PATH), "testtag-20260708", "dev"],
@@ -219,3 +223,16 @@ class PredeployGateExecutionTest(SimpleTestCase):
             msg="service must NOT be rolled when pre-deploy migrate/check fails",
         )
         self.assertIn("service NOT rolled", result.stdout)
+
+    def test_gate_disabled_by_default_skips_run_task_and_updates_service(self):
+        with TemporaryDirectory() as tmpdir:
+            result, calls = self._run_deploy(tmpdir, enable_gate=False)
+
+        self.assertEqual(
+            result.returncode,
+            0,
+            msg=f"stdout={result.stdout}\nstderr={result.stderr}",
+        )
+        self.assertNotIn("ecs run-task", calls)
+        self.assertIn("ecs update-service", calls)
+        self.assertIn("Pre-deploy migrate + check gate disabled", result.stdout)

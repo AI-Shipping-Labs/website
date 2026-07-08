@@ -4,6 +4,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
@@ -118,7 +119,7 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
             env_by_container["ai-shipping-labs-worker"]["RUN_MIGRATIONS"], "false"
         )
 
-    def _env_by_container(self, deploy_env, role=None):
+    def _env_by_container(self, deploy_env, role=None, *, predeploy_enabled=False):
         with TemporaryDirectory() as tmpdir:
             input_path = Path(tmpdir) / "input.json"
             output_path = Path(tmpdir) / "output.json"
@@ -128,8 +129,13 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
             if role is not None:
                 args.append(role)
 
-            with redirect_stdout(StringIO()):
-                update_task_def.update_task_definition(*args)
+            env = {}
+            if predeploy_enabled:
+                env["PREDEPLOY_MIGRATE_CHECK_ENABLED"] = "true"
+
+            with patch.dict("os.environ", env, clear=False):
+                with redirect_stdout(StringIO()):
+                    update_task_def.update_task_definition(*args)
 
             task_def = self._read_task_definition(output_path)
 
@@ -140,20 +146,29 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
             for container in task_def["containerDefinitions"]
         }
 
-    def test_boot_mode_set_per_container_for_combined_dev(self):
+    def test_boot_mode_absent_by_default_for_combined_dev(self):
+        # Temporary fallback until DataTalksClub/aws-infra#12 is applied:
+        # without BOOT_MODE, the entrypoint uses legacy RUN_MIGRATIONS and the
+        # deploy does not need ecs:RunTask.
+        env_by_container = self._env_by_container("dev")
+
+        self.assertNotIn("BOOT_MODE", env_by_container["ai-shipping-labs"])
+        self.assertNotIn("BOOT_MODE", env_by_container["ai-shipping-labs-worker"])
+
+    def test_boot_mode_set_per_container_for_combined_dev_when_gate_enabled(self):
         # Issue #1141 Phase 2A: the essential (web) container serves in
         # BOOT_MODE=web; the worker sidecar in BOOT_MODE=worker. Neither
         # migrates/checks on the serving boot — the pre-deploy task does.
-        env_by_container = self._env_by_container("dev")
+        env_by_container = self._env_by_container("dev", predeploy_enabled=True)
 
         self.assertEqual(env_by_container["ai-shipping-labs"]["BOOT_MODE"], "web")
         self.assertEqual(
             env_by_container["ai-shipping-labs-worker"]["BOOT_MODE"], "worker"
         )
 
-    def test_boot_mode_set_for_prod_web_and_worker_roles(self):
-        web_env = self._env_by_container("prod", "web")
-        worker_env = self._env_by_container("prod", "worker")
+    def test_boot_mode_set_for_prod_web_and_worker_roles_when_gate_enabled(self):
+        web_env = self._env_by_container("prod", "web", predeploy_enabled=True)
+        worker_env = self._env_by_container("prod", "worker", predeploy_enabled=True)
 
         self.assertEqual(web_env["ai-shipping-labs"]["BOOT_MODE"], "web")
         self.assertEqual(

@@ -243,3 +243,19 @@ class StartGunicornArgvTest(SimpleTestCase):
         self.assertIn("--workers", built)
         self.assertEqual(built[built.index("--workers") + 1], "2")
         self.assertIn("--preload", built)
+        self.assertIn("--config", built)
+        self.assertEqual(
+            built[built.index("--config") + 1],
+            "python:website.gunicorn_conf",
+        )
+
+    def test_qcluster_initializes_logfire_after_boot_timing_path(self):
+        with mock.patch(
+            "integrations.services.observability.init_logfire_once"
+        ) as init_logfire, mock.patch(
+            "django.core.management.call_command"
+        ) as call_command:
+            entry._start_qcluster()
+
+        init_logfire.assert_called_once()
+        call_command.assert_called_once_with("qcluster", verbosity=1)

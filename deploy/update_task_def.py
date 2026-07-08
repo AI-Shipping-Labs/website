@@ -34,6 +34,15 @@ SITE_BASE_URL_BY_ENV = {
 
 VALID_ROLES = {"combined", "web", "worker"}
 
+# Issue #1141 Phase 2C: gunicorn worker count per environment. Dev runs 2 to
+# ease pressure in the shared 512 MB task; prod keeps 3. Read at boot from
+# ``os.environ['GUNICORN_WORKERS']`` (NOT get_config -- see
+# ``scripts/entrypoint_init._gunicorn_worker_count``).
+GUNICORN_WORKERS_BY_ENV = {
+    "dev": "2",
+    "prod": "3",
+}
+
 
 def _set_env_var(environment, name, value):
     for env_var in environment:
@@ -48,9 +57,27 @@ def _run_migrations_for_container(container_name):
     # Two containers in the same task race on migrations with mixed DDL +
     # data steps and deadlock (issue #336). Pick the web container as the
     # single migrator; everything else (workers, sidecars) skips.
+    #
+    # Issue #1141 Phase 2A: RUN_MIGRATIONS is kept ONLY for the legacy
+    # BOOT_MODE-absent fallback in scripts/entrypoint_init.py, so a partial
+    # rollout can never leave the DB un-migrated. The serving containers set
+    # BOOT_MODE (below) and skip migrate; the pre-deploy one-off task is the
+    # real single migrator.
     if container_name and container_name.endswith("-worker"):
         return "false"
     return "true"
+
+
+def _boot_mode_for_container(container_name):
+    # Issue #1141 Phase 2A: the SERVING task def sets BOOT_MODE=web on the
+    # essential (web) container and BOOT_MODE=worker on the worker
+    # container/sidecar. Serving containers then SKIP migrate + check (those
+    # run once in the pre-deploy one-off task with a BOOT_MODE=predeploy
+    # override) and bind fast. The worker is identified by its `-worker`
+    # name suffix, matching _run_migrations_for_container / _ensure_worker_sidecar.
+    if container_name and container_name.endswith("-worker"):
+        return "worker"
+    return "web"
 
 
 def _required_allowed_hosts(deploy_env):
@@ -71,6 +98,10 @@ def _site_base_url_for_env(deploy_env):
     return SITE_BASE_URL_BY_ENV.get(deploy_env, SITE_BASE_URL_BY_ENV["dev"])
 
 
+def _gunicorn_workers_for_env(deploy_env):
+    return GUNICORN_WORKERS_BY_ENV.get(deploy_env, GUNICORN_WORKERS_BY_ENV["dev"])
+
+
 def _ensure_worker_sidecar(containers):
     # Combined-role task: web + worker share one ECS task. Clone the web
     # container so image, secrets, and log config stay in sync — only
@@ -78,10 +109,13 @@ def _ensure_worker_sidecar(containers):
     #
     # ``command`` is set here for ECS console readability only. The
     # Dockerfile sets ENTRYPOINT to ``scripts/entrypoint_init.py`` without
-    # consuming ``$@``, so the actual web/worker dispatch is driven by the
-    # ``RUN_MIGRATIONS`` env var (set on the web container only). If you
-    # need to change worker behaviour, edit ``scripts/entrypoint_init.py``
-    # — editing this command field has no runtime effect.
+    # consuming ``$@``, so the actual web/worker/predeploy dispatch is driven
+    # by the ``BOOT_MODE`` env var (``web`` on the essential container,
+    # ``worker`` on this sidecar; ``predeploy`` is a run-task override).
+    # ``RUN_MIGRATIONS`` is kept only for the legacy BOOT_MODE-absent
+    # fallback. If you need to change worker behaviour, edit
+    # ``scripts/entrypoint_init.py`` — editing this command field has no
+    # runtime effect.
     if any(c["name"].endswith("-worker") for c in containers):
         return
 
@@ -158,6 +192,16 @@ def update_task_definition(
                 environment,
                 "RUN_MIGRATIONS",
                 _run_migrations_for_container(container_def.get("name")),
+            )
+            _set_env_var(
+                environment,
+                "BOOT_MODE",
+                _boot_mode_for_container(container_def.get("name")),
+            )
+            _set_env_var(
+                environment,
+                "GUNICORN_WORKERS",
+                _gunicorn_workers_for_env(deploy_env),
             )
             container_def["environment"] = environment
 

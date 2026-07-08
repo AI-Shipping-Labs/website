@@ -118,6 +118,72 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
             env_by_container["ai-shipping-labs-worker"]["RUN_MIGRATIONS"], "false"
         )
 
+    def _env_by_container(self, deploy_env, role=None):
+        with TemporaryDirectory() as tmpdir:
+            input_path = Path(tmpdir) / "input.json"
+            output_path = Path(tmpdir) / "output.json"
+            self._write_task_definition(input_path)
+
+            args = [str(input_path), "20260708-abcd123", str(output_path), deploy_env]
+            if role is not None:
+                args.append(role)
+
+            with redirect_stdout(StringIO()):
+                update_task_def.update_task_definition(*args)
+
+            task_def = self._read_task_definition(output_path)
+
+        return {
+            container["name"]: {
+                item["name"]: item["value"] for item in container["environment"]
+            }
+            for container in task_def["containerDefinitions"]
+        }
+
+    def test_boot_mode_set_per_container_for_combined_dev(self):
+        # Issue #1141 Phase 2A: the essential (web) container serves in
+        # BOOT_MODE=web; the worker sidecar in BOOT_MODE=worker. Neither
+        # migrates/checks on the serving boot — the pre-deploy task does.
+        env_by_container = self._env_by_container("dev")
+
+        self.assertEqual(env_by_container["ai-shipping-labs"]["BOOT_MODE"], "web")
+        self.assertEqual(
+            env_by_container["ai-shipping-labs-worker"]["BOOT_MODE"], "worker"
+        )
+
+    def test_boot_mode_set_for_prod_web_and_worker_roles(self):
+        web_env = self._env_by_container("prod", "web")
+        worker_env = self._env_by_container("prod", "worker")
+
+        self.assertEqual(web_env["ai-shipping-labs"]["BOOT_MODE"], "web")
+        self.assertEqual(
+            worker_env["ai-shipping-labs-worker"]["BOOT_MODE"], "worker"
+        )
+
+    def test_run_migrations_kept_for_backward_compat_fallback(self):
+        # RUN_MIGRATIONS is retained (not removed) so the BOOT_MODE-absent
+        # legacy path in the entrypoint stays safe during a partial rollout.
+        env_by_container = self._env_by_container("dev")
+        self.assertEqual(env_by_container["ai-shipping-labs"]["RUN_MIGRATIONS"], "true")
+        self.assertEqual(
+            env_by_container["ai-shipping-labs-worker"]["RUN_MIGRATIONS"], "false"
+        )
+
+    def test_gunicorn_workers_two_for_dev(self):
+        # Issue #1141 Phase 2C: dev runs 2 workers to ease 512 MB pressure.
+        env_by_container = self._env_by_container("dev")
+        for name, env in env_by_container.items():
+            with self.subTest(container=name):
+                self.assertEqual(env["GUNICORN_WORKERS"], "2")
+
+    def test_gunicorn_workers_three_for_prod(self):
+        web_env = self._env_by_container("prod", "web")
+        worker_env = self._env_by_container("prod", "worker")
+        self.assertEqual(web_env["ai-shipping-labs"]["GUNICORN_WORKERS"], "3")
+        self.assertEqual(
+            worker_env["ai-shipping-labs-worker"]["GUNICORN_WORKERS"], "3"
+        )
+
     def test_web_role_strips_worker_sidecar(self):
         with TemporaryDirectory() as tmpdir:
             input_path = Path(tmpdir) / "input.json"

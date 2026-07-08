@@ -96,12 +96,15 @@ diagnose_service_failure() {
     fi
 }
 
-deploy_service() {
+# Register a new task definition for SERVICE at the current TAG/ROLE.
+# Sets the global REGISTERED_TASK_DEF_ARN to the new ARN. Runs in the main
+# shell (NOT a subshell) so any `exit 1` here aborts the whole deploy loudly.
+register_task_def() {
     local SERVICE=$1
     local ROLE=$2
 
     echo ""
-    echo "=== Deploying ${SERVICE} (role=${ROLE}) with tag ${TAG} ==="
+    echo "=== Registering task definition for ${SERVICE} (role=${ROLE}) with tag ${TAG} ==="
 
     local FILE_IN="${SERVICE}-${TAG}.json"
     local FILE_OUT="updated_${SERVICE}-${TAG}.json"
@@ -133,10 +136,154 @@ deploy_service() {
         --query 'taskDefinition.taskDefinitionArn' \
         --output text)
 
+    rm -f ${FILE_IN} ${FILE_OUT}
+
     if [ -z "${NEW_TASK_DEF_ARN}" ] || [ "${NEW_TASK_DEF_ARN}" = "None" ]; then
         echo "Error: Task definition registration did not return an ARN."
         exit 1
     fi
+
+    REGISTERED_TASK_DEF_ARN="${NEW_TASK_DEF_ARN}"
+}
+
+# Issue #1141 Phase 2A — pre-deploy gate. Run migrate + `check --fail-level
+# ERROR` ONCE in a one-off ECS task (BOOT_MODE=predeploy) BEFORE any service
+# is rolled, using the SAME registered task-def ARN that the service will run
+# (same image, secrets, DEBUG/SES_ENABLED/ALLOWED_HOSTS). This:
+#   * moves the two RDS-bound costs (check ~28s + migrate ~8.8s) off every
+#     serving container's pre-bind path;
+#   * makes the pre-deploy task the SINGLE migrator (#336);
+#   * STRENGTHENS the #529 misconfig gate — a bad config (e.g. email_app.E001)
+#     now fails the DEPLOY before any container serves, instead of promoting a
+#     crash-looping container.
+#
+# FAIL-CLOSED: if migrate or check exits non-zero, this function calls
+# `exit 1`, which aborts the whole deploy. The service rollout is never
+# reached, so the service stays on its OLD task def (not rolled).
+run_predeploy_migrate_check() {
+    local SERVICE=$1
+    local TASK_DEF_ARN=$2
+
+    echo ""
+    echo "=== Pre-deploy migrate + check (BOOT_MODE=predeploy) on ${TASK_DEF_ARN} ==="
+
+    # Reuse the service's real network configuration so the one-off task lands
+    # in the same subnets/security groups and can reach RDS.
+    local NETWORK_CONFIG
+    NETWORK_CONFIG=$(aws ecs describe-services \
+        --cluster ${CLUSTER} \
+        --services ${SERVICE} \
+        --query 'services[0].networkConfiguration' \
+        --output json)
+
+    if [ -z "${NETWORK_CONFIG}" ] || [ "${NETWORK_CONFIG}" = "null" ]; then
+        echo "Error: Could not read networkConfiguration for ${SERVICE}; cannot run pre-deploy task."
+        exit 1
+    fi
+
+    # Launch config: prefer the service's capacityProviderStrategy; fall back
+    # to its launchType (Fargate). run-task requires one or the other.
+    local CAP_PROVIDER
+    CAP_PROVIDER=$(aws ecs describe-services \
+        --cluster ${CLUSTER} \
+        --services ${SERVICE} \
+        --query 'services[0].capacityProviderStrategy' \
+        --output json)
+    local LAUNCH_TYPE
+    LAUNCH_TYPE=$(aws ecs describe-services \
+        --cluster ${CLUSTER} \
+        --services ${SERVICE} \
+        --query 'services[0].launchType' \
+        --output text)
+
+    local LAUNCH_ARGS
+    if [ -n "${CAP_PROVIDER}" ] && [ "${CAP_PROVIDER}" != "null" ] && [ "${CAP_PROVIDER}" != "[]" ]; then
+        LAUNCH_ARGS=(--capacity-provider-strategy "${CAP_PROVIDER}")
+    else
+        LAUNCH_ARGS=(--launch-type "${LAUNCH_TYPE}")
+    fi
+
+    # The pre-deploy override runs the ESSENTIAL (web) container in predeploy
+    # mode (migrate + check + exit 0). The essential container is the single
+    # migrator; when it exits, ECS stops the whole task, so a combined-task
+    # worker sidecar does NOT linger as a qcluster.
+    local ESSENTIAL_NAME
+    # shellcheck disable=SC2016  # backticks are a JMESPath boolean literal, not a shell command substitution
+    ESSENTIAL_NAME=$(aws ecs describe-task-definition \
+        --task-definition ${TASK_DEF_ARN} \
+        --query 'taskDefinition.containerDefinitions[?essential==`true`].name | [0]' \
+        --output text)
+
+    if [ -z "${ESSENTIAL_NAME}" ] || [ "${ESSENTIAL_NAME}" = "None" ]; then
+        echo "Error: Could not determine the essential container for ${TASK_DEF_ARN}."
+        exit 1
+    fi
+
+    local OVERRIDES
+    OVERRIDES=$(printf '{"containerOverrides":[{"name":"%s","environment":[{"name":"BOOT_MODE","value":"predeploy"}]}]}' "${ESSENTIAL_NAME}")
+
+    echo "Running one-off migrate+check task on container ${ESSENTIAL_NAME}..."
+    local TASK_ARN
+    TASK_ARN=$(aws ecs run-task \
+        --cluster ${CLUSTER} \
+        --task-definition ${TASK_DEF_ARN} \
+        "${LAUNCH_ARGS[@]}" \
+        --network-configuration "${NETWORK_CONFIG}" \
+        --overrides "${OVERRIDES}" \
+        --started-by "predeploy-${TAG}" \
+        --query 'tasks[0].taskArn' \
+        --output text)
+
+    if [ -z "${TASK_ARN}" ] || [ "${TASK_ARN}" = "None" ]; then
+        echo "Error: Pre-deploy run-task did not return a task ARN. Aborting deploy; service NOT rolled."
+        exit 1
+    fi
+
+    echo "Waiting for pre-deploy task ${TASK_ARN} to reach STOPPED (timeout ~10 min)..."
+    if ! aws ecs wait tasks-stopped \
+        --cluster ${CLUSTER} \
+        --tasks ${TASK_ARN}; then
+        echo "ERROR: pre-deploy task did not reach STOPPED. Aborting deploy; service NOT rolled."
+        aws ecs describe-tasks \
+            --cluster ${CLUSTER} \
+            --tasks ${TASK_ARN} \
+            --query 'tasks[].{last:lastStatus,stoppedReason:stoppedReason,containers:containers[].{name:name,exitCode:exitCode,reason:reason}}' \
+            --output json || true
+        exit 1
+    fi
+
+    # Read the ESSENTIAL container's exit code — that is the migrate+check
+    # result. Any other container (e.g. a killed sidecar) is ignored.
+    local EXIT_CODE
+    EXIT_CODE=$(aws ecs describe-tasks \
+        --cluster ${CLUSTER} \
+        --tasks ${TASK_ARN} \
+        --query "tasks[0].containers[?name=='${ESSENTIAL_NAME}'].exitCode | [0]" \
+        --output text)
+
+    if [ "${EXIT_CODE}" != "0" ]; then
+        echo "ERROR: pre-deploy migrate+check exited with code '${EXIT_CODE}' (expected 0)."
+        echo "A failing migrate or #529 check FAILS the deploy: service NOT rolled (stays on its old task def)."
+        aws ecs describe-tasks \
+            --cluster ${CLUSTER} \
+            --tasks ${TASK_ARN} \
+            --query 'tasks[].{last:lastStatus,stoppedReason:stoppedReason,containers:containers[].{name:name,exitCode:exitCode,reason:reason}}' \
+            --output json || true
+        exit 1
+    fi
+
+    echo "Pre-deploy migrate+check succeeded (exit 0). Proceeding to roll ${SERVICE}."
+}
+
+# Roll SERVICE to NEW_TASK_DEF_ARN and wait for steady state. Assumes the
+# pre-deploy migrate+check gate already passed.
+roll_service() {
+    local SERVICE=$1
+    local ROLE=$2
+    local NEW_TASK_DEF_ARN=$3
+
+    echo ""
+    echo "=== Rolling ${SERVICE} (role=${ROLE}) to ${NEW_TASK_DEF_ARN} ==="
 
     echo "Updating ECS service..."
     # Dev may be provisioned at desired_count=0 to reduce idle Fargate cost.
@@ -178,7 +325,6 @@ deploy_service() {
                 if [ "${DEPLOYED_TAG}" = "${TAG}" ]; then
                     echo "WARNING: ECS waiter timed out, but ${DEPLOY_HOST}/ping is serving ${DEPLOYED_TAG} after grace attempt ${i}."
                     echo "Treating deployment as successful so post-deploy bookkeeping can continue."
-                    rm -f ${FILE_IN} ${FILE_OUT}
                     return 0
                 fi
                 echo "Grace attempt ${i}/${GRACE_ATTEMPTS}: ${DEPLOY_HOST}/ping returned '${DEPLOYED_TAG:-<unreachable>}'; expected '${TAG}'."
@@ -190,17 +336,45 @@ deploy_service() {
         diagnose_service_failure "${SERVICE}" "${ROLE}"
         exit 1
     fi
+}
 
-    rm -f ${FILE_IN} ${FILE_OUT}
+# Register -> pre-deploy migrate+check gate -> roll, for a single service.
+# The gate runs BEFORE the rollout, so a failing migrate/check aborts the
+# deploy and the service is never rolled.
+deploy_service() {
+    local SERVICE=$1
+    local ROLE=$2
+
+    register_task_def "${SERVICE}" "${ROLE}"
+    local NEW_TASK_DEF_ARN="${REGISTERED_TASK_DEF_ARN}"
+
+    run_predeploy_migrate_check "${SERVICE}" "${NEW_TASK_DEF_ARN}"
+
+    roll_service "${SERVICE}" "${ROLE}" "${NEW_TASK_DEF_ARN}"
 }
 
 # Prod runs web and worker as separate ECS services for memory isolation.
-# Worker deploys first so its replacement is already running before the web
-# rollout drops the old sidecar — eliminates the "no worker" gap during the
-# rollout window.
+# The pre-deploy migrate+check task must run EXACTLY ONCE (against the web
+# task-def) and complete exit 0 BEFORE either service is rolled — this keeps
+# the single-migrator invariant (#336) and migrate-before-serve for both
+# services. Worker is rolled first so its replacement is already running
+# before the web rollout drops the old sidecar.
 if [ "${ENV}" = "prod" ]; then
-    deploy_service "ai-shipping-labs-worker-${ENV}" "worker"
-    deploy_service "ai-shipping-labs-${ENV}" "web"
+    WEB_SERVICE="ai-shipping-labs-${ENV}"
+    WORKER_SERVICE="ai-shipping-labs-worker-${ENV}"
+
+    register_task_def "${WORKER_SERVICE}" "worker"
+    WORKER_TASK_DEF_ARN="${REGISTERED_TASK_DEF_ARN}"
+
+    register_task_def "${WEB_SERVICE}" "web"
+    WEB_TASK_DEF_ARN="${REGISTERED_TASK_DEF_ARN}"
+
+    # Single pre-deploy migrate+check, using the web task-def, before EITHER
+    # service is rolled. Aborts the whole deploy (nothing rolled) on failure.
+    run_predeploy_migrate_check "${WEB_SERVICE}" "${WEB_TASK_DEF_ARN}"
+
+    roll_service "${WORKER_SERVICE}" "worker" "${WORKER_TASK_DEF_ARN}"
+    roll_service "${WEB_SERVICE}" "web" "${WEB_TASK_DEF_ARN}"
 else
     deploy_service "ai-shipping-labs-${ENV}" "combined"
 fi

@@ -44,6 +44,15 @@ GUNICORN_WORKERS_BY_ENV = {
     "prod": "3",
 }
 
+# No-infra fast-start fallback: deploy CI already runs
+# ``manage.py check --fail-level ERROR`` before the image is built. Running
+# it again inside every serving container dominates cold-start time, so the
+# entrypoint skips it unless this env var is explicitly true.
+SERVING_BOOT_CHECK_ENABLED_BY_ENV = {
+    "dev": "false",
+    "prod": "false",
+}
+
 
 def _set_env_var(environment, name, value):
     for env_var in environment:
@@ -108,6 +117,13 @@ def _site_base_url_for_env(deploy_env):
 
 def _gunicorn_workers_for_env(deploy_env):
     return GUNICORN_WORKERS_BY_ENV.get(deploy_env, GUNICORN_WORKERS_BY_ENV["dev"])
+
+
+def _serving_boot_check_enabled_for_env(deploy_env):
+    return SERVING_BOOT_CHECK_ENABLED_BY_ENV.get(
+        deploy_env,
+        SERVING_BOOT_CHECK_ENABLED_BY_ENV["dev"],
+    )
 
 
 def _ensure_worker_sidecar(containers):
@@ -215,6 +231,11 @@ def update_task_definition(
                 environment,
                 "GUNICORN_WORKERS",
                 _gunicorn_workers_for_env(deploy_env),
+            )
+            _set_env_var(
+                environment,
+                "SERVING_BOOT_CHECK_ENABLED",
+                _serving_boot_check_enabled_for_env(deploy_env),
             )
             container_def["environment"] = environment
 

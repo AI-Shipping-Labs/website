@@ -164,36 +164,40 @@ class WorkerModeTest(BootModeDispatchTestBase):
         self.assertEqual(self.persist.call_args.args[0], "worker")
 
 
-class LegacyBackwardCompatTest(BootModeDispatchTestBase):
-    """BOOT_MODE absent must behave EXACTLY as before this change."""
+class NoInfraServingBootTest(BootModeDispatchTestBase):
+    """BOOT_MODE absent keeps migrations but skips expensive checks by default."""
 
-    def test_legacy_web_migrates_checks_schedules_and_serves(self):
-        # RUN_MIGRATIONS=true, BOOT_MODE absent -> the old web path.
+    def test_web_migrates_schedules_and_serves_without_check_by_default(self):
+        # RUN_MIGRATIONS=true, BOOT_MODE absent -> no-infra web path.
         self._run_main_with_env({"RUN_MIGRATIONS": "true"})
 
         names = _command_names(self.call_command)
         self.assertIn("migrate", names)
-        self.assertIn("check", names)
+        self.assertNotIn("check", names)
         self.register_schedules.assert_called_once()
         self.start_gunicorn.assert_called_once()
         self.start_qcluster.assert_not_called()
         self.assertEqual(self.persist.call_args.args[0], "web")
 
-    def test_legacy_worker_checks_schedules_and_starts_qcluster_no_migrate(self):
-        # RUN_MIGRATIONS absent, BOOT_MODE absent -> the old worker path.
+    def test_worker_schedules_and_starts_qcluster_without_migrate_or_check(self):
+        # RUN_MIGRATIONS absent, BOOT_MODE absent -> no-infra worker path.
         self._run_main_with_env({})
 
         names = _command_names(self.call_command)
         self.assertNotIn("migrate", names)
-        self.assertIn("check", names)
+        self.assertNotIn("check", names)
         self.register_schedules.assert_called_once()
         self.start_qcluster.assert_called_once()
         self.start_gunicorn.assert_not_called()
         self.assertEqual(self.persist.call_args.args[0], "worker")
 
-    def test_legacy_web_ordering_migrate_before_check(self):
-        self._run_main_with_env({"RUN_MIGRATIONS": "true"})
+    def test_serving_boot_check_can_be_enabled_and_runs_after_migrate(self):
+        self._run_main_with_env({
+            "RUN_MIGRATIONS": "true",
+            "SERVING_BOOT_CHECK_ENABLED": "true",
+        })
         names = _command_names(self.call_command)
+        self.assertIn("check", names)
         self.assertLess(names.index("migrate"), names.index("check"))
 
 

@@ -35,13 +35,12 @@ dispatch, and whether this boot runs ``migrate``.
   serving container binds fast.
 * ``BOOT_MODE=worker`` -> ``django.setup`` -> register schedules ->
   qcluster. SKIPS migrate and check.
-* ``BOOT_MODE`` ABSENT -> exactly the legacy behavior, keyed off
+* ``BOOT_MODE`` ABSENT -> no-infra serving path, keyed off
   ``RUN_MIGRATIONS`` as before: web (``RUN_MIGRATIONS=true``) migrates ->
-  checks -> schedules -> gunicorn; worker checks -> schedules -> qcluster.
-  This backward-compat path is critical so a partial rollout (or a manual
-  ``run-task`` without ``BOOT_MODE``) can never leave the DB un-migrated
-  or the #529 gate un-run. ``deploy/update_task_def.py`` keeps setting
-  ``RUN_MIGRATIONS`` for this fallback path only.
+  schedules -> gunicorn; worker schedules -> qcluster. The expensive
+  ``check --fail-level ERROR`` step is skipped by default on serving boot
+  because deploy CI already runs it before the image is built. Set
+  ``SERVING_BOOT_CHECK_ENABLED=true`` to restore the old serving-boot gate.
 
 Every mode still benefits from the single-process boot: only one settings
 import, no Secrets Manager / RDS round trips before serving / polling.
@@ -280,6 +279,18 @@ def _run_check(phases):
     )
 
 
+def _serving_boot_check_enabled():
+    """Return whether legacy serving boot should run ``manage.py check``.
+
+    This defaults OFF as the no-infra fast-start path: the deploy workflow
+    already runs the same Error-level Django check before build, and paying it
+    again inside every ECS serving container dominates cold-start time. Keep a
+    simple env override for incident response and local parity checks.
+    """
+    value = os.environ.get("SERVING_BOOT_CHECK_ENABLED", "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _run_predeploy(phases):
     """``BOOT_MODE=predeploy``: migrate + #529 check, then return (exit 0).
 
@@ -324,14 +335,17 @@ def _finalize_serving(role, phases, boot_start):
 
 
 def _run_legacy(phases, boot_start):
-    """``BOOT_MODE`` ABSENT: exactly today's behavior (backward-compat).
+    """``BOOT_MODE`` ABSENT: no-infra serving path.
 
-    Keyed off ``RUN_MIGRATIONS`` as before so a partial rollout or a manual
-    ``run-task`` without ``BOOT_MODE`` never leaves the DB un-migrated or the
-    #529 gate un-run:
+    Keyed off ``RUN_MIGRATIONS`` as before so a partial rollout without
+    ``BOOT_MODE`` never leaves the DB un-migrated:
 
-    * web (``RUN_MIGRATIONS=true``): migrate -> check -> schedules -> gunicorn
-    * worker (``RUN_MIGRATIONS!=true``): check -> schedules -> qcluster
+    * web (``RUN_MIGRATIONS=true``): migrate -> schedules -> gunicorn
+    * worker (``RUN_MIGRATIONS!=true``): schedules -> qcluster
+
+    ``manage.py check --fail-level ERROR`` remains available behind
+    ``SERVING_BOOT_CHECK_ENABLED=true`` but defaults off in deployed serving
+    tasks because the deploy workflow runs the same check before build.
     """
     run_migrations = os.environ.get("RUN_MIGRATIONS") == "true"
 
@@ -343,10 +357,16 @@ def _run_legacy(phases, boot_start):
             flush=True,
         )
 
-    # Legacy order: migrate -> check -> serve, so a fresh DB is migrated
-    # (including the email_app migration that creates ``django_q_cache``)
-    # before any check that hits the ORM runs.
-    _run_check(phases)
+    if _serving_boot_check_enabled():
+        # If explicitly enabled, keep the safe ordering: migrate first so a
+        # fresh DB has tables such as django_q_cache before ORM-backed checks.
+        _run_check(phases)
+    else:
+        print(
+            "Skipping Django system checks on serving boot "
+            "(SERVING_BOOT_CHECK_ENABLED is not true)",
+            flush=True,
+        )
 
     _finalize_serving("web" if run_migrations else "worker", phases, boot_start)
 

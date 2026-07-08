@@ -199,6 +199,16 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
             worker_env["ai-shipping-labs-worker"]["GUNICORN_WORKERS"], "3"
         )
 
+    def test_serving_boot_check_disabled_by_default_for_dev_and_prod(self):
+        dev_env = self._env_by_container("dev")
+        prod_web_env = self._env_by_container("prod", "web")
+        prod_worker_env = self._env_by_container("prod", "worker")
+
+        for env_by_container in (dev_env, prod_web_env, prod_worker_env):
+            for name, env in env_by_container.items():
+                with self.subTest(container=name):
+                    self.assertEqual(env["SERVING_BOOT_CHECK_ENABLED"], "false")
+
     def test_web_role_strips_worker_sidecar(self):
         with TemporaryDirectory() as tmpdir:
             input_path = Path(tmpdir) / "input.json"

@@ -195,7 +195,7 @@ from studio.views.questionnaires import (
     response_question_delete,
     response_question_edit,
 )
-from studio.views.recordings import recording_edit, recording_list, recording_publish_youtube
+from studio.views.recordings import recording_edit, recording_list
 from studio.views.redirects import redirect_create, redirect_delete, redirect_edit, redirect_list, redirect_toggle
 from studio.views.ses_events import ses_event_detail, ses_event_list
 from studio.views.settings import (
@@ -555,7 +555,6 @@ urlpatterns = [
     # Recordings
     path('recordings/', recording_list, name='studio_recording_list'),
     path('recordings/<int:recording_id>/edit', recording_edit, name='studio_recording_edit'),
-    path('recordings/<int:recording_id>/publish-youtube', recording_publish_youtube, name='studio_recording_publish_youtube'),
     path('recordings/<int:recording_id>/notify', recording_notify, name='studio_recording_notify'),
     path('recordings/<int:recording_id>/announce-slack', recording_announce_slack, name='studio_recording_announce_slack'),
 

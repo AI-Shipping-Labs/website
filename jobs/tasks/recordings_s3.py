@@ -1,8 +1,6 @@
 """Shared S3 helpers for recording upload tasks."""
 
 import io
-import os
-import tempfile
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -63,17 +61,6 @@ def upload_recording_mp4(file_data, config, key):
         },
     )
     return build_recording_s3_url(config.bucket, config.region, key)
-
-
-def download_recording_to_temp_file(s3_url, config):
-    s3_key = extract_s3_key(s3_url, config.bucket, config.region)
-    s3_client = get_recordings_s3_client(config)
-
-    temp_fd, temp_path = tempfile.mkstemp(suffix='.mp4')
-    os.close(temp_fd)
-
-    s3_client.download_file(config.bucket, s3_key, temp_path)
-    return temp_path, s3_key
 
 
 def extract_s3_key(s3_url, bucket, region):

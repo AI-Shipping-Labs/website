@@ -407,11 +407,6 @@ AWS_S3_RECORDINGS_REGION = os.environ.get('AWS_S3_RECORDINGS_REGION', 'eu-centra
 AWS_S3_CONTENT_BUCKET = os.environ.get('AWS_S3_CONTENT_BUCKET', '')
 AWS_S3_CONTENT_REGION = os.environ.get('AWS_S3_CONTENT_REGION', 'eu-west-1')
 
-# YouTube Data API v3 credentials (OAuth2 with refresh token)
-YOUTUBE_CLIENT_ID = os.environ.get('YOUTUBE_CLIENT_ID', '')
-YOUTUBE_CLIENT_SECRET = os.environ.get('YOUTUBE_CLIENT_SECRET', '')
-YOUTUBE_REFRESH_TOKEN = os.environ.get('YOUTUBE_REFRESH_TOKEN', '')
-
 SES_FROM_EMAIL = os.environ.get('SES_FROM_EMAIL', '')
 SES_TRANSACTIONAL_FROM_EMAIL = os.environ.get(
     'SES_TRANSACTIONAL_FROM_EMAIL',

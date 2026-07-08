@@ -297,15 +297,6 @@ INTEGRATION_GROUPS = [
         ],
     },
     {
-        'name': 'youtube',
-        'label': 'YouTube',
-        'keys': [
-            {'key': 'YOUTUBE_CLIENT_ID', 'is_secret': True, 'description': 'YouTube Data API OAuth client ID. Used to upload event recordings to the channel.', 'docs_url': '_docs/integrations/youtube.md#youtube_client_id'},
-            {'key': 'YOUTUBE_CLIENT_SECRET', 'is_secret': True, 'description': 'YouTube OAuth client secret. Get from Google Cloud Console > APIs & Services > Credentials.', 'docs_url': '_docs/integrations/youtube.md#youtube_client_secret'},
-            {'key': 'YOUTUBE_REFRESH_TOKEN', 'is_secret': True, 'description': 'Long-lived OAuth refresh token authorising uploads. Generated once via the YouTube auth flow.', 'docs_url': '_docs/integrations/youtube.md#youtube_refresh_token'},
-        ],
-    },
-    {
         'name': 'calendly',
         'label': 'Calendly',
         'keys': [

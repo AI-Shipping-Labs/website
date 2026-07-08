@@ -53,10 +53,41 @@ web tier down. We log and continue.
 import logging
 import os
 import sys
+import time
 
 import django
 
 logger = logging.getLogger(__name__)
+
+
+def _emit_timing(phase, seconds):
+    """Print a single flushed ``BOOT_TIMING`` line for CloudWatch.
+
+    Format matches the ``CI_TIMING phase=... seconds=...`` convention used
+    in ``.github/workflows/deploy-dev.yml`` so ops can grep both with the
+    same tooling. ``flush=True`` is mandatory: the container may crash in a
+    later phase before gunicorn binds, and the line must still reach
+    CloudWatch. See issue #1141 Phase 1.
+    """
+    print(f"BOOT_TIMING phase={phase} seconds={seconds:.3f}", flush=True)
+
+
+def _timed(phase, fn):
+    """Run ``fn()``, emit its elapsed ``BOOT_TIMING`` line, return its result.
+
+    Purely additive observability: it does NOT change ordering, behavior, or
+    crash semantics of the wrapped phase. The timing line is emitted from a
+    ``finally`` block so a phase that raises still records its elapsed time
+    in CloudWatch before the exception propagates unchanged. ``fn``'s return
+    value is passed straight through to the caller.
+
+    Uses ``time.perf_counter()`` for a monotonic wall-clock measurement.
+    """
+    start = time.perf_counter()
+    try:
+        return fn()
+    finally:
+        _emit_timing(phase, time.perf_counter() - start)
 
 
 def _register_schedules():
@@ -81,8 +112,16 @@ def _register_schedules():
 
 
 def main():
+    # Issue #1141 Phase 1: capture process-start reference for the final
+    # ``BOOT_TIMING phase=total`` line. ``perf_counter()`` here is the
+    # earliest point in main; the small pre-main interpreter/import cost is
+    # negligible relative to the per-phase seconds we are measuring.
+    boot_start = time.perf_counter()
+
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "website.settings")
-    django.setup()
+    # Time settings import + app registry population (incl.
+    # integrations.apps.ready() -> Logfire). See issue #1141 Phase 1.
+    _timed("django_setup", django.setup)
 
     from django.core.management import call_command
 
@@ -96,7 +135,10 @@ def main():
         # See issue #336. ``deploy/update_task_def.py`` sets
         # ``RUN_MIGRATIONS=true`` on the web container only.
         print("Apply database migrations", flush=True)
-        call_command("migrate", interactive=False, verbosity=1)
+        _timed(
+            "migrate",
+            lambda: call_command("migrate", interactive=False, verbosity=1),
+        )
         print("Database migrations applied successfully.", flush=True)
     else:
         print(
@@ -114,13 +156,18 @@ def main():
     # ``django_q_cache`` table) before any future check that hits the ORM
     # runs.
     print("Run Django system checks (fail on Error level)", flush=True)
-    call_command("check", "--fail-level", "ERROR")
+    _timed("check", lambda: call_command("check", "--fail-level", "ERROR"))
 
     # Issue #708: register the django-q schedules (including
     # ``complete-finished-events``) on every boot for both web and worker.
     # Idempotent; failures are logged and swallowed so a bad schedule
     # cannot crash the container.
-    _register_schedules()
+    _timed("setup_schedules", _register_schedules)
+
+    # Issue #1141 Phase 1: total pre-serve path (process start -> just
+    # before the gunicorn/qcluster handoff). This also captures the
+    # "time to Starting server / Starting django-q cluster" handoff figure.
+    _emit_timing("total", time.perf_counter() - boot_start)
 
     if run_migrations:
         # Web container -> hand off to gunicorn IN THIS PROCESS.

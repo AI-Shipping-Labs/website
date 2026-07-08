@@ -13,20 +13,38 @@ same Python interpreter, no second Django boot. Combined with
 ``gunicorn --preload`` (master forks workers without re-importing the
 WSGI module), the cold-start cost is paid exactly once per container.
 
-Web vs worker container
-=======================
+Boot mode dispatch (issue #1141 Phase 2A)
+=========================================
 
-Both containers share the same Docker ENTRYPOINT. The web task definition
-sets ``RUN_MIGRATIONS=true``; the worker container (cloned from web with
-``command`` overridden in ``deploy/update_task_def.py``) does not. We use
-that env var as the dispatch flag:
+All containers share the same Docker ENTRYPOINT (it does NOT consume
+``$@``, so an ECS ``command`` override cannot select a run mode). The
+``BOOT_MODE`` env var selects what this process does. It untangles two
+concerns the old ``RUN_MIGRATIONS`` flag conflated: web-vs-worker role
+dispatch, and whether this boot runs ``migrate``.
 
-* web (RUN_MIGRATIONS=true)  -> migrate, check, register schedules, gunicorn
-* worker (RUN_MIGRATIONS!=true) -> check, register schedules, qcluster
+* ``BOOT_MODE=predeploy`` -> ``django.setup`` -> ``migrate`` ->
+  ``check --fail-level ERROR`` -> exit 0. NO schedules, NO gunicorn, NO
+  qcluster. This is the single pre-deploy one-off task (``aws ecs
+  run-task``) that ``deploy/deploy_dev.sh`` runs BEFORE rolling the
+  service. A non-zero exit from migrate or check propagates so the task
+  fails and the deploy aborts without rolling the service. It is the
+  SINGLE migrator (#336) and it runs the #529 misconfig gate against the
+  real serving env.
+* ``BOOT_MODE=web`` -> ``django.setup`` -> register schedules -> gunicorn
+  bind. SKIPS migrate and check (they ran in the pre-deploy task), so the
+  serving container binds fast.
+* ``BOOT_MODE=worker`` -> ``django.setup`` -> register schedules ->
+  qcluster. SKIPS migrate and check.
+* ``BOOT_MODE`` ABSENT -> exactly the legacy behavior, keyed off
+  ``RUN_MIGRATIONS`` as before: web (``RUN_MIGRATIONS=true``) migrates ->
+  checks -> schedules -> gunicorn; worker checks -> schedules -> qcluster.
+  This backward-compat path is critical so a partial rollout (or a manual
+  ``run-task`` without ``BOOT_MODE``) can never leave the DB un-migrated
+  or the #529 gate un-run. ``deploy/update_task_def.py`` keeps setting
+  ``RUN_MIGRATIONS`` for this fallback path only.
 
-The worker still benefits from the single-process boot: only one settings
-import, no Secrets Manager / RDS round trips before django-q starts
-polling.
+Every mode still benefits from the single-process boot: only one settings
+import, no Secrets Manager / RDS round trips before serving / polling.
 
 The ``django_q_cache`` table (used by the worker-heartbeat
 ``DatabaseCache`` backend) is created by an ``email_app`` migration, so
@@ -160,6 +178,184 @@ def _register_schedules():
         logger.exception("setup_schedules failed during entrypoint boot")
 
 
+def _gunicorn_worker_count():
+    """Return the gunicorn ``--workers`` count from ``os.environ`` (default 3).
+
+    Issue #1141 Phase 2C. This is read from ``GUNICORN_WORKERS`` and MUST NOT
+    go through the ``IntegrationSetting`` / ``get_config`` framework. It is a
+    deploy-time value consumed on the gunicorn master BEFORE the app serves a
+    single request and before the runtime is fully wired: the DB override
+    cannot be consulted pre-boot, and querying RDS here would re-introduce the
+    exact pre-bind DB round-trip Phase 2 is removing. A non-integer /
+    non-positive value falls back to the default 3 with a logged warning so a
+    bad env var can never crash boot.
+    """
+    raw = os.environ.get("GUNICORN_WORKERS")
+    if raw is None:
+        return 3
+    try:
+        count = int(raw)
+    except (TypeError, ValueError):
+        count = 0
+    if count <= 0:
+        logger.warning(
+            "Invalid GUNICORN_WORKERS=%r; falling back to 3 workers", raw,
+        )
+        return 3
+    return count
+
+
+def _start_gunicorn(workers):
+    """Hand off to gunicorn IN THIS PROCESS (web serving path).
+
+    ``gunicorn.app.wsgiapp.run`` reads its CLI from ``sys.argv``, so we
+    rewrite argv to look like the previous CMD line. ``--preload`` makes the
+    master load the app once and fork workers without re-importing -- the
+    cold-start gain carries across all workers.
+    """
+    print("Starting server", flush=True)
+    sys.argv = [
+        "gunicorn",
+        "website.wsgi:application",
+        "--bind", "0.0.0.0:8000",
+        "--workers", str(workers),
+        "--preload",
+    ]
+    from gunicorn.app.wsgiapp import run as gunicorn_run
+    gunicorn_run()
+
+
+def _start_qcluster():
+    """Hand off to the django-q cluster IN THIS PROCESS (worker path)."""
+    # Inline import mirrors the rest of this entrypoint: Django management is
+    # imported lazily so importing the module stays cheap and does not touch
+    # Django before settings are configured.
+    from django.core.management import call_command
+
+    print("Starting django-q cluster", flush=True)
+    os.environ["DJANGO_QCLUSTER_PROCESS"] = "true"
+    call_command("qcluster", verbosity=1)
+
+
+def _run_migrate(phases):
+    """Apply DB migrations, timed. Raises (propagates) on migration failure.
+
+    Migrations run from a SINGLE container per deploy. Two containers (web +
+    worker) starting in parallel from the same image race any migration with
+    both DDL and data steps (e.g. integrations.0021) and deadlock against the
+    same database (issue #336). Under ``BOOT_MODE`` the sole migrator is the
+    ``predeploy`` one-off task; in the legacy fallback it is the web container
+    (``RUN_MIGRATIONS=true``).
+    """
+    from django.core.management import call_command
+
+    print("Apply database migrations", flush=True)
+    _timed(
+        "migrate",
+        lambda: call_command("migrate", interactive=False, verbosity=1),
+        record=phases,
+    )
+    print("Database migrations applied successfully.", flush=True)
+
+
+def _run_check(phases):
+    """Run the #529 system-check gate, timed. Propagates on Error-level checks.
+
+    Issue #529: defence-in-depth gate against a misconfigured deploy. Runs
+    against the actual platform env vars (real DEBUG, real SES_ENABLED). If a
+    registered system check fires at Error level (e.g. email_app.E001 when
+    SES_ENABLED is missing from the task definition), ``call_command`` raises,
+    the process exits non-zero, and the deploy halts. Under ``BOOT_MODE`` this
+    runs in the ``predeploy`` one-off task (so a bad config fails the DEPLOY
+    before any container serves); in the legacy fallback it runs on the
+    serving boot as before.
+    """
+    from django.core.management import call_command
+
+    print("Run Django system checks (fail on Error level)", flush=True)
+    _timed(
+        "check",
+        lambda: call_command("check", "--fail-level", "ERROR"),
+        record=phases,
+    )
+
+
+def _run_predeploy(phases):
+    """``BOOT_MODE=predeploy``: migrate + #529 check, then return (exit 0).
+
+    Runs NO schedules, NO gunicorn, NO qcluster. A non-zero exit from migrate
+    or check propagates (the exception is not caught here) so the pre-deploy
+    one-off ECS task fails and ``deploy/deploy_dev.sh`` aborts the deploy
+    WITHOUT rolling the service. This is the single migrator (#336) and the
+    #529 misconfig gate, moved off every serving container's pre-bind path.
+
+    We deliberately do NOT persist ``boot_timing:web``/``:worker`` from here:
+    a predeploy task is not a serving container. The per-phase BOOT_TIMING
+    lines for ``django_setup`` / ``migrate`` / ``check`` are still emitted by
+    ``_timed`` so the pre-deploy task's CloudWatch logs remain diagnosable.
+    """
+    _run_migrate(phases)
+    _run_check(phases)
+
+
+def _finalize_serving(role, phases, boot_start):
+    """Register schedules, emit the total line, and persist boot timing.
+
+    Shared by the ``web`` and ``worker`` serving paths (issue #1141 Phase 2A)
+    and the legacy fallback. ``migrate`` and ``check`` are NOT run here under
+    ``BOOT_MODE`` -- they were decoupled into the pre-deploy task.
+    """
+    # Issue #708: register the django-q schedules on every boot for both web
+    # and worker. Idempotent; failures are logged and swallowed so a bad
+    # schedule cannot crash the container.
+    _timed("setup_schedules", _register_schedules, record=phases)
+
+    # Issue #1141 Phase 1: total pre-serve path (process start -> just before
+    # the gunicorn/qcluster handoff).
+    total = time.perf_counter() - boot_start
+    _emit_timing("total", total)
+    phases["total"] = total
+
+    # Issue #1142: persist the captured per-phase numbers to the shared
+    # ``django_q`` cache BEFORE the blocking handoff so the boot-timing
+    # diagnostics endpoint can read them. Fail-safe: a store failure is logged
+    # and swallowed and never crashes the container.
+    persist_boot_timing(role, phases)
+
+
+def _run_legacy(phases, boot_start):
+    """``BOOT_MODE`` ABSENT: exactly today's behavior (backward-compat).
+
+    Keyed off ``RUN_MIGRATIONS`` as before so a partial rollout or a manual
+    ``run-task`` without ``BOOT_MODE`` never leaves the DB un-migrated or the
+    #529 gate un-run:
+
+    * web (``RUN_MIGRATIONS=true``): migrate -> check -> schedules -> gunicorn
+    * worker (``RUN_MIGRATIONS!=true``): check -> schedules -> qcluster
+    """
+    run_migrations = os.environ.get("RUN_MIGRATIONS") == "true"
+
+    if run_migrations:
+        _run_migrate(phases)
+    else:
+        print(
+            "Skipping migrations on this container (RUN_MIGRATIONS != true)",
+            flush=True,
+        )
+
+    # Legacy order: migrate -> check -> serve, so a fresh DB is migrated
+    # (including the email_app migration that creates ``django_q_cache``)
+    # before any check that hits the ORM runs.
+    _run_check(phases)
+
+    _finalize_serving("web" if run_migrations else "worker", phases, boot_start)
+
+    if run_migrations:
+        _start_gunicorn(_gunicorn_worker_count())
+    else:
+        _start_qcluster()
+
+
 def main():
     # Issue #1141 Phase 1: capture process-start reference for the final
     # ``BOOT_TIMING phase=total`` line. ``perf_counter()`` here is the
@@ -177,86 +373,28 @@ def main():
     # integrations.apps.ready() -> Logfire). See issue #1141 Phase 1.
     _timed("django_setup", django.setup, record=phases)
 
-    from django.core.management import call_command
+    # Issue #1141 Phase 2A: dispatch on BOOT_MODE (predeploy / web / worker),
+    # falling back to the legacy RUN_MIGRATIONS behavior when it is absent.
+    boot_mode = os.environ.get("BOOT_MODE")
 
-    run_migrations = os.environ.get("RUN_MIGRATIONS") == "true"
+    if boot_mode == "predeploy":
+        # Migrate + #529 check, then return -> process exits 0 (unless a
+        # phase raised, which propagates and fails the pre-deploy task).
+        _run_predeploy(phases)
+        return
 
-    if run_migrations:
-        # Migrations run from a single container per task. Two containers
-        # (web + worker) start in parallel from the same image, and any
-        # migration with both DDL and data steps (e.g. integrations.0021)
-        # deadlocks when run concurrently against the same database.
-        # See issue #336. ``deploy/update_task_def.py`` sets
-        # ``RUN_MIGRATIONS=true`` on the web container only.
-        print("Apply database migrations", flush=True)
-        _timed(
-            "migrate",
-            lambda: call_command("migrate", interactive=False, verbosity=1),
-            record=phases,
-        )
-        print("Database migrations applied successfully.", flush=True)
-    else:
-        print(
-            "Skipping migrations on this container (RUN_MIGRATIONS != true)",
-            flush=True,
-        )
+    if boot_mode == "web":
+        _finalize_serving("web", phases, boot_start)
+        _start_gunicorn(_gunicorn_worker_count())
+        return
 
-    # Issue #529: defence-in-depth gate against a misconfigured deploy.
-    # Runs against the actual platform env vars (real DEBUG, real
-    # SES_ENABLED). If a registered system check fires at Error level
-    # (e.g. email_app.E001 when SES_ENABLED is missing from the prod task
-    # definition), the container exits non-zero, ECS marks it unhealthy,
-    # and the rollout halts. Order: migrate -> check -> serve, so a fresh
-    # DB is migrated (including the email_app migration that creates the
-    # ``django_q_cache`` table) before any future check that hits the ORM
-    # runs.
-    print("Run Django system checks (fail on Error level)", flush=True)
-    _timed(
-        "check",
-        lambda: call_command("check", "--fail-level", "ERROR"),
-        record=phases,
-    )
+    if boot_mode == "worker":
+        _finalize_serving("worker", phases, boot_start)
+        _start_qcluster()
+        return
 
-    # Issue #708: register the django-q schedules (including
-    # ``complete-finished-events``) on every boot for both web and worker.
-    # Idempotent; failures are logged and swallowed so a bad schedule
-    # cannot crash the container.
-    _timed("setup_schedules", _register_schedules, record=phases)
-
-    # Issue #1141 Phase 1: total pre-serve path (process start -> just
-    # before the gunicorn/qcluster handoff). This also captures the
-    # "time to Starting server / Starting django-q cluster" handoff figure.
-    total = time.perf_counter() - boot_start
-    _emit_timing("total", total)
-    phases["total"] = total
-
-    # Issue #1142: persist the captured per-phase numbers to the shared
-    # ``django_q`` cache BEFORE the blocking gunicorn/qcluster handoff so the
-    # boot-timing diagnostics endpoint can read them. Fail-safe: a store
-    # failure is logged and swallowed and never crashes the container.
-    persist_boot_timing("web" if run_migrations else "worker", phases)
-
-    if run_migrations:
-        # Web container -> hand off to gunicorn IN THIS PROCESS.
-        # ``gunicorn.app.wsgiapp.run`` reads its CLI from sys.argv, so we
-        # rewrite argv to look like the previous CMD line. ``--preload``
-        # makes the master load the app once and fork workers without
-        # re-importing -- the cold-start gain carries across all workers.
-        print("Starting server", flush=True)
-        sys.argv = [
-            "gunicorn",
-            "website.wsgi:application",
-            "--bind", "0.0.0.0:8000",
-            "--workers", "3",
-            "--preload",
-        ]
-        from gunicorn.app.wsgiapp import run as gunicorn_run
-        gunicorn_run()
-    else:
-        # Worker container -> django-q cluster, in-process.
-        print("Starting django-q cluster", flush=True)
-        os.environ["DJANGO_QCLUSTER_PROCESS"] = "true"
-        call_command("qcluster", verbosity=1)
+    # BOOT_MODE absent -> exact legacy behavior.
+    _run_legacy(phases, boot_start)
 
 
 if __name__ == "__main__":

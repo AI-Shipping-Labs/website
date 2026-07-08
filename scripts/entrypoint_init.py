@@ -220,7 +220,6 @@ def _start_gunicorn(workers):
         "--bind", "0.0.0.0:8000",
         "--workers", str(workers),
         "--preload",
-        "--config", "python:website.gunicorn_conf",
     ]
     from gunicorn.app.wsgiapp import run as gunicorn_run
     gunicorn_run()
@@ -234,9 +233,6 @@ def _start_qcluster():
     from django.core.management import call_command
 
     print("Starting django-q cluster", flush=True)
-    from integrations.services.observability import init_logfire_once
-
-    init_logfire_once()
     os.environ["DJANGO_QCLUSTER_PROCESS"] = "true"
     call_command("qcluster", verbosity=1)
 

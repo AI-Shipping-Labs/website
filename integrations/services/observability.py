@@ -28,7 +28,6 @@ from django.conf import settings
 from integrations.config import get_config, is_enabled
 
 logger = logging.getLogger(__name__)
-_logfire_initialized = False
 
 
 def logfire_is_enabled():
@@ -74,25 +73,6 @@ def init_logfire():
         logger.warning('Failed to initialize Logfire', exc_info=True)
         return False
     return True
-
-
-def init_logfire_once():
-    """Initialize Logfire at most once in the current serving process.
-
-    This is used by post-``django.setup`` serving hooks so Logfire no longer
-    blocks the ECS pre-bind path. ``init_logfire`` remains the single gate and
-    implementation; this wrapper only prevents duplicate configure calls in a
-    long-lived process.
-    """
-    global _logfire_initialized
-
-    if _logfire_initialized:
-        return False
-
-    initialized = init_logfire()
-    if initialized:
-        _logfire_initialized = True
-    return initialized
 
 
 def _instrument(logfire):

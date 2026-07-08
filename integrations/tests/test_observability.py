@@ -8,20 +8,16 @@ is forced open. ``logfire.configure`` is always patched, so no Logfire
 network traffic is emitted in CI.
 """
 
-import importlib
 from unittest.mock import patch
 
 from django.conf import settings
 from django.test import TestCase, override_settings
 
-from integrations.apps import IntegrationsConfig
 from integrations.config import clear_config_cache
 from integrations.services.observability import (
     init_logfire,
-    init_logfire_once,
     logfire_is_enabled,
 )
-from website.gunicorn_conf import post_fork
 
 FAKE_TOKEN = 'pylf_fake_test_token'
 
@@ -56,11 +52,7 @@ class LogfireInitTest(TestCase):
 
     def setUp(self):
         clear_config_cache()
-        import integrations.services.observability as observability
-
-        observability._logfire_initialized = False
         self.addCleanup(clear_config_cache)
-        self.addCleanup(setattr, observability, '_logfire_initialized', False)
 
     def test_configure_not_called_under_testing(self):
         # Default test-suite state: TESTING is True -> gate closed.
@@ -143,45 +135,3 @@ class LogfireInitTest(TestCase):
             finally:
                 if had_anthropic:
                     logfire.instrument_anthropic = saved
-
-
-class LogfireDeferredStartupTest(TestCase):
-
-    def setUp(self):
-        clear_config_cache()
-        import integrations.services.observability as observability
-
-        observability._logfire_initialized = False
-        self.addCleanup(clear_config_cache)
-        self.addCleanup(setattr, observability, '_logfire_initialized', False)
-
-    def test_app_ready_does_not_initialize_logfire(self):
-        config = IntegrationsConfig(
-            'integrations',
-            importlib.import_module('integrations'),
-        )
-
-        with patch('integrations.services.observability.init_logfire') as mock_init:
-            config.ready()
-
-        mock_init.assert_not_called()
-
-    def test_gunicorn_post_fork_initializes_logfire_once(self):
-        with patch(
-            'integrations.services.observability.init_logfire',
-            return_value=True,
-        ) as mock_init:
-            self.assertTrue(post_fork(server=None, worker=None))
-            self.assertFalse(post_fork(server=None, worker=None))
-
-        mock_init.assert_called_once()
-
-    def test_init_logfire_once_does_not_mark_closed_gate_initialized(self):
-        with patch(
-            'integrations.services.observability.init_logfire',
-            return_value=False,
-        ) as mock_init:
-            self.assertFalse(init_logfire_once())
-            self.assertFalse(init_logfire_once())
-
-        self.assertEqual(mock_init.call_count, 2)

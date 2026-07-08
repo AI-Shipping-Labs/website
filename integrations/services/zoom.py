@@ -355,3 +355,17 @@ def validate_webhook_signature(request):
     expected = f'v0={expected_sig}'
 
     return hmac.compare_digest(expected, signature)
+
+
+def build_url_validation_encrypted_token(plain_token):
+    """Return Zoom's URL-validation HMAC using the resolved webhook secret."""
+    secret_token = get_config('ZOOM_WEBHOOK_SECRET_TOKEN')
+    if not secret_token:
+        logger.warning('ZOOM_WEBHOOK_SECRET_TOKEN not configured')
+        return ''
+
+    return hmac.new(
+        secret_token.encode('utf-8'),
+        plain_token.encode('utf-8'),
+        hashlib.sha256,
+    ).hexdigest()

@@ -622,10 +622,6 @@ class Event(
         """Return True if this event has any recap data."""
         return bool(self.recap_html)
 
-    def get_recap_url(self):
-        """Return the URL for the recap landing page."""
-        return f'/events/{self.slug}/recap'
-
     @property
     def is_external(self):
         """Return True when this event is hosted on a third-party platform.

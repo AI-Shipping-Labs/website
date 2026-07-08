@@ -60,17 +60,6 @@ CONTENT_TYPES = [
 ]
 
 
-def _get_all_published_items():
-    """Return all published content items across all types."""
-    items = []
-    for ct in CONTENT_TYPES:
-        queryset = ct['model'].objects.filter(**ct['filter'])
-        for obj in queryset:
-            if obj.tags:
-                items.append((obj, ct))
-    return items
-
-
 def _collect_all_tags():
     """Collect all tags from all content types with counts.
 

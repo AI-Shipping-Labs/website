@@ -43,17 +43,6 @@ def threads_for_plan(plan):
     )
 
 
-def progress_event_for_thread(thread):
-    """The current auto-applied :class:`IngestedProgressEvent`, or None.
-
-    Read-only selector. Honours a prefetched ``progress_events`` cache to
-    avoid an extra query per thread when the thread came from
-    :func:`threads_for_member` / :func:`threads_for_plan`.
-    """
-    events = list(thread.progress_events.all())
-    return events[0] if events else None
-
-
 def unmatched_threads():
     """Threads whose root author we could not match to a member, newest-first."""
     return (

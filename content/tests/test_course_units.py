@@ -19,6 +19,11 @@ from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_OPEN
 from content.models import Course, Module, Unit, UserCourseProgress
+from content.services.course_units import (
+    get_all_units_ordered,
+    get_next_unit,
+    get_prev_unit,
+)
 from content.tests.factories import make_course_with_units
 from tests.fixtures import TierSetupMixin
 
@@ -608,8 +613,8 @@ class ApiCourseUnitCompleteTest(CourseUnitSetupMixin, TestCase):
 # ============================================================
 
 
-class NextUnitHelperTest(TestCase):
-    """Test the _get_next_unit helper function."""
+class CourseUnitNavigationServiceTest(TestCase):
+    """Test course unit reading-order service functions."""
 
     @classmethod
     def setUpTestData(cls):
@@ -644,85 +649,46 @@ class NextUnitHelperTest(TestCase):
         cls.u3 = graph.units_by_slug['u3']
         cls.u4 = graph.units_by_slug['u4']
 
+    def test_get_all_units_ordered(self):
+        ordered = get_all_units_ordered(self.course)
+        self.assertEqual(
+            [unit.pk for unit in ordered],
+            [self.u1.pk, self.u2.pk, self.u3.pk, self.u4.pk],
+        )
+
     def test_next_within_module(self):
-        from content.views.courses import _get_next_unit
-        next_unit = _get_next_unit(self.course, self.u1)
+        next_unit = get_next_unit(self.course, self.u1)
         self.assertEqual(next_unit.pk, self.u2.pk)
 
     def test_next_across_module(self):
-        from content.views.courses import _get_next_unit
-        next_unit = _get_next_unit(self.course, self.u2)
+        next_unit = get_next_unit(self.course, self.u2)
         self.assertEqual(next_unit.pk, self.u3.pk)
 
     def test_last_unit_returns_none(self):
-        from content.views.courses import _get_next_unit
-        next_unit = _get_next_unit(self.course, self.u4)
+        next_unit = get_next_unit(self.course, self.u4)
         self.assertIsNone(next_unit)
 
     def test_middle_of_second_module(self):
-        from content.views.courses import _get_next_unit
-        next_unit = _get_next_unit(self.course, self.u3)
+        next_unit = get_next_unit(self.course, self.u3)
         self.assertEqual(next_unit.pk, self.u4.pk)
 
-
-class PrevUnitHelperTest(TestCase):
-    """Test the _get_prev_unit helper function."""
-
-    @classmethod
-    def setUpTestData(cls):
-        graph = make_course_with_units(
-            title='Nav Course', slug='nav-prev-course', status='published',
-            modules=[
-                {
-                    'title': 'M1',
-                    'slug': 'm1',
-                    'sort_order': 0,
-                    'units': [
-                        {'title': 'U1', 'slug': 'u1', 'sort_order': 0},
-                        {'title': 'U2', 'slug': 'u2', 'sort_order': 1},
-                    ],
-                },
-                {
-                    'title': 'M2',
-                    'slug': 'm2',
-                    'sort_order': 1,
-                    'units': [
-                        {'title': 'U3', 'slug': 'u3', 'sort_order': 0},
-                        {'title': 'U4', 'slug': 'u4', 'sort_order': 1},
-                    ],
-                },
-            ],
-        )
-        cls.course = graph.course
-        cls.m1 = graph.modules_by_slug['m1']
-        cls.m2 = graph.modules_by_slug['m2']
-        cls.u1 = graph.units_by_slug['u1']
-        cls.u2 = graph.units_by_slug['u2']
-        cls.u3 = graph.units_by_slug['u3']
-        cls.u4 = graph.units_by_slug['u4']
-
     def test_first_unit_returns_none(self):
-        from content.views.courses import _get_prev_unit
-        prev_unit = _get_prev_unit(self.course, self.u1)
+        prev_unit = get_prev_unit(self.course, self.u1)
         self.assertIsNone(prev_unit)
 
     def test_prev_within_module(self):
-        from content.views.courses import _get_prev_unit
-        prev_unit = _get_prev_unit(self.course, self.u2)
+        prev_unit = get_prev_unit(self.course, self.u2)
         self.assertEqual(prev_unit.pk, self.u1.pk)
 
     def test_prev_across_module_boundary(self):
-        from content.views.courses import _get_prev_unit
-        prev_unit = _get_prev_unit(self.course, self.u3)
+        prev_unit = get_prev_unit(self.course, self.u3)
         self.assertEqual(prev_unit.pk, self.u2.pk)
 
     def test_last_unit_prev_is_second_to_last(self):
-        from content.views.courses import _get_prev_unit
-        prev_unit = _get_prev_unit(self.course, self.u4)
+        prev_unit = get_prev_unit(self.course, self.u4)
         self.assertEqual(prev_unit.pk, self.u3.pk)
 
     def test_single_unit_course_returns_none(self):
-        from content.views.courses import _get_prev_unit
         solo_course = Course.objects.create(
             title='Solo', slug='solo-course', status='published',
         )
@@ -732,7 +698,7 @@ class PrevUnitHelperTest(TestCase):
         solo_unit = Unit.objects.create(
             module=solo_module, title='SU', slug='su', sort_order=0,
         )
-        prev_unit = _get_prev_unit(solo_course, solo_unit)
+        prev_unit = get_prev_unit(solo_course, solo_unit)
         self.assertIsNone(prev_unit)
 
 

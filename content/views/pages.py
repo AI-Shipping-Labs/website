@@ -62,28 +62,6 @@ def _filter_by_tags(queryset, selected_tags):
     return queryset.filter(pk__in=matching_ids)
 
 
-def _build_tag_filter_url(base_path, selected_tags, tag_to_add=None, tag_to_remove=None, extra_params=None):
-    """Build a URL with tag query params.
-
-    Used by templates to generate links for adding/removing tag filters.
-    """
-    tags = list(selected_tags)
-    if tag_to_add and tag_to_add not in tags:
-        tags.append(tag_to_add)
-    if tag_to_remove and tag_to_remove in tags:
-        tags.remove(tag_to_remove)
-    params = []
-    if extra_params:
-        for key, val in extra_params.items():
-            if val:
-                params.append(f'{key}={val}')
-    for tag in tags:
-        params.append(f'tag={tag}')
-    if params:
-        return f'{base_path}?{"&".join(params)}'
-    return base_path
-
-
 def _get_tag_rules_for_tags(tags):
     """Return TagRule objects that match any of the given tags.
 

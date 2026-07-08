@@ -244,11 +244,6 @@ def get_gated_reason(user, content):
     return 'insufficient_tier'
 
 
-def is_unverified_email_gate(user, content):
-    """True when a free authenticated user is blocked only by email verification."""
-    return get_gated_reason(user, content) == 'unverified_email'
-
-
 def build_verify_email_context(user):
     """Build shared context for the verify-email-required partial."""
     from django.urls import reverse

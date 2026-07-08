@@ -22,7 +22,7 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from events.models import Event
-from integrations.models import ContentSource, WebhookLog
+from integrations.models import ContentSource, IntegrationSetting, WebhookLog
 
 User = get_user_model()
 
@@ -983,6 +983,18 @@ class ZoomWebhookUrlValidationTest(_ZoomSecretIsolationMixin, TestCase):
         super().setUp()
         self.client = Client()
 
+    def _post_challenge(self, payload, secret=ZOOM_TEST_SECRET):
+        body = json.dumps(payload)
+        timestamp = str(int(time.time()))
+        signature = make_zoom_signature(body, timestamp, secret=secret)
+        return self.client.post(
+            '/api/webhooks/zoom',
+            data=body,
+            content_type='application/json',
+            HTTP_X_ZM_REQUEST_TIMESTAMP=timestamp,
+            HTTP_X_ZM_SIGNATURE=signature,
+        )
+
     def test_url_validation_challenge(self):
         payload = {
             'event': 'endpoint.url_validation',
@@ -990,17 +1002,7 @@ class ZoomWebhookUrlValidationTest(_ZoomSecretIsolationMixin, TestCase):
                 'plainToken': 'test-plain-token-abc',
             },
         }
-        body = json.dumps(payload)
-        timestamp = str(int(time.time()))
-        signature = make_zoom_signature(body, timestamp)
-
-        response = self.client.post(
-            '/api/webhooks/zoom',
-            data=body,
-            content_type='application/json',
-            HTTP_X_ZM_REQUEST_TIMESTAMP=timestamp,
-            HTTP_X_ZM_SIGNATURE=signature,
-        )
+        response = self._post_challenge(payload)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data['plainToken'], 'test-plain-token-abc')
@@ -1013,6 +1015,76 @@ class ZoomWebhookUrlValidationTest(_ZoomSecretIsolationMixin, TestCase):
             hashlib.sha256,
         ).hexdigest()
         self.assertEqual(data['encryptedToken'], expected_encrypted)
+
+    @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN='old-secret')
+    def test_url_validation_uses_studio_secret_for_signature_and_hmac(self):
+        from integrations.config import clear_config_cache
+
+        IntegrationSetting.objects.update_or_create(
+            key='ZOOM_WEBHOOK_SECRET_TOKEN',
+            defaults={
+                'value': 'studio-secret',
+                'group': 'zoom',
+                'is_secret': True,
+            },
+        )
+        clear_config_cache()
+
+        payload = {
+            'event': 'endpoint.url_validation',
+            'payload': {
+                'plainToken': 'rotated-plain-token',
+            },
+        }
+        response = self._post_challenge(payload, secret='studio-secret')
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['plainToken'], 'rotated-plain-token')
+        self.assertEqual(
+            data['encryptedToken'],
+            hmac.new(
+                b'studio-secret',
+                b'rotated-plain-token',
+                hashlib.sha256,
+            ).hexdigest(),
+        )
+        self.assertNotEqual(
+            data['encryptedToken'],
+            hmac.new(
+                b'old-secret',
+                b'rotated-plain-token',
+                hashlib.sha256,
+            ).hexdigest(),
+        )
+
+    @override_settings(ZOOM_WEBHOOK_SECRET_TOKEN='old-secret')
+    def test_url_validation_rejects_stale_settings_secret_after_rotation(self):
+        from integrations.config import clear_config_cache
+
+        IntegrationSetting.objects.update_or_create(
+            key='ZOOM_WEBHOOK_SECRET_TOKEN',
+            defaults={
+                'value': 'studio-secret',
+                'group': 'zoom',
+                'is_secret': True,
+            },
+        )
+        clear_config_cache()
+
+        payload = {
+            'event': 'endpoint.url_validation',
+            'payload': {
+                'plainToken': 'rotated-plain-token',
+            },
+        }
+        response = self._post_challenge(payload, secret='old-secret')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()['error'],
+            'Invalid webhook signature',
+        )
 
 
 # --- Recording.completed Webhook Tests ---
@@ -1038,11 +1110,12 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
             required_level=10,
             status='upcoming',
         )
+        self.initial_published = self.event.published
 
-    def _post_webhook(self, payload_dict):
+    def _post_webhook(self, payload_dict, secret=ZOOM_TEST_SECRET):
         body = json.dumps(payload_dict)
         timestamp = str(int(time.time()))
-        signature = make_zoom_signature(body, timestamp)
+        signature = make_zoom_signature(body, timestamp, secret=secret)
         return self.client.post(
             '/api/webhooks/zoom',
             data=body,
@@ -1050,6 +1123,162 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
             HTTP_X_ZM_REQUEST_TIMESTAMP=timestamp,
             HTTP_X_ZM_SIGNATURE=signature,
         )
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_first_delivery_stores_recording_and_enqueues_one_upload(self, mock_q_async):
+        mock_q_async.return_value = 'upload-task-id'
+        payload = make_recording_completed_payload(
+            '12345678901', include_transcript=True,
+        )
+
+        response = self._post_webhook(payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.recording_url, 'https://zoom.us/rec/play/abc123')
+        self.assertEqual(
+            self.event.transcript_url,
+            'https://zoom.us/rec/download/transcript123.vtt',
+        )
+        self.assertEqual(self.event.status, 'upcoming')
+        self.assertEqual(self.event.recording_s3_url, '')
+        self.assertEqual(self.event.published, self.initial_published)
+
+        log = WebhookLog.objects.get(
+            service='zoom',
+            event_type='recording.completed',
+        )
+        self.assertTrue(log.processed)
+        mock_q_async.assert_called_once()
+        self.assertEqual(
+            mock_q_async.call_args[0][0],
+            'jobs.tasks.recording_upload.upload_recording_to_s3',
+        )
+        self.assertEqual(mock_q_async.call_args[0][1], self.event.id)
+        self.assertEqual(
+            mock_q_async.call_args[0][2],
+            'https://zoom.us/rec/download/abc123',
+        )
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_duplicate_delivery_while_upload_pending_is_idempotent(self, mock_q_async):
+        mock_q_async.return_value = 'upload-task-id'
+        payload = make_recording_completed_payload(
+            '12345678901', include_transcript=True,
+        )
+
+        first_response = self._post_webhook(payload)
+        second_response = self._post_webhook(payload)
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.recording_url, 'https://zoom.us/rec/play/abc123')
+        self.assertEqual(
+            self.event.transcript_url,
+            'https://zoom.us/rec/download/transcript123.vtt',
+        )
+        self.assertEqual(self.event.recording_s3_url, '')
+        self.assertEqual(self.event.published, self.initial_published)
+        self.assertEqual(mock_q_async.call_count, 1)
+        self.assertEqual(
+            WebhookLog.objects.filter(
+                service='zoom',
+                event_type='recording.completed',
+            ).count(),
+            2,
+        )
+        self.assertEqual(
+            WebhookLog.objects.filter(
+                service='zoom',
+                event_type='recording.completed',
+                processed=True,
+            ).count(),
+            2,
+        )
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_replay_after_s3_upload_preserves_watchable_state(self, mock_q_async):
+        published_at = timezone.now() - timedelta(minutes=10)
+        Event.objects.filter(pk=self.event.pk).update(
+            recording_url='https://zoom.us/rec/play/abc123',
+            transcript_url='https://zoom.us/rec/download/transcript123.vtt',
+            recording_s3_url='https://s3.example.test/recordings/event.mp4',
+            published=True,
+            published_at=published_at,
+        )
+        payload = make_recording_completed_payload(
+            '12345678901', include_transcript=True,
+        )
+
+        response = self._post_webhook(payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(
+            self.event.recording_s3_url,
+            'https://s3.example.test/recordings/event.mp4',
+        )
+        self.assertTrue(self.event.published)
+        self.assertEqual(self.event.published_at, published_at)
+        self.assertEqual(self.event.recording_url, 'https://zoom.us/rec/play/abc123')
+        self.assertEqual(
+            self.event.transcript_url,
+            'https://zoom.us/rec/download/transcript123.vtt',
+        )
+        mock_q_async.assert_not_called()
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_missing_meeting_id_is_non_fatal_and_skips_upload(self, mock_q_async):
+        payload = make_recording_completed_payload('')
+
+        response = self._post_webhook(payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.recording_url, '')
+        self.assertEqual(self.event.transcript_url, '')
+        self.assertEqual(self.event.recording_s3_url, '')
+        mock_q_async.assert_not_called()
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_unknown_meeting_id_is_non_fatal_and_skips_upload(self, mock_q_async):
+        payload = make_recording_completed_payload('99999999999')
+
+        response = self._post_webhook(payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.recording_url, '')
+        self.assertEqual(self.event.transcript_url, '')
+        self.assertEqual(self.event.recording_s3_url, '')
+        mock_q_async.assert_not_called()
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_unsigned_recording_webhook_cannot_mutate_event_or_enqueue_upload(
+        self, mock_q_async,
+    ):
+        payload = make_recording_completed_payload('12345678901')
+
+        response = self.client.post(
+            '/api/webhooks/zoom',
+            data=json.dumps(payload),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.recording_url, '')
+        self.assertEqual(self.event.transcript_url, '')
+        self.assertEqual(self.event.recording_s3_url, '')
+        self.assertEqual(self.event.published, self.initial_published)
+        self.assertFalse(
+            WebhookLog.objects.filter(
+                service='zoom',
+                event_type='recording.completed',
+            ).exists()
+        )
+        mock_q_async.assert_not_called()
 
     def test_sets_recording_fields_on_event(self):
         """recording.completed webhook sets recording fields on the matched Event.
@@ -1066,7 +1295,7 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
         self.event.refresh_from_db()
         self.assertTrue(self.event.has_recording)
         self.assertEqual(self.event.recording_url, 'https://zoom.us/rec/play/abc123')
-        self.assertFalse(self.event.published)  # Needs admin review
+        self.assertEqual(self.event.published, self.initial_published)
 
     def test_recording_fields_set_on_event(self):
         """Recording fields are set directly on the matched Event."""
@@ -1119,6 +1348,37 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
 
         recording = Event.objects.get(slug='workshop-building-ai-agents')
         self.assertEqual(recording.recording_url, 'https://zoom.us/rec/share/fallback')
+
+    @patch('jobs.tasks.helpers.q_async_task')
+    def test_recording_falls_back_to_share_url_without_upload_job(
+        self, mock_q_async,
+    ):
+        payload = {
+            'event': 'recording.completed',
+            'payload': {
+                'object': {
+                    'id': '12345678901',
+                    'share_url': 'https://zoom.us/rec/share/fallback',
+                    'recording_files': [
+                        {
+                            'recording_type': 'chat_file',
+                            'play_url': 'https://zoom.us/rec/play/chat',
+                        },
+                    ],
+                },
+            },
+        }
+
+        response = self._post_webhook(payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(
+            self.event.recording_url,
+            'https://zoom.us/rec/share/fallback',
+        )
+        self.assertEqual(self.event.transcript_url, '')
+        mock_q_async.assert_not_called()
 
     def test_no_matching_event_ignored(self):
         """Webhook for unknown meeting ID is logged but event not updated."""

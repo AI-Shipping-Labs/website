@@ -61,15 +61,6 @@ def _normalize_list_filter(raw):
     return DEFAULT_LIST_FILTER
 
 
-def _active_tier_name(user):
-    """Return the user's effective tier label without provenance suffixes.
-
-    Mirrors the helper in ``studio.views.users`` so the CRM list shows
-    the same tier label as the user list (override-aware).
-    """
-    return _active_tier_info(user)['name']
-
-
 def _active_tier_info(user):
     """Return effective tier display fields for CRM list/detail templates."""
     base_name = user.tier.name if user.tier_id else 'Free'

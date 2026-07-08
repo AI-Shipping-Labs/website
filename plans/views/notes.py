@@ -37,7 +37,6 @@ from django.contrib.auth.decorators import login_required
 from django.http import (
     Http404,
     HttpResponseBadRequest,
-    HttpResponseNotAllowed,
     JsonResponse,
 )
 from django.shortcuts import get_object_or_404, redirect
@@ -221,9 +220,3 @@ def _extract_body(request) -> str | None:
         if body:
             return body
     return None
-
-
-@login_required
-def week_note_methods_405(request, *args, **kwargs):
-    """Reject GET on the note endpoints with a clear 405."""
-    return HttpResponseNotAllowed(['POST', 'PATCH', 'DELETE'])

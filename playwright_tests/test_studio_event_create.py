@@ -283,6 +283,7 @@ class TestScenario5OriginEditGate:
     @pytest.mark.core
     def test_studio_editable_github_readonly(self, django_server, browser):
         from django.db import connection
+        from django.utils import timezone
 
         from events.models import Event
 
@@ -292,7 +293,7 @@ class TestScenario5OriginEditGate:
         gh = Event(
             title="GitHub-Synced Event",
             slug="gh-event-ec5",
-            start_datetime=datetime(2026, 7, 1, 18, 0),
+            start_datetime=timezone.now() + timedelta(days=20),
             origin="github",
             source_repo="AI-Shipping-Labs/content",
             source_path="events/gh-event-ec5.yaml",
@@ -301,7 +302,7 @@ class TestScenario5OriginEditGate:
         studio = Event(
             title="Studio Event",
             slug="studio-event-ec5",
-            start_datetime=datetime(2026, 7, 8, 18, 0),
+            start_datetime=timezone.now() + timedelta(days=21),
             origin="studio",
         )
         studio.save()

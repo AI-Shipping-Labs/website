@@ -23,7 +23,10 @@ from django.views.decorators.http import require_POST
 
 from events.models import Event
 from integrations.models import WebhookLog
-from integrations.services.zoom import validate_webhook_signature
+from integrations.services.zoom import (
+    build_url_validation_encrypted_token,
+    validate_webhook_signature,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,16 +66,7 @@ def zoom_webhook(request):
     if event_type == 'endpoint.url_validation':
         plain_token = payload.get('payload', {}).get('plainToken', '')
         if plain_token:
-            import hashlib
-            import hmac
-
-            from django.conf import settings
-            secret = settings.ZOOM_WEBHOOK_SECRET_TOKEN
-            encrypted_token = hmac.new(
-                secret.encode('utf-8'),
-                plain_token.encode('utf-8'),
-                hashlib.sha256,
-            ).hexdigest()
+            encrypted_token = build_url_validation_encrypted_token(plain_token)
             return JsonResponse({
                 'plainToken': plain_token,
                 'encryptedToken': encrypted_token,
@@ -155,18 +149,30 @@ def _handle_recording_completed(payload, webhook_log):
     if not video_url:
         video_url = object_data.get('share_url', '')
 
-    # Set recording fields directly on the Event.
+    had_recording_url = bool(event.recording_url)
+    had_recording_s3_url = bool(event.recording_s3_url)
+
+    # Set Zoom-derived recording fields directly on the Event. Replays must not
+    # wipe S3/publishing state after the upload job has made the recording
+    # watchable, and they should not clear previously stored Zoom URLs when a
+    # retry payload omits optional files.
     # Issue #713: do NOT flip ``status`` to ``completed`` here — the
     # event becomes "past" automatically via the time-derived
     # ``Event.is_past`` property once ``end_datetime`` passes, and the
     # daily ``complete_finished_events`` cron later refreshes the
     # stored field for staff bookkeeping. Writing the field on every
     # webhook hit was redundant.
-    event.recording_url = video_url
-    event.transcript_url = transcript_url
-    event.recording_s3_url = ''  # Populated later by S3 upload job
-    event.published = False  # Admin reviews before publishing
-    event.save()
+    update_fields = []
+    if video_url and not event.recording_url:
+        event.recording_url = video_url
+        update_fields.append('recording_url')
+    if transcript_url and not event.transcript_url:
+        event.transcript_url = transcript_url
+        update_fields.append('transcript_url')
+
+    if update_fields:
+        update_fields.append('updated_at')
+        event.save(update_fields=update_fields)
 
     # Mark webhook as processed
     webhook_log.processed = True
@@ -178,7 +184,13 @@ def _handle_recording_completed(payload, webhook_log):
     )
 
     # Enqueue background job to download from Zoom and upload to S3
-    if download_url:
+    should_enqueue_upload = (
+        bool(download_url)
+        and not had_recording_url
+        and not had_recording_s3_url
+    )
+
+    if should_enqueue_upload:
         from jobs.tasks import async_task, build_task_name
         async_task(
             'jobs.tasks.recording_upload.upload_recording_to_s3',
@@ -193,6 +205,11 @@ def _handle_recording_completed(payload, webhook_log):
         )
         logger.info(
             'Enqueued S3 upload job for event "%s" (id=%s)',
+            event.title, event.id,
+        )
+    elif download_url:
+        logger.info(
+            'Skipping duplicate S3 upload job for event "%s" (id=%s)',
             event.title, event.id,
         )
     else:

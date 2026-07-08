@@ -439,21 +439,6 @@ def module_overview(request, course_slug, module_slug):
     return render(request, 'content/module_overview.html', context)
 
 
-def _get_all_units_ordered(course):
-    """Return all units in course reading order."""
-    return course_unit_service.get_all_units_ordered(course)
-
-
-def _get_next_unit(course, current_unit):
-    """Find the next unit in course reading order."""
-    return course_unit_service.get_next_unit(course, current_unit)
-
-
-def _get_prev_unit(course, current_unit):
-    """Find the previous unit in course reading order."""
-    return course_unit_service.get_prev_unit(course, current_unit)
-
-
 def course_unit_detail(request, course_slug, module_slug, unit_slug):
     """Unit page: gated by tier level, except for preview units.
 

@@ -32,23 +32,6 @@ CONTENT_TYPE_MAP = {
 }
 
 
-def _is_content_published(content_type, content):
-    """Check if the given content is published/active (not a draft)."""
-    if content_type == 'article':
-        return content.published
-    elif content_type == 'recording':
-        return content.published
-    elif content_type == 'download':
-        return content.published
-    elif content_type == 'event':
-        return content.status in ('upcoming', 'completed')
-    elif content_type == 'course':
-        return content.status == 'published'
-    elif content_type == 'workshop':
-        return content.status == 'published'
-    return False
-
-
 def _was_recently_notified(content_type, content):
     """Check if notifications were sent for this content in the last 24 hours.
 

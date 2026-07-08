@@ -98,16 +98,26 @@ class EventEditRegistrationsContextTest(TierSetupMixin, StaffUserMixin, TestCase
         self.assertContains(response, 'data-testid="registrations-count-chip"')
         self.assertContains(response, '3 registered')
 
-    def test_panel_renders_one_row_per_registration(self):
+    def test_panel_renders_one_desktop_row_per_registration(self):
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
-        # Each row carries a data-email attribute with the user's
-        # lowercased email; count those to avoid picking up the JS
-        # selector string that names "registration-row".
+        # The responsive panel (issue #1144) renders BOTH a desktop table
+        # row and a mobile card per attendee, each carrying data-email.
+        # Assert on the desktop-row testid to count table rows only.
+        self.assertContains(
+            response, 'data-testid="registration-row"', count=3,
+        )
+
+    def test_panel_renders_one_mobile_card_per_registration(self):
+        """Issue #1144: below md the roster renders one stacked card per
+        attendee so full names/emails wrap instead of clipping."""
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+        self.assertContains(
+            response, 'data-testid="registration-card"', count=3,
+        )
+        # Each attendee appears in exactly two places (row + card).
         html = response.content.decode()
-        row_count = html.count('data-email="alice@test.com"') \
-            + html.count('data-email="bob@test.com"') \
-            + html.count('data-email="carol@test.com"')
-        self.assertEqual(row_count, 3)
+        for email in ('alice@test.com', 'bob@test.com', 'carol@test.com'):
+            self.assertEqual(html.count(f'data-email="{email}"'), 2)
 
     def test_rows_show_email_name_and_tier_labels(self):
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')

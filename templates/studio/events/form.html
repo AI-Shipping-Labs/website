@@ -300,7 +300,15 @@
              autocomplete="off"
              class="w-full sm:w-80 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
     </div>
-    <div class="border border-border rounded-lg overflow-x-auto max-h-96 overflow-y-auto"
+    {% comment %}
+      Issue #1144: responsive roster. Desktop/tablet (md+) keeps the
+      existing 5-column table; below md we render one stacked card per
+      attendee so full names and emails wrap instead of clipping and the
+      metadata columns cannot overprint. The filter JS toggles both
+      presentations by a shared data-email attribute.
+    {% endcomment %}
+    <!-- Desktop / tablet table (md and up) -->
+    <div class="hidden md:block border border-border rounded-lg overflow-x-auto max-h-96 overflow-y-auto"
          data-testid="registrations-table-wrapper">
       <table class="w-full table-fixed text-sm" data-testid="registrations-table">
         <thead class="bg-secondary/50 sticky top-0">
@@ -347,19 +355,59 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Mobile cards (below md) -->
+    <ul class="md:hidden border border-border rounded-lg divide-y divide-border max-h-96 overflow-y-auto"
+        data-testid="registrations-cards">
+      {% for reg in registrations %}
+      <li class="p-4 space-y-2"
+          data-testid="registration-card"
+          data-email="{{ reg.user.email|lower }}">
+        <div>
+          <div class="text-sm font-medium text-foreground break-words">{{ reg.user.get_full_name|default:reg.user.email }}</div>
+          <div class="text-xs text-muted-foreground break-all">{{ reg.user.email }}</div>
+        </div>
+        <dl class="text-xs space-y-1">
+          <div class="flex gap-2">
+            <dt class="w-24 shrink-0 text-muted-foreground">Registered</dt>
+            <dd class="text-foreground min-w-0 break-words">{{ reg.registered_at|operator_datetime }}</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="w-24 shrink-0 text-muted-foreground">Tier</dt>
+            <dd class="text-foreground min-w-0 break-words">{{ reg.user.tier.name|default:"Free" }}</dd>
+          </div>
+          <div class="flex gap-2" data-testid="registration-card-joined">
+            <dt class="w-24 shrink-0 text-muted-foreground">Joined</dt>
+            <dd class="text-foreground min-w-0 break-words">
+              {% if reg.joined_at %}
+              <span class="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2 py-0.5 font-medium text-green-600 dark:text-green-400"
+                    data-testid="registration-card-joined-badge">Joined</span>
+              <span class="ml-2 text-muted-foreground">{{ reg.joined_at|operator_datetime }}</span>
+              {% else %}
+              <span class="text-muted-foreground" data-testid="registration-card-not-joined">Not joined</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+      </li>
+      {% endfor %}
+    </ul>
     <script>
       (function() {
         var input = document.getElementById('registrations-filter');
         if (!input) { return; }
-        var rows = document.querySelectorAll('[data-testid="registrations-tbody"] tr[data-testid="registration-row"]');
+        var panel = input.closest('[data-testid="event-registrations-panel"]');
+        if (!panel) { return; }
+        // Toggle BOTH desktop rows and mobile cards by their shared data-email.
+        var items = panel.querySelectorAll('[data-email]');
         input.addEventListener('input', function() {
           var q = (input.value || '').trim().toLowerCase();
-          rows.forEach(function(row) {
-            var email = row.getAttribute('data-email') || '';
+          items.forEach(function(item) {
+            var email = item.getAttribute('data-email') || '';
             if (!q || email.indexOf(q) !== -1) {
-              row.style.display = '';
+              item.style.display = '';
             } else {
-              row.style.display = 'none';
+              item.style.display = 'none';
             }
           });
         });

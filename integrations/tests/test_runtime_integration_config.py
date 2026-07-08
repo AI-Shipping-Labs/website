@@ -10,7 +10,6 @@ from django.utils import timezone
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from integrations.services import ses as ses_service
-from integrations.services import youtube
 from payments.services import _get_stripe_client, verify_webhook_signature
 from tests.fixtures import TierSetupMixin
 
@@ -29,11 +28,9 @@ def set_integration(key, value, group):
 class RuntimeConfigTestCase(TestCase):
     def setUp(self):
         clear_config_cache()
-        youtube.clear_token_cache()
 
     def tearDown(self):
         clear_config_cache()
-        youtube.clear_token_cache()
 
 
 class StripeRuntimeConfigTest(TierSetupMixin, RuntimeConfigTestCase):
@@ -76,68 +73,6 @@ class StripeRuntimeConfigTest(TierSetupMixin, RuntimeConfigTestCase):
             b"{}",
             "t=1,v1=test",
             "whsec_db",
-        )
-
-
-class YouTubeRuntimeConfigTest(RuntimeConfigTestCase):
-    @override_settings(
-        YOUTUBE_CLIENT_ID="settings-client",
-        YOUTUBE_CLIENT_SECRET="settings-secret",
-        YOUTUBE_REFRESH_TOKEN="settings-refresh",
-    )
-    @patch("integrations.services.youtube.requests.post")
-    def test_refresh_token_request_uses_db_credentials(self, mock_post):
-        mock_post.return_value = SimpleNamespace(
-            status_code=200,
-            content=b"{}",
-            json=lambda: {"access_token": "token-db", "expires_in": 3600},
-        )
-        set_integration("YOUTUBE_CLIENT_ID", "db-client", "youtube")
-        set_integration("YOUTUBE_CLIENT_SECRET", "db-secret", "youtube")
-        set_integration("YOUTUBE_REFRESH_TOKEN", "db-refresh", "youtube")
-
-        token = youtube.get_access_token()
-
-        self.assertEqual(token, "token-db")
-        self.assertEqual(
-            mock_post.call_args.kwargs["data"],
-            {
-                "client_id": "db-client",
-                "client_secret": "db-secret",
-                "refresh_token": "db-refresh",
-                "grant_type": "refresh_token",
-            },
-        )
-
-    @patch("integrations.services.youtube.requests.post")
-    def test_rotated_credentials_are_used_after_caches_clear(self, mock_post):
-        mock_post.side_effect = [
-            SimpleNamespace(
-                status_code=200,
-                content=b"{}",
-                json=lambda: {"access_token": "token-old", "expires_in": 3600},
-            ),
-            SimpleNamespace(
-                status_code=200,
-                content=b"{}",
-                json=lambda: {"access_token": "token-new", "expires_in": 3600},
-            ),
-        ]
-        set_integration("YOUTUBE_CLIENT_ID", "old-client", "youtube")
-        set_integration("YOUTUBE_CLIENT_SECRET", "old-secret", "youtube")
-        set_integration("YOUTUBE_REFRESH_TOKEN", "old-refresh", "youtube")
-        self.assertEqual(youtube.get_access_token(), "token-old")
-
-        set_integration("YOUTUBE_CLIENT_ID", "new-client", "youtube")
-        set_integration("YOUTUBE_CLIENT_SECRET", "new-secret", "youtube")
-        set_integration("YOUTUBE_REFRESH_TOKEN", "new-refresh", "youtube")
-        clear_config_cache()
-        youtube.clear_token_cache()
-
-        self.assertEqual(youtube.get_access_token(), "token-new")
-        self.assertEqual(
-            mock_post.call_args.kwargs["data"]["client_id"],
-            "new-client",
         )
 
 

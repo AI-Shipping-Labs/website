@@ -420,7 +420,7 @@ class SettingsDashboardViewTest(TestCase):
             for section in sections
         }
         self.assertEqual(groups_by_section['payments'], ['stripe'])
-        self.assertEqual(groups_by_section['content'], ['zoom', 'youtube', 'calendly', 'github'])
+        self.assertEqual(groups_by_section['content'], ['zoom', 'calendly', 'github'])
         self.assertEqual(groups_by_section['messaging'], ['ses', 'slack', 'maven', 'triggers'])
         self.assertEqual(groups_by_section['storage'], ['s3_recordings', 's3_content'])
         self.assertEqual(groups_by_section['site'], ['site'])
@@ -716,6 +716,59 @@ class DeadStripeSettingsRetirementTest(TestCase):
         body = response.content.decode()
         self.assertNotIn('data-field-key="STRIPE_PUBLISHABLE_KEY"', body)
         self.assertNotIn('name="STRIPE_PUBLISHABLE_KEY"', body)
+
+
+class DeadYouTubeSettingsRetirementTest(TestCase):
+    """Regression: the YouTube upload credentials stay retired (Phase C of #1134).
+
+    The YouTube upload mechanism was removed once S3 serving + the in-app
+    player became the default watch path. Its OAuth credentials are only
+    consumed by that upload service, so they are orphaned and must not
+    reappear in the registry, the Django settings module, or the Studio
+    settings page. YouTube PLAYBACK of existing ``recording_url`` links is
+    unaffected.
+    """
+
+    YOUTUBE_KEYS = (
+        'YOUTUBE_CLIENT_ID',
+        'YOUTUBE_CLIENT_SECRET',
+        'YOUTUBE_REFRESH_TOKEN',
+    )
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff_user = User.objects.create_user(
+            email='admin@test.com', password='testpass', is_staff=True,
+        )
+
+    def test_settings_registry_has_no_youtube_group(self):
+        group_names = {group['name'] for group in INTEGRATION_GROUPS}
+        self.assertNotIn('youtube', group_names)
+
+    def test_settings_registry_does_not_expose_youtube_keys(self):
+        all_keys = {
+            key_def['key']
+            for group in INTEGRATION_GROUPS
+            for key_def in group['keys']
+        }
+        for key in self.YOUTUBE_KEYS:
+            self.assertNotIn(key, all_keys)
+
+    def test_django_settings_module_does_not_define_youtube_keys(self):
+        for key in self.YOUTUBE_KEYS:
+            self.assertFalse(
+                hasattr(settings, key),
+                f'{key} must not be defined on Django settings',
+            )
+
+    def test_studio_settings_page_does_not_render_youtube_group(self):
+        self.client.login(email='admin@test.com', password='testpass')
+        response = self.client.get('/studio/settings/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        for key in self.YOUTUBE_KEYS:
+            self.assertNotIn(f'data-field-key="{key}"', body)
+            self.assertNotIn(f'name="{key}"', body)
 
 
 class IntegrationRegistryDocsCoverageTest(SimpleTestCase):

@@ -157,8 +157,8 @@ Without it: `validate_webhook_signature` logs
 webhook endpoint returns 401 for every Zoom delivery. Side effects:
 - Recording-ready signals never reach the platform, so the
   `jobs/tasks/recording_upload.py` chain (pull from Zoom cloud → push
-  to S3 → upload to YouTube) does not run automatically. You can still
-  run the pipeline manually.
+  to S3) does not run automatically. You can still run the pipeline
+  manually.
 - "Meeting started" UI cues (e.g. "Join now" highlights) lose their
   real-time signal and fall back to scheduled-time heuristics.
 

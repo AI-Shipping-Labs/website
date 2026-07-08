@@ -130,3 +130,19 @@ class StudioRecordingEditTest(TestCase):
 
         self.assertNotContains(response, 'data-testid="origin-panel"')
         self.assertNotContains(response, 'data-testid="synced-banner"')
+
+    def test_edit_form_has_recording_url_field_and_no_youtube_upload(self):
+        response = self.client.get(f'/studio/recordings/{self.recording.pk}/edit')
+
+        self.assertContains(response, 'Recording URL')
+        self.assertContains(response, 'name="recording_url"')
+        # The YouTube upload path (Phase C of #1134) is fully removed.
+        self.assertNotContains(response, 'YouTube Upload')
+        self.assertNotContains(response, 'Publish to YouTube')
+        self.assertNotContains(response, 'publishToYouTube')
+
+    def test_publish_youtube_endpoint_is_gone(self):
+        response = self.client.post(
+            f'/studio/recordings/{self.recording.pk}/publish-youtube',
+        )
+        self.assertEqual(response.status_code, 404)

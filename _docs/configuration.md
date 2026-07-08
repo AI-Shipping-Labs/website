@@ -46,7 +46,7 @@ Test: `curl -I {SITE_BASE_URL}/ping` returns `200 OK`. Then visit `{SITE_BASE_UR
 3. Sign in at `{SITE_BASE_URL}/accounts/login/` with the superuser email + password.
 4. Open `{SITE_BASE_URL}/studio/settings/`. Every integration group from `INTEGRATION_GROUPS` is rendered there with a status badge (`configured`, `partial`, `not_configured`).
 
-Test: visit `/studio/settings/` and confirm 17 integration groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, YouTube, Calendly, GitHub App, Slack, Site, Analytics, Auth, Banner Generator, LLM Provider, Observability, Maven, Event triggers).
+Test: visit `/studio/settings/` and confirm 16 integration groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, Calendly, GitHub App, Slack, Site, Analytics, Auth, Banner Generator, LLM Provider, Observability, Maven, Event triggers).
 
 ## 3. OAuth login providers
 
@@ -348,23 +348,7 @@ Webhook endpoint: `{SITE_BASE_URL}/api/webhooks/zoom` (no trailing slash). Confi
 
 Test: in `Studio > Events`, create an event with platform=zoom; confirm a join URL is generated and the meeting exists in your Zoom account.
 
-## 11. YouTube (recording uploads)
-
-Studio path: `Studio > Settings > YouTube`.
-
-Provider console: Google Cloud Console (the same project can host both the OAuth Login client from section 3.1 and the YouTube Data API client, as separate OAuth clients).
-
-Keys to set in Studio:
-
-| Key | Source | Notes |
-|-----|--------|-------|
-| `YOUTUBE_CLIENT_ID` | secret | OAuth 2.0 client ID. |
-| `YOUTUBE_CLIENT_SECRET` | secret | OAuth 2.0 client secret. |
-| `YOUTUBE_REFRESH_TOKEN` | secret | One-time long-lived refresh token. Generate via OAuth Playground (`https://developers.google.com/oauthplayground/`) using your client ID/secret and the `https://www.googleapis.com/auth/youtube.upload` scope. In OAuth Playground, click the gear icon (top right), check `Use your own OAuth credentials`, and paste your client ID + secret there before authorizing. |
-
-Test: in `Studio > Recordings`, click "Publish to YouTube" on a recording; confirm an upload starts and the resulting YouTube URL is stored on the recording.
-
-## 12. End-to-end smoke test
+## 11. End-to-end smoke test
 
 Run this checklist after configuring everything. Each item is one click, end to end.
 
@@ -375,15 +359,15 @@ Run this checklist after configuring everything. Each item is one click, end to 
 - [ ] As a paid member, cancel the subscription via `{SITE_BASE_URL}/account/` (or the Stripe customer portal); confirm the user's tier on `/account/` drops to Free within a few seconds (Stripe webhook `customer.subscription.deleted` reaches `/api/webhooks/payments`).
 - [ ] Trigger a content sync at `/studio/sync/`; new articles appear at `/blog/` and their images load from the CDN domain.
 - [ ] Create an event with platform=zoom in `/studio/events/`; the join URL points at zoom.us and the meeting exists in the Zoom account.
-- [ ] Upload a workshop recording to S3 via `/studio/recordings/<id>/edit`; click "Publish to YouTube"; the YouTube URL is stored.
+- [ ] Upload a workshop recording to S3 via `/studio/recordings/<id>/edit`; confirm it plays in the in-app player on the recording surface.
 - [ ] Trigger a Slack announcement from `/studio/articles/<id>/announce-slack/`; the bot posts to the configured channel.
 - [ ] Send a test email campaign in `/studio/campaigns/`; confirm delivery to a verified SES recipient.
 
-## 12.1. Signup attribution and the anonymous_id join key
+## 11.1. Signup attribution and the anonymous_id join key
 
 UTM and organic-referrer attribution are captured by `analytics.middleware.CampaignTrackingMiddleware`, snapshotted onto `UserAttribution` at signup. The middleware also assigns a stable UUID4 cookie `aslab_aid` (the anonymous_id) to every non-bot visitor, copied onto `UserAttribution.anonymous_id` at signup time. This `anonymous_id` is the cross-system join key: future GA/S3 stitching binds `GA user_id = aslab_aid` on the client and joins on this column. This issue does NOT implement GA binding; it only records the design — operators should not yet expect to see `anonymous_id` in GA. Organic referrers (LinkedIn, YouTube, ChatGPT, Google, …) are bucketed by `analytics.referrer_source.normalize_referrer` and stored on `UserAttribution.{first,last}_touch_referrer_source`; see issue #772.
 
-## 13. Where to look when something is wrong
+## 12. Where to look when something is wrong
 
 - `Studio > Worker` (`/studio/worker/`) — django-q heartbeats and queue depth. If the worker is "NOT running", background sync / email / Slack jobs will queue forever.
 - `Studio > Sync > history` (`/studio/sync/history/`) — last sync attempts with success / failure status.

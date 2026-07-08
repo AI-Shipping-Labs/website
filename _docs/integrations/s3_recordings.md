@@ -5,17 +5,21 @@ This page documents every setting registered in
 Each section follows the same template — Purpose, Without it, Where to
 find it, Prereqs, Rotation, Test vs live.
 
-The recordings bucket is the durable staging area for Zoom cloud
-recordings before they are pushed to YouTube. The flow is:
+The recordings bucket is the durable, private home for Zoom cloud
+recordings. Members watch them through the access-controlled in-app
+player, which redirects to a short-lived presigned S3 URL. The flow is:
 
 1. Zoom posts `recording.completed`.
 2. `jobs/tasks/recording_upload.py` downloads the MP4 from Zoom.
-3. `jobs/tasks/recordings_s3.py` uploads it to this bucket.
-4. `jobs/tasks/youtube_upload.py` reads it back from this bucket and
-   uploads to YouTube.
+3. `jobs/tasks/recordings_s3.py` uploads it to this bucket and stores
+   the S3 URL on the event.
+4. The authenticated serving endpoint mints a presigned `GetObject`
+   URL (`build_recording_presigned_url` in
+   `jobs/tasks/recordings_s3.py`) and redirects the in-app player to it.
 
 The bucket is private — there is no public listing or CDN fronting it,
-and objects are accessed only via the platform's IAM user.
+and objects are accessed only via the platform's IAM user or short-lived
+presigned URLs.
 
 Direct deep-link URLs are intentionally written in code blocks so they
 do not render as clickable links. Copy them into the browser.
@@ -23,8 +27,8 @@ do not render as clickable links. Copy them into the browser.
 ## AWS_S3_RECORDINGS_BUCKET
 
 Purpose: Bucket name where event recordings land. Read by
-`jobs/tasks/recordings_s3.py:28` (upload) and
-`jobs/tasks/youtube_upload.py:146` (download). The IAM user defined by
+`jobs/tasks/recordings_s3.py` for both upload and presigned playback
+URLs. The IAM user defined by
 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` must have
 `s3:PutObject` and `s3:GetObject` on this bucket.
 
@@ -52,10 +56,11 @@ Prereqs:
 - Create the bucket in the same region as `AWS_S3_RECORDINGS_REGION`
   (cross-region traffic is allowed but slow and pays egress).
 - Block all public access (the platform never serves directly from
-  this bucket; YouTube is the public surface).
-- Lifecycle rule recommended: transition to Glacier (or expire) after
-  N days once a recording has been confirmed on YouTube. The platform
-  does not delete its own objects.
+  this bucket; members watch via short-lived presigned URLs behind the
+  authenticated in-app player).
+- Lifecycle rules are optional: the platform serves recordings straight
+  from this bucket, so keep objects available for as long as members
+  should be able to watch. The platform does not delete its own objects.
 - IAM policy on the SES user must include:
 
   ```
@@ -84,10 +89,10 @@ to isolate dev recordings — naming convention
 ## AWS_S3_RECORDINGS_REGION
 
 Purpose: AWS region of the recordings bucket. Read by
-`jobs/tasks/recordings_s3.py:30` with a fallback default of
+`jobs/tasks/recordings_s3.py` with a fallback default of
 `eu-central-1`. Used to construct the S3 client and the
-`https://<bucket>.s3.<region>.amazonaws.com/<key>` URL referenced by
-the YouTube uploader.
+`https://<bucket>.s3.<region>.amazonaws.com/<key>` URL stored on the
+event and resolved for presigned playback.
 
 Without it: Falls back to `eu-central-1`. If the bucket lives in a
 different region, boto3 returns a permanent redirect (HTTP 301) on

@@ -1477,6 +1477,50 @@
         ]
       }
     },
+    "/api/diagnostics/boot-timing": {
+      "get": {
+        "description": "Returns the most recent per-phase cold-start timings for both the web and worker container tiers, each with its build ``tag``, ``recorded_at``, ``role``, and a ``phases`` map, plus a top-level ``generated_at``. Staff-token only, read-only. A tier with no captured boot yet is ``null``; the response is still a clean 200 (never 404/500).",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "generated_at": "2026-07-08T10:05:00+00:00",
+                  "web": {
+                    "phases": {
+                      "check": 1.3,
+                      "django_setup": 4.2,
+                      "migrate": 8.1,
+                      "setup_schedules": 0.4,
+                      "total": 14.0
+                    },
+                    "recorded_at": "2026-07-08T10:00:00+00:00",
+                    "role": "web",
+                    "tag": "20260708-ab12cd3"
+                  },
+                  "worker": {
+                    "phases": {
+                      "check": 1.2,
+                      "django_setup": 4.1,
+                      "setup_schedules": 0.4,
+                      "total": 5.9
+                    },
+                    "recorded_at": "2026-07-08T10:00:05+00:00",
+                    "role": "worker",
+                    "tag": "20260708-ab12cd3"
+                  }
+                }
+              }
+            },
+            "description": "The latest web and worker boot timings."
+          }
+        },
+        "summary": "Read the latest per-phase container boot timings",
+        "tags": [
+          "Diagnostics"
+        ]
+      }
+    },
     "/api/diagnostics/cleanup-gates": {
       "get": {
         "description": "Returns the production-data gate counts the blocked cleanup issues (#1016 / #1018 / #1017) wait on, plus a ``generated_at`` timestamp. Staff-token only, read-only. Integer counts only -- no PII, no row ids, no titles. Each gate proceeds only when its count is ``0``.",

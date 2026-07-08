@@ -20,6 +20,7 @@ from api.views.articles import (
     article_preview_link,
     article_preview_token_regenerate,
 )
+from api.views.boot_timing import boot_timing_diagnostics
 from api.views.campaigns import campaign_detail, campaigns_collection
 from api.views.checkpoints import (
     checkpoint_detail,
@@ -716,6 +717,16 @@ urlpatterns = [
         "diagnostics/cleanup-gates",
         cleanup_gates_diagnostics,
         name="api_cleanup_gates_diagnostics",
+    ),
+    # ---- Boot-timing diagnostics (issue #1142) ------------------------
+    # Staff-token read-only per-phase container cold-start timings for the
+    # web and worker tiers, persisted to the shared ``django_q`` cache by
+    # ``scripts/entrypoint_init.py`` on every boot. No captures, so no
+    # converter/literal collision concerns. Slashless like every /api route.
+    path(
+        "diagnostics/boot-timing",
+        boot_timing_diagnostics,
+        name="api_boot_timing_diagnostics",
     ),
     # ---- Onboarding read API (issue #837) -----------------------------
     # Staff-token read-only feed over the questionnaires app: survey shape

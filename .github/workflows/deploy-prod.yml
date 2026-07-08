@@ -12,6 +12,11 @@ on:
         type: string
         description: "Tag to deploy to production (optional, defaults to current dev tag)"
         required: false
+      predeployMigrateCheck:
+        type: boolean
+        description: "Run the pre-deploy ECS migrate/check gate"
+        required: false
+        default: false
 
 jobs:
   deploy:
@@ -87,6 +92,7 @@ jobs:
         env:
           CONFIRM_DEPLOY: ${{ github.event.inputs.confirmProdDeploy }}
           AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+          PREDEPLOY_MIGRATE_CHECK_ENABLED: ${{ inputs.predeployMigrateCheck }}
 
       - name: Verify prod deploy landed
         run: |

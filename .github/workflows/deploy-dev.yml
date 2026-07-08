@@ -2,6 +2,12 @@ name: Deploy Dev
 
 on:
   workflow_dispatch:
+    inputs:
+      predeployMigrateCheck:
+        type: boolean
+        description: "Run the pre-deploy ECS migrate/check gate"
+        required: false
+        default: false
   push:
     branches: [main]
     paths-ignore:
@@ -397,6 +403,7 @@ jobs:
         run: bash deploy/deploy_dev.sh ${{ env.TAG }}
         env:
           AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+          PREDEPLOY_MIGRATE_CHECK_ENABLED: ${{ inputs.predeployMigrateCheck }}
 
       - name: Verify deploy landed
         uses: ./.github/actions/wake-dev-ecs

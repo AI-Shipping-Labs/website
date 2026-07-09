@@ -67,6 +67,7 @@ def _create_workshop(
     status='published',
     cover_image_url='',
     tags=None,
+    core_tools=None,
 ):
     """Create a workshop with optional linked event + pages.
 
@@ -112,6 +113,7 @@ def _create_workshop(
         code_repo_url=code_repo_url,
         cover_image_url=cover_image_url,
         tags=tags or [],
+        core_tools=core_tools or [],
         materials=workshop_materials or [],
         event=event,
     )
@@ -421,6 +423,73 @@ class TestVisitorBrowsesCatalog:
         page.wait_for_load_state('domcontentloaded')
 
         assert page.url.endswith('/workshops')
+
+    @pytest.mark.core
+    def test_visitor_filters_by_tool_and_opens_matching_workshop(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='claude-agents',
+            title='Claude Agents Workshop',
+            pages=0,
+            recording=0,
+            tags=['agents'],
+            core_tools=['Claude Code', 'OpenAI API', 'Django'],
+        )
+        _create_workshop(
+            slug='langchain-agents',
+            title='LangChain Agents Workshop',
+            pages=0,
+            recording=0,
+            tags=['agents'],
+            core_tools=['LangChain'],
+        )
+        _create_workshop(
+            slug='no-tools',
+            title='No Tools Workshop',
+            pages=0,
+            recording=0,
+            tags=['agents'],
+        )
+
+        page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
+
+        claude_card = page.locator(
+            'article:has(a[href="/workshops/claude-agents"])',
+        )
+        assert claude_card.locator('[data-testid="workshop-card-tools"]').is_visible()
+        assert 'Claude Code' in claude_card.inner_text()
+        no_tools_card = page.locator(
+            'article:has(a[href="/workshops/no-tools"])',
+        )
+        assert no_tools_card.locator('[data-testid="workshop-card-tools"]').count() == 0
+
+        page.locator(
+            '[data-testid="workshop-tool-filter"][data-tool="Claude Code"]',
+        ).click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops?tool=Claude%20Code')
+        body = page.content()
+        assert 'Claude Agents Workshop' in body
+        assert 'LangChain Agents Workshop' not in body
+        assert 'No Tools Workshop' not in body
+        assert page.locator('[data-testid="workshop-active-tool"]').inner_text() == (
+            'Claude Code'
+        )
+
+        page.locator('a[href="/workshops/claude-agents"]').first.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops/claude-agents')
+        tools = page.locator('[data-testid="workshop-detail-tools"]')
+        assert tools.is_visible()
+        tools_text = tools.inner_text()
+        assert 'Tools & technologies' in tools_text
+        assert 'Claude Code' in tools_text
+        assert 'OpenAI API' in tools_text
+        assert 'Django' in tools_text
 
     @pytest.mark.core
     def test_visitor_sees_catalog_and_lands_on_paywalled_landing(

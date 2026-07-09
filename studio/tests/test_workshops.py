@@ -237,6 +237,20 @@ class StudioWorkshopDetailTest(TestCase):
         self.assertContains(response, 'Hands-on intro')
         self.assertContains(response, 'agents')
 
+    def test_shows_core_tools_as_yaml_sourced_metadata(self):
+        Workshop.objects.filter(pk=self.workshop.pk).update(
+            core_tools=['Claude Code', 'OpenAI API', 'Django'],
+        )
+
+        response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
+
+        self.assertContains(response, 'data-testid="studio-workshop-core-tools"')
+        self.assertContains(response, 'Tools &amp; technologies')
+        self.assertContains(response, 'From workshop.yaml')
+        self.assertContains(response, 'Claude Code')
+        self.assertContains(response, 'OpenAI API')
+        self.assertContains(response, 'Django')
+
     def test_shows_three_tier_gates(self):
         response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
         # Each gate dd has a data-testid we can rely on for assertions.
@@ -422,6 +436,9 @@ class StudioWorkshopEditFormTest(TestCase):
         response = self.client.get(
             f'/studio/workshops/{self.workshop.pk}/edit',
         )
+        self.assertContains(response, 'data-testid="studio-workshop-core-tools"')
+        self.assertContains(response, 'Tools &amp; technologies')
+        self.assertContains(response, 'From workshop.yaml')
         body = response.content.decode()
         # Slice to the editable form section.
         form_start = body.find('data-testid="workshop-edit-form"')
@@ -431,7 +448,7 @@ class StudioWorkshopEditFormTest(TestCase):
         # No form input has any of these names.
         for fname in (
             'title', 'description', 'tags',
-            'date', 'code_repo_url', 'instructor_name',
+            'date', 'code_repo_url', 'instructor_name', 'core_tools',
         ):
             self.assertNotIn(
                 f'name="{fname}"', form_html,
@@ -466,6 +483,8 @@ class StudioWorkshopEditFormTest(TestCase):
         # Any attempt to mutate yaml-sourced fields via the POST is silently
         # ignored — the original values must be preserved.
         original_title = self.workshop.title
+        self.workshop.core_tools = ['Claude Code']
+        self.workshop.save()
         response = self.client.post(
             f'/studio/workshops/{self.workshop.pk}/edit',
             {
@@ -477,11 +496,13 @@ class StudioWorkshopEditFormTest(TestCase):
                 'title': 'HACKED',
                 'description': 'evil',
                 'instructor_name': 'evil',
+                'core_tools': 'evil',
             },
         )
         self.assertEqual(response.status_code, 302)
         self.workshop.refresh_from_db()
         self.assertEqual(self.workshop.title, original_title)
+        self.assertEqual(self.workshop.core_tools, ['Claude Code'])
         self.assertNotIn('evil', self.workshop.description)
 
     def test_post_invariant_violation_recording_below_pages(self):

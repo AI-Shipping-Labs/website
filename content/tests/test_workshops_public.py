@@ -79,7 +79,7 @@ def _make_workshop(slug='ws', title='Workshop', status='published',
                    recording_url='https://www.youtube.com/watch?v=abc',
                    materials=None, code_repo_url='', cover_image_url='',
                    description='# Hello\n\nDescription text.',
-                   tags=None, instructor='Alice'):
+                   tags=None, core_tools=None, instructor='Alice'):
     """Create a workshop (and optional linked event) for tests."""
     event = None
     if with_event:
@@ -102,6 +102,7 @@ def _make_workshop(slug='ws', title='Workshop', status='published',
         code_repo_url=code_repo_url,
         cover_image_url=cover_image_url,
         tags=tags or [],
+        core_tools=core_tools or [],
         event=event,
     )
     if instructor:
@@ -117,6 +118,16 @@ def _make_page(workshop, slug, title, sort_order, body='Hello'):
         sort_order=sort_order,
         body=body,
     )
+
+
+class WorkshopContentDocsTest(SimpleTestCase):
+    def test_workshop_docs_document_core_tools_frontmatter(self):
+        docs = Path('_docs/content.md').read_text(encoding='utf-8')
+
+        self.assertIn('core_tools:', docs)
+        self.assertIn('- Claude Code', docs)
+        self.assertIn('public workshop catalog', docs)
+        self.assertIn('/workshops?tool=...', docs)
 
 
 class WorkshopsCatalogTest(TierSetupMixin, TestCase):
@@ -426,6 +437,152 @@ class WorkshopCatalogAccessFilterTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'View all workshops')
 
 
+class WorkshopCatalogToolFilterTest(TierSetupMixin, TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.claude_agents = _make_workshop(
+            slug='claude-agents',
+            title='Claude Agents',
+            pages=LEVEL_BASIC,
+            recording=LEVEL_MAIN,
+            tags=['agents'],
+            core_tools=[
+                'Claude Code',
+                'OpenAI API',
+                'Django',
+                'Python',
+                'FastAPI',
+            ],
+        )
+        cls.langchain_frontend = _make_workshop(
+            slug='langchain-frontend',
+            title='LangChain Frontend',
+            pages=LEVEL_BASIC,
+            recording=LEVEL_MAIN,
+            tags=['frontend'],
+            core_tools=['LangChain'],
+        )
+        cls.python_agents = _make_workshop(
+            slug='python-agents',
+            title='Python Agents',
+            pages=LEVEL_OPEN,
+            recording=LEVEL_OPEN,
+            tags=['agents'],
+            core_tools=['Python'],
+        )
+        cls.no_tools = _make_workshop(
+            slug='no-tools',
+            title='No Tools Workshop',
+            pages=LEVEL_OPEN,
+            recording=LEVEL_OPEN,
+            tags=['agents'],
+        )
+        cls.draft_private = _make_workshop(
+            slug='draft-private-tool',
+            title='Draft Private Tool',
+            status='draft',
+            pages=LEVEL_OPEN,
+            recording=LEVEL_OPEN,
+            tags=['agents'],
+            core_tools=['Private Tool'],
+        )
+
+    def test_catalog_renders_tool_filter_group_and_card_chips(self):
+        response = self.client.get('/workshops')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="workshop-tool-filters"')
+        self.assertContains(response, 'Tools')
+        self.assertContains(response, 'Claude Code')
+        self.assertContains(response, 'OpenAI API')
+        self.assertContains(response, 'Django')
+        self.assertContains(response, 'LangChain')
+        self.assertContains(response, 'Python')
+        self.assertNotContains(response, 'Private Tool')
+        self.assertContains(response, 'data-testid="workshop-card-tools"', count=3)
+        self.assertContains(response, 'aria-label="1 more tools and technologies"')
+
+        body = response.content.decode()
+        link_index = body.index('href="/workshops/claude-agents"')
+        card_start = body.rfind('<article', 0, link_index)
+        card_end = body.index('</article>', link_index)
+        card_html = body[card_start:card_end]
+        self.assertIn('Claude Code', card_html)
+        self.assertIn('OpenAI API', card_html)
+        self.assertIn('Django', card_html)
+        self.assertIn('Python', card_html)
+        self.assertNotIn('FastAPI', card_html)
+
+    def test_catalog_hides_tool_filter_group_when_no_published_tools_exist(self):
+        Workshop.objects.filter(status='published').update(core_tools=[])
+
+        response = self.client.get('/workshops')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-testid="workshop-tool-filters"')
+        self.assertNotContains(response, 'data-testid="workshop-card-tools"')
+
+    def test_catalog_filters_by_single_tool(self):
+        response = self.client.get('/workshops?tool=Claude%20Code')
+
+        self.assertEqual(response.context['selected_tools'], ['Claude Code'])
+        self.assertContains(response, 'Claude Agents')
+        self.assertNotContains(response, 'LangChain Frontend')
+        self.assertNotContains(response, 'Python Agents')
+        self.assertContains(response, 'data-testid="workshop-active-tool"')
+
+    def test_catalog_filters_multiple_tools_with_and_semantics(self):
+        response = self.client.get('/workshops?tool=Python&tool=OpenAI%20API')
+
+        self.assertEqual(
+            response.context['selected_tools'],
+            ['Python', 'OpenAI API'],
+        )
+        self.assertContains(response, 'Claude Agents')
+        self.assertNotContains(response, 'Python Agents')
+        self.assertNotContains(response, 'LangChain Frontend')
+
+    def test_catalog_tool_tag_and_access_filters_combine_and_preserve_query(self):
+        response = self.client.get(
+            '/workshops?access=paid&tool=Claude%20Code&tag=agents',
+        )
+
+        self.assertContains(response, 'Claude Agents')
+        self.assertNotContains(response, 'Python Agents')
+        self.assertNotContains(response, 'LangChain Frontend')
+        self.assertContains(
+            response,
+            'href="/workshops?access=free&amp;tool=Claude%20Code&amp;tag=agents"',
+        )
+        self.assertContains(
+            response,
+            'href="/workshops?access=paid&amp;tool=Claude%20Code"',
+        )
+        self.assertContains(
+            response,
+            'href="/workshops?access=paid&amp;tag=agents"',
+        )
+        self.assertContains(
+            response,
+            (
+                'href="/workshops?access=paid&amp;tool=Claude%20Code'
+                '&amp;tool=Django&amp;tag=agents"'
+            ),
+        )
+
+    def test_draft_workshop_tools_do_not_contribute_options_or_results(self):
+        response = self.client.get('/workshops')
+        self.assertNotContains(response, 'Private Tool')
+        self.assertNotContains(response, 'Draft Private Tool')
+
+        filtered = self.client.get('/workshops?tool=Private%20Tool')
+
+        self.assertContains(filtered, 'data-testid="workshops-empty-state"')
+        self.assertContains(filtered, 'No workshops match the selected filters.')
+        self.assertNotContains(filtered, 'Draft Private Tool')
+
+
 class WorkshopLandingTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -494,6 +651,43 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/ws')
         self.assertContains(response, 'Alice')
         self.assertContains(response, 'April 21, 2026')
+
+    def test_landing_shows_full_core_tools_when_landing_access_allowed(self):
+        ws = _make_workshop(
+            slug='tool-detail',
+            title='Tool Detail',
+            landing=LEVEL_OPEN,
+            pages=LEVEL_OPEN,
+            recording=LEVEL_OPEN,
+            core_tools=['OpenAI API', 'Django', 'Claude Code'],
+        )
+
+        response = self.client.get(ws.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="workshop-detail-tools"')
+        self.assertContains(response, 'Tools &amp; technologies')
+        body = response.content.decode()
+        tools_index = body.index('data-testid="workshop-detail-tools"')
+        self.assertLess(body.index('OpenAI API', tools_index), body.index('Django', tools_index))
+        self.assertLess(body.index('Django', tools_index), body.index('Claude Code', tools_index))
+
+    def test_landing_paywall_does_not_leak_core_tools(self):
+        ws = _make_workshop(
+            slug='paid-tool-detail',
+            title='Paid Tool Detail',
+            landing=LEVEL_MAIN,
+            pages=LEVEL_MAIN,
+            recording=LEVEL_MAIN,
+            core_tools=['Secret Internal Tool'],
+        )
+
+        response = self.client.get(ws.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="workshop-landing-paywall"')
+        self.assertNotContains(response, 'data-testid="workshop-detail-tools"')
+        self.assertNotContains(response, 'Secret Internal Tool')
 
     def test_landing_shows_code_repo_button(self):
         response = self.client.get('/workshops/ws')

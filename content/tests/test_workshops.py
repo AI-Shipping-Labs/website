@@ -143,6 +143,26 @@ class WorkshopModelValidationTest(TierSetupMixin, TestCase):
         )
         self.assertEqual(ws.landing_required_level, 0)
 
+    def test_core_tools_defaults_to_empty_list(self):
+        ws = Workshop.objects.create(
+            slug='core-tools-default',
+            title='Core Tools Default',
+            date=date(2026, 4, 21),
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+        other = Workshop.objects.create(
+            slug='core-tools-default-other',
+            title='Core Tools Default Other',
+            date=date(2026, 4, 22),
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+
+        self.assertEqual(ws.core_tools, [])
+        self.assertEqual(other.core_tools, [])
+        self.assertIsNot(ws.core_tools, other.core_tools)
+
     def test_save_renders_description_markdown(self):
         ws = Workshop.objects.create(
             slug='md-test',

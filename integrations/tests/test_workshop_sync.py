@@ -412,6 +412,102 @@ class WorkshopSyncTutorialOnlyNoEventTest(_WorkshopSyncFixtureBase):
         self.assertTrue(studio_event.published)
 
 
+class WorkshopSyncCoreToolsTest(_WorkshopSyncFixtureBase):
+    """Workshop ``core_tools:`` frontmatter normalization and validation."""
+
+    def test_sync_normalizes_core_tools_list(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml=(
+                'core_tools:\n'
+                '  - " Claude Code "\n'
+                '  - ""\n'
+                '  - "OpenAI API"\n'
+                '  - "claude code"\n'
+                '  - "Django"\n'
+            ),
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(
+            workshop.core_tools,
+            ['Claude Code', 'OpenAI API', 'Django'],
+        )
+
+    def test_sync_accepts_missing_and_empty_core_tools(self):
+        missing_folder = '2026/2026-04-21-missing-tools'
+        empty_folder = '2026/2026-04-22-empty-tools'
+        self._write_workshop_yaml(
+            folder=missing_folder,
+            slug='missing-tools',
+            title='Missing Tools',
+            content_id='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+        )
+        self._write_page(missing_folder, '01-overview.md', title='Overview')
+        self._write_workshop_yaml(
+            folder=empty_folder,
+            slug='empty-tools',
+            title='Empty Tools',
+            content_id='cccccccc-cccc-cccc-cccc-cccccccccccc',
+            extra_yaml='core_tools: []\n',
+        )
+        self._write_page(empty_folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        self.assertEqual(
+            Workshop.objects.get(slug='missing-tools').core_tools,
+            [],
+        )
+        self.assertEqual(
+            Workshop.objects.get(slug='empty-tools').core_tools,
+            [],
+        )
+
+    def test_sync_reports_error_for_non_list_core_tools(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml='core_tools: Claude Code\n',
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(Workshop.objects.count(), 0)
+        self.assertTrue(
+            any('core_tools' in err.get('error', '') for err in sync_log.errors),
+            f'Expected a core_tools error, got: {sync_log.errors}',
+        )
+
+    def test_sync_reports_error_for_non_string_core_tool_item(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml=(
+                'core_tools:\n'
+                '  - Claude Code\n'
+                '  - 123\n'
+            ),
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(Workshop.objects.count(), 0)
+        self.assertTrue(
+            any(
+                'core_tools[1]' in err.get('error', '')
+                for err in sync_log.errors
+            ),
+            f'Expected a core_tools[1] error, got: {sync_log.errors}',
+        )
+
+
 class WorkshopSyncReusesExistingEventTest(_WorkshopSyncFixtureBase):
     """If an Event with the same slug exists, reuse it — don't overwrite ops fields."""
 

@@ -1,0 +1,27 @@
+{% load access_tags %}
+{% if freestyle_evidence %}
+<div class="mt-5 rounded-lg border border-border bg-secondary/40 p-4" data-testid="freestyle-evidence-block">
+  <p class="text-sm font-semibold text-foreground">Past freestyle sessions</p>
+  <p class="mt-1 text-sm text-muted-foreground">
+    See how previous freestyle builds were run before upgrading.
+  </p>
+  <div class="mt-4 space-y-3">
+    {% for item in freestyle_evidence %}
+    <a href="{{ item.url }}"
+       class="group flex items-start justify-between gap-3 rounded-md border border-border bg-background px-3 py-3 transition-colors hover:border-accent/40"
+       data-testid="freestyle-evidence-link">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-foreground group-hover:text-accent">{{ item.title }}</p>
+        <p class="mt-1 text-xs text-muted-foreground">{{ item.kind_label }} · {{ item.date_label }}</p>
+      </div>
+      {% if item.required_level > 0 %}
+      <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+        <i data-lucide="lock" class="h-3 w-3"></i>
+        {{ item.required_level|required_tier_label }}
+      </span>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}

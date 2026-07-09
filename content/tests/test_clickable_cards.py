@@ -162,8 +162,9 @@ class DownloadsListClickableCardTest(TestCase):
     """Visitor clicks the empty area of a download card and reaches the
     file/signup/pricing destination matching their access state."""
 
-    def test_lead_magnet_card_anonymous_wraps_to_signup(self):
-        """Lead magnet (level=0) for anonymous: wrapper goes to signup-with-next."""
+    def test_lead_magnet_card_anonymous_uses_inline_form_not_signup_wrapper(self):
+        """Lead magnets on /downloads use the inline email form, not a
+        clickable signup wrapper around the card body."""
         Download.objects.create(
             title='Free Cheatsheet',
             slug='free-cheatsheet',
@@ -182,10 +183,14 @@ class DownloadsListClickableCardTest(TestCase):
             and _focus_classes_present(a['class'])
         ]
         self.assertEqual(
-            len(wrapper_links), 1,
-            'Anonymous lead-magnet card body should wrap to signup-with-next, '
-            f'with focus ring; got anchors: {scan.anchors}',
+            len(wrapper_links), 0,
+            'Anonymous lead-magnet card body should not wrap to signup. '
+            f'Got anchors: {scan.anchors}',
         )
+        body = response.content.decode()
+        self.assertIn('data-testid="download-inline-subscribe-form"', body)
+        self.assertEqual(body.count('Free Cheatsheet'), 1)
+        self.assertEqual(body.count('Free for everyone.'), 1)
 
     def test_gated_card_anonymous_wraps_to_pricing(self):
         """Gated download (required_level>0) without access: body links to /pricing."""
@@ -231,9 +236,8 @@ class DownloadsListClickableCardTest(TestCase):
             f'Downloads list contains nested anchors: {scan.nested_anchor_hrefs}',
         )
 
-    def test_inner_cta_remains_separate_anchor(self):
-        """Sign Up / Download / View Pricing CTAs render as their own anchors,
-        outside the wrapping body <a>."""
+    def test_lead_magnet_renders_inline_form_not_signup_anchors(self):
+        """Lead magnets keep the CTA interactive without emitting signup anchors."""
         Download.objects.create(
             title='Lead Magnet',
             slug='lead-magnet',
@@ -245,19 +249,12 @@ class DownloadsListClickableCardTest(TestCase):
         )
         response = self.client.get('/downloads')
         body = response.content.decode()
-        # The inner CTA is the same destination as the wrapper for lead magnets,
-        # but it carries the bg-accent button styling. Both must exist.
         self.assertIn('Sign Up to Download', body)
-        scan = _scan_anchors(body)
-        signup_links = [
-            a for a in scan.anchors
-            if a['href'] == '/accounts/signup?next=/api/downloads/lead-magnet/file'
-        ]
-        self.assertEqual(
-            len(signup_links), 2,
-            'Lead-magnet card should produce two anchors with the same href: '
-            'one for the body wrapper, one for the inner Sign Up CTA. '
-            f'Got: {len(signup_links)}',
+        self.assertIn('data-testid="download-inline-subscribe-form"', body)
+        self.assertIn('data-redirect-to="/api/downloads/lead-magnet/file"', body)
+        self.assertNotIn(
+            '/accounts/signup?next=/api/downloads/lead-magnet/file',
+            body,
         )
 
     def test_download_card_caps_visible_tag_chips(self):

@@ -4,6 +4,7 @@ import datetime
 import json
 import logging
 import time
+from urllib.parse import urlencode
 
 import jwt
 from django.conf import settings
@@ -202,7 +203,23 @@ def _send_verification_email(user, return_path=None):
 
 
 def _render_verify_email_result(request, *, success, message, status=200):
-    if success:
+    verified_user = None
+    if success and hasattr(request, "_verified_email_user"):
+        verified_user = request._verified_email_user
+
+    if (
+        success
+        and verified_user is not None
+        and verified_user.signup_source == "newsletter"
+        and not verified_user.account_activated
+        and not verified_user.has_usable_password()
+    ):
+        cta_url = (
+            "/accounts/password-reset-request?"
+            + urlencode({"email": verified_user.email})
+        )
+        cta_label = "Set a password"
+    elif success:
         cta_url = "/account/" if request.user.is_authenticated else "/accounts/login/"
         cta_label = (
             "Continue to Account"
@@ -470,6 +487,7 @@ def verify_email_api(request):
             mark_activated(user)
     if user.signup_source == SIGNUP_SOURCE_SIGNUP:
         send_free_welcome_email(user)
+    request._verified_email_user = user
 
     # Content gates sign a same-site return path into signup/resend
     # verification links. Newsletter lead-magnet links use the legacy

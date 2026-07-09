@@ -3,6 +3,7 @@ import re
 import uuid
 from urllib.parse import urlparse
 
+from django.apps import apps
 from django.conf import settings
 
 from integrations.config import get_config, site_base_url
@@ -242,6 +243,7 @@ def site_context(request):
         'login_state': ga_login_state,
         'member_tier': ga_member_tier,
     }
+    download_model = apps.get_model('content', 'Download')
 
     return {
         'VERSION': settings.VERSION,
@@ -258,6 +260,9 @@ def site_context(request):
         'ga_client_context_json': json.dumps(ga_client_context),
         'gtag_pending_event': pending_event,
         'current_year': __import__('datetime').datetime.now().year,
+        'has_published_downloads': download_model.objects.filter(
+            published=True
+        ).exists(),
     }
 
 

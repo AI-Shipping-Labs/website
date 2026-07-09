@@ -54,6 +54,7 @@ from content.templatetags.video_utils import (
 )
 from content.utils.teaser import truncate_to_words
 from content.views.pages import _filter_by_tags, _get_selected_tags
+from events.services.freestyle_evidence import build_freestyle_evidence
 
 # Approximate word budget for the locked-page teaser body. Mirrors the
 # constant used by ``content.views.courses.TEASER_WORD_LIMIT`` so the
@@ -69,6 +70,12 @@ CATALOG_ACCESS_OPTIONS = (
     (CATALOG_ACCESS_FREE, 'Free'),
     (CATALOG_ACCESS_PAID, 'Paid'),
 )
+
+
+def _freestyle_evidence_for_workshop(workshop, *reasons):
+    if "insufficient_tier" not in reasons:
+        return []
+    return build_freestyle_evidence(workshop)
 
 
 def _gated_reason_for_level(user, required_level):
@@ -372,6 +379,9 @@ def _build_landing_context(workshop, user):
         'current_user_state': current_user_state,
         'landing_cta_label': 'View Pricing',
         'recording_cta_label': f'Upgrade to {recording_tier_name}',
+        'freestyle_evidence': _freestyle_evidence_for_workshop(
+            workshop, landing_gated_reason, pages_gated_reason,
+        ),
         **verify_email_context,
     }
 
@@ -742,6 +752,9 @@ def _build_video_gated_context(request, workshop, event):
             'gated_cta_url': gated_cta_url,
             'gated_cta_label': gated_cta_label,
             'gated_cta_testid': 'video-upgrade-cta',
+            'freestyle_evidence': _freestyle_evidence_for_workshop(
+                workshop, gated_reason,
+            ),
         },
         403,
     )
@@ -973,6 +986,9 @@ def _build_page_gated_context(request, workshop, page):
             'gated_cta_url': gated_cta_url,
             'gated_cta_label': gated_cta_label,
             'gated_cta_testid': 'page-upgrade-cta',
+            'freestyle_evidence': _freestyle_evidence_for_workshop(
+                workshop, gated_reason,
+            ),
         },
         403,
     )

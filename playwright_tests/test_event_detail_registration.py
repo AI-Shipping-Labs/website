@@ -44,9 +44,12 @@ pytestmark = pytest.mark.local_only
 
 
 def _clear_events():
+    from content.models import Workshop, WorkshopPage
     from events.models import Event, EventRegistration
 
     EventRegistration.objects.all().delete()
+    WorkshopPage.objects.all().delete()
+    Workshop.objects.all().delete()
     Event.objects.all().delete()
     connection.close()
 
@@ -73,6 +76,34 @@ def _create_event(
         cover_image_url=cover_image_url,
         required_level=required_level,
     )
+    connection.close()
+    return event
+
+
+def _create_past_freestyle_recording(slug, title, *, days_ago, with_workshop=False):
+    from content.models import Workshop
+    from events.models import Event
+
+    start_datetime = timezone.now() - datetime.timedelta(days=days_ago)
+    event = Event.objects.create(
+        slug=slug,
+        title=title,
+        description="A recorded freestyle session.",
+        start_datetime=start_datetime,
+        status="completed",
+        recording_url=f"https://example.com/{slug}.mp4",
+    )
+    if with_workshop:
+        Workshop.objects.create(
+            slug=f"{slug}-writeup",
+            title=f"{title} Writeup",
+            date=start_datetime.date(),
+            status="published",
+            landing_required_level=0,
+            pages_required_level=5,
+            recording_required_level=20,
+            event=event,
+        )
     connection.close()
     return event
 
@@ -328,6 +359,46 @@ class TestAnonymousPaidEventCopy:
         page.wait_for_url(f"{django_server}/pricing")
         # Smoke check: the pricing page renders without an error.
         assert "Pricing" in page.title() or "pricing" in page.url
+
+    def test_paid_freestyle_event_shows_past_freestyle_evidence(
+        self, django_server, page
+    ):
+        _clear_events()
+        _ensure_tiers()
+        event = _create_event(
+            slug="premium-freestyle-build",
+            title="Premium Freestyle Build",
+            required_level=20,
+        )
+        _create_past_freestyle_recording(
+            "fresh-freestyle",
+            "Fresh Freestyle Session",
+            days_ago=3,
+            with_workshop=True,
+        )
+        _create_past_freestyle_recording(
+            "mid-freestyle",
+            "Mid Freestyle Session",
+            days_ago=7,
+        )
+        _create_past_freestyle_recording(
+            "older-freestyle",
+            "Older Freestyle Session",
+            days_ago=14,
+        )
+
+        page.goto(
+            f"{django_server}{event.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
+
+        evidence = page.get_by_test_id("freestyle-evidence-block")
+        assert evidence.is_visible()
+        links = page.get_by_test_id("freestyle-evidence-link")
+        assert links.count() == 3
+        assert "Fresh Freestyle Session Writeup" in evidence.inner_text()
+        assert "Mid Freestyle Session" in evidence.inner_text()
+        assert "Older Freestyle Session" in evidence.inner_text()
 
     def test_anonymous_free_event_still_shows_email_form(
         self, django_server, page

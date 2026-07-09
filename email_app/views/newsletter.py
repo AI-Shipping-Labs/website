@@ -282,4 +282,8 @@ def unsubscribe_api(request):
 @ensure_csrf_cookie
 def subscribe_page(request):
     """Render the dedicated /subscribe page with the subscribe form."""
-    return render(request, "email_app/subscribe.html")
+    return render(
+        request,
+        "email_app/subscribe.html",
+        {"hide_footer_newsletter": True},
+    )

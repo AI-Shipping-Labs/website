@@ -62,6 +62,13 @@ def _filter_by_tags(queryset, selected_tags):
     return queryset.filter(pk__in=matching_ids)
 
 
+def _clean_guest_surface_text(value):
+    """Normalize stale sync-managed text before rendering public pages."""
+    if value is None:
+        return ''
+    return str(value).replace('\\"', '"').replace("\\'", "'").strip()
+
+
 def _get_tag_rules_for_tags(tags):
     """Return TagRule objects that match any of the given tags.
 
@@ -133,13 +140,21 @@ def _build_sprint_summaries(sprints, user):
 
 def _get_activity_sprints(user):
     """Return public activity-hub sprint summaries for the current viewer."""
-    statuses = ['active']
-    if user.is_authenticated and user.is_staff:
-        statuses.append('draft')
+    today = timezone.localdate()
+    sprints = []
 
-    sprints = Sprint.objects.filter(status__in=statuses).order_by(
+    active_sprints = Sprint.objects.filter(status='active').order_by(
         'start_date', 'name',
     )
+    for sprint in active_sprints:
+        if sprint.start_date <= today <= sprint.end_date:
+            sprints.append(sprint)
+
+    if user.is_authenticated and user.is_staff:
+        sprints.extend(
+            Sprint.objects.filter(status='draft').order_by('start_date', 'name')
+        )
+
     return _build_sprint_summaries(sprints, user)
 
 
@@ -376,6 +391,8 @@ def collection_list(request):
     # Build per-link access info and strip URLs from gated links
     annotated_links = []
     for link in links:
+        link.title = _clean_guest_surface_text(link.title)
+        link.description = _clean_guest_surface_text(link.description)
         gated_reason = get_gated_reason(request.user, link)
         has_access = not gated_reason or gated_reason == 'unverified_email'
         url = link.url if not gated_reason else None
@@ -465,6 +482,7 @@ def tutorial_detail(request, slug):
     return render(request, 'content/tutorial_detail.html', context)
 
 
+@ensure_csrf_cookie
 def downloads_list(request):
     """Downloadable resources listing page with optional tag filtering."""
     downloads = Download.objects.filter(published=True)

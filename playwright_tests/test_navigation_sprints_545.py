@@ -76,6 +76,24 @@ def _create_sprint(
     return sprint
 
 
+def _create_download(
+    title="Public Download",
+    slug="public-download",
+):
+    from django.db import connection
+
+    from content.models import Download
+
+    download = Download.objects.create(
+        title=title,
+        slug=slug,
+        file_url=f"https://example.com/{slug}.pdf",
+        published=True,
+    )
+    connection.close()
+    return download
+
+
 def _assert_no_horizontal_overflow(page):
     assert page.evaluate(
         "() => document.documentElement.scrollWidth <= "
@@ -197,6 +215,24 @@ def test_resources_dropdown_lists_blog_first(django_server, page):
     page.get_by_test_id("nav-resources-link-blog").click()
     page.wait_for_url("**/blog")
     _shot(page, "03-resources-blog-first")
+
+
+def test_resources_dropdown_adds_downloads_only_when_published(
+    django_server, page, django_db_blocker
+):
+    with django_db_blocker.unblock():
+        _create_download()
+
+    page.set_viewport_size({"width": 1280, "height": 800})
+    page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+    page.get_by_test_id("nav-resources-trigger").hover()
+    menu = page.get_by_test_id("nav-resources-menu")
+    menu.wait_for(state="visible")
+
+    downloads_link = page.get_by_test_id("nav-resources-link-downloads")
+    assert downloads_link.count() == 1
+    assert downloads_link.get_attribute("href") == "/downloads"
 
 
 def test_community_dropdown_groups_membership_sprints_events(django_server, page):
@@ -506,4 +542,6 @@ def test_existing_activities_page_still_loads(django_server, page):
     page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
 
     assert page.locator('[data-testid="activities-sprints-section"]').is_visible()
-    assert page.get_by_text("Member activities and support").is_visible()
+    assert page.get_by_role(
+        "heading", name="Membership benefits by tier"
+    ).is_visible()

@@ -124,6 +124,15 @@ class FooterNewsletterSuppressionTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, FOOTER_NEWSLETTER_ANCHOR)
         self.assertNotContains(response, FOOTER_NEWSLETTER_HEADING)
 
+    def test_subscribe_page_hides_footer_newsletter_and_keeps_single_form(self):
+        response = self.client.get('/subscribe')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, FOOTER_NEWSLETTER_ANCHOR)
+        self.assertNotContains(response, FOOTER_NEWSLETTER_HEADING)
+        self.assertContains(response, 'class="subscribe-form')
+        self.assertEqual(response.content.decode().count('<form class="subscribe-form '), 1)
+
     # ----------------------------------------------------------------
     # Positive regression guards — newsletter MUST still appear
     # ----------------------------------------------------------------

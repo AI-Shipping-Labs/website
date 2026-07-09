@@ -16,8 +16,11 @@ https://aishippinglabs.com/member-api/v1
 Auth header:
 
 ```text
-Authorization: Token <AI_SHIPPING_LABS_MEMBER_API_KEY>
+Authorization: Token <asl_member_...>
 ```
+
+Use the value from `AI_SHIPPING_LABS_MEMBER_API_KEY` in place of the
+placeholder when making requests.
 
 All requests and responses are JSON. Use only `/member-api/v1`.
 
@@ -52,6 +55,24 @@ set -a
 source .env
 set +a
 ```
+
+## Safe API Surface
+
+Allowed endpoints include:
+
+```text
+GET /member-api/v1/plans
+GET /member-api/v1/plans/{plan_id}
+GET /member-api/v1/plans/{plan_id}/markdown
+PATCH /member-api/v1/plans/{plan_id}/progress
+```
+
+Do not call `/api/`, `/studio/`, Django admin, or staff-only endpoints from
+this skill. Member API keys cannot access CRM notes, onboarding answers, staff
+context, cohort teammates' plans, or other members' data.
+
+Forbidden data includes CRM notes, onboarding answers, staff context, and other
+members' data.
 
 ## Fast Path: Update A Plan From Markdown
 

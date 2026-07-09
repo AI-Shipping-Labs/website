@@ -11,6 +11,7 @@ Logger calls go through the package for the same reason.
 """
 
 import stripe
+from django.conf import settings
 
 from payments import services as _services
 
@@ -58,6 +59,13 @@ def _get_subscription_interval(subscription_id):
     """
     try:
         client = _services._get_stripe_client()
+        if _is_real_stripe_client_blocked_in_tests(client):
+            _services.logger.info(
+                "Skipping optional Stripe interval lookup for subscription %s "
+                "under TESTING",
+                subscription_id,
+            )
+            return ""
         subscription = client.subscriptions.retrieve(
             subscription_id,
             params={"expand": ["items.data.price"]},
@@ -75,6 +83,14 @@ def _get_subscription_interval(subscription_id):
             exc_info=True,
         )
     return ""
+
+
+def _is_real_stripe_client_blocked_in_tests(client):
+    """Prevent optional fallback lookups from reaching Stripe in tests."""
+    return getattr(settings, "TESTING", False) and isinstance(
+        client,
+        stripe.StripeClient,
+    )
 
 
 def _is_missing(value):

@@ -175,6 +175,23 @@ class SubscriptionExtractionTest(TestCase):
         self.assertEqual(_get_subscription_interval("sub_err"), "")
 
     @patch("payments.services._get_stripe_client")
+    def test_interval_skips_real_stripe_client_under_tests(self, mock_get_client):
+        # make coverage must never make provider network calls. The optional
+        # interval fallback can still be unit-tested with MagicMock clients,
+        # but a real StripeClient is skipped under settings.TESTING.
+        real_client = stripe.StripeClient("sk_test_no_network")
+        mock_get_client.return_value = real_client
+
+        with patch.object(
+            real_client.subscriptions,
+            "retrieve",
+            side_effect=AssertionError("unexpected Stripe network call"),
+        ) as retrieve:
+            self.assertEqual(_get_subscription_interval("sub_real"), "")
+
+        retrieve.assert_not_called()
+
+    @patch("payments.services._get_stripe_client")
     def test_price_id_from_mapping_object_with_items_method_collision(
         self, mock_get_client,
     ):

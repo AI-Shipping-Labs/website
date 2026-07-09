@@ -69,11 +69,15 @@ def past_events_queryset(queryset=None, *, now=None, public=True):
 
 def past_recording_events_queryset(queryset=None, *, now=None):
     """Return public finished events that have a publishable recording."""
+    has_recording_q = (
+        (Q(recording_s3_url__isnull=False) & ~Q(recording_s3_url=''))
+        | (Q(recording_url__isnull=False) & ~Q(recording_url=''))
+        | (Q(recording_embed_url__isnull=False) & ~Q(recording_embed_url=''))
+    )
     return (
         past_events_queryset(queryset, now=now, public=True)
         .filter(published=True)
-        .exclude(recording_url='')
-        .exclude(recording_url__isnull=True)
+        .filter(has_recording_q)
     )
 
 

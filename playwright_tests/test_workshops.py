@@ -2,6 +2,7 @@
 
 Covers the user-flow scenarios in the issue:
 - Anonymous visitor browses the catalog and lands on a gated landing page.
+- Anonymous visitor filters the catalog by free/paid access.
 - Free user hits the pages paywall on the landing.
 - Basic user reads tutorial pages but sees the recording paywall.
 - Basic user navigates between tutorial pages with prev/next.
@@ -275,6 +276,151 @@ class TestVisitorBrowsesCatalog:
         body = page.content()
         assert 'Agent Workshop' in body
         assert 'Python Workshop' in body
+
+    @pytest.mark.core
+    def test_visitor_filters_free_catalog_and_opens_matching_workshop(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='open-free-main-recording',
+            title='Open Free Workshop',
+            pages=0,
+            recording=20,
+            tags=['agents'],
+        )
+        _create_workshop(
+            slug='registered-free',
+            title='Registered Free Workshop',
+            pages=5,
+            recording=5,
+            tags=['agents'],
+        )
+        _create_workshop(
+            slug='paid-basic',
+            title='Paid Basic Workshop',
+            pages=10,
+            recording=20,
+            tags=['agents'],
+        )
+        _create_workshop(
+            slug='draft-free',
+            title='Draft Free Workshop',
+            status='draft',
+            pages=0,
+            recording=0,
+            tags=['agents'],
+        )
+
+        page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
+
+        all_filter = page.locator('[data-testid="workshop-access-filter-all"]')
+        assert all_filter.get_attribute('aria-current') == 'page'
+        body = page.content()
+        assert 'Open Free Workshop' in body
+        assert 'Registered Free Workshop' in body
+        assert 'Paid Basic Workshop' in body
+        assert 'Draft Free Workshop' not in body
+
+        page.locator('[data-testid="workshop-access-filter-free"]').click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops?access=free')
+        free_filter = page.locator('[data-testid="workshop-access-filter-free"]')
+        assert free_filter.get_attribute('aria-current') == 'page'
+
+        filtered_body = page.content()
+        assert 'Open Free Workshop' in filtered_body
+        assert 'Registered Free Workshop' in filtered_body
+        assert 'Paid Basic Workshop' not in filtered_body
+        assert 'Draft Free Workshop' not in filtered_body
+
+        page.locator('a[href="/workshops/open-free-main-recording"]').first.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops/open-free-main-recording')
+        assert page.locator('[data-testid="workshop-title"]').inner_text() == (
+            'Open Free Workshop'
+        )
+        recording_lock = page.locator('[data-testid="workshop-video-locked"]')
+        assert recording_lock.is_visible()
+        assert 'Main or above' in recording_lock.inner_text()
+
+    def test_access_and_tag_filters_preserve_each_other(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='free-agents',
+            title='Free Agents Workshop',
+            pages=0,
+            recording=0,
+            tags=['agents'],
+        )
+        _create_workshop(
+            slug='paid-agents',
+            title='Paid Agents Workshop',
+            pages=10,
+            recording=20,
+            tags=['agents'],
+        )
+        _create_workshop(
+            slug='paid-python',
+            title='Paid Python Workshop',
+            pages=20,
+            recording=20,
+            tags=['python'],
+        )
+
+        page.goto(
+            f'{django_server}/workshops?access=free&tag=agents',
+            wait_until='domcontentloaded',
+        )
+
+        paid_filter = page.locator('[data-testid="workshop-access-filter-paid"]')
+        assert paid_filter.get_attribute('href') == '/workshops?access=paid&tag=agents'
+        paid_filter.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops?access=paid&tag=agents')
+        paid_agents_body = page.content()
+        assert 'Paid Agents Workshop' in paid_agents_body
+        assert 'Free Agents Workshop' not in paid_agents_body
+        assert 'Paid Python Workshop' not in paid_agents_body
+
+        page.goto(
+            f'{django_server}/workshops?access=paid',
+            wait_until='domcontentloaded',
+        )
+        python_tag = page.locator(
+            'article:has(a[href="/workshops/paid-python"]) '
+            '[data-testid="workshop-card-tags"] a:has-text("python")',
+        )
+        assert python_tag.get_attribute('href') == '/workshops?access=paid&tag=python'
+        python_tag.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops?access=paid&tag=python')
+        python_body = page.content()
+        assert 'Paid Python Workshop' in python_body
+        assert 'Paid Agents Workshop' not in python_body
+        assert page.locator('[data-testid="workshop-active-access"]').inner_text() == (
+            'Paid'
+        )
+
+        active_tag = page.locator('[data-testid="workshop-active-tag"]')
+        assert active_tag.get_attribute('href') == '/workshops?access=paid'
+        active_tag.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops?access=paid')
+
+        clear_link = page.locator('[data-testid="clear-workshop-filter"]')
+        assert clear_link.get_attribute('href') == '/workshops'
+        clear_link.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops')
 
     @pytest.mark.core
     def test_visitor_sees_catalog_and_lands_on_paywalled_landing(

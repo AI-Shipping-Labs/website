@@ -263,6 +263,10 @@ def _dashboard(request):
     # Re-fetch user with select_related('tier') to avoid a lazy-load query
     # every time user.tier.name or user.tier.level is accessed.
     user = User.objects.select_related('tier').get(pk=request.user.pk)
+    # Reuse the prefetched user for template/context-processor rendering too.
+    # The GA context needs user.tier.slug; keeping request.user on Django's
+    # auth-loaded instance would add a duplicate tier query on the dashboard.
+    request.user = user
 
     # --- Welcome banner ---
     # Fetch active tier override once; pass it to get_user_level to avoid a

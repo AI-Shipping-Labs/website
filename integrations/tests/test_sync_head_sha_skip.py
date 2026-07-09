@@ -12,6 +12,9 @@ The repo-level skip differs from issue #225's per-item change detection:
 entirely. Both compose.
 """
 
+import hashlib
+import hmac
+import json
 import os
 import shutil
 import tempfile
@@ -478,6 +481,7 @@ class WebhookForcesSyncTest(TestCase):
             repo_name='octo/repo-235-webhook',
             last_synced_commit='a' * 40,
             last_sync_status='success',
+            webhook_secret='test-webhook-secret',
         )
 
     def _push_payload(self):
@@ -486,17 +490,27 @@ class WebhookForcesSyncTest(TestCase):
             'repository': {'full_name': self.source.repo_name},
         }
 
+    def _signature(self, body):
+        digest = hmac.new(
+            self.source.webhook_secret.encode('utf-8'),
+            body.encode('utf-8'),
+            hashlib.sha256,
+        ).hexdigest()
+        return f'sha256={digest}'
+
     @mock.patch('integrations.views.github_webhook.sync_content_source')
     def test_webhook_passes_force_true(self, mock_sync):
         # ImportError path: django_q absent, runs sync inline. We patch
         # sync_content_source itself so we can inspect the kwargs.
+        body = json.dumps(self._push_payload())
         with mock.patch.dict(
             'sys.modules', {'django_q.tasks': None},
         ):
             response = self.client.post(
                 '/api/webhooks/github',
-                data=self._push_payload(),
+                data=body,
                 content_type='application/json',
+                HTTP_X_HUB_SIGNATURE_256=self._signature(body),
                 HTTP_X_GITHUB_EVENT='push',
             )
         self.assertEqual(response.status_code, 200)

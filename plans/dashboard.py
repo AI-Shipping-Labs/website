@@ -145,7 +145,12 @@ def build_sprint_plan_card_context(user):
     }
 
 
-def build_active_sprint_opportunities_context(user, user_level, plan=None):
+def build_active_sprint_opportunities_context(
+    user,
+    user_level,
+    plan=None,
+    has_any_plan=None,
+):
     """Return active sprint/cohort opportunities for the dashboard.
 
     The dashboard is a discovery surface, not a sprint catalog, so this
@@ -163,11 +168,14 @@ def build_active_sprint_opportunities_context(user, user_level, plan=None):
         }
 
     current_plan_sprint_id = plan.sprint_id if plan is not None else None
-    blocked_sprint_ids = set(
-        Plan.objects
-        .filter(member=user, shared_at__isnull=True)
-        .values_list('sprint_id', flat=True),
-    )
+    if has_any_plan is False:
+        blocked_sprint_ids = set()
+    else:
+        blocked_sprint_ids = set(
+            Plan.objects
+            .filter(member=user, shared_at__isnull=True)
+            .values_list('sprint_id', flat=True),
+        )
     if current_plan_sprint_id is not None:
         blocked_sprint_ids.add(current_plan_sprint_id)
     enrollments = list(

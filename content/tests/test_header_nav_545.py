@@ -2,7 +2,9 @@ import datetime
 import re
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import resolve, reverse
 from django.utils import timezone
 
@@ -279,4 +281,25 @@ class HeaderDownloadsNavigationTest(TestCase):
         self.assertIn('href="/downloads"', header)
         self.assertIn(
             'data-testid="mobile-nav-resources-link-downloads"', header,
+        )
+
+    def test_authenticated_home_skips_downloads_nav_query(self):
+        user = User.objects.create_user(
+            email='member-downloads-nav@example.com',
+        )
+        self.client.force_login(user)
+
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get('/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'content/dashboard.html')
+        header = response.content.decode().split('</header>', 1)[0]
+        self.assertNotIn('data-testid="nav-resources-link-downloads"', header)
+        self.assertFalse(
+            any(
+                'content_download' in query['sql']
+                for query in ctx.captured_queries
+            ),
+            'Authenticated home header should not query downloads.',
         )

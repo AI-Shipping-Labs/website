@@ -323,7 +323,7 @@ def events_list(request):
 
     Accepts ``?filter=`` with values ``all`` (default), ``upcoming``, or
     ``past``. The past surface filters to completed events that have a
-    recording URL, supports tag filtering via ``?tag=``, and paginates at
+    recording, supports tag filtering via ``?tag=``, and paginates at
     20 per page.
     """
     filter_mode = request.GET.get('filter', 'all').strip().lower()
@@ -339,18 +339,22 @@ def events_list(request):
         .order_by('start_datetime')
     )
 
-    # For the "past" surface we show finished events with a recording
-    # (and honor the ``published`` flag). The default "all" view does not
-    # require a recording. Issue #863: cancelled occurrences are hidden from
-    # every public listing, so neither bucket includes them.
+    # For the "past" surface we show published finished events with any
+    # recording field populated. The default "all" view does not require a
+    # recording. Issue #863: cancelled occurrences are hidden from every public
+    # listing, so neither bucket includes them.
     past_with_recording_qs = past_recording_events_queryset(
         now=now,
-    ).order_by('-start_datetime')
+    ).select_related('workshop').order_by('-start_datetime')
 
     # ``past_all_qs`` = any non-cancelled event past its effective end.
     # Issue #863: cancelled events no longer appear here (previously they were
     # added back via ``Q(status='cancelled')``).
-    past_all_qs = past_events_queryset(now=now).order_by('-start_datetime')
+    past_all_qs = (
+        past_events_queryset(now=now)
+        .select_related('workshop')
+        .order_by('-start_datetime')
+    )
 
     # Collect all tags from past-with-recording events for the tag filter UI
     all_past_tags = set()

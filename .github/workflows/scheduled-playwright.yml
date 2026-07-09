@@ -177,9 +177,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      contents: read
       issues: write
 
     steps:
+      - name: Checkout code for notification helper
+        if: contains(toJSON(needs.*.result), 'failure')
+        uses: actions/checkout@v5
+        continue-on-error: true
+
       - name: Open or update failure issue
         if: contains(toJSON(needs.*.result), 'failure')
         env:
@@ -189,15 +195,19 @@ jobs:
         shell: bash
         run: |
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          failed_jobs=$(gh run view "${GITHUB_RUN_ID}" \
-            --json jobs \
-            --jq '.jobs[] | select(.conclusion == "failure") | "- " + .name' || true)
-          if [ -z "${failed_jobs}" ]; then
-            failed_jobs="- Failure details were not available when this notification ran."
-          fi
-
           body_file="$(mktemp)"
-          cat > "${body_file}" <<EOF
+          if [ -f scripts/scheduled_playwright_failure_notice.py ] \
+            && python3 scripts/scheduled_playwright_failure_notice.py --output "${body_file}"; then
+            :
+          else
+            failed_jobs=$(gh run view "${GITHUB_RUN_ID}" \
+              --json jobs \
+              --jq '.jobs[] | select(.conclusion == "failure") | if .url then "- " + .name + "\n  Job: " + .url else "- " + .name end' || true)
+            if [ -z "${failed_jobs}" ]; then
+              failed_jobs="- Failure details were not available when this notification ran."
+            fi
+
+            cat > "${body_file}" <<EOF
           Scheduled Playwright failed on \`${GITHUB_REF_NAME}\`.
 
           Run: ${run_url}
@@ -207,6 +217,7 @@ jobs:
           Failed jobs:
           ${failed_jobs}
           EOF
+          fi
 
           issue_number=$(gh issue list \
             --state open \

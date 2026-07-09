@@ -7,6 +7,7 @@ dismissed card stays gone across devices and sessions. The endpoint is
 idempotent.
 """
 
+import datetime
 import json
 
 from django.contrib.auth import get_user_model
@@ -33,6 +34,17 @@ class DismissDashboardCardEndpointTest(TestCase):
             content_type="application/json",
         )
 
+    def _make_plan(self, member=None):
+        from plans.models import Plan, Sprint
+
+        member = member or self.user
+        sprint = Sprint.objects.create(
+            name=f"Sprint {Sprint.objects.count() + 1}",
+            slug=f"dismiss-sprint-{Sprint.objects.count() + 1}",
+            start_date=datetime.date(2026, 5, 1),
+        )
+        return Plan.objects.create(member=member, sprint=sprint)
+
     def test_url_name_resolves(self):
         self.assertEqual(reverse("dismiss_dashboard_card"), DISMISS_URL)
 
@@ -51,6 +63,44 @@ class DismissDashboardCardEndpointTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.user.refresh_from_db()
         self.assertIn("slack_join", self.user.dashboard_dismissals)
+
+    def test_plan_carry_over_prompt_for_owned_plan_persists(self):
+        plan = self._make_plan()
+        card = f"plan_carry_over_prompt:{plan.pk}"
+
+        response = self._post({"card": card})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok", "card": card})
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.dashboard_dismissals, [card])
+
+    def test_plan_carry_over_prompt_for_non_owned_plan_rejected(self):
+        other = User.objects.create_user(email="other@test.com", password="pw")
+        plan = self._make_plan(other)
+
+        response = self._post({"card": f"plan_carry_over_prompt:{plan.pk}"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.dashboard_dismissals, [])
+
+    def test_plan_carry_over_prompt_malformed_keys_rejected(self):
+        for card in [
+            "plan_carry_over_prompt:",
+            "plan_carry_over_prompt:abc",
+            "plan_carry_over_prompt:-1",
+            "plan_carry_over_prompt:01",
+            "plan_carry_over_prompt:1:extra",
+            ["plan_carry_over_prompt:1"],
+        ]:
+            with self.subTest(card=card):
+                response = self._post({"card": card})
+                self.assertEqual(response.status_code, 400)
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.dashboard_dismissals, [])
 
     def test_unknown_card_returns_400_and_does_not_mutate(self):
         response = self._post({"card": "not-a-real-card"})

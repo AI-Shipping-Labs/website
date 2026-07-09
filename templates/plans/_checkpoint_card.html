@@ -32,7 +32,7 @@ Studio tests.
           class="plan-editor-checkpoint-delete text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">x</button>
 </li>
 {% else %}
-<li class="group flex min-h-[52px] items-start gap-3 rounded-md bg-card px-3 py-3 text-sm shadow-sm ring-1 ring-border/70 transition-colors {% if checkpoint.done_at %}is-complete{% endif %}"
+<li class="group flex min-h-[44px] items-start gap-3 px-1 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent {% if checkpoint.done_at %}is-complete{% endif %}"
     data-testid="plan-checkpoint"
     data-checkpoint-card
     data-plan-item
@@ -61,8 +61,8 @@ Studio tests.
     <span class="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border text-xs text-muted-foreground" aria-label="Not done"></span>
     {% endif %}
   {% endif %}
-  <div class="min-w-0 flex-1">
-    <div class="plan-markdown cursor-text {% if checkpoint.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
+  <div class="min-w-0 flex-1" {% if plan_can_edit %}data-checkpoint-edit-trigger{% endif %}>
+    <div class="plan-markdown {% if plan_can_edit %}cursor-text{% endif %} {% if checkpoint.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
          data-testid="checkpoint-text"
          data-checkpoint-text
          data-rendered-markdown
@@ -74,7 +74,6 @@ Studio tests.
               data-markdown-input
               data-testid="plan-item-markdown-input">{{ checkpoint.description }}</textarea>
     <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-      <button type="button" class="text-accent hover:underline" data-checkpoint-edit data-edit-item data-testid="plan-item-edit">Edit</button>
       <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-checkpoint-save data-save-item data-testid="plan-item-save">Save</button>
       <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-checkpoint-cancel data-cancel-edit>Cancel</button>
       <span class="text-muted-foreground" data-checkpoint-status data-save-status data-testid="plan-item-save-status" aria-live="polite"></span>

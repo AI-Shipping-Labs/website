@@ -363,11 +363,11 @@
       const cancel = card.querySelector('[data-checkpoint-cancel], [data-cancel-edit]');
       const edit = card.querySelector('[data-checkpoint-edit], [data-edit-item]');
       const rendered = card.querySelector('[data-checkpoint-text]');
-      if (!input || !save || !cancel || !edit || !rendered) { return false; }
+      if (!input || !save || !cancel || !rendered) { return false; }
       input.classList.toggle('hidden', !editing);
       save.classList.toggle('hidden', !editing);
       cancel.classList.toggle('hidden', !editing);
-      edit.classList.toggle('hidden', editing);
+      if (edit) { edit.classList.toggle('hidden', editing); }
       rendered.classList.toggle('hidden', editing);
       card.dataset.editing = editing ? 'true' : 'false';
       if (editing) {
@@ -405,10 +405,24 @@
           rendered.dataset.markdownSource = description;
           setExistingEditorState(card, false);
           setCardStatus(card, 'Saved', 'saved');
+          card.focus();
         } else {
+          setExistingEditorState(card, false);
           setCardStatus(card, 'Save failed. Try again.', 'failed');
+          card.focus();
         }
       });
+    }
+
+    function cancelExistingEdit(card) {
+      const input = card.querySelector('[data-checkpoint-edit-input], [data-markdown-input]');
+      const rendered = card.querySelector('[data-checkpoint-text]');
+      if (input && rendered) {
+        input.value = rendered.dataset.markdownSource || input.defaultValue || input.value;
+      }
+      setCardStatus(card, '', 'saved');
+      setExistingEditorState(card, false);
+      card.focus();
     }
 
     function enterInlineEdit(card) {
@@ -597,6 +611,8 @@
       boundCards.add(card);
       const checkbox = card.querySelector('[data-checkpoint-done-toggle]');
       const text = card.querySelector('[data-checkpoint-text]');
+      const trigger = card.querySelector('[data-checkpoint-edit-trigger]');
+      const input = card.querySelector('[data-checkpoint-edit-input], [data-markdown-input]');
       const edit = card.querySelector('[data-checkpoint-edit], [data-edit-item]');
       const save = card.querySelector('[data-checkpoint-save], [data-save-item]');
       const cancel = card.querySelector('[data-checkpoint-cancel], [data-cancel-edit]');
@@ -627,7 +643,18 @@
       }
 
       if (text) {
-        text.addEventListener('click', function () {
+        text.addEventListener('click', function (e) {
+          if (e.target.closest && e.target.closest('a, button, input, textarea, label')) {
+            return;
+          }
+          enterInlineEdit(card);
+        });
+      }
+      if (trigger) {
+        trigger.addEventListener('click', function (e) {
+          if (e.target.closest && e.target.closest('a, button, input, textarea, label')) {
+            return;
+          }
           enterInlineEdit(card);
         });
       }
@@ -643,13 +670,15 @@
       }
       if (cancel) {
         cancel.addEventListener('click', function () {
-          const input = card.querySelector('[data-checkpoint-edit-input], [data-markdown-input]');
-          const rendered = card.querySelector('[data-checkpoint-text]');
-          if (input && rendered) {
-            input.value = rendered.dataset.markdownSource || input.defaultValue || input.value;
+          cancelExistingEdit(card);
+        });
+      }
+      if (input) {
+        input.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelExistingEdit(card);
           }
-          setCardStatus(card, '', 'saved');
-          setExistingEditorState(card, false);
         });
       }
       if (del) {

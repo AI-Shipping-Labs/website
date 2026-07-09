@@ -109,6 +109,39 @@
     memberTaskToast.dataset.timerId = String(timerId);
   }
 
+  function bindCarryOverDismiss() {
+    root.querySelectorAll('[data-plan-carry-over-dismiss]').forEach(function (button) {
+      if (button.dataset.carryOverDismissBound === 'true') { return; }
+      button.dataset.carryOverDismissBound = 'true';
+      button.addEventListener('click', function () {
+        const card = button.getAttribute('data-dismiss-card');
+        const panel = button.closest('[data-plan-carry-over-panel]');
+        const error = panel
+          ? panel.querySelector('[data-plan-carry-over-dismiss-error]')
+          : null;
+        if (!card || !panel) { return; }
+        if (error) {
+          error.textContent = '';
+          error.classList.add('hidden');
+        }
+        button.disabled = true;
+        postJson('/account/api/dismiss-card', {card: card})
+          .then(function () {
+            panel.remove();
+          })
+          .catch(function (err) {
+            const message = err.message || "Couldn't dismiss prompt. Try again.";
+            button.disabled = false;
+            if (error) {
+              error.textContent = message;
+              error.classList.remove('hidden');
+            }
+            showTaskToast(message);
+          });
+      });
+    });
+  }
+
   if (window.SprintPlanTaskBoard) {
     window.SprintPlanTaskBoard.create(root, {
       apiBase: apiBase,
@@ -125,6 +158,8 @@
       },
     });
   }
+
+  bindCarryOverDismiss();
 
   function updateCompleteState(item, done) {
     const rendered = item.querySelector('[data-rendered-markdown]');

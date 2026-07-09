@@ -175,6 +175,7 @@ class TestMemberTaskBoard1046:
             notes = page.locator('[data-testid="plan-checkpoint"]').filter(
                 has_text="Write notes",
             )
+            assert notes.locator('[data-testid="plan-item-edit"]').count() == 0
             with page.expect_response("**/api/checkpoints/*"):
                 notes.locator('[data-testid="plan-row-done-toggle"]').check()
             expect(notes.locator("[data-checkpoint-text]")).to_have_class(
@@ -207,6 +208,146 @@ class TestMemberTaskBoard1046:
             expect(page.locator('[data-testid="my-plan-progress"]')).to_contain_text(
                 "1 of 4 checkpoints done",
             )
+        finally:
+            context.close()
+
+    def test_owner_cancels_task_edit(self, django_server, browser):
+        _ensure_tiers()
+        _clear_plan_data()
+        _create_user("owner@test.com", tier_slug="free", email_verified=True)
+        _create_user("teammate@test.com", tier_slug="free", email_verified=True)
+        data = _seed_board()
+
+        context = _auth_context(browser, "owner@test.com")
+        try:
+            page = context.new_page()
+            page.goto(
+                f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
+                wait_until="networkidle",
+            )
+
+            notes = page.locator('[data-testid="plan-checkpoint"]').filter(
+                has_text="Write notes",
+            )
+            notes.locator("[data-checkpoint-text]").click()
+            notes.locator('[data-testid="plan-item-markdown-input"]').fill(
+                "Wrong text",
+            )
+            notes.locator('[data-testid="plan-item-markdown-input"]').press(
+                "Escape",
+            )
+
+            expect(notes.locator("[data-checkpoint-text]")).to_contain_text(
+                "Write notes",
+            )
+            expect(notes.locator("[data-checkpoint-text]")).not_to_contain_text(
+                "Wrong text",
+            )
+
+            page.reload(wait_until="networkidle")
+            expect(
+                page.locator(
+                    '[data-testid="plan-checkpoint"] [data-checkpoint-text]',
+                    has_text="Write notes",
+                ),
+            ).to_be_visible()
+            assert page.locator(
+                '[data-testid="plan-checkpoint"] [data-checkpoint-text]',
+                has_text="Wrong text",
+            ).count() == 0
+        finally:
+            context.close()
+
+    def test_keyboard_focused_owner_edits_task(self, django_server, browser):
+        _ensure_tiers()
+        _clear_plan_data()
+        _create_user("owner@test.com", tier_slug="free", email_verified=True)
+        _create_user("teammate@test.com", tier_slug="free", email_verified=True)
+        data = _seed_board()
+
+        context = _auth_context(browser, "owner@test.com")
+        try:
+            page = context.new_page()
+            page.goto(
+                f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
+                wait_until="networkidle",
+            )
+
+            notes = page.locator('[data-testid="plan-checkpoint"]').filter(
+                has_text="Write notes",
+            )
+            checkpoint_id = notes.get_attribute("data-checkpoint-id")
+            notes = page.locator(
+                f'[data-testid="plan-checkpoint"][data-checkpoint-id="{checkpoint_id}"]'
+            )
+            notes.focus()
+            notes.press("F2")
+            notes.locator('[data-testid="plan-item-markdown-input"]').fill(
+                "Write keyboard notes",
+            )
+            with page.expect_response("**/api/checkpoints/*"):
+                notes.locator('[data-testid="plan-item-save"]').click()
+
+            expect(notes.locator("[data-checkpoint-text]")).to_contain_text(
+                "Write keyboard notes",
+            )
+            expect(notes).to_be_focused()
+        finally:
+            context.close()
+
+    def test_failed_member_edit_restores_prior_text(self, django_server, browser):
+        _ensure_tiers()
+        _clear_plan_data()
+        _create_user("owner@test.com", tier_slug="free", email_verified=True)
+        _create_user("teammate@test.com", tier_slug="free", email_verified=True)
+        data = _seed_board()
+
+        context = _auth_context(browser, "owner@test.com")
+        try:
+            page = context.new_page()
+            page.route(
+                "**/api/checkpoints/*",
+                lambda route: route.fulfill(
+                    status=503,
+                    content_type="application/json",
+                    body='{"error": "temporary", "code": "temporary"}',
+                ),
+            )
+            page.goto(
+                f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
+                wait_until="networkidle",
+            )
+
+            notes = page.locator('[data-testid="plan-checkpoint"]').filter(
+                has_text="Write notes",
+            )
+            notes.locator("[data-checkpoint-text]").click()
+            notes.locator('[data-testid="plan-item-markdown-input"]').fill(
+                "Write changed notes",
+            )
+            notes.locator('[data-testid="plan-item-save"]').click()
+
+            expect(
+                page.locator('[data-testid="member-plan-task-error"]'),
+            ).to_be_visible()
+            expect(notes.locator("[data-checkpoint-text]")).to_contain_text(
+                "Write notes",
+            )
+            expect(notes.locator("[data-checkpoint-text]")).not_to_contain_text(
+                "Write changed notes",
+            )
+
+            page.reload(wait_until="networkidle")
+            expect(
+                page.locator(
+                    '[data-testid="plan-checkpoint"] [data-checkpoint-text]',
+                    has_text="Write notes",
+                ),
+            ).to_be_visible()
+            assert page.locator(
+                '[data-testid="plan-checkpoint"] [data-checkpoint-text]',
+                has_text="Write changed notes",
+            ).count() == 0
         finally:
             context.close()
 

@@ -8,17 +8,185 @@
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
-  <section id="community-sprints" class="border-t border-border bg-background pt-24 pb-12 sm:pt-28 sm:pb-16 lg:pt-32" data-testid="activities-sprints-section">
+  <section id="access-by-tier" class="bg-background pt-24 pb-16 sm:pt-28 sm:pb-20 lg:pt-32" data-testid="activities-access-by-tier-section">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <div class="mx-auto max-w-3xl text-center" data-testid="activities-access-by-tier-intro">
+        <p class="inline-flex items-center gap-2 text-sm font-medium uppercase tracking-widest text-accent">
+          <i data-lucide="layers-3" class="h-4 w-4"></i>
+          Access by Tier
+        </p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
+          Membership benefits by tier
+        </h1>
+        <p class="mt-5 text-base leading-relaxed text-muted-foreground sm:text-lg">
+          Compare what Basic, Main, and Premium unlock across content, community accountability,
+          live learning, courses, and career support.
+        </p>
+      </div>
+
+      {% if activities %}
+      <div class="mx-auto mt-10 flex flex-wrap items-center justify-center gap-3" aria-label="Filter activities by membership tier">
+        <button type="button" onclick="filterActivities('all')" class="tier-filter-btn active rounded-full px-4 py-2 text-sm font-medium bg-accent text-accent-foreground" data-tier="all" data-testid="activities-tier-filter" aria-pressed="true">
+          All
+        </button>
+        <button type="button" onclick="filterActivities('basic')" class="tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground" data-tier="basic" data-testid="activities-tier-filter" aria-pressed="false">
+          Basic
+        </button>
+        <button type="button" onclick="filterActivities('main')" class="tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground" data-tier="main" data-testid="activities-tier-filter" aria-pressed="false">
+          Main
+        </button>
+        <button type="button" onclick="filterActivities('premium')" class="tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground" data-tier="premium" data-testid="activities-tier-filter" aria-pressed="false">
+          Premium
+        </button>
+      </div>
+
+      <div class="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-2" id="activities-grid" data-testid="activities-grid">
+        {% for activity in activities %}
+        <article class="activity-card group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50"
+                 data-tiers="{{ activity.tiers|join:',' }}"
+                 data-testid="activity-card">
+          <div class="flex items-start gap-4">
+            <div class="shrink-0 rounded-lg bg-secondary p-3" aria-hidden="true">
+              <i data-lucide="{{ activity.icon }}" class="h-5 w-5 text-accent"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <h2 class="font-semibold text-foreground" data-testid="activity-card-title">{{ activity.title }}</h2>
+              <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ activity.description }}</p>
+              <div class="mt-4 flex flex-wrap gap-2" aria-label="Tier inclusion">
+                {% if 'basic' in activity.tiers %}
+                <span class="inline-flex items-center gap-1 rounded-full border border-transparent bg-muted-foreground/20 text-muted-foreground px-2.5 py-0.5 text-xs font-medium" data-testid="activity-tier-badge" data-tier="basic" data-included="true">
+                  <i data-lucide="check" class="h-3 w-3"></i> Basic
+                </span>
+                {% else %}
+                <span class="inline-flex items-center gap-1 rounded-full border border-border text-muted-foreground/50 px-2.5 py-0.5 text-xs font-medium" data-testid="activity-tier-badge" data-tier="basic" data-included="false">
+                  <i data-lucide="x" class="h-3 w-3"></i> Basic
+                </span>
+                {% endif %}
+                {% if 'main' in activity.tiers %}
+                <span class="inline-flex items-center gap-1 rounded-full border border-transparent bg-accent text-accent-foreground px-2.5 py-0.5 text-xs font-medium" data-testid="activity-tier-badge" data-tier="main" data-included="true">
+                  <i data-lucide="check" class="h-3 w-3"></i> Main
+                </span>
+                {% else %}
+                <span class="inline-flex items-center gap-1 rounded-full border border-border text-muted-foreground/50 px-2.5 py-0.5 text-xs font-medium" data-testid="activity-tier-badge" data-tier="main" data-included="false">
+                  <i data-lucide="x" class="h-3 w-3"></i> Main
+                </span>
+                {% endif %}
+                {% if 'premium' in activity.tiers %}
+                <span class="inline-flex items-center gap-1 rounded-full border border-transparent bg-foreground text-background px-2.5 py-0.5 text-xs font-medium" data-testid="activity-tier-badge" data-tier="premium" data-included="true">
+                  <i data-lucide="check" class="h-3 w-3"></i> Premium
+                </span>
+                {% else %}
+                <span class="inline-flex items-center gap-1 rounded-full border border-border text-muted-foreground/50 px-2.5 py-0.5 text-xs font-medium" data-testid="activity-tier-badge" data-tier="premium" data-included="false">
+                  <i data-lucide="x" class="h-3 w-3"></i> Premium
+                </span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+
+      <div class="mx-auto mt-20 max-w-6xl" data-testid="activities-quick-comparison">
+        <h2 class="mb-8 text-center text-xl font-semibold text-foreground">Quick comparison</h2>
+        <div class="grid gap-6 md:grid-cols-3">
+          <div class="rounded-lg border border-border bg-card p-6">
+            <div class="mb-4 flex items-center gap-3">
+              <div class="rounded-full bg-muted-foreground/20 p-2">
+                <i data-lucide="book-open" class="h-4 w-4 text-muted-foreground"></i>
+              </div>
+              <div>
+                <h3 class="font-semibold text-foreground">Basic</h3>
+                <p class="text-xs text-muted-foreground">Content only</p>
+              </div>
+            </div>
+            <ul class="space-y-2">
+              {% for a in basic_activities %}
+              <li class="flex items-center gap-2 text-sm text-muted-foreground">
+                <i data-lucide="check" class="h-3.5 w-3.5 shrink-0 text-accent"></i>
+                {{ a.title }}
+              </li>
+              {% endfor %}
+            </ul>
+            <div class="mt-4 border-t border-border pt-4">
+              <p class="text-xs text-muted-foreground">{{ basic_count }} activities</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-accent bg-card p-6">
+            <div class="mb-4 flex items-center gap-3">
+              <div class="rounded-full bg-accent p-2">
+                <i data-lucide="users" class="h-4 w-4 text-accent-foreground"></i>
+              </div>
+              <div>
+                <h3 class="font-semibold text-foreground">Main</h3>
+                <p class="text-xs text-accent">Structure + accountability</p>
+              </div>
+            </div>
+            <ul class="space-y-2">
+              {% for a in main_activities %}
+              <li class="flex items-center gap-2 text-sm text-muted-foreground">
+                <i data-lucide="check" class="h-3.5 w-3.5 shrink-0 text-accent"></i>
+                {{ a.title }}
+              </li>
+              {% endfor %}
+            </ul>
+            <div class="mt-4 border-t border-border pt-4">
+              <p class="text-xs text-muted-foreground">{{ main_count }} activities</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-foreground bg-card p-6">
+            <div class="mb-4 flex items-center gap-3">
+              <div class="rounded-full bg-foreground p-2">
+                <i data-lucide="star" class="h-4 w-4 text-background"></i>
+              </div>
+              <div>
+                <h3 class="font-semibold text-foreground">Premium</h3>
+                <p class="text-xs text-muted-foreground">Courses + career growth</p>
+              </div>
+            </div>
+            <ul class="space-y-2">
+              {% for a in premium_activities %}
+              <li class="flex items-center gap-2 text-sm text-muted-foreground">
+                <i data-lucide="check" class="h-3.5 w-3.5 shrink-0 text-accent"></i>
+                {{ a.title }}
+              </li>
+              {% endfor %}
+            </ul>
+            <div class="mt-4 border-t border-border pt-4">
+              <p class="text-xs text-muted-foreground">All {{ premium_count }} activities</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="mx-auto mt-12 max-w-2xl rounded-lg border border-border bg-card p-6 text-center shadow-sm sm:p-8" data-testid="activities-tier-empty">
+        <i data-lucide="refresh-cw" class="mx-auto h-9 w-9 text-muted-foreground"></i>
+        <h2 class="mt-4 text-xl font-semibold text-foreground">Membership activities are being updated</h2>
+        <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
+          We are refreshing the benefits list. You can still compare membership prices and choose the tier that fits your goals.
+        </p>
+        <a href="/pricing" class="mt-5 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90">
+          View membership options
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section id="community-sprints" class="border-t border-border bg-background py-16 sm:py-20" data-testid="activities-sprints-section">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
       <div class="space-y-8">
         <div class="max-w-3xl" data-testid="activities-sprints-intro-row">
           <p class="inline-flex items-center gap-2 text-sm font-medium uppercase tracking-widest text-accent">
             <i data-lucide="timer" class="h-4 w-4"></i>
-            Activities
+            Community Sprints
           </p>
-          <h1 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
+          <h2 class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
             Active community sprints
-          </h1>
+          </h2>
           <p class="mt-5 text-base leading-relaxed text-muted-foreground sm:text-lg">
             Sprints are time-bound cohorts for shipping projects with structure, accountability,
             and a clear window for making visible progress with the community.
@@ -110,149 +278,6 @@
     </div>
   </section>
 
-  <section class="border-t border-border bg-background py-16 sm:py-20">
-    <div class="mx-auto max-w-7xl px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl text-center">
-        <p class="text-sm font-medium uppercase tracking-widest text-accent">Access by Tier</p>
-        <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-          Member activities and support
-        </h2>
-        <p class="mt-6 text-lg leading-relaxed text-muted-foreground">
-          Filter by tier to see which recurring activities, support options, and accountability surfaces are included.
-        </p>
-      </div>
-
-      <div class="mx-auto mt-10 flex flex-wrap items-center justify-center gap-3">
-        <button type="button" onclick="filterActivities('all')" class="tier-filter-btn active rounded-full px-4 py-2 text-sm font-medium bg-accent text-accent-foreground" data-tier="all">
-          All
-        </button>
-        <button type="button" onclick="filterActivities('basic')" class="tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground" data-tier="basic">
-          Basic
-        </button>
-        <button type="button" onclick="filterActivities('main')" class="tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground" data-tier="main">
-          Main
-        </button>
-        <button type="button" onclick="filterActivities('premium')" class="tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground" data-tier="premium">
-          Premium
-        </button>
-      </div>
-
-      <div class="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-2" id="activities-grid">
-        {% for activity in activities %}
-        <div class="activity-card group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50"
-             data-tiers="{{ activity.tiers|join:',' }}">
-          <div class="flex items-start gap-4">
-            <div class="shrink-0 rounded-lg bg-secondary p-3">
-              <i data-lucide="{{ activity.icon }}" class="h-5 w-5 text-accent"></i>
-            </div>
-            <div class="min-w-0 flex-1">
-              <h3 class="font-semibold text-foreground">{{ activity.title }}</h3>
-              <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ activity.description }}</p>
-              <div class="mt-4 flex flex-wrap gap-2">
-                {% if 'basic' in activity.tiers %}
-                <span class="inline-flex items-center gap-1 rounded-full border border-transparent bg-muted-foreground/20 text-muted-foreground px-2.5 py-0.5 text-xs font-medium">
-                  <i data-lucide="check" class="h-3 w-3"></i> Basic
-                </span>
-                {% else %}
-                <span class="inline-flex items-center gap-1 rounded-full border border-border text-muted-foreground/40 px-2.5 py-0.5 text-xs font-medium">Basic</span>
-                {% endif %}
-                {% if 'main' in activity.tiers %}
-                <span class="inline-flex items-center gap-1 rounded-full border border-transparent bg-accent text-accent-foreground px-2.5 py-0.5 text-xs font-medium">
-                  <i data-lucide="check" class="h-3 w-3"></i> Main
-                </span>
-                {% else %}
-                <span class="inline-flex items-center gap-1 rounded-full border border-border text-muted-foreground/40 px-2.5 py-0.5 text-xs font-medium">Main</span>
-                {% endif %}
-                {% if 'premium' in activity.tiers %}
-                <span class="inline-flex items-center gap-1 rounded-full border border-transparent bg-foreground text-background px-2.5 py-0.5 text-xs font-medium">
-                  <i data-lucide="check" class="h-3 w-3"></i> Premium
-                </span>
-                {% else %}
-                <span class="inline-flex items-center gap-1 rounded-full border border-border text-muted-foreground/40 px-2.5 py-0.5 text-xs font-medium">Premium</span>
-                {% endif %}
-              </div>
-            </div>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-
-      <div class="mx-auto mt-20 max-w-6xl">
-        <h3 class="mb-8 text-center text-xl font-semibold text-foreground">Quick comparison</h3>
-        <div class="grid gap-6 md:grid-cols-3">
-          <div class="rounded-lg border border-border bg-card p-6">
-            <div class="mb-4 flex items-center gap-3">
-              <div class="rounded-full bg-muted-foreground/20 p-2">
-                <i data-lucide="book-open" class="h-4 w-4 text-muted-foreground"></i>
-              </div>
-              <div>
-                <h4 class="font-semibold text-foreground">Basic</h4>
-                <p class="text-xs text-muted-foreground">Content only</p>
-              </div>
-            </div>
-            <ul class="space-y-2">
-              {% for a in basic_activities %}
-              <li class="flex items-center gap-2 text-sm text-muted-foreground">
-                <i data-lucide="check" class="h-3.5 w-3.5 shrink-0 text-accent"></i>
-                {{ a.title }}
-              </li>
-              {% endfor %}
-            </ul>
-            <div class="mt-4 border-t border-border pt-4">
-              <p class="text-xs text-muted-foreground">{{ basic_count }} activities</p>
-            </div>
-          </div>
-
-          <div class="rounded-lg border border-accent bg-card p-6">
-            <div class="mb-4 flex items-center gap-3">
-              <div class="rounded-full bg-accent p-2">
-                <i data-lucide="users" class="h-4 w-4 text-accent-foreground"></i>
-              </div>
-              <div>
-                <h4 class="font-semibold text-foreground">Main</h4>
-                <p class="text-xs text-accent">Structure + accountability</p>
-              </div>
-            </div>
-            <ul class="space-y-2">
-              {% for a in main_activities %}
-              <li class="flex items-center gap-2 text-sm text-muted-foreground">
-                <i data-lucide="check" class="h-3.5 w-3.5 shrink-0 text-accent"></i>
-                {{ a.title }}
-              </li>
-              {% endfor %}
-            </ul>
-            <div class="mt-4 border-t border-border pt-4">
-              <p class="text-xs text-muted-foreground">{{ main_count }} activities</p>
-            </div>
-          </div>
-
-          <div class="rounded-lg border border-foreground bg-card p-6">
-            <div class="mb-4 flex items-center gap-3">
-              <div class="rounded-full bg-foreground p-2">
-                <i data-lucide="star" class="h-4 w-4 text-background"></i>
-              </div>
-              <div>
-                <h4 class="font-semibold text-foreground">Premium</h4>
-                <p class="text-xs text-muted-foreground">Courses + career growth</p>
-              </div>
-            </div>
-            <ul class="space-y-2">
-              {% for a in premium_activities %}
-              <li class="flex items-center gap-2 text-sm text-muted-foreground">
-                <i data-lucide="check" class="h-3.5 w-3.5 shrink-0 text-accent"></i>
-                {{ a.title }}
-              </li>
-              {% endfor %}
-            </ul>
-            <div class="mt-4 border-t border-border pt-4">
-              <p class="text-xs text-muted-foreground">All {{ premium_count }} activities</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
   {% include "includes/footer.html" %}
 </main>
 
@@ -261,8 +286,10 @@ function filterActivities(tier) {
   document.querySelectorAll('.tier-filter-btn').forEach(function(btn) {
     if (btn.dataset.tier === tier) {
       btn.className = 'tier-filter-btn active rounded-full px-4 py-2 text-sm font-medium bg-accent text-accent-foreground';
+      btn.setAttribute('aria-pressed', 'true');
     } else {
       btn.className = 'tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground';
+      btn.setAttribute('aria-pressed', 'false');
     }
   });
   document.querySelectorAll('.activity-card').forEach(function(card) {

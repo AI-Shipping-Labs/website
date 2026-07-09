@@ -45,6 +45,15 @@ class PricingInlineRegisterTest(TestCase):
             'Free-tier card must not render the legacy signup button.',
         )
 
+    def test_pricing_links_to_activities_by_tier_comparison(self):
+        response = self.client.get("/pricing")
+
+        self.assertContains(
+            response,
+            'href="/activities#access-by-tier"',
+        )
+        self.assertContains(response, "Compare activities by tier")
+
     def test_anonymous_pricing_inline_form_has_next_url(self):
         """Login link inside the inline card returns the visitor to
         /pricing after sign-in."""
@@ -83,6 +92,7 @@ class PricingInlineRegisterTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="inline-register-card"')
         self.assertNotContains(response, 'id="register-email"')
+        self.assertContains(response, 'href="/activities#access-by-tier"')
 
 
 class PricingInlineRegisterCompactTest(TestCase):

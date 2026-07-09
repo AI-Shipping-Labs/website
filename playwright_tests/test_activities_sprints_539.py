@@ -1,6 +1,6 @@
-"""Playwright coverage for the sprint-first /activities redesign.
+"""Playwright coverage for the /activities tier benefits and sprint hub.
 
-Screenshots are written to ``/tmp/aisl-issue-539-screenshots`` for tester
+Screenshots are written to ``.tmp/screenshots/issue-1181`` for tester
 review.
 """
 
@@ -21,7 +21,7 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
 
-SCREENSHOT_DIR = Path("/tmp/aisl-issue-539-screenshots")
+SCREENSHOT_DIR = Path(".tmp/screenshots/issue-1181")
 
 
 def _shot(page, name):
@@ -126,9 +126,15 @@ def _primary_nav_labels(page):
     )
 
 
+def _visible_activity_titles(page):
+    return page.locator(
+        '[data-testid="activity-card"]:visible [data-testid="activity-card-title"]'
+    ).all_inner_texts()
+
+
 @pytest.mark.django_db(transaction=True)
-class TestActivitiesSprintFirstLayout:
-    def test_anonymous_desktop_discovers_active_sprints_first(
+class TestActivitiesAccessByTierLayout:
+    def test_anonymous_desktop_discovers_tier_benefits_before_sprints(
         self, django_server, page, django_db_blocker
     ):
         with django_db_blocker.unblock():
@@ -138,11 +144,20 @@ class TestActivitiesSprintFirstLayout:
         page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
 
         assert _primary_nav_labels(page) == ["About", "Community", "Resources"]
+        page.get_by_role("heading", name="Membership benefits by tier").wait_for()
+        benefits = page.locator('[data-testid="activities-access-by-tier-section"]')
+        sprints = page.locator('[data-testid="activities-sprints-section"]')
+        assert benefits.get_attribute("id") == "access-by-tier"
+        assert _top(benefits) < _top(sprints)
+        assert _top(page.get_by_role("heading", name="Membership benefits by tier")) < 260
+        assert page.locator('[data-testid="activities-tier-filter"]').count() == 4
+        assert page.locator('[data-testid="activity-card"]').count() == 15
+        assert page.locator('[data-testid="activities-quick-comparison"]').is_visible()
+
         page.get_by_role("heading", name="Active community sprints").wait_for()
         intro = page.locator('[data-testid="activities-sprints-intro-row"]')
         card = page.locator('[data-testid="activities-sprint-card"]').first
         assert _bottom(intro) <= _top(card)
-        assert _top(card) < 900
         body = page.locator("body").inner_text()
         assert "May Shipping Sprint" in body
         assert "Active" in body
@@ -164,7 +179,7 @@ class TestActivitiesSprintFirstLayout:
         _assert_no_horizontal_overflow(page)
         _shot(page, "01-activities-anonymous-desktop")
 
-    def test_mobile_anonymous_sees_sprint_within_first_600px(
+    def test_mobile_anonymous_sees_tier_benefits_first(
         self, django_server, browser, django_db_blocker
     ):
         with django_db_blocker.unblock():
@@ -174,18 +189,14 @@ class TestActivitiesSprintFirstLayout:
         page = context.new_page()
         page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
 
-        heading = page.get_by_role("heading", name="Active community sprints")
-        intro = page.locator('[data-testid="activities-sprints-intro-row"]')
-        card = page.locator('[data-testid="activities-sprint-card"]').first
+        heading = page.get_by_role("heading", name="Membership benefits by tier")
+        benefits = page.locator('[data-testid="activities-access-by-tier-section"]')
+        sprints = page.locator('[data-testid="activities-sprints-section"]')
+        first_activity = page.locator('[data-testid="activity-card"]').first
         assert _top(heading) < 220
-        assert _bottom(intro) <= _top(card)
-        assert _top(card) < 600
-        assert _top(card.locator('[data-testid="activities-sprint-dates"]')) > _top(
-            card.locator('[data-testid="activities-sprint-name"]')
-        )
-        assert _top(card.locator('[data-testid="activities-sprint-cta"]')) > _top(
-            card.locator('[data-testid="activities-sprint-guidance"]')
-        )
+        assert _top(first_activity) < 650
+        assert _top(benefits) < _top(sprints)
+        assert page.locator('[data-testid="activities-tier-filter"]').count() == 4
         _assert_no_horizontal_overflow(page)
         _shot(page, "02-activities-anonymous-pixel7")
         context.close()
@@ -295,31 +306,96 @@ class TestActivitiesSprintFirstLayout:
         _shot(staff_page, "06-activities-staff-draft")
         ctx.close()
 
-    def test_secondary_nav_and_tier_filters_remain_available(
+    def test_pricing_compare_link_lands_on_access_by_tier_without_changing_ctas(
         self, django_server, page, django_db_blocker
     ):
         with django_db_blocker.unblock():
             _seed_base(active=True)
 
-        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
+        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+        payment_links_before = page.locator(".tier-cta-link").evaluate_all(
+            "(links) => links.map((link) => link.getAttribute('href'))"
+        )
+        page.locator('[data-testid="pricing-activities-compare-link"]').click()
+        page.wait_for_load_state("domcontentloaded")
+
+        assert page.url.endswith("/activities#access-by-tier")
+        assert page.locator("#access-by-tier").is_visible()
+        assert page.get_by_role(
+            "heading", name="Membership benefits by tier"
+        ).is_visible()
+
+        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+        payment_links_after = page.locator(".tier-cta-link").evaluate_all(
+            "(links) => links.map((link) => link.getAttribute('href'))"
+        )
+        assert payment_links_after == payment_links_before
+
+    def test_tier_filters_show_cumulative_membership_activities(
+        self, django_server, page, django_db_blocker
+    ):
+        with django_db_blocker.unblock():
+            _seed_base(active=True)
+
+        page.goto(
+            f"{django_server}/activities#access-by-tier",
+            wait_until="domcontentloaded",
+        )
 
         secondary = page.locator('[data-testid="activities-secondary-nav"]')
         assert secondary.locator('a[href="/events"]').count() == 1
         assert secondary.locator('a[href="/workshops"]').count() == 1
-        assert _top(page.locator('[data-testid="activities-sprint-card"]').first) < (
-            _top(secondary)
-        )
 
-        page.get_by_role("button", name="Basic").click()
-        assert "active" in page.locator('.tier-filter-btn[data-tier="basic"]').get_attribute(
-            "class"
-        )
-        page.get_by_role("button", name="Main").click()
-        assert "active" in page.locator('.tier-filter-btn[data-tier="main"]').get_attribute(
-            "class"
-        )
+        basic_filter = page.locator('.tier-filter-btn[data-tier="basic"]')
+        main_filter = page.locator('.tier-filter-btn[data-tier="main"]')
+        premium_filter = page.locator('.tier-filter-btn[data-tier="premium"]')
+
+        basic_filter.click()
+        assert basic_filter.get_attribute("aria-pressed") == "true"
+        basic_titles = _visible_activity_titles(page)
+        assert "Exclusive Substack Content" in basic_titles
+        assert "Closed Community Access" not in basic_titles
+        assert "Mini-Courses on Specialized Topics" not in basic_titles
+
+        main_filter.click()
+        assert main_filter.get_attribute("aria-pressed") == "true"
+        assert basic_filter.get_attribute("aria-pressed") == "false"
+        main_titles = _visible_activity_titles(page)
+        assert "Exclusive Substack Content" in main_titles
+        assert "Closed Community Access" in main_titles
+        assert "Interactive Group Coding Sessions" in main_titles
+        assert "Profile Teardowns" not in main_titles
+
+        premium_filter.click()
+        assert premium_filter.get_attribute("aria-pressed") == "true"
+        premium_titles = _visible_activity_titles(page)
+        assert "Mini-Courses on Specialized Topics" in premium_titles
+        assert "Vote on Course Topics" in premium_titles
+        assert "Profile Teardowns" in premium_titles
+        assert len(premium_titles) == 15
+
         page.get_by_text("Quick comparison").scroll_into_view_if_needed()
         assert page.get_by_text("Quick comparison").is_visible()
+
+    def test_missing_tier_activity_config_shows_empty_state(
+        self, django_server, page, django_db_blocker
+    ):
+        with django_db_blocker.unblock():
+            _seed_base(active=False)
+            from content.models import SiteConfig
+
+            SiteConfig.objects.filter(key="tiers").delete()
+
+        page.goto(
+            f"{django_server}/activities#access-by-tier",
+            wait_until="domcontentloaded",
+        )
+
+        empty = page.locator('[data-testid="activities-tier-empty"]')
+        assert empty.is_visible()
+        assert "Membership activities are being updated" in empty.inner_text()
+        assert empty.locator('a[href="/pricing"]').count() == 1
+        assert page.locator('[data-testid="activity-card"]').count() == 0
 
     def test_resources_stays_library_without_sprint_hub(
         self, django_server, page, django_db_blocker

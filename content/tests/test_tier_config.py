@@ -424,6 +424,106 @@ class ActivitiesViewIntegrationTest(TestCase):
         self.assertContains(response, 'Closed Community Access')
         self.assertContains(response, 'Mini-Courses on Specialized Topics')
 
+    def test_access_by_tier_section_is_first_activity_surface(self):
+        response = self.client.get('/activities')
+        body = response.content.decode()
+
+        access_index = body.index('id="access-by-tier"')
+        sprint_index = body.index('id="community-sprints"')
+
+        self.assertLess(access_index, sprint_index)
+        self.assertContains(
+            response,
+            'data-testid="activities-access-by-tier-section"',
+        )
+        self.assertContains(response, 'Membership benefits by tier')
+        self.assertContains(response, 'Compare what Basic, Main, and Premium unlock')
+
+    def test_filter_buttons_expose_selected_state_accessibly(self):
+        response = self.client.get('/activities')
+
+        self.assertContains(
+            response,
+            'data-tier="all" data-testid="activities-tier-filter" aria-pressed="true"',
+        )
+        self.assertContains(
+            response,
+            'data-tier="basic" data-testid="activities-tier-filter" aria-pressed="false"',
+        )
+        self.assertContains(
+            response,
+            'data-tier="main" data-testid="activities-tier-filter" aria-pressed="false"',
+        )
+        self.assertContains(
+            response,
+            'data-tier="premium" data-testid="activities-tier-filter" aria-pressed="false"',
+        )
+
+    def test_activity_cards_render_required_fields_and_tier_inclusion(self):
+        response = self.client.get('/activities')
+        body = response.content.decode()
+
+        basic_start = body.index('Exclusive Substack Content')
+        basic_card = body[
+            body.rfind('data-testid="activity-card"', 0, basic_start):
+            body.find('</article>', basic_start)
+        ]
+        main_start = body.index('Closed Community Access')
+        main_card = body[
+            body.rfind('data-testid="activity-card"', 0, main_start):
+            body.find('</article>', main_start)
+        ]
+        premium_start = body.index('Profile Teardowns')
+        premium_card = body[
+            body.rfind('data-testid="activity-card"', 0, premium_start):
+            body.find('</article>', premium_start)
+        ]
+
+        self.assertIn('data-lucide="book-open"', basic_card)
+        self.assertIn('Full access to premium paywalled articles', basic_card)
+        self.assertIn('data-tier="basic" data-included="true"', basic_card)
+        self.assertIn('data-tier="main" data-included="true"', basic_card)
+        self.assertIn('data-tier="premium" data-included="true"', basic_card)
+
+        self.assertIn('data-tier="basic" data-included="false"', main_card)
+        self.assertIn('data-tier="main" data-included="true"', main_card)
+        self.assertIn('data-tier="premium" data-included="true"', main_card)
+
+        self.assertIn('data-tier="basic" data-included="false"', premium_card)
+        self.assertIn('data-tier="main" data-included="false"', premium_card)
+        self.assertIn('data-tier="premium" data-included="true"', premium_card)
+
+    def test_quick_comparison_uses_activity_data_counts(self):
+        response = self.client.get('/activities')
+        body = response.content.decode()
+
+        quick_comparison = body[body.index('data-testid="activities-quick-comparison"'):]
+        self.assertIn('3 activities', quick_comparison)
+        self.assertIn('12 activities', quick_comparison)
+        self.assertIn('All 15 activities', quick_comparison)
+
+
+class ActivitiesViewFallbackTest(TestCase):
+    def test_missing_tier_config_renders_empty_state_with_pricing_link(self):
+        response = self.client.get('/activities#access-by-tier')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['activities'], [])
+        self.assertContains(response, 'data-testid="activities-tier-empty"')
+        self.assertContains(response, 'Membership activities are being updated')
+        self.assertContains(response, 'href="/pricing"')
+        self.assertNotContains(response, 'data-testid="activity-card"')
+
+    def test_empty_tier_config_renders_empty_state_with_pricing_link(self):
+        _seed_tiers([])
+
+        response = self.client.get('/activities')
+
+        self.assertEqual(response.context['activities'], [])
+        self.assertContains(response, 'data-testid="activities-tier-empty"')
+        self.assertContains(response, 'href="/pricing"')
+        self.assertNotContains(response, 'id="activities-grid"')
+
 
 class HomepageTiersIntegrationTest(TestCase):
     """Test that the homepage correctly uses DB-backed tier data."""

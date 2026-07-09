@@ -79,6 +79,10 @@ class ActivitiesSprintHubTest(TestCase):
         self.assertContains(response, 'id="community-sprints"')
         self.assertContains(response, 'Active community sprints')
         self.assertContains(response, 'time-bound cohorts for shipping projects')
+        self.assertContains(
+            response,
+            'Anonymous visitors can browse active sprint windows',
+        )
         self.assertContains(response, sprint.name)
         self.assertContains(response, _expected_sprint_range(start_date, 4))
         self.assertContains(response, 'Active')
@@ -126,7 +130,7 @@ class ActivitiesSprintHubTest(TestCase):
         self.assertNotIn('sm:grid-cols-2', facts_markup)
         self.assertNotIn('sm:flex-row sm:items-start sm:justify-between', content)
 
-    def test_sprints_render_before_secondary_nav_and_tier_activity_content(self):
+    def test_tier_activity_content_renders_before_sprints(self):
         Sprint.objects.create(
             name='May Shipping Sprint',
             slug='may-shipping-sprint',
@@ -139,6 +143,9 @@ class ActivitiesSprintHubTest(TestCase):
         response = self.client.get('/activities')
         content = response.content.decode()
 
+        access_by_tier_index = content.index(
+            'data-testid="activities-access-by-tier-section"'
+        )
         sprint_section_index = content.index(
             'data-testid="activities-sprints-section"'
         )
@@ -146,13 +153,12 @@ class ActivitiesSprintHubTest(TestCase):
         secondary_nav_index = content.index(
             'data-testid="activities-secondary-nav"'
         )
-        access_by_tier_index = content.index('Access by Tier')
-        quick_comparison_index = content.index('Quick comparison')
+        tier_empty_index = content.index('data-testid="activities-tier-empty"')
 
+        self.assertLess(access_by_tier_index, tier_empty_index)
+        self.assertLess(tier_empty_index, sprint_section_index)
         self.assertLess(sprint_section_index, sprint_card_index)
         self.assertLess(sprint_card_index, secondary_nav_index)
-        self.assertLess(secondary_nav_index, access_by_tier_index)
-        self.assertLess(access_by_tier_index, quick_comparison_index)
 
     def test_draft_sprint_is_hidden_from_anonymous_and_member(self):
         Sprint.objects.create(

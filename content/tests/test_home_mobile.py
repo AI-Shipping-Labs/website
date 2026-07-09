@@ -86,12 +86,12 @@ class HomepageMobileLayoutTest(TestCase):
         self.assertIn("overflow-x-hidden", tiers_match.group(1))
 
     def test_pricing_cards_stack_on_mobile(self):
-        """Pricing cards should use lg:grid-cols-3 (stacking on mobile by default)."""
+        """Homepage membership cards should use lg:grid-cols-4 (stacking on mobile by default)."""
         content = self._get_homepage_content()
         # Find the pricing grid
         tiers_pos = content.index('id="tiers"')
-        grid_match = re.search(r'class="[^"]*lg:grid-cols-3[^"]*"', content[tiers_pos:])
-        self.assertIsNotNone(grid_match, "Pricing grid with lg:grid-cols-3 not found")
+        grid_match = re.search(r'class="[^"]*lg:grid-cols-4[^"]*"', content[tiers_pos:])
+        self.assertIsNotNone(grid_match, "Pricing grid with lg:grid-cols-4 not found")
 
     def test_highlighted_card_scale_only_on_large_screens(self):
         """The highlighted pricing card should only scale on lg+ screens (lg:scale-105)."""

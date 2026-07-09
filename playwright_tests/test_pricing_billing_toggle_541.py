@@ -3,6 +3,8 @@ import os
 import pytest
 from playwright.sync_api import expect
 
+from playwright_tests.conftest import ensure_site_config_tiers
+
 # Issue #656: this module seeds pricing tiers via Tier.objects.update_or_create
 # and cannot run against the deployed dev environment.
 pytestmark = [
@@ -66,6 +68,13 @@ def _goto_pricing(page, django_server, width=1280, height=900):
     page.set_viewport_size({"width": width, "height": height})
     page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
     page.locator("#pricing-section").scroll_into_view_if_needed()
+
+
+def _goto_home(page, django_server, width=1280, height=900):
+    ensure_site_config_tiers()
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{django_server}/#tiers", wait_until="domcontentloaded")
+    page.locator("#tiers").scroll_into_view_if_needed()
 
 
 def _paid_prices(page):
@@ -145,6 +154,52 @@ def test_pricing_billing_toggle_keyboard_switches_monthly_and_back(
     assert _paid_prices(page)["main"] == "€500"
 
 
+@pytest.mark.core
+def test_home_billing_toggle_defaults_to_monthly_and_switches_annual_and_back(
+    django_server, page
+):
+    _goto_home(page, django_server)
+    toggle = page.locator("#billing-toggle")
+
+    expect(toggle).to_have_attribute("aria-pressed", "false")
+    assert "text-foreground" in page.locator("#monthly-label").get_attribute(
+        "class"
+    )
+    assert "text-muted-foreground" in page.locator(
+        "#annual-label"
+    ).get_attribute("class")
+    assert _paid_prices(page) == {
+        "basic": "€20",
+        "main": "€50",
+        "premium": "€100",
+    }
+    for tier in ["basic", "main", "premium"]:
+        cta = page.locator(f'[data-tier-card="{tier}"] .tier-cta-link')
+        assert cta.get_attribute("href") == cta.get_attribute(
+            "data-link-monthly"
+        )
+
+    toggle.focus()
+    expect(toggle).to_be_focused()
+    page.keyboard.press("Space")
+
+    expect(toggle).to_have_attribute("aria-pressed", "true")
+    assert _paid_prices(page) == {
+        "basic": "€200",
+        "main": "€500",
+        "premium": "€1000",
+    }
+    for tier in ["basic", "main", "premium"]:
+        cta = page.locator(f'[data-tier-card="{tier}"] .tier-cta-link')
+        assert cta.get_attribute("href") == cta.get_attribute(
+            "data-link-annual"
+        )
+
+    page.keyboard.press("Enter")
+    expect(toggle).to_have_attribute("aria-pressed", "false")
+    assert _paid_prices(page)["main"] == "€50"
+
+
 @pytest.mark.parametrize("width", [320, 393, 768, 1024, 1280])
 def test_pricing_billing_toggle_stays_centered_without_body_overflow(
     django_server, page, width
@@ -182,24 +237,17 @@ def test_pricing_billing_toggle_stays_centered_without_body_overflow(
 
 
 @pytest.mark.parametrize("width,height", [(1280, 900), (393, 851)])
-def test_home_and_pricing_use_matching_billing_toggle_pattern(
+def test_home_and_pricing_use_matching_billing_toggle_dimensions(
     django_server, page, width, height
 ):
-    _ensure_pricing_tiers()
-    page.set_viewport_size({"width": width, "height": height})
-    page.goto(f"{django_server}/#tiers", wait_until="domcontentloaded")
-    page.locator("#tiers").scroll_into_view_if_needed()
+    _goto_home(page, django_server, width=width, height=height)
     home = _billing_control_metrics(page)
 
-    page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
-    page.locator("#pricing-section").scroll_into_view_if_needed()
+    _goto_pricing(page, django_server, width=width, height=height)
     pricing = _billing_control_metrics(page)
 
-    assert pricing["pressed"] == home["pressed"] == "true"
-    assert pricing["toggle_class"] == home["toggle_class"]
-    assert pricing["dot_class"] == home["dot_class"]
-    assert pricing["monthly_class"] == home["monthly_class"]
-    assert pricing["annual_class"] == home["annual_class"]
+    assert home["pressed"] == "false"
+    assert pricing["pressed"] == "true"
     assert pricing["toggle_box"]["width"] == home["toggle_box"]["width"]
     assert pricing["toggle_box"]["height"] == home["toggle_box"]["height"]
     assert pricing["dot_box"]["width"] == home["dot_box"]["width"]

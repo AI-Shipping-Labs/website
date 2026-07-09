@@ -9,9 +9,14 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from accounts.gating import is_newsletter_only_user
+from accounts.oauth_context import get_oauth_provider_context
 from accounts.services.timezones import format_user_datetime
 from community.services.slack_links import build_slack_profile_url
-from content.access import get_active_override, get_user_level
+from content.access import (
+    get_active_override,
+    get_required_tier_name,
+    get_user_level,
+)
 from content.models import (
     Article,
     Course,
@@ -28,12 +33,17 @@ from content.models import (
 from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from content.tier_config import get_tiers_with_features
 from events.models import Event
-from events.services.time_windows import registered_upcoming_events
+from events.services.time_windows import (
+    past_recording_events_queryset,
+    registered_upcoming_events,
+    upcoming_events_queryset,
+)
 from integrations.config import get_config
 from plans.dashboard import (
     build_active_sprint_opportunities_context,
     build_sprint_plan_card_context,
 )
+from plans.models import Sprint
 from questionnaires.onboarding import has_completed_onboarding
 
 DASHBOARD_EVENT_DATETIME_FORMAT = '%a, %b %d, %Y, %H:%M'
@@ -101,6 +111,21 @@ FEATURES = [
     },
 ]
 
+FREE_HOME_TIER = {
+    'name': 'Free',
+    'tagline': 'Start shipping with us',
+    'description': (
+        'Create a free account to get community updates, browse open '
+        'resources, and register for free/open events without a checkout.'
+    ),
+    'hook': 'Newsletter, open resources, and live-event access.',
+    'features': [
+        {'text': 'Community updates and newsletter emails', 'included': True},
+        {'text': 'Open resources, recordings, and tutorials', 'included': True},
+        {'text': 'Register for free/open live events', 'included': True},
+    ],
+}
+
 
 FAQ_ITEMS = [
     {
@@ -144,6 +169,8 @@ FAQ_ITEMS = [
 SECTION_NAV = [
     {'id': 'about', 'label': 'Philosophy'},
     {'id': 'tiers', 'label': 'Membership'},
+    {'id': 'sprint-story', 'label': 'Sprints'},
+    {'id': 'upcoming-events', 'label': 'Live Events'},
     {'id': 'testimonials', 'label': 'Testimonials'},
     {'id': 'resources', 'label': 'Workshops'},
     {'id': 'blog', 'label': 'Blog'},
@@ -184,12 +211,8 @@ def home(request):
 def _public_home(request):
     """Render the public marketing homepage for anonymous users."""
     articles = Article.objects.filter(published=True)[:3]
-    recordings = Event.objects.filter(
-        published=True,
-    ).exclude(
-        recording_url='',
-    ).exclude(
-        recording_url__isnull=True,
+    recordings = past_recording_events_queryset(
+        now=timezone.now(),
     ).order_by('-start_datetime')[:3]
     projects = Project.objects.filter(published=True)[:3]
     curated_links = CuratedLink.objects.filter(published=True)[:6]
@@ -198,11 +221,15 @@ def _public_home(request):
     stripe_links = settings.STRIPE_PAYMENT_LINKS
     tiers_with_links = []
     for tier in get_tiers_with_features():
+        if tier.get('stripe_key') == 'free':
+            continue
         tier_copy = dict(tier)
         key = tier['stripe_key']
         tier_copy['payment_link_monthly'] = stripe_links.get(key, {}).get('monthly', '#')
         tier_copy['payment_link_annual'] = stripe_links.get(key, {}).get('annual', '#')
         tiers_with_links.append(tier_copy)
+
+    featured_sprint = _get_featured_homepage_sprint()
 
     context = {
         'articles': articles,
@@ -211,10 +238,20 @@ def _public_home(request):
         'curated_links': curated_links,
         'testimonials': TESTIMONIALS,
         'features': FEATURES,
+        'free_tier': FREE_HOME_TIER,
         'tiers': tiers_with_links,
+        'featured_sprint': featured_sprint,
+        'featured_sprint_required_tier_name': (
+            get_required_tier_name(featured_sprint.min_tier_level)
+            if featured_sprint is not None else ''
+        ),
+        'upcoming_events': _get_homepage_public_upcoming_events(),
         'faq_items': FAQ_ITEMS,
         'section_nav': SECTION_NAV,
+        'registered_event_ids': set(),
     }
+    context.update(get_oauth_provider_context())
+    context['next_url'] = request.path
     return render(request, 'home.html', context)
 
 
@@ -720,6 +757,29 @@ def _get_upcoming_events(user):
             fmt=DASHBOARD_EVENT_DATETIME_FORMAT,
         )
     return events
+
+
+def _get_featured_homepage_sprint(today=None):
+    """Return the earliest visible active sprint whose window has not ended."""
+    today = today or timezone.localdate()
+    for sprint in Sprint.objects.filter(status='active').order_by('start_date'):
+        if not sprint.has_ended(today):
+            return sprint
+    return None
+
+
+def _get_homepage_public_upcoming_events(now=None, limit=3):
+    """Return up to ``limit`` upcoming published public events for homepage."""
+    now = now or timezone.now()
+    queryset = (
+        upcoming_events_queryset(now=now)
+        .filter(published=True)
+        .select_related('event_series')
+        .order_by('start_datetime')
+    )
+    if limit is not None:
+        return list(queryset[:limit])
+    return list(queryset)
 
 
 def _get_starting_soon_event(user):

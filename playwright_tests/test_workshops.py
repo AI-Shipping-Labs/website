@@ -25,6 +25,9 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     create_user as _create_user,
 )
+from playwright_tests.conftest import (
+    ensure_tiers,
+)
 
 os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')
 from django.db import connection  # noqa: E402
@@ -148,6 +151,131 @@ def _create_workshop(
 
 @pytest.mark.django_db(transaction=True)
 class TestVisitorBrowsesCatalog:
+    @pytest.mark.core
+    def test_anonymous_visitor_understands_offer_and_jumps_to_catalog(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='landing-ws',
+            title='Shipping Agents',
+            pages=0,
+            recording=0,
+            tags=['agents'],
+        )
+
+        response = page.goto(
+            f'{django_server}/workshops',
+            wait_until='domcontentloaded',
+        )
+        assert response is not None and response.status == 200
+
+        landing = page.locator('[data-testid="workshops-landing"]')
+        assert landing.is_visible()
+        landing_text = landing.inner_text()
+        assert 'Hands-on AI workshops' in landing_text
+        assert 'Practical AI engineering sessions' in landing_text
+        assert 'recording' in landing_text
+        assert 'step-by-step writeups or tutorial pages' in landing_text
+        assert 'runnable code or materials' in landing_text
+
+        assert page.evaluate(
+            """() => {
+                const landing = document.querySelector(
+                    '[data-testid="workshops-landing"]'
+                );
+                const card = document.querySelector(
+                    '[data-testid="workshop-card"]'
+                );
+                return Boolean(
+                    landing && card &&
+                    (landing.compareDocumentPosition(card) &
+                     Node.DOCUMENT_POSITION_FOLLOWING)
+                );
+            }""",
+        )
+
+        page.locator('[data-testid="browse-workshops-cta"]').click()
+        page.wait_for_function(
+            "() => window.location.hash === '#workshop-catalog'",
+        )
+        assert page.url.endswith('/workshops#workshop-catalog')
+        assert page.locator('[data-testid="workshop-catalog"]').is_visible()
+
+        card = page.locator('article:has(a[href="/workshops/landing-ws"])')
+        assert card.is_visible()
+        card.locator('a').first.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops/landing-ws')
+        body = page.content()
+        assert 'data-testid="workshop-title"' in body
+        assert 'Shipping Agents' in body
+        assert 'data-testid="workshop-pages-list"' in body
+
+    def test_membership_options_cta_lands_on_pricing(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        ensure_tiers()
+        _create_workshop()
+
+        page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
+        page.locator('[data-testid="view-membership-options-cta"]').click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/pricing')
+        expected_tiers = {'free', 'basic', 'main', 'premium'}
+        found_tiers = {
+            slug
+            for slug in expected_tiers
+            if page.locator(f'[data-tier-card="{slug}"]').count() >= 1
+        }
+        assert found_tiers == expected_tiers
+
+    def test_filtered_catalog_keeps_landing_and_clear_path(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='agents-ws',
+            title='Agent Workshop',
+            pages=0,
+            recording=0,
+            tags=['agents'],
+        )
+        _create_workshop(
+            slug='python-ws',
+            title='Python Workshop',
+            pages=0,
+            recording=0,
+            tags=['python'],
+        )
+
+        page.goto(
+            f'{django_server}/workshops?tag=agents',
+            wait_until='domcontentloaded',
+        )
+
+        assert page.locator('[data-testid="workshops-landing"]').is_visible()
+        assert page.locator('[data-testid="workshop-catalog"]').is_visible()
+        assert page.locator('[data-testid="workshop-active-filters"]').is_visible()
+        assert 'agents' in page.locator(
+            '[data-testid="workshop-active-filters"]',
+        ).inner_text()
+        assert 'Agent Workshop' in page.content()
+        assert 'Python Workshop' not in page.content()
+
+        clear_link = page.locator('[data-testid="clear-workshop-filter"]')
+        assert clear_link.get_attribute('href') == '/workshops'
+        clear_link.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops')
+        body = page.content()
+        assert 'Agent Workshop' in body
+        assert 'Python Workshop' in body
+
     @pytest.mark.core
     def test_visitor_sees_catalog_and_lands_on_paywalled_landing(
         self, django_server, page,

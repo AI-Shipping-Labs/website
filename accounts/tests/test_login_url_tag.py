@@ -8,8 +8,8 @@ after successful authentication. The exclusion list and sanitizer are
 shared with the logout flow.
 """
 
-from datetime import timedelta
 import re
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.template import Context, Template

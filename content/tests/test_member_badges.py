@@ -56,7 +56,7 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
             'templates/accounts/account.html',
             'templates/content/blog_list.html',
             'templates/content/courses_list.html',
-            'templates/content/workshops_list.html',
+            'templates/content/_workshops_catalog.html',
             'templates/content/workshop_detail.html',
             'templates/content/sprints_index.html',
             'templates/plans/sprint_detail.html',

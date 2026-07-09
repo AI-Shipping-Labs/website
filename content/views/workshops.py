@@ -2,7 +2,9 @@
 
 Renders the user-facing surface for the ``Workshop`` content type:
 
-- ``/workshops`` — catalog of all published workshops.
+- ``/workshops`` — visitor-facing workshops landing page with a short
+  latest-workshops preview.
+- ``/workshops/catalog`` — filterable catalog of all published workshops.
 - ``/workshops/<slug>`` — landing page (description + metadata)
   gated by ``landing_required_level``.
 - ``/workshops/<slug>/video`` — recording panel + materials,
@@ -17,7 +19,7 @@ Basic+ members read the tutorial, and Main+ members watch the recording.
 The catalog defaults to every published workshop (with a tier badge) so
 users see what they would unlock by upgrading. Issue #1166 adds the
 optional ``?access=free|paid`` filter for the public catalog while
-keeping the canonical unfiltered URL at ``/workshops``.
+keeping the canonical unfiltered URL at ``/workshops/catalog``.
 
 Slug-only workshop routes are canonical. Legacy dated routes validate the
 ``(date, slug)`` pair against a published workshop, then 301 to the canonical
@@ -60,7 +62,9 @@ from content.views.pages import _filter_by_tags, _get_selected_tags
 # same fade-out pattern shows on workshop tutorial / video pages.
 TEASER_WORD_LIMIT = 150
 
-CATALOG_BASE_PATH = '/workshops'
+WORKSHOPS_LANDING_PATH = '/workshops'
+WORKSHOPS_CATALOG_PATH = '/workshops/catalog'
+LANDING_PREVIEW_LIMIT = 3
 CATALOG_ACCESS_ALL = 'all'
 CATALOG_ACCESS_FREE = 'free'
 CATALOG_ACCESS_PAID = 'paid'
@@ -121,7 +125,7 @@ def _filter_workshops_by_catalog_access(queryset, selected_access):
     return queryset
 
 
-def _build_catalog_filter_url(*, selected_tags, access_slug):
+def _build_catalog_filter_url(*, selected_tags, access_slug, base_path):
     """Return a catalog URL preserving the current tag filters."""
     params = []
     if access_slug in (CATALOG_ACCESS_FREE, CATALOG_ACCESS_PAID):
@@ -130,15 +134,29 @@ def _build_catalog_filter_url(*, selected_tags, access_slug):
         params.append(('tag', tag))
     query = urlencode(params, doseq=True)
     if not query:
-        return CATALOG_BASE_PATH
-    return f'{CATALOG_BASE_PATH}?{query}'
+        return base_path
+    return f'{base_path}?{query}'
 
 
-def workshops_list(request):
-    """Catalog page: grid of all published workshops."""
+def _build_workshops_catalog_context(
+    request,
+    *,
+    base_path,
+    show_filters,
+    catalog_eyebrow,
+    catalog_heading,
+    catalog_intro,
+    catalog_section_id,
+    catalog_testid,
+    limit=None,
+):
+    """Build shared context for workshop catalog cards and filters."""
     workshops = Workshop.objects.filter(status='published').order_by('-date')
-    selected_tags = _get_selected_tags(request)
-    selected_access = _normalize_catalog_access(request.GET.get('access'))
+    selected_tags = _get_selected_tags(request) if show_filters else []
+    selected_access = (
+        _normalize_catalog_access(request.GET.get('access'))
+        if show_filters else CATALOG_ACCESS_ALL
+    )
 
     # Collect all tags from published workshops for the filter UI (mirrors
     # the courses_list pattern — chips are rendered inline on the cards).
@@ -148,8 +166,14 @@ def workshops_list(request):
             all_tags.update(workshop.tags)
     all_tags = sorted(all_tags)
 
-    workshops = _filter_workshops_by_catalog_access(workshops, selected_access)
-    workshops = _filter_by_tags(workshops, selected_tags)
+    if show_filters:
+        workshops = _filter_workshops_by_catalog_access(
+            workshops, selected_access,
+        )
+        workshops = _filter_by_tags(workshops, selected_tags)
+
+    if limit is not None:
+        workshops = workshops[:limit]
 
     access_filter_options = [
         {
@@ -158,6 +182,7 @@ def workshops_list(request):
             'url': _build_catalog_filter_url(
                 selected_tags=selected_tags,
                 access_slug=slug,
+                base_path=base_path,
             ),
             'is_active': selected_access == slug,
         }
@@ -180,9 +205,63 @@ def workshops_list(request):
             ) else None
         ),
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
-        'base_path': CATALOG_BASE_PATH,
+        'base_path': base_path,
+        'clear_filters_url': base_path,
+        'catalog_all_url': WORKSHOPS_CATALOG_PATH,
+        'show_catalog_filters': show_filters,
+        'catalog_eyebrow': catalog_eyebrow,
+        'catalog_heading': catalog_heading,
+        'catalog_intro': catalog_intro,
+        'catalog_section_id': catalog_section_id,
+        'catalog_testid': catalog_testid,
     }
+    return context
+
+
+def workshops_list(request):
+    """Landing page: marketing copy with a short latest-workshops preview."""
+    context = _build_workshops_catalog_context(
+        request,
+        base_path=WORKSHOPS_CATALOG_PATH,
+        show_filters=False,
+        catalog_eyebrow='Latest workshops',
+        catalog_heading='Start with recent workshop writeups',
+        catalog_intro=(
+            'Preview the newest published workshops, then open the full '
+            'archive when you want to filter by topic or access level.'
+        ),
+        catalog_section_id='workshop-preview',
+        catalog_testid='workshops-preview',
+        limit=LANDING_PREVIEW_LIMIT,
+    )
     return render(request, 'content/workshops_list.html', context)
+
+
+def workshops_catalog(request):
+    """Catalog page: grid of all published workshops."""
+    context = _build_workshops_catalog_context(
+        request,
+        base_path=WORKSHOPS_CATALOG_PATH,
+        show_filters=True,
+        catalog_eyebrow='Archive',
+        catalog_heading='All workshops',
+        catalog_intro=(
+            'Browse the full AI Shipping Labs workshop archive, newest first, '
+            'with recordings, writeups, tutorial pages, materials, and '
+            'membership access labels.'
+        ),
+        catalog_section_id='workshop-catalog',
+        catalog_testid='workshop-catalog',
+    )
+    context.update({
+        'page_title': 'All Workshops | AI Shipping Labs',
+        'page_meta_description': (
+            'Browse the full AI Shipping Labs workshop catalog and archive, '
+            'including recordings, writeups, tutorial pages, materials, and '
+            'access labels.'
+        ),
+    })
+    return render(request, 'content/workshops_catalog.html', context)
 
 
 # Legacy dated workshop links are ``YYYY-MM-DD-<slug>``. The date is

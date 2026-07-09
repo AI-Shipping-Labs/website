@@ -1,7 +1,8 @@
 """Tests for the public Workshop surface (issue #296).
 
 Covers:
-- ``/workshops`` catalog (published only, draft hidden, tier badges,
+- ``/workshops`` landing page with a latest-workshops preview and catalog CTA.
+- ``/workshops/catalog`` catalog (published only, draft hidden, tier badges,
   empty state, tag filter).
 - ``/workshops/<slug>`` landing page (404 on draft / unknown, SEO content
   always rendered, landing-level paywall, pages list with locks).
@@ -34,6 +35,9 @@ from events.models import Event
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
+
+WORKSHOPS_LANDING_URL = '/workshops'
+WORKSHOPS_CATALOG_URL = '/workshops/catalog'
 
 
 def _attach_workshop_instructor(workshop, name, position=0):
@@ -131,14 +135,19 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         )
 
     def test_catalog_lists_published_only(self):
-        response = self.client.get('/workshops')
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
         self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'content/workshops_catalog.html')
+        self.assertTemplateUsed(response, 'content/_workshops_catalog.html')
+        self.assertContains(response, 'All workshops')
         self.assertContains(response, 'Visible Workshop')
         self.assertNotContains(response, 'Hidden Draft')
 
-    def test_catalog_renders_visitor_landing_before_workshop_cards(self):
-        response = self.client.get('/workshops')
+    def test_landing_renders_visitor_offer_preview_and_catalog_cta(self):
+        response = self.client.get(WORKSHOPS_LANDING_URL)
         self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'content/workshops_list.html')
+        self.assertTemplateUsed(response, 'content/_workshops_catalog.html')
         self.assertContains(response, 'data-testid="workshops-landing"')
         self.assertContains(response, 'Hands-on AI workshops')
         self.assertContains(response, 'Practical AI engineering sessions')
@@ -147,22 +156,25 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Guided build flow')
         self.assertContains(response, 'Replay and writeups')
         self.assertContains(response, 'Project outcomes')
-        self.assertContains(response, 'href="#workshop-catalog"')
-        self.assertContains(response, 'Browse workshops')
+        self.assertContains(response, 'href="/workshops/catalog"')
+        self.assertContains(response, 'Browse all workshops')
         self.assertContains(response, 'href="/pricing"')
         self.assertContains(response, 'View membership options')
-        self.assertContains(response, 'id="workshop-catalog"')
-        self.assertContains(response, 'data-testid="workshop-catalog"')
+        self.assertContains(response, 'id="workshop-preview"')
+        self.assertContains(response, 'data-testid="workshops-preview"')
+        self.assertContains(response, 'Start with recent workshop writeups')
+        self.assertContains(response, 'data-testid="view-all-workshops-preview-cta"')
+        self.assertNotContains(response, 'data-testid="workshop-access-filters"')
 
         body = response.content.decode()
         landing_index = body.index('data-testid="workshops-landing"')
-        catalog_index = body.index('data-testid="workshop-catalog"')
+        preview_index = body.index('data-testid="workshops-preview"')
         card_index = body.index('data-testid="workshop-card"')
-        self.assertLess(landing_index, catalog_index)
-        self.assertLess(catalog_index, card_index)
+        self.assertLess(landing_index, preview_index)
+        self.assertLess(preview_index, card_index)
 
     def test_catalog_metadata_describes_workshop_landing_offer(self):
-        response = self.client.get('/workshops')
+        response = self.client.get(WORKSHOPS_LANDING_URL)
 
         self.assertContains(
             response,
@@ -173,44 +185,71 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'step-by-step writeups')
         self.assertContains(response, 'code, and materials')
 
+    def test_catalog_route_has_archive_metadata_without_landing_copy(self):
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
+
+        self.assertContains(
+            response,
+            '<title>All Workshops | AI Shipping Labs</title>',
+            html=True,
+        )
+        self.assertContains(
+            response,
+            'Browse the full AI Shipping Labs workshop catalog and archive',
+        )
+        self.assertContains(response, 'data-testid="workshop-catalog"')
+        self.assertContains(response, 'All workshops')
+        self.assertNotContains(response, 'data-testid="workshops-landing"')
+        self.assertNotContains(response, 'Practical AI engineering sessions')
+
     def test_catalog_shows_tier_badge_when_pages_gated(self):
-        response = self.client.get('/workshops')
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
         self.assertContains(response, 'data-testid="workshop-tier-badge"')
         # Issue #481: badges read "Basic or above" not "Basic+".
         self.assertContains(response, 'Basic or above')
         self.assertNotContains(response, 'Basic+')
 
     def test_catalog_links_to_landing(self):
-        response = self.client.get('/workshops')
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
         self.assertContains(response, 'href="/workshops/one"')
 
     def test_catalog_empty_state(self):
         Workshop.objects.all().delete()
-        response = self.client.get('/workshops')
-        self.assertContains(response, 'data-testid="workshops-landing"')
-        self.assertContains(response, 'Hands-on AI workshops')
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
+        self.assertNotContains(response, 'data-testid="workshops-landing"')
         self.assertContains(response, 'data-testid="workshop-catalog"')
         self.assertContains(response, 'data-testid="workshops-empty-state"')
         self.assertContains(response, 'data-testid="member-empty-state"')
         self.assertContains(response, 'data-empty-kind="fresh"')
         self.assertContains(response, 'No workshops published yet')
 
+    def test_landing_empty_preview_keeps_catalog_path(self):
+        Workshop.objects.all().delete()
+        response = self.client.get(WORKSHOPS_LANDING_URL)
+
+        self.assertContains(response, 'data-testid="workshops-landing"')
+        self.assertContains(response, 'href="/workshops/catalog"')
+        self.assertContains(response, 'data-testid="workshops-preview"')
+        self.assertContains(response, 'No workshops published yet')
+
     def test_catalog_filter_by_tag(self):
         _make_workshop(slug='three', title='Other Topic', tags=['rust'])
-        response = self.client.get('/workshops?tag=rust')
-        self.assertContains(response, 'data-testid="workshops-landing"')
+        response = self.client.get(f'{WORKSHOPS_CATALOG_URL}?tag=rust')
+        self.assertNotContains(response, 'data-testid="workshops-landing"')
         self.assertContains(response, 'data-testid="workshop-catalog"')
         self.assertContains(response, 'data-testid="workshop-active-filters"')
         self.assertContains(response, 'Filters')
         self.assertContains(response, 'rust')
         self.assertContains(response, 'data-testid="clear-workshop-filter"')
-        self.assertContains(response, 'href="/workshops"')
+        self.assertContains(response, 'href="/workshops/catalog"')
         self.assertContains(response, 'Other Topic')
         self.assertNotContains(response, 'Visible Workshop')
 
     def test_catalog_filter_no_match_shows_empty_state(self):
-        response = self.client.get('/workshops?tag=does-not-exist')
-        self.assertContains(response, 'data-testid="workshops-landing"')
+        response = self.client.get(
+            f'{WORKSHOPS_CATALOG_URL}?tag=does-not-exist',
+        )
+        self.assertNotContains(response, 'data-testid="workshops-landing"')
         self.assertContains(response, 'data-testid="workshop-catalog"')
         self.assertContains(response, 'data-testid="workshop-active-filters"')
         self.assertContains(response, 'No workshops found')
@@ -218,8 +257,52 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-testid="member-empty-state"')
         self.assertContains(response, 'data-empty-kind="filter"')
         self.assertContains(response, 'No workshops match the selected filters.')
-        self.assertContains(response, 'href="/workshops"')
+        self.assertContains(response, 'href="/workshops/catalog"')
         self.assertContains(response, 'View all workshops')
+
+    def test_catalog_route_ordering_does_not_treat_catalog_as_slug(self):
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'All workshops')
+
+        missing = self.client.get('/workshops/does-not-exist')
+        self.assertEqual(missing.status_code, 404)
+
+    def test_catalog_orders_published_workshops_newest_first(self):
+        older = _make_workshop(
+            slug='older',
+            title='Older Workshop',
+            tags=['history'],
+        )
+        older.date = date(2026, 1, 10)
+        older.save()
+        newer = _make_workshop(
+            slug='newer',
+            title='Newer Workshop',
+            tags=['future'],
+        )
+        newer.date = date(2026, 7, 10)
+        newer.save()
+        draft_newer = _make_workshop(
+            slug='draft-newer',
+            title='Draft Newer Workshop',
+            status='draft',
+        )
+        draft_newer.date = date(2026, 8, 10)
+        draft_newer.save()
+
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
+        body = response.content.decode()
+
+        self.assertLess(
+            body.index('Newer Workshop'),
+            body.index('Visible Workshop'),
+        )
+        self.assertLess(
+            body.index('Visible Workshop'),
+            body.index('Older Workshop'),
+        )
+        self.assertNotContains(response, 'Draft Newer Workshop')
 
     def test_catalog_does_not_add_workshops_listing_api_endpoint(self):
         response = self.client.get('/api/workshops')
@@ -227,7 +310,7 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_catalog_missing_cover_uses_decorative_fallback_preview(self):
-        response = self.client.get('/workshops')
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
         body = response.content.decode()
         fallback = body.split(
             'data-testid="workshop-card-preview-fallback"', 1,
@@ -243,7 +326,7 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
     def test_catalog_cover_image_has_alt_text_and_lazy_loading(self):
         self.published.cover_image_url = 'https://cdn.example/workshop-card.png'
         self.published.save()
-        response = self.client.get('/workshops')
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
         self.assertContains(response, 'data-testid="workshop-card-preview-image"')
         self.assertContains(response, 'https://cdn.example/workshop-card.png')
         self.assertContains(response, 'alt="Cover image for Visible Workshop"')
@@ -301,7 +384,7 @@ class WorkshopCatalogAccessFilterTest(TierSetupMixin, TestCase):
         )
 
     def test_catalog_defaults_to_all_published_workshops(self):
-        response = self.client.get('/workshops')
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['selected_access'], 'all')
@@ -319,7 +402,7 @@ class WorkshopCatalogAccessFilterTest(TierSetupMixin, TestCase):
         self.assertIn('aria-current="page"', all_chip)
 
     def test_catalog_access_free_includes_open_and_registered_only(self):
-        response = self.client.get('/workshops?access=free')
+        response = self.client.get(f'{WORKSHOPS_CATALOG_URL}?access=free')
 
         self.assertEqual(response.context['selected_access'], 'free')
         self.assertContains(response, 'Open Agents')
@@ -331,7 +414,7 @@ class WorkshopCatalogAccessFilterTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'data-testid="workshop-tier-badge"')
 
     def test_catalog_access_paid_includes_basic_and_main_only(self):
-        response = self.client.get('/workshops?access=paid')
+        response = self.client.get(f'{WORKSHOPS_CATALOG_URL}?access=paid')
 
         self.assertEqual(response.context['selected_access'], 'paid')
         self.assertContains(response, 'Basic Agents')
@@ -352,7 +435,7 @@ class WorkshopCatalogAccessFilterTest(TierSetupMixin, TestCase):
 
         for query in cases:
             with self.subTest(query=query):
-                response = self.client.get(f'/workshops{query}')
+                response = self.client.get(f'{WORKSHOPS_CATALOG_URL}{query}')
 
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.context['selected_access'], 'all')
@@ -367,20 +450,22 @@ class WorkshopCatalogAccessFilterTest(TierSetupMixin, TestCase):
                 self.assertIn('aria-current="page"', all_chip)
 
     def test_access_filter_controls_and_clear_link_preserve_selected_tags(self):
-        response = self.client.get('/workshops?access=free&tag=agents')
+        response = self.client.get(
+            f'{WORKSHOPS_CATALOG_URL}?access=free&tag=agents',
+        )
 
         self.assertContains(response, 'data-testid="workshop-access-filter-all"')
         self.assertContains(response, 'data-testid="workshop-access-filter-free"')
         self.assertContains(response, 'data-testid="workshop-access-filter-paid"')
-        self.assertContains(response, 'href="/workshops?tag=agents"')
+        self.assertContains(response, 'href="/workshops/catalog?tag=agents"')
         self.assertContains(
-            response, 'href="/workshops?access=free&amp;tag=agents"',
+            response, 'href="/workshops/catalog?access=free&amp;tag=agents"',
         )
         self.assertContains(
-            response, 'href="/workshops?access=paid&amp;tag=agents"',
+            response, 'href="/workshops/catalog?access=paid&amp;tag=agents"',
         )
         self.assertContains(response, 'data-testid="clear-workshop-filter"')
-        self.assertContains(response, 'href="/workshops"')
+        self.assertContains(response, 'href="/workshops/catalog"')
 
         body = response.content.decode()
         free_chip = body.split(
@@ -389,25 +474,29 @@ class WorkshopCatalogAccessFilterTest(TierSetupMixin, TestCase):
         self.assertIn('aria-current="page"', free_chip)
 
     def test_tag_links_preserve_active_access_when_adding_or_removing_tags(self):
-        response = self.client.get('/workshops?access=paid')
+        response = self.client.get(f'{WORKSHOPS_CATALOG_URL}?access=paid')
 
         self.assertContains(
-            response, 'href="/workshops?access=paid&amp;tag=python"',
+            response, 'href="/workshops/catalog?access=paid&amp;tag=python"',
         )
         self.assertContains(
-            response, 'href="/workshops?access=paid&amp;tag=agents"',
+            response, 'href="/workshops/catalog?access=paid&amp;tag=agents"',
         )
 
-        filtered = self.client.get('/workshops?access=paid&tag=agents&tag=python')
-        self.assertContains(
-            filtered, 'href="/workshops?access=paid&amp;tag=agents"',
+        filtered = self.client.get(
+            f'{WORKSHOPS_CATALOG_URL}?access=paid&tag=agents&tag=python',
         )
         self.assertContains(
-            filtered, 'href="/workshops?access=paid&amp;tag=python"',
+            filtered, 'href="/workshops/catalog?access=paid&amp;tag=agents"',
+        )
+        self.assertContains(
+            filtered, 'href="/workshops/catalog?access=paid&amp;tag=python"',
         )
 
     def test_access_and_tag_filters_combine_with_and_semantics(self):
-        response = self.client.get('/workshops?access=paid&tag=agents')
+        response = self.client.get(
+            f'{WORKSHOPS_CATALOG_URL}?access=paid&tag=agents',
+        )
 
         self.assertContains(response, 'Basic Agents')
         self.assertNotContains(response, 'Open Agents')
@@ -418,11 +507,13 @@ class WorkshopCatalogAccessFilterTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'agents')
 
     def test_filtered_empty_state_handles_combined_filters(self):
-        response = self.client.get('/workshops?access=free&tag=enterprise-ai')
+        response = self.client.get(
+            f'{WORKSHOPS_CATALOG_URL}?access=free&tag=enterprise-ai',
+        )
 
         self.assertContains(response, 'data-testid="workshops-empty-state"')
         self.assertContains(response, 'No workshops match the selected filters.')
-        self.assertContains(response, 'href="/workshops"')
+        self.assertContains(response, 'href="/workshops/catalog"')
         self.assertContains(response, 'View all workshops')
 
 

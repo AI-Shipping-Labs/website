@@ -31,46 +31,11 @@ from integrations.services.github_sync.parsing import (
 )
 from integrations.services.github_sync.repo import derive_slug, extract_sort_order, _matches_ignore_patterns
 
+from events.services.timestamps import normalize_event_timestamps_for_sync
 from integrations.services.github_sync.dispatchers.instructors import _attach_instructors_to_event, _resolve_instructors_for_yaml
 from integrations.services.github_sync.dispatchers.hosts import _attach_hosts_to_event, _resolve_hosts_for_event_yaml
 
 _UNSET = object()
-
-
-def _normalize_event_timestamps_for_sync(timestamps):
-    """Store synced event timestamps in the canonical ``time_seconds/label`` shape."""
-    from content.templatetags.video_utils import parse_video_timestamp
-
-    if not timestamps:
-        return []
-
-    normalized = []
-    for ts in timestamps:
-        if not isinstance(ts, dict):
-            continue
-
-        if 'time_seconds' in ts:
-            try:
-                time_seconds = int(ts.get('time_seconds') or 0)
-            except (TypeError, ValueError):
-                continue
-        elif 'time' in ts:
-            try:
-                time_seconds = parse_video_timestamp(ts.get('time'))
-            except ValueError:
-                continue
-        else:
-            continue
-
-        if time_seconds < 0:
-            continue
-
-        normalized.append({
-            'time_seconds': time_seconds,
-            'label': ts.get('label') or ts.get('title') or '',
-        })
-
-    return normalized
 
 
 def _coerce_external_host_for_sync(raw, *, slug=''):
@@ -132,7 +97,7 @@ def _build_synced_event_content_defaults(
         'recording_url': recording_url,
         'recording_embed_url': recording_embed_url,
         'transcript_url': transcript_url,
-        'timestamps': _normalize_event_timestamps_for_sync(timestamps),
+        'timestamps': normalize_event_timestamps_for_sync(timestamps),
         'materials': materials or [],
         'core_tools': core_tools or [],
         'learning_objectives': learning_objectives or [],

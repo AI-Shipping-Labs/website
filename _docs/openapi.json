@@ -2582,6 +2582,16 @@
                       "tags": [
                         "sprint:may-2026"
                       ],
+                      "timestamps": [
+                        {
+                          "label": "Setup",
+                          "time_seconds": 960
+                        },
+                        {
+                          "label": "Build",
+                          "time_seconds": 125
+                        }
+                      ],
                       "timezone": "Europe/Berlin",
                       "title": "Office Hours: May 5",
                       "updated_at": "2026-04-15T12:00:00+00:00",
@@ -2613,6 +2623,12 @@
                   1
                 ],
                 "start_datetime": "2026-05-05T17:00:00+02:00",
+                "timestamps": [
+                  {
+                    "time": "16:00",
+                    "title": "Setup"
+                  }
+                ],
                 "title": "Office Hours: May 5"
               },
               "schema": {
@@ -2705,6 +2721,40 @@
                     },
                     "type": "array"
                   },
+                  "timestamps": {
+                    "description": "Recording chapters. Empty array clears chapters on PATCH; omitted PATCH values preserve existing chapters.",
+                    "items": {
+                      "additionalProperties": false,
+                      "description": "Provide either time_seconds or time, and either label or title. Stored responses always return canonical time_seconds/label rows.",
+                      "properties": {
+                        "label": {
+                          "description": "Canonical chapter label.",
+                          "type": "string"
+                        },
+                        "time": {
+                          "description": "Import-friendly MM:SS or H:MM:SS timestamp.",
+                          "type": "string"
+                        },
+                        "time_seconds": {
+                          "description": "Canonical seconds value. Integer-like strings are accepted and normalized to integers.",
+                          "oneOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "description": "Import-friendly chapter title.",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
                   "timezone": {
                     "type": "string"
                   },
@@ -2773,6 +2823,16 @@
                   "status": "scheduled",
                   "tags": [
                     "sprint:may-2026"
+                  ],
+                  "timestamps": [
+                    {
+                      "label": "Setup",
+                      "time_seconds": 960
+                    },
+                    {
+                      "label": "Build",
+                      "time_seconds": 125
+                    }
                   ],
                   "timezone": "Europe/Berlin",
                   "title": "Office Hours: May 5",
@@ -2886,6 +2946,16 @@
                   "tags": [
                     "sprint:may-2026"
                   ],
+                  "timestamps": [
+                    {
+                      "label": "Setup",
+                      "time_seconds": 960
+                    },
+                    {
+                      "label": "Build",
+                      "time_seconds": 125
+                    }
+                  ],
                   "timezone": "Europe/Berlin",
                   "title": "Office Hours: May 5",
                   "updated_at": "2026-04-15T12:00:00+00:00",
@@ -2937,7 +3007,13 @@
                 ],
                 "published": true,
                 "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
-                "status": "completed"
+                "status": "completed",
+                "timestamps": [
+                  {
+                    "label": "Setup",
+                    "time_seconds": 960
+                  }
+                ]
               },
               "schema": {
                 "properties": {
@@ -3000,6 +3076,40 @@
                   "status": {
                     "type": "string"
                   },
+                  "timestamps": {
+                    "description": "Recording chapters. Empty array clears chapters on PATCH; omitted PATCH values preserve existing chapters.",
+                    "items": {
+                      "additionalProperties": false,
+                      "description": "Provide either time_seconds or time, and either label or title. Stored responses always return canonical time_seconds/label rows.",
+                      "properties": {
+                        "label": {
+                          "description": "Canonical chapter label.",
+                          "type": "string"
+                        },
+                        "time": {
+                          "description": "Import-friendly MM:SS or H:MM:SS timestamp.",
+                          "type": "string"
+                        },
+                        "time_seconds": {
+                          "description": "Canonical seconds value. Integer-like strings are accepted and normalized to integers.",
+                          "oneOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "description": "Import-friendly chapter title.",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
                   "title": {
                     "type": "string"
                   }
@@ -3058,6 +3168,16 @@
                   "status": "scheduled",
                   "tags": [
                     "sprint:may-2026"
+                  ],
+                  "timestamps": [
+                    {
+                      "label": "Setup",
+                      "time_seconds": 960
+                    },
+                    {
+                      "label": "Build",
+                      "time_seconds": 125
+                    }
                   ],
                   "timezone": "Europe/Berlin",
                   "title": "Office Hours: May 5",

@@ -67,6 +67,37 @@ class BuildSpecTest(TestCase):
         )
         self.assertIn("title", example["events"][0]["hosts"][0])
 
+    def test_events_openapi_documents_timestamps_requests_and_examples(self):
+        post_props = self._request_body_properties("/api/events", "post")
+        patch_props = self._request_body_properties("/api/events/{slug}", "patch")
+        self.assertIn("timestamps", post_props)
+        self.assertIn("timestamps", patch_props)
+        self.assertEqual(post_props["timestamps"]["type"], "array")
+        self.assertEqual(patch_props["timestamps"]["type"], "array")
+
+        timestamp_props = post_props["timestamps"]["items"]["properties"]
+        self.assertEqual(
+            set(timestamp_props),
+            {"time_seconds", "time", "label", "title"},
+        )
+
+        list_example = (
+            self.document["paths"]["/api/events"]["get"]
+            ["responses"]["200"]["content"]["application/json"]["example"]
+        )
+        detail_example = (
+            self.document["paths"]["/api/events/{slug}"]["get"]
+            ["responses"]["200"]["content"]["application/json"]["example"]
+        )
+        self.assertEqual(
+            list_example["events"][0]["timestamps"][0],
+            {"time_seconds": 960, "label": "Setup"},
+        )
+        self.assertEqual(
+            detail_example["timestamps"][1],
+            {"time_seconds": 125, "label": "Build"},
+        )
+
     def test_host_patch_documents_title_request_field(self):
         props = self._request_body_properties("/api/hosts/{slug}", "patch")
         self.assertIn("title", props)

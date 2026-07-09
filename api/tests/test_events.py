@@ -64,6 +64,7 @@ class EventsApiTestBase(TestCase):
             source_repo="AI-Shipping-Labs/content",
             source_path="events/github.md",
             content_id=uuid.uuid4(),
+            timestamps=[{"time_seconds": 0, "label": "Intro"}],
         )
         cls.studio_event = Event.objects.create(
             title="Studio Event",
@@ -198,6 +199,7 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "published",
                 "host_email",
                 "recording_url",
+                "timestamps",
                 "materials",
                 "hosts",
                 "banner_url",
@@ -210,7 +212,12 @@ class EventsListAndDetailTest(EventsApiTestBase):
             },
         )
         self.assertEqual(by_slug["studio-event"]["recording_url"], "")
+        self.assertEqual(by_slug["studio-event"]["timestamps"], [])
         self.assertEqual(by_slug["studio-event"]["materials"], [])
+        self.assertEqual(
+            by_slug["github-synced-event"]["timestamps"],
+            [{"time_seconds": 0, "label": "Intro"}],
+        )
 
     def test_list_filters_by_status_origin_and_title_search(self):
         Event.objects.create(
@@ -256,6 +263,7 @@ class EventsListAndDetailTest(EventsApiTestBase):
         self.assertEqual(body["source_repo"], "AI-Shipping-Labs/content")
         self.assertEqual(body["source_path"], "events/github.md")
         self.assertEqual(body["recording_url"], "")
+        self.assertEqual(body["timestamps"], [{"time_seconds": 0, "label": "Intro"}])
         self.assertEqual(body["materials"], [])
         self.assertFalse(body["editable"])
         self.assertEqual(
@@ -403,12 +411,68 @@ class EventsCreateTest(EventsApiTestBase):
         self.assertEqual(body["location"], "")
         self.assertEqual(body["external_host"], "")
         self.assertEqual(body["recording_url"], "")
+        self.assertEqual(body["timestamps"], [])
         self.assertEqual(body["materials"], [])
         self.assertEqual(body["origin"], "studio")
         self.assertEqual(body["source_repo"], "")
 
         event = Event.objects.get(slug="minimal-api-event")
         self.assertEqual(event.end_datetime, event.start_datetime + timedelta(hours=1))
+        self.assertEqual(event.timestamps, [])
+
+    def test_create_with_canonical_timestamps_stores_and_returns_canonical_rows(self):
+        response = self._post({
+            "title": "Canonical Timestamp Event",
+            "start_datetime": (self.start + timedelta(days=10)).isoformat(),
+            "recording_url": "https://www.youtube.com/watch?v=abc",
+            "timestamps": [
+                {"time_seconds": 125, "label": "Build"},
+                {"time_seconds": "300", "label": " Review "},
+            ],
+        })
+
+        expected = [
+            {"time_seconds": 125, "label": "Build"},
+            {"time_seconds": 300, "label": "Review"},
+        ]
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["timestamps"], expected)
+
+        event = Event.objects.get(slug="canonical-timestamp-event")
+        self.assertEqual(event.timestamps, expected)
+
+        detail = self.client.get(
+            "/api/events/canonical-timestamp-event",
+            **self._auth(),
+        )
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["timestamps"], expected)
+
+    def test_create_with_import_friendly_timestamps_normalizes_to_canonical_rows(self):
+        response = self._post({
+            "title": "Imported Timestamp Event",
+            "start_datetime": (self.start + timedelta(days=10)).isoformat(),
+            "timestamps": [
+                {"time": "16:00", "title": "Setup"},
+                {
+                    "time_seconds": "125",
+                    "time": "99:99",
+                    "label": "Build",
+                    "title": "Ignored",
+                },
+            ],
+        })
+
+        expected = [
+            {"time_seconds": 960, "label": "Setup"},
+            {"time_seconds": 125, "label": "Build"},
+        ]
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["timestamps"], expected)
+        self.assertEqual(
+            Event.objects.get(slug="imported-timestamp-event").timestamps,
+            expected,
+        )
 
     def test_create_without_timezone_uses_token_owner_preferred_timezone(self):
         self.staff.preferred_timezone = "Europe/Berlin"
@@ -899,6 +963,113 @@ class EventsUpdateTest(EventsApiTestBase):
         self.studio_event.refresh_from_db()
         self.assertEqual(self.studio_event.materials, [])
 
+    def test_patch_timestamps_updates_clears_and_preserves_on_omit(self):
+        self.studio_event.recording_url = "https://www.youtube.com/watch?v=old"
+        self.studio_event.materials = [
+            {"title": "Slides", "url": "https://docs.example.com/slides"}
+        ]
+        self.studio_event.timestamps = [
+            {"time_seconds": 60, "label": "Old intro"},
+        ]
+        self.studio_event.save()
+
+        update = self._patch(
+            "studio-event",
+            {
+                "recording_url": "https://www.youtube.com/watch?v=new",
+                "timestamps": [
+                    {"time": "16:00", "title": "Setup"},
+                    {"time_seconds": "125", "label": "Build"},
+                ],
+            },
+        )
+
+        expected = [
+            {"time_seconds": 960, "label": "Setup"},
+            {"time_seconds": 125, "label": "Build"},
+        ]
+        self.assertEqual(update.status_code, 200)
+        self.assertEqual(update.json()["timestamps"], expected)
+        self.studio_event.refresh_from_db()
+        self.assertEqual(self.studio_event.timestamps, expected)
+        self.assertEqual(
+            self.studio_event.materials,
+            [{"title": "Slides", "url": "https://docs.example.com/slides"}],
+        )
+
+        preserve = self._patch(
+            "studio-event",
+            {"recording_url": "https://www.youtube.com/watch?v=latest"},
+        )
+        self.assertEqual(preserve.status_code, 200)
+        self.assertEqual(preserve.json()["timestamps"], expected)
+        self.studio_event.refresh_from_db()
+        self.assertEqual(self.studio_event.timestamps, expected)
+
+        clear = self._patch("studio-event", {"timestamps": []})
+        self.assertEqual(clear.status_code, 200)
+        self.assertEqual(clear.json()["timestamps"], [])
+        self.studio_event.refresh_from_db()
+        self.assertEqual(self.studio_event.timestamps, [])
+        self.assertEqual(
+            self.studio_event.recording_url,
+            "https://www.youtube.com/watch?v=latest",
+        )
+        self.assertEqual(
+            self.studio_event.materials,
+            [{"title": "Slides", "url": "https://docs.example.com/slides"}],
+        )
+
+    def test_invalid_timestamps_return_422_without_creating_or_mutating_event(self):
+        create_before = Event.objects.count()
+        create = self._post({
+            "title": "Bad Timestamp Event",
+            "start_datetime": self.start.isoformat(),
+            "timestamps": "not-an-array",
+        })
+        self.assertEqual(create.status_code, 422)
+        self.assertEqual(create.json()["code"], "validation_error")
+        self.assertIn("timestamps", create.json()["details"])
+        self.assertEqual(Event.objects.count(), create_before)
+
+        original_timestamps = [{"time_seconds": 60, "label": "Original"}]
+        original_recording_url = "https://www.youtube.com/watch?v=old"
+        invalid_payloads = (
+            "not-an-array",
+            ["not-an-object"],
+            [{}],
+            [{"time": "not-a-time", "title": "Bad time"}],
+            [{"time_seconds": 1.5, "label": "Float"}],
+            [{"time_seconds": -1, "label": "Negative"}],
+            [{"time_seconds": True, "label": "Boolean"}],
+            [{"time_seconds": 1}],
+            [{"time_seconds": 1, "label": 123}],
+            [{"time_seconds": 1, "label": " "}],
+            [{"time_seconds": 1, "label": "Valid", "url": "extra"}],
+        )
+
+        for timestamps in invalid_payloads:
+            with self.subTest(timestamps=timestamps):
+                self.studio_event.timestamps = original_timestamps
+                self.studio_event.recording_url = original_recording_url
+                self.studio_event.save()
+
+                response = self._patch(
+                    "studio-event",
+                    {
+                        "recording_url": "https://www.youtube.com/watch?v=new",
+                        "timestamps": timestamps,
+                    },
+                )
+
+                self.assertEqual(response.status_code, 422)
+                body = response.json()
+                self.assertEqual(body["code"], "validation_error")
+                self.assertIn("timestamps", body["details"])
+                self.studio_event.refresh_from_db()
+                self.assertEqual(self.studio_event.timestamps, original_timestamps)
+                self.assertEqual(self.studio_event.recording_url, original_recording_url)
+
     def test_invalid_recording_url_returns_422_without_mutating_event(self):
         self.studio_event.recording_url = "https://www.youtube.com/watch?v=old"
         self.studio_event.materials = [
@@ -959,12 +1130,14 @@ class EventsUpdateTest(EventsApiTestBase):
         self.github_event.materials = [
             {"title": "Old", "url": "https://docs.example.com/old"}
         ]
+        self.github_event.timestamps = [{"time_seconds": 60, "label": "Old intro"}]
         self.github_event.save()
 
         response = self._patch(
             "github-synced-event",
             {
                 "recording_url": "https://www.youtube.com/watch?v=new",
+                "timestamps": [{"time_seconds": 120, "label": "New intro"}],
                 "materials": [
                     {"title": "New", "url": "https://docs.example.com/new"}
                 ],
@@ -981,6 +1154,10 @@ class EventsUpdateTest(EventsApiTestBase):
         self.assertEqual(
             self.github_event.materials,
             [{"title": "Old", "url": "https://docs.example.com/old"}],
+        )
+        self.assertEqual(
+            self.github_event.timestamps,
+            [{"time_seconds": 60, "label": "Old intro"}],
         )
 
 

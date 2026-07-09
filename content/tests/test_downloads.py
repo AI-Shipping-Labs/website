@@ -395,6 +395,23 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], 'https://example.com/files/free.pdf')
 
+    def test_unverified_free_user_gets_email_verification_signal(self):
+        User.objects.create_user(
+            email='dl_unverified@test.com',
+            password='testpass',
+            tier=self.free_tier,
+            email_verified=False,
+        )
+        self.client.login(email='dl_unverified@test.com', password='testpass')
+
+        response = self.client.get('/api/downloads/free-pdf/file')
+
+        self.assertEqual(response.status_code, 403)
+        data = response.json()
+        self.assertTrue(data['requires_email_verification'])
+        self.assertEqual(data['gated_reason'], 'unverified_email')
+        self.assertEqual(data['download_slug'], 'free-pdf')
+
     def test_download_increments_count(self):
         User.objects.create_user(
             email='dl_count@test.com', password='testpass',

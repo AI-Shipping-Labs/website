@@ -21,6 +21,12 @@
         </p>
       </div>
 
+      {% if verify_downloads_email %}
+      <div id="verify-downloads-email" class="mb-8">
+        {% include "content/_verify_email_required.html" %}
+      </div>
+      {% endif %}
+
       {% if downloads %}
       <div class="grid gap-6 sm:grid-cols-2">
         {% for item in downloads %}
@@ -40,6 +46,9 @@
         <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
           <a href="{{ card_href }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="download-card-body-link">
           {% endwith %}
+        {% elif item.requires_email_verification %}
+        <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
+          <a href="#verify-downloads-email" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="download-card-body-link">
         {% elif item.has_access %}
         <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
           <a href="/api/downloads/{{ item.download.slug }}/file" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="download-card-body-link">
@@ -101,6 +110,15 @@
                      class="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
                     <i data-lucide="mail" class="h-4 w-4"></i>
                     Sign Up to Download
+                  </a>
+                </div>
+              {% elif item.requires_email_verification %}
+                <div class="text-sm">
+                  <p class="mb-2 text-muted-foreground">This download is included with your Free account.</p>
+                  <a href="#verify-downloads-email"
+                     class="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-amber-500/40 px-4 py-2 font-medium text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-200">
+                    <i data-lucide="mail-warning" class="h-4 w-4"></i>
+                    Verify email to download
                   </a>
                 </div>
               {% elif item.has_access %}

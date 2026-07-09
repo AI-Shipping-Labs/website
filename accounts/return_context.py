@@ -2,6 +2,8 @@
 
 from urllib.parse import urlencode, urlsplit
 
+from django.utils.http import url_has_allowed_host_and_scheme
+
 DEFAULT_RETURN_URL = "/"
 
 # Path prefixes that must NEVER be used as the post-logout return target.
@@ -34,6 +36,59 @@ def sanitize_next_url(value, default=DEFAULT_RETURN_URL):
         return default
 
     if parsed.scheme or parsed.netloc or not parsed.path.startswith("/"):
+        return default
+    return value
+
+
+def _path_with_query_and_fragment(parsed_url):
+    """Rebuild a relative URL from a parsed local or same-host URL."""
+    path = parsed_url.path or "/"
+    if parsed_url.query:
+        path = f"{path}?{parsed_url.query}"
+    if parsed_url.fragment:
+        path = f"{path}#{parsed_url.fragment}"
+    return path
+
+
+def sanitize_verification_return_path(value, *, request=None, default=""):
+    """Return a safe content-return path for email verification links.
+
+    Verification emails are long-lived account-action links, so they use a
+    stricter sanitizer than generic ``next`` handling:
+
+    - relative paths are allowed;
+    - same-host absolute URLs are allowed but stored as relative paths;
+    - auth/logout/admin/member-only destinations are rejected via the same
+      exclusion list used for logout redirects;
+    - malformed, empty, protocol-relative, external, or control-character
+      values fall back to ``default``.
+    """
+    if not isinstance(value, str):
+        return default
+
+    value = value.strip()
+    if not value or "\\" in value or any(ord(char) < 32 for char in value):
+        return default
+
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return default
+
+    if parsed.scheme or parsed.netloc:
+        if request is None:
+            return default
+        if not url_has_allowed_host_and_scheme(
+            value,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return default
+        value = _path_with_query_and_fragment(parsed)
+    else:
+        value = sanitize_next_url(value, default="")
+
+    if not value or should_skip_logout_redirect(value):
         return default
     return value
 

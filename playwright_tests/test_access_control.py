@@ -21,6 +21,8 @@ Usage:
 
 import datetime
 import os
+from unittest.mock import patch
+from urllib.parse import urlparse
 
 import pytest
 from django.utils import timezone
@@ -36,6 +38,9 @@ from playwright_tests.conftest import (
 )
 from playwright_tests.conftest import (
     create_user as _create_user,
+)
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
 )
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
@@ -498,6 +503,321 @@ class TestScenario449UnverifiedSignupFreeArticle:
         assert "Full article body after verification" in final_body
         assert 'data-testid="verify-email-required-card"' not in final_body
         assert "Related Articles" in final_body
+
+
+# ---------------------------------------------------------------
+# Scenario 1160: Verify-email return-to-content round trip
+# ---------------------------------------------------------------
+
+@pytest.mark.django_db(transaction=True)
+class TestScenario1160VerifyEmailReturnToContent:
+    """Verification emails carry safe signed return paths back to content."""
+
+    def _capture_send(self, sent_contexts):
+        def capture_send(*args, **kwargs):
+            from email_app.models import EmailLog
+
+            user = args[0]
+            template_name = args[1]
+            context = args[2] if len(args) >= 3 else kwargs.get("context", {})
+            sent_contexts.append(
+                {
+                    "template": template_name,
+                    "context": dict(context or {}),
+                }
+            )
+            return EmailLog.objects.create(user=user, email_type=template_name)
+
+        return capture_send
+
+    def _verification_path(self, verify_url):
+        parsed = urlparse(verify_url)
+        path = parsed.path
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
+        return path
+
+    @pytest.mark.core
+    def test_register_verification_link_returns_to_article_next(
+        self, django_server, page
+    ):
+        _clear_all_content()
+        _ensure_tiers()
+
+        from accounts.models import User
+
+        User.objects.filter(email="return-reader@test.com").delete()
+        connection.close()
+
+        _create_article(
+            title="Free Return Article",
+            slug="free-return-article",
+            description="A free article that should unlock after verification.",
+            content_markdown="# Free Return Article\n\nReturn article body.",
+            author="Alice",
+            tags=["verification"],
+            required_level=0,
+        )
+
+        page.goto(f"{django_server}/accounts/register/", wait_until="domcontentloaded")
+        csrf_token = next(
+            cookie["value"]
+            for cookie in page.context.cookies(django_server)
+            if cookie["name"] == "csrftoken"
+        )
+
+        sent_contexts = []
+        with patch(
+            "email_app.services.email_service.EmailService.send",
+            side_effect=self._capture_send(sent_contexts),
+        ):
+            register_response = page.request.post(
+                f"{django_server}/api/register",
+                data={
+                    "email": "return-reader@test.com",
+                    "password": "pass1234",
+                    "next": "/blog/free-return-article",
+                },
+                headers={"X-CSRFToken": csrf_token},
+            )
+
+        assert register_response.status == 201
+        register_data = register_response.json()
+        assert register_data["return_url"] == "/blog/free-return-article"
+        assert "returns you to this content" in register_data["message"]
+        assert sent_contexts
+
+        user = User.objects.get(email="return-reader@test.com")
+        assert user.tier.slug == "free"
+        assert user.email_verified is False
+        connection.close()
+
+        page.goto(f"{django_server}/accounts/login/", wait_until="domcontentloaded")
+        page.fill("#login-email", "return-reader@test.com")
+        page.fill("#login-password", "pass1234")
+        page.click("#login-submit")
+        page.wait_for_url(f"{django_server}/")
+
+        page.goto(
+            f"{django_server}/blog/free-return-article",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+        assert 'data-testid="verify-email-required-card"' in body
+        assert "return-reader@test.com" in body
+        assert 'data-testid="gated-access-card"' not in body
+        assert "Upgrade to Free" not in body
+        assert "Free required" not in body
+        assert "Return article body" not in body
+
+        verify_path = self._verification_path(
+            sent_contexts[-1]["context"]["verify_url"]
+        )
+        page.goto(f"{django_server}{verify_path}", wait_until="domcontentloaded")
+        page.wait_for_url(f"{django_server}/blog/free-return-article")
+
+        final_body = page.content()
+        assert "Return article body" in final_body
+        assert 'data-testid="verify-email-required-card"' not in final_body
+
+    @pytest.mark.core
+    def test_resend_verification_link_returns_to_same_article(
+        self, django_server, browser
+    ):
+        _clear_all_content()
+
+        from django.core.cache import cache
+
+        cache.clear()
+        _create_user(
+            "resend-return@test.com",
+            tier_slug="free",
+            email_verified=False,
+        )
+        _create_article(
+            title="Free Resend Return Article",
+            slug="free-resend-return-article",
+            description="A free article blocked until email verification.",
+            content_markdown=(
+                "# Free Resend Return Article\n\nResend return article body."
+            ),
+            author="Alice",
+            tags=["verification"],
+            required_level=0,
+        )
+
+        context = _auth_context(browser, "resend-return@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/blog/free-resend-return-article",
+            wait_until="domcontentloaded",
+        )
+        article_url = page.url
+        verify_card = page.get_by_test_id("verify-email-required-card")
+        assert verify_card.is_visible()
+
+        sent_contexts = []
+        with patch(
+            "email_app.services.email_service.EmailService.send",
+            side_effect=self._capture_send(sent_contexts),
+        ):
+            verify_card.get_by_role(
+                "button", name="Resend verification email"
+            ).click()
+            page.wait_for_load_state("domcontentloaded")
+
+        assert page.url == article_url
+        assert "Verification email sent." in page.content()
+        assert sent_contexts
+
+        verify_path = self._verification_path(
+            sent_contexts[-1]["context"]["verify_url"]
+        )
+        page.goto(f"{django_server}{verify_path}", wait_until="domcontentloaded")
+        page.wait_for_url(f"{django_server}/blog/free-resend-return-article")
+
+        final_body = page.content()
+        assert "Resend return article body" in final_body
+        assert 'data-testid="verify-email-required-card"' not in final_body
+        context.close()
+
+    @pytest.mark.core
+    def test_unverified_free_surface_sweep_uses_verify_card(
+        self, django_server, browser
+    ):
+        _clear_all_content()
+
+        from content.models import CuratedLink, Workshop, WorkshopPage
+        from events.models import Event
+
+        _create_user(
+            "surface-sweep@test.com",
+            tier_slug="free",
+            email_verified=False,
+        )
+
+        _create_article(
+            title="Sweep Article",
+            slug="sweep-article",
+            content_markdown="# Sweep Article\n\nArticle body.",
+            required_level=0,
+        )
+        _create_tutorial(
+            title="Sweep Tutorial",
+            slug="sweep-tutorial",
+            content_markdown="Tutorial body.",
+            required_level=0,
+        )
+        _create_project(
+            title="Sweep Project",
+            slug="sweep-project",
+            content_markdown="Project body.",
+            required_level=0,
+        )
+        upcoming = _create_event(
+            title="Sweep Event",
+            slug="sweep-event",
+            description="Event body.",
+            required_level=0,
+            status="upcoming",
+        )
+        past_recording = Event.objects.create(
+            title="Sweep Recording",
+            slug="sweep-recording",
+            description="Recording body.",
+            required_level=0,
+            status="completed",
+            published=True,
+            start_datetime=timezone.now() - datetime.timedelta(days=7),
+            recording_url="https://youtube.com/watch?v=sweep",
+        )
+        course = _create_course(
+            title="Sweep Course",
+            slug="sweep-course",
+            description="Course body.",
+            required_level=0,
+        )
+        module = _create_module(course, "Intro", sort_order=0)
+        _create_unit(module, "Lesson", sort_order=0, body="Lesson body.")
+        curated = CuratedLink.objects.create(
+            item_id="sweep-link",
+            title="Sweep Link",
+            description="Curated body.",
+            url="https://example.com/sweep",
+            category="workshops",
+            required_level=0,
+        )
+        download = _create_download(
+            title="Sweep Download",
+            slug="sweep-download",
+            description="Download body.",
+            required_level=0,
+        )
+        workshop_event = Event.objects.create(
+            title="Sweep Workshop Event",
+            slug="sweep-workshop-event",
+            description="Workshop event.",
+            required_level=0,
+            status="completed",
+            published=True,
+            start_datetime=timezone.now() - datetime.timedelta(days=7),
+            recording_url="https://youtube.com/watch?v=workshop",
+        )
+        workshop = Workshop.objects.create(
+            title="Sweep Workshop",
+            slug="sweep-workshop",
+            description="Workshop body.",
+            date=datetime.date.today(),
+            status="published",
+            landing_required_level=0,
+            pages_required_level=0,
+            recording_required_level=0,
+            event=workshop_event,
+        )
+        workshop_page = WorkshopPage.objects.create(
+            workshop=workshop,
+            title="Intro",
+            slug="intro",
+            sort_order=1,
+            body="Workshop page body.",
+            body_html="<p>Workshop page body.</p>",
+        )
+        connection.close()
+
+        context = _auth_context(browser, "surface-sweep@test.com")
+        page = context.new_page()
+        paths = [
+            "/blog/sweep-article",
+            "/tutorials/sweep-tutorial",
+            "/projects/sweep-project",
+            upcoming.get_absolute_url(),
+            past_recording.get_absolute_url(),
+            "/courses/sweep-course",
+            "/courses/sweep-course/intro/lesson",
+            f"/resources/{curated.pk}/go",
+            "/downloads",
+            workshop.get_absolute_url(),
+            workshop_page.get_absolute_url(),
+            f"{workshop.get_absolute_url()}/video",
+        ]
+
+        for path in paths:
+            page.goto(f"{django_server}{path}", wait_until="domcontentloaded")
+            body = page.content()
+            assert 'data-testid="verify-email-required-card"' in body, path
+            assert "surface-sweep@test.com" in body, path
+            assert 'data-testid="gated-access-card"' not in body, path
+            assert "Upgrade to Free" not in body, path
+            assert "Free required" not in body, path
+
+        api_response = page.request.get(
+            f"{django_server}/api/downloads/{download.slug}/file"
+        )
+        assert api_response.status == 403
+        data = api_response.json()
+        assert data["requires_email_verification"] is True
+        assert data["gated_reason"] == "unverified_email"
+        context.close()
 
 
 # ---------------------------------------------------------------

@@ -6,7 +6,7 @@ import jwt
 from django.conf import settings
 
 JWT_ALGORITHM = "HS256"
-ALLOWED_EXTRA_PAYLOAD_FIELDS = {"redirect_to"}
+ALLOWED_EXTRA_PAYLOAD_FIELDS = {"redirect_to", "return_path"}
 RESERVED_PAYLOAD_FIELDS = {"user_id", "action", "exp"}
 
 

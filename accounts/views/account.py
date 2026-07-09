@@ -15,11 +15,11 @@ from django.http import (
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from accounts.gating import is_newsletter_only_user
 from accounts.models import MemberAPIKey
+from accounts.return_context import sanitize_verification_return_path
 
 # Issue #448: per-user resend throttle for the account verification banner.
 RESEND_VERIFICATION_THROTTLE_SECONDS = 60
@@ -597,13 +597,12 @@ def account_profile_post_view(request):
 def resend_verification_view(request):
     """Resend the email-verification message to the current user."""
     user = request.user
-    next_url = request.POST.get("next") or "account"
-    if next_url != "account" and not url_has_allowed_host_and_scheme(
-        next_url,
-        allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
-    ):
-        next_url = "account"
+    return_path = sanitize_verification_return_path(
+        request.POST.get("next") or "",
+        request=request,
+        default="",
+    )
+    next_url = return_path or "account"
 
     if user.email_verified:
         messages.info(request, "Your email is already verified.")
@@ -621,7 +620,10 @@ def resend_verification_view(request):
     from accounts.views.auth import _send_verification_email
 
     try:
-        email_log = _send_verification_email(user)
+        if return_path:
+            email_log = _send_verification_email(user, return_path=return_path)
+        else:
+            email_log = _send_verification_email(user)
     except Exception:
         cache.delete(cache_key)
         logger.exception(

@@ -22,6 +22,7 @@ from accounts.return_context import (
     append_next,
     get_next_url,
     sanitize_next_url,
+    sanitize_verification_return_path,
     should_skip_logout_redirect,
 )
 from accounts.services.email_resolution import resolve_user_by_email
@@ -122,20 +123,24 @@ def logout_view(request):
     return redirect(next_url)
 
 
-def _generate_verification_token(user_id, expiry_hours=24):
+def _generate_verification_token(user_id, expiry_hours=24, return_path=None):
     """Generate a JWT token for email verification.
 
     Args:
         user_id: The user's primary key.
         expiry_hours: How many hours until the token expires (default 24).
+        return_path: Optional safe same-site path to redirect to after
+            successful verification.
 
     Returns:
         str: The encoded JWT token.
     """
+    safe_return_path = sanitize_verification_return_path(return_path, default="")
     return generate_user_action_token(
         user_id,
         "verify_email",
         expiry_hours=expiry_hours,
+        return_path=safe_return_path,
     )
 
 
@@ -156,16 +161,18 @@ def _generate_password_reset_token(user_id, expiry_hours=1):
     )
 
 
-def _send_verification_email(user):
+def _send_verification_email(user, return_path=None):
     """Send a verification email to the user using EmailService.
 
     Args:
         user: User model instance.
+        return_path: Optional safe same-site path to include in the signed
+            verification token.
 
     Returns:
         EmailLog instance when SES accepted the send; ``None`` on failure.
     """
-    token = _generate_verification_token(user.pk)
+    token = _generate_verification_token(user.pk, return_path=return_path)
     site_url = site_base_url()
     verify_url = f"{site_url}/api/verify-email?token={token}"
     ttl_days = resolve_unverified_ttl_days()
@@ -322,7 +329,9 @@ def register_api(request):
 
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
-    next_url = sanitize_next_url(data.get("next", ""), default="")
+    next_url = sanitize_verification_return_path(
+        data.get("next", ""), request=request, default=""
+    )
 
     if not email:
         return JsonResponse({"error": "Email is required"}, status=400)
@@ -363,12 +372,22 @@ def register_api(request):
     _probe_slack_membership_on_signup(user)
 
     # Send verification email
-    _send_verification_email(user)
+    if next_url:
+        _send_verification_email(user, return_path=next_url)
+    else:
+        _send_verification_email(user)
+
+    message = "Account created. Check your email to verify your address."
+    if next_url:
+        message = (
+            "Account created. Check your email to verify your address. "
+            "The verification link returns you to this content and unlocks it."
+        )
 
     return JsonResponse(
         {
             "status": "ok",
-            "message": "Account created. Check your email to verify your address.",
+            "message": message,
             "return_url": next_url,
         },
         status=201,
@@ -448,8 +467,19 @@ def verify_email_api(request):
 
         if user.signup_source == SIGNUP_SOURCE_SIGNUP:
             mark_activated(user)
-    # Check for redirect_to (lead magnet flow from newsletter subscribe)
-    redirect_to = payload.get("redirect_to")
+    # Content gates sign a same-site return path into signup/resend
+    # verification links. Newsletter lead-magnet links use the legacy
+    # ``redirect_to`` payload field; sanitize both defensively before
+    # redirecting because the token source was originally user input.
+    return_path = sanitize_verification_return_path(
+        payload.get("return_path"), request=request, default=""
+    )
+    if return_path:
+        return redirect(return_path)
+
+    redirect_to = sanitize_verification_return_path(
+        payload.get("redirect_to"), request=request, default=""
+    )
     if redirect_to:
         return redirect(redirect_to)
 

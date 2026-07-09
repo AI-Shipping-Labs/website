@@ -32,6 +32,12 @@
 
       {% include "events/_event_registration_card.html" %}
 
+      {% if not event.is_upcoming and gated_reason == "unverified_email" %}
+      <div class="mb-12">
+        {% include "content/_verify_email_required.html" %}
+      </div>
+      {% endif %}
+
       {% comment %}
         Issue #1037: standalone completed events can expose explicit
         recording/material links as structured resources. Playback for linked

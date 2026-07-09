@@ -17,6 +17,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from accounts.models import User
+from accounts.models.user import SIGNUP_SOURCE_SIGNUP
 from accounts.oauth_context import get_oauth_provider_context
 from accounts.return_context import (
     append_next,
@@ -26,6 +27,7 @@ from accounts.return_context import (
     should_skip_logout_redirect,
 )
 from accounts.services.email_resolution import resolve_user_by_email
+from accounts.services.free_welcome import send_free_welcome_email
 from accounts.services.verification import resolve_unverified_ttl_days
 from accounts.utils.tokens import JWT_ALGORITHM, generate_user_action_token
 from integrations.config import site_base_url
@@ -462,11 +464,13 @@ def verify_email_api(request):
         # (signup_source='newsletter') intentionally stay inactive
         # because they have never set a password and have not done
         # anything else.
-        from accounts.models.user import SIGNUP_SOURCE_SIGNUP
         from accounts.utils.activation import mark_activated
 
         if user.signup_source == SIGNUP_SOURCE_SIGNUP:
             mark_activated(user)
+    if user.signup_source == SIGNUP_SOURCE_SIGNUP:
+        send_free_welcome_email(user)
+
     # Content gates sign a same-site return path into signup/resend
     # verification links. Newsletter lead-magnet links use the legacy
     # ``redirect_to`` payload field; sanitize both defensively before

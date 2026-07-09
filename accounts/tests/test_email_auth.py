@@ -26,6 +26,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import User
+from email_app.models import EmailLog
 from email_app.services.email_service import EmailServiceError
 
 JWT_ALGORITHM = "HS256"
@@ -464,6 +465,70 @@ class VerifyEmailAPITest(TestCase):
     def test_verify_url_name(self):
         url = reverse("api_verify_email")
         self.assertEqual(url, "/api/verify-email")
+
+
+@tag('core')
+@override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
+class FreeWelcomeEmailPasswordFlowTest(TestCase):
+    """Free welcome sends only after successful email verification."""
+
+    register_url = "/api/register"
+    verify_url = "/api/verify-email"
+
+    def _post_register(self, data):
+        return self.client.post(
+            self.register_url,
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+
+    @patch("accounts.views.auth._probe_slack_membership_on_signup")
+    def test_register_verification_sends_free_welcome_once(self, _probe_slack):
+        response = self._post_register(
+            {"email": "new-free@test.com", "password": "secure1234"}
+        )
+        self.assertEqual(response.status_code, 201)
+        user = User.objects.get(email="new-free@test.com")
+
+        self.assertFalse(user.email_verified)
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=user,
+                email_type="email_verification_signup",
+            ).count(),
+            1,
+        )
+        self.assertFalse(
+            EmailLog.objects.filter(
+                user=user,
+                email_type="free_welcome",
+            ).exists()
+        )
+
+        token = _make_verification_token(user.pk)
+        verify_response = self.client.get(f"{self.verify_url}?token={token}")
+        self.assertEqual(verify_response.status_code, 200)
+
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        self.assertTrue(user.account_activated)
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=user,
+                email_type="free_welcome",
+            ).count(),
+            1,
+        )
+
+        repeat_response = self.client.get(f"{self.verify_url}?token={token}")
+        self.assertEqual(repeat_response.status_code, 200)
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=user,
+                email_type="free_welcome",
+            ).count(),
+            1,
+        )
 
 
 # ── Login API ─────────────────────────────────────────────────────────

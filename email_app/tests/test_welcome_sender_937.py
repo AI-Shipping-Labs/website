@@ -20,6 +20,7 @@ from integrations.models import IntegrationSetting
 
 WELCOME_TYPES = [
     'welcome',
+    'free_welcome',
     'cofounder_welcome',
     'basic_welcome',
     'premium_welcome',

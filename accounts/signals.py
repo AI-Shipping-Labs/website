@@ -4,6 +4,7 @@ from accounts.models.user import (
     SIGNUP_SOURCE_OAUTH,
     SIGNUP_SOURCE_UNKNOWN,
 )
+from accounts.services.free_welcome import send_free_welcome_email
 from accounts.utils.activation import mark_activated
 from accounts.utils.names import set_name_from_external
 
@@ -73,6 +74,9 @@ def set_signup_source_oauth_on_social_signup(sender, request, sociallogin, **kwa
 
     if update_fields:
         user.save(update_fields=update_fields)
+
+    if is_brand_new_oauth_signup:
+        send_free_welcome_email(user)
 
     # GA4 conversion (issue #774): only fire on a brand-new OAuth
     # signup, not on an existing email-signup / newsletter user later

@@ -98,6 +98,81 @@
     </section>
     {% endif %}
 
+    {% if show_free_activation_checklist %}
+    <!-- Free activation checklist (issue #1161). -->
+    <section class="mb-8" data-testid="free-activation-checklist">
+      <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p class="text-sm font-medium uppercase tracking-wide text-accent">Getting started</p>
+          <h2 class="mt-1 text-2xl font-semibold tracking-tight text-foreground">Start building with your Free account</h2>
+        </div>
+        <p class="max-w-xl text-sm text-muted-foreground">Start with open courses and live events, then learn how sprints and plans work.</p>
+      </div>
+      <div class="grid gap-3 md:grid-cols-3">
+        {% for item in free_activation_checklist_items %}
+        <article class="flex min-h-48 flex-col rounded-lg border p-4 transition-colors {% if item.completed %}border-emerald-500/30 bg-emerald-500/10{% else %}border-border bg-card hover:border-accent/50{% endif %}"
+                 data-testid="free-activation-item-{{ item.key }}"
+                 data-complete="{{ item.completed|yesno:'true,false' }}">
+          <div class="flex items-start gap-3">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {% if item.completed %}bg-emerald-500/15 text-emerald-300{% else %}bg-secondary text-accent{% endif %}">
+              <i data-lucide="{% if item.completed %}check-circle{% else %}{{ item.icon }}{% endif %}" class="h-5 w-5"></i>
+            </span>
+            <div class="min-w-0">
+              <h3 class="text-sm font-semibold text-foreground">{{ item.title }}</h3>
+              <p class="mt-1 text-sm leading-relaxed text-muted-foreground">{{ item.description }}</p>
+            </div>
+          </div>
+          <div class="mt-auto pt-4">
+            {% if item.completed %}
+            <div class="flex items-center justify-between gap-3">
+              <span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300"
+                    data-testid="free-activation-complete-{{ item.key }}">
+                <i data-lucide="check" class="h-3.5 w-3.5"></i>
+                Done
+              </span>
+              <a href="{{ item.url }}"
+                 class="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline"
+                 data-testid="free-activation-action-{{ item.key }}">
+                Open
+                <i data-lucide="arrow-right" class="h-3.5 w-3.5"></i>
+              </a>
+            </div>
+            {% else %}
+            <a href="{{ item.url }}"
+               class="{% button_classes 'secondary' 'w-full justify-center' %}"
+               data-testid="free-activation-action-{{ item.key }}">
+              {{ item.cta_label }}
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+            {% endif %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if show_free_plan_teaser %}
+    <section class="mb-8" data-testid="free-plan-teaser">
+      <div class="rounded-lg border border-accent/30 bg-accent/10 p-5 sm:p-6">
+        <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div class="max-w-3xl">
+            <h2 class="text-xl font-semibold tracking-tight text-foreground">Turn your next project into a sprint plan</h2>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Paid members get a personal plan, a community sprint with accountability, and Slack/community support around the work they want to ship.
+            </p>
+          </div>
+          <a href="/pricing"
+             class="{% button_classes 'primary' 'shrink-0 justify-center' %}"
+             data-testid="free-plan-teaser-cta">
+            View paid memberships
+            <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
     {% if plan %}
     <!-- Sprint Plan Section (issue #442) -->
     <section class="mb-8">

@@ -37,6 +37,7 @@ from plans.dashboard import (
 from questionnaires.onboarding import has_completed_onboarding
 
 DASHBOARD_EVENT_DATETIME_FORMAT = '%a, %b %d, %Y, %H:%M'
+AI_HERO_COURSE_SLUG = 'aihero'
 
 TESTIMONIALS = [
     {
@@ -369,12 +370,19 @@ def _dashboard(request):
         and user_level >= LEVEL_BASIC
         and sprint_plan_context['plan'] is None
     )
+    free_activation_context = _get_free_activation_context(
+        user=user,
+        user_level=user_level,
+        active_override=active_override,
+        upcoming_events=upcoming_events,
+    )
 
     context = {
         'tier_name': tier_name,
         'override_tier_name': override_tier_name,
         'show_onboarding_prompt': show_onboarding_prompt,
         'show_plan_preparing': show_plan_preparing,
+        **free_activation_context,
         'in_progress_courses': in_progress_courses,
         'in_progress_learning': in_progress_learning,
         'hidden_learning_count': hidden_learning_count,
@@ -842,6 +850,96 @@ def _get_active_polls(user_level):
         Q(closes_at__isnull=True) | Q(closes_at__gt=now),
     ).order_by('-created_at')[:2]
     return list(polls)
+
+
+def _get_free_activation_context(*, user, user_level, active_override, upcoming_events):
+    """Return Free-only dashboard activation checklist and teaser context."""
+    from content.access import LEVEL_OPEN
+
+    empty_context = {
+        'show_free_activation_checklist': False,
+        'show_free_plan_teaser': False,
+        'free_activation_checklist_items': [],
+    }
+    if user_level != LEVEL_OPEN or active_override is not None:
+        return empty_context
+
+    has_active_sprint_plan = _has_active_sprint_plan(user)
+    if has_active_sprint_plan:
+        return empty_context
+
+    ai_hero_started = _has_started_ai_hero(user)
+    event_registered = bool(upcoming_events)
+    sprint_engaged = _has_active_sprint_engagement(user)
+
+    return {
+        'show_free_activation_checklist': True,
+        'show_free_plan_teaser': True,
+        'free_activation_checklist_items': [
+            {
+                'key': 'ai-hero',
+                'title': 'Start AI Hero',
+                'description': 'Begin with the open course for building AI products.',
+                'url': '/courses/aihero',
+                'cta_label': 'Open course',
+                'icon': 'book-open',
+                'completed': ai_hero_started,
+            },
+            {
+                'key': 'events',
+                'title': 'Register for a free event',
+                'description': 'Join a live session or workshop you can attend.',
+                'url': '/events',
+                'cta_label': 'Browse events',
+                'icon': 'calendar',
+                'completed': event_registered,
+            },
+            {
+                'key': 'sprints',
+                'title': 'Learn how sprints and plans work',
+                'description': 'See how members use plans, cohorts, and accountability.',
+                'url': '/activities#community-sprints',
+                'cta_label': 'View sprints',
+                'icon': 'map',
+                'completed': sprint_engaged,
+            },
+        ],
+    }
+
+
+def _has_started_ai_hero(user):
+    """Return True when the member has enrolled in or progressed in AI Hero."""
+    course = Course.objects.filter(slug=AI_HERO_COURSE_SLUG).only('id').first()
+    if course is None:
+        return False
+    if Enrollment.objects.filter(
+        user=user,
+        course_id=course.pk,
+        unenrolled_at__isnull=True,
+    ).exists():
+        return True
+    return UserCourseProgress.objects.filter(
+        user=user,
+        unit__module__course_id=course.pk,
+    ).exists()
+
+
+def _has_active_sprint_plan(user):
+    from plans.models import Plan
+
+    return Plan.objects.filter(
+        member=user,
+        sprint__status='active',
+    ).exists()
+
+
+def _has_active_sprint_engagement(user):
+    from plans.models import SprintEnrollment
+
+    return SprintEnrollment.objects.filter(
+        user=user,
+        sprint__status='active',
+    ).exists()
 
 
 def _get_quick_actions(user_level):

@@ -227,6 +227,21 @@ class EmailServiceTemplateRenderingTest(TestCase):
         self.assertIn('/community/slack', html)
 
     @patch.object(EmailService, '_send_ses', return_value='test-id')
+    def test_free_welcome_template(self, mock_ses):
+        self.service.send(self.user, 'free_welcome')
+
+        call_args = mock_ses.call_args
+        subject = call_args[0][1]
+        html = call_args[0][2]
+        self.assertIn('Welcome to AI Shipping Labs', subject)
+        self.assertIn('/courses/aihero', html)
+        self.assertIn('/events', html)
+        self.assertIn('/activities#community-sprints', html)
+        self.assertNotIn('onboarding', html.lower())
+        self.assertNotIn('Slack', html)
+        self.assertEqual(call_args.kwargs['email_type'], 'free_welcome')
+
+    @patch.object(EmailService, '_send_ses', return_value='test-id')
     def test_payment_failed_template(self, mock_ses):
         self.service.send(self.user, 'payment_failed', {
             'tier_name': 'Premium',

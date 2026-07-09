@@ -95,10 +95,9 @@ class PricingInlineRegisterTest(TestCase):
         self.assertContains(response, 'href="/activities#access-by-tier"')
 
 
-class PricingInlineRegisterCompactTest(TestCase):
-    """Issue #654: /pricing renders the inline register card in compact
-    mode so the free-tier slot stops dwarfing the Basic/Main/Premium
-    siblings on a 1440-wide grid.
+class PricingInlineRegisterCollapsedEmailTest(TestCase):
+    """Issue #1188: /pricing renders the inline register card with
+    OAuth providers visible first and the email form collapsed.
     """
 
     @classmethod
@@ -117,9 +116,9 @@ class PricingInlineRegisterCompactTest(TestCase):
         end = next_card if next_card != -1 else len(body)
         return body[free_start:end]
 
-    def test_anonymous_pricing_uses_compact_variant(self):
-        """The free-tier card on /pricing renders the compact toggle
-        and keeps the OAuth block hidden until the visitor expands it."""
+    def test_anonymous_pricing_uses_collapsed_email_variant(self):
+        """The free-tier card on /pricing renders OAuth first and keeps
+        the email form hidden until the visitor expands it."""
         app = SocialApp.objects.create(
             provider='google', name='Google',
             client_id='google-cid', secret='google-secret',
@@ -129,27 +128,28 @@ class PricingInlineRegisterCompactTest(TestCase):
         response = self.client.get("/pricing")
         self.assertEqual(response.status_code, 200)
         free_card = self._free_card_html(response)
-        # Compact toggle is inside the free-tier card.
+        self.assertIn("Sign up with Google", free_card)
         self.assertIn(
+            'data-testid="inline-register-email-toggle"', free_card,
+        )
+        self.assertIn("Sign up with your email", free_card)
+        self.assertNotIn(
             'data-testid="inline-register-oauth-toggle"', free_card,
         )
-        self.assertIn("More sign-in options", free_card)
-        # OAuth wrapper is hidden by default.
-        self.assertIn('id="inline-register-oauth-block"', free_card)
+        # Email wrapper is hidden by default.
+        self.assertIn('id="inline-register-email-block"', free_card)
         block_segment = free_card.split(
-            'id="inline-register-oauth-block"', 1,
+            'id="inline-register-email-block"', 1,
         )[1]
         opening_tag = block_segment.split('>', 1)[0]
         self.assertIn('hidden', opening_tag)
-        # The OAuth markup itself is still rendered (inside the hidden
-        # wrapper) — clicking the toggle reveals it without re-render.
-        self.assertIn("Sign up with Google", free_card)
+        self.assertIn('id="register-email"', free_card)
 
-    def test_anonymous_pricing_compact_with_no_oauth_no_toggle(self):
-        """No SocialApp configured → no toggle button on /pricing.
+    def test_anonymous_pricing_collapsed_email_with_no_oauth_expands_form(self):
+        """No SocialApp configured → no dead-end disclosure on /pricing.
 
-        Compact mode must not leave an orphan "More sign-in options"
-        button when OAuth would have been empty.
+        The email form is visible immediately and no empty OAuth row
+        or email disclosure renders.
         """
         response = self.client.get("/pricing")
         self.assertEqual(response.status_code, 200)
@@ -161,7 +161,24 @@ class PricingInlineRegisterCompactTest(TestCase):
         self.assertNotIn(
             'data-testid="inline-register-oauth-toggle"', free_card,
         )
-        self.assertNotIn("More sign-in options", free_card)
         self.assertNotIn(
             'data-testid="inline-register-oauth-disclosure"', free_card,
         )
+        self.assertNotIn(
+            'data-testid="inline-register-email-toggle"', free_card,
+        )
+        self.assertNotIn(
+            'id="inline-register-email-block"', free_card,
+        )
+
+    def test_pricing_mobile_indicator_controls_render_for_all_tiers(self):
+        response = self.client.get("/pricing")
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn('data-testid="pricing-tier-indicators"', body)
+        self.assertEqual(
+            body.count('data-testid="pricing-tier-indicator"'),
+            4,
+        )
+        for tier_name in ("Free", "Basic", "Main", "Premium"):
+            self.assertIn(f'aria-label="Show {tier_name} tier"', body)

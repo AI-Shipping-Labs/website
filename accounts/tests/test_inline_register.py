@@ -227,8 +227,8 @@ class InlineRegisterCollapseEmailVariantTest(TestCase):
     below the OAuth row. When no OAuth provider is configured the form
     renders expanded (no dead-end card with nothing to click).
 
-    The flag is independent of ``compact``; pricing and gated-access
-    surfaces must keep their existing rendering.
+    The flag is independent of ``compact``; surfaces opt into each
+    disclosure mode explicitly.
     """
 
     template = "accounts/includes/_inline_register_card.html"
@@ -362,10 +362,10 @@ class InlineRegisterCollapseEmailVariantTest(TestCase):
         self.assertIn('id="register-password"', html)
         self.assertIn('id="register-password-confirm"', html)
 
-    def test_collapse_email_does_not_affect_pricing_compact_variant(self):
+    def test_collapse_email_does_not_affect_compact_variant(self):
         """The collapse_email flag is orthogonal to ``compact``.
-        Pricing keeps using compact=True without collapse_email, so the
-        OAuth disclosure (#654) renders and the email form is inline.
+        Rendering the partial with compact=True and no collapse_email
+        still renders the OAuth disclosure and the email form inline.
         """
         self._seed_provider("google", "Google")
         html = render_to_string(self.template, {

@@ -1,18 +1,17 @@
-"""Playwright coverage for the compact inline-register variant (#654).
+"""Playwright coverage for pricing and course inline-register variants.
 
-Issue #654 follows up on #652: the inline register card on /pricing
-collapses its OAuth provider buttons behind a "More sign-in options"
-disclosure so the free-tier card no longer outweighs the
-Basic / Main / Premium siblings at 1440x900. Course detail and
-workshop pages paywall keep the expanded variant.
+Issue #1188 switches /pricing from the old compact OAuth disclosure to
+the shared collapse-email pattern: OAuth is visible first and the email
+form expands only when requested. The legacy #654 compact behavior is
+still covered at the partial level by Django tests.
 
 The scenarios assert what the visitor sees:
 
-  - the toggle is present on /pricing and absent on /courses/<slug>
-  - clicking the toggle reveals OAuth buttons and flips aria-expanded
-  - the Google href still carries ?next=/pricing once revealed
-  - empty OAuth config drops the toggle (no orphan button)
-  - the form still submits regardless of disclosure state
+  - OAuth is visible on /pricing and email fields start hidden
+  - clicking the email toggle reveals the form and flips aria-expanded
+  - the Google href still carries ?next=/pricing
+  - empty OAuth config renders the email form immediately
+  - the expanded email form still submits
 """
 
 import os
@@ -97,14 +96,14 @@ def _configure_oauth(*providers):
 
 
 @pytest.mark.django_db(transaction=True)
-class TestInlineRegisterCompactVariant:
+class TestPricingInlineRegisterVariant:
     """Six BDD scenarios pinned by the issue body."""
 
-    def test_pricing_free_card_renders_compact_with_oauth_hidden(
+    def test_pricing_free_card_renders_oauth_first_with_email_hidden(
         self, django_server, page, django_db_blocker,
     ):
-        """Visitor on /pricing sees the form + toggle button, with
-        OAuth buttons hidden behind the disclosure."""
+        """Visitor on /pricing sees OAuth first, with email hidden
+        behind the disclosure."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -113,28 +112,29 @@ class TestInlineRegisterCompactVariant:
         page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
         free_card = page.locator('[data-tier-card="free"]')
         assert free_card.is_visible()
-        # The inline register form is inside the free-tier card.
-        assert free_card.locator("#register-email").is_visible()
-        assert free_card.locator("#register-password").is_visible()
-        assert free_card.locator("#register-password-confirm").is_visible()
-        assert free_card.locator("#register-submit").is_visible()
-        # The compact toggle is present and starts collapsed.
-        toggle = free_card.locator(
-            '[data-testid="inline-register-oauth-toggle"]',
-        )
-        assert toggle.is_visible()
-        assert toggle.get_attribute("aria-expanded") == "false"
-        # The Google button exists in the DOM but is hidden inside the
-        # ``[hidden]`` block — Playwright treats it as not visible.
         google_button = free_card.get_by_role(
             "link", name="Sign up with Google", exact=True,
         )
-        assert google_button.is_visible() is False
+        assert google_button.is_visible()
+        toggle = free_card.locator(
+            '[data-testid="inline-register-email-toggle"]',
+        )
+        assert toggle.is_visible()
+        assert toggle.get_attribute("aria-expanded") == "false"
+        assert free_card.locator("#register-email").count() == 1
+        assert free_card.locator("#register-email").is_visible() is False
+        assert free_card.locator("#register-password").is_visible() is False
+        assert free_card.locator("#register-password-confirm").is_visible() is False
+        assert (
+            free_card.locator(
+                '[data-testid="inline-register-oauth-toggle"]',
+            ).count() == 0
+        )
 
-    def test_pricing_toggle_expands_and_collapses_oauth(
+    def test_pricing_toggle_expands_and_collapses_email(
         self, django_server, page, django_db_blocker,
     ):
-        """Clicking the toggle reveals the Google button and flips
+        """Clicking the toggle reveals the email form and flips
         aria-expanded; clicking again hides it."""
         with django_db_blocker.unblock():
             _reset_state()
@@ -144,26 +144,23 @@ class TestInlineRegisterCompactVariant:
         page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
         free_card = page.locator('[data-tier-card="free"]')
         toggle = free_card.locator(
-            '[data-testid="inline-register-oauth-toggle"]',
-        )
-        google_button = free_card.get_by_role(
-            "link", name="Sign up with Google", exact=True,
+            '[data-testid="inline-register-email-toggle"]',
         )
         # Expand.
         toggle.click()
-        google_button.wait_for(state="visible")
+        free_card.locator("#register-email").wait_for(state="visible")
         assert toggle.get_attribute("aria-expanded") == "true"
+        assert page.evaluate("document.activeElement.id") == "register-email"
         # Collapse again.
         toggle.click()
-        google_button.wait_for(state="hidden")
+        free_card.locator("#register-email").wait_for(state="hidden")
         assert toggle.get_attribute("aria-expanded") == "false"
 
-    def test_pricing_google_href_carries_next_url_after_disclosure(
+    def test_pricing_google_href_carries_next_url(
         self, django_server, page, django_db_blocker,
     ):
-        """Once the disclosure is open the Google button's href still
-        round-trips /pricing via ?next= so the visitor lands back here
-        after the OAuth callback."""
+        """The visible Google button's href round-trips /pricing via
+        ?next= so the visitor lands back here after the OAuth callback."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -171,9 +168,6 @@ class TestInlineRegisterCompactVariant:
 
         page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
         free_card = page.locator('[data-tier-card="free"]')
-        free_card.locator(
-            '[data-testid="inline-register-oauth-toggle"]',
-        ).click()
         google_button = free_card.get_by_role(
             "link", name="Sign up with Google", exact=True,
         )
@@ -234,10 +228,10 @@ class TestInlineRegisterCompactVariant:
     def test_pricing_with_no_oauth_shows_no_toggle(
         self, django_server, page, django_db_blocker,
     ):
-        """No SocialApp configured → compact mode still hides cleanly.
+        """No SocialApp configured → email form renders expanded.
 
-        The toggle button only makes sense when there is OAuth to
-        reveal; absent that, no orphan button should render and no
+        The email disclosure only makes sense when OAuth is visible
+        first; absent OAuth, no orphan button should render and no
         OAuth provider markup should appear anywhere on the card.
         """
         with django_db_blocker.unblock():
@@ -255,6 +249,11 @@ class TestInlineRegisterCompactVariant:
             ).count() == 0
         )
         assert (
+            free_card.locator(
+                '[data-testid="inline-register-email-toggle"]',
+            ).count() == 0
+        )
+        assert (
             free_card.locator("[data-auth-oauth-divider]").count() == 0
         )
         assert (
@@ -264,9 +263,8 @@ class TestInlineRegisterCompactVariant:
     def test_pricing_inline_form_submits_regardless_of_disclosure(
         self, django_server, page, django_db_blocker,
     ):
-        """A visitor can register from the compact card without ever
-        opening the OAuth disclosure — the form POST is independent
-        of the disclosure state."""
+        """After the visitor expands the email path, the pricing form
+        submits and keeps the return link on /pricing."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -275,6 +273,10 @@ class TestInlineRegisterCompactVariant:
 
         page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
         free_card = page.locator('[data-tier-card="free"]')
+        free_card.locator(
+            '[data-testid="inline-register-email-toggle"]',
+        ).click()
+        free_card.locator("#register-email").wait_for(state="visible")
         free_card.locator("#register-email").fill(email)
         free_card.locator("#register-password").fill(DEFAULT_PASSWORD)
         free_card.locator("#register-password-confirm").fill(DEFAULT_PASSWORD)

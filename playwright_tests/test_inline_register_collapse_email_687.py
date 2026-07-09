@@ -11,7 +11,7 @@ Scenarios — pinned by the issue body:
   - clicking the toggle expands the form and focuses #register-email
   - clicking again collapses the form
   - keyboard (Space) activates the toggle the same as a mouse click
-  - /pricing is unaffected — #654 disclosure still works, no #687 toggle
+  - /pricing also uses collapse_email=True (#1188)
   - no-OAuth fallback renders the email form expanded (no dead-end)
   - the expanded email form still registers a user via /api/register
 """
@@ -213,12 +213,10 @@ class TestInlineRegisterCollapseEmailVariant:
         card.locator("#register-email").wait_for(state="visible")
         assert toggle.get_attribute("aria-expanded") == "true"
 
-    def test_pricing_page_is_unaffected_by_collapse_email(
+    def test_pricing_page_uses_collapse_email_pattern(
         self, django_server, page, django_db_blocker,
     ):
-        """/pricing must keep its #654 compact OAuth disclosure with the
-        email form rendered inline. No #687 toggle should appear there.
-        """
+        """/pricing uses the same social-first collapsed email pattern."""
         with django_db_blocker.unblock():
             _reset_state()
             ensure_tiers()
@@ -226,19 +224,22 @@ class TestInlineRegisterCollapseEmailVariant:
 
         page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
         free_card = page.locator('[data-tier-card="free"]')
-        # Email input visible immediately — no collapse-email behavior.
-        assert free_card.locator("#register-email").is_visible()
-        # No #687 toggle anywhere on the pricing card.
+        google_button = free_card.get_by_role(
+            "link", name="Sign up with Google", exact=True,
+        )
+        assert google_button.is_visible()
+        assert free_card.locator("#register-email").is_visible() is False
+        # The #687 email toggle is present on pricing as of #1188.
         assert (
             free_card.locator(
                 '[data-testid="inline-register-email-toggle"]',
-            ).count() == 0
+            ).count() == 1
         )
-        # The compact #654 OAuth toggle IS still present.
+        # The old #654 OAuth toggle is not used on pricing anymore.
         assert (
             free_card.locator(
                 '[data-testid="inline-register-oauth-toggle"]',
-            ).count() == 1
+            ).count() == 0
         )
 
     def test_no_oauth_renders_email_expanded_on_course_detail(

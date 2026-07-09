@@ -7,6 +7,36 @@
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
+  <style>
+    @media (max-width: 1023px) {
+      #pricing-section .pricing-free-tier-card .pricing-inline-register-embed > div {
+        max-width: none;
+        border-width: 0;
+        background: transparent;
+        padding: 0;
+      }
+
+      #pricing-section .pricing-free-tier-card .pricing-inline-register-embed [data-auth-oauth-divider] {
+        margin-bottom: 1rem;
+        margin-top: 1rem;
+      }
+
+      #pricing-section .pricing-free-tier-card .pricing-inline-register-embed [data-auth-oauth-providers] a,
+      #pricing-section .pricing-free-tier-card .pricing-inline-register-embed button[aria-controls="inline-register-email-block"] {
+        padding-bottom: 0.625rem;
+        padding-top: 0.625rem;
+      }
+
+      #pricing-section .pricing-free-tier-card .pricing-inline-register-embed > div > .mt-6 {
+        margin-top: 1rem;
+      }
+
+      #pricing-section .pricing-free-tier-card .pricing-inline-register-embed > div > .mt-3 {
+        margin-top: 0.5rem;
+      }
+    }
+  </style>
+
   {# Issue #510: tighten mobile vertical spacing on the pricing tier section #}
   <section class="overflow-x-hidden max-lg:pb-6 pt-32 sm:pb-24 lg:pb-32" id="pricing-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -66,12 +96,12 @@
         larger padding. Free / Basic / Premium are compact peers — narrower, top 3
         features only. Desktop layout (lg:grid-cols-4) is unchanged.
       {% endcomment %}
-      <div class="mx-auto mt-6 grid max-w-7xl gap-8 sm:gap-6 sm:mt-16 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:items-start max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:grid-cols-2 lg:grid-cols-4"
+      <div class="mx-auto mt-6 grid max-w-7xl items-start gap-8 sm:gap-6 sm:mt-16 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:grid-cols-2 lg:grid-cols-4"
            data-tier-carousel
            data-testid="pricing-tier-carousel">
         {% for item in tiers_data %}
         {# Issue #510: drop `min-h-full` on mobile so peer cards size to content #}
-        <div class="relative overflow-visible flex flex-col rounded-xl border p-5 sm:p-8 transition-all lg:min-h-full max-lg:flex-none max-lg:snap-center {% if item.tier.slug == 'main' %}border-accent bg-background shadow-xl ring-2 ring-accent/20 mt-4 sm:mt-0 max-lg:w-[min(82vw,22rem)]{% else %}border-border bg-background max-lg:w-[min(70vw,18rem)] max-lg:p-4{% endif %}"
+        <div class="relative overflow-visible flex flex-col rounded-xl border p-5 sm:p-8 transition-all max-lg:flex-none max-lg:snap-center {% if item.tier.slug == 'free' %}pricing-free-tier-card {% endif %}{% if item.tier.slug == 'main' %}border-accent bg-background shadow-xl ring-2 ring-accent/20 mt-4 sm:mt-0 max-lg:w-[min(82vw,22rem)]{% else %}border-border bg-background {% if item.tier.slug == 'free' %}max-lg:w-[min(82vw,22rem)]{% else %}max-lg:w-[min(70vw,18rem)]{% endif %} max-lg:p-4{% endif %}"
              data-tier-card="{{ item.tier.slug }}"
              data-testid="pricing-tier-card"
              {% if item.tier.slug == 'main' %}style="box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);"{% endif %}>
@@ -125,8 +155,8 @@
           <!-- Features -->
           <ul class="mb-8 flex-1 space-y-3 max-lg:mb-4 max-lg:space-y-2">
             {% for feature in item.tier.features %}
-            {# Issue #510: hide features beyond top 3 on non-highlighted cards on mobile only. #}
-            <li class="flex items-start gap-3 {% if item.tier.slug != 'main' and forloop.counter > 3 %}max-lg:hidden{% endif %}">
+            {# Issues #510/#1188: keep peer cards compact on mobile; Free shows two visible benefits before social signup. #}
+            <li class="flex items-start gap-3 {% if item.tier.slug == 'free' and forloop.counter > 2 %}max-lg:hidden{% elif item.tier.slug != 'main' and forloop.counter > 3 %}max-lg:hidden{% endif %}">
               <i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
               <span class="text-sm text-foreground">{{ feature }}</span>
             </li>
@@ -146,13 +176,14 @@
               without leaving /pricing. The form/OAuth/legal partials are
               shared with the standalone register page.
 
-              Issue #654: pass compact=True so OAuth providers are tucked
-              behind a "More sign-in options" disclosure — keeps the free
-              tier card height in line with Basic/Main/Premium siblings.
-              Course detail and workshop pages paywall stay on the
-              default expanded variant.
+              Issue #1188: reuse the course-page collapse_email=True
+              variant so OAuth providers are visible first and the email
+              form expands only when requested. With no OAuth configured,
+              the shared partial renders the email form expanded.
             {% endcomment %}
-            {% include "accounts/includes/_inline_register_card.html" with compact=True %}
+            <div class="pricing-inline-register-embed">
+              {% include "accounts/includes/_inline_register_card.html" with collapse_email=True %}
+            </div>
             {% elif item.state.action_kind == 'portal' %}
             <a href="{{ stripe_customer_portal_url }}"
                class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80 min-h-[44px] flex items-center justify-center"
@@ -171,6 +202,21 @@
           </div>
         </div>
         {% endfor %}
+      </div>
+
+      <div class="mt-2 flex justify-center lg:hidden" data-pricing-tier-indicators data-testid="pricing-tier-indicators">
+        <div class="inline-flex min-h-[44px] items-center gap-2" role="group" aria-label="Pricing tiers">
+          {% for item in tiers_data %}
+          <button type="button"
+                  class="h-3 w-3 rounded-full border border-border bg-muted transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  data-tier-indicator="{{ item.tier.slug }}"
+                  data-testid="pricing-tier-indicator"
+                  aria-label="Show {{ item.tier.name }} tier"
+                  aria-current="false">
+            <span class="sr-only">{{ item.tier.name }}</span>
+          </button>
+          {% endfor %}
+        </div>
       </div>
     </div>
   </section>
@@ -258,6 +304,49 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
 
 // Center the recommended tier in mobile scroll-snap carousels.
 (function() {
+  var activeIndicatorClasses = ['bg-accent', 'border-accent', 'scale-110'];
+  var inactiveIndicatorClasses = ['bg-muted', 'border-border'];
+
+  function setActiveIndicator(slug) {
+    document.querySelectorAll('[data-tier-indicator]').forEach(function(indicator) {
+      var isActive = indicator.dataset.tierIndicator === slug;
+      indicator.setAttribute('aria-current', isActive ? 'true' : 'false');
+      activeIndicatorClasses.forEach(function(className) {
+        indicator.classList.toggle(className, isActive);
+      });
+      inactiveIndicatorClasses.forEach(function(className) {
+        indicator.classList.toggle(className, !isActive);
+      });
+    });
+  }
+
+  function currentCenteredTier(carousel) {
+    var cards = Array.prototype.slice.call(
+      carousel.querySelectorAll('[data-tier-card]')
+    );
+    if (!cards.length) return null;
+    var carouselRect = carousel.getBoundingClientRect();
+    var carouselCenter = carouselRect.left + carouselRect.width / 2;
+    var best = cards[0];
+    var bestDelta = Infinity;
+    cards.forEach(function(card) {
+      var rect = card.getBoundingClientRect();
+      var cardCenter = rect.left + rect.width / 2;
+      var delta = Math.abs(cardCenter - carouselCenter);
+      if (delta < bestDelta) {
+        best = card;
+        bestDelta = delta;
+      }
+    });
+    return best.dataset.tierCard;
+  }
+
+  function updatePricingIndicators() {
+    var carousel = document.querySelector('[data-testid="pricing-tier-carousel"]');
+    if (!carousel) return;
+    setActiveIndicator(currentCenteredTier(carousel) || 'main');
+  }
+
   function centerRecommendedTier() {
     if (!window.matchMedia('(max-width: 1023px)').matches) return;
     document.querySelectorAll('[data-tier-carousel]').forEach(function(carousel) {
@@ -266,9 +355,51 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
       var targetLeft = recommended.offsetLeft - ((carousel.clientWidth - recommended.clientWidth) / 2);
       carousel.scrollLeft = Math.max(0, targetLeft);
     });
+    updatePricingIndicators();
+  }
+
+  function centerTier(carousel, tierSlug, smooth) {
+    var target = carousel.querySelector('[data-tier-card="' + tierSlug + '"]');
+    if (!target) return;
+    var targetLeft = target.offsetLeft - ((carousel.clientWidth - target.clientWidth) / 2);
+    carousel.scrollTo({
+      left: Math.max(0, targetLeft),
+      behavior: smooth ? 'smooth' : 'auto'
+    });
+    setActiveIndicator(tierSlug);
+  }
+
+  function initPricingTierIndicators() {
+    var carousel = document.querySelector('[data-testid="pricing-tier-carousel"]');
+    if (!carousel) return;
+
+    document.querySelectorAll('[data-tier-indicator]').forEach(function(indicator) {
+      indicator.addEventListener('click', function() {
+        centerTier(carousel, indicator.dataset.tierIndicator, true);
+      });
+    });
+
+    var scrollFrame = null;
+    carousel.addEventListener('scroll', function() {
+      if (scrollFrame) return;
+      scrollFrame = window.requestAnimationFrame(function() {
+        scrollFrame = null;
+        updatePricingIndicators();
+      });
+    }, { passive: true });
+
+    updatePricingIndicators();
   }
   window.addEventListener('load', centerRecommendedTier);
-  window.addEventListener('resize', centerRecommendedTier);
+  window.addEventListener('resize', function() {
+    centerRecommendedTier();
+    updatePricingIndicators();
+  });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPricingTierIndicators);
+  } else {
+    initPricingTierIndicators();
+  }
 })();
 </script>
 {% endblock %}

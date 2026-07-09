@@ -12,6 +12,7 @@ import datetime
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
+from django.utils import timezone
 
 from plans.models import Plan, Sprint
 from tests.fixtures import TierSetupMixin
@@ -36,7 +37,9 @@ class DashboardSprintPlanLifecycleTest(TierSetupMixin, TestCase):
             duration_weeks=duration_weeks,
             status=status,
         )
-        plan = Plan.objects.create(member=user, sprint=sprint)
+        plan = Plan.objects.create(
+            member=user, sprint=sprint, shared_at=timezone.now(),
+        )
         self.client.login(email=email, password="pw")
         return user, sprint, plan
 

@@ -4,9 +4,14 @@ import datetime
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
-from plans.dashboard import build_sprint_plan_card_context
+from content.access import LEVEL_MAIN
+from plans.dashboard import (
+    build_active_sprint_opportunities_context,
+    build_sprint_plan_card_context,
+)
 from plans.models import Checkpoint, Plan, Sprint, SprintEnrollment, Week
 from plans.services import annotate_plan_progress
 
@@ -57,7 +62,10 @@ class SprintPlanCardProgressContextTest(TestCase):
             email='member@test.com', password='pw',
         )
         cls.plan = Plan.objects.create(
-            member=cls.member, sprint=cls.sprint, visibility='cohort',
+            member=cls.member,
+            sprint=cls.sprint,
+            visibility='cohort',
+            shared_at=timezone.now(),
         )
         week = Week.objects.create(plan=cls.plan, week_number=1)
         for index in range(2):
@@ -82,11 +90,12 @@ class SprintPlanCardProgressContextTest(TestCase):
                 context['plan_progress_total'],
                 plan.progress_done,
                 plan.progress_total,
+                context['has_any_plan'],
                 context['cohort_has_other_members'],
             )
 
         self.assertEqual(plan.pk, self.plan.pk)
-        self.assertEqual(progress, (2, 3, 2, 3, True))
+        self.assertEqual(progress, (2, 3, 2, 3, True, True))
 
     def test_dashboard_card_context_defaults_to_zero_without_plan(self):
         user = User.objects.create_user(email='noplan@test.com', password='pw')
@@ -98,8 +107,96 @@ class SprintPlanCardProgressContextTest(TestCase):
             context,
             {
                 'plan': None,
+                'has_any_plan': False,
                 'plan_progress_total': 0,
                 'plan_progress_done': 0,
                 'cohort_has_other_members': False,
             },
         )
+
+    def test_dashboard_card_context_keeps_current_shared_plan_precedence(self):
+        today = timezone.localdate()
+        user = User.objects.create_user(
+            email='current-shared@test.com', password='pw',
+        )
+        current = Sprint.objects.create(
+            name='Current Sprint',
+            slug='current-shared-precedence',
+            start_date=today - datetime.timedelta(days=7),
+            duration_weeks=6,
+            status='active',
+        )
+        ended = Sprint.objects.create(
+            name='Ended Sprint',
+            slug='ended-shared-precedence',
+            start_date=today - datetime.timedelta(days=70),
+            duration_weeks=4,
+            status='completed',
+        )
+        draft = Sprint.objects.create(
+            name='Staff Draft Sprint',
+            slug='draft-shared-precedence',
+            start_date=today - datetime.timedelta(days=1),
+            duration_weeks=6,
+            status='active',
+        )
+        current_plan = Plan.objects.create(
+            member=user,
+            sprint=current,
+            shared_at=timezone.now() - datetime.timedelta(days=30),
+        )
+        ended_plan = Plan.objects.create(
+            member=user,
+            sprint=ended,
+            shared_at=timezone.now(),
+        )
+        draft_plan = Plan.objects.create(member=user, sprint=draft)
+        Plan.objects.filter(pk=current_plan.pk).update(
+            created_at=timezone.now() - datetime.timedelta(days=30),
+        )
+        Plan.objects.filter(pk=ended_plan.pk).update(
+            created_at=timezone.now() - datetime.timedelta(days=1),
+        )
+        Plan.objects.filter(pk=draft_plan.pk).update(created_at=timezone.now())
+
+        context = build_sprint_plan_card_context(user)
+
+        self.assertTrue(context['has_any_plan'])
+        self.assertEqual(context['plan'].pk, current_plan.pk)
+
+
+class ActiveSprintOpportunitiesContextTest(TestCase):
+    def test_unshared_member_draft_sprint_is_hidden_from_opportunities(self):
+        today = timezone.localdate()
+        user = User.objects.create_user(
+            email='draft-opportunity@test.com', password='pw',
+        )
+        draft = Sprint.objects.create(
+            name='Draft Sprint',
+            slug='draft-opportunity-sprint',
+            start_date=today - datetime.timedelta(days=7),
+            duration_weeks=6,
+            status='active',
+            min_tier_level=LEVEL_MAIN,
+        )
+        other = Sprint.objects.create(
+            name='Open Sprint',
+            slug='open-opportunity-sprint',
+            start_date=today + datetime.timedelta(days=7),
+            duration_weeks=6,
+            status='active',
+            min_tier_level=LEVEL_MAIN,
+        )
+        SprintEnrollment.objects.create(sprint=draft, user=user)
+        Plan.objects.create(member=user, sprint=draft)
+
+        context = build_active_sprint_opportunities_context(user, LEVEL_MAIN)
+
+        opportunities = context['active_sprint_opportunities']
+        self.assertEqual(len(opportunities), 1)
+        self.assertEqual(opportunities[0]['sprint'].pk, other.pk)
+        self.assertEqual(
+            opportunities[0]['url'],
+            reverse('sprint_detail', kwargs={'sprint_slug': other.slug}),
+        )
+        self.assertEqual(opportunities[0]['cta_label'], 'View sprint')

@@ -150,7 +150,9 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
             duration_weeks=4,
             status='active',
         )
-        plan = Plan.objects.create(member=user, sprint=sprint)
+        plan = Plan.objects.create(
+            member=user, sprint=sprint, shared_at=timezone.now(),
+        )
         self.client.force_login(user)
 
         response = self.client.get('/')

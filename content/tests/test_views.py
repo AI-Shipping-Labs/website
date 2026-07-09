@@ -16,12 +16,17 @@ class HomeViewTest(TestCase):
             date=date(2025, 6, 15),
             published=True,
         )
+        from datetime import timedelta
+
         from django.utils import timezone
+
+        now = timezone.now()
         self.recording = Event.objects.create(
             title='Test Recording',
             slug='test-recording',
             description='Workshop desc',
-            start_datetime=timezone.now(),
+            start_datetime=now - timedelta(hours=3),
+            end_datetime=now - timedelta(hours=1),
             status='completed',
             recording_url='https://youtube.com/watch?v=test',
             published=True,

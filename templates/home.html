@@ -1,5 +1,36 @@
 {% extends "base.html" %}
 {% load static %}
+{% load sprint_extras %}
+
+{% block extra_head %}
+<style>
+  #tiers .home-free-tier-card .home-inline-register-embed > div {
+    max-width: none;
+    border-width: 0;
+    background: transparent;
+    padding: 0;
+  }
+
+  #tiers .home-free-tier-card .home-inline-register-embed [data-auth-oauth-divider] {
+    margin-bottom: 1rem;
+    margin-top: 1rem;
+  }
+
+  #tiers .home-free-tier-card .home-inline-register-embed > div > .mt-6 {
+    margin-top: 1rem;
+  }
+
+  #tiers .home-free-tier-card .home-inline-register-embed > div > .mt-3 {
+    margin-top: 0.5rem;
+  }
+
+  #tiers .home-free-tier-card .home-inline-register-embed [data-auth-oauth-providers] a,
+  #tiers .home-free-tier-card .home-inline-register-embed button[aria-controls="inline-register-email-block"] {
+    padding-bottom: 0.625rem;
+    padding-top: 0.625rem;
+  }
+</style>
+{% endblock %}
 
 {% block title %}AI Shipping Labs | A Technical Community{% endblock %}
 
@@ -113,16 +144,16 @@
         </p>
 
         <div class="mt-4 flex items-center justify-center gap-4 sm:mt-8">
-          <span class="whitespace-nowrap text-sm text-muted-foreground" id="monthly-label">Monthly</span>
+          <span class="whitespace-nowrap text-sm text-foreground" id="monthly-label">Monthly</span>
           <div class="touch-target-toggle">
             <button type="button" id="billing-toggle"
-                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-accent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                     aria-label="Toggle annual pricing"
-                    aria-pressed="true">
-              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-accent-foreground shadow ring-0 transition-transform translate-x-5" id="billing-toggle-dot"></span>
+                    aria-pressed="false">
+              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform translate-x-0" id="billing-toggle-dot"></span>
             </button>
           </div>
-          <span class="whitespace-nowrap text-sm text-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
+          <span class="whitespace-nowrap text-sm text-muted-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
         </div>
       </div>
 
@@ -134,13 +165,46 @@
         without converting the badge to an in-flow element first.
 
         Also: on mobile, Main (highlighted) is the dominant card — wider, full
-        feature list, larger padding. Basic / Premium are compact peers — narrower,
-        condensed feature list (first 3 only), no positioning paragraph. Desktop
-        layout (lg:grid-cols-3, lg:scale-105, full features) is unchanged.
+        feature list, larger padding. Free / Basic / Premium are compact peers —
+        narrower, condensed feature list on mobile, no positioning paragraph.
+        Desktop layout now shows four cards while preserving the highlighted
+        Main tier treatment.
       {% endcomment %}
-      <div class="mx-auto mt-4 grid max-w-7xl gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:items-start max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:mt-16 lg:grid-cols-3"
+      <div class="mx-auto mt-4 grid max-w-7xl gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:items-start max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:mt-16 lg:grid-cols-4"
            data-tier-carousel
            data-testid="home-tier-carousel">
+        <div class="home-free-tier-card relative flex flex-col overflow-visible rounded-xl border border-border bg-background p-5 transition-all lg:min-h-full max-lg:flex-none max-lg:snap-center max-lg:w-[min(82vw,22rem)] max-lg:p-4 sm:p-8"
+             data-tier-card="free"
+             data-testid="home-tier-card">
+          <div class="mb-6 max-lg:mb-3">
+            <h3 class="text-lg font-semibold text-foreground">{{ free_tier.name }}</h3>
+            <p class="mt-1 text-sm text-accent">{{ free_tier.tagline }}</p>
+          </div>
+
+          <div class="mb-6 max-lg:mb-3">
+            <div class="flex items-baseline">
+              <span class="text-4xl font-semibold text-foreground">&euro;0</span>
+              <span class="ml-2 text-muted-foreground">/forever</span>
+            </div>
+            <p class="mt-2 text-sm text-muted-foreground">{{ free_tier.hook }}</p>
+          </div>
+
+          <p class="mb-6 text-sm text-muted-foreground max-lg:mb-4">{{ free_tier.description }}</p>
+
+          <ul class="mb-8 flex-1 space-y-3 max-lg:mb-4 max-lg:space-y-2">
+            {% for feature in free_tier.features %}
+            <li class="flex items-start gap-3 {% if forloop.counter > 2 %}max-lg:hidden{% endif %}">
+              <i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
+              <span class="text-sm text-foreground">{{ feature.text }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+
+          <div class="mt-auto home-inline-register-embed" data-testid="home-free-tier-register">
+            {% include "accounts/includes/_inline_register_card.html" with collapse_email=True %}
+          </div>
+        </div>
+
         {% for tier in tiers %}
         {# Issue #510: drop `min-h-full` on mobile so peer cards size to content #}
         <div class="relative flex flex-col overflow-visible rounded-xl border p-5 transition-all lg:min-h-full max-lg:flex-none max-lg:snap-center sm:p-8 {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 max-lg:w-[min(82vw,22rem)] lg:scale-105{% else %}border-border bg-background max-lg:w-[min(70vw,18rem)] max-lg:p-4{% endif %}"
@@ -163,8 +227,8 @@
 
           <div class="mb-6 max-lg:mb-3">
             <div class="flex items-baseline">
-              <span class="text-4xl font-semibold text-foreground tier-price" data-annual="{{ tier.price_annual }}" data-monthly="{{ tier.price_monthly }}">&euro;{{ tier.price_annual }}</span>
-              <span class="ml-2 text-muted-foreground tier-period">/year</span>
+              <span class="text-4xl font-semibold text-foreground tier-price" data-annual="{{ tier.price_annual }}" data-monthly="{{ tier.price_monthly }}">&euro;{{ tier.price_monthly }}</span>
+              <span class="ml-2 text-muted-foreground tier-period">/month</span>
             </div>
             <p class="mt-2 text-sm text-muted-foreground">{{ tier.hook }}</p>
           </div>
@@ -187,7 +251,7 @@
 
           <div class="mt-auto space-y-4 max-lg:space-y-3">
             <p class="text-xs text-muted-foreground {% if not tier.highlighted %}max-lg:hidden{% endif %}">{{ tier.positioning }}</p>
-            <a href="{{ tier.payment_link_annual }}"
+            <a href="{{ tier.payment_link_monthly }}"
                class="tier-cta-link flex min-h-[44px] w-full items-center justify-center rounded-md px-4 py-3 text-center text-sm font-medium transition-colors cursor-pointer sm:py-2.5 {% if tier.highlighted %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
                data-link-annual="{{ tier.payment_link_annual }}" data-link-monthly="{{ tier.payment_link_monthly }}"
                style="{% if tier.highlighted %}box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);{% endif %}">
@@ -197,6 +261,137 @@
         </div>
         {% endfor %}
       </div>
+    </div>
+  </section>
+
+  <section id="sprint-story" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28" data-testid="home-sprint-story-section">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div class="max-w-3xl">
+          <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+            <i data-lucide="route" class="h-4 w-4"></i>
+            Main-tier workflow
+          </p>
+          <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+            Plan -&gt; Sprint -&gt; Ship
+          </h2>
+          <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
+            Community sprints turn good intentions into shipping windows. Members set a concrete goal,
+            work inside a shared sprint cadence, and leave with a project milestone they can show.
+          </p>
+        </div>
+        <a href="/sprints" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80" data-testid="home-sprints-index-link">
+          Explore sprints
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+
+      <div class="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-start">
+        <div class="grid gap-4 sm:grid-cols-3" data-testid="home-sprint-story-steps">
+          <article class="rounded-xl border border-border bg-card p-6">
+            <div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-foreground">1</div>
+            <h3 class="text-lg font-semibold text-foreground">Plan</h3>
+            <p class="mt-2 text-sm leading-6 text-muted-foreground">
+              Pick one project outcome that matters enough to finish inside a defined window.
+            </p>
+          </article>
+          <article class="rounded-xl border border-border bg-card p-6">
+            <div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-foreground">2</div>
+            <h3 class="text-lg font-semibold text-foreground">Sprint</h3>
+            <p class="mt-2 text-sm leading-6 text-muted-foreground">
+              Work alongside other builders with a live cadence, check-ins, and visible progress.
+            </p>
+          </article>
+          <article class="rounded-xl border border-border bg-card p-6">
+            <div class="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-foreground">3</div>
+            <h3 class="text-lg font-semibold text-foreground">Ship</h3>
+            <p class="mt-2 text-sm leading-6 text-muted-foreground">
+              End the sprint with a project milestone, demo, or public artifact you can build on.
+            </p>
+          </article>
+        </div>
+
+        <aside class="rounded-xl border border-border bg-card p-6 sm:p-8" data-testid="home-featured-sprint-card">
+          {% if featured_sprint %}
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Current or next sprint</p>
+          <h3 class="mt-3 text-2xl font-semibold text-foreground" data-testid="home-featured-sprint-name">{{ featured_sprint.name }}</h3>
+          <p class="mt-2 text-sm text-muted-foreground" data-testid="home-featured-sprint-range">{% sprint_date_range featured_sprint %}</p>
+          <div class="mt-5 space-y-3 text-sm text-muted-foreground">
+            <div class="flex items-center gap-2">
+              <i data-lucide="calendar-range" class="h-4 w-4 shrink-0 text-accent"></i>
+              <span>Visible public sprint window</span>
+            </div>
+            <div class="flex items-center gap-2" data-testid="home-featured-sprint-tier">
+              <i data-lucide="shield-check" class="h-4 w-4 shrink-0 text-accent"></i>
+              <span>Membership: {{ featured_sprint_required_tier_name }}</span>
+            </div>
+          </div>
+          <div class="mt-6 flex flex-col gap-3 sm:flex-row">
+            <a href="{{ featured_sprint.get_absolute_url }}" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="home-featured-sprint-link">
+              View this sprint
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+            <a href="/sprints" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+              All sprint windows
+            </a>
+          </div>
+          {% else %}
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Sprints run throughout the year</p>
+          <h3 class="mt-3 text-2xl font-semibold text-foreground" data-testid="home-featured-sprint-empty-heading">Next sprint coming soon</h3>
+          <p class="mt-3 text-sm leading-6 text-muted-foreground" data-testid="home-featured-sprint-empty-copy">
+            Browse the sprint calendar to see what is active now, what is opening next, and which membership level each sprint requires.
+          </p>
+          <a href="/sprints" class="mt-6 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="home-featured-sprint-empty-link">
+            Explore sprints
+            <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>
+          {% endif %}
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <section id="upcoming-events" class="border-t border-border bg-card py-12 sm:py-20 lg:py-28" data-testid="home-upcoming-events-section">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div class="max-w-3xl">
+          <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+            <i data-lucide="calendar-heart" class="h-4 w-4"></i>
+            Upcoming live events
+          </p>
+          <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+            Sample the community before you commit
+          </h2>
+          <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
+            Join an upcoming session, see how the community works live, and use the existing guest registration flow when an event is open to Free members.
+          </p>
+        </div>
+        <a href="/events?filter=upcoming" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80" data-testid="home-upcoming-events-link">
+          View all upcoming events
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+
+      {% if upcoming_events %}
+      <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3" data-testid="home-upcoming-events-grid">
+        {% for event in upcoming_events %}
+        <div data-testid="home-upcoming-event-card">
+          {% include "events/_upcoming_event_card.html" with event=event %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="mt-10 rounded-xl border border-border bg-background p-6 sm:p-8" data-testid="home-upcoming-events-empty">
+        <h3 class="text-lg font-semibold text-foreground">No live events are scheduled right now</h3>
+        <p class="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          Check the events page for the latest schedule and newly announced sessions.
+        </p>
+        <a href="/events" class="mt-5 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-secondary px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
+          Browse events
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+      {% endif %}
     </div>
   </section>
 
@@ -509,7 +704,12 @@
 
   {% include "includes/footer.html" %}
 </main>
+{% endblock %}
 
+{% block extra_scripts %}
+<script src="/static/js/accounts/auth-helpers.js"></script>
+{{ next_url|json_script:"auth-next-url" }}
+<script src="/static/js/accounts/inline-register.js"></script>
 <script>
 function toggleFaq(btn) {
   var content = btn.nextElementSibling;
@@ -523,7 +723,7 @@ function toggleFaq(btn) {
 }
 
 // Billing toggle (annual/monthly)
-var isAnnual = true;
+var isAnnual = false;
 document.getElementById('billing-toggle').addEventListener('click', function() {
   isAnnual = !isAnnual;
   var dot = document.getElementById('billing-toggle-dot');
@@ -549,14 +749,12 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
     annualLabel.className = 'whitespace-nowrap text-sm text-muted-foreground';
   }
 
-  // Update prices
   document.querySelectorAll('.tier-price').forEach(function(el) {
     el.textContent = '\u20AC' + (isAnnual ? el.dataset.annual : el.dataset.monthly);
   });
   document.querySelectorAll('.tier-period').forEach(function(el) {
     el.textContent = isAnnual ? '/year' : '/month';
   });
-  // Update CTA links
   document.querySelectorAll('.tier-cta-link').forEach(function(el) {
     el.href = isAnnual ? el.dataset.linkAnnual : el.dataset.linkMonthly;
   });
@@ -576,6 +774,5 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
   window.addEventListener('load', centerRecommendedTier);
   window.addEventListener('resize', centerRecommendedTier);
 })();
-
 </script>
 {% endblock %}

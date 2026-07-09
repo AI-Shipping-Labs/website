@@ -23,6 +23,7 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
+from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_REGISTERED
 from content.models import (
     Instructor,
     Workshop,
@@ -200,7 +201,7 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-testid="workshops-landing"')
         self.assertContains(response, 'data-testid="workshop-catalog"')
         self.assertContains(response, 'data-testid="workshop-active-filters"')
-        self.assertContains(response, 'Filtering by')
+        self.assertContains(response, 'Filters')
         self.assertContains(response, 'rust')
         self.assertContains(response, 'data-testid="clear-workshop-filter"')
         self.assertContains(response, 'href="/workshops"')
@@ -216,6 +217,7 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-testid="workshops-empty-state"')
         self.assertContains(response, 'data-testid="member-empty-state"')
         self.assertContains(response, 'data-empty-kind="filter"')
+        self.assertContains(response, 'No workshops match the selected filters.')
         self.assertContains(response, 'href="/workshops"')
         self.assertContains(response, 'View all workshops')
 
@@ -247,6 +249,181 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'alt="Cover image for Visible Workshop"')
         self.assertContains(response, 'loading="lazy"')
         self.assertNotContains(response, 'data-testid="workshop-card-preview-fallback"')
+
+
+class WorkshopCatalogAccessFilterTest(TierSetupMixin, TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.open_agents = _make_workshop(
+            slug='open-agents',
+            title='Open Agents',
+            pages=LEVEL_OPEN,
+            recording=LEVEL_MAIN,
+            tags=['agents'],
+        )
+        cls.registered_python = _make_workshop(
+            slug='registered-python',
+            title='Registered Python',
+            pages=LEVEL_REGISTERED,
+            recording=LEVEL_REGISTERED,
+            tags=['python'],
+        )
+        cls.basic_agents = _make_workshop(
+            slug='basic-agents',
+            title='Basic Agents',
+            pages=LEVEL_BASIC,
+            recording=LEVEL_MAIN,
+            tags=['agents'],
+        )
+        cls.main_python = _make_workshop(
+            slug='main-python',
+            title='Main Python',
+            pages=LEVEL_MAIN,
+            recording=LEVEL_MAIN,
+            tags=['python'],
+        )
+        cls.draft_free = _make_workshop(
+            slug='draft-free',
+            title='Draft Free',
+            status='draft',
+            pages=LEVEL_OPEN,
+            recording=LEVEL_OPEN,
+            tags=['agents'],
+        )
+        cls.draft_paid = _make_workshop(
+            slug='draft-paid',
+            title='Draft Paid',
+            status='draft',
+            pages=LEVEL_BASIC,
+            recording=LEVEL_MAIN,
+            tags=['python'],
+        )
+
+    def test_catalog_defaults_to_all_published_workshops(self):
+        response = self.client.get('/workshops')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['selected_access'], 'all')
+        self.assertContains(response, 'Open Agents')
+        self.assertContains(response, 'Registered Python')
+        self.assertContains(response, 'Basic Agents')
+        self.assertContains(response, 'Main Python')
+        self.assertNotContains(response, 'Draft Free')
+        self.assertNotContains(response, 'Draft Paid')
+
+        body = response.content.decode()
+        all_chip = body.split(
+            'data-testid="workshop-access-filter-all"', 1,
+        )[1].split('>', 1)[0]
+        self.assertIn('aria-current="page"', all_chip)
+
+    def test_catalog_access_free_includes_open_and_registered_only(self):
+        response = self.client.get('/workshops?access=free')
+
+        self.assertEqual(response.context['selected_access'], 'free')
+        self.assertContains(response, 'Open Agents')
+        self.assertContains(response, 'Registered Python')
+        self.assertNotContains(response, 'Basic Agents')
+        self.assertNotContains(response, 'Main Python')
+        self.assertNotContains(response, 'Draft Free')
+        self.assertContains(response, 'data-testid="workshop-free-badge"', count=2)
+        self.assertNotContains(response, 'data-testid="workshop-tier-badge"')
+
+    def test_catalog_access_paid_includes_basic_and_main_only(self):
+        response = self.client.get('/workshops?access=paid')
+
+        self.assertEqual(response.context['selected_access'], 'paid')
+        self.assertContains(response, 'Basic Agents')
+        self.assertContains(response, 'Main Python')
+        self.assertNotContains(response, 'Open Agents')
+        self.assertNotContains(response, 'Registered Python')
+        self.assertNotContains(response, 'Draft Paid')
+        self.assertContains(response, 'data-testid="workshop-tier-badge"', count=2)
+        self.assertNotContains(response, 'data-testid="workshop-free-badge"')
+
+    def test_blank_all_and_unknown_access_values_fall_back_to_all(self):
+        cases = [
+            '?access=',
+            '?access=all',
+            '?access=banana',
+            '?access=%20banana%20',
+        ]
+
+        for query in cases:
+            with self.subTest(query=query):
+                response = self.client.get(f'/workshops{query}')
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['selected_access'], 'all')
+                self.assertContains(response, 'Open Agents')
+                self.assertContains(response, 'Basic Agents')
+                self.assertContains(response, 'Main Python')
+
+                body = response.content.decode()
+                all_chip = body.split(
+                    'data-testid="workshop-access-filter-all"', 1,
+                )[1].split('>', 1)[0]
+                self.assertIn('aria-current="page"', all_chip)
+
+    def test_access_filter_controls_and_clear_link_preserve_selected_tags(self):
+        response = self.client.get('/workshops?access=free&tag=agents')
+
+        self.assertContains(response, 'data-testid="workshop-access-filter-all"')
+        self.assertContains(response, 'data-testid="workshop-access-filter-free"')
+        self.assertContains(response, 'data-testid="workshop-access-filter-paid"')
+        self.assertContains(response, 'href="/workshops?tag=agents"')
+        self.assertContains(
+            response, 'href="/workshops?access=free&amp;tag=agents"',
+        )
+        self.assertContains(
+            response, 'href="/workshops?access=paid&amp;tag=agents"',
+        )
+        self.assertContains(response, 'data-testid="clear-workshop-filter"')
+        self.assertContains(response, 'href="/workshops"')
+
+        body = response.content.decode()
+        free_chip = body.split(
+            'data-testid="workshop-access-filter-free"', 1,
+        )[1].split('>', 1)[0]
+        self.assertIn('aria-current="page"', free_chip)
+
+    def test_tag_links_preserve_active_access_when_adding_or_removing_tags(self):
+        response = self.client.get('/workshops?access=paid')
+
+        self.assertContains(
+            response, 'href="/workshops?access=paid&amp;tag=python"',
+        )
+        self.assertContains(
+            response, 'href="/workshops?access=paid&amp;tag=agents"',
+        )
+
+        filtered = self.client.get('/workshops?access=paid&tag=agents&tag=python')
+        self.assertContains(
+            filtered, 'href="/workshops?access=paid&amp;tag=agents"',
+        )
+        self.assertContains(
+            filtered, 'href="/workshops?access=paid&amp;tag=python"',
+        )
+
+    def test_access_and_tag_filters_combine_with_and_semantics(self):
+        response = self.client.get('/workshops?access=paid&tag=agents')
+
+        self.assertContains(response, 'Basic Agents')
+        self.assertNotContains(response, 'Open Agents')
+        self.assertNotContains(response, 'Registered Python')
+        self.assertNotContains(response, 'Main Python')
+        self.assertContains(response, 'data-testid="workshop-active-access"')
+        self.assertContains(response, 'Paid')
+        self.assertContains(response, 'agents')
+
+    def test_filtered_empty_state_handles_combined_filters(self):
+        response = self.client.get('/workshops?access=free&tag=enterprise-ai')
+
+        self.assertContains(response, 'data-testid="workshops-empty-state"')
+        self.assertContains(response, 'No workshops match the selected filters.')
+        self.assertContains(response, 'href="/workshops"')
+        self.assertContains(response, 'View all workshops')
 
 
 class WorkshopLandingTest(TierSetupMixin, TestCase):

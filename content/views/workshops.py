@@ -14,8 +14,10 @@ Every section gates against its own field, so a Workshop with
 ``landing=0, pages=10, recording=20`` lets free visitors see the landing,
 Basic+ members read the tutorial, and Main+ members watch the recording.
 
-The catalog always shows every published workshop (with a tier badge) so
-users see what they would unlock by upgrading.
+The catalog defaults to every published workshop (with a tier badge) so
+users see what they would unlock by upgrading. Issue #1166 adds the
+optional ``?access=free|paid`` filter for the public catalog while
+keeping the canonical unfiltered URL at ``/workshops``.
 
 Slug-only workshop routes are canonical. Legacy dated routes validate the
 ``(date, slug)`` pair against a published workshop, then 301 to the canonical
@@ -58,6 +60,16 @@ from content.views.pages import _filter_by_tags, _get_selected_tags
 # same fade-out pattern shows on workshop tutorial / video pages.
 TEASER_WORD_LIMIT = 150
 
+CATALOG_BASE_PATH = '/workshops'
+CATALOG_ACCESS_ALL = 'all'
+CATALOG_ACCESS_FREE = 'free'
+CATALOG_ACCESS_PAID = 'paid'
+CATALOG_ACCESS_OPTIONS = (
+    (CATALOG_ACCESS_ALL, 'All'),
+    (CATALOG_ACCESS_FREE, 'Free'),
+    (CATALOG_ACCESS_PAID, 'Paid'),
+)
+
 
 def _gated_reason_for_level(user, required_level):
     """Return the gated reason for a workshop gate at ``required_level``.
@@ -85,10 +97,48 @@ def _gated_reason_for_level(user, required_level):
     return 'insufficient_tier'
 
 
+def _normalize_catalog_access(value):
+    """Return the canonical workshop catalog access filter slug.
+
+    Supported values are ``free`` and ``paid``. Missing, blank, ``all``,
+    or unknown values all collapse to ``all`` so the canonical
+    no-filter state remains ``/workshops``.
+    """
+    normalized = (value or '').strip().lower()
+    if normalized == CATALOG_ACCESS_FREE:
+        return CATALOG_ACCESS_FREE
+    if normalized == CATALOG_ACCESS_PAID:
+        return CATALOG_ACCESS_PAID
+    return CATALOG_ACCESS_ALL
+
+
+def _filter_workshops_by_catalog_access(queryset, selected_access):
+    """Apply the public paid/free catalog filter to ``queryset``."""
+    if selected_access == CATALOG_ACCESS_FREE:
+        return queryset.filter(pages_required_level__lt=LEVEL_BASIC)
+    if selected_access == CATALOG_ACCESS_PAID:
+        return queryset.filter(pages_required_level__gte=LEVEL_BASIC)
+    return queryset
+
+
+def _build_catalog_filter_url(*, selected_tags, access_slug):
+    """Return a catalog URL preserving the current tag filters."""
+    params = []
+    if access_slug in (CATALOG_ACCESS_FREE, CATALOG_ACCESS_PAID):
+        params.append(('access', access_slug))
+    for tag in selected_tags:
+        params.append(('tag', tag))
+    query = urlencode(params, doseq=True)
+    if not query:
+        return CATALOG_BASE_PATH
+    return f'{CATALOG_BASE_PATH}?{query}'
+
+
 def workshops_list(request):
     """Catalog page: grid of all published workshops."""
     workshops = Workshop.objects.filter(status='published').order_by('-date')
     selected_tags = _get_selected_tags(request)
+    selected_access = _normalize_catalog_access(request.GET.get('access'))
 
     # Collect all tags from published workshops for the filter UI (mirrors
     # the courses_list pattern — chips are rendered inline on the cards).
@@ -98,14 +148,39 @@ def workshops_list(request):
             all_tags.update(workshop.tags)
     all_tags = sorted(all_tags)
 
+    workshops = _filter_workshops_by_catalog_access(workshops, selected_access)
     workshops = _filter_by_tags(workshops, selected_tags)
+
+    access_filter_options = [
+        {
+            'slug': slug,
+            'label': label,
+            'url': _build_catalog_filter_url(
+                selected_tags=selected_tags,
+                access_slug=slug,
+            ),
+            'is_active': selected_access == slug,
+        }
+        for slug, label in CATALOG_ACCESS_OPTIONS
+    ]
 
     context = {
         'workshops': workshops,
         'all_tags': all_tags,
         'selected_tags': selected_tags,
+        'selected_access': selected_access,
+        'selected_access_label': dict(CATALOG_ACCESS_OPTIONS)[selected_access],
+        'access_filter_options': access_filter_options,
+        'has_active_filters': bool(selected_tags)
+        or selected_access != CATALOG_ACCESS_ALL,
+        'access_extra_params': (
+            {'access': selected_access}
+            if selected_access in (
+                CATALOG_ACCESS_FREE, CATALOG_ACCESS_PAID,
+            ) else None
+        ),
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
-        'base_path': '/workshops',
+        'base_path': CATALOG_BASE_PATH,
     }
     return render(request, 'content/workshops_list.html', context)
 

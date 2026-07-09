@@ -288,6 +288,15 @@ def _dashboard(request):
     # onboarding response. Completion is derived (no model field).
     onboarding_complete = has_completed_onboarding(user)
 
+    # Sprint plan card (issue #442 / #1199). ``plan`` is the selected shared
+    # member plan only; unshared rows are staff drafts and must not expose the
+    # "Open my plan" CTA. ``has_any_plan`` still suppresses the onboarding
+    # prompt for members who already have any plan row.
+    sprint_plan_context = build_sprint_plan_card_context(user)
+    has_any_plan = sprint_plan_context['has_any_plan']
+
+    from content.access import LEVEL_BASIC
+
     # --- Request a call (issue #870) ---
     # Surface the request-a-call entry point only once onboarding is
     # complete — the page itself gates on the same condition.
@@ -346,20 +355,26 @@ def _dashboard(request):
     # Issue #1129: a persisted dismissal hides the nudge for good, even
     # while onboarding stays incomplete (the member keeps other onboarding
     # entry points).
-    from content.access import LEVEL_BASIC
     onboarding_prompt_dismissed = (
         "onboarding_prompt" in user.dashboard_dismissals
     )
     show_onboarding_prompt = (
         not onboarding_complete
+        and not has_any_plan
         and user_level >= LEVEL_BASIC
         and not onboarding_prompt_dismissed
+    )
+    show_plan_preparing = (
+        onboarding_complete
+        and user_level >= LEVEL_BASIC
+        and sprint_plan_context['plan'] is None
     )
 
     context = {
         'tier_name': tier_name,
         'override_tier_name': override_tier_name,
         'show_onboarding_prompt': show_onboarding_prompt,
+        'show_plan_preparing': show_plan_preparing,
         'in_progress_courses': in_progress_courses,
         'in_progress_learning': in_progress_learning,
         'hidden_learning_count': hidden_learning_count,
@@ -379,9 +394,6 @@ def _dashboard(request):
         # so its Join-Slack card stays un-dismissable.
         'slack_card_dismissable': True,
     }
-    # Sprint plan card (issue #442). Same context keys as the Account
-    # page so the duplicated card markup reads identically.
-    sprint_plan_context = build_sprint_plan_card_context(user)
     context.update(sprint_plan_context)
     context.update(
         build_active_sprint_opportunities_context(

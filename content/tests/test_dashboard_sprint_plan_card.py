@@ -12,6 +12,7 @@ import datetime
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_PREMIUM
 from plans.models import Plan, Sprint, SprintEnrollment
@@ -52,7 +53,7 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
             status='active',
         )
         plan = Plan.objects.create(
-            member=user, sprint=sprint,
+            member=user, sprint=sprint, shared_at=timezone.now(),
         )
 
         self.client.login(email='member@test.com', password='pw')
@@ -182,7 +183,7 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
             min_tier_level=LEVEL_MAIN,
         )
         plan = Plan.objects.create(
-            member=user, sprint=current,
+            member=user, sprint=current, shared_at=timezone.now(),
         )
 
         self.client.login(email='planned-sprint@test.com', password='pw')

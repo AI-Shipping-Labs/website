@@ -67,6 +67,37 @@
     </div>
     {% endif %}
 
+    {% if show_plan_preparing %}
+    <!-- Plan preparation waiting state (issue #1199). -->
+    <section class="mb-8" data-testid="dashboard-plan-preparing-section">
+      <div class="rounded-lg border border-accent/30 bg-card p-5 sm:p-6" data-testid="dashboard-plan-preparing-card">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div class="flex items-start gap-3">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10">
+              <i data-lucide="map" class="h-5 w-5 text-accent"></i>
+            </div>
+            <div class="min-w-0">
+              <h2 class="text-xl font-semibold text-foreground" data-testid="dashboard-plan-preparing-heading">
+                Your plan is being prepared
+              </h2>
+              <p class="mt-2 text-sm text-muted-foreground" data-testid="dashboard-plan-preparing-copy">
+                Alexey and Valeria are using your onboarding answers to prepare your sprint plan.
+                This usually takes 1-2 business days. We will let you know through the bell
+                notification and by email as soon as it is ready.
+              </p>
+            </div>
+          </div>
+          <a href="{% url 'onboarding_start' %}"
+             class="{% button_classes 'secondary' 'shrink-0' %}"
+             data-testid="dashboard-plan-preparing-cta">
+            Review onboarding answers
+            <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
     {% if plan %}
     <!-- Sprint Plan Section (issue #442) -->
     <section class="mb-8">

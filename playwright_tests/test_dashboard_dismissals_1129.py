@@ -59,6 +59,8 @@ def _get_dismissals(email):
 
 
 def _create_plan(email, *, start_offset_days, duration_weeks, status):
+    from django.utils import timezone
+
     from accounts.models import User
     from plans.models import Plan, Sprint
 
@@ -71,7 +73,11 @@ def _create_plan(email, *, start_offset_days, duration_weeks, status):
         duration_weeks=duration_weeks,
         status=status,
     )
-    plan = Plan.objects.create(member=user, sprint=sprint)
+    plan = Plan.objects.create(
+        member=user,
+        sprint=sprint,
+        shared_at=timezone.now(),
+    )
     connection.close()
     return plan
 

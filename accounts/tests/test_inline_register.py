@@ -76,6 +76,13 @@ class InlineRegisterPartialTest(TestCase):
             html,
         )
 
+    def test_partial_login_link_omits_homepage_next_url(self):
+        html = render_to_string(self.template, {
+            "next_url": "/",
+        })
+        self.assertIn('/accounts/login/"', html)
+        self.assertNotIn('/accounts/login/?next=/', html)
+
     def test_partial_oauth_buttons_carry_next_url(self):
         """OAuth provider links must round-trip the originating page so
         the visitor lands back where they started after callback."""

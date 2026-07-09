@@ -9,6 +9,7 @@ shared with the logout flow.
 """
 
 from datetime import timedelta
+import re
 
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
@@ -160,18 +161,16 @@ class HeaderSignInLinkTest(TestCase):
         expected_href = (
             f'/accounts/login/?next=%2Fblog%2F{self.article.slug}'
         )
-        # Two Sign-in links exist in the header (desktop and mobile);
-        # both must carry the captured next value.
-        sign_in_link_html = (
-            f'href="{expected_href}"'
+        header_sign_in_hrefs = re.findall(
+            r'href="([^"]+)" data-testid="header-sign-in-link"',
+            body,
         )
         self.assertEqual(
-            body.count(sign_in_link_html),
-            2,
+            header_sign_in_hrefs,
+            [expected_href, expected_href],
             (
                 f"Expected the desktop AND mobile Sign-in links to render "
-                f"href={expected_href!r}; "
-                f"found {body.count(sign_in_link_html)} occurrences."
+                f"href={expected_href!r}; found {header_sign_in_hrefs!r}."
             ),
         )
         # Defensive: the bare login URL (no ``?next=``) must NOT be
@@ -184,9 +183,11 @@ class HeaderSignInLinkTest(TestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
-        # Both desktop and mobile point at bare ``/accounts/login/``.
-        self.assertEqual(body.count('href="/accounts/login/"'), 2)
-        # And neither carries ``?next=/`` for the homepage.
-        self.assertNotIn(
-            'href="/accounts/login/?next=', body
+        header_sign_in_hrefs = re.findall(
+            r'href="([^"]+)" data-testid="header-sign-in-link"',
+            body,
+        )
+        self.assertEqual(
+            header_sign_in_hrefs,
+            ["/accounts/login/", "/accounts/login/"],
         )

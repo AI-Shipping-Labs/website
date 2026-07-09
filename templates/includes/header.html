@@ -158,7 +158,7 @@
         </div>
       </div>
       {% else %}
-      <a href="{{ header_login_url }}" class="inline-flex items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+      <a href="{{ header_login_url }}" data-testid="header-sign-in-link" class="inline-flex items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
         Sign in
       </a>
       {% endif %}
@@ -262,7 +262,7 @@
         </a>
       </div>
       {% else %}
-      <a href="{{ header_login_url }}" class="mt-4 block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+      <a href="{{ header_login_url }}" data-testid="header-sign-in-link" class="mt-4 block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
         Sign in
       </a>
       {% endif %}

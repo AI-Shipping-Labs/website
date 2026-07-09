@@ -42,6 +42,26 @@ class StudioSyncDashboardTest(TestCase):
         response = self.client.get('/studio/sync/')
         self.assertContains(response, 'AI-Shipping-Labs/content')
 
+    def test_dashboard_warns_when_webhook_secret_missing(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            webhook_secret='   ',
+        )
+        response = self.client.get('/studio/sync/')
+        self.assertContains(response, 'data-testid="webhook-secret-warning"')
+        self.assertContains(
+            response,
+            'GitHub webhooks are blocked until a webhook secret is configured',
+        )
+
+    def test_dashboard_does_not_warn_when_webhook_secret_configured(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            webhook_secret='configured-secret',
+        )
+        response = self.client.get('/studio/sync/')
+        self.assertNotContains(response, 'data-testid="webhook-secret-warning"')
+
     def test_dashboard_one_card_per_repo(self):
         """Issue #310: one ContentSource per repo, one card per repo."""
         ContentSource.objects.create(

@@ -65,15 +65,19 @@ class ImportResult:
     """Outcome of applying a content-sources import payload.
 
     ``skipped_repos`` collects entries the importer rejected because their
-    ``repo_name`` was missing, empty, or not a string. The view surfaces it
-    as a Django messages warning so the operator knows what didn't make it.
-    Entries are stored as ``<entry #N>`` placeholders rather than echoing
-    untrusted payload text back.
+    ``repo_name`` was missing, empty, or not a string. Entries are stored as
+    ``<entry #N>`` placeholders rather than echoing untrusted payload text
+    back.
+
+    ``skipped_secret_repos`` collects entries with a usable ``repo_name`` but
+    no usable webhook secret for creating or updating the source. These are
+    safe to surface by repo name so operators know which source to repair.
     """
 
     created: int = 0
     updated: int = 0
     skipped_repos: list[str] = field(default_factory=list)
+    skipped_secret_repos: list[str] = field(default_factory=list)
 
 
 class ImportError(Exception):
@@ -144,17 +148,31 @@ def apply_import(payload: dict) -> ImportResult:
             result.skipped_repos.append(f'<entry #{index + 1}>')
             continue
 
+        existing = ContentSource.objects.filter(repo_name=repo_name).first()
+
+        webhook_secret_present = 'webhook_secret' in entry
+        webhook_secret = None
+        if webhook_secret_present:
+            raw_secret = entry.get('webhook_secret')
+            if not isinstance(raw_secret, str) or not raw_secret.strip():
+                result.skipped_secret_repos.append(repo_name)
+                continue
+            webhook_secret = raw_secret.strip()
+        elif existing is None:
+            result.skipped_secret_repos.append(repo_name)
+            continue
+
         defaults = {
             'is_private': bool(entry.get('is_private', False)),
             'max_files': _coerce_max_files(entry.get('max_files')),
         }
         # ``webhook_secret`` is special: if the key is absent we keep the
         # existing row's value (forward-compat with future exports that
-        # drop secrets). When the key is present, even an empty string
-        # round-trips verbatim.
-        if 'webhook_secret' in entry:
-            secret = entry.get('webhook_secret')
-            defaults['webhook_secret'] = secret if isinstance(secret, str) else ''
+        # drop secrets). If the key is present it must be nonblank; blank
+        # imports no longer create unauthenticated webhook sources or clear
+        # an existing secret.
+        if webhook_secret_present:
+            defaults['webhook_secret'] = webhook_secret
 
         _, created = ContentSource.objects.update_or_create(
             repo_name=repo_name,

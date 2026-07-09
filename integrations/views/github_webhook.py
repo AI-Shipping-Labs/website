@@ -65,16 +65,25 @@ def github_webhook(request):
             status=404,
         )
 
-    # Validate webhook signature using the source's webhook_secret
-    if source.webhook_secret:
-        if not validate_webhook_signature(request, source.webhook_secret):
-            logger.warning(
-                'Invalid GitHub webhook signature for repo %s', repo_full_name,
-            )
-            return JsonResponse(
-                {'error': 'Invalid webhook signature'},
-                status=400,
-            )
+    # Validate webhook signature before any logs, state updates, or sync work.
+    webhook_secret = (source.webhook_secret or '').strip()
+    if not webhook_secret:
+        logger.warning(
+            'GitHub webhook secret is not configured for repo %s',
+            repo_full_name,
+        )
+        return JsonResponse(
+            {'error': 'Webhook secret is not configured'},
+            status=400,
+        )
+    if not validate_webhook_signature(request, webhook_secret):
+        logger.warning(
+            'Invalid GitHub webhook signature for repo %s', repo_full_name,
+        )
+        return JsonResponse(
+            {'error': 'Invalid webhook signature'},
+            status=400,
+        )
 
     # Log the webhook
     event_type = request.headers.get('X-GitHub-Event', 'unknown')

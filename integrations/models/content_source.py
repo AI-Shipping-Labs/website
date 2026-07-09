@@ -1,5 +1,6 @@
 import uuid
 
+from django.core.exceptions import ValidationError
 from django.db import models
 
 SYNC_STATUS_CHOICES = [
@@ -80,10 +81,35 @@ class ContentSource(models.Model):
     def __str__(self):
         return self.repo_name
 
+    def clean(self):
+        super().clean()
+        webhook_secret = (self.webhook_secret or '').strip()
+        if not webhook_secret:
+            raise ValidationError({
+                'webhook_secret': (
+                    'GitHub webhooks require a shared secret. '
+                    'Set a nonblank webhook secret before saving.'
+                ),
+            })
+        self.webhook_secret = webhook_secret
+
     @property
     def short_name(self):
         """Return just the repo name without the org prefix."""
         return self.repo_name.split('/')[-1] if '/' in self.repo_name else self.repo_name
+
+    @property
+    def webhook_secret_configured(self):
+        """Whether inbound GitHub webhooks can be signature-validated."""
+        return bool((self.webhook_secret or '').strip())
+
+    @property
+    def webhook_security_status(self):
+        return (
+            'configured'
+            if self.webhook_secret_configured
+            else 'missing_secret'
+        )
 
     @property
     def short_synced_commit(self):

@@ -8348,7 +8348,9 @@
                       "sync_locked_at": null,
                       "sync_requested": false,
                       "synced_commit_url": "https://github.com/AI-Shipping-Labs/content/commit/a1b2c3d4e5f6",
-                      "updated_at": "2026-04-15T12:00:00+00:00"
+                      "updated_at": "2026-04-15T12:00:00+00:00",
+                      "webhook_secret_configured": true,
+                      "webhook_security_status": "configured"
                     }
                   ]
                 }
@@ -8463,7 +8465,9 @@
                     "sync_locked_at": null,
                     "sync_requested": false,
                     "synced_commit_url": "https://github.com/AI-Shipping-Labs/content/commit/a1b2c3d4e5f6",
-                    "updated_at": "2026-04-15T12:00:00+00:00"
+                    "updated_at": "2026-04-15T12:00:00+00:00",
+                    "webhook_secret_configured": true,
+                    "webhook_security_status": "configured"
                   },
                   "status": "completed",
                   "task_id": null
@@ -8493,7 +8497,9 @@
                     "sync_locked_at": null,
                     "sync_requested": false,
                     "synced_commit_url": "https://github.com/AI-Shipping-Labs/content/commit/a1b2c3d4e5f6",
-                    "updated_at": "2026-04-15T12:00:00+00:00"
+                    "updated_at": "2026-04-15T12:00:00+00:00",
+                    "webhook_secret_configured": true,
+                    "webhook_security_status": "configured"
                   },
                   "status": "queued",
                   "task_id": "task_xyz"

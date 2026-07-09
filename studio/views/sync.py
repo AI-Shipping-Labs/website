@@ -721,6 +721,8 @@ def _build_repos_context():
             'last_synced_commit': source.last_synced_commit or '',
             'short_synced_commit': source.short_synced_commit,
             'synced_commit_url': source.synced_commit_url,
+            'webhook_secret_configured': source.webhook_secret_configured,
+            'webhook_security_status': source.webhook_security_status,
         }
         if source.last_sync_status == 'failed':
             last_log = (
@@ -1248,6 +1250,13 @@ def content_sources_import(request):
             'Skipped entries with missing or invalid repo_name: '
             + ', '.join(result.skipped_repos)
             + '.',
+        )
+    if result.skipped_secret_repos:
+        messages.warning(
+            request,
+            'Skipped content sources with missing or blank webhook_secret: '
+            + ', '.join(result.skipped_secret_repos)
+            + '. Existing webhook secrets were preserved.',
         )
 
     return redirect('studio_sync_dashboard')

@@ -163,13 +163,15 @@ class ContentSourceCreateViewTest(TestCase):
            return_value=SAMPLE_REPOS)
     def test_post_auto_generates_webhook_secret_when_blank(
             self, _mock_list, _mock_async):
-        self.client.post('/studio/content-sources/new/', {
+        response = self.client.post('/studio/content-sources/new/', {
             'repo_name': 'AI-Shipping-Labs/blog',
             'webhook_secret': '',
-        })
+        }, follow=True)
         source = ContentSource.objects.get(repo_name='AI-Shipping-Labs/blog')
         self.assertTrue(source.webhook_secret)
         self.assertGreaterEqual(len(source.webhook_secret), 32)
+        self.assertContains(response, source.webhook_secret)
+        self.assertContains(response, 'First sync queued')
 
     @patch('django_q.tasks.async_task')
     @patch('studio.views.content_sources.list_installation_repositories',

@@ -24,9 +24,11 @@ from unittest.mock import MagicMock, patch
 
 from boto3.exceptions import S3UploadFailedError
 from botocore.exceptions import ClientError, NoCredentialsError
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from django.test import Client, TestCase, override_settings, tag
+from django.test import Client, RequestFactory, TestCase, override_settings, tag
 from django.utils import timezone
 
 from content.models import (
@@ -40,8 +42,9 @@ from content.models import (
     Workshop,
 )
 from events.models import Event
+from integrations.admin.content_source import ContentSourceAdmin
 from integrations.config import clear_config_cache
-from integrations.models import ContentSource, IntegrationSetting, SyncLog
+from integrations.models import ContentSource, IntegrationSetting, SyncLog, WebhookLog
 from integrations.services.content_sync_queue import ContentSyncQueueResult
 from integrations.services.github import (
     GitHubSyncError,
@@ -119,6 +122,54 @@ class ContentSourceModelTest(TestCase):
             is_private=True,
         )
         self.assertTrue(source.is_private)
+
+    def test_full_clean_rejects_blank_webhook_secret(self):
+        source = ContentSource(repo_name='AI-Shipping-Labs/blog')
+        with self.assertRaises(ValidationError) as ctx:
+            source.full_clean()
+        self.assertIn('webhook_secret', ctx.exception.message_dict)
+        self.assertIn(
+            'GitHub webhooks require a shared secret',
+            ctx.exception.message_dict['webhook_secret'][0],
+        )
+
+    def test_full_clean_rejects_whitespace_webhook_secret(self):
+        source = ContentSource(
+            repo_name='AI-Shipping-Labs/blog',
+            webhook_secret='   ',
+        )
+        with self.assertRaises(ValidationError):
+            source.full_clean()
+
+    def test_full_clean_strips_nonblank_webhook_secret(self):
+        source = ContentSource(
+            repo_name='AI-Shipping-Labs/blog',
+            webhook_secret='  secret123  ',
+        )
+        source.full_clean()
+        self.assertEqual(source.webhook_secret, 'secret123')
+
+    def test_admin_form_rejects_blank_webhook_secret(self):
+        request = RequestFactory().get('/admin/integrations/contentsource/add/')
+        request.user = User(
+            email='admin@test.com',
+            is_staff=True,
+            is_superuser=True,
+        )
+        admin = ContentSourceAdmin(ContentSource, AdminSite())
+        form_class = admin.get_form(request)
+        form = form_class(data={
+            'repo_name': 'AI-Shipping-Labs/blog',
+            'webhook_secret': '   ',
+            'max_files': 1000,
+        })
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('webhook_secret', form.errors)
+        self.assertIn(
+            'GitHub webhooks require a shared secret',
+            form.errors['webhook_secret'][0],
+        )
 
 
 # ===========================================================================
@@ -419,9 +470,10 @@ class GitHubWebhookEndpointTest(TestCase):
             webhook_secret=TEST_WEBHOOK_SECRET,
         )
 
-    def _post_webhook(self, payload_dict, event_type='push'):
+    def _post_webhook(self, payload_dict, event_type='push',
+                      secret=TEST_WEBHOOK_SECRET):
         body = json.dumps(payload_dict)
-        sig = make_github_signature(body.encode('utf-8'))
+        sig = make_github_signature(body.encode('utf-8'), secret=secret)
         return self.client.post(
             '/api/webhooks/github',
             data=body,
@@ -430,16 +482,62 @@ class GitHubWebhookEndpointTest(TestCase):
             HTTP_X_GITHUB_EVENT=event_type,
         )
 
-    def test_valid_push_webhook_returns_200(self):
+    def _assert_no_webhook_side_effects(self, mock_async=None, mock_sync=None):
+        self.source.refresh_from_db()
+        self.assertFalse(WebhookLog.objects.filter(service='github').exists())
+        self.assertFalse(SyncLog.objects.filter(source=self.source).exists())
+        self.assertIsNone(self.source.last_webhook_at)
+        self.assertFalse(self.source.sync_requested)
+        self.assertIsNone(self.source.last_sync_status)
+        if mock_async is not None:
+            mock_async.assert_not_called()
+        if mock_sync is not None:
+            mock_sync.assert_not_called()
+
+    def test_valid_push_webhook_to_main_returns_200_and_queues_sync(self):
         payload = {
             'ref': 'refs/heads/main',
             'repository': {'full_name': 'AI-Shipping-Labs/blog'},
         }
-        with patch('integrations.views.github_webhook.sync_content_source'):
+        with (
+            patch('django_q.tasks.async_task', return_value='task-id') as mock_async,
+            patch(
+                'integrations.views.github_webhook.sync_content_source',
+            ) as mock_sync,
+        ):
             response = self._post_webhook(payload)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data['status'], 'ok')
+        self.source.refresh_from_db()
+        self.assertIsNotNone(self.source.last_webhook_at)
+        self.assertEqual(self.source.last_sync_status, 'queued')
+        self.assertTrue(
+            SyncLog.objects.filter(source=self.source, status='queued').exists()
+        )
+        webhook_log = WebhookLog.objects.get(service='github')
+        self.assertEqual(webhook_log.event_type, 'push')
+        self.assertTrue(webhook_log.processed)
+        mock_async.assert_called_once()
+        self.assertEqual(
+            mock_async.call_args.args[0],
+            'integrations.services.github.sync_content_source',
+        )
+        self.assertEqual(mock_async.call_args.args[1].pk, self.source.pk)
+        self.assertTrue(mock_async.call_args.kwargs['force'])
+        mock_sync.assert_not_called()
+
+    def test_valid_push_webhook_to_master_queues_sync(self):
+        payload = {
+            'ref': 'refs/heads/master',
+            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
+        }
+        with patch('django_q.tasks.async_task', return_value='task-id'):
+            response = self._post_webhook(payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.source.refresh_from_db()
+        self.assertIsNotNone(self.source.last_webhook_at)
         self.assertTrue(
             SyncLog.objects.filter(source=self.source, status='queued').exists()
         )
@@ -449,16 +547,71 @@ class GitHubWebhookEndpointTest(TestCase):
             'ref': 'refs/heads/main',
             'repository': {'full_name': 'AI-Shipping-Labs/blog'},
         }
-        response = self.client.post(
-            '/api/webhooks/github',
-            data=json.dumps(payload),
-            content_type='application/json',
-            HTTP_X_HUB_SIGNATURE_256='sha256=invalidsig',
-            HTTP_X_GITHUB_EVENT='push',
-        )
+        with (
+            patch('django_q.tasks.async_task') as mock_async,
+            patch(
+                'integrations.views.github_webhook.sync_content_source',
+            ) as mock_sync,
+        ):
+            response = self.client.post(
+                '/api/webhooks/github',
+                data=json.dumps(payload),
+                content_type='application/json',
+                HTTP_X_HUB_SIGNATURE_256='sha256=invalidsig',
+                HTTP_X_GITHUB_EVENT='push',
+            )
         self.assertEqual(response.status_code, 400)
         data = response.json()
         self.assertEqual(data['error'], 'Invalid webhook signature')
+        self._assert_no_webhook_side_effects(mock_async, mock_sync)
+
+    def test_missing_signature_returns_400_without_side_effects(self):
+        payload = {
+            'ref': 'refs/heads/main',
+            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
+        }
+        with (
+            patch('django_q.tasks.async_task') as mock_async,
+            patch(
+                'integrations.views.github_webhook.sync_content_source',
+            ) as mock_sync,
+        ):
+            response = self.client.post(
+                '/api/webhooks/github',
+                data=json.dumps(payload),
+                content_type='application/json',
+                HTTP_X_GITHUB_EVENT='push',
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error'], 'Invalid webhook signature')
+        self._assert_no_webhook_side_effects(mock_async, mock_sync)
+
+    def test_tampered_signature_returns_400_without_side_effects(self):
+        signed_body = json.dumps({
+            'ref': 'refs/heads/main',
+            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
+        })
+        tampered_payload = {
+            'ref': 'refs/heads/main',
+            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
+            'tampered': True,
+        }
+        with (
+            patch('django_q.tasks.async_task') as mock_async,
+            patch(
+                'integrations.views.github_webhook.sync_content_source',
+            ) as mock_sync,
+        ):
+            response = self.client.post(
+                '/api/webhooks/github',
+                data=json.dumps(tampered_payload),
+                content_type='application/json',
+                HTTP_X_HUB_SIGNATURE_256=make_github_signature(signed_body),
+                HTTP_X_GITHUB_EVENT='push',
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error'], 'Invalid webhook signature')
+        self._assert_no_webhook_side_effects(mock_async, mock_sync)
 
     def test_unknown_repo_returns_404(self):
         payload = {
@@ -497,9 +650,19 @@ class GitHubWebhookEndpointTest(TestCase):
             'ref': 'refs/heads/feature-branch',
             'repository': {'full_name': 'AI-Shipping-Labs/blog'},
         }
-        with patch('integrations.views.github_webhook.sync_content_source') as mock_sync:
+        with (
+            patch('django_q.tasks.async_task') as mock_async,
+            patch(
+                'integrations.views.github_webhook.sync_content_source',
+            ) as mock_sync,
+        ):
             response = self._post_webhook(payload)
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(WebhookLog.objects.filter(service='github').count(), 1)
+        self.assertFalse(SyncLog.objects.filter(source=self.source).exists())
+        self.source.refresh_from_db()
+        self.assertIsNone(self.source.last_webhook_at)
+        mock_async.assert_not_called()
         mock_sync.assert_not_called()
 
     def test_get_not_allowed(self):
@@ -520,37 +683,67 @@ class GitHubWebhookEndpointTest(TestCase):
         )
 
     def test_webhook_logged(self):
-        from integrations.models import WebhookLog
         payload = {
             'ref': 'refs/heads/main',
             'repository': {'full_name': 'AI-Shipping-Labs/blog'},
         }
-        with patch('integrations.views.github_webhook.sync_content_source'):
+        with patch('django_q.tasks.async_task', return_value='task-id'):
             self._post_webhook(payload)
         log = WebhookLog.objects.filter(service='github').first()
         self.assertIsNotNone(log)
         self.assertEqual(log.event_type, 'push')
 
-    def test_source_without_webhook_secret_skips_validation(self):
-        """Sources without webhook_secret accept any request."""
+    def test_blank_webhook_secret_returns_400_without_side_effects(self):
         self.source.webhook_secret = ''
         self.source.save()
         payload = {
             'ref': 'refs/heads/main',
             'repository': {'full_name': 'AI-Shipping-Labs/blog'},
         }
-        with patch('integrations.views.github_webhook.sync_content_source'):
+        with (
+            patch('django_q.tasks.async_task') as mock_async,
+            patch(
+                'integrations.views.github_webhook.sync_content_source',
+            ) as mock_sync,
+        ):
             response = self.client.post(
                 '/api/webhooks/github',
                 data=json.dumps(payload),
                 content_type='application/json',
                 HTTP_X_GITHUB_EVENT='push',
             )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['status'], 'ok')
-        self.assertTrue(
-            SyncLog.objects.filter(source=self.source, status='queued').exists()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()['error'],
+            'Webhook secret is not configured',
         )
+        self._assert_no_webhook_side_effects(mock_async, mock_sync)
+
+    def test_whitespace_webhook_secret_returns_400_without_side_effects(self):
+        self.source.webhook_secret = '   '
+        self.source.save()
+        payload = {
+            'ref': 'refs/heads/main',
+            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
+        }
+        with (
+            patch('django_q.tasks.async_task') as mock_async,
+            patch(
+                'integrations.views.github_webhook.sync_content_source',
+            ) as mock_sync,
+        ):
+            response = self.client.post(
+                '/api/webhooks/github',
+                data=json.dumps(payload),
+                content_type='application/json',
+                HTTP_X_GITHUB_EVENT='push',
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()['error'],
+            'Webhook secret is not configured',
+        )
+        self._assert_no_webhook_side_effects(mock_async, mock_sync)
 
 
 # ===========================================================================

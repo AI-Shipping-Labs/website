@@ -26,6 +26,56 @@ elif [ "${ENV}" = "prod" ]; then
     DEPLOY_HOST="https://aishippinglabs.com"
 fi
 
+# Issue #1140 stopgap for the cold-start ELB health race observed on
+# 2026-07-08: dev took ~21 minutes to converge after crash-looping slow
+# cold-start tasks past the ALB health budget. The real cure is
+# DataTalksClub/aws-infra#11 (ECS health_check_grace_period_seconds and
+# target-group tuning). Until then, the deploy runner waits longer for the
+# exact VERSION tag to appear at /ping after the ECS services-stable waiter
+# times out.
+#
+# Defaults: 150 attempts x 10s = 25 minutes of post-waiter grace. Override
+# DEPLOY_GRACE_ATTEMPTS and/or DEPLOY_GRACE_SLEEP_SECONDS in the shell/CI env
+# to raise or lower the bounded ceiling without editing code. These are
+# deliberately deploy-time shell variables, not IntegrationSettings: the CI
+# runner must read them before the Django app is reachable, including the
+# failure mode where the app never boots.
+DEFAULT_DEPLOY_GRACE_ATTEMPTS=150
+DEFAULT_DEPLOY_GRACE_SLEEP_SECONDS=10
+
+is_non_negative_integer() {
+    case "$1" in
+        ''|*[!0-9]*)
+            return 1
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
+is_positive_integer() {
+    is_non_negative_integer "$1" && [ "$1" -gt 0 ]
+}
+
+configured_deploy_grace_attempts() {
+    local VALUE="${DEPLOY_GRACE_ATTEMPTS:-${DEFAULT_DEPLOY_GRACE_ATTEMPTS}}"
+    if ! is_positive_integer "${VALUE}"; then
+        echo "ERROR: DEPLOY_GRACE_ATTEMPTS must be a positive integer; got '${VALUE}'." >&2
+        exit 1
+    fi
+    echo "${VALUE}"
+}
+
+configured_deploy_grace_sleep_seconds() {
+    local VALUE="${DEPLOY_GRACE_SLEEP_SECONDS:-${DEFAULT_DEPLOY_GRACE_SLEEP_SECONDS}}"
+    if ! is_non_negative_integer "${VALUE}"; then
+        echo "ERROR: DEPLOY_GRACE_SLEEP_SECONDS must be a non-negative integer; got '${VALUE}'." >&2
+        exit 1
+    fi
+    echo "${VALUE}"
+}
+
 predeploy_migrate_check_enabled() {
     case "${PREDEPLOY_MIGRATE_CHECK_ENABLED:-}" in
         1|true|TRUE|yes|YES|on|ON)
@@ -105,6 +155,29 @@ diagnose_service_failure() {
     else
         echo "(service has no load balancer attached)"
     fi
+}
+
+wait_for_deployed_tag_after_waiter_timeout() {
+    local DEPLOYED_TAG
+    local GRACE_ATTEMPTS
+    local GRACE_SLEEP_SECONDS
+
+    GRACE_ATTEMPTS=$(configured_deploy_grace_attempts)
+    GRACE_SLEEP_SECONDS=$(configured_deploy_grace_sleep_seconds)
+
+    echo "ECS waiter timed out; polling ${DEPLOY_HOST}/ping for ${TAG} for up to $((GRACE_ATTEMPTS * GRACE_SLEEP_SECONDS))s..."
+    for i in $(seq 1 "${GRACE_ATTEMPTS}"); do
+        DEPLOYED_TAG=$(curl -fsSL --max-time 10 "${DEPLOY_HOST}/ping" 2>/dev/null || true)
+        if [ "${DEPLOYED_TAG}" = "${TAG}" ]; then
+            echo "WARNING: ECS waiter timed out, but ${DEPLOY_HOST}/ping is serving the expected tag '${DEPLOYED_TAG}' after grace attempt ${i}."
+            echo "Treating deployment as successful so post-deploy bookkeeping can continue."
+            return 0
+        fi
+        echo "Grace attempt ${i}/${GRACE_ATTEMPTS}: ${DEPLOY_HOST}/ping returned '${DEPLOYED_TAG:-<unreachable>}'; expected '${TAG}'."
+        sleep "${GRACE_SLEEP_SECONDS}"
+    done
+    echo "${DEPLOY_HOST}/ping returned '${DEPLOYED_TAG:-<unreachable>}'; expected '${TAG}'."
+    return 1
 }
 
 # Register a new task definition for SERVICE at the current TAG/ROLE.
@@ -327,25 +400,12 @@ roll_service() {
         echo "ERROR: ${SERVICE} did not reach steady state."
 
         # /ping fallback only makes sense for the web service. ECS can still
-        # finish target registration just after the waiter hits its fixed
-        # ceiling, so allow a short grace window before declaring failure.
+        # finish target registration after the waiter hits its fixed ceiling,
+        # so allow the bounded #1140 grace window before declaring failure.
         if [ "${ROLE}" != "worker" ] && [ -n "${DEPLOY_HOST}" ]; then
-            local DEPLOYED_TAG
-            local GRACE_ATTEMPTS=30
-            local GRACE_SLEEP_SECONDS=10
-
-            echo "ECS waiter timed out; polling ${DEPLOY_HOST}/ping for ${TAG} for up to $((GRACE_ATTEMPTS * GRACE_SLEEP_SECONDS))s..."
-            for i in $(seq 1 ${GRACE_ATTEMPTS}); do
-                DEPLOYED_TAG=$(curl -fsSL --max-time 10 "${DEPLOY_HOST}/ping" 2>/dev/null || true)
-                if [ "${DEPLOYED_TAG}" = "${TAG}" ]; then
-                    echo "WARNING: ECS waiter timed out, but ${DEPLOY_HOST}/ping is serving ${DEPLOYED_TAG} after grace attempt ${i}."
-                    echo "Treating deployment as successful so post-deploy bookkeeping can continue."
-                    return 0
-                fi
-                echo "Grace attempt ${i}/${GRACE_ATTEMPTS}: ${DEPLOY_HOST}/ping returned '${DEPLOYED_TAG:-<unreachable>}'; expected '${TAG}'."
-                sleep ${GRACE_SLEEP_SECONDS}
-            done
-            echo "${DEPLOY_HOST}/ping returned '${DEPLOYED_TAG:-<unreachable>}'; expected '${TAG}'."
+            if wait_for_deployed_tag_after_waiter_timeout; then
+                return 0
+            fi
         fi
 
         diagnose_service_failure "${SERVICE}" "${ROLE}"

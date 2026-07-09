@@ -52,6 +52,12 @@ still in flight.
         <span data-repo-last-synced>Never synced</span>
         {% endif %}
       </div>
+      {% if not repo.webhook_secret_configured %}
+      <div class="mt-3 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+           data-testid="webhook-secret-warning">
+        GitHub webhooks are blocked until a webhook secret is configured for this source.
+      </div>
+      {% endif %}
     </div>
     <div class="flex flex-wrap items-center gap-2">
       <form method="post" action="{% url 'studio_sync_repo_trigger' repo.repo_name %}" class="sync-form {% studio_list_class 'action_form' %}">

@@ -23,9 +23,9 @@ inputs:
     required: false
     default: ""
   max-attempts:
-    description: Number of readiness polling attempts.
+    description: Number of readiness polling attempts. Default aligns with deploy/deploy_dev.sh's #1140 post-waiter grace window.
     required: true
-    default: "30"
+    default: "150"
   sleep-seconds:
     description: Seconds to sleep between polling attempts.
     required: true
@@ -64,8 +64,8 @@ runs:
               echo "::notice ::${PING_URL} returned HTTP 200 after ${i} attempt(s)."
               exit 0
             fi
-            if printf '%s' "${response}" | grep -Fq -- "${EXPECTED_TEXT}"; then
-              echo "::notice ::${PING_URL} returned '${response}' matching '${EXPECTED_TEXT}' after ${i} attempt(s)."
+            if [ "${response}" = "${EXPECTED_TEXT}" ]; then
+              echo "::notice ::${PING_URL} returned exactly '${response}' after ${i} attempt(s)."
               exit 0
             fi
           fi

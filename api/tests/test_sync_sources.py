@@ -42,6 +42,7 @@ class SyncSourcesApiTest(TestCase):
         Token.objects.bulk_create([cls.non_staff_token])
         cls.source = ContentSource.objects.create(
             repo_name="AI-Shipping-Labs/content",
+            webhook_secret="configured-secret",
             is_private=True,
             last_sync_status="success",
             last_synced_at=timezone.now(),
@@ -77,21 +78,49 @@ class SyncSourcesApiTest(TestCase):
                 self.assertEqual(response.json(), expected_body)
 
     def test_list_sources_returns_metadata_without_webhook_secret(self):
+        missing_secret_source = ContentSource.objects.create(
+            repo_name="AI-Shipping-Labs/missing-secret",
+            webhook_secret="   ",
+        )
         response = self.client.get("/api/sync/sources", **self._auth())
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(len(data["sources"]), 1)
-        source = data["sources"][0]
+        self.assertEqual(len(data["sources"]), 2)
+        sources = {source["repo_name"]: source for source in data["sources"]}
+        source = sources["AI-Shipping-Labs/content"]
         self.assertEqual(source["id"], str(self.source.pk))
         self.assertEqual(source["repo_name"], "AI-Shipping-Labs/content")
         self.assertEqual(source["short_name"], "content")
         self.assertTrue(source["is_private"])
+        self.assertTrue(source["webhook_secret_configured"])
+        self.assertEqual(source["webhook_security_status"], "configured")
         self.assertEqual(source["last_sync_status"], "success")
         self.assertEqual(source["last_synced_commit"], "abcdef1234567890")
         self.assertEqual(source["short_synced_commit"], "abcdef1")
-        self.assertNotIn("webhook_secret", source)
-        self.assertNotIn("last_sync_log", source)
+        missing = sources["AI-Shipping-Labs/missing-secret"]
+        self.assertEqual(missing["id"], str(missing_secret_source.pk))
+        self.assertFalse(missing["webhook_secret_configured"])
+        self.assertEqual(missing["webhook_security_status"], "missing_secret")
+        for serialized in sources.values():
+            self.assertNotIn("webhook_secret", serialized)
+            self.assertNotIn("last_sync_log", serialized)
+
+    def test_openapi_example_documents_webhook_security_metadata(self):
+        from api.openapi import build_spec
+        from api.urls import urlpatterns
+
+        document = build_spec(urlpatterns)
+        example = (
+            document["paths"]["/api/sync/sources"]["get"]
+            ["responses"]["200"]["content"]["application/json"]["example"]
+            ["sources"][0]
+        )
+
+        self.assertTrue(example["webhook_secret_configured"])
+        self.assertEqual(example["webhook_security_status"], "configured")
+        self.assertNotIn("webhook_secret", example)
+        self.assertNotIn("last_sync_log", example)
 
     def test_delete_sources_collection_returns_guidance_without_mutating(self):
         response = self.client.delete("/api/sync/sources", **self._auth())

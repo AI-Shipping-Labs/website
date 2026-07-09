@@ -223,10 +223,16 @@ class ContentSourcesApplyImportTest(TestCase):
     def test_silently_ignores_non_dict_entries(self):
         result = apply_import({
             'format_version': 1,
-            'content_sources': [None, 'string', 42, {'repo_name': 'org/a'}],
+            'content_sources': [
+                None,
+                'string',
+                42,
+                {'repo_name': 'org/a', 'webhook_secret': 's'},
+            ],
         })
         self.assertEqual(result.created, 1)
         self.assertEqual(result.skipped_repos, [])
+        self.assertEqual(result.skipped_secret_repos, [])
 
     def test_unknown_keys_in_entry_are_ignored(self):
         # Forward-compat: a future field like ``branch`` must not crash.
@@ -256,21 +262,47 @@ class ContentSourcesApplyImportTest(TestCase):
         self.assertEqual(row.webhook_secret, 'kept')
         self.assertTrue(row.is_private)
 
-    def test_webhook_secret_empty_string_round_trips(self):
+    def test_webhook_secret_empty_string_is_skipped_and_preserves_existing(self):
         ContentSource.objects.create(repo_name='org/a', webhook_secret='had')
-        apply_import({
+        result = apply_import({
             'format_version': 1,
             'content_sources': [
                 {'repo_name': 'org/a', 'webhook_secret': ''},
             ],
         })
         row = ContentSource.objects.get(repo_name='org/a')
-        self.assertEqual(row.webhook_secret, '')
+        self.assertEqual(row.webhook_secret, 'had')
+        self.assertEqual(result.updated, 0)
+        self.assertEqual(result.skipped_secret_repos, ['org/a'])
+
+    def test_webhook_secret_whitespace_is_skipped(self):
+        result = apply_import({
+            'format_version': 1,
+            'content_sources': [
+                {'repo_name': 'org/a', 'webhook_secret': '   '},
+            ],
+        })
+        self.assertEqual(result.created, 0)
+        self.assertFalse(ContentSource.objects.filter(repo_name='org/a').exists())
+        self.assertEqual(result.skipped_secret_repos, ['org/a'])
+
+    def test_webhook_secret_absent_skips_new_source(self):
+        result = apply_import({
+            'format_version': 1,
+            'content_sources': [
+                {'repo_name': 'org/a', 'is_private': True},
+            ],
+        })
+        self.assertEqual(result.created, 0)
+        self.assertFalse(ContentSource.objects.filter(repo_name='org/a').exists())
+        self.assertEqual(result.skipped_secret_repos, ['org/a'])
 
     def test_max_files_defaults_to_1000_when_absent(self):
         apply_import({
             'format_version': 1,
-            'content_sources': [{'repo_name': 'org/a'}],
+            'content_sources': [
+                {'repo_name': 'org/a', 'webhook_secret': 's'},
+            ],
         })
         self.assertEqual(
             ContentSource.objects.get(repo_name='org/a').max_files,
@@ -280,7 +312,13 @@ class ContentSourcesApplyImportTest(TestCase):
     def test_max_files_negative_clamped_to_zero(self):
         apply_import({
             'format_version': 1,
-            'content_sources': [{'repo_name': 'org/a', 'max_files': -7}],
+            'content_sources': [
+                {
+                    'repo_name': 'org/a',
+                    'webhook_secret': 's',
+                    'max_files': -7,
+                },
+            ],
         })
         self.assertEqual(
             ContentSource.objects.get(repo_name='org/a').max_files, 0,
@@ -290,7 +328,11 @@ class ContentSourcesApplyImportTest(TestCase):
         apply_import({
             'format_version': 1,
             'content_sources': [
-                {'repo_name': 'org/a', 'max_files': 'not-a-number'},
+                {
+                    'repo_name': 'org/a',
+                    'webhook_secret': 's',
+                    'max_files': 'not-a-number',
+                },
             ],
         })
         self.assertEqual(
@@ -307,13 +349,16 @@ class ContentSourcesImportResultTest(TestCase):
         self.assertEqual(r.created, 0)
         self.assertEqual(r.updated, 0)
         self.assertEqual(r.skipped_repos, [])
+        self.assertEqual(r.skipped_secret_repos, [])
 
     def test_skipped_repos_is_independent_per_instance(self):
         # field(default_factory=list) — guard against shared mutable default.
         a = ImportResult()
         b = ImportResult()
         a.skipped_repos.append('x')
+        a.skipped_secret_repos.append('org/a')
         self.assertEqual(b.skipped_repos, [])
+        self.assertEqual(b.skipped_secret_repos, [])
 
 
 class ContentSourcesDashboardButtonsTest(TestCase):
@@ -571,6 +616,25 @@ class ContentSourcesImportViewTest(TestCase):
         self.assertTrue(
             any('Skipped' in m and '<entry #1>' in m for m in msgs),
             f'Expected skipped-repos warning, got: {msgs!r}',
+        )
+
+    def test_blank_webhook_secret_surfaces_warning_and_preserves_existing(self):
+        ContentSource.objects.create(repo_name='org/a', webhook_secret='kept')
+        response = self._post_payload({
+            'format_version': 1,
+            'content_sources': [
+                {'repo_name': 'org/a', 'webhook_secret': ''},
+            ],
+        })
+
+        self.assertEqual(
+            ContentSource.objects.get(repo_name='org/a').webhook_secret,
+            'kept',
+        )
+        msgs = [str(m) for m in response.wsgi_request._messages]
+        self.assertTrue(
+            any('blank webhook_secret' in m and 'org/a' in m for m in msgs),
+            f'Expected skipped-secret warning, got: {msgs!r}',
         )
 
     def test_zero_recognised_entries_flashes_info(self):

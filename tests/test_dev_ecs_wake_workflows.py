@@ -28,7 +28,8 @@ class DevEcsWakeActionTest(SimpleTestCase):
         self.assertIn('--cluster "${ECS_CLUSTER}"', run_script)
         self.assertIn('--service "${ECS_SERVICE}"', run_script)
         self.assertIn('--desired-count "${DESIRED_COUNT}"', run_script)
-        self.assertIn('grep -Fq -- "${EXPECTED_TEXT}"', run_script)
+        self.assertIn('if [ "${response}" = "${EXPECTED_TEXT}" ]; then', run_script)
+        self.assertNotIn("grep -Fq", run_script)
 
     def test_shared_action_exposes_required_configuration_inputs(self):
         action = _load_yaml(ACTION_PATH)
@@ -46,6 +47,9 @@ class DevEcsWakeActionTest(SimpleTestCase):
         ):
             with self.subTest(name=name):
                 self.assertIn(name, inputs)
+
+        self.assertEqual(inputs["max-attempts"]["default"], "150")
+        self.assertEqual(inputs["sleep-seconds"]["default"], "10")
 
 
 @tag("core")
@@ -118,6 +122,40 @@ class DeployDevWakeWorkflowTest(SimpleTestCase):
         self.assertEqual(verify_step["with"]["expected-text"], "${{ env.TAG }}")
 
         self.assertNotIn("Polling https://dev.aishippinglabs.com/ping", DEPLOY_DEV_WORKFLOW_PATH.read_text())
+
+    def test_deploy_script_and_verify_action_grace_windows_are_aligned(self):
+        workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
+        deploy_job = workflow["jobs"]["deploy"]
+        deploy_env = deploy_job["env"]
+
+        self.assertEqual(deploy_env["DEV_DEPLOY_GRACE_ATTEMPTS"], "150")
+        self.assertEqual(deploy_env["DEV_DEPLOY_GRACE_SLEEP_SECONDS"], "10")
+
+        deploy_step = next(step for step in deploy_job["steps"] if step.get("name") == "Deploy to Dev")
+        self.assertEqual(
+            deploy_step["env"]["DEPLOY_GRACE_ATTEMPTS"],
+            "${{ env.DEV_DEPLOY_GRACE_ATTEMPTS }}",
+        )
+        self.assertEqual(
+            deploy_step["env"]["DEPLOY_GRACE_SLEEP_SECONDS"],
+            "${{ env.DEV_DEPLOY_GRACE_SLEEP_SECONDS }}",
+        )
+
+        verify_step = next(step for step in deploy_job["steps"] if step.get("name") == "Verify deploy landed")
+        self.assertEqual(
+            verify_step["with"]["max-attempts"],
+            "${{ env.DEV_DEPLOY_GRACE_ATTEMPTS }}",
+        )
+        self.assertEqual(
+            verify_step["with"]["sleep-seconds"],
+            "${{ env.DEV_DEPLOY_GRACE_SLEEP_SECONDS }}",
+        )
+
+        script = DEPLOY_SCRIPT_PATH.read_text()
+        self.assertIn("DEFAULT_DEPLOY_GRACE_ATTEMPTS=150", script)
+        self.assertIn("DEFAULT_DEPLOY_GRACE_SLEEP_SECONDS=10", script)
+        self.assertIn("DataTalksClub/aws-infra#11", script)
+        self.assertIn("not IntegrationSettings", script)
 
     def test_dev_deploy_script_sets_desired_count_for_dev_combined_service(self):
         script = DEPLOY_SCRIPT_PATH.read_text()

@@ -16,8 +16,13 @@ from playwright_tests.conftest import ensure_tiers as _ensure_tiers
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
+from django.utils import timezone  # noqa: E402
 
 pytestmark = pytest.mark.local_only
+
+
+def _relative_sprint_start(weeks_from_today):
+    return timezone.localdate() + datetime.timedelta(weeks=weeks_from_today)
 
 
 def _clear_plans_data():
@@ -62,20 +67,16 @@ def _seed_sprint_a_and_b(member_email, *, unfinished_descriptions=None):
 
     Returns the Sprint B plan pk.
     """
-    from django.utils import timezone
-
     from accounts.models import User
     from plans.models import Checkpoint, Sprint
 
     member = User.objects.get(email=member_email)
     sprint_a = Sprint.objects.create(
         name="Sprint A", slug="sprint-a",
-        # date-rot-ok: fixed ordering fixture for carry-over source sprint.
-        start_date=datetime.date(2026, 1, 1), duration_weeks=6)
+        start_date=_relative_sprint_start(-16), duration_weeks=6)
     sprint_b = Sprint.objects.create(
         name="Sprint B", slug="sprint-b",
-        # date-rot-ok: fixed ordering fixture for carry-over target sprint.
-        start_date=datetime.date(2026, 5, 1), duration_weeks=6)
+        start_date=_relative_sprint_start(-8), duration_weeks=6)
     plan_a = _make_plan(member, sprint_a, 6)
     week1 = plan_a.weeks.get(week_number=1)
     Checkpoint.objects.create(
@@ -114,16 +115,16 @@ def _seed_two_prompt_plans(member_email):
     member = User.objects.get(email=member_email)
     sprint_a = Sprint.objects.create(
         name="Sprint A", slug="scope-sprint-a",
-        start_date=datetime.date(2026, 1, 1), duration_weeks=4)
+        start_date=_relative_sprint_start(-16), duration_weeks=4)
     sprint_b = Sprint.objects.create(
         name="Sprint B", slug="scope-sprint-b",
-        start_date=datetime.date(2026, 5, 1), duration_weeks=4)
+        start_date=_relative_sprint_start(-8), duration_weeks=4)
     sprint_c = Sprint.objects.create(
         name="Sprint C", slug="scope-sprint-c",
-        start_date=datetime.date(2026, 9, 1), duration_weeks=4)
+        start_date=_relative_sprint_start(0), duration_weeks=4)
     sprint_d = Sprint.objects.create(
         name="Sprint D", slug="scope-sprint-d",
-        start_date=datetime.date(2026, 12, 1), duration_weeks=4)
+        start_date=_relative_sprint_start(8), duration_weeks=4)
     plan_a = _make_plan(member, sprint_a, 4)
     Checkpoint.objects.create(
         week=plan_a.weeks.get(week_number=1),
@@ -378,8 +379,7 @@ class TestCarryOverFlow:
         member = User.objects.get(email="newmain@test.com")
         sprint = Sprint.objects.create(
             name="First Sprint", slug="first-sprint",
-            # date-rot-ok: no-prior-plan fixture; current sprint state is not under test.
-            start_date=datetime.date(2026, 5, 1), duration_weeks=4)
+            start_date=_relative_sprint_start(0), duration_weeks=4)
         plan = _make_plan(member, sprint, 4)
         plan_pk = plan.pk
         connection.close()

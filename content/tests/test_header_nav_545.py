@@ -9,6 +9,7 @@ from django.urls import resolve, reverse
 from django.utils import timezone
 
 from content.models import Download
+from content.nav_availability import refresh_published_downloads_nav_cache
 from plans.models import Plan, Sprint
 
 User = get_user_model()
@@ -46,6 +47,9 @@ class HeaderTextNavigationIssue580Test(TestCase):
             start_date=timezone.localdate() - datetime.timedelta(days=7),
             status='active',
         )
+
+    def setUp(self):
+        refresh_published_downloads_nav_cache()
 
     def _header_html(self, user=None):
         if user is not None:
@@ -253,9 +257,20 @@ class HeaderTextNavigationIssue580Test(TestCase):
 
 
 class HeaderDownloadsNavigationTest(TestCase):
+    def setUp(self):
+        refresh_published_downloads_nav_cache()
+
     def _header_html(self):
-        response = self.client.get('/')
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            any(
+                'content_download' in query['sql']
+                for query in ctx.captured_queries
+            ),
+            'Header render should not query downloads for nav availability.',
+        )
         html = response.content.decode()
         return html[:html.index('</header>')]
 
@@ -280,6 +295,42 @@ class HeaderDownloadsNavigationTest(TestCase):
         self.assertIn('data-testid="nav-resources-link-downloads"', header)
         self.assertIn('href="/downloads"', header)
         self.assertIn(
+            'data-testid="mobile-nav-resources-link-downloads"', header,
+        )
+
+    def test_downloads_link_hidden_when_downloads_are_unpublished(self):
+        Download.objects.create(
+            title='Draft Download',
+            slug='draft-download',
+            file_url='https://example.com/draft.pdf',
+            published=False,
+        )
+
+        header = self._header_html()
+
+        self.assertNotIn('data-testid="nav-resources-link-downloads"', header)
+        self.assertNotIn(
+            'data-testid="mobile-nav-resources-link-downloads"', header,
+        )
+
+    def test_downloads_link_updates_when_last_download_is_unpublished(self):
+        download = Download.objects.create(
+            title='Temporary Download',
+            slug='temporary-download',
+            file_url='https://example.com/temporary.pdf',
+            published=True,
+        )
+        self.assertIn(
+            'data-testid="nav-resources-link-downloads"',
+            self._header_html(),
+        )
+
+        download.published = False
+        download.save(update_fields=['published'])
+
+        header = self._header_html()
+        self.assertNotIn('data-testid="nav-resources-link-downloads"', header)
+        self.assertNotIn(
             'data-testid="mobile-nav-resources-link-downloads"', header,
         )
 

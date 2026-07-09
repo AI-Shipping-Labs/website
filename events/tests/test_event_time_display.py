@@ -4,6 +4,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import User
+from accounts.templatetags.date_formatting import event_source_short_datetime
 from events.models import Event
 from events.services.display_time import format_event_time_range
 from integrations.config import clear_config_cache
@@ -233,7 +234,7 @@ class EventDetailTimeDisplayTest(TestCase):
 
 
 class EventListAndCalendarScopeTest(TestCase):
-    def test_list_and_calendar_are_date_only_and_link_to_detail(self):
+    def test_list_shows_time_while_calendar_stays_date_only(self):
         # Issue #713: use a future start so the event lands in the
         # Upcoming section.
         future = timezone.now() + timedelta(days=30)
@@ -253,6 +254,6 @@ class EventListAndCalendarScopeTest(TestCase):
         # Issue #673: links go to the canonical id+slug URL now.
         self.assertContains(list_response, event.get_absolute_url())
         self.assertContains(calendar_response, event.get_absolute_url())
-        self.assertContains(list_response, event.weekday_date())
+        self.assertContains(list_response, event_source_short_datetime(event))
         self.assertNotContains(list_response, event.formatted_start())
         self.assertNotContains(calendar_response, event.formatted_time())

@@ -243,7 +243,13 @@ def site_context(request):
         'login_state': ga_login_state,
         'member_tier': ga_member_tier,
     }
-    download_model = apps.get_model('content', 'Download')
+    user = getattr(request, 'user', None)
+    has_published_downloads = False
+    if not getattr(user, 'is_authenticated', False):
+        download_model = apps.get_model('content', 'Download')
+        has_published_downloads = download_model.objects.filter(
+            published=True
+        ).exists()
 
     return {
         'VERSION': settings.VERSION,
@@ -260,9 +266,7 @@ def site_context(request):
         'ga_client_context_json': json.dumps(ga_client_context),
         'gtag_pending_event': pending_event,
         'current_year': __import__('datetime').datetime.now().year,
-        'has_published_downloads': download_model.objects.filter(
-            published=True
-        ).exists(),
+        'has_published_downloads': has_published_downloads,
     }
 
 

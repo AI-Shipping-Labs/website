@@ -384,6 +384,9 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
         passing `active_override=` into `get_user_level`, so there is no
         duplicate override/tier fetch left to remove. The cap is set to 26
         (no extra headroom) so a per-course N+1 regression still fails.
+        #1163 keeps the downloads navigation flag off authenticated
+        dashboard renders so the header does not spend a query deciding
+        whether to show the Downloads link.
         """
         self.client.login(email='totalq@example.com', password='testpass')
 
@@ -401,4 +404,13 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
             len(ctx), 27,
             f"Dashboard used {len(ctx)} queries (limit: 27). "
             f"Possible N+1 regression.",
+        )
+        download_queries = [
+            query['sql'] for query in ctx.captured_queries
+            if 'content_download' in query['sql']
+        ]
+        self.assertEqual(
+            download_queries,
+            [],
+            'Dashboard render should not query downloads for header nav.',
         )

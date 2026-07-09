@@ -10,9 +10,9 @@ Expected context:
     <div class="mb-4">
       <i data-lucide="mail-warning" class="mx-auto h-10 w-10 text-amber-600 dark:text-amber-300"></i>
     </div>
-    <p class="text-lg font-semibold">Verify your email to unlock this</p>
+    <p class="text-lg font-semibold">Verify your email to keep reading</p>
     <p class="mx-auto mt-2 max-w-xl text-sm leading-6 text-amber-900/80 dark:text-amber-100/80">
-      This content is included with your Free account. Verify {{ verify_email_address }} to open it.
+      This content is included with your Free account. Verify {{ verify_email_address }} to unlock it; the resend link will return you to this page.
     </p>
     <form method="post" action="{{ verify_resend_url }}" class="mt-6" data-verification-resend-form>
       {% csrf_token %}

@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
+from accounts.return_context import sanitize_verification_return_path
 from accounts.services.verification import resolve_unverified_ttl_days
 from accounts.utils.tokens import JWT_ALGORITHM, generate_user_action_token
 from integrations.config import site_base_url
@@ -33,6 +34,7 @@ def _generate_verification_token(user_id, redirect_to=None, expiry_hours=24):
     Returns:
         str: The encoded JWT token.
     """
+    redirect_to = sanitize_verification_return_path(redirect_to, default="") or None
     return generate_user_action_token(
         user_id,
         "verify_email",
@@ -63,6 +65,10 @@ def _send_subscribe_verification_email(user, redirect_to=None):
         user: User model instance.
         redirect_to: Optional download URL for lead magnet flow.
     """
+    redirect_to = sanitize_verification_return_path(
+        redirect_to,
+        default="",
+    ) or None
     token = _generate_verification_token(user.pk, redirect_to=redirect_to)
     site_url = site_base_url()
     verify_url = f"{site_url}/api/verify-email?token={token}"
@@ -126,7 +132,11 @@ def subscribe_api(request):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     email = data.get("email", "").strip().lower()
-    redirect_to = data.get("redirect_to", "").strip()
+    redirect_to = sanitize_verification_return_path(
+        data.get("redirect_to", ""),
+        request=request,
+        default="",
+    )
 
     if not email:
         return JsonResponse({"error": "Email is required"}, status=400)

@@ -31,6 +31,8 @@ from content.models import (
     Project,
     Tutorial,
     Unit,
+    Workshop,
+    WorkshopPage,
 )
 from events.models import Event
 from tests.fixtures import TierSetupMixin
@@ -789,11 +791,21 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
         self.assert_verify_gate(response)
         self.assertNotContains(response, 'Free project body')
 
-    # Issue #426 retired the inline event recording UI, so the completed
-    # event detail page no longer renders any per-content verify gate for
-    # the recording. Recording playback (and its verify gate) lives on the
-    # workshop video page now; the upcoming-event verify gate is covered
-    # by ``test_event_detail_renders_verify_gate`` below.
+    def test_event_recording_detail_renders_verify_gate(self):
+        event = Event.objects.create(
+            title='Free Recording Gate',
+            slug='free-recording-gate',
+            description='Recording description',
+            start_datetime=timezone.now() - timedelta(days=7),
+            status='completed',
+            published=True,
+            required_level=LEVEL_OPEN,
+            recording_url='https://youtube.com/watch?v=free',
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assert_verify_gate(response)
+        self.assertNotContains(response, 'Upgrade to Free')
+        self.assertNotContains(response, 'Free required')
 
     def test_event_detail_renders_verify_gate(self):
         event = Event.objects.create(
@@ -840,7 +852,23 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
         response = self.client.get(f'/resources/{link.pk}/go')
         self.assert_verify_gate(response)
 
-    def test_download_file_renders_verify_gate(self):
+    def test_downloads_list_renders_verify_gate(self):
+        Download.objects.create(
+            title='Free Download Gate',
+            slug='free-download-gate',
+            description='Free download description',
+            file_url='https://example.com/free.pdf',
+            required_level=LEVEL_OPEN,
+            published=True,
+        )
+        response = self.client.get('/downloads')
+        self.assert_verify_gate(response)
+        self.assertContains(response, 'Verify email to download')
+        self.assertNotContains(response, 'href="/api/downloads/free-download-gate/file"')
+        self.assertNotContains(response, 'Upgrade to Free')
+        self.assertNotContains(response, 'Free required')
+
+    def test_download_file_api_returns_email_verification_signal(self):
         Download.objects.create(
             title='Free Download Gate',
             slug='free-download-gate',
@@ -850,7 +878,80 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
             published=True,
         )
         response = self.client.get('/api/downloads/free-download-gate/file')
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json(),
+            {
+                'error': 'Email verification required',
+                'requires_email_verification': True,
+                'gated_reason': 'unverified_email',
+                'download_slug': 'free-download-gate',
+            },
+        )
+        self.assertNotIn('Insufficient access level', response.content.decode())
+
+    def _create_workshop(self, slug='free-workshop-gate'):
+        event = Event.objects.create(
+            title='Free Workshop Recording Gate',
+            slug=f'{slug}-event',
+            description='Workshop event description',
+            start_datetime=timezone.now() - timedelta(days=7),
+            status='completed',
+            published=True,
+            required_level=LEVEL_OPEN,
+            recording_url='https://youtube.com/watch?v=workshop',
+        )
+        workshop = Workshop.objects.create(
+            title='Free Workshop Gate',
+            slug=slug,
+            description='Workshop description',
+            date=date(2025, 1, 1),
+            status='published',
+            landing_required_level=LEVEL_OPEN,
+            pages_required_level=LEVEL_OPEN,
+            recording_required_level=LEVEL_OPEN,
+            event=event,
+        )
+        WorkshopPage.objects.create(
+            workshop=workshop,
+            title='Intro Page',
+            slug='intro',
+            sort_order=1,
+            body='Workshop page body',
+            body_html='<p>Workshop page body</p>',
+        )
+        return workshop
+
+    def test_workshop_landing_renders_verify_gate(self):
+        workshop = self._create_workshop('free-workshop-landing-gate')
+
+        response = self.client.get(workshop.get_absolute_url())
+
         self.assert_verify_gate(response)
+        self.assertNotContains(response, 'data-testid="workshop-landing-paywall"')
+        self.assertNotContains(response, 'Upgrade to Free')
+        self.assertNotContains(response, 'Free required')
+
+    def test_workshop_page_detail_renders_verify_gate(self):
+        workshop = self._create_workshop('free-workshop-page-gate')
+        page = workshop.pages.get(slug='intro')
+
+        response = self.client.get(page.get_absolute_url())
+
+        self.assert_verify_gate(response)
+        self.assertNotContains(response, 'data-testid="workshop-pages-paywall"')
+        self.assertNotContains(response, 'Upgrade to Free')
+        self.assertNotContains(response, 'Free required')
+
+    def test_workshop_video_renders_verify_gate(self):
+        workshop = self._create_workshop('free-workshop-video-gate')
+
+        response = self.client.get(f'{workshop.get_absolute_url()}/video')
+
+        self.assert_verify_gate(response)
+        self.assertNotContains(response, 'data-testid="video-paywall"')
+        self.assertNotContains(response, 'Upgrade to Free')
+        self.assertNotContains(response, 'Free required')
 
     def test_free_listings_still_render_normally(self):
         Article.objects.create(

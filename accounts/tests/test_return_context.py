@@ -7,6 +7,7 @@ from accounts.return_context import (
     append_next,
     get_next_url,
     sanitize_next_url,
+    sanitize_verification_return_path,
     should_skip_logout_redirect,
 )
 
@@ -43,6 +44,61 @@ class SanitizeNextUrlTest(TestCase):
 
     def test_empty_string_uses_default(self):
         self.assertEqual(sanitize_next_url("", default="/x"), "/x")
+
+
+@tag('core')
+class SanitizeVerificationReturnPathTest(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.request = self.factory.get("/")
+
+    def test_safe_relative_path_passes_through(self):
+        self.assertEqual(
+            sanitize_verification_return_path(
+                "/blog/free?x=1#section",
+                request=self.request,
+            ),
+            "/blog/free?x=1#section",
+        )
+
+    def test_same_host_absolute_url_is_normalized_to_path(self):
+        self.assertEqual(
+            sanitize_verification_return_path(
+                "http://testserver/workshops/free",
+                request=self.request,
+            ),
+            "/workshops/free",
+        )
+
+    def test_external_absolute_url_is_rejected(self):
+        self.assertEqual(
+            sanitize_verification_return_path(
+                "https://evil.example/phish",
+                request=self.request,
+                default="",
+            ),
+            "",
+        )
+
+    def test_auth_logout_targets_are_rejected(self):
+        blocked = [
+            "/accounts/logout/",
+            "/accounts/login/",
+            "/account/",
+            "/admin/",
+            "/studio/",
+            "/notifications",
+        ]
+        for value in blocked:
+            with self.subTest(value=value):
+                self.assertEqual(
+                    sanitize_verification_return_path(
+                        value,
+                        request=self.request,
+                        default="",
+                    ),
+                    "",
+                )
 
 
 @tag('core')

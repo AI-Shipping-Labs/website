@@ -32,7 +32,7 @@ JWT_ALGORITHM = "HS256"
 FAST_PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 
-def _make_verification_token(user_id, expired=False):
+def _make_verification_token(user_id, expired=False, return_path=None, redirect_to=None):
     """Create a verification JWT token for testing."""
     if expired:
         exp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
@@ -43,6 +43,10 @@ def _make_verification_token(user_id, expired=False):
         "action": "verify_email",
         "exp": exp,
     }
+    if return_path:
+        payload["return_path"] = return_path
+    if redirect_to:
+        payload["redirect_to"] = redirect_to
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
@@ -94,6 +98,37 @@ class RegisterAPITest(TestCase):
         self.assertEqual(resp.status_code, 201)
         user = User.objects.get(email="verify-send@example.com")
         mock_send.assert_called_once_with(user)
+
+    @patch("accounts.views.auth._send_verification_email")
+    def test_register_with_safe_next_sends_verification_email_return_path(self, mock_send):
+        resp = self._post({
+            "email": "verify-return@example.com",
+            "password": "secure1234",
+            "next": "/blog/free-return-article?from=signup",
+        })
+        self.assertEqual(resp.status_code, 201)
+        user = User.objects.get(email="verify-return@example.com")
+        mock_send.assert_called_once_with(
+            user,
+            return_path="/blog/free-return-article?from=signup",
+        )
+        self.assertEqual(
+            resp.json()["message"],
+            "Account created. Check your email to verify your address. "
+            "The verification link returns you to this content and unlocks it.",
+        )
+
+    @patch("accounts.views.auth._send_verification_email")
+    def test_register_discards_unsafe_next_before_email_generation(self, mock_send):
+        resp = self._post({
+            "email": "verify-unsafe-return@example.com",
+            "password": "secure1234",
+            "next": "https://evil.example/phish",
+        })
+        self.assertEqual(resp.status_code, 201)
+        user = User.objects.get(email="verify-unsafe-return@example.com")
+        mock_send.assert_called_once_with(user)
+        self.assertEqual(resp.json()["return_url"], "")
 
     def test_register_user_has_password(self):
         """Registered user has a usable password."""
@@ -284,10 +319,90 @@ class VerifyEmailAPITest(TestCase):
         self.assertContains(resp, 'href="/account/"')
         self.assertContains(resp, "Continue to Account")
 
+    def test_verify_success_redirects_to_signed_return_path(self):
+        user = User.objects.create_user(
+            email="return-path@example.com",
+            password="test1234",
+            verification_expires_at=timezone.now() + datetime.timedelta(days=1),
+        )
+        token = _make_verification_token(
+            user.pk,
+            return_path="/blog/free-return-article?from=email",
+        )
+
+        resp = self.client.get(f"{self.url}?token={token}")
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/blog/free-return-article?from=email")
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        self.assertIsNone(user.verification_expires_at)
+
+    def test_verify_already_verified_user_redirects_to_signed_return_path(self):
+        user = User.objects.create_user(
+            email="already-return@example.com",
+            password="test1234",
+            email_verified=True,
+            verification_expires_at=timezone.now() + datetime.timedelta(days=1),
+        )
+        token = _make_verification_token(user.pk, return_path="/tutorials/free")
+
+        resp = self.client.get(f"{self.url}?token={token}")
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/tutorials/free")
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        self.assertIsNotNone(user.verification_expires_at)
+
+    def test_verify_discards_unsafe_signed_return_path(self):
+        user = User.objects.create_user(
+            email="unsafe-return@example.com",
+            password="test1234",
+        )
+        token = _make_verification_token(
+            user.pk,
+            return_path="https://evil.example/phish",
+        )
+
+        resp = self.client.get(f"{self.url}?token={token}")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assert_html_result(resp, heading="Email Verified")
+        self.assertNotEqual(getattr(resp, "url", ""), "https://evil.example/phish")
+
+    def test_verify_discards_rejected_auth_return_path(self):
+        user = User.objects.create_user(
+            email="auth-return@example.com",
+            password="test1234",
+        )
+        token = _make_verification_token(user.pk, return_path="/accounts/logout/")
+
+        resp = self.client.get(f"{self.url}?token={token}")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assert_html_result(resp, heading="Email Verified")
+
+    def test_verify_legacy_redirect_to_is_sanitized(self):
+        user = User.objects.create_user(
+            email="legacy-redirect@example.com",
+            password="test1234",
+        )
+        token = _make_verification_token(user.pk, redirect_to="/downloads/free/file")
+
+        resp = self.client.get(f"{self.url}?token={token}")
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/downloads/free/file")
+
     def test_verify_expired_token_returns_400(self):
         """Expired token returns 400."""
         user = User.objects.create_user(email="expired@example.com", password="test1234")
-        token = _make_verification_token(user.pk, expired=True)
+        token = _make_verification_token(
+            user.pk,
+            expired=True,
+            return_path="/blog/should-not-open",
+        )
         resp = self.client.get(f"{self.url}?token={token}")
         self.assertEqual(resp.status_code, 400)
         self.assert_html_result(
@@ -298,7 +413,7 @@ class VerifyEmailAPITest(TestCase):
 
     def test_verify_invalid_token_returns_400(self):
         """Garbage token returns 400."""
-        resp = self.client.get(f"{self.url}?token=invalid_garbage")
+        resp = self.client.get(f"{self.url}?token=invalid_garbage&next=/blog/x")
         self.assertEqual(resp.status_code, 400)
         self.assert_html_result(
             resp,
@@ -308,7 +423,7 @@ class VerifyEmailAPITest(TestCase):
 
     def test_verify_missing_token_returns_400(self):
         """No token parameter returns 400."""
-        resp = self.client.get(self.url)
+        resp = self.client.get(f"{self.url}?next=/blog/x")
         self.assertEqual(resp.status_code, 400)
         self.assert_html_result(
             resp,
@@ -324,6 +439,7 @@ class VerifyEmailAPITest(TestCase):
             "action": "password_reset",  # wrong action
             "exp": datetime.datetime.now(datetime.timezone.utc)
             + datetime.timedelta(hours=24),
+            "return_path": "/blog/should-not-open",
         }
         token = jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
         resp = self.client.get(f"{self.url}?token={token}")
@@ -336,7 +452,7 @@ class VerifyEmailAPITest(TestCase):
 
     def test_verify_nonexistent_user_returns_404(self):
         """Token for non-existent user returns 404."""
-        token = _make_verification_token(99999)
+        token = _make_verification_token(99999, return_path="/blog/should-not-open")
         resp = self.client.get(f"{self.url}?token={token}")
         self.assertEqual(resp.status_code, 404)
         self.assert_html_result(
@@ -655,6 +771,36 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "template bug"):
             _send_verification_email(self.user)
+
+    @patch("email_app.services.email_service.EmailService")
+    def test_send_verification_email_signs_return_path(self, service_cls):
+        from accounts.views.auth import _send_verification_email
+
+        _send_verification_email(self.user, return_path="/blog/free-return-article")
+
+        _, _, context = service_cls.return_value.send.call_args.args
+        token = context["verify_url"].split("token=", 1)[1]
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+        )
+        self.assertEqual(payload["return_path"], "/blog/free-return-article")
+
+    @patch("email_app.services.email_service.EmailService")
+    def test_send_verification_email_discards_unsafe_return_path(self, service_cls):
+        from accounts.views.auth import _send_verification_email
+
+        _send_verification_email(self.user, return_path="https://evil.example/phish")
+
+        _, _, context = service_cls.return_value.send.call_args.args
+        token = context["verify_url"].split("token=", 1)[1]
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+        )
+        self.assertNotIn("return_path", payload)
 
     @patch("email_app.services.email_service.EmailService")
     def test_send_password_reset_email_soft_fails_email_service_error(self, service_cls):

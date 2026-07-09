@@ -482,22 +482,30 @@ def downloads_list(request):
 
     # Annotate each download with access info for the template
     annotated_downloads = []
+    verify_downloads_email = False
     for download in downloads:
         has_access = can_access(request.user, download)
         is_lead_magnet = download.required_level == 0
         is_anonymous = not request.user.is_authenticated
         gated_reason = get_gated_reason(request.user, download)
+        requires_email_verification = gated_reason == 'unverified_email'
         if gated_reason == 'unverified_email':
-            has_access = True
+            has_access = False
+            verify_downloads_email = True
 
         annotated_downloads.append({
             'download': download,
             'has_access': has_access,
             'is_lead_magnet': is_lead_magnet,
             'show_email_form': is_lead_magnet and is_anonymous,
+            'requires_email_verification': requires_email_verification,
             'cta_message': (
                 f'Upgrade to {get_required_tier_name(download.required_level)} to download'
-                if not has_access and not is_lead_magnet else ''
+                if (
+                    not has_access
+                    and not is_lead_magnet
+                    and not requires_email_verification
+                ) else ''
             ),
         })
 
@@ -507,5 +515,9 @@ def downloads_list(request):
         'selected_tags': selected_tags,
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
         'base_path': '/downloads',
+        'verify_downloads_email': verify_downloads_email,
     }
+    if verify_downloads_email:
+        from content.access import build_verify_email_context
+        context.update(build_verify_email_context(request.user))
     return render(request, 'content/downloads_list.html', context)

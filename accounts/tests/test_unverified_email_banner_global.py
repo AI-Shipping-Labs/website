@@ -245,6 +245,7 @@ class ResendVerificationNextRedirectTest(TestCase):
         # Safe in-site next is preserved.
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(resp.url, "/courses/")
+        send_mock.assert_called_once_with(user, return_path="/courses/")
 
     def test_resend_hostile_next_falls_back_to_account(self):
         user = User.objects.create_user(
@@ -265,3 +266,4 @@ class ResendVerificationNextRedirectTest(TestCase):
         # Hostile next is dropped; redirect goes to the named ``account`` URL.
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(resp.url, "/account/")
+        send_mock.assert_called_once_with(user)

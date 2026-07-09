@@ -42,6 +42,10 @@ dispatch, and whether this boot runs ``migrate``.
   because deploy CI already runs it before the image is built. Set
   ``SERVING_BOOT_CHECK_ENABLED=true`` to restore the old serving-boot gate.
 
+Before Django setup, every mode runs a cheap raw-env smoke check. It catches
+the high-value production email misconfig guarded by ``email_app.E001`` without
+invoking Django's full URL/model check framework on the serving path.
+
 Every mode still benefits from the single-process boot: only one settings
 import, no Secrets Manager / RDS round trips before serving / polling.
 
@@ -75,6 +79,14 @@ import time
 import django
 
 logger = logging.getLogger(__name__)
+
+_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def _truthy_env(name, *, default=False):
+    if name not in os.environ:
+        return default
+    return os.environ[name].strip().lower() in _TRUTHY_ENV_VALUES
 
 
 def _emit_timing(phase, seconds):
@@ -202,6 +214,39 @@ def _gunicorn_worker_count():
         )
         return 3
     return count
+
+
+def _serving_boot_smoke_check_enabled():
+    return _truthy_env("SERVING_BOOT_SMOKE_CHECK_ENABLED", default=True)
+
+
+def _run_serving_boot_smoke_check():
+    """Run cheap deploy-critical checks before Django setup.
+
+    This is intentionally much narrower than ``manage.py check``. It does not
+    import URLconfs, models, templates, or hit the database; it only validates
+    raw env values whose absence would create a known production incident.
+    """
+    if not _serving_boot_smoke_check_enabled():
+        print(
+            "Skipping serving boot smoke check "
+            "(SERVING_BOOT_SMOKE_CHECK_ENABLED is not true)",
+            flush=True,
+        )
+        return
+
+    debug = _truthy_env("DEBUG", default=True)
+    ses_enabled = _truthy_env("SES_ENABLED", default=False)
+    if not debug and not ses_enabled:
+        raise RuntimeError(
+            "SERVING_BOOT_SMOKE_CHECK failed: DEBUG=false but "
+            "SES_ENABLED is not true. Transactional email would silently "
+            "no-op. Set SES_ENABLED=true or set "
+            "SERVING_BOOT_SMOKE_CHECK_ENABLED=false for an intentional "
+            "non-sending environment."
+        )
+
+    print("Serving boot smoke check passed", flush=True)
 
 
 def _start_gunicorn(workers):
@@ -389,6 +434,7 @@ def main():
     phases = {}
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "website.settings")
+    _timed("smoke_check", _run_serving_boot_smoke_check, record=phases)
     # Time settings import + app registry population (incl.
     # integrations.apps.ready() -> Logfire). See issue #1141 Phase 1.
     _timed("django_setup", django.setup, record=phases)

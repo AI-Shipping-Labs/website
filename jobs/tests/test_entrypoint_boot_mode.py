@@ -124,6 +124,18 @@ class PredeployModeTest(BootModeDispatchTestBase):
         self.start_gunicorn.assert_not_called()
         self.start_qcluster.assert_not_called()
 
+    def test_smoke_check_failure_stops_before_django_setup(self):
+        with self.assertRaises(RuntimeError):
+            self._run_main_with_env({
+                "BOOT_MODE": "predeploy",
+                "DEBUG": "false",
+            })
+
+        entry.django.setup.assert_not_called()
+        self.call_command.assert_not_called()
+        self.start_gunicorn.assert_not_called()
+        self.start_qcluster.assert_not_called()
+
 
 class WebModeTest(BootModeDispatchTestBase):
     def test_web_registers_schedules_and_serves_without_migrate_or_check(self):
@@ -226,6 +238,52 @@ class GunicornWorkerCountTest(SimpleTestCase):
                         "scripts.entrypoint_init", level="WARNING"
                     ):
                         self.assertEqual(entry._gunicorn_worker_count(), 3)
+
+
+class ServingBootSmokeCheckTest(SimpleTestCase):
+    def test_truthy_env_defaults_when_missing(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(entry._truthy_env("MISSING_FLAG", default=True))
+            self.assertFalse(entry._truthy_env("MISSING_FLAG", default=False))
+
+    def test_truthy_env_recognizes_enabled_values(self):
+        for value in ("1", "true", "TRUE", "yes", "on"):
+            with self.subTest(value=value):
+                with mock.patch.dict(os.environ, {"FLAG": value}, clear=True):
+                    self.assertTrue(entry._truthy_env("FLAG"))
+
+    def test_smoke_check_fails_when_production_email_is_disabled(self):
+        with mock.patch.dict(os.environ, {"DEBUG": "false"}, clear=True):
+            with self.assertRaisesMessage(
+                RuntimeError, "DEBUG=false but SES_ENABLED is not true",
+            ):
+                entry._run_serving_boot_smoke_check()
+
+    def test_smoke_check_passes_when_production_email_is_enabled(self):
+        with mock.patch.dict(
+            os.environ,
+            {"DEBUG": "false", "SES_ENABLED": "true"},
+            clear=True,
+        ):
+            with mock.patch("builtins.print") as print_:
+                entry._run_serving_boot_smoke_check()
+
+        print_.assert_called_with("Serving boot smoke check passed", flush=True)
+
+    def test_smoke_check_can_be_disabled_for_intentional_non_sending_env(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "DEBUG": "false",
+                "SERVING_BOOT_SMOKE_CHECK_ENABLED": "false",
+            },
+            clear=True,
+        ):
+            with mock.patch("builtins.print") as print_:
+                entry._run_serving_boot_smoke_check()
+
+        print_.assert_called_once()
+        self.assertIn("Skipping serving boot smoke check", print_.call_args.args[0])
 
 
 class StartGunicornArgvTest(SimpleTestCase):

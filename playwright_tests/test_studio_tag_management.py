@@ -201,10 +201,14 @@ class TestTagRenamePropagates:
         ).click()
         page.wait_for_load_state("domcontentloaded")
 
-        body = page.content()
-        assert "Renamed" in body
-        assert "paid-user" in body or True  # appears in the flash message
-        assert "on 3 user(s)" in body
+        success_message = page.locator(
+            '[data-testid="messages-region"] [data-message-tag="success"]'
+        )
+        assert success_message.count() == 1
+        assert (
+            success_message.inner_text().strip()
+            == 'Renamed "paid-user" to "paid" on 3 user(s).'
+        )
 
         # The chip on this user now reads 'paid'.
         assert page.locator(

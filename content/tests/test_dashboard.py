@@ -21,6 +21,7 @@ from django.urls import Resolver404, resolve
 from django.utils import timezone
 from freezegun import freeze_time
 
+from accounts.models import TierOverride
 from content.access import LEVEL_PREMIUM
 from content.models import (
     Article,
@@ -37,6 +38,7 @@ from content.models import (
 from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from events.models import Event, EventRegistration, EventSeries
 from notifications.models import Notification
+from plans.models import Plan, Sprint, SprintEnrollment
 from tests.fixtures import TierSetupMixin
 from voting.models import Poll
 
@@ -1051,6 +1053,184 @@ class QuickActionsTest(TierSetupMixin, TestCase):
         self.client.login(email='actions-main@example.com', password='testpass')
         response = self.client.get('/')
         self.assertLessEqual(len(response.context['quick_actions']), 6)
+
+
+# ============================================================
+# Free Activation Surface
+# ============================================================
+
+
+class FreeActivationDashboardTest(TierSetupMixin, TestCase):
+    """Free members get guided first steps and paid value teaser."""
+
+    def _login_user(self, user):
+        self.client.login(email=user.email, password='testpass')
+
+    def _create_ai_hero(self):
+        course = Course.objects.create(
+            title='AI Hero',
+            slug='aihero',
+            status='published',
+        )
+        module = Module.objects.create(
+            course=course,
+            title='Start',
+            slug='start',
+            sort_order=1,
+        )
+        unit = Unit.objects.create(
+            module=module,
+            title='First build',
+            slug='first-build',
+            sort_order=1,
+        )
+        return course, unit
+
+    def _create_active_sprint(self, slug='free-sprint'):
+        return Sprint.objects.create(
+            name='Free Sprint',
+            slug=slug,
+            start_date=timezone.localdate(),
+            duration_weeks=4,
+            status='active',
+            min_tier_level=0,
+        )
+
+    def test_brand_new_free_member_sees_checklist_before_empty_states(self):
+        user = User.objects.create_user(
+            email='free-activation@test.com',
+            password='testpass',
+            tier=self.free_tier,
+        )
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        self.assertTrue(response.context['show_free_activation_checklist'])
+        self.assertTrue(response.context['show_free_plan_teaser'])
+        self.assertFalse(response.context['show_onboarding_prompt'])
+        content = response.content.decode()
+        self.assertIn('data-testid="free-activation-checklist"', content)
+        self.assertIn('data-testid="free-plan-teaser"', content)
+        self.assertLess(
+            content.index('data-testid="free-activation-checklist"'),
+            content.index('data-testid="member-empty-state"'),
+        )
+        self.assertContains(response, 'href="/courses/aihero"')
+        self.assertContains(response, 'href="/events"')
+        self.assertContains(response, 'href="/activities#community-sprints"')
+        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'personal plan')
+        self.assertContains(response, 'sprint with accountability')
+        self.assertContains(response, 'Slack/community support')
+
+        for item in response.context['free_activation_checklist_items']:
+            path = urlparse(item['url']).path
+            try:
+                resolve(path)
+            except Resolver404 as exc:
+                self.fail(f"{item['title']} links to missing route {path}: {exc}")
+
+    def test_checklist_completion_reflects_existing_activity(self):
+        user = User.objects.create_user(
+            email='free-progress@test.com',
+            password='testpass',
+            tier=self.free_tier,
+        )
+        course, unit = self._create_ai_hero()
+        Enrollment.objects.create(user=user, course=course)
+        UserCourseProgress.objects.create(user=user, unit=unit, completed_at=timezone.now())
+        event = Event.objects.create(
+            title='Open Event',
+            slug='open-event',
+            start_datetime=timezone.now() + timedelta(days=3),
+            status='upcoming',
+            required_level=0,
+        )
+        EventRegistration.objects.create(user=user, event=event)
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        items = {
+            item['key']: item
+            for item in response.context['free_activation_checklist_items']
+        }
+        self.assertTrue(items['ai-hero']['completed'])
+        self.assertTrue(items['events']['completed'])
+        self.assertFalse(items['sprints']['completed'])
+        self.assertContains(
+            response,
+            'data-testid="free-activation-complete-ai-hero"',
+        )
+        self.assertContains(
+            response,
+            'data-testid="free-activation-complete-events"',
+        )
+
+        sprint = self._create_active_sprint(slug='engaged-sprint')
+        SprintEnrollment.objects.create(sprint=sprint, user=user)
+        response = self.client.get('/')
+        items = {
+            item['key']: item
+            for item in response.context['free_activation_checklist_items']
+        }
+        self.assertTrue(items['sprints']['completed'])
+
+    def test_active_sprint_plan_hides_free_activation_surface(self):
+        user = User.objects.create_user(
+            email='free-plan@test.com',
+            password='testpass',
+            tier=self.free_tier,
+        )
+        sprint = self._create_active_sprint(slug='planned-sprint')
+        Plan.objects.create(member=user, sprint=sprint)
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        self.assertFalse(response.context['show_free_activation_checklist'])
+        self.assertFalse(response.context['show_free_plan_teaser'])
+        self.assertNotContains(response, 'data-testid="free-activation-checklist"')
+        self.assertNotContains(response, 'data-testid="free-plan-teaser"')
+
+    def test_paid_members_keep_paid_onboarding_prompt_only(self):
+        user = User.objects.create_user(
+            email='basic-activation@test.com',
+            password='testpass',
+            tier=self.basic_tier,
+        )
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        self.assertTrue(response.context['show_onboarding_prompt'])
+        self.assertFalse(response.context['show_free_activation_checklist'])
+        self.assertFalse(response.context['show_free_plan_teaser'])
+        self.assertContains(response, 'data-testid="onboarding-prompt"')
+        self.assertNotContains(response, 'data-testid="free-activation-checklist"')
+
+    def test_free_user_with_active_paid_override_uses_paid_dashboard(self):
+        user = User.objects.create_user(
+            email='override-activation@test.com',
+            password='testpass',
+            tier=self.free_tier,
+        )
+        TierOverride.objects.create(
+            user=user,
+            original_tier=self.free_tier,
+            override_tier=self.main_tier,
+            expires_at=timezone.now() + timedelta(days=7),
+            is_active=True,
+        )
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        self.assertFalse(response.context['show_free_activation_checklist'])
+        self.assertFalse(response.context['show_free_plan_teaser'])
+        self.assertNotContains(response, 'data-testid="free-activation-checklist"')
+        self.assertNotContains(response, 'data-testid="free-plan-teaser"')
 
 
 # ============================================================

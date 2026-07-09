@@ -247,6 +247,18 @@ def _enroll_user(user, course):
     return enrollment
 
 
+def _register_user_for_event(user, event):
+    """Create an EventRegistration for dashboard checks."""
+    from events.models import EventRegistration
+
+    registration, _ = EventRegistration.objects.get_or_create(
+        user=user,
+        event=event,
+    )
+    connection.close()
+    return registration
+
+
 def _create_event(
     title,
     slug,
@@ -542,6 +554,126 @@ class TestScenario3EmptyStatesGuideNextSteps:
 
         # Then: Navigates to /courses
         assert "/courses" in page.url
+
+
+# -------------------------------------------------------------------
+# Scenario 3b: Free activation checklist and teaser guide first steps
+# -------------------------------------------------------------------
+
+@pytest.mark.django_db(transaction=True)
+class TestScenario3bFreeActivationDashboard:
+    """Free activation checklist and teaser navigation."""
+
+    @pytest.mark.core
+    def test_new_free_member_can_navigate_checklist_and_teaser(
+        self, django_server, browser
+    ):
+        _clear_dashboard_data()
+        _ensure_tiers()
+        _ensure_site_config_tiers()
+        _create_course(
+            title="AI Hero",
+            slug="aihero",
+            description="Start building useful AI products.",
+            required_level=0,
+        )
+        _create_user("free-activation@test.com", tier_slug="free")
+
+        context = _auth_context(browser, "free-activation@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        checklist = page.locator('[data-testid="free-activation-checklist"]')
+        assert checklist.count() == 1
+        assert "Start AI Hero" in checklist.inner_text()
+        assert "Register for a free event" in checklist.inner_text()
+        assert "Learn how sprints and plans work" in checklist.inner_text()
+
+        first_empty_state = page.locator('[data-testid="member-empty-state"]').first
+        checklist_box = checklist.bounding_box()
+        empty_box = first_empty_state.bounding_box()
+        assert checklist_box is not None
+        assert empty_box is not None
+        assert checklist_box["y"] < empty_box["y"]
+
+        page.locator('[data-testid="free-activation-action-ai-hero"]').click()
+        page.wait_for_url("**/courses/aihero*", timeout=10000)
+        assert "/courses/aihero" in page.url
+
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+        page.locator('[data-testid="free-activation-action-events"]').click()
+        page.wait_for_url("**/events*", timeout=10000)
+        assert "/events" in page.url
+
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+        page.locator('[data-testid="free-activation-action-sprints"]').click()
+        page.wait_for_url("**/activities#community-sprints", timeout=10000)
+        assert "/activities#community-sprints" in page.url
+
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+        teaser = page.locator('[data-testid="free-plan-teaser"]')
+        assert teaser.count() == 1
+        teaser_text = teaser.inner_text()
+        assert "personal plan" in teaser_text
+        assert "sprint with accountability" in teaser_text
+        assert "Slack/community support" in teaser_text
+        page.locator('[data-testid="free-plan-teaser-cta"]').click()
+        page.wait_for_url("**/pricing*", timeout=10000)
+        pricing_body = page.content()
+        assert "Basic" in pricing_body
+        assert "Main" in pricing_body
+        assert "Premium" in pricing_body
+
+    @pytest.mark.core
+    def test_free_member_activity_marks_checklist_items_complete(
+        self, django_server, browser
+    ):
+        _clear_dashboard_data()
+        user = _create_user("free-progress@test.com", tier_slug="free")
+        course = _create_course(
+            title="AI Hero",
+            slug="aihero",
+            description="Start building useful AI products.",
+            required_level=0,
+        )
+        module = _create_module(course, "Start", sort_order=1)
+        unit = _create_unit(module, "First build", sort_order=1)
+        _enroll_user(user, course)
+        _mark_unit_completed(user, unit)
+        event = _create_event(
+            title="Open Event",
+            slug="open-event",
+            required_level=0,
+            status="upcoming",
+            start_datetime=timezone.now() + datetime.timedelta(days=3),
+        )
+        _register_user_for_event(user, event)
+
+        context = _auth_context(browser, "free-progress@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        assert (
+            page.locator('[data-testid="free-activation-item-ai-hero"]')
+            .get_attribute("data-complete")
+            == "true"
+        )
+        assert (
+            page.locator('[data-testid="free-activation-item-events"]')
+            .get_attribute("data-complete")
+            == "true"
+        )
+        assert (
+            page.locator('[data-testid="free-activation-item-sprints"]')
+            .get_attribute("data-complete")
+            == "false"
+        )
+        assert page.locator(
+            '[data-testid="free-activation-complete-ai-hero"]'
+        ).count() == 1
+        assert page.locator(
+            '[data-testid="free-activation-complete-events"]'
+        ).count() == 1
 # -------------------------------------------------------------------
 # Scenario 4: Basic member resumes an in-progress course from the
 #              dashboard

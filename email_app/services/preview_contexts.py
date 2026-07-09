@@ -16,6 +16,10 @@ PREVIEW_CONTEXTS = {
         'tier_name': 'Main',
         'site_url': 'https://aishippinglabs.com',
     },
+    'free_welcome': {
+        'user_name': 'Ada',
+        'site_url': 'https://aishippinglabs.com',
+    },
     'email_verification_signup': {
         'user_name': 'Ada',
         'verify_url': 'https://aishippinglabs.com/verify?token=demo',

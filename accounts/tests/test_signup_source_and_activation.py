@@ -28,6 +28,7 @@ from django.utils import timezone
 
 from accounts.models import User
 from accounts.utils.activation import mark_activated, mark_email_verified
+from email_app.models import EmailLog
 
 
 @tag('core')
@@ -403,6 +404,33 @@ class OAuthSocialAccountAddedSignalTest(TestCase):
         self.assertEqual(user.signup_source, 'oauth')
         self.assertTrue(user.account_activated)
 
+    def test_brand_new_oauth_user_gets_one_free_welcome(self):
+        user = User.objects.create_user(email='oauth-welcome@test.com')
+        self.assertEqual(user.signup_source, 'unknown')
+
+        self._trigger_signal(user)
+
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        self.assertTrue(user.account_activated)
+        self.assertEqual(user.signup_source, 'oauth')
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=user,
+                email_type='free_welcome',
+            ).count(),
+            1,
+        )
+
+        self._trigger_signal(user)
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=user,
+                email_type='free_welcome',
+            ).count(),
+            1,
+        )
+
     def test_existing_newsletter_user_linking_oauth_keeps_original_source(self):
         user = User.objects.create_user(
             email='news+oauth@test.com',
@@ -418,6 +446,33 @@ class OAuthSocialAccountAddedSignalTest(TestCase):
         self.assertEqual(user.signup_source, 'newsletter')
         # But OAuth is an activation event.
         self.assertTrue(user.account_activated)
+        self.assertFalse(
+            EmailLog.objects.filter(
+                user=user,
+                email_type='free_welcome',
+            ).exists()
+        )
+
+    def test_existing_user_linking_oauth_does_not_duplicate_free_welcome(self):
+        user = User.objects.create_user(
+            email='signup+oauth@test.com',
+            signup_source='signup',
+            account_activated=True,
+            email_verified=True,
+        )
+        EmailLog.objects.create(user=user, email_type='free_welcome')
+
+        self._trigger_signal(user)
+
+        user.refresh_from_db()
+        self.assertEqual(user.signup_source, 'signup')
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=user,
+                email_type='free_welcome',
+            ).count(),
+            1,
+        )
 
 
 @tag('core')

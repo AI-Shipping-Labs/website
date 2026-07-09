@@ -23,6 +23,7 @@ DEFAULT_WELCOME_FROM_EMAIL = "welcome@aishippinglabs.com"
 # recipient explicitly requested, not an unsolicited marketing campaign.
 TRANSACTIONAL_EMAIL_TYPES = {
     "welcome",
+    "free_welcome",
     "payment_failed",
     "cancellation",
     "community_invite",
@@ -103,6 +104,7 @@ PROMOTIONAL_EMAIL_TYPES = {
 # only the From address is overridden, never the classification.
 WELCOME_EMAIL_TYPES = {
     "welcome",
+    "free_welcome",
     "cofounder_welcome",
     "basic_welcome",
     "premium_welcome",

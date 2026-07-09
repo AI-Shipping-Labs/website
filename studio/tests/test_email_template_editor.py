@@ -91,6 +91,7 @@ class EmailTemplateListTest(TestCase):
         names = {r['template_name'] for r in rows}
         for expected in [
             'welcome',
+            'free_welcome',
             'email_verification_signup',
             'password_reset',
             'community_invite',
@@ -400,6 +401,31 @@ class EmailTemplatePreviewTest(TestCase):
             {'subject': 'a', 'body_markdown': 'b', 'footer_note': ''},
         )
         self.assertEqual(response.status_code, 404)
+
+    def test_free_welcome_preview_uses_representative_context(self):
+        edit_response = self.client.get(
+            '/studio/email-templates/free_welcome/edit/',
+        )
+        self.assertEqual(edit_response.status_code, 200)
+        initial = edit_response.context['initial']
+
+        response = self.client.post(
+            '/studio/email-templates/free_welcome/preview/',
+            {
+                'subject': initial['subject'],
+                'body_markdown': initial['body_markdown'],
+                'footer_note': initial['footer_note'],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn('/courses/aihero', body)
+        self.assertIn('/events', body)
+        self.assertIn('/activities#community-sprints', body)
+        self.assertNotIn('{{', body)
+        self.assertNotIn('onboarding', body.lower())
+        self.assertNotIn('Slack', body)
 
     def test_preview_get_returns_405(self):
         response = self.client.get(

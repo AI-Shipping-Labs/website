@@ -254,7 +254,13 @@ class EnrollGtagSessionFlagTest(TierSetupMixin, TestCase):
         session = self.client.session
         self.assertEqual(
             session.get('gtag_event_pending'),
-            {'event': 'course_enroll', 'params': {'course_slug': 'gtag-course'}},
+            {
+                'event': 'course_enroll',
+                'params': {
+                    'course_slug': 'gtag-course',
+                    'login_state': 'authenticated',
+                },
+            },
         )
 
     def test_idempotent_enroll_does_not_re_set_flag_on_existing_active_row(self):

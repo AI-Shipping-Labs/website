@@ -120,6 +120,7 @@
     submitBtn.disabled = true;
     var originalText = submitBtn.textContent;
     submitBtn.textContent = 'Subscribing...';
+    var analytics = window.aslabAnalytics;
 
     var csrfToken = '';
     var cookies = document.cookie.split(';');
@@ -129,6 +130,13 @@
         csrfToken = cookie.substring('csrftoken='.length);
         break;
       }
+    }
+
+    if (analytics && typeof analytics.trackSignup === 'function') {
+      analytics.trackSignup('signup_start', {
+        method: 'newsletter',
+        signup_kind: 'newsletter',
+      });
     }
 
     fetch('/api/subscribe', {
@@ -146,11 +154,11 @@
         messageEl.className = 'footer-subscribe-message mt-2 text-sm text-green-400';
         messageEl.classList.remove('hidden');
         emailInput.value = '';
-        // GA4 conversion: footer newsletter signup completes inline
-        // (no navigation), so fire the event directly. Guarded so
-        // pages without GA configured don't ReferenceError.
-        if (typeof gtag === 'function') {
-          gtag('event', 'sign_up', { method: 'newsletter' });
+        if (analytics && typeof analytics.trackSignup === 'function') {
+          analytics.trackSignup('sign_up', {
+            method: 'newsletter',
+            signup_kind: 'newsletter',
+          });
         }
       } else {
         errorEl.textContent = data.error || 'Something went wrong.';

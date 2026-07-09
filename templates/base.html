@@ -49,6 +49,101 @@
     })();
   </script>
 
+  <script>
+    window.aslabAnalytics = (function() {
+      var analyticsContext = {{ ga_client_context_json|safe }};
+      var loginState = analyticsContext.login_state || 'anonymous';
+      var memberTier = analyticsContext.member_tier || '';
+
+      function hasOwn(obj, key) {
+        return Object.prototype.hasOwnProperty.call(obj, key);
+      }
+
+      function cloneParams(params) {
+        var clone = {};
+        if (!params || typeof params !== 'object') {
+          return clone;
+        }
+        for (var key in params) {
+          if (hasOwn(params, key)) {
+            clone[key] = params[key];
+          }
+        }
+        return clone;
+      }
+
+      function withDefaults(params, includeEntryPath) {
+        var merged = cloneParams(params);
+        if (!hasOwn(merged, 'login_state')) {
+          merged.login_state = loginState;
+        }
+        if (includeEntryPath && !hasOwn(merged, 'entry_path')) {
+          merged.entry_path = window.location.pathname;
+        }
+        return merged;
+      }
+
+      function emitEvent(eventName, params) {
+        if (typeof window.gtag !== 'function') {
+          return false;
+        }
+        try {
+          window.gtag('event', eventName, params);
+          return true;
+        } catch (err) {
+          return false;
+        }
+      }
+
+      function emitEventWithFallback(eventName, params, callback, timeoutMs) {
+        var finished = false;
+
+        function finish() {
+          if (finished) {
+            return;
+          }
+          finished = true;
+          if (typeof callback === 'function') {
+            callback();
+          }
+        }
+
+        var eventParams = cloneParams(params);
+        eventParams.event_callback = finish;
+
+        if (emitEvent(eventName, eventParams)) {
+          window.setTimeout(finish, timeoutMs || 1500);
+          return;
+        }
+
+        finish();
+      }
+
+      return {
+        loginState: loginState,
+        memberTier: memberTier,
+        withDefaults: function(params) {
+          return withDefaults(params, false);
+        },
+        withSignupDefaults: function(params) {
+          return withDefaults(params, true);
+        },
+        track: function(eventName, params) {
+          return emitEvent(eventName, withDefaults(params, false));
+        },
+        trackSignup: function(eventName, params) {
+          return emitEvent(eventName, withDefaults(params, true));
+        },
+        trackWithNavigationFallback: function(eventName, params, callback, timeoutMs) {
+          emitEventWithFallback(eventName, withDefaults(params, false), callback, timeoutMs);
+        },
+        trackSignupWithNavigationFallback: function(eventName, params, callback, timeoutMs) {
+          emitEventWithFallback(eventName, withDefaults(params, true), callback, timeoutMs);
+        },
+      };
+    })();
+  </script>
+
   {% if google_analytics_id %}
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id={{ google_analytics_id }}"></script>
@@ -56,15 +151,11 @@
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
-    gtag('config', '{{ google_analytics_id }}');
-    {% if aslab_anon_id %}
-    // Bind the aslab_aid cookie to GA so server-side joins on
-    // UserAttribution.anonymous_id work against GA exports. The double
-    // gtag('config', ...) (once plain, once with user_id) is the
-    // documented GA4 pattern for setting user_id post-init.
-    gtag('set', 'user_properties', { aslab_aid: '{{ aslab_anon_id }}' });
-    gtag('config', '{{ google_analytics_id }}', { user_id: '{{ aslab_anon_id }}' });
-    {% endif %}
+    // Bind the validated anonymous UUID plus reporting dimensions to GA.
+    // ``aslab_aid`` remains the only cross-system join identifier; login
+    // state and member tier are safe segmentation fields.
+    gtag('set', 'user_properties', {{ ga_user_properties_json|safe }});
+    gtag('config', '{{ google_analytics_id }}', {{ ga_config_json|safe }});
     {% if gtag_pending_event %}
     // One-shot conversion event from a server-side flow (course
     // enroll, OAuth signup, etc.). The session key was popped in

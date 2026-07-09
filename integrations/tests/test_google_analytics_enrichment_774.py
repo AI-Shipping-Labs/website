@@ -1,25 +1,27 @@
-"""Tests for GA enrichment + conversion events (issue #774).
+"""Tests for GA enrichment + conversion events (issues #774 and #1164).
 
 Covers:
 
 - ``site_context['aslab_anon_id']`` validates the ``aslab_aid`` cookie
   as a UUID; bad / empty values yield ``''``.
-- ``templates/base.html`` emits ``gtag('set', 'user_properties', ...)``
-  and a second ``gtag('config', ID, { user_id: ... })`` only when both
-  ``GOOGLE_ANALYTICS_ID`` is configured AND a valid ``aslab_aid``
-  cookie is present.
+- ``site_context`` exposes GA-safe bootstrap JSON for login state,
+  member tier, and the anonymous join key without leaking PII.
+- ``templates/base.html`` keeps the direct ``gtag.js`` loader, adds the
+  safe GA bootstrap payloads, and renders one-shot pending events only
+  when ``GOOGLE_ANALYTICS_ID`` is configured.
 - When GA is unset, no ``gtag``/``googletagmanager`` markup renders at
   all (regression on #771's gate).
 - The one-shot ``gtag_event_pending`` session flag is popped (not just
   read) on render, and the partial renders a properly-quoted
   ``gtag('event', ...)`` call.
-- The newsletter subscribe form, inline register form, dashboard
-  Stripe-success script, and event_detail.js all contain the literal
-  ``gtag('event', ...)`` call wired to the right trigger.
+- The signup-start/completed-signup handlers, OAuth fallback path,
+  dashboard purchase script, and event-detail registration script all
+  route through the shared analytics helper with the documented params.
 """
 
 import json
 import uuid
+from pathlib import Path
 
 from django.test import RequestFactory, TestCase, override_settings
 
@@ -35,6 +37,26 @@ def _set_ga_id(value='G-TESTXYZ'):
         group='analytics',
     )
     clear_config_cache()
+
+
+def _load_repo_file(*parts):
+    return (
+        Path(__file__).resolve().parent.parent.parent.joinpath(*parts)
+    ).read_text()
+
+
+def _configure_oauth_provider(provider='google', name='Google'):
+    from allauth.socialaccount.models import SocialApp
+    from django.contrib.sites.models import Site
+
+    SocialApp.objects.all().delete()
+    app = SocialApp.objects.create(
+        provider=provider,
+        name=name,
+        client_id=f'{provider}-cid',
+        secret=f'{provider}-secret',
+    )
+    app.sites.add(Site.objects.get_current())
 
 
 class AslabAnonIdContextProcessorTest(TestCase):
@@ -74,8 +96,82 @@ class AslabAnonIdContextProcessorTest(TestCase):
         self.assertEqual(context['aslab_anon_id'], '')
 
 
+class GaContextSegmentationTest(TestCase):
+    """GA bootstrap JSON distinguishes login state without leaking PII."""
+
+    def setUp(self):
+        clear_config_cache()
+        self.anon_id = str(uuid.uuid4())
+
+    def tearDown(self):
+        clear_config_cache()
+
+    def test_anonymous_context_exposes_join_key_and_login_state(self):
+        request = RequestFactory().get('/')
+        request.COOKIES['aslab_aid'] = self.anon_id
+
+        context = site_context(request)
+
+        self.assertEqual(
+            json.loads(context['ga_user_properties_json']),
+            {
+                'login_state': 'anonymous',
+                'aslab_aid': self.anon_id,
+            },
+        )
+        self.assertEqual(
+            json.loads(context['ga_config_json']),
+            {
+                'login_state': 'anonymous',
+                'user_id': self.anon_id,
+            },
+        )
+        self.assertEqual(
+            json.loads(context['ga_client_context_json']),
+            {
+                'login_state': 'anonymous',
+                'member_tier': '',
+            },
+        )
+
+    def test_authenticated_context_exposes_member_tier_without_pii(self):
+        from accounts.models import User
+
+        user = User.objects.create_user(
+            email='ga-auth@test.com',
+            password='testpass',
+            email_verified=True,
+        )
+        request = RequestFactory().get('/account/')
+        request.user = user
+        request.COOKIES['aslab_aid'] = self.anon_id
+
+        context = site_context(request)
+        user_properties_json = context['ga_user_properties_json']
+        config_json = context['ga_config_json']
+
+        self.assertEqual(
+            json.loads(user_properties_json),
+            {
+                'login_state': 'authenticated',
+                'aslab_aid': self.anon_id,
+                'member_tier': 'free',
+            },
+        )
+        self.assertEqual(
+            json.loads(config_json),
+            {
+                'login_state': 'authenticated',
+                'user_id': self.anon_id,
+                'member_tier': 'free',
+            },
+        )
+        self.assertNotIn(user.email, user_properties_json)
+        self.assertNotIn(user.email, config_json)
+
+
 class GtagEnrichmentRenderingTest(TestCase):
-    """``base.html`` emits user_property + user_id only with GA + cookie."""
+    """``base.html`` emits GA bootstrap data with the documented fields."""
 
     def setUp(self):
         clear_config_cache()
@@ -109,40 +205,55 @@ class GtagEnrichmentRenderingTest(TestCase):
         self.client.cookies['aslab_aid'] = self.anon_id
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
-        # Plain config line is still emitted.
-        self.assertContains(response, "gtag('config', 'G-TESTXYZ')")
-        # user_property carries the validated UUID.
+        self.assertContains(response, "gtag('config', 'G-TESTXYZ',")
         self.assertContains(
             response,
-            f"gtag('set', 'user_properties', {{ aslab_aid: '{self.anon_id}' }})",
+            f'"login_state": "anonymous", "aslab_aid": "{self.anon_id}"',
         )
-        # Second gtag('config', ...) call wires user_id.
         self.assertContains(
             response,
-            f"gtag('config', 'G-TESTXYZ', {{ user_id: '{self.anon_id}' }})",
+            f'"login_state": "anonymous", "user_id": "{self.anon_id}"',
         )
 
-    def test_enrichment_suppressed_when_cookie_missing(self):
-        # GA configured but no cookie (bot / admin path / pre-middleware
-        # request) — render the loader but NOT the user_property /
-        # user_id lines, which would otherwise emit empty strings.
+    def test_anonymous_login_state_renders_even_without_cookie(self):
         _set_ga_id('G-TESTXYZ')
-        # Explicitly do NOT set the aslab_aid cookie.
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "gtag('config', 'G-TESTXYZ')")
-        self.assertNotContains(response, 'user_properties')
+        self.assertContains(response, "gtag('config', 'G-TESTXYZ',")
+        self.assertContains(response, '"login_state": "anonymous"')
         self.assertNotContains(response, 'user_id:')
+        self.assertNotContains(response, self.anon_id)
 
-    def test_enrichment_suppressed_when_cookie_is_invalid(self):
+    def test_invalid_cookie_drops_join_key_but_keeps_login_state(self):
         _set_ga_id('G-TESTXYZ')
         self.client.cookies['aslab_aid'] = 'corrupted-value'
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "gtag('config', 'G-TESTXYZ')")
-        self.assertNotContains(response, 'user_properties')
+        self.assertContains(response, "gtag('config', 'G-TESTXYZ',")
+        self.assertContains(response, '"login_state": "anonymous"')
         # The invalid value itself must not appear anywhere in the HTML.
         self.assertNotContains(response, 'corrupted-value')
+
+    def test_authenticated_page_renders_member_tier_when_available(self):
+        from accounts.models import User
+
+        _set_ga_id('G-TESTXYZ')
+        user = User.objects.create_user(
+            email='ga-member@test.com',
+            password='testpass',
+            email_verified=True,
+            signup_source='signup',
+            account_activated=True,
+        )
+        self.client.force_login(user)
+        self.client.cookies['aslab_aid'] = self.anon_id
+
+        response = self.client.get('/account/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '"login_state": "authenticated"')
+        self.assertContains(response, '"member_tier": "free"')
+        self.assertContains(response, f'"user_id": "{self.anon_id}"')
 
 
 class GtagPendingEventContextProcessorTest(TestCase):
@@ -266,55 +377,71 @@ class GtagPendingEventRenderingTest(TestCase):
 
 
 class NewsletterSubscribeGtagEventTest(TestCase):
-    """The newsletter subscribe form fires ``sign_up`` on success."""
+    """Newsletter signup uses the documented funnel params."""
 
-    def test_subscribe_form_template_emits_sign_up_event(self):
-        # The handler lives in templates/includes/subscribe_form.html.
-        # Any public surface that includes the partial picks up the
-        # event handler. Pick the home page as the canonical surface.
-        response = self.client.get('/')
+    def test_subscribe_page_emits_signup_start_and_sign_up(self):
+        response = self.client.get('/subscribe')
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "gtag('event', 'sign_up', { method: 'newsletter' })",
+            "analytics.trackSignup('signup_start'",
+        )
+        self.assertContains(
+            response,
+            "analytics.trackSignup('sign_up'",
+        )
+        self.assertContains(
+            response,
+            "method: 'newsletter'",
+        )
+        self.assertContains(
+            response,
+            "signup_kind: 'newsletter'",
         )
 
 
 class InlineRegisterGtagEventTest(TestCase):
-    """The inline register JS contains the email ``sign_up`` event."""
+    """The inline register JS contains the email signup funnel contract."""
 
-    def test_inline_register_js_emits_email_sign_up(self):
-        # The script is served as a static asset. Read it from disk
-        # rather than hitting the URL (collectstatic isn't run in tests).
-        from pathlib import Path
-        path = (
-            Path(__file__).resolve().parent.parent.parent
-            / 'static' / 'js' / 'accounts' / 'inline-register.js'
-        )
-        content = path.read_text()
-        self.assertIn("gtag('event', 'sign_up', { method: 'email' })", content)
-        # Guarded so pages without GA configured don't ReferenceError.
-        self.assertIn("typeof gtag === 'function'", content)
+    def test_inline_register_js_emits_signup_start_and_sign_up(self):
+        content = _load_repo_file('static', 'js', 'accounts', 'inline-register.js')
+        self.assertIn("analytics.trackSignup('signup_start'", content)
+        self.assertIn("analytics.trackSignup('sign_up'", content)
+        self.assertIn("method: 'email'", content)
+        self.assertIn("signup_kind: 'account'", content)
+
+
+class OauthSignupStartTrackingTemplateTest(TestCase):
+    """OAuth signup buttons emit signup_start only on sign-up surfaces."""
+
+    def test_register_page_marks_oauth_links_for_signup_start_tracking(self):
+        _configure_oauth_provider('google', 'Google')
+
+        response = self.client.get('/accounts/register/')
+
+        self.assertContains(response, 'data-ga-oauth-track-signup-start="true"')
+        self.assertContains(response, 'data-ga-oauth-provider="google"')
+        self.assertContains(response, "trackSignupWithNavigationFallback(")
+        self.assertContains(response, "signup_kind: 'account'")
+        self.assertContains(response, "window.location.assign(href)")
+
+    def test_login_page_does_not_mark_oauth_links_as_signup_starts(self):
+        _configure_oauth_provider('google', 'Google')
+
+        response = self.client.get('/accounts/login/')
+
+        self.assertNotContains(response, 'data-ga-oauth-provider="google"')
 
 
 class EventDetailGtagEventTest(TestCase):
     """The event_detail.js fires event_register with reload gating."""
 
     def test_event_detail_js_emits_event_register_with_callback(self):
-        from pathlib import Path
-        path = (
-            Path(__file__).resolve().parent.parent.parent
-            / 'static' / 'js' / 'events' / 'event_detail.js'
-        )
-        content = path.read_text()
-        # Event name and the slug parameter.
-        self.assertIn("gtag('event', 'event_register'", content)
+        content = _load_repo_file('static', 'js', 'events', 'event_detail.js')
+        self.assertIn("trackWithNavigationFallback(", content)
+        self.assertIn("'event_register'", content)
         self.assertIn('event_slug: slug', content)
-        # event_callback wires the reload to the gtag callback.
-        self.assertIn('event_callback: reload', content)
-        # Fallback timer guarantees the reload still happens if gtag
-        # is blocked / missing.
-        self.assertIn('setTimeout(reload, 1500)', content)
+        self.assertIn('1500', content)
 
 
 class DashboardPurchaseGtagEventTest(TestCase):
@@ -339,11 +466,7 @@ class DashboardPurchaseGtagEventTest(TestCase):
         self.client.login(email='dash@test.com', password='testpass')
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
-        # The script block fires the purchase event when the success
-        # query string is present. The check happens client-side, so
-        # we assert the literal source — Playwright covers the
-        # in-browser behavior.
-        self.assertContains(response, "gtag('event', 'purchase'")
+        self.assertContains(response, "analytics.track('purchase', purchaseParams)")
         self.assertContains(response, "currency: 'EUR'")
         # Tier / value / billing are read from URLSearchParams.
         self.assertContains(response, "params.get('tier')")

@@ -559,7 +559,8 @@
     // the success URL — see _docs/integrations/analytics.md. Missing
     // tier/value/billing params just yield a purchase event with no
     // value, which is still useful for funnel tracking.
-    if (typeof gtag === 'function') {
+    var analytics = window.aslabAnalytics;
+    if (analytics && typeof analytics.track === 'function') {
       var tierSlug = params.get('tier') || '';
       var rawValue = params.get('value') || '';
       var billing = params.get('billing') || '';
@@ -574,7 +575,7 @@
         if (billing) item.billing_period = billing;
         purchaseParams.items = [item];
       }
-      gtag('event', 'purchase', purchaseParams);
+      analytics.track('purchase', purchaseParams);
     }
     var banner = document.getElementById('checkout-success-banner');
     if (banner) {

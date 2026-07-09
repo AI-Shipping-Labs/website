@@ -117,6 +117,7 @@ def _make_sprint(name, slug, *, event_series=None, min_tier_level=0):
     sprint = Sprint.objects.create(
         name=name,
         slug=slug,
+        # date-rot-ok: event-series link fixture; call dates, not sprint current state, are under test.
         start_date=datetime.date(2026, 5, 1),
         status='active',
         min_tier_level=min_tier_level,

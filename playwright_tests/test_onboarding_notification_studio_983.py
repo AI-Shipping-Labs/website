@@ -287,6 +287,7 @@ class TestPlanRequestNotificationRegression:
         sprint = Sprint.objects.create(
             name="Sprint 983",
             slug="sprint-983",
+            # date-rot-ok: notification routing fixture; current sprint state is not under test.
             start_date=datetime.date(2026, 6, 1),
         )
         member_pk = member.pk

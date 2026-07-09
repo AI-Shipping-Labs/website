@@ -52,6 +52,7 @@ def _seed_resource_plan(member_email):
     sprint = Sprint.objects.create(
         name="May 2026",
         slug="may-2026",
+        # date-rot-ok: plan resource fixture; current sprint state is not under test.
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=6,
         status="active",

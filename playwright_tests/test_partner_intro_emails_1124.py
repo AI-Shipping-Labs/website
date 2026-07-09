@@ -50,6 +50,7 @@ def _seed_sprint(name, slug, *, status="active"):
     return Sprint.objects.create(
         name=name,
         slug=slug,
+        # date-rot-ok: partner-intro service fixture; stored status drives eligibility.
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=4,
         status=status,

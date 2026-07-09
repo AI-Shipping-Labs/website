@@ -79,7 +79,7 @@ def _create_recording(
         # is in the past. Default to 30 days ago so recordings created
         # without an explicit ``date`` always land in the past bucket
         # regardless of the local wall clock at test time.
-        date = datetime.date.today() - datetime.timedelta(days=30)
+        date = _past_recording_date()
 
     start_dt = timezone.make_aware(
         datetime.datetime.combine(date, datetime.time(12, 0))
@@ -118,6 +118,10 @@ def _create_recording(
     )
     connection.close()
     return recording
+
+
+def _past_recording_date(days_ago=30):
+    return timezone.localdate() - datetime.timedelta(days=days_ago)
 
 
 def _clear_recordings():
@@ -160,7 +164,7 @@ class TestScenario1VisitorBrowsesAndWatchesOpen:
                 {"title": "GitHub Repo", "url": "https://example.com/repo"},
             ],
             tags=["ai", "agents"],
-            date=datetime.date(2026, 2, 15),
+            date=_past_recording_date(days_ago=10),
         )
         _create_recording(
             title="Advanced RAG Pipelines",
@@ -168,7 +172,7 @@ class TestScenario1VisitorBrowsesAndWatchesOpen:
             description="Deep dive into RAG pipeline architectures.",
             youtube_url="https://www.youtube.com/watch?v=rag456",
             tags=["ai", "rag"],
-            date=datetime.date(2026, 2, 10),
+            date=_past_recording_date(days_ago=15),
         )
 
         # Step 1: Navigate to /events?filter=past
@@ -249,7 +253,7 @@ class TestScenario2VisitorFiltersRecordingsByTag:
             description="Getting started with LangChain.",
             youtube_url="https://www.youtube.com/watch?v=lc123",
             tags=["langchain", "python"],
-            date=datetime.date(2026, 2, 15),
+            date=_past_recording_date(days_ago=10),
         )
         _create_recording(
             title="Django REST APIs",
@@ -257,7 +261,7 @@ class TestScenario2VisitorFiltersRecordingsByTag:
             description="Building REST APIs with Django.",
             youtube_url="https://www.youtube.com/watch?v=dj456",
             tags=["django", "python"],
-            date=datetime.date(2026, 2, 14),
+            date=_past_recording_date(days_ago=11),
         )
         _create_recording(
             title="Prompt Engineering",
@@ -265,7 +269,7 @@ class TestScenario2VisitorFiltersRecordingsByTag:
             description="Master prompt engineering techniques.",
             youtube_url="https://www.youtube.com/watch?v=pe789",
             tags=["prompts"],
-            date=datetime.date(2026, 2, 13),
+            date=_past_recording_date(days_ago=12),
         )
 
         # Step 1: Navigate to /events?filter=past
@@ -453,9 +457,7 @@ class TestScenario4BasicMemberWatchesBasicRecording:
         # Recording lives on the workshop video page (issue #426).
         # Issue #915: bare-slug URLs no longer redirect — use the canonical
         # date-slug URL (workshop date defaults to today-30 in the helper).
-        rec_date = (
-            datetime.date.today() - datetime.timedelta(days=30)
-        ).isoformat()
+        rec_date = _past_recording_date().isoformat()
         page.goto(
             f"{django_server}/workshops/{rec_date}-ai-tool-breakdown-cursor/video",
             wait_until="domcontentloaded",
@@ -511,7 +513,7 @@ class TestScenario5NavigateFromDetailToFilteredListing:
             description="How to build chatbots with LLMs.",
             youtube_url="https://www.youtube.com/watch?v=cb111",
             tags=["chatbots", "python"],
-            date=datetime.date(2026, 2, 15),
+            date=_past_recording_date(days_ago=10),
         )
         _create_recording(
             title="Deploy with Docker",
@@ -519,7 +521,7 @@ class TestScenario5NavigateFromDetailToFilteredListing:
             description="Containerize your ML applications.",
             youtube_url="https://www.youtube.com/watch?v=dk222",
             tags=["docker", "devops"],
-            date=datetime.date(2026, 2, 14),
+            date=_past_recording_date(days_ago=11),
         )
 
         # Step 1: Navigate to recording detail page.
@@ -588,6 +590,7 @@ class TestScenario6PaginateLargeCollection:
         with pagination controls, then navigates to page 2 with 5, then
         back to page 1."""
         _clear_recordings()
+        base_date = _past_recording_date(days_ago=60)
         for i in range(25):
             _create_recording(
                 title=f"Workshop {i + 1:03d}",
@@ -595,7 +598,7 @@ class TestScenario6PaginateLargeCollection:
                 description=f"Description for workshop {i + 1}.",
                 youtube_url=f"https://www.youtube.com/watch?v=ws{i + 1}",
                 tags=["workshop"],
-                date=datetime.date(2026, 1, 1) + datetime.timedelta(days=i),
+                date=base_date + datetime.timedelta(days=i),
             )
 
         # Step 1: Navigate to /events?filter=past
@@ -652,6 +655,7 @@ class TestScenario7PaginateFilteredListing:
         filtering by 'agents' shows 20 on page 1, then page 2 has 2,
         and the tag filter stays active."""
         _clear_recordings()
+        agents_base_date = _past_recording_date(days_ago=60)
         for i in range(22):
             _create_recording(
                 title=f"Agent Workshop {i + 1:03d}",
@@ -659,8 +663,9 @@ class TestScenario7PaginateFilteredListing:
                 description=f"Agent workshop {i + 1}.",
                 youtube_url=f"https://www.youtube.com/watch?v=aw{i + 1}",
                 tags=["agents"],
-                date=datetime.date(2026, 1, 1) + datetime.timedelta(days=i),
+                date=agents_base_date + datetime.timedelta(days=i),
             )
+        other_base_date = _past_recording_date(days_ago=30)
         for i in range(3):
             _create_recording(
                 title=f"Other Workshop {i + 1:03d}",
@@ -668,7 +673,7 @@ class TestScenario7PaginateFilteredListing:
                 description=f"Other workshop {i + 1}.",
                 youtube_url=f"https://www.youtube.com/watch?v=ow{i + 1}",
                 tags=["other"],
-                date=datetime.date(2026, 3, 1) + datetime.timedelta(days=i),
+                date=other_base_date + datetime.timedelta(days=i),
             )
 
         # Step 1: Navigate to /events?filter=past&tag=agents

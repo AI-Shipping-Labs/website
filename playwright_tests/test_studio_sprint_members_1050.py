@@ -20,6 +20,7 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
+from django.utils import timezone  # noqa: E402
 
 pytestmark = pytest.mark.local_only
 
@@ -67,9 +68,9 @@ def _seed_sprint_members():
     with_plan.last_name = "Plan"
     with_plan.save(update_fields=["first_name", "last_name"])
     sprint = Sprint.objects.create(
-        name="June Studio Sprint",
-        slug="june-studio",
-        start_date=datetime.date(2026, 6, 1),
+        name="Studio Sprint",
+        slug="studio-sprint",
+        start_date=timezone.localdate() - datetime.timedelta(days=7),
         duration_weeks=4,
         status="active",
     )

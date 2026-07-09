@@ -4,6 +4,7 @@ import datetime
 import os
 
 import pytest
+from django.utils import timezone
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -37,9 +38,9 @@ def _create_sprint():
     from plans.models import Sprint
 
     sprint = Sprint.objects.create(
-        name="June 2026 Operator Sprint",
-        slug="june-2026-operator-sprint",
-        start_date=datetime.date(2026, 6, 1),
+        name="Operator Sprint",
+        slug="operator-sprint",
+        start_date=timezone.localdate() - datetime.timedelta(days=7),
         duration_weeks=6,
         status="active",
         min_tier_level=0,

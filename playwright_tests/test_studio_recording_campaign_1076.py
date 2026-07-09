@@ -59,11 +59,14 @@ def _make_event(title="Shipping Agents Workshop", slug="shipping-agents-wk",
     from content.models import Workshop
     from events.models import Event
 
+    historical_event_date = date(2026, 6, 8)
+    historical_start = datetime(2026, 6, 8, 16, 0, tzinfo=UTC)
+    historical_end = datetime(2026, 6, 8, 17, 0, tzinfo=UTC)
     event = Event.objects.create(
         title=title,
         slug=slug,
-        start_datetime=datetime(2026, 6, 8, 16, 0, tzinfo=UTC),
-        end_datetime=datetime(2026, 6, 8, 17, 0, tzinfo=UTC),
+        start_datetime=historical_start,
+        end_datetime=historical_end,
         status="completed",
         recording_url="https://youtube.com/watch?v=agents",
     )
@@ -71,7 +74,7 @@ def _make_event(title="Shipping Agents Workshop", slug="shipping-agents-wk",
         Workshop.objects.create(
             slug=f"{slug}-ws",
             title=f"{title} write-up",
-            date=date(2026, 6, 8),
+            date=historical_event_date,
             description="The complete WORKSHOP WRITEUP body for members.",
             event=event,
         )

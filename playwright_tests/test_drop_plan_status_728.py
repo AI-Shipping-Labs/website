@@ -65,6 +65,7 @@ class TestDropPlanStatus728:
         )
         Sprint.objects.create(
             name="May 2026 sprint", slug="may-2026",
+            # date-rot-ok: plan status UI fixture; current sprint state is not under test.
             start_date=datetime.date(2026, 5, 1), duration_weeks=6,
         )
         connection.close()
@@ -93,6 +94,7 @@ class TestDropPlanStatus728:
         )
         sprint = Sprint.objects.create(
             name="May 2026 sprint", slug="may-2026",
+            # date-rot-ok: plan status UI fixture; current sprint state is not under test.
             start_date=datetime.date(2026, 5, 1), duration_weeks=6,
         )
         plan = Plan.objects.create(member=member, sprint=sprint)
@@ -131,6 +133,7 @@ class TestDropPlanStatus728:
         )
         sprint = Sprint.objects.create(
             name="May 2026 sprint", slug="may-2026",
+            # date-rot-ok: plan list fixture; only stable sprint identity is needed.
             start_date=datetime.date(2026, 5, 1), duration_weeks=6,
         )
         Plan.objects.create(member=member, sprint=sprint)
@@ -176,6 +179,7 @@ class TestDropPlanStatus728:
         )
         sprint = Sprint.objects.create(
             name="May 2026 sprint", slug="may-2026",
+            # date-rot-ok: member plan chrome fixture; current sprint state is not under test.
             start_date=datetime.date(2026, 5, 1), duration_weeks=6,
         )
         plan = Plan.objects.create(

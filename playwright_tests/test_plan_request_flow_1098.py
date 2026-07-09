@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 import pytest
+from django.utils import timezone
 
 from playwright_tests.conftest import auth_context, create_staff_user, create_user
 
@@ -54,7 +55,7 @@ def _seed_requested_member():
     sprint = Sprint.objects.create(
         name="Request Prep Sprint",
         slug="request-prep-sprint",
-        start_date=datetime.date(2026, 7, 1),
+        start_date=timezone.localdate() - datetime.timedelta(days=7),
         duration_weeks=4,
         status="active",
         min_tier_level=0,

@@ -52,6 +52,7 @@ def _seed_plan(owner_email="member@test.com", teammate_email="teammate@test.com"
     sprint = Sprint.objects.create(
         name="May 2026 sprint",
         slug="may-2026",
+        # date-rot-ok: pre-sprint action labels are independent of current sprint state.
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=6,
     )

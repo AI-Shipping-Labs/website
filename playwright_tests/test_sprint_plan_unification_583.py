@@ -74,6 +74,7 @@ def _seed_workspace(
     sprint = Sprint.objects.create(
         name='Unify Sprint',
         slug='unify-sprint',
+        # date-rot-ok: plan workspace fixture; current sprint state is not under test.
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=2)
     owner = User.objects.get(email=owner_email)

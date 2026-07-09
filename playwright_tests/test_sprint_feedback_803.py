@@ -58,6 +58,7 @@ def _reset():
 
     sprint = Sprint.objects.create(
         name="May 2026", slug="may-2026",
+        # date-rot-ok: feedback distribution uses stored active status, not date-derived current state.
         start_date=datetime.date(2026, 5, 1), status="active",
         min_tier_level=0,
     )

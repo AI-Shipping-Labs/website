@@ -43,6 +43,11 @@ from django.db import connection  # noqa: E402
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
 
+# date-rot-ok: sprint board route identity; access checks do not depend on
+# these sprints being current or upcoming.
+FIXED_MAY_SPRINT_ROUTE_DATE = datetime.date(2026, 5, 1)
+FIXED_JUNE_SPRINT_ROUTE_DATE = datetime.date(2026, 6, 1)
+
 
 def _clear_plans_data():
     from plans.models import InterviewNote, Plan, Sprint
@@ -125,7 +130,7 @@ class TestMemberOptsInToCohortVisibility:
         _set_user_name('alice@test.com', 'Alice', 'Smith')
 
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', FIXED_MAY_SPRINT_ROUTE_DATE,
         )
         # Alice already cohort-visible with progress.
         _create_plan_with_checkpoints(
@@ -228,10 +233,10 @@ class TestOutsiderCannotReachBoard:
         _create_user('outsider@test.com', tier_slug='free')
 
         may_sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', FIXED_MAY_SPRINT_ROUTE_DATE,
         )
         june_sprint = _create_sprint(
-            'june-2026', 'June 2026', datetime.date(2026, 6, 1),
+            'june-2026', 'June 2026', FIXED_JUNE_SPRINT_ROUTE_DATE,
         )
         alice_plan = _create_plan(
             member_email='alice@test.com',
@@ -280,7 +285,7 @@ class TestReadOnlyPlanPage:
         _set_user_name('alice@test.com', 'Alice', 'Smith')
 
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', FIXED_MAY_SPRINT_ROUTE_DATE,
         )
         alice_plan = _create_plan(
             member_email='alice@test.com',

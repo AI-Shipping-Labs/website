@@ -51,12 +51,12 @@ def _seed_event_with_workshop(
     from content.models import Workshop
     from events.models import Event, EventRegistration
 
-    start = datetime.datetime(2026, 6, 8, 16, 0, tzinfo=datetime.UTC)
+    historical_start = datetime.datetime(2026, 6, 8, 16, 0, tzinfo=datetime.UTC)
     event = Event.objects.create(
         title="Playwright Workshop Event",
         slug=slug,
-        start_datetime=start,
-        end_datetime=start + datetime.timedelta(hours=1),
+        start_datetime=historical_start,
+        end_datetime=historical_start + datetime.timedelta(hours=1),
         status="completed",
     )
     workshop = None
@@ -65,7 +65,7 @@ def _seed_event_with_workshop(
             title="Playwright Workshop Notes",
             slug=f"{slug}-notes",
             description="A practical write-up for the event registrants.",
-            date=datetime.date(2026, 6, 8),
+            date=historical_start.date(),
             status=workshop_status,
             landing_required_level=0,
             pages_required_level=5,

@@ -1,7 +1,7 @@
 """Playwright checks for long Studio edit form ergonomics."""
 
 import os
-from datetime import datetime
+from datetime import timedelta
 
 import pytest
 from django.db import connection
@@ -76,8 +76,8 @@ def _create_event(**kwargs):
     defaults = {
         "title": "Sticky Event",
         "slug": "sticky-event",
-        "start_datetime": datetime(2026, 6, 1, 10, 0),
-        "end_datetime": datetime(2026, 6, 1, 11, 0),
+        "start_datetime": timezone.now() + timedelta(days=14),
+        "end_datetime": timezone.now() + timedelta(days=14, hours=1),
         "status": "upcoming",
     }
     defaults.update(kwargs)

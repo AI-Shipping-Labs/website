@@ -100,6 +100,7 @@ def _seed_users_and_data():
     sprint = Sprint.objects.create(
         name="Spring 2026 CRM",
         slug="spring-2026-crm",
+        # date-rot-ok: CRM overview fixture uses fixed sprint labels for history.
         start_date=datetime.date(2026, 3, 1),
     )
 
@@ -108,6 +109,7 @@ def _seed_users_and_data():
     sprint_b = Sprint.objects.create(
         name="Summer 2026 CRM",
         slug="summer-2026-crm",
+        # date-rot-ok: CRM overview fixture uses fixed sprint labels for history.
         start_date=datetime.date(2026, 6, 1),
     )
     plan_b = Plan.objects.create(member=engaged, sprint=sprint_b)

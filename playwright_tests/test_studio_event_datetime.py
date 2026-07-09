@@ -91,11 +91,13 @@ class TestScenario2StaffEditsEventPrePopulated:
         # (treated as UTC under USE_TZ=True) renders unchanged in the
         # picker. Otherwise the default 'Europe/Berlin' timezone would
         # render 10:00 UTC as 12:00 local.
+        fixed_start = datetime(2026, 6, 1, 10, 0)
+        fixed_end = datetime(2026, 6, 1, 11, 30)
         event = _create_event(
             title="Pre-Populated Event",
             slug="pre-populated-event",
-            start_datetime=datetime(2026, 6, 1, 10, 0),
-            end_datetime=datetime(2026, 6, 1, 11, 30),
+            start_datetime=fixed_start,
+            end_datetime=fixed_end,
             status="draft",
             timezone="UTC",
         )
@@ -170,11 +172,13 @@ class TestScenario4NoDatetimeLocalInput:
         _clear_events()
         _create_staff_user("staff-noraw-edit@test.com")
 
+        fixed_start = datetime(2026, 3, 15, 14, 0)
+        fixed_end = datetime(2026, 3, 15, 16, 0)
         event = _create_event(
             title="No Raw Event",
             slug="no-raw-event",
-            start_datetime=datetime(2026, 3, 15, 14, 0),
-            end_datetime=datetime(2026, 3, 15, 16, 0),
+            start_datetime=fixed_start,
+            end_datetime=fixed_end,
             status="draft",
         )
 

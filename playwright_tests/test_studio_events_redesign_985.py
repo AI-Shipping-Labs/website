@@ -1,7 +1,7 @@
 """Playwright coverage for the Studio events table redesign (#985)."""
 
 import os
-from datetime import datetime, timedelta
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -24,6 +24,11 @@ def _reset_event_state():
     Event.objects.all().delete()
     EventSeries.objects.all().delete()
     connection.close()
+
+
+def _event_row_date_label(value, timezone_name):
+    local_value = value.astimezone(ZoneInfo(timezone_name))
+    return f"{local_value:%a, %b} {local_value.day}, {local_value:%Y, %H:%M} {timezone_name}"
 
 
 @pytest.mark.core
@@ -63,11 +68,16 @@ def test_studio_events_redesigned_list_and_past_pagination(django_server, browse
         platform="custom",
         origin="studio",
     )
+    berlin_start = (
+        (now + timedelta(days=7))
+        .astimezone(ZoneInfo("UTC"))
+        .replace(hour=12, minute=0, second=0, microsecond=0)
+    )
     berlin_event = Event.objects.create(
         title="Berlin Noon",
         slug="berlin-noon-985",
-        start_datetime=datetime(2026, 7, 20, 12, 0, tzinfo=ZoneInfo("UTC")),
-        end_datetime=datetime(2026, 7, 20, 13, 0, tzinfo=ZoneInfo("UTC")),
+        start_datetime=berlin_start,
+        end_datetime=berlin_start + timedelta(hours=1),
         kind="standard",
         platform="zoom",
     )
@@ -127,7 +137,7 @@ def test_studio_events_redesigned_list_and_past_pagination(django_server, browse
     berlin_row = page.locator(
         f'tr:has(a[href="/studio/events/{berlin_event.pk}/edit"])'
     ).first
-    assert "Mon, Jul 20, 2026, 14:00 Europe/Berlin" in berlin_row.locator(
+    assert _event_row_date_label(berlin_start, "Europe/Berlin") in berlin_row.locator(
         '[data-testid="event-row-date"]'
     ).inner_text()
 

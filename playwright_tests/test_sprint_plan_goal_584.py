@@ -65,6 +65,7 @@ def _seed_goal_plan(
     sprint = Sprint.objects.create(
         name='Goal Sprint',
         slug='goal-sprint',
+        # date-rot-ok: plan goal editing fixture; current sprint state is not under test.
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=2)
     owner = User.objects.get(email='member@test.com')

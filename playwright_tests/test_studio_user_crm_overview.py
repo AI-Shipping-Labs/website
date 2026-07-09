@@ -69,6 +69,7 @@ def _seed_member_with_plan_and_notes(staff_email):
     sprint = Sprint.objects.create(
         name="Spring 2026 (CRM)",
         slug="spring-2026-crm",
+        # date-rot-ok: CRM overview fixture uses fixed sprint labels for history.
         start_date=datetime.date(2026, 3, 1),
     )
     plan = Plan.objects.create(member=member, sprint=sprint)

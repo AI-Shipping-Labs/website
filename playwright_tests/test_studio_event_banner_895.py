@@ -94,7 +94,7 @@ def _make_event(slug, title, **overrides):
         slug=slug,
         title=title,
         description="A live session on shipping agents.",
-        start_datetime=datetime(2026, 5, 28, 16, 0, tzinfo=timezone.utc),
+        start_datetime=datetime.now(timezone.utc) + timedelta(days=30),
         timezone="Europe/Berlin",
         status="upcoming",
         origin="studio",

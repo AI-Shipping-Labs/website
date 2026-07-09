@@ -72,6 +72,7 @@ def _seed_studio_markdown_download_plan(member_email):
     sprint = Sprint.objects.create(
         name="Studio Download Sprint",
         slug="studio-download-sprint",
+        # date-rot-ok: Studio download fixture; current sprint state is not under test.
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=4,
     )
@@ -138,6 +139,7 @@ class TestViewAsMemberReturnToPlan:
         sprint = Sprint.objects.create(
             name="Return Sprint",
             slug="return-sprint",
+            # date-rot-ok: Studio redirect fixture; current sprint state is not under test.
             start_date="2026-05-01",
             duration_weeks=6,
         )
@@ -232,6 +234,10 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
     """Sidebar navigation + create flow for sprints and plans."""
 
     def test_create_sprint_then_plan_via_sidebar(self, django_server, browser):
+        import datetime
+
+        from django.utils import timezone
+
         _ensure_tiers()
         _clear_plans_data()
         _create_staff_user("staff@test.com")
@@ -240,6 +246,11 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
             tier_slug="free",
             email_verified=True,
         )
+        sprint_name = "Sidebar planning sprint"
+        sprint_slug = "sidebar-planning-sprint"
+        sprint_start_date = (
+            timezone.localdate() + datetime.timedelta(days=21)
+        ).isoformat()
 
         context = _auth_context(browser, "staff@test.com")
         page = context.new_page()
@@ -268,15 +279,15 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
             '[data-testid="sprints-header"]'
         ).get_by_role("link", name="New sprint", exact=True).click()
         page.wait_for_url(f"{django_server}/studio/sprints/new")
-        page.locator('input[name="name"]').fill("May 2026 sprint")
-        page.locator('input[name="slug"]').fill("may-2026")
-        page.locator('input[name="start_date"]').fill("2026-05-01")
+        page.locator('input[name="name"]').fill(sprint_name)
+        page.locator('input[name="slug"]').fill(sprint_slug)
+        page.locator('input[name="start_date"]').fill(sprint_start_date)
         page.locator('input[name="duration_weeks"]').fill("6")
         page.locator('select[name="status"]').select_option("draft")
         page.locator('button[type="submit"]').click()
 
         # Detail page renders the sprint name in its <h1>.
-        page.locator('h1:has-text("May 2026 sprint")').wait_for(state="visible")
+        page.locator(f'h1:has-text("{sprint_name}")').wait_for(state="visible")
 
         # Step 4: jump to Plans via the sidebar.
         _expand_studio_sidebar_section(page, "planning")
@@ -307,7 +318,7 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
             '[data-email="member@test.com"]'
         ).first.click()
         page.locator('select[name="sprint"]').select_option(
-            label="May 2026 sprint",
+            label=sprint_name,
         )
         page.locator('button[type="submit"]').click()
 
@@ -352,14 +363,17 @@ class TestMoveUnfinishedPlanItems:
 
         member = User.objects.get(email="member@test.com")
         may = Sprint.objects.create(
+            # date-rot-ok: fixed ordering fixture for Studio plan filters.
             name="May Sprint", slug="may-2026", start_date="2026-05-01",
             duration_weeks=4,
         )
         june = Sprint.objects.create(
+            # date-rot-ok: fixed ordering fixture for Studio plan filters.
             name="June Sprint", slug="june-2026", start_date="2026-06-01",
             duration_weeks=4,
         )
         july = Sprint.objects.create(
+            # date-rot-ok: fixed ordering fixture for Studio plan filters.
             name="July Sprint", slug="july-2026", start_date="2026-07-01",
             duration_weeks=4,
         )
@@ -457,6 +471,7 @@ class TestStaffCapturesInterviewNotes:
 
         sprint = Sprint.objects.create(
             name="May 2026 sprint", slug="may-2026",
+            # date-rot-ok: Studio plan form fixture; current sprint state is not under test.
             start_date="2026-05-01",
         )
         member = User.objects.get(email="member@test.com")

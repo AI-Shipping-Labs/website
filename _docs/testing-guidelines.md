@@ -333,6 +333,22 @@ an exact boundary, countdown, date-derived status, or hardcoded date label.
 When fixture dates are generated dynamically, compute expected labels from
 those same fixture dates.
 
+For Playwright tests, do not seed future/current-sensitive fixtures with
+near-current fixed dates such as `datetime(2026, ...)` or `"2026-06-01"`.
+Events, cohorts, sprints, dashboards, registrations, Studio lists/edit forms,
+join windows, and active/upcoming/default-list-visible scenarios must use
+`timezone.now()` / `timezone.localdate()` plus `timedelta(...)`, or run under
+an explicit frozen clock. Exact date-copy assertions should either freeze time
+or derive the expected label from the generated fixture date.
+
+Intentional fixed dates are allowed only when the historical/canonical/frozen
+intent is visible in code. Use a same-line or preceding-line comment such as
+`# date-rot-ok: canonical legacy workshop URL`, or a named helper/constant such
+as `fixed_start`, `historical_event_date`, or `FIXED_WORKSHOP_CATALOG_DATE`.
+The Playwright static guard in `playwright_tests/test_date_rot_guard.py` fails
+unreasoned hard-coded 2026 dates in future-sensitive event/cohort/sprint fields
+and date form inputs with file/line remediation guidance.
+
 Bad:
 ```python
 event = Event.objects.create(start=timezone.now() + timedelta(hours=24))

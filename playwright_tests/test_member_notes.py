@@ -52,11 +52,13 @@ def _seed_member_with_two_plans():
     spring = Sprint.objects.create(
         name="Spring 2026",
         slug="spring-2026",
+        # date-rot-ok: fixed historical sprint labels prove notes survive across sprints.
         start_date="2026-03-01",
     )
     summer = Sprint.objects.create(
         name="Summer 2026",
         slug="summer-2026",
+        # date-rot-ok: fixed historical sprint labels prove notes survive across sprints.
         start_date="2026-06-01",
     )
     member = User.objects.get(email="member@test.com")

@@ -43,6 +43,7 @@ def _make_plan(email, slack_user_id, *, active=True):
     sprint = Sprint.objects.create(
         name=f"Sprint {email}",
         slug=f"sprint-{slack_user_id.lower()}",
+        # date-rot-ok: Slack ingest apply fixture; active/completed status drives behavior.
         start_date=datetime.date(2026, 5, 1),
         status="active" if active else "completed",
     )

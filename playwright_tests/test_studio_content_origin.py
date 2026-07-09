@@ -5,6 +5,7 @@ import os
 import uuid
 
 import pytest
+from django.utils import timezone
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -131,7 +132,7 @@ def _create_content_origin_pairs():
     event = Event.objects.create(
         title='Synced Origin Event',
         slug='synced-origin-event',
-        start_datetime=datetime.datetime(2026, 6, 1, 10, 0),
+        start_datetime=timezone.now() + datetime.timedelta(days=30),
         status='upcoming',
         origin='github',
         source_repo='AI-Shipping-Labs/content',
@@ -141,7 +142,7 @@ def _create_content_origin_pairs():
     local_event = Event.objects.create(
         title='Local Origin Event',
         slug='local-origin-event',
-        start_datetime=datetime.datetime(2026, 6, 2, 10, 0),
+        start_datetime=timezone.now() + datetime.timedelta(days=31),
         status='upcoming',
     )
     project = Project.objects.create(

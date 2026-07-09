@@ -106,6 +106,7 @@ def _seed_markdown_download_plan(member_email):
     sprint = Sprint.objects.create(
         name="Download Sprint",
         slug="download-sprint",
+        # date-rot-ok: markdown export fixture; current sprint state is not under test.
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=4)
     member = User.objects.get(email=member_email)
@@ -231,6 +232,7 @@ class TestMemberCannotViewOtherMembersPlan:
         # Alice and Bob are members of the SAME sprint per the spec.
         sprint = Sprint.objects.create(
             name="Spring Cohort", slug="spring-cohort",
+            # date-rot-ok: access-control fixture; current sprint state is not under test.
             start_date=datetime.date(2026, 5, 1),
             duration_weeks=6)
         alice_plan_pk = _seed_plan_with_two_checkpoints(
@@ -274,6 +276,7 @@ class TestAnonymousRedirectedToLogin:
 
         sprint = Sprint.objects.create(
             name="S", slug="s",
+            # date-rot-ok: login-redirect fixture; current sprint state is not under test.
             start_date=datetime.date(2026, 5, 1))
         member = User.objects.create_user(
             email="member@test.com", password="x")

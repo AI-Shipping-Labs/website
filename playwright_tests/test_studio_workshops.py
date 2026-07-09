@@ -45,6 +45,10 @@ from django.db import connection  # noqa: E402
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
 
+# date-rot-ok: Studio workshop CRUD/list tests use fixed catalog dates; no
+# current/upcoming filtering depends on these values.
+FIXED_WORKSHOP_CATALOG_DATE = datetime.date(2026, 4, 21)
+
 
 def _clear_workshops():
     """Delete all workshops, pages, events to start each test from zero."""
@@ -91,7 +95,7 @@ def _create_workshop(
     workshop = Workshop.objects.create(
         slug=slug,
         title=title,
-        date=date or datetime.date(2026, 4, 21),
+        date=date or FIXED_WORKSHOP_CATALOG_DATE,
         description='Hands-on intro.',
         tags=['agents'],
         status=status,
@@ -186,6 +190,7 @@ class TestStudioWorkshopListFilter:
         _clear_workshops()
         _create_staff_user('admin@test.com')
 
+        # date-rot-ok: deterministic list dates; status filtering is under test.
         # 2 drafts + 3 published.
         for i in range(2):
             _create_workshop(
@@ -240,6 +245,7 @@ class TestStudioWorkshopListSearch:
         _clear_workshops()
         _create_staff_user('admin@test.com')
 
+        # date-rot-ok: deterministic search fixture dates; search text is under test.
         _create_workshop(
             slug='rag-basics', title='RAG basics',
             date=datetime.date(2026, 1, 1),

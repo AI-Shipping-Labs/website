@@ -30,6 +30,7 @@ from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
+from django.utils import timezone
 
 from playwright_tests.conftest import auth_context, create_staff_user, create_user
 
@@ -125,7 +126,9 @@ def _sprint(slug):
 
     return Sprint.objects.create(
         name=f"Sprint {slug}", slug=slug,
-        start_date=datetime.date(2026, 6, 1), duration_weeks=4, status="active",
+        start_date=timezone.localdate() - datetime.timedelta(days=7),
+        duration_weeks=4,
+        status="active",
     )
 
 

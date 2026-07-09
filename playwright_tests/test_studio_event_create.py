@@ -10,9 +10,10 @@ Usage:
 
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
+from django.utils import timezone
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -39,6 +40,10 @@ def _reset_event_state():
     Event.objects.all().delete()
     EventSeries.objects.all().delete()
     connection.close()
+
+
+def _future_form_date(days=30):
+    return (timezone.localdate() + timedelta(days=days)).strftime("%d/%m/%Y")
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +79,7 @@ class TestScenario1CreateOneOff:
         assert page.get_by_role("heading", name="New Event").is_visible()
 
         page.fill('input[name="title"]', "Office Hours July 21")
-        page.fill('input[name="event_date"]', "21/07/2026")
+        page.fill('input[name="event_date"]', _future_form_date())
         page.fill('input[name="event_time"]', "18:00")
         # Leave duration blank — defaults to 1 hour.
         # Issue #860: this Zoom event has no meeting/URL yet, so submit fires
@@ -126,7 +131,7 @@ class TestScenario2PublishAndView:
         page = ctx.new_page()
 
         # Use a date in the future so it lands on the upcoming filter.
-        future = (datetime.now() + timedelta(days=30)).strftime("%d/%m/%Y")
+        future = _future_form_date()
         page.goto(
             f"{django_server}/studio/events/new",
             wait_until="domcontentloaded",
@@ -242,7 +247,7 @@ class TestScenario4DuplicateSlug:
         existing = Event(
             title="Office Hours",
             slug="office-hours",
-            start_datetime=datetime(2026, 6, 1, 18, 0),
+            start_datetime=timezone.now() + timedelta(days=45),
             origin="studio",
         )
         existing.save()
@@ -258,7 +263,7 @@ class TestScenario4DuplicateSlug:
         )
         page.fill('input[name="title"]', "Office Hours")
         page.fill('input[name="slug"]', "office-hours")
-        page.fill('input[name="event_date"]', "20/06/2026")
+        page.fill('input[name="event_date"]', _future_form_date(days=46))
         page.fill('input[name="event_time"]', "18:00")
         # Issue #860: link-less Zoom event — accept the "no meeting link"
         # confirm so the POST reaches the server-side duplicate-slug check.

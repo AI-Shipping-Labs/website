@@ -14,6 +14,7 @@ from django.db import connection  # noqa: E402
 
 pytestmark = pytest.mark.local_only
 
+# date-rot-ok: canonical legacy dated workshop URL fixture.
 WORKSHOP_DATE = datetime.date(2026, 6, 17)
 WORKSHOP_SLUG = 'cloudflare-workers-vectorize-agent'
 DATE_SLUG = f'{WORKSHOP_DATE.isoformat()}-{WORKSHOP_SLUG}'
@@ -181,6 +182,7 @@ class TestBadDatedUrls:
         _create_workshop()
 
         response = page.goto(
+            # date-rot-ok: intentional wrong legacy date must 404.
             f'{django_server}/workshops/2026-06-18-{WORKSHOP_SLUG}',
             wait_until='domcontentloaded',
         )

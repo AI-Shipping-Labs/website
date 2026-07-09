@@ -106,9 +106,10 @@ class ActivitiesViewTest(TestCase):
 
     def test_activities_contains_content(self):
         response = self.client.get('/activities')
+        self.assertContains(response, 'Membership benefits by tier')
         self.assertContains(response, 'Active community sprints')
         self.assertContains(response, 'Next sprint coming soon')
-        self.assertContains(response, 'Quick comparison')
+        self.assertContains(response, 'Membership activities are being updated')
 
 
 class BlogListViewTest(TestCase):

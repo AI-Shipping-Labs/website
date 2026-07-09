@@ -51,8 +51,23 @@ plan has unfinished tasks we offer the carry-over button; once everything
 is already copied (count == 0) we show an "all caught up" notice instead.
 {% endcomment %}
 {% if plan_can_edit and carry_over_source %}
-<section class="mt-10 rounded-lg border border-accent/40 bg-accent/5 p-4" data-testid="plan-carry-over-panel">
-  <h2 class="text-base font-semibold text-foreground">Carry over unfinished tasks</h2>
+<section class="mt-10 rounded-lg border border-accent/40 bg-accent/5 p-4"
+         data-testid="plan-carry-over-panel"
+         data-plan-carry-over-panel
+         data-dismiss-card-container>
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <h2 class="text-base font-semibold text-foreground">Carry over unfinished tasks</h2>
+    {% if carry_over_unfinished_count %}
+    <button type="button"
+            class="text-sm text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            aria-label="Dismiss carry-over prompt"
+            data-testid="plan-carry-over-dismiss"
+            data-plan-carry-over-dismiss
+            data-dismiss-card="{{ carry_over_dismissal_key }}">
+      Dismiss carry-over prompt
+    </button>
+    {% endif %}
+  </div>
   {% if carry_over_unfinished_count %}
   <p class="mt-1 text-sm text-muted-foreground" data-testid="plan-carry-over-message">
     Bring your unfinished tasks from {{ carry_over_source.sprint.name }} into this plan.
@@ -68,6 +83,10 @@ is already copied (count == 0) we show an "all caught up" notice instead.
       Carry over {{ carry_over_unfinished_count }} task{{ carry_over_unfinished_count|pluralize }}
     </button>
   </form>
+  <p class="mt-2 hidden text-sm text-destructive"
+     aria-live="polite"
+     data-testid="plan-carry-over-dismiss-error"
+     data-plan-carry-over-dismiss-error></p>
   {% else %}
   <p class="mt-1 text-sm text-muted-foreground" data-testid="plan-carry-over-caught-up">
     All caught up — nothing left to carry over from {{ carry_over_source.sprint.name }}.

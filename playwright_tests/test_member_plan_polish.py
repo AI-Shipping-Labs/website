@@ -124,7 +124,8 @@ class TestMemberPlanPolish:
             item.locator('[data-testid="plan-item-save-status"]'),
         ).to_have_text("Saved")
 
-        item.locator('[data-testid="plan-item-edit"]').click()
+        assert item.locator('[data-testid="plan-item-edit"]').count() == 0
+        item.locator('[data-checkpoint-text]').click()
         item.locator('[data-testid="plan-item-markdown-input"]').fill(
             "Build **RAG** prototype"
         )

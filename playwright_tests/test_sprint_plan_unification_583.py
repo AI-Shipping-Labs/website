@@ -143,7 +143,8 @@ class TestUnifiedWorkspace583:
 
             # The workspace itself is the editor. Edit a checkpoint inline.
             item = page.locator('[data-testid="plan-checkpoint"]').first
-            item.locator('[data-testid="plan-item-edit"]').click()
+            assert item.locator('[data-testid="plan-item-edit"]').count() == 0
+            item.locator('[data-checkpoint-text]').click()
             item.locator(
                 '[data-testid="plan-item-markdown-input"]').fill('Build **RAG** prototype')
             with page.expect_response('**/api/checkpoints/*') as resp:

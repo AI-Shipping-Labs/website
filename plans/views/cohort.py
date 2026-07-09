@@ -266,8 +266,14 @@ def my_plan_detail(request, sprint_slug, plan_id):
     # earlier plan OR the earlier plan has zero unfinished tasks; it shows
     # the "all caught up" notice when there ARE unfinished source tasks but
     # they have all already been copied into this plan (net count 0).
+    carry_over_dismissal_key = f'plan_carry_over_prompt:{plan.pk}'
+    carry_over_dismissed = (
+        carry_over_dismissal_key in (request.user.dashboard_dismissals or [])
+    )
     carry_over_source = find_carry_over_source_plan(destination_plan=plan)
     carry_over_unfinished_count = 0
+    if carry_over_dismissed:
+        carry_over_source = None
     if carry_over_source is not None:
         raw_unfinished = count_total_unfinished(source_plan=carry_over_source)
         if raw_unfinished == 0:
@@ -294,6 +300,7 @@ def my_plan_detail(request, sprint_slug, plan_id):
             'comments_disabled_reason': comments_disabled_reason,
             'carry_over_source': carry_over_source,
             'carry_over_unfinished_count': carry_over_unfinished_count,
+            'carry_over_dismissal_key': carry_over_dismissal_key,
         },
     )
 

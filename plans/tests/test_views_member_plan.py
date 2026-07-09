@@ -396,7 +396,11 @@ class MyPlanDetailOwnerSurfaceTest(TestCase):
         self.assertContains(response, 'data-checkpoint-drag-handle')
         self.assertContains(response, 'data-testid="plan-row-done-toggle"')
         self.assertContains(response, 'data-testid="plan-item-markdown-input"')
-        self.assertContains(response, 'data-testid="plan-item-edit"')
+        body = response.content.decode('utf-8')
+        checkpoint_start = body.index('data-testid="plan-checkpoint"')
+        checkpoint_end = body.index('</li>', checkpoint_start)
+        checkpoint_markup = body[checkpoint_start:checkpoint_end]
+        self.assertNotIn('data-testid="plan-item-edit"', checkpoint_markup)
         self.assertNotContains(response, 'data-api-token=')
         self.assertIn(settings.CSRF_COOKIE_NAME, response.cookies)
         self.assertContains(response, 'name="csrfmiddlewaretoken"')

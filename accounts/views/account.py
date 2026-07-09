@@ -413,6 +413,33 @@ def email_preferences_view(request):
 # POST is accepted only for these stable keys; anything else is a 400. The
 # readers (content/views/home.py) branch on the same keys.
 DISMISSABLE_DASHBOARD_CARDS = frozenset({"onboarding_prompt", "slack_join"})
+PLAN_CARRY_OVER_DISMISS_PREFIX = "plan_carry_over_prompt:"
+
+
+def _is_owned_plan_carry_over_dismissal(card, user):
+    """Return True when ``card`` names one of ``user``'s sprint plans."""
+    if not isinstance(card, str):
+        return False
+    if not card.startswith(PLAN_CARRY_OVER_DISMISS_PREFIX):
+        return False
+
+    raw_plan_id = card.removeprefix(PLAN_CARRY_OVER_DISMISS_PREFIX)
+    if not raw_plan_id.isdigit():
+        return False
+    if raw_plan_id != str(int(raw_plan_id)):
+        return False
+
+    from plans.models import Plan
+
+    return Plan.objects.filter(pk=int(raw_plan_id), member=user).exists()
+
+
+def _is_valid_dashboard_dismissal(card, user):
+    if not isinstance(card, str):
+        return False
+    if card in DISMISSABLE_DASHBOARD_CARDS:
+        return True
+    return _is_owned_plan_carry_over_dismissal(card, user)
 
 
 @login_required
@@ -427,9 +454,10 @@ def dismiss_dashboard_card(request):
     operator-facing ``IntegrationSetting`` framework. Modeled on
     ``email_preferences_view``:
 
-    - Validates ``card`` against :data:`DISMISSABLE_DASHBOARD_CARDS`;
-      an unknown or missing key returns ``400`` with an ``error`` and
-      does not modify ``dashboard_dismissals``.
+    - Validates ``card`` against :data:`DISMISSABLE_DASHBOARD_CARDS`
+      or the owner-scoped ``plan_carry_over_prompt:<plan_id>`` key;
+      an unknown, missing, malformed, or non-owned key returns ``400``
+      with an ``error`` and does not modify ``dashboard_dismissals``.
     - Idempotent: adds the key only if absent, so dismissing an
       already-dismissed card is a no-op that still returns ``200``.
     - Anonymous callers are redirected to login by ``@login_required``.
@@ -440,7 +468,7 @@ def dismiss_dashboard_card(request):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     card = data.get("card") if isinstance(data, dict) else None
-    if card not in DISMISSABLE_DASHBOARD_CARDS:
+    if not _is_valid_dashboard_dismissal(card, request.user):
         return JsonResponse({"error": "Unknown card"}, status=400)
 
     user = request.user

@@ -143,6 +143,9 @@ class CarryOverPanelRenderTest(TestCase):
             kwargs={'sprint_slug': plan.sprint.slug, 'plan_id': plan.pk},
         )
 
+    def _dismiss_key(self, plan):
+        return f'plan_carry_over_prompt:{plan.pk}'
+
     def test_panel_shown_with_source_name_and_count(self):
         source = _make_plan(self.member, self.s_prev, 4)
         Checkpoint.objects.create(
@@ -158,6 +161,8 @@ class CarryOverPanelRenderTest(TestCase):
         self.assertContains(resp, 'Spring Sprint')
         self.assertContains(resp, '2 unfinished tasks available')
         self.assertContains(resp, 'Carry over 2 tasks')
+        self.assertContains(resp, 'data-testid="plan-carry-over-dismiss"')
+        self.assertContains(resp, f'data-dismiss-card="{self._dismiss_key(dest)}"')
 
     def test_panel_hidden_when_no_prior_plan(self):
         dest = _make_plan(self.member, self.s_next, 4)
@@ -190,6 +195,76 @@ class CarryOverPanelRenderTest(TestCase):
         resp = self.client.get(self._my_plan_url(dest))
         self.assertContains(resp, 'data-testid="plan-carry-over-caught-up"')
         self.assertNotContains(resp, 'data-testid="plan-carry-over-submit"')
+        self.assertNotContains(resp, 'data-testid="plan-carry-over-dismiss"')
+
+    def test_panel_hidden_on_first_render_when_plan_dismissed(self):
+        source = _make_plan(self.member, self.s_prev, 4)
+        Checkpoint.objects.create(
+            week=source.weeks.get(week_number=1), description='a', position=0,
+        )
+        dest = _make_plan(self.member, self.s_next, 4)
+        self.member.dashboard_dismissals = [self._dismiss_key(dest)]
+        self.member.save(update_fields=['dashboard_dismissals'])
+
+        self.client.force_login(self.member)
+        resp = self.client.get(self._my_plan_url(dest))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'data-testid="plan-carry-over-panel"')
+        self.assertNotContains(resp, 'data-testid="plan-carry-over-caught-up"')
+
+    def test_dismissed_plan_hides_later_caught_up_notice(self):
+        source = _make_plan(self.member, self.s_prev, 4)
+        Checkpoint.objects.create(
+            week=source.weeks.get(week_number=1), description='a', position=0,
+        )
+        dest = _make_plan(self.member, self.s_next, 4)
+        self.client.force_login(self.member)
+        self.client.post(reverse(
+            'carry_over_tasks',
+            kwargs={'sprint_slug': dest.sprint.slug, 'plan_id': dest.pk},
+        ))
+        self.member.dashboard_dismissals = [self._dismiss_key(dest)]
+        self.member.save(update_fields=['dashboard_dismissals'])
+
+        resp = self.client.get(self._my_plan_url(dest))
+
+        self.assertNotContains(resp, 'data-testid="plan-carry-over-panel"')
+        self.assertNotContains(resp, 'data-testid="plan-carry-over-caught-up"')
+
+    def test_dismissing_one_plan_does_not_hide_another_plan(self):
+        source_one = _make_plan(self.member, self.s_prev, 4)
+        Checkpoint.objects.create(
+            week=source_one.weeks.get(week_number=1),
+            description='first source task',
+            position=0,
+        )
+        dest_one = _make_plan(self.member, self.s_next, 4)
+        s_third = Sprint.objects.create(
+            name='Autumn Sprint', slug='autumn',
+            start_date=datetime.date(2026, 9, 1), duration_weeks=4,
+        )
+        source_two = _make_plan(self.member, s_third, 4)
+        Checkpoint.objects.create(
+            week=source_two.weeks.get(week_number=1),
+            description='second source task',
+            position=0,
+        )
+        s_fourth = Sprint.objects.create(
+            name='Winter Sprint', slug='winter',
+            start_date=datetime.date(2026, 12, 1), duration_weeks=4,
+        )
+        dest_two = _make_plan(self.member, s_fourth, 4)
+        self.member.dashboard_dismissals = [self._dismiss_key(dest_one)]
+        self.member.save(update_fields=['dashboard_dismissals'])
+
+        self.client.force_login(self.member)
+        resp_one = self.client.get(self._my_plan_url(dest_one))
+        resp_two = self.client.get(self._my_plan_url(dest_two))
+
+        self.assertNotContains(resp_one, 'data-testid="plan-carry-over-panel"')
+        self.assertContains(resp_two, 'data-testid="plan-carry-over-panel"')
+        self.assertContains(resp_two, 'Autumn Sprint')
 
     def test_panel_not_on_read_only_teammate_view(self):
         # Both members enrolled in the same sprint; the source plan exists

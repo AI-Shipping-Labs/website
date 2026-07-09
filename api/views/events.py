@@ -48,6 +48,7 @@ from events.services.calendar_lifecycle import (
 )
 from events.services.display_time import resolve_event_creation_timezone
 from events.services.host_registration import maybe_register_host_as_attendee
+from events.services.timestamps import validate_event_timestamps_for_api
 from events.services.workshop_ready_notification import (
     WorkshopReadyNotReady,
     notify_workshop_ready,
@@ -94,6 +95,7 @@ WRITABLE_FIELDS = {
     "published",
     "host_email",
     "recording_url",
+    "timestamps",
     "materials",
 }
 
@@ -106,6 +108,43 @@ VALID_REQUIRED_LEVELS = {value for value, _label in VISIBILITY_CHOICES}
 
 _VALID_STATUSES_ENUM = sorted(VALID_STATUSES)
 _VALID_ORIGINS_ENUM = sorted(VALID_ORIGINS)
+
+_TIMESTAMPS_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "time_seconds": {
+                "oneOf": [{"type": "integer"}, {"type": "string"}],
+                "description": (
+                    "Canonical seconds value. Integer-like strings are "
+                    "accepted and normalized to integers."
+                ),
+            },
+            "time": {
+                "type": "string",
+                "description": "Import-friendly MM:SS or H:MM:SS timestamp.",
+            },
+            "label": {
+                "type": "string",
+                "description": "Canonical chapter label.",
+            },
+            "title": {
+                "type": "string",
+                "description": "Import-friendly chapter title.",
+            },
+        },
+        "additionalProperties": False,
+        "description": (
+            "Provide either time_seconds or time, and either label or title. "
+            "Stored responses always return canonical time_seconds/label rows."
+        ),
+    },
+    "description": (
+        "Recording chapters. Empty array clears chapters on PATCH; omitted "
+        "PATCH values preserve existing chapters."
+    ),
+}
 
 _EVENT_EXAMPLE = {
     "id": 42,
@@ -126,6 +165,16 @@ _EVENT_EXAMPLE = {
     "published": True,
     "host_email": "host@example.com",
     "recording_url": "https://www.youtube.com/watch?v=16EUIZQTiAo",
+    "timestamps": [
+        {
+            "time_seconds": 960,
+            "label": "Setup",
+        },
+        {
+            "time_seconds": 125,
+            "label": "Build",
+        },
+    ],
     "materials": [
         {
             "title": "Workshop notes",
@@ -203,6 +252,7 @@ def serialize_event(event):
         "published": event.published,
         "host_email": event.host_email,
         "recording_url": event.recording_url or "",
+        "timestamps": event.timestamps or [],
         "materials": event.materials or [],
         "hosts": [_serialize_host(host) for host in event.ordered_hosts],
         "banner_url": effective_banner_url(event),
@@ -340,6 +390,15 @@ def _collect_event_values(data, *, existing=None):
             errors["materials"] = error
         else:
             values["materials"] = materials
+
+    if "timestamps" in data:
+        timestamps, error = validate_event_timestamps_for_api(data["timestamps"])
+        if error:
+            errors["timestamps"] = error
+        else:
+            values["timestamps"] = timestamps
+    elif existing is None:
+        values["timestamps"] = []
 
     for field, valid_values in (
         ("kind", VALID_KINDS),
@@ -685,6 +744,7 @@ def _maybe_enqueue_banner(event, generate_banner):
                             "clears materials."
                         ),
                     },
+                    "timestamps": _TIMESTAMPS_SCHEMA,
                     "host_ids": {
                         "type": "array",
                         "items": {"type": "integer"},
@@ -726,6 +786,12 @@ def _maybe_enqueue_banner(event, generate_banner):
                     "start_datetime": "2026-05-05T17:00:00+02:00",
                     "host_email": "host@example.com",
                     "host_ids": [1],
+                    "timestamps": [
+                        {
+                            "time": "16:00",
+                            "title": "Setup",
+                        }
+                    ],
                 },
             },
             "responses": {
@@ -934,6 +1000,7 @@ def events_collection(request):
                             "clears materials."
                         ),
                     },
+                    "timestamps": _TIMESTAMPS_SCHEMA,
                     "host_ids": {
                         "type": "array",
                         "items": {"type": "integer"},
@@ -976,6 +1043,12 @@ def events_collection(request):
                             "title": "Workshop notes",
                             "url": "https://docs.example.com/workshop-notes",
                             "type": "doc",
+                        }
+                    ],
+                    "timestamps": [
+                        {
+                            "time_seconds": 960,
+                            "label": "Setup",
                         }
                     ],
                 },

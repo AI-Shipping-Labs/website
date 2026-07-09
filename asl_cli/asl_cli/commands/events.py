@@ -11,6 +11,7 @@ from asl_cli.commands._shared import (
     emit,
     format_option,
     get_client,
+    json_option,
 )
 
 API = "/api"
@@ -63,6 +64,11 @@ EVENT_FLAGS = [
     click.option("--tags", default=None, help="Comma-separated tags, e.g. sprint:may-2026,workshop."),
     click.option("--zoom-join-url", default=None),
     click.option("--recording-url", default=None),
+    json_option(
+        "timestamps",
+        required=False,
+        help_text="JSON array of timestamp rows (or @file.json).",
+    ),
     click.option("--create-zoom/--no-create-zoom", default=None,
                  help="Provision a real Zoom meeting."),
     click.option("--generate-banner/--no-generate-banner", default=None,
@@ -90,6 +96,11 @@ def _split_csv_int(value):
     return [int(v.strip()) for v in value.split(",") if v.strip()]
 
 
+def _validate_timestamps_option(body):
+    if "timestamps" in body and not isinstance(body["timestamps"], list):
+        raise click.UsageError("--timestamps must be a JSON array.")
+
+
 @events.command("create")
 @apply_event_flags
 @format_option
@@ -104,6 +115,7 @@ def events_create(fmt, **kwargs):
         body["tags"] = _split_csv(body["tags"])
     if "host_ids" in body and isinstance(body["host_ids"], str):
         body["host_ids"] = _split_csv_int(body["host_ids"])
+    _validate_timestamps_option(body)
     emit(get_client().post(f"{API}/events", json_body=body), fmt)
 
 
@@ -118,6 +130,7 @@ def events_update(slug, fmt, **kwargs):
         body["tags"] = _split_csv(body["tags"])
     if "host_ids" in body and isinstance(body["host_ids"], str):
         body["host_ids"] = _split_csv_int(body["host_ids"])
+    _validate_timestamps_option(body)
     emit(get_client().patch(f"{API}/events/{slug}", json_body=body), fmt)
 
 

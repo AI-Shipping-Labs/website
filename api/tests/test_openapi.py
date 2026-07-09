@@ -132,6 +132,14 @@ class BuildSpecTest(TestCase):
             "Authorization: Token",
             security_schemes["tokenAuth"]["description"],
         )
+        self.assertIn(
+            "shown once",
+            security_schemes["tokenAuth"]["description"],
+        )
+        self.assertIn(
+            "cannot be retrieved later",
+            security_schemes["tokenAuth"]["description"],
+        )
 
     def test_default_document_security_is_token_auth(self):
         # Document-level default: every operation that doesn't opt out

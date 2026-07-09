@@ -126,9 +126,7 @@ class TestSuperuserIssuesToken:
         assert admin_email in created_body
 
         # 5. Back to list -- masked prefix only, full key absent from
-        #    visible cells. (The revoke form's action URL legitimately
-        #    contains the key as a path parameter; that's not a "display"
-        #    of the key.)
+        #    visible text and page source.
         page.locator('[data-testid="api-token-back-to-list"]').click()
         page.wait_for_load_state("domcontentloaded")
         assert page.url.rstrip("/").endswith("/studio/api-tokens")
@@ -145,6 +143,7 @@ class TestSuperuserIssuesToken:
         assert admin_email in row_text
         # And the full key is NOT rendered as visible text in the cell.
         assert token_value not in row_text
+        assert token_value not in page.content()
 
         # 6. Navigating back to /created/ redirects to the list (one-shot).
         page.goto(
@@ -199,7 +198,8 @@ class TestSuperuserRevokesToken:
         _create_staff_user(admin_email)
         _delete_all_tokens()
         admin = User.objects.get(email=admin_email)
-        Token.objects.create(user=admin, name="old-laptop")
+        token = Token.objects.create(user=admin, name="old-laptop")
+        plaintext_key = token.key
         connection.close()
 
         context = _auth_context(browser, admin_email)
@@ -211,6 +211,7 @@ class TestSuperuserRevokesToken:
         )
         body_before = page.content()
         assert "old-laptop" in body_before
+        assert plaintext_key not in body_before
 
         # Auto-confirm the JS confirm() dialog.
         page.on("dialog", lambda dialog: dialog.accept())
@@ -222,6 +223,55 @@ class TestSuperuserRevokesToken:
         body_after = page.content()
         assert "old-laptop" not in body_after
         assert "Token revoked" in body_after
+
+        context.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestSuperuserRotatesToken:
+    """Superuser rotates a token without leaking the old credential."""
+
+    def test_rotate_shows_new_key_once_and_hides_old_key(
+        self, django_server, browser
+    ):
+        from accounts.models import Token, User
+
+        admin_email = "admin-rotate@test.com"
+        _create_staff_user(admin_email)
+        _delete_all_tokens()
+        admin = User.objects.get(email=admin_email)
+        token = Token.objects.create(user=admin, name="old laptop")
+        old_key = token.key
+        connection.close()
+
+        context = _auth_context(browser, admin_email)
+        page = context.new_page()
+
+        page.goto(
+            f"{django_server}/studio/api-tokens/",
+            wait_until="domcontentloaded",
+        )
+        assert old_key not in page.content()
+
+        page.on("dialog", lambda dialog: dialog.accept())
+        page.locator('[data-testid="api-token-rotate"]').click()
+        page.wait_for_load_state("domcontentloaded")
+
+        assert "/studio/api-tokens/created/" in page.url
+        new_key = page.locator('[data-testid="api-token-value"]').inner_text()
+        assert len(new_key) > 30
+        assert new_key != old_key
+        assert old_key not in page.content()
+        warning = page.locator('[data-testid="api-token-warning"]').inner_text()
+        assert "old token" in warning.lower()
+
+        page.goto(
+            f"{django_server}/studio/api-tokens/created/",
+            wait_until="domcontentloaded",
+        )
+        assert page.url.rstrip("/").endswith("/studio/api-tokens")
+        assert new_key not in page.content()
+        assert old_key not in page.content()
 
         context.close()
 

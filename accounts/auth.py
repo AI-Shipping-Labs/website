@@ -1,10 +1,10 @@
-"""Token authentication decorator for the JSON API (issue #431).
+"""Token authentication decorators for JSON API endpoints.
 
-Reads the ``Authorization: Token <key>`` header, looks up the matching
-``accounts.models.Token`` row, sets ``request.user`` to the token's owner, and
-bumps ``last_used_at``. Returns a JSON 401 (NOT a redirect to /accounts/login/)
-when the header is missing or the token does not exist; clients are scripts
-that should never be redirected to a browser login page.
+Reads the ``Authorization: Token <key>`` header, verifies the submitted key
+against hashed ``accounts.models.Token`` rows, sets ``request.user`` to the
+token's owner, and bumps ``last_used_at``. Returns a JSON 401 (NOT a redirect
+to /accounts/login/) when the header is missing or invalid; clients are
+scripts that should never be redirected to a browser login page.
 """
 
 from functools import wraps
@@ -29,10 +29,9 @@ def token_required(view_func):
     unrelated columns (and to skip the User.save() free-tier branch on every
     API call).
 
-    Tokens are NOT downgraded when ``user.is_staff`` flips to False -- the
-    token's owner can lose staff privileges and still authenticate, because
-    revocation is the explicit way to cut API access. The Studio token-list
-    page shows the owner's email so the operator can audit this.
+    The token owner must still be staff. Non-staff tokens intentionally return
+    the same invalid-token shape as unknown tokens so callers cannot discover
+    whether a submitted credential maps to a row.
     """
 
     @wraps(view_func)
@@ -55,14 +54,14 @@ def token_required(view_func):
             )
 
         key = parts[1].strip()
-        token = Token.objects.filter(key=key).select_related("user").first()
+        token = Token.authenticate(key)
         if token is None:
             return JsonResponse({"error": "Invalid token"}, status=401)
         if not is_staff_user(token.user):
             return JsonResponse({"error": "Invalid token"}, status=401)
 
         token.last_used_at = timezone.now()
-        token.save(update_fields=["last_used_at"])
+        Token.objects.filter(pk=token.pk).update(last_used_at=token.last_used_at)
 
         request.user = token.user
         # Issue #764: stash the token on the request so audit-logging views
@@ -100,11 +99,12 @@ def token_required_any_user(view_func):
             )
 
         key = parts[1].strip()
-        token = Token.objects.filter(key=key).select_related("user").first()
+        token = Token.authenticate(key)
         if token is None:
             return JsonResponse({"error": "Invalid token"}, status=401)
 
-        Token.objects.filter(pk=token.pk).update(last_used_at=timezone.now())
+        token.last_used_at = timezone.now()
+        Token.objects.filter(pk=token.pk).update(last_used_at=token.last_used_at)
 
         request.user = token.user
         request.auth_token = token

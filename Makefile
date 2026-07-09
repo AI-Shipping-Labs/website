@@ -72,7 +72,9 @@ coverage:
 # Run the full active Playwright end-to-end suite.
 # The local-server fixture picks a free OS-assigned port per session (#885),
 # so concurrent runs from separate worktrees no longer collide on a fixed
-# port. Set PLAYWRIGHT_DJANGO_PORT only to pin a known port.
+# port. A repo-local pytest guard blocks two local Playwright sessions inside
+# the same worktree because they would share test_playwright_db.sqlite3.
+# Set PLAYWRIGHT_DJANGO_PORT only to pin a known port.
 test-playwright:
 	uv run pytest -m "not visual_regression" playwright_tests/ -v
 

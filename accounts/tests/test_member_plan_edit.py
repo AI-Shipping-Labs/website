@@ -247,18 +247,19 @@ class StaffEditorRegressionTest(TestCase):
         )
         Week.objects.create(plan=cls.plan, week_number=1, position=0)
 
-    def test_staff_editor_still_uses_studio_template_and_token(self):
+    def test_staff_editor_still_uses_studio_template_without_token(self):
         self.client.login(email='staff@test.com', password='pw')
         response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'studio/plans/edit.html')
         self.assertTemplateUsed(response, 'studio/plans/_editor_body.html')
         self.assertContains(response, 'id="plan-editor"')
+        self.assertNotContains(response, 'data-api-token=')
         self.assertEqual(
             Token.objects.filter(
                 user=self.staff, name='studio-plan-editor',
             ).count(),
-            1,
+            0,
         )
         self.assertEqual(
             Token.objects.filter(

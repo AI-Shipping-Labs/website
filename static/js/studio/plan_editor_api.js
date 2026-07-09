@@ -18,6 +18,15 @@
     const onToast = options.onToast || function () {};
     let inflight = 0;
 
+    function getCookie(name) {
+      const prefix = name + '=';
+      return document.cookie.split(';').map(function (cookie) {
+        return cookie.trim();
+      }).find(function (cookie) {
+        return cookie.startsWith(prefix);
+      })?.substring(prefix.length) || '';
+    }
+
     function normalizeError(status, data, fallbackMessage) {
       return {
         ok: false,
@@ -36,10 +45,17 @@
       const init = {
         method: method,
         headers: {
-          'Authorization': 'Token ' + apiToken,
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
+        credentials: 'same-origin',
       };
+      if (apiToken) {
+        init.headers.Authorization = 'Token ' + apiToken;
+      } else {
+        init.headers['X-CSRFToken'] = getCookie('csrftoken');
+        init.headers['X-Requested-With'] = 'XMLHttpRequest';
+      }
       if (body !== undefined && body !== null) {
         init.body = JSON.stringify(body);
       }

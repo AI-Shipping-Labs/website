@@ -908,13 +908,24 @@ class TestAccessControlMatrix:
 If you add a new feature on a critical path, tag the test. If you remove the
 feature, the marker travels with the deletion. The marker IS the registry.
 
-### Local concurrency caveat
+### Local concurrency guard
 
-This caveat is resolved as of #885. See "Running Playwright in isolation /
-parallel across worktrees" below: the server fixture now picks a free
-OS-assigned port per session, so concurrent runs from separate worktrees no
-longer collide. The old "run one suite at a time locally" constraint no
-longer applies.
+The old machine-wide "run one Playwright suite at a time locally" constraint is
+resolved as of #885. See "Running Playwright in isolation / parallel across
+worktrees" below: the server fixture now picks a free OS-assigned port per
+session, so concurrent runs from separate worktrees no longer collide.
+
+The remaining unsafe case is two local Playwright pytest sessions inside the
+same git worktree, because they share that checkout's
+`test_playwright_db.sqlite3`. This is now blocked by tooling. A direct
+`uv run pytest playwright_tests/...` invocation or any Makefile Playwright
+target claims `.tmp/playwright-session.lock` before migrations, Django
+`runserver`, browser launch, or fixture seeding. A second local session in the
+same worktree exits quickly with holder details and remediation instructions.
+
+When `PLAYWRIGHT_BASE_URL` points at a non-local host such as
+`https://dev.aishippinglabs.com`, the suite does not start the local server or
+use the local SQLite test DB, so it does not claim the same-worktree guard.
 
 ## Running Playwright in isolation / parallel across worktrees
 
@@ -943,6 +954,15 @@ the dynamic port, the last shared resource is gone: multiple agents in separate
 worktrees can now run `make test-playwright` / `make test-playwright-core`
 SIMULTANEOUSLY without interfering. Each agent verifies its own work
 independently — there is no need to serialize on the port.
+
+Do not start two local Playwright pytest sessions inside the same worktree. If
+that happens, the second session fails before it can touch
+`test_playwright_db.sqlite3`, showing the worktree path, current PID, holder
+details when available, and instructions to wait, stop the other run, or use a
+separate worktree. Normal pytest teardown releases the guard. If a pytest
+process is killed, the underlying advisory lock is released by the OS, so stale
+metadata in `.tmp/playwright-session.lock` does not permanently block the next
+run.
 
 ```bash
 make test-playwright          # full active suite

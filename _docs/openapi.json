@@ -26,14 +26,14 @@
     },
     "securitySchemes": {
       "tokenAuth": {
-        "description": "Send the header ``Authorization: Token <key>`` where ``<key>`` is a staff-owned token from the Studio tokens page. The literal scheme name is ``Token``, not ``Bearer`` (Swagger UI's authorize dialog renders this as ``bearer`` but the wire format we accept is ``Token``).",
+        "description": "Send the header ``Authorization: Token <key>`` where ``<key>`` is a staff-owned token from the Studio tokens page. New and rotated token values are shown once in Studio and cannot be retrieved later. The literal scheme name is ``Token``, not ``Bearer`` (Swagger UI's authorize dialog renders this as ``bearer`` but the wire format we accept is ``Token``).",
         "scheme": "bearer",
         "type": "http"
       }
     }
   },
   "info": {
-    "description": "Operator API for AI Shipping Labs. All endpoints accept JSON in and return JSON out. Authentication is via the ``Authorization: Token <key>`` header where ``<key>`` is a token owned by a staff user.\n\nThe spec endpoint ``/api/openapi.json`` itself accepts the same ``Authorization: Token <key>`` header, so OpenAPI tooling (Postman ``Import -> Link``, ``openapi-generator``, Swagger UI) can pull the spec from the same base URL it then calls. Example:\n\n```\ncurl -H \"Authorization: Token $API_TOKEN\" https://aishippinglabs.com/api/openapi.json > spec.json\n```",
+    "description": "Operator API for AI Shipping Labs. All endpoints accept JSON in and return JSON out. Authentication is via the ``Authorization: Token <key>`` header where ``<key>`` is a token owned by a staff user. Studio shows new or rotated operator token values once; existing plaintext tokens cannot be retrieved later.\n\nThe spec endpoint ``/api/openapi.json`` itself accepts the same ``Authorization: Token <key>`` header, so OpenAPI tooling (Postman ``Import -> Link``, ``openapi-generator``, Swagger UI) can pull the spec from the same base URL it then calls. Example:\n\n```\ncurl -H \"Authorization: Token $API_TOKEN\" https://aishippinglabs.com/api/openapi.json > spec.json\n```",
     "title": "AI Shipping Labs Operator API",
     "version": "1.0.0"
   },

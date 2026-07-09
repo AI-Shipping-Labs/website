@@ -15,11 +15,9 @@ reflected here so the editor stays compatible.
 
 ``build_plan_editor_context`` (issue #444) is the single source of
 truth for the full template context the Studio editor template needs.
-It mints (or reuses) a per-user API token under a parameterizable name
-so staff tokens can be audited and revoked independently.
+Browser writes use the logged-in session plus CSRF through the shared
+``token_or_session_required`` API decorators.
 """
-
-from accounts.models import Token
 
 
 def _serialize_checkpoint(checkpoint):
@@ -148,24 +146,6 @@ def serialize_plan_detail(plan):
     }
 
 
-def _get_or_create_editor_token(user, name):
-    """Return a Token bound to ``user`` under the reserved ``name``.
-
-    ``name`` is a reserved label (e.g. ``studio-plan-editor`` for the
-    Studio path, ``member-plan-editor`` for the member self-edit path).
-    Re-using the same name across sessions means we get-or-create at
-    most one token per (user, name) for this UI -- never accumulate
-    one per page load. ``Token.save()`` populates ``key`` on first
-    save when blank, so a single ``get_or_create`` is enough.
-
-    Tokens minted here live alongside any operator-issued tokens from
-    the Studio token UI (#431). Naming them under reserved labels
-    means revoking one does not also kill ad-hoc operator tokens.
-    """
-    token, _ = Token.objects.get_or_create(user=user, name=name)
-    return token
-
-
 def _serialize_interview_note(note):
     """Match the API note shape; used by the editor bootstrap payload."""
     return {
@@ -185,7 +165,8 @@ def build_plan_editor_context(plan, *, viewer, token_name):
     (staff Studio path) and ``member_plan_edit`` (member-facing path).
     Both call ``render(request, ..., build_plan_editor_context(plan,
     viewer=request.user, token_name='studio-plan-editor' or
-    'member-plan-editor'))``.
+    'member-plan-editor'))``. The ``token_name`` parameter is retained for
+    call-site compatibility but no longer mints or renders an API token.
 
     Caller is expected to have prefetched ``weeks__checkpoints``,
     ``resources``, ``deliverables``, ``next_steps``, and
@@ -198,7 +179,7 @@ def build_plan_editor_context(plan, *, viewer, token_name):
     notes -- the API queryset gate enforces that.
     """
     plan_payload = serialize_plan_detail(plan)
-    token = _get_or_create_editor_token(viewer, token_name)
+    _ = (viewer, token_name)
 
     notes = list(plan.interview_notes.all().order_by('-created_at'))
     internal_notes = [
@@ -218,7 +199,6 @@ def build_plan_editor_context(plan, *, viewer, token_name):
     return {
         'plan': plan,
         'plan_payload': plan_payload,
-        'api_token': token.key,
         'api_base': '/api/',
         'weeks_count': weeks_count,
         'checkpoints_count': checkpoints_count,

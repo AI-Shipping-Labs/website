@@ -5,10 +5,9 @@ These tests cover the thin server shell only:
 - Access control matrix (anonymous / non-staff / staff).
 - The bootstrap JSON payload matches the API detail shape from #433.
 - The editor renders summary fields, focus block, week cards, side
-  panels, the SortableJS CDN with SRI, and a per-staff API token via
-  ``data-api-token`` (never inlined in a ``<script>`` source).
-- Re-opening the editor reuses the same token rather than minting a new
-  one each time -- the editor token is a singleton per staff user.
+  panels, and the SortableJS CDN with SRI.
+- Re-opening the editor does not mint or render a reusable operator token;
+  browser writes authenticate through session + CSRF.
 
 Drag, keyboard, autosave, revert-on-failure and toast behaviour are
 JavaScript flows; per testing-guidelines Rule 4 they belong in
@@ -20,7 +19,7 @@ import datetime
 import json
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -529,8 +528,8 @@ class StudioPlanParticipantNavigationTest(TestCase):
         self.assertContains(response, '3 checkpoints across 2 weeks')
 
 
-class PlanEditorTokenTest(TestCase):
-    """The editor mints (or reuses) a single API token per staff user."""
+class PlanEditorSessionAuthTest(TestCase):
+    """The editor uses session + CSRF instead of a rendered API token."""
 
     @classmethod
     def setUpTestData(cls):
@@ -548,28 +547,30 @@ class PlanEditorTokenTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
 
-    def test_token_attached_via_data_api_token_attribute(self):
+    def test_editor_does_not_render_or_mint_operator_token(self):
         response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
-        token = Token.objects.get(user=self.staff, name='studio-plan-editor')
-        self.assertContains(response, f'data-api-token="{token.key}"')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-api-token=')
+        self.assertEqual(
+            Token.objects.filter(
+                user=self.staff, name='studio-plan-editor',
+            ).count(),
+            0,
+        )
 
-    def test_token_not_inlined_in_script_source(self):
-        """The token must live on a data attribute, not a <script> body.
+    def test_reserved_operator_token_not_inlined_in_script_source(self):
+        """No reusable editor token should appear in any script body.
 
-        AC: ``data-api-token`` on the editor root, never inline in
-        ``<script>`` source. Reading the page and asserting the token
-        does NOT appear inside any <script> tag's text guards against
-        a future change that copies it into a JS variable initialiser.
+        Reading the page and asserting the old reserved token name and
+        token data attribute do not appear inside any <script> tag guards
+        against a future change that copies credentials into JS.
         Django strips ``{# ... #}`` comments so the only ``<script``
         opens left in the response are real tags. The bootstrap data
-        node is excluded from the check because it carries the
-        plan JSON, not JS source -- the API token must not leak there
-        either, but the JSON parse step verifies the payload separately.
+        node is included in the check because it is still DOM source.
         """
         from html.parser import HTMLParser
 
         response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
-        token = Token.objects.get(user=self.staff, name='studio-plan-editor')
         body = response.content.decode()
 
         class ScriptCollector(HTMLParser):
@@ -609,31 +610,22 @@ class PlanEditorTokenTest(TestCase):
         # otherwise this assertion is vacuous (Rule 1 self-check).
         self.assertGreater(len(collector.buffers), 0)
         for entry in collector.buffers:
-            if entry['is_data_node']:
-                # The bootstrap JSON is a separate concern; verify the
-                # token is not embedded in it either.
-                self.assertNotIn(
-                    token.key,
-                    entry['text'],
-                    msg='API token leaked into the bootstrap JSON',
-                )
-                continue
             self.assertNotIn(
-                token.key,
+                'studio-plan-editor',
                 entry['text'],
-                msg='API token leaked into a <script> block',
+                msg='Reserved API token name leaked into a <script> block',
+            )
+            self.assertNotIn(
+                'data-api-token',
+                entry['text'],
+                msg='API token data attribute leaked into a <script> block',
             )
 
     def test_api_base_attribute_present(self):
         response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
         self.assertContains(response, 'data-api-base="/api/"')
 
-    def test_token_is_reused_across_page_loads(self):
-        """The editor MUST get-or-create -- never mint a fresh token per page.
-
-        Reloading the editor a thousand times in a session should yield
-        exactly one token row for the user, with the same key.
-        """
+    def test_reloads_do_not_create_editor_token(self):
         before = Token.objects.filter(
             user=self.staff, name='studio-plan-editor',
         ).count()
@@ -646,13 +638,33 @@ class PlanEditorTokenTest(TestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(third.status_code, 200)
 
-        tokens = Token.objects.filter(
-            user=self.staff, name='studio-plan-editor',
+        self.assertEqual(
+            Token.objects.filter(
+                user=self.staff, name='studio-plan-editor',
+            ).count(),
+            0,
         )
-        self.assertEqual(tokens.count(), 1)
-        token = tokens.get()
         for response in [first, second, third]:
-            self.assertContains(response, f'data-api-token="{token.key}"')
+            self.assertNotContains(response, 'data-api-token=')
+
+    def test_staff_session_with_csrf_can_patch_plan_detail(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.login(email='staff@test.com', password='pw')
+        edit_response = csrf_client.get(f'/studio/plans/{self.plan.pk}/edit/')
+        self.assertEqual(edit_response.status_code, 200)
+        csrf_token = csrf_client.cookies['csrftoken'].value
+
+        response = csrf_client.patch(
+            f'/api/plans/{self.plan.pk}',
+            data=json.dumps({'goal': 'Updated through session'}),
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=csrf_token,
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.goal, 'Updated through session')
 
 
 class PlanEditorSidebarTest(TestCase):

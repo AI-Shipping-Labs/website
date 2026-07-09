@@ -1,6 +1,7 @@
 """Tests for the Studio API token management UI (issue #431)."""
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import check_password
 from django.test import Client, TestCase
 
 from accounts.models import Token
@@ -64,6 +65,7 @@ class ApiTokenListViewTest(TestCase):
         cls.token = Token.objects.create(
             user=cls.superuser, name="script-import",
         )
+        cls.plaintext_key = cls.token.key
 
     def setUp(self):
         self.client = Client()
@@ -80,19 +82,14 @@ class ApiTokenListViewTest(TestCase):
             response,
             f'data-testid="api-token-prefix">\n          {self.token.key_prefix}',
         )
-        # The full plaintext key is not rendered as visible text. (The
-        # revoke form's action URL legitimately contains the key as a
-        # path parameter; that's not a "display" of the key.)
-        # Verify the key does NOT appear inside any visible cell:
         body_text = response.content.decode()
-        # Strip out the form action URL which contains the key as a path
-        # segment, then assert the key isn't present anywhere else.
-        action_url = f"/studio/api-tokens/{self.token.key}/revoke/"
-        self.assertIn(action_url, body_text)
-        body_without_action = body_text.replace(action_url, "")
+        revoke_url = f"/studio/api-tokens/{self.token.pk}/revoke/"
+        rotate_url = f"/studio/api-tokens/{self.token.pk}/rotate/"
+        self.assertIn(revoke_url, body_text)
+        self.assertIn(rotate_url, body_text)
         self.assertNotIn(
-            self.token.key, body_without_action,
-            "Full plaintext key must only appear in the revoke form action URL.",
+            self.plaintext_key, body_text,
+            "Full plaintext key must not appear in page source or action URLs.",
         )
 
     def test_revoke_button_uses_destructive_palette(self):
@@ -198,14 +195,25 @@ class ApiTokenCreateFormTest(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Location"], "/studio/api-tokens/created/")
+        plaintext_key = self.client.session[SESSION_KEY]["key"]
 
         token = Token.objects.get(name="import-script")
         # Token is owned by the signed-in superuser.
         self.assertEqual(token.user, self.superuser)
+        self.assertIsNone(token.key)
+        self.assertNotEqual(token.pk, plaintext_key)
+        self.assertNotEqual(token.key_hash, plaintext_key)
+        self.assertNotEqual(token.lookup_prefix, plaintext_key)
+        self.assertEqual(
+            token.lookup_prefix,
+            plaintext_key[:Token.LOOKUP_PREFIX_LENGTH],
+        )
+        self.assertTrue(check_password(plaintext_key, token.key_hash))
+
         followed = self.client.get("/studio/api-tokens/created/")
         self.assertEqual(followed.status_code, 200)
         # The plaintext key appears exactly once on the page.
-        self.assertContains(followed, token.key, count=1)
+        self.assertContains(followed, plaintext_key, count=1)
         # The owner email shown on the created page is the current admin.
         self.assertContains(followed, "super@test.com")
 
@@ -274,41 +282,103 @@ class ApiTokenRevokeTest(TestCase):
         self.token = Token.objects.create(
             user=self.superuser, name="to-revoke",
         )
+        self.plaintext_key = self.token.key
 
     def test_revoke_deletes_token(self):
         response = self.client.post(
-            f"/studio/api-tokens/{self.token.key}/revoke/",
+            f"/studio/api-tokens/{self.token.pk}/revoke/",
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Location"], "/studio/api-tokens/")
         self.assertEqual(
-            Token.objects.filter(key=self.token.key).count(), 0,
+            Token.objects.filter(pk=self.token.pk).count(), 0,
         )
 
     def test_revoke_rejects_get(self):
         response = self.client.get(
-            f"/studio/api-tokens/{self.token.key}/revoke/",
+            f"/studio/api-tokens/{self.token.pk}/revoke/",
         )
         # require_POST returns 405 for GET.
         self.assertEqual(response.status_code, 405)
         self.assertTrue(
-            Token.objects.filter(key=self.token.key).exists(),
+            Token.objects.filter(pk=self.token.pk).exists(),
         )
 
     def test_revoked_token_no_longer_authenticates(self):
-        revoked_key = self.token.key
         # Revoke via the Studio endpoint.
-        self.client.post(f"/studio/api-tokens/{revoked_key}/revoke/")
+        self.client.post(f"/studio/api-tokens/{self.token.pk}/revoke/")
 
         # API request with the (now deleted) token must 401.
         # Use a fresh client with no Studio session.
         api_client = Client()
         response = api_client.get(
             "/api/contacts/export",
-            HTTP_AUTHORIZATION=f"Token {revoked_key}",
+            HTTP_AUTHORIZATION=f"Token {self.plaintext_key}",
         )
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json(), {"error": "Invalid token"})
+
+
+class ApiTokenRotateTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.superuser = User.objects.create_user(
+            email="super@test.com",
+            password="testpass",
+            is_staff=True,
+            is_superuser=True,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(email="super@test.com", password="testpass")
+        self.token = Token.objects.create(
+            user=self.superuser, name="to-rotate",
+        )
+        self.old_key = self.token.key
+
+    def test_rotate_replaces_credential_and_shows_new_key_once(self):
+        token_id = self.token.pk
+        old_hash = self.token.key_hash
+        response = self.client.post(f"/studio/api-tokens/{token_id}/rotate/")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/studio/api-tokens/created/")
+        new_key = self.client.session[SESSION_KEY]["key"]
+        self.assertNotEqual(new_key, self.old_key)
+
+        self.token.refresh_from_db()
+        self.assertEqual(self.token.pk, token_id)
+        self.assertNotEqual(self.token.key_hash, old_hash)
+        self.assertTrue(check_password(new_key, self.token.key_hash))
+        self.assertEqual(
+            self.token.lookup_prefix,
+            new_key[:Token.LOOKUP_PREFIX_LENGTH],
+        )
+
+        first = self.client.get("/studio/api-tokens/created/")
+        self.assertEqual(first.status_code, 200)
+        self.assertContains(first, "API token rotated")
+        self.assertContains(first, "old token")
+        self.assertContains(first, new_key, count=1)
+        self.assertNotContains(first, self.old_key)
+
+        second = self.client.get("/studio/api-tokens/created/")
+        self.assertEqual(second.status_code, 302)
+        self.assertEqual(second["Location"], "/studio/api-tokens/")
+
+        api_client = Client()
+        old_response = api_client.get(
+            "/api/contacts/export",
+            HTTP_AUTHORIZATION=f"Token {self.old_key}",
+        )
+        self.assertEqual(old_response.status_code, 401)
+        self.assertEqual(old_response.json(), {"error": "Invalid token"})
+
+        new_response = api_client.get(
+            "/api/contacts/export",
+            HTTP_AUTHORIZATION=f"Token {new_key}",
+        )
+        self.assertEqual(new_response.status_code, 200)
 
 
 class ApiTokenSidebarLinkTest(TestCase):

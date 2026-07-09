@@ -86,15 +86,12 @@
 </div>
 
 {% comment %}
-  The editor root carries the bootstrap payload (plan JSON), API token,
-  and API base. The token is exposed via the data-api-token HTML
-  attribute rather than inlined in a script tag, so a CSP that
-  disallows inline script values does not have to allow this one.
+  The editor root carries the bootstrap payload (plan JSON) and API base.
+  Browser writes authenticate through the logged-in session plus CSRF.
 {% endcomment %}
 <div id="plan-editor"
      data-testid="plan-editor"
      data-api-base="{{ api_base }}"
-     data-api-token="{{ api_token }}"
      data-plan-id="{{ plan.pk }}">
 
   {# JSON bootstrap. ``json_script`` escapes <, >, and & so user content #}

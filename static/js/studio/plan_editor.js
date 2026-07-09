@@ -51,10 +51,6 @@
   const apiToken = root.dataset.apiToken || '';
   const planId = parseInt(root.dataset.planId, 10);
 
-  if (!apiToken) {
-    console.warn('plan-editor: missing API token; writes will fail with 401');
-  }
-
   // ---------- saved/saving indicator ----------
 
   const indicator = document.querySelector('[data-testid="save-indicator"]');

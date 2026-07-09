@@ -68,10 +68,8 @@ logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
-# Stable name attached to the API token issued to a staff user when they
-# open the drag-and-drop plan editor. Re-using the same name across
-# sessions means we get-or-create at most one token per staff user for
-# this UI -- never accumulate one per page load.
+# Legacy reserved label kept out of the operator-token UI. The editor no
+# longer mints or renders a reusable API token; browser saves use session+CSRF.
 EDITOR_TOKEN_NAME = 'studio-plan-editor'
 
 
@@ -424,9 +422,8 @@ def plan_edit(request, plan_id):
     wanting to add one, route through the API instead.
 
     Issue #444: the context-build is shared with the member-facing
-    editor view via ``build_plan_editor_context``. The token name
-    ``studio-plan-editor`` is the staff label; the member view uses
-    ``member-plan-editor``.
+    editor view via ``build_plan_editor_context``. The legacy token-name
+    argument is retained only for call-site compatibility.
     """
     plan = get_object_or_404(
         Plan.objects

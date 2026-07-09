@@ -1,9 +1,9 @@
-"""Studio API token management (issue #431, simplified per issue #619).
+"""Studio operator API token management.
 
 Superusers issue tokens to themselves so scripts can hit ``/api/contacts/...``
 without a session cookie. The plaintext key is shown to the operator exactly
 once on the ``/created/`` page (one-shot session stash, identical pattern to
-``user_create_done``); afterwards the Studio surfaces only the ``key_prefix``.
+``user_create_done``); afterwards the Studio surfaces only ``key_prefix``.
 
 All views are gated by ``superuser_required`` -- staff alone is not enough.
 Tokens are always bound to ``request.user``: the create form no longer asks
@@ -14,14 +14,11 @@ in depth at the model layer.
 
 from django import forms
 from django.contrib import messages
-from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from accounts.models import Token
 from studio.decorators import superuser_required
-
-User = get_user_model()
 
 RESERVED_SYSTEM_TOKEN_NAMES = frozenset(
     {
@@ -92,13 +89,14 @@ def studio_api_token_create(request):
     if request.method == "POST":
         form = TokenCreateForm(request.POST)
         if form.is_valid():
-            token = Token.objects.create(
+            token, plaintext_key = Token.create_for_user(
                 user=request.user,
                 name=form.cleaned_data.get("name") or "",
             )
             request.session[SESSION_KEY] = {
-                "key": token.key,
-                "pk": token.pk,
+                "key": plaintext_key,
+                "pk": str(token.pk),
+                "action": "created",
             }
             return redirect("studio_api_token_created")
     else:
@@ -133,20 +131,39 @@ def studio_api_token_created(request):
         {
             "token": token,
             "plaintext_key": stash.get("key", ""),
+            "action": stash.get("action", "created"),
         },
     )
 
 
 @superuser_required
 @require_POST
-def studio_api_token_revoke(request, key):
-    """Delete the named token.
+def studio_api_token_rotate(request, token_id):
+    """Rotate the selected token by non-secret row identifier."""
+    token = get_object_or_404(
+        Token.objects.exclude(name__in=RESERVED_SYSTEM_TOKEN_NAMES),
+        pk=token_id,
+    )
+    plaintext_key = token.rotate_key()
+    request.session[SESSION_KEY] = {
+        "key": plaintext_key,
+        "pk": str(token.pk),
+        "action": "rotated",
+    }
+    return redirect("studio_api_token_created")
 
-    Revocation is the only way to cut API access -- there's no rotation /
-    expiration / scoping in v1. Idempotent: revoking a missing key flashes
-    the same success message so a double-click doesn't 404.
+
+@superuser_required
+@require_POST
+def studio_api_token_revoke(request, token_id):
+    """Delete the selected token by non-secret row identifier.
+
+    Revocation cuts API access permanently for the selected row.
     """
-    token = get_object_or_404(Token, key=key)
+    token = get_object_or_404(
+        Token.objects.exclude(name__in=RESERVED_SYSTEM_TOKEN_NAMES),
+        pk=token_id,
+    )
     token.delete()
     messages.success(request, "Token revoked")
     return redirect("studio_api_token_list")

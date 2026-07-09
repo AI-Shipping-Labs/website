@@ -25,6 +25,13 @@ startup probe, and the base URL the browser navigates to — they are equal by
 construction. This lets several worktrees run Playwright concurrently without
 colliding on a single fixed port. See ``_docs/testing-guidelines.md``
 ("Running Playwright in isolation / parallel across worktrees").
+
+Local same-worktree guard: before local Playwright sessions can migrate the
+SQLite test database, start ``runserver``, seed fixtures, or launch Chromium,
+pytest claims a repo-local ``.tmp/playwright-session.lock``. A second local
+session in the same git worktree fails fast with holder details. Non-local
+``PLAYWRIGHT_BASE_URL`` runs do not claim this guard because they do not touch
+the local SQLite test database.
 """
 
 import os
@@ -38,6 +45,7 @@ import pytest
 from django.core.management import call_command
 from playwright.sync_api import sync_playwright
 
+from playwright_tests.worktree_guard import PlaywrightWorktreeGuard, WorktreeGuardAlreadyHeld
 from website.test_database_guard import assert_playwright_database_is_safe
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
@@ -137,6 +145,37 @@ def _base_url_is_local(url):
 def base_url_is_local():
     """Public helper: True when running against a local Django runserver."""
     return _base_url_is_local(_resolved_base_url())
+
+
+def _claim_playwright_worktree_guard(config):
+    """Claim the local worktree guard for this pytest session when needed."""
+    if not _base_url_is_local(_resolved_base_url()):
+        return None
+
+    guard = PlaywrightWorktreeGuard.for_current_worktree()
+    try:
+        guard.acquire()
+    except WorktreeGuardAlreadyHeld as exc:
+        pytest.exit(str(exc), returncode=2)
+
+    config._playwright_worktree_guard = guard
+    return guard
+
+
+def _release_playwright_worktree_guard(config):
+    guard = getattr(config, "_playwright_worktree_guard", None)
+    if guard is None:
+        return
+    guard.release()
+    delattr(config, "_playwright_worktree_guard")
+
+
+def pytest_sessionstart(session):
+    _claim_playwright_worktree_guard(session.config)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    _release_playwright_worktree_guard(session.config)
 
 
 def pytest_collection_modifyitems(config, items):

@@ -252,7 +252,9 @@ def build_spec(
         "Operator API for AI Shipping Labs. All endpoints accept "
         "JSON in and return JSON out. Authentication is via the "
         "``Authorization: Token <key>`` header where ``<key>`` is "
-        "a token owned by a staff user.\n\n"
+        "a token owned by a staff user. Studio shows new or rotated "
+        "operator token values once; existing plaintext tokens cannot "
+        "be retrieved later.\n\n"
         "The spec endpoint ``/api/openapi.json`` itself accepts "
         "the same ``Authorization: Token <key>`` header, so "
         "OpenAPI tooling (Postman ``Import -> Link``, "
@@ -266,10 +268,11 @@ def build_spec(
     token_description = token_description or (
         "Send the header ``Authorization: Token <key>`` where "
         "``<key>`` is a staff-owned token from the Studio "
-        "tokens page. The literal scheme name is ``Token``, "
-        "not ``Bearer`` (Swagger UI's authorize dialog renders "
-        "this as ``bearer`` but the wire format we accept is "
-        "``Token``)."
+        "tokens page. New and rotated token values are shown once "
+        "in Studio and cannot be retrieved later. The literal scheme "
+        "name is ``Token``, not ``Bearer`` (Swagger UI's authorize "
+        "dialog renders this as ``bearer`` but the wire format we "
+        "accept is ``Token``)."
     )
 
     spec = APISpec(

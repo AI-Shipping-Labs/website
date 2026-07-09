@@ -29,7 +29,7 @@ from api.serializers.plans import (
     serialize_plan_detail,
     serialize_plan_flat,
 )
-from api.utils import parse_json_body, require_methods
+from api.utils import parse_json_body, require_methods, token_or_session_required
 from api.views._permissions import (
     bearer_is_admin,
     visible_plans_for,
@@ -1683,7 +1683,7 @@ def _refetch_plan_detail(plan_id):
     )
 
 
-@token_required
+@token_or_session_required
 @csrf_exempt
 @require_methods("GET", "PATCH", "DELETE")
 @openapi_spec(

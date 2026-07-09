@@ -4,6 +4,7 @@
 import json
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import check_password
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
@@ -59,6 +60,37 @@ class TokenAuthTest(TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    def test_token_row_stores_hash_not_plaintext_key(self):
+        plaintext = self.token.key
+        token = Token.objects.get(pk=self.token.pk)
+        self.assertIsNone(token.key)
+        self.assertNotEqual(token.pk, plaintext)
+        self.assertNotEqual(token.key_hash, plaintext)
+        self.assertNotEqual(token.lookup_prefix, plaintext)
+        self.assertEqual(
+            token.lookup_prefix,
+            plaintext[:Token.LOOKUP_PREFIX_LENGTH],
+        )
+        self.assertTrue(check_password(plaintext, token.key_hash))
+
+    def test_lookup_prefix_collision_checks_all_hash_candidates(self):
+        prefix = "same-prefix-for-auth0000"
+        self.assertEqual(len(prefix), Token.LOOKUP_PREFIX_LENGTH)
+        first_key = f"{prefix}first"
+        second_key = f"{prefix}second"
+        first = Token(key=first_key, user=self.admin, name="first-collision")
+        second = Token(key=second_key, user=self.admin, name="second-collision")
+        Token.objects.bulk_create([first, second])
+
+        response = self.client.get(
+            "/api/contacts/export",
+            HTTP_AUTHORIZATION=f"Token {second_key}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        second.refresh_from_db()
+        self.assertIsNotNone(second.last_used_at)
+
     def test_existing_non_staff_token_row_is_rejected(self):
         member = User.objects.create_user(
             email="stale-member-token@test.com",
@@ -106,6 +138,8 @@ class TokenAuthTest(TestCase):
     def test_valid_token_updates_last_used_at(self):
         fresh_token = Token.objects.create(user=self.admin)
         self.assertIsNone(fresh_token.last_used_at)
+        original_hash = fresh_token.key_hash
+        original_prefix = fresh_token.lookup_prefix
 
         before = timezone.now()
         response = self.client.get(
@@ -119,6 +153,8 @@ class TokenAuthTest(TestCase):
         # Bumped during the request, so it sits between "before" and "now".
         self.assertGreaterEqual(fresh_token.last_used_at, before)
         self.assertLessEqual(fresh_token.last_used_at, timezone.now())
+        self.assertEqual(fresh_token.key_hash, original_hash)
+        self.assertEqual(fresh_token.lookup_prefix, original_prefix)
 
     def test_authorization_without_token_scheme_returns_401(self):
         """A bare key with no 'Token ' scheme is treated as missing.

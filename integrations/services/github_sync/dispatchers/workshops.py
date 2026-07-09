@@ -209,7 +209,7 @@ def _sync_single_workshop(
     # would tie those apps' import timing to this one. Matches the pattern
     # used by every other ``_sync_*`` helper in this file.
     from content.access import UNIT_VISIBILITY_CHOICES
-    from content.models import Workshop
+    from content.models import Workshop, normalize_workshop_skill_level
 
     yaml_path = os.path.join(workshop_dir, 'workshop.yaml')
     data = None
@@ -324,6 +324,13 @@ def _sync_single_workshop(
             known_images=known_images, errors=stats['errors'],
         )
 
+        try:
+            skill_level = normalize_workshop_skill_level(
+                data.get('skill_level'),
+            )
+        except ValueError as exc:
+            raise ValueError(f'{exc} ({yaml_rel_path})') from exc
+
         # Issue #646: top-level ``materials:`` key on the workshop yaml.
         # Workshop-scoped materials are gated by ``pages_required_level``;
         # they coexist with (and override) ``recording.materials`` which
@@ -371,6 +378,7 @@ def _sync_single_workshop(
             'description': landing_description,
             'date': workshop_date,
             'tags': data.get('tags', []) or [],
+            'skill_level': skill_level,
             'cover_image_url': cover_image_url,
             'status': 'published',
             'landing_required_level': landing_required_level,

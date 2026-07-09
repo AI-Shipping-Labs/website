@@ -66,6 +66,7 @@ def _create_workshop(
     status='published',
     cover_image_url='',
     tags=None,
+    skill_level='',
 ):
     """Create a workshop with optional linked event + pages.
 
@@ -111,6 +112,7 @@ def _create_workshop(
         code_repo_url=code_repo_url,
         cover_image_url=cover_image_url,
         tags=tags or [],
+        skill_level=skill_level,
         materials=workshop_materials or [],
         event=event,
     )
@@ -394,6 +396,120 @@ class TestVisitorBrowsesCatalog:
         page.locator('main').screenshot(
             path=str(tmp_path / 'issue-480-workshops-mobile-detail.png'),
         )
+
+
+@pytest.mark.django_db(transaction=True)
+class TestWorkshopSkillFilters:
+    @pytest.mark.core
+    def test_beginner_filter_keeps_skill_and_access_distinct_then_opens_detail(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='beginner-main',
+            title='Beginner Main Workshop',
+            pages=20,
+            recording=20,
+            skill_level='beginner',
+            tags=['agents'],
+        )
+        _create_workshop(
+            slug='intermediate-python',
+            title='Intermediate Python Workshop',
+            pages=0,
+            recording=0,
+            skill_level='intermediate',
+            tags=['python'],
+        )
+        _create_workshop(
+            slug='advanced-architecture',
+            title='Advanced Architecture Workshop',
+            pages=0,
+            recording=0,
+            skill_level='advanced',
+            tags=['architecture'],
+        )
+
+        page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
+        beginner_card = page.locator(
+            'article:has(a[href="/workshops/beginner-main"])',
+        )
+        assert beginner_card.is_visible()
+        card_text = beginner_card.inner_text()
+        assert 'Skill: Beginner-friendly' in card_text
+        assert 'Main or above' in card_text
+
+        page.locator('[data-testid="workshop-skill-filter-beginner"]').click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert 'skill_level=beginner' in page.url
+        body = page.content()
+        assert 'Beginner Main Workshop' in body
+        assert 'Intermediate Python Workshop' not in body
+        assert 'Advanced Architecture Workshop' not in body
+
+        page.locator('a[href="/workshops/beginner-main"]').first.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops/beginner-main')
+        detail = page.locator('[data-testid="workshop-skill-level"]')
+        assert detail.is_visible()
+        detail_text = detail.inner_text()
+        assert 'Skill level: Beginner-friendly' in detail_text
+        assert 'basic Python and command-line workflows' in detail_text
+
+    def test_switching_skill_filter_preserves_active_tag_context(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='beginner-agents',
+            title='Beginner Agents Workshop',
+            pages=0,
+            recording=0,
+            skill_level='beginner',
+            tags=['agents'],
+        )
+        _create_workshop(
+            slug='advanced-agents',
+            title='Advanced Agents Workshop',
+            pages=0,
+            recording=0,
+            skill_level='advanced',
+            tags=['agents'],
+        )
+        _create_workshop(
+            slug='advanced-python',
+            title='Advanced Python Workshop',
+            pages=0,
+            recording=0,
+            skill_level='advanced',
+            tags=['python'],
+        )
+
+        page.goto(
+            f'{django_server}/workshops?tag=agents&skill_level=beginner',
+            wait_until='domcontentloaded',
+        )
+
+        assert 'Beginner Agents Workshop' in page.content()
+        advanced_href = page.locator(
+            '[data-testid="workshop-skill-filter-advanced"]',
+        ).get_attribute('href')
+        assert advanced_href == '/workshops?skill_level=advanced&tag=agents'
+
+        page.locator('[data-testid="workshop-skill-filter-advanced"]').click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert 'skill_level=advanced' in page.url
+        assert 'tag=agents' in page.url
+        body = page.content()
+        assert 'Advanced Agents Workshop' in body
+        assert 'Beginner Agents Workshop' not in body
+        assert 'Advanced Python Workshop' not in body
+        assert 'agents' in page.locator(
+            '[data-testid="workshop-active-filters"]',
+        ).inner_text()
 
 
 # ----------------------------------------------------------------------

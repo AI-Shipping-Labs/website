@@ -887,6 +887,89 @@ class WorkshopSyncLandingGateValidationTest(_WorkshopSyncFixtureBase):
         )
 
 
+class WorkshopSyncSkillLevelTest(_WorkshopSyncFixtureBase):
+    """Top-level ``skill_level:`` parsing for workshop metadata."""
+
+    def test_sync_normalizes_and_persists_skill_level(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml='skill_level: " Intermediate "\n',
+        )
+        self._write_page(folder, '01-p.md', title='P')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(
+            sync_log.errors, [],
+            f'Expected no errors, got: {sync_log.errors}',
+        )
+        self.assertEqual(Workshop.objects.get().skill_level, 'intermediate')
+
+    def test_sync_missing_or_blank_skill_level_stays_blank(self):
+        first_folder = '2026/2026-04-21-demo'
+        second_folder = '2026/2026-04-22-blank'
+        self._write_workshop_yaml(folder=first_folder)
+        self._write_page(first_folder, '01-p.md', title='P')
+        self._write_workshop_yaml(
+            folder=second_folder,
+            content_id=str(uuid.uuid4()),
+            slug='blank',
+            title='Blank Skill',
+            extra_yaml='skill_level: " "\n',
+        )
+        self._write_page(second_folder, '01-p.md', title='P')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(
+            sync_log.errors, [],
+            f'Expected no errors, got: {sync_log.errors}',
+        )
+        self.assertEqual(
+            set(Workshop.objects.values_list('skill_level', flat=True)),
+            {''},
+        )
+
+    def test_invalid_skill_level_logs_error_and_sibling_still_syncs(self):
+        bad_path = '2026/2026-04-21-bad/workshop.yaml'
+        self._write(
+            bad_path,
+            'content_id: ' + str(uuid.uuid4()) + '\n'
+            'slug: bad-skill\n'
+            'title: Bad Skill\n'
+            'date: 2026-04-21\n'
+            'pages_required_level: 10\n'
+            'skill_level: expert\n',
+        )
+        self._write_workshop_yaml(
+            folder='2026/2026-04-22-good',
+            content_id=str(uuid.uuid4()),
+            slug='good-skill',
+            title='Good Skill',
+            extra_yaml='skill_level: advanced\n',
+        )
+        self._write_page('2026/2026-04-22-good', '01-p.md', title='P')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(Workshop.objects.count(), 1)
+        workshop = Workshop.objects.get()
+        self.assertEqual(workshop.slug, 'good-skill')
+        self.assertEqual(workshop.skill_level, 'advanced')
+        self.assertTrue(
+            any(
+                err.get('file') == bad_path
+                and 'allowed values: beginner, intermediate, advanced'
+                in err.get('error', '')
+                and bad_path in err.get('error', '')
+                for err in sync_log.errors
+            ),
+            f'Expected a skill_level error for {bad_path}, got: '
+            f'{sync_log.errors}',
+        )
+
+
 class WorkshopSyncStaleCleanupTest(_WorkshopSyncFixtureBase):
     """Workshops whose source folder disappeared are marked draft."""
 

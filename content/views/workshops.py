@@ -41,7 +41,13 @@ from content.access import (
     get_required_tier_name,
     get_user_level,
 )
-from content.models import Workshop, WorkshopPage
+from content.models import (
+    SKILL_LEVEL_METADATA,
+    Workshop,
+    WorkshopPage,
+    get_workshop_skill_level_label,
+    normalize_workshop_skill_level,
+)
 from content.services import completion as completion_service
 from content.templatetags.video_utils import (
     append_query_param,
@@ -57,6 +63,35 @@ from content.views.pages import _filter_by_tags, _get_selected_tags
 # constant used by ``content.views.courses.TEASER_WORD_LIMIT`` so the
 # same fade-out pattern shows on workshop tutorial / video pages.
 TEASER_WORD_LIMIT = 150
+CATALOG_BASE_PATH = '/workshops'
+
+
+def _normalize_catalog_skill_level(value):
+    """Return a valid skill-level filter slug or ``''`` for no filter."""
+    try:
+        return normalize_workshop_skill_level(value)
+    except ValueError:
+        return ''
+
+
+def _filter_workshops_by_skill_level(queryset, selected_skill_level):
+    """Apply the public workshop skill-level catalog filter."""
+    if selected_skill_level:
+        return queryset.filter(skill_level=selected_skill_level)
+    return queryset
+
+
+def _build_catalog_filter_url(*, selected_tags, skill_level):
+    """Build a workshop catalog URL preserving active tag filters."""
+    params = []
+    if skill_level:
+        params.append(('skill_level', skill_level))
+    for tag in selected_tags:
+        params.append(('tag', tag))
+    query = urlencode(params, doseq=True)
+    if not query:
+        return CATALOG_BASE_PATH
+    return f'{CATALOG_BASE_PATH}?{query}'
 
 
 def _gated_reason_for_level(user, required_level):
@@ -89,6 +124,9 @@ def workshops_list(request):
     """Catalog page: grid of all published workshops."""
     workshops = Workshop.objects.filter(status='published').order_by('-date')
     selected_tags = _get_selected_tags(request)
+    selected_skill_level = _normalize_catalog_skill_level(
+        request.GET.get('skill_level'),
+    )
 
     # Collect all tags from published workshops for the filter UI (mirrors
     # the courses_list pattern — chips are rendered inline on the cards).
@@ -98,14 +136,47 @@ def workshops_list(request):
             all_tags.update(workshop.tags)
     all_tags = sorted(all_tags)
 
-    workshops = _filter_by_tags(workshops, selected_tags)
+    tag_filtered_workshops = _filter_by_tags(workshops, selected_tags)
+    available_skill_levels = set(
+        tag_filtered_workshops
+        .exclude(skill_level='')
+        .values_list('skill_level', flat=True)
+        .distinct()
+    )
+    skill_filter_options = [
+        {
+            'slug': slug,
+            'label': metadata['label'],
+            'url': _build_catalog_filter_url(
+                selected_tags=selected_tags,
+                skill_level=slug,
+            ),
+            'is_active': selected_skill_level == slug,
+        }
+        for slug, metadata in SKILL_LEVEL_METADATA.items()
+        if slug in available_skill_levels
+    ]
+    workshops = _filter_workshops_by_skill_level(
+        tag_filtered_workshops, selected_skill_level,
+    )
+    has_active_filters = bool(selected_tags) or bool(selected_skill_level)
 
     context = {
         'workshops': workshops,
         'all_tags': all_tags,
         'selected_tags': selected_tags,
+        'selected_skill_level': selected_skill_level,
+        'selected_skill_level_label': get_workshop_skill_level_label(
+            selected_skill_level,
+        ),
+        'skill_filter_options': skill_filter_options,
+        'has_active_filters': has_active_filters,
+        'skill_extra_params': (
+            {'skill_level': selected_skill_level}
+            if selected_skill_level else None
+        ),
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
-        'base_path': '/workshops',
+        'base_path': CATALOG_BASE_PATH,
     }
     return render(request, 'content/workshops_list.html', context)
 

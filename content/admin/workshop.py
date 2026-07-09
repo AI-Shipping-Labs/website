@@ -28,28 +28,30 @@ class WorkshopAdmin(admin.ModelAdmin):
     """Admin for Workshop with nested page inline editor."""
 
     list_display = [
-        'title', 'slug', 'date', 'status',
+        'title', 'slug', 'date', 'status', 'skill_level',
         'landing_required_level',
         'pages_required_level', 'recording_required_level',
         'event', 'updated_at', 'studio_link',
     ]
     list_display_links = ['title']
     list_filter = [
-        'status', 'landing_required_level',
+        'status', 'skill_level', 'landing_required_level',
         'pages_required_level', 'recording_required_level',
     ]
-    search_fields = ['title', 'slug', 'description']
+    search_fields = ['title', 'slug', 'description', 'skill_level']
     prepopulated_fields = {'slug': ('title',)}
     raw_id_fields = ['event']
     inlines = [WorkshopInstructorInline, WorkshopPageInline]
     ordering = ['-date']
-    readonly_fields = ['created_at', 'updated_at', 'studio_link']
+    readonly_fields = [
+        'skill_level', 'created_at', 'updated_at', 'studio_link',
+    ]
 
     fieldsets = (
         (None, {
             'fields': (
                 'title', 'slug', 'description', 'cover_image_url',
-                'date', 'tags',
+                'date', 'tags', 'skill_level',
             ),
         }),
         ('Access', {

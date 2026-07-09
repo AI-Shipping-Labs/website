@@ -52,9 +52,21 @@
         <dd class="text-foreground mt-1">{{ workshop.date|operator_date }}</dd>
       </div>
       <div>
+        <dt class="text-muted-foreground">Skill level</dt>
+        <dd class="text-foreground mt-1" data-testid="studio-workshop-skill-level">
+          {% if workshop.skill_level %}{{ workshop.skill_level_label }}{% else %}&mdash;{% endif %}
+        </dd>
+      </div>
+      <div>
         <dt class="text-muted-foreground">Instructor</dt>
         <dd class="text-foreground mt-1" data-testid="studio-workshop-instructors">{% with workshop_instructors=workshop.ordered_instructors %}{% if workshop_instructors %}{% for instructor in workshop_instructors %}{{ instructor.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}{% endwith %}</dd>
       </div>
+      {% if workshop.skill_level %}
+      <div class="md:col-span-2">
+        <dt class="text-muted-foreground">Skill description</dt>
+        <dd class="text-foreground mt-1" data-testid="studio-workshop-skill-description">{{ workshop.skill_level_description }}</dd>
+      </div>
+      {% endif %}
       <div class="md:col-span-2">
         <dt class="text-muted-foreground">Tags</dt>
         <dd class="text-foreground mt-1">

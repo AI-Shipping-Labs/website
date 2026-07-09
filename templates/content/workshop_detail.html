@@ -30,6 +30,11 @@
           {% else %}
           {% member_tier_badge workshop.pages_required_level tone="accent_strong" size="sm" icon="badge-check" testid="workshop-free-badge" %}
           {% endif %}
+          {% if workshop.skill_level %}
+          <span class="inline-flex items-center rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-muted-foreground" data-testid="workshop-skill-badge">
+            Skill: {{ workshop.skill_level_label }}
+          </span>
+          {% endif %}
         </div>
 
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;" data-testid="workshop-title">
@@ -48,6 +53,13 @@
           </span>
           {% endfor %}
         </div>
+
+        {% if workshop.skill_level %}
+        <div class="mt-4 rounded-lg border border-border bg-secondary/30 px-4 py-3 text-sm" data-testid="workshop-skill-level">
+          <p class="font-medium text-foreground">Skill level: {{ workshop.skill_level_label }}</p>
+          <p class="mt-1 leading-6 text-muted-foreground">{{ workshop.skill_level_description }}</p>
+        </div>
+        {% endif %}
 
         {% if workshop.tags %}
         <div class="mt-4 flex flex-wrap gap-2">

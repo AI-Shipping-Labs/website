@@ -253,7 +253,10 @@ def enroll_course(request, slug):
     if not was_already_enrolled:
         request.session['gtag_event_pending'] = {
             'event': 'course_enroll',
-            'params': {'course_slug': course.slug},
+            'params': {
+                'course_slug': course.slug,
+                'login_state': 'authenticated',
+            },
         }
 
     next_unit = course.get_next_unit_for(user)

@@ -40,10 +40,9 @@ Prereqs:
 - A Google Analytics 4 property with a web data stream pointed at this
   site's domain. GA4 (not Universal Analytics, which Google retired in
   2023).
-- No additional Google-side configuration is required — the platform
-  uses GA's default measurement (autocollected events: `page_view`,
-  `session_start`, etc.). Conversion events and custom user properties
-  are out of scope for this setting (see issue #771 "Out of scope").
+- The measurement ID only turns the direct `gtag.js` loader on or off.
+  Event naming, custom dimensions, key events, and optional GTM wiring
+  are documented below.
 
 Rotation: Rotating the measurement ID means pointing the site at a
 different GA property. Paste the new `G-...` value into Studio and save.
@@ -67,40 +66,78 @@ Local development and the CI test suite leave the setting blank by
 default; no test setup is required to suppress GA during
 `manage.py test`.
 
-## `aslab_aid` user_property and user_id binding
+## `aslab_aid`, `login_state`, and `member_tier`
 
-Every GA event now carries the `aslab_aid` user_property and (on the
-page-load `gtag('config', ...)` call) `user_id`. Both values come from
-the `aslab_aid` cookie set by `analytics.middleware.CampaignTrackingMiddleware`
-and validated in `website.context_processors.site_context`. The same
-UUID is stored on `analytics.UserAttribution.anonymous_id`, so GA
-exports can be joined to our DB on this column for source-attributed
-funnel analysis.
+The direct `gtag.js` bootstrap in `templates/base.html` now sets:
 
-The cookie is `httponly=True`, so JavaScript cannot read it. The value
-is rendered server-side into the inline GA loader script inside
-`templates/base.html`. Bot, admin, and static-asset requests skip the
-middleware (no cookie set), so the template guards on
-`{% if aslab_anon_id %}` to avoid emitting empty values.
+- `user_id = aslab_aid` when the `aslab_aid` cookie is present and
+  parses as a UUID4.
+- `user_properties.aslab_aid = <uuid>` on the same condition.
+- `user_properties.login_state = anonymous|authenticated` on every page
+  render.
+- `user_properties.member_tier = free|basic|main|premium` on
+  authenticated renders when the user has a tier row.
 
-## Conversion events
+The same UUID is stored on
+`analytics.UserAttribution.anonymous_id`, so GA exports can be joined
+back to the DB on `aslab_aid` for attribution analysis.
 
-The platform fires the following `gtag('event', ...)` calls. All are
-gated on `GOOGLE_ANALYTICS_ID` being set — when GA is disabled, none
-of these events render or execute.
+The cookie itself is `httponly=True`, so JavaScript never reads it
+directly; `website.context_processors.site_context` validates it and
+renders only the UUID into the inline GA bootstrap. Do not send email
+addresses, names, Django user IDs, Stripe customer IDs, or raw session
+IDs to GA. `aslab_aid` is the only cross-system join key.
 
-| Event | Surface | Trigger | Parameters |
+## Signup Funnel Contract
+
+The client handlers are safe to render even when GA is disabled. When
+`GOOGLE_ANALYTICS_ID` is blank there is no loader and no request to
+Google; the handlers simply no-op because `window.gtag` is absent.
+
+### Event names and required parameters
+
+| Event | Surface | Trigger | Required parameters |
 |---|---|---|---|
-| `sign_up` | Newsletter subscribe form (`templates/includes/subscribe_form.html`) | XHR success branch | `method: 'newsletter'` |
-| `sign_up` | Email signup form (`static/js/accounts/inline-register.js`) | XHR success branch | `method: 'email'` |
-| `sign_up` | OAuth signup (Google / GitHub / Slack) | `accounts.signals.set_signup_source_oauth_on_social_signup` (only fires on `social_account_added`, i.e. brand-new social account link) | `method: 'oauth'`, `provider: '<google|github|slack>'` |
-| `event_register` | Live event registration (`static/js/events/event_detail.js`) | XHR success, before page reload (uses `event_callback`) | `event_slug: '<slug>'` |
-| `course_enroll` | Course enroll endpoint (`content/views/courses.py:enroll_course`) | Next-page render after server-side redirect (session flag, one-shot) | `course_slug: '<slug>'` |
-| `purchase` | Stripe checkout return (`templates/content/dashboard.html`) | `?checkout=success` query string on `/account/` | `value: <amount>`, `currency: 'EUR'`, `items: [{ tier: '<slug>', billing_period: '<period>' }]` |
+| `signup_start` | Newsletter subscribe forms (`templates/includes/subscribe_form.html`, footer newsletter form) | Submit begins, before `/api/subscribe` | `method='newsletter'`, `signup_kind='newsletter'`, `entry_path`, `login_state` |
+| `signup_start` | Email account signup (`static/js/accounts/inline-register.js`) | Password validation passes, before `/api/register` | `method='email'`, `signup_kind='account'`, `entry_path`, `login_state` |
+| `signup_start` | OAuth signup buttons (`templates/accounts/includes/_oauth_providers.html`) | Click, before navigation to provider | `method='oauth'`, `provider`, `signup_kind='account'`, `entry_path`, `login_state` |
+| `sign_up` | Newsletter subscribe success | Successful `/api/subscribe` response | `method='newsletter'`, `signup_kind='newsletter'`, `entry_path`, `login_state` |
+| `sign_up` | Email account signup success | Successful `/api/register` response | `method='email'`, `signup_kind='account'`, `entry_path`, `login_state` |
+| `sign_up` | Brand-new OAuth signup only | First post-OAuth render after `social_account_added` creates the new social identity | `method='oauth'`, `provider`, `signup_kind='account'`, `login_state='authenticated'` |
+| `event_register` | Live event registration (`static/js/events/event_detail.js`) | XHR success before reload | `event_slug`, `login_state` |
+| `course_enroll` | Course enroll endpoint (`content/views/courses.py:enroll_course`) | Next-page render after server-side redirect | `course_slug`, `login_state='authenticated'` |
+| `purchase` | Stripe checkout return (`templates/content/dashboard.html`) | `?checkout=success` on `/account/` | `currency='EUR'`, `login_state='authenticated'` plus optional `value` and `items[{tier,billing_period}]` |
 
-Find each event in GA Reports > Engagement > Events. The
-`aslab_aid` user_property is set on the GA session before any event
-fires, so every conversion above carries it automatically.
+Interpretation of signup conversions:
+
+- Newsletter-only signup: `method='newsletter'` and
+  `signup_kind='newsletter'`
+- Full account signup: `method='email'` or `method='oauth'` and
+  `signup_kind='account'`
+
+Returning OAuth logins and existing-account OAuth provider linking do
+not emit `sign_up`.
+
+### GA4 custom dimensions and user properties
+
+Register these in GA4 Admin so Explorations and standard reports can
+segment the funnel fields:
+
+- User-scoped properties: `aslab_aid`, `login_state`, `member_tier`
+- Event-scoped dimensions: `signup_kind`, `method`, `provider`,
+  `entry_path`
+
+If operators want `login_state` inside event reports as well as
+user-scoped reporting, register an event-scoped `login_state` dimension
+too; the event handlers already include it in their parameter payloads.
+
+### Key-event / conversion setup
+
+- Mark `sign_up` as the completed signup conversion (GA4 "Key event").
+- Use `signup_start` for funnel-step analysis only; do not mark it as
+  the completed signup conversion.
+- Keep `event_register`, `course_enroll`, and `purchase` as separate
+  downstream conversion events if the property already relies on them.
 
 ### Stripe Payment Link success-URL query parameters
 
@@ -139,3 +176,35 @@ The event name is validated against `^[A-Za-z][A-Za-z0-9_]{0,39}$` and
 the params dict is JSON-serialised in the context processor before
 template rendering, so the inline script is safe against arbitrary
 content sneaking into the page.
+
+## Optional GTM Setup
+
+Do not add a Google Tag Manager container script to the app just to
+capture these events. The website already emits the direct `gtag.js`
+loader from `templates/base.html`, and double-installing pageview tags
+or duplicate GA4 event tags will inflate the numbers.
+
+If the GA4 property is managed from GTM for operator reasons, mirror the
+existing event names in GTM rather than inventing new ones:
+
+- Trigger names / dataLayer event names: `signup_start`, `sign_up`,
+  `event_register`, `course_enroll`, `purchase`
+- Map the parameters above directly (`method`, `signup_kind`,
+  `provider`, `entry_path`, `login_state`, etc.)
+- Reuse the existing measurement ID; do not fire a second GA4 pageview
+  tag on top of the direct `gtag.js` bootstrap
+
+If GTM cannot be configured without duplicating the direct `gtag.js`
+events, leave GTM out of the path and keep the direct loader as the
+single source of truth.
+
+## Production / Staging Checklist
+
+- Production: set the live GA4 measurement ID in Studio >
+  Settings > Analytics > `GOOGLE_ANALYTICS_ID`.
+- Staging / dev: either leave `GOOGLE_ANALYTICS_ID` blank or set a
+  separate non-production GA4 property.
+- Never point staging/dev at the production measurement ID.
+- After changing the measurement ID, verify in GA4 Realtime or
+  DebugView that `signup_start` and `sign_up` arrive with the documented
+  parameters before relying on the reports.

@@ -51,12 +51,17 @@
             reloaded = true;
             window.location.reload();
           };
-          if (typeof gtag === 'function') {
-            gtag('event', 'event_register', {
-              event_slug: slug,
-              event_callback: reload,
-            });
-            setTimeout(reload, 1500);
+          const analytics = window.aslabAnalytics;
+          if (
+            analytics
+            && typeof analytics.trackWithNavigationFallback === 'function'
+          ) {
+            analytics.trackWithNavigationFallback(
+              'event_register',
+              { event_slug: slug },
+              reload,
+              1500,
+            );
           } else {
             reload();
           }

@@ -97,7 +97,12 @@ def set_signup_source_oauth_on_social_signup(sender, request, sociallogin, **kwa
             provider = ''
         request.session['gtag_event_pending'] = {
             'event': 'sign_up',
-            'params': {'method': 'oauth', 'provider': provider},
+            'params': {
+                'method': 'oauth',
+                'provider': provider,
+                'signup_kind': 'account',
+                'login_state': 'authenticated',
+            },
         }
 
 

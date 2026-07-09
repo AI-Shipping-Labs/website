@@ -511,7 +511,15 @@ class OAuthSignupGtagSessionFlagTest(TestCase):
 
         self.assertEqual(
             request.session.get('gtag_event_pending'),
-            {'event': 'sign_up', 'params': {'method': 'oauth', 'provider': 'google'}},
+            {
+                'event': 'sign_up',
+                'params': {
+                    'method': 'oauth',
+                    'provider': 'google',
+                    'signup_kind': 'account',
+                    'login_state': 'authenticated',
+                },
+            },
         )
 
     def test_existing_user_linking_oauth_does_not_set_pending_event(self):
@@ -525,6 +533,39 @@ class OAuthSignupGtagSessionFlagTest(TestCase):
         request = self._request_with_session()
 
         self._trigger_signal(user, request, provider='google')
+
+        self.assertNotIn('gtag_event_pending', request.session)
+
+    def test_returning_oauth_login_does_not_set_pending_event(self):
+        # A returning OAuth login uses allauth's existing-social-account path,
+        # not social_account_added, so it must not create a new conversion.
+        from allauth.socialaccount.models import SocialAccount, SocialLogin
+        from allauth.socialaccount.signals import pre_social_login
+
+        user = User.objects.create_user(
+            email='returning+oauth@test.com',
+            signup_source='oauth',
+            account_activated=True,
+            email_verified=True,
+        )
+        account = SocialAccount.objects.create(
+            user=user,
+            provider='google',
+            uid='google-returning-uid',
+        )
+        request = self._request_with_session()
+        sociallogin = SocialLogin(
+            user=user,
+            account=account,
+            email_addresses=[],
+        )
+
+        self.assertTrue(sociallogin.is_existing)
+        pre_social_login.send(
+            sender=None,
+            request=request,
+            sociallogin=sociallogin,
+        )
 
         self.assertNotIn('gtag_event_pending', request.session)
 

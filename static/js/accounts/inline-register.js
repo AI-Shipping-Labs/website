@@ -55,6 +55,14 @@
     registerPending = true;
     setRegisterPending(true);
 
+    var analytics = window.aslabAnalytics;
+    if (analytics && typeof analytics.trackSignup === 'function') {
+      analytics.trackSignup('signup_start', {
+        method: 'email',
+        signup_kind: 'account',
+      });
+    }
+
     fetch('/api/register', {
       method: 'POST',
       headers: {
@@ -68,11 +76,11 @@
         registerPending = false;
         setRegisterPending(false);
         if (result.status === 201) {
-          // GA4 conversion: email signup renders the success message
-          // inline (no navigation), so fire the event directly. Guarded
-          // so pages without GA configured don't ReferenceError.
-          if (typeof gtag === 'function') {
-            gtag('event', 'sign_up', { method: 'email' });
+          if (analytics && typeof analytics.trackSignup === 'function') {
+            analytics.trackSignup('sign_up', {
+              method: 'email',
+              signup_kind: 'account',
+            });
           }
           window.authHelpers.showMessage(
             'register-success',

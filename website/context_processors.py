@@ -36,6 +36,25 @@ def _validated_aslab_anon_id(request):
     except (ValueError, TypeError):
         return ''
 
+
+def _ga_login_state(request):
+    """Return the GA-safe login state label for this request."""
+    user = getattr(request, 'user', None)
+    if getattr(user, 'is_authenticated', False):
+        return 'authenticated'
+    return 'anonymous'
+
+
+def _ga_member_tier_slug(request):
+    """Return the authenticated user's tier slug, or ``''`` when absent."""
+    user = getattr(request, 'user', None)
+    if not getattr(user, 'is_authenticated', False):
+        return ''
+
+    tier = getattr(user, 'tier', None)
+    slug = getattr(tier, 'slug', '') if tier is not None else ''
+    return slug if isinstance(slug, str) else ''
+
 # Default ports per scheme. Used by the host-mismatch detector so an
 # explicit ":80" / ":443" compares equal to an omitted port — operators
 # rarely set the default port explicitly, and warning on it would fire
@@ -203,6 +222,27 @@ def site_context(request):
                     'params_json': params_json,
                 }
 
+    aslab_anon_id = _validated_aslab_anon_id(request)
+    ga_login_state = _ga_login_state(request)
+    ga_member_tier = _ga_member_tier_slug(request)
+
+    ga_user_properties = {'login_state': ga_login_state}
+    if aslab_anon_id:
+        ga_user_properties['aslab_aid'] = aslab_anon_id
+    if ga_member_tier:
+        ga_user_properties['member_tier'] = ga_member_tier
+
+    ga_config = {'login_state': ga_login_state}
+    if aslab_anon_id:
+        ga_config['user_id'] = aslab_anon_id
+    if ga_member_tier:
+        ga_config['member_tier'] = ga_member_tier
+
+    ga_client_context = {
+        'login_state': ga_login_state,
+        'member_tier': ga_member_tier,
+    }
+
     return {
         'VERSION': settings.VERSION,
         'site_name': settings.SITE_NAME,
@@ -210,7 +250,12 @@ def site_context(request):
         'site_description': settings.SITE_DESCRIPTION,
         'stripe_customer_portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
         'google_analytics_id': get_config('GOOGLE_ANALYTICS_ID', ''),
-        'aslab_anon_id': _validated_aslab_anon_id(request),
+        'aslab_anon_id': aslab_anon_id,
+        'ga_login_state': ga_login_state,
+        'ga_member_tier': ga_member_tier,
+        'ga_user_properties_json': json.dumps(ga_user_properties),
+        'ga_config_json': json.dumps(ga_config),
+        'ga_client_context_json': json.dumps(ga_client_context),
         'gtag_pending_event': pending_event,
         'current_year': __import__('datetime').datetime.now().year,
     }

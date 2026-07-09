@@ -52,10 +52,10 @@ the inline card it replaced (#523 / #673 / #857 / #572).
         {% if event.description_html %}
         <p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description_html|striptags|truncatechars:200 }}</p>
         {% endif %}
-        <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+        <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground" data-testid="event-card-date">
           <span class="flex items-center gap-1.5">
             <i data-lucide="calendar" class="h-4 w-4"></i>
-            {{ event.weekday_date }}
+            {% include "events/_event_list_datetime.html" with event=event %}
           </span>
           {% if event.location %}
           <span class="flex items-center gap-1.5">

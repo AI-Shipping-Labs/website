@@ -1,0 +1,6 @@
+{% load date_formatting %}
+{% if user.is_authenticated %}
+  {% user_event_datetime event.start_datetime user fmt='%a, %b %d, %Y, %H:%M' %}
+{% else %}
+  {{ event|event_source_short_datetime }}
+{% endif %}

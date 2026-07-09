@@ -22,6 +22,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
+from accounts.templatetags.date_formatting import event_source_short_datetime
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import Instructor, Workshop
 from events.models import (
@@ -281,9 +282,12 @@ class EventsListPageTest(TestCase):
         self.assertNotContains(response, 'Live')
         self.assertNotContains(response, 'Async')
 
-    def test_event_card_shows_date(self):
+    def test_event_card_shows_list_datetime(self):
         response = self.client.get('/events')
-        self.assertContains(response, self.upcoming_event.weekday_date())
+        self.assertContains(
+            response,
+            event_source_short_datetime(self.upcoming_event),
+        )
         self.assertNotContains(response, self.upcoming_event.formatted_time())
 
     def test_event_card_shows_location(self):

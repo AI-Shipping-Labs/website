@@ -42,21 +42,44 @@ def _clear_activity_data():
     connection.close()
 
 
+def _active_sprint_start():
+    return datetime.date.today() - datetime.timedelta(days=14)
+
+
+def _expected_sprint_range(start_date, duration_weeks):
+    end_date = start_date + datetime.timedelta(weeks=duration_weeks)
+    if start_date.year == end_date.year:
+        return (
+            f"{start_date:%B} {start_date.day} – "
+            f"{end_date:%B} {end_date.day}, {end_date.year} "
+            f"({duration_weeks} weeks)"
+        )
+    return (
+        f"{start_date:%B} {start_date.day}, {start_date.year} – "
+        f"{end_date:%B} {end_date.day}, {end_date.year} "
+        f"({duration_weeks} weeks)"
+    )
+
+
 def _create_sprint(
     name="May Shipping Sprint",
     slug="may-shipping-sprint",
     status="active",
     min_tier_level=20,
     duration_weeks=4,
+    start_date=None,
 ):
     from django.db import connection
 
     from plans.models import Sprint
 
+    if start_date is None:
+        start_date = _active_sprint_start()
+
     sprint = Sprint.objects.create(
         name=name,
         slug=slug,
-        start_date=datetime.date(2026, 5, 15),
+        start_date=start_date,
         duration_weeks=duration_weeks,
         status=status,
         min_tier_level=min_tier_level,
@@ -161,7 +184,7 @@ class TestActivitiesAccessByTierLayout:
         body = page.locator("body").inner_text()
         assert "May Shipping Sprint" in body
         assert "Active" in body
-        assert "May 15 – June 12, 2026 (4 weeks)" in body
+        assert _expected_sprint_range(_active_sprint_start(), 4) in body
         assert "Membership: Main" in body
         cta = card.locator('[data-testid="activities-sprint-cta"]')
         assert "Log in to join" in cta.inner_text()
@@ -218,6 +241,29 @@ class TestActivitiesAccessByTierLayout:
         assert page.locator("#community-sprints").count() == 1
         assert "May Shipping Sprint" in section.inner_text()
         _shot(page, "03-activities-anchor-desktop")
+
+    def test_stale_active_sprint_is_hidden_from_public_activities(
+        self, django_server, page, django_db_blocker
+    ):
+        with django_db_blocker.unblock():
+            _seed_base(active=False)
+            _create_sprint(
+                name="Old Active Sprint",
+                slug="old-active-sprint",
+                start_date=datetime.date.today() - datetime.timedelta(days=70),
+            )
+            _create_sprint(
+                name="Current Active Sprint",
+                slug="current-active-sprint",
+            )
+
+        page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
+
+        section_text = page.locator(
+            '[data-testid="activities-sprints-section"]'
+        ).inner_text()
+        assert "Current Active Sprint" in section_text
+        assert "Old Active Sprint" not in section_text
 
     def test_empty_state_links_to_events_and_workshops(
         self, django_server, page, django_db_blocker

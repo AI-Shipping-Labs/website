@@ -53,6 +53,9 @@
           <a href="/projects" data-testid="nav-resources-link-projects" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Project Ideas</a>
           <a href="/interview" data-testid="nav-resources-link-interview" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Interview Prep</a>
           <a href="/resources" data-testid="nav-resources-link-curated-links" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Curated Links</a>
+          {% if has_published_downloads %}
+          <a href="/downloads" data-testid="nav-resources-link-downloads" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Downloads</a>
+          {% endif %}
         </div>
         </div>
       </div>
@@ -218,6 +221,9 @@
           <a href="/projects" data-testid="mobile-nav-resources-link-projects" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Project Ideas</a>
           <a href="/interview" data-testid="mobile-nav-resources-link-interview" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Interview Prep</a>
           <a href="/resources" data-testid="mobile-nav-resources-link-curated-links" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Curated Links</a>
+          {% if has_published_downloads %}
+          <a href="/downloads" data-testid="mobile-nav-resources-link-downloads" class="flex min-h-[32px] items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Downloads</a>
+          {% endif %}
         </div>
       </div>
       {% if user.is_authenticated %}

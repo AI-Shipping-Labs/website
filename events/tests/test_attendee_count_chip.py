@@ -4,10 +4,11 @@ Covers:
 
 - ``Event.attendee_count`` property: prefers a ``_attendee_count``
   annotation when present, otherwise falls back to ``registration_count``.
-- Event detail page: chip copy on upcoming events with 0, 1, and 2+
-  registrations, and on past events with 0, 1, and 2+ registrations.
-- Series page: per-card chip copy, and that the queryset is annotated
-  so attendee counting does not generate a per-event ``COUNT(*)`` query.
+- Event detail page: counts below 5 stay hidden; 5+ render the correct
+  upcoming/past copy.
+- Event list and series pages: the same 5+ threshold applies on public
+  cards, and the queryset stays annotated so attendee counting does not
+  generate a per-event ``COUNT(*)`` query.
 """
 
 from datetime import time, timedelta
@@ -58,7 +59,7 @@ class EventAttendeeCountPropertyTest(TestCase):
 
 
 class EventDetailAttendeeChipCopyTest(TestCase):
-    """Chip copy variants on the public event detail page."""
+    """Chip visibility on the public event detail page."""
 
     def _make_event(self, slug, status='upcoming'):
         if status == 'upcoming':
@@ -71,44 +72,33 @@ class EventDetailAttendeeChipCopyTest(TestCase):
             status=status,
         )
 
-    def test_upcoming_with_zero_shows_be_the_first(self):
-        event = self._make_event('upcoming-zero', status='upcoming')
+    def test_upcoming_below_threshold_hides_chip(self):
+        event = self._make_event('upcoming-four', status='upcoming')
+        _register_users(event, 4)
         response = self.client.get(event.get_absolute_url())
-        self.assertContains(
-            response, 'data-testid="event-attendee-count"',
-        )
-        self.assertContains(response, 'Be the first to sign up')
-        self.assertNotContains(response, '0 people are going')
-
-    def test_upcoming_with_one_uses_singular(self):
-        event = self._make_event('upcoming-one', status='upcoming')
-        _register_users(event, 1)
-        response = self.client.get(event.get_absolute_url())
-        self.assertContains(response, '1 person is going')
-        self.assertNotContains(response, '1 people are going')
+        self.assertNotContains(response, 'data-testid="event-attendee-count"')
+        self.assertNotContains(response, '4 people are going')
 
     def test_upcoming_with_many_uses_plural(self):
         event = self._make_event('upcoming-many', status='upcoming')
         _register_users(event, 5)
         response = self.client.get(event.get_absolute_url())
         self.assertContains(response, '5 people are going')
+        self.assertNotContains(response, 'people attended')
 
     def test_past_with_zero_hides_chip(self):
         event = self._make_event('past-zero', status='completed')
         response = self.client.get(event.get_absolute_url())
-        # The chip element itself must not be in the DOM when a past
-        # event has zero attendees — there is no social proof to show.
         self.assertNotContains(
             response, 'data-testid="event-attendee-count"',
         )
 
-    def test_past_with_one_uses_singular_attended(self):
-        event = self._make_event('past-one', status='completed')
-        _register_users(event, 1)
+    def test_past_below_threshold_hides_chip(self):
+        event = self._make_event('past-four', status='completed')
+        _register_users(event, 4)
         response = self.client.get(event.get_absolute_url())
-        self.assertContains(response, '1 person attended')
-        self.assertNotContains(response, '1 people attended')
-        self.assertNotContains(response, '1 person is going')
+        self.assertNotContains(response, 'data-testid="event-attendee-count"')
+        self.assertNotContains(response, '4 people attended')
 
     def test_past_with_many_uses_plural_attended(self):
         event = self._make_event('past-many', status='completed')
@@ -119,9 +109,49 @@ class EventDetailAttendeeChipCopyTest(TestCase):
 
     def test_cancelled_with_attendees_uses_attended_copy(self):
         event = self._make_event('cancelled-evt', status='cancelled')
-        _register_users(event, 3)
+        _register_users(event, 6)
         response = self.client.get(event.get_absolute_url())
-        self.assertContains(response, '3 people attended')
+        self.assertContains(response, '6 people attended')
+
+
+class EventListAttendeeChipTest(TestCase):
+    def _make_event(self, slug, *, status='upcoming', count=0, recording=False):
+        if status == 'upcoming':
+            start = timezone.now() + timedelta(days=7)
+        else:
+            start = timezone.now() - timedelta(days=7)
+        event = Event.objects.create(
+            title=f'Event {slug}',
+            slug=slug,
+            start_datetime=start,
+            status=status,
+            recording_url='https://example.com/video.mp4' if recording else '',
+        )
+        if count:
+            _register_users(event, count)
+        return event
+
+    def test_upcoming_events_list_hides_low_counts_and_keeps_five_plus(self):
+        self._make_event('upcoming-low', count=4)
+        self._make_event('upcoming-high', count=5)
+
+        response = self.client.get('/events')
+        body = response.content.decode()
+
+        self.assertEqual(body.count('data-testid="event-attendee-count"'), 1)
+        self.assertIn('5 people are going', body)
+        self.assertNotIn('4 people are going', body)
+
+    def test_past_recordings_list_hides_low_counts_and_keeps_five_plus(self):
+        self._make_event('past-low', status='completed', count=4, recording=True)
+        self._make_event('past-high', status='completed', count=5, recording=True)
+
+        response = self.client.get('/events?filter=past')
+        body = response.content.decode()
+
+        self.assertEqual(body.count('data-testid="event-attendee-count"'), 1)
+        self.assertIn('5 people attended', body)
+        self.assertNotIn('4 people attended', body)
 
 
 class EventSeriesAttendeeChipTest(TestCase):
@@ -152,19 +182,17 @@ class EventSeriesAttendeeChipTest(TestCase):
 
     def test_series_renders_chip_per_card_with_correct_copy(self):
         self._add_event('weekly-1', 1, count=0)
-        self._add_event('weekly-2', 2, count=1)
+        self._add_event('weekly-2', 2, count=4)
         self._add_event('weekly-3', 3, count=5)
 
         response = self.client.get(self.series.get_absolute_url())
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
-        # Three chip elements, one per card.
         self.assertEqual(
-            body.count('data-testid="event-attendee-count"'), 3,
+            body.count('data-testid="event-attendee-count"'), 1,
         )
-        self.assertIn('Be the first to sign up', body)
-        self.assertIn('1 person is going', body)
         self.assertIn('5 people are going', body)
+        self.assertNotIn('4 people are going', body)
 
     def test_series_view_does_not_n_plus_one_on_attendee_counts(self):
         """Adding more events to a series must not add ``COUNT(*)`` queries.

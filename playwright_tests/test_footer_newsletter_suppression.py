@@ -172,6 +172,20 @@ class TestFooterNewsletterSuppression:
         ).is_visible()
         assert page.get_by_text('AI Shipping Labs').first.is_visible()
 
+    def test_anonymous_visitor_on_subscribe_sees_one_form_not_two(
+        self, django_server, page, django_db_blocker,
+    ):
+        with django_db_blocker.unblock():
+            _reset_state()
+            ensure_tiers()
+
+        page.goto(f'{django_server}/subscribe', wait_until='domcontentloaded')
+        assert page.get_by_role(
+            'heading', name=FOOTER_HEADING, exact=True,
+        ).count() == 0
+        assert page.locator('#newsletter').count() == 0
+        assert page.locator('form.subscribe-form').count() == 1
+
     def test_anonymous_visitor_on_workshop_pages_paywall_sees_no_footer_newsletter(
         self, django_server, page, django_db_blocker,
     ):

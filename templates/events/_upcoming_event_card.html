@@ -64,6 +64,11 @@ the inline card it replaced (#523 / #673 / #857 / #572).
           </span>
           {% endif %}
         </div>
+        {% if event.attendee_count >= 5 %}
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          {% include "events/_event_attendee_count.html" %}
+        </div>
+        {% endif %}
         {% if event.tags %}
         <div class="mt-3 flex flex-wrap gap-1.5" data-testid="event-card-tags">
           {% for tag in event.tags|slice:":3" %}

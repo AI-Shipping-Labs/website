@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.urls import resolve, reverse
 from django.utils import timezone
 
+from content.models import Download
 from plans.models import Plan, Sprint
 
 User = get_user_model()
@@ -247,3 +248,35 @@ class HeaderTextNavigationIssue580Test(TestCase):
             with self.subTest(path=path):
                 match = resolve(path)
                 self.assertIsNotNone(match.func)
+
+
+class HeaderDownloadsNavigationTest(TestCase):
+    def _header_html(self):
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        return html[:html.index('</header>')]
+
+    def test_downloads_link_hidden_when_no_published_downloads_exist(self):
+        header = self._header_html()
+
+        self.assertNotIn('data-testid="nav-resources-link-downloads"', header)
+        self.assertNotIn(
+            'data-testid="mobile-nav-resources-link-downloads"', header,
+        )
+
+    def test_downloads_link_shown_on_desktop_and_mobile_when_published(self):
+        Download.objects.create(
+            title='Public Download',
+            slug='public-download',
+            file_url='https://example.com/download.pdf',
+            published=True,
+        )
+
+        header = self._header_html()
+
+        self.assertIn('data-testid="nav-resources-link-downloads"', header)
+        self.assertIn('href="/downloads"', header)
+        self.assertIn(
+            'data-testid="mobile-nav-resources-link-downloads"', header,
+        )

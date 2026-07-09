@@ -43,6 +43,7 @@ from events.services.display_time import (
     build_event_time_display,
     should_display_event_location,
 )
+from events.services.freestyle_evidence import build_freestyle_evidence
 from events.services.time_windows import (
     past_events_queryset,
     past_recording_events_queryset,
@@ -335,6 +336,7 @@ def events_list(request):
     now = timezone.now()
     upcoming_events = (
         upcoming_events_queryset(now=now)
+        .annotate(_attendee_count=Count('registrations'))
         .select_related('event_series')
         .order_by('start_datetime')
     )
@@ -345,6 +347,8 @@ def events_list(request):
     # listing, so neither bucket includes them.
     past_with_recording_qs = past_recording_events_queryset(
         now=now,
+    ).annotate(
+        _attendee_count=Count('registrations')
     ).select_related('workshop').order_by('-start_datetime')
 
     # ``past_all_qs`` = any non-cancelled event past its effective end.
@@ -352,6 +356,7 @@ def events_list(request):
     # added back via ``Q(status='cancelled')``).
     past_all_qs = (
         past_events_queryset(now=now)
+        .annotate(_attendee_count=Count('registrations'))
         .select_related('workshop')
         .order_by('-start_datetime')
     )
@@ -791,6 +796,11 @@ def event_detail(request, event_id, slug):
         # Issue #1037: structured post-event resource links for standalone
         # completed events. No description scraping, no inline playback UI.
         'post_event_resources': post_event_resources,
+        'freestyle_evidence': (
+            build_freestyle_evidence(event)
+            if event.is_upcoming and gating.get('gated_reason') == 'insufficient_tier'
+            else []
+        ),
     }
     context.update(gating)
     return render(request, 'events/event_detail.html', context)

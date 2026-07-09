@@ -11,32 +11,24 @@ Required context:
           ``registration_count`` property).
 
 Copy rules:
-  Upcoming (event.is_upcoming):
-    0           -> "Be the first to sign up"
-    1           -> "1 person is going"
-    n (n >= 2)  -> "{n} people are going"
-  Past (event.is_past):
-    0           -> chip hidden (no social proof to show)
-    1           -> "1 person attended"
-    n (n >= 2)  -> "{n} people attended"
+  Counts 0-4   -> chip hidden
+  Upcoming 5+  -> "{n} people are going"
+  Past 5+      -> "{n} people attended"
   Draft         -> chip hidden (draft events 404 for non-staff)
 
 The wrapping {% if %} keeps the surrounding flex/gap container clean
-when no chip is rendered (past+0, draft).
+when no chip is rendered (0-4, draft).
 {% endcomment %}
 {% if event.is_upcoming or event.is_past %}
 {% with count=event.attendee_count %}
-{% if event.is_upcoming or count > 0 %}
+{% if count >= 5 %}
 <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground"
       data-testid="event-attendee-count">
   <i data-lucide="users" class="h-3 w-3"></i>
   {% if event.is_upcoming %}
-    {% if count == 0 %}Be the first to sign up
-    {% elif count == 1 %}1 person is going
-    {% else %}{{ count }} people are going{% endif %}
+    {{ count }} people are going
   {% else %}
-    {% if count == 1 %}1 person attended
-    {% else %}{{ count }} people attended{% endif %}
+    {{ count }} people attended
   {% endif %}
 </span>
 {% endif %}

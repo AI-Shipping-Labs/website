@@ -25,6 +25,15 @@ from integrations.services.github_sync.parsing import (
 )
 from integrations.services.github_sync.repo import derive_slug, extract_sort_order, _matches_ignore_patterns
 
+
+def _clean_curated_link_text(value):
+    """Normalize sync-managed curated-link text without truncating it."""
+    if value is None:
+        return ''
+    text = str(value)
+    return text.replace('\\"', '"').replace("\\'", "'").strip()
+
+
 def _dispatch_curated_links(source, repo_dir, file_list, commit_sha, stats):
     """Walker dispatch handler: process curated link markdown/YAML files.
 
@@ -182,8 +191,8 @@ def _sync_curated_link_manifest(
 
 def _curated_link_defaults(source, rel_path, metadata, description, commit_sha):
     return {
-        'title': metadata.get('title', ''),
-        'description': description or '',
+        'title': _clean_curated_link_text(metadata.get('title', '')),
+        'description': _clean_curated_link_text(description or ''),
         'url': metadata.get('url', ''),
         'category': metadata.get('category', 'other'),
         'tags': metadata.get('tags', []) or [],

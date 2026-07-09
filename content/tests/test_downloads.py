@@ -243,6 +243,10 @@ class DownloadsListViewTest(TestCase):
         response = self.client.get('/downloads')
         self.assertContains(response, '<title>Downloads | AI Shipping Labs</title>')
 
+    def test_downloads_page_sets_csrf_cookie_for_inline_form(self):
+        response = self.client.get('/downloads')
+        self.assertIn('csrftoken', response.cookies)
+
 
 class DownloadsListTagFilterTest(TestCase):
     """Test tag filtering on /downloads via ?tag=X."""
@@ -326,7 +330,7 @@ class DownloadsListAccessControlTest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_sees_signup_and_upgrade_ctas(self):
-        """Anonymous users see 'Sign Up to Download' for free items and
+        """Anonymous users see the inline lead-magnet form and
         'Upgrade to Basic to download' for gated items.
 
         Per-tier matrix and lock-icon rendering covered by
@@ -336,6 +340,7 @@ class DownloadsListAccessControlTest(TierSetupMixin, TestCase):
         """
         response = self.client.get('/downloads')
         self.assertContains(response, 'Sign Up to Download')
+        self.assertContains(response, 'data-testid="download-inline-subscribe-form"')
         self.assertContains(response, 'Upgrade to Basic to download')
 
     def test_basic_user_sees_download_for_basic_resource(self):
@@ -849,15 +854,24 @@ class DownloadsGatingTest(TierSetupMixin, TestCase):
         response = self.client.get('/downloads')
         self.assertEqual(response.status_code, 200)
 
-        # Card is present and the signup CTA links the visitor to
-        # /accounts/signup with a `next` parameter pointing at the
-        # gated file endpoint.
+        # Card is present and the CTA is now an inline email form that
+        # posts to the existing subscribe flow before sending the
+        # visitor to the gated file endpoint.
         self.assertContains(response, 'Free PDF Guide')
         self.assertContains(
             response,
-            'href="/accounts/signup?next=/api/downloads/free-pdf-guide/file"',
+            'data-testid="download-inline-subscribe-form"',
+        )
+        self.assertContains(
+            response,
+            'data-redirect-to="/api/downloads/free-pdf-guide/file"',
         )
         self.assertContains(response, 'Sign Up to Download')
+        self.assertContains(response, "fetch('/api/subscribe'")
+        self.assertNotContains(
+            response,
+            'href="/accounts/signup?next=/api/downloads/free-pdf-guide/file"',
+        )
 
     def test_anonymous_sees_upgrade_cta_for_gated(self):
         # Replaces playwright_tests/test_downloadable_resources.py::TestScenario3AnonymousGatedDownloadUpgradeCTA::test_anonymous_sees_upgrade_cta_for_gated_download

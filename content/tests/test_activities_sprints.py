@@ -207,6 +207,27 @@ class ActivitiesSprintHubTest(TestCase):
 
         self.assertNotContains(response, 'Completed Sprint')
 
+    def test_stale_active_sprint_past_its_window_is_hidden(self):
+        Sprint.objects.create(
+            name='Old Active Sprint',
+            slug='old-active-sprint',
+            start_date=datetime.date.today() - datetime.timedelta(days=70),
+            duration_weeks=4,
+            status='active',
+        )
+        Sprint.objects.create(
+            name='Current Active Sprint',
+            slug='current-active-sprint',
+            start_date=_active_sprint_start(),
+            duration_weeks=4,
+            status='active',
+        )
+
+        response = self.client.get('/activities')
+
+        self.assertContains(response, 'Current Active Sprint')
+        self.assertNotContains(response, 'Old Active Sprint')
+
     def test_empty_state_renders_when_no_active_sprints_exist(self):
         response = self.client.get('/activities')
 

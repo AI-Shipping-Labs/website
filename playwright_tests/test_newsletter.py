@@ -607,16 +607,16 @@ class TestScenario7LeadMagnetSubscribeFlow:
     """Anonymous visitor downloads a lead magnet by subscribing
     with their email."""
 
-    def test_anonymous_sees_signup_cta_on_lead_magnet(
+    def test_anonymous_submits_inline_email_form_on_lead_magnet(
         self, django_server
     , page):
         """Given a published download with required_level=0 (lead magnet)
         and an anonymous visitor.
         1. Navigate to /downloads
         2. Find the lead magnet download card
-        Then: The card shows a 'Sign Up to Download Free' CTA.
-        3. Click the sign-up link on the lead magnet card
-        Then: The visitor is directed to create an account."""
+        Then: The card shows an inline email form.
+        3. Submit the inline form
+        Then: The subscribe API succeeds and the page stays on /downloads."""
         _ensure_tiers()
         _clear_downloads()
         _create_download(
@@ -639,21 +639,36 @@ class TestScenario7LeadMagnetSubscribeFlow:
         # Step 2: Find the lead magnet download card
         assert "Free AI Cheat Sheet" in body
 
-        # Then: Shows "Sign Up to Download" CTA
-        signup_btn = page.locator(
-            'a:has-text("Sign Up to Download")'
+        card = page.locator('[data-testid="download-card"]').filter(
+            has_text="Free AI Cheat Sheet"
         )
-        assert signup_btn.count() >= 1
-
-        # Step 3: Click the sign-up link
-        signup_btn.first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: Visitor is directed to signup/register
-        assert (
-            "/accounts/signup" in page.url
-            or "/accounts/register" in page.url
+        form = card.get_by_test_id("download-inline-subscribe-form")
+        assert form.count() == 1
+        assert card.get_by_test_id(
+            "download-inline-subscribe-container"
+        ).get_attribute("data-redirect-to") == (
+            "/api/downloads/free-ai-cheat-sheet/file"
         )
+        assert page.locator('a[href*="/accounts/signup"]').count() == 0
+
+        # Step 3: Submit the inline form
+        form.locator('input[name="email"]').fill("lead-magnet-flow@test.com")
+        with page.expect_response("**/api/subscribe") as response_info:
+            form.locator('button[type="submit"]').click()
+        response = response_info.value
+        assert response.status == 200
+        payload = response.json()
+        assert payload["status"] == "ok"
+
+        message = card.get_by_test_id("download-inline-subscribe-message")
+        message.wait_for(state="visible")
+        assert "verification link" in message.inner_text().lower()
+        assert page.url == f"{django_server}/downloads"
+
+        from accounts.models import User
+
+        assert User.objects.filter(email="lead-magnet-flow@test.com").exists()
+
     def test_lead_magnet_verification_redirects_to_download(
         self, django_server
     , page):

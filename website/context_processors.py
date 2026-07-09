@@ -3,6 +3,7 @@ import re
 import uuid
 from urllib.parse import urlparse
 
+from django.apps import apps
 from django.conf import settings
 
 from integrations.config import get_config, site_base_url
@@ -203,6 +204,8 @@ def site_context(request):
                     'params_json': params_json,
                 }
 
+    download_model = apps.get_model('content', 'Download')
+
     return {
         'VERSION': settings.VERSION,
         'site_name': settings.SITE_NAME,
@@ -213,6 +216,9 @@ def site_context(request):
         'aslab_anon_id': _validated_aslab_anon_id(request),
         'gtag_pending_event': pending_event,
         'current_year': __import__('datetime').datetime.now().year,
+        'has_published_downloads': download_model.objects.filter(
+            published=True
+        ).exists(),
     }
 
 

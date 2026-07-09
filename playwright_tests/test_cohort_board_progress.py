@@ -44,6 +44,10 @@ from django.db import connection  # noqa: E402
 # deployed dev environment. See _docs/testing-guidelines.md.
 pytestmark = pytest.mark.local_only
 
+# date-rot-ok: sprint board route identity; dashboard cohort CTA does not
+# depend on this sprint being current or upcoming.
+FIXED_SPRINT_ROUTE_DATE = datetime.date(2026, 5, 1)
+
 
 def _clear_plans_data():
     from plans.models import InterviewNote, Plan, Sprint, SprintEnrollment
@@ -147,7 +151,7 @@ class TestProgressVisibleForEveryMember:
         _set_user_name('carol@test.com', 'Carol', 'Lee')
 
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', FIXED_SPRINT_ROUTE_DATE,
         )
         # viewer 2/5 cohort
         _create_plan_with_checkpoints(
@@ -215,7 +219,7 @@ class TestPrivatePlanLeaksNoContent:
         _set_user_name('dana@test.com', 'Dana', 'Doe')
 
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', FIXED_SPRINT_ROUTE_DATE,
         )
         _create_plan_with_checkpoints(
             member_email='viewer@test.com', sprint_slug=sprint.slug,
@@ -288,7 +292,7 @@ class TestCohortPlanLinkStillWorks:
         _set_user_name('eli@test.com', 'Eli', 'Engineer')
 
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', FIXED_SPRINT_ROUTE_DATE,
         )
         _enroll('viewer@test.com', sprint.slug)
         _enroll('eli@test.com', sprint.slug)
@@ -341,7 +345,7 @@ class TestNoPlanRowAtBottom:
         _set_user_name('frank@test.com', 'Frank', 'Newcomer')
 
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', FIXED_SPRINT_ROUTE_DATE,
         )
         _enroll('viewer@test.com', sprint.slug)
         _enroll('teammate@test.com', sprint.slug)
@@ -398,7 +402,7 @@ class TestSortStableOnReload:
         _set_user_name('carol@test.com', 'Carol', 'C')
 
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', FIXED_SPRINT_ROUTE_DATE,
         )
         # Viewer also at 3/5 -- but viewer's email starts with 'v',
         # so the three-peer alphabetical block should be deterministic.
@@ -457,7 +461,7 @@ class TestDeletedEnrollmentDisappears:
         _set_user_name('gabe@test.com', 'Gabe', 'Gone')
 
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', FIXED_SPRINT_ROUTE_DATE,
         )
         _enroll('viewer@test.com', sprint.slug)
         _enroll('gabe@test.com', sprint.slug)
@@ -503,7 +507,7 @@ class TestDashboardCohortCtaForAnyOtherMember:
         _set_user_name('peer@test.com', 'Pia', 'Peer')
 
         sprint = _create_sprint(
-            'may-2026', 'May 2026', datetime.date(2026, 5, 1),
+            'may-2026', 'May 2026', FIXED_SPRINT_ROUTE_DATE,
         )
         _enroll('viewer@test.com', sprint.slug)
         _enroll('peer@test.com', sprint.slug)

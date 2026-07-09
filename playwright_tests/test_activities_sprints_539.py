@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 import pytest
+from django.utils import timezone
 
 from playwright_tests.conftest import auth_context as _auth_context
 from playwright_tests.conftest import create_user as _create_user
@@ -56,7 +57,7 @@ def _create_sprint(
     sprint = Sprint.objects.create(
         name=name,
         slug=slug,
-        start_date=datetime.date(2026, 5, 15),
+        start_date=timezone.localdate() - datetime.timedelta(days=7),
         duration_weeks=duration_weeks,
         status=status,
         min_tier_level=min_tier_level,
@@ -86,7 +87,23 @@ def _seed_base(active=True):
     ensure_site_config_tiers()
     _clear_activity_data()
     if active:
-        _create_sprint()
+        return _create_sprint()
+    return None
+
+
+def _sprint_date_label(sprint):
+    start = sprint.start_date
+    end = sprint.end_date
+    week_word = "week" if sprint.duration_weeks == 1 else "weeks"
+    if start.year == end.year:
+        return (
+            f"{start.strftime('%B %-d')} – {end.strftime('%B %-d, %Y')} "
+            f"({sprint.duration_weeks} {week_word})"
+        )
+    return (
+        f"{start.strftime('%B %-d, %Y')} – {end.strftime('%B %-d, %Y')} "
+        f"({sprint.duration_weeks} {week_word})"
+    )
 
 
 def _assert_no_horizontal_overflow(page):
@@ -138,7 +155,7 @@ class TestActivitiesAccessByTierLayout:
         self, django_server, page, django_db_blocker
     ):
         with django_db_blocker.unblock():
-            _seed_base(active=True)
+            sprint = _seed_base(active=True)
 
         page.set_viewport_size({"width": 1280, "height": 900})
         page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
@@ -161,7 +178,7 @@ class TestActivitiesAccessByTierLayout:
         body = page.locator("body").inner_text()
         assert "May Shipping Sprint" in body
         assert "Active" in body
-        assert "May 15 – June 12, 2026 (4 weeks)" in body
+        assert _sprint_date_label(sprint) in body
         assert "Membership: Main" in body
         cta = card.locator('[data-testid="activities-sprint-cta"]')
         assert "Log in to join" in cta.inner_text()

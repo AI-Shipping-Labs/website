@@ -75,6 +75,7 @@ def _create_sprint(name, slug, duration_weeks=6):
 
     sprint = Sprint.objects.create(
         name=name, slug=slug,
+        # date-rot-ok: Studio add-member fixture; current sprint state is not under test.
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=duration_weeks,
     )

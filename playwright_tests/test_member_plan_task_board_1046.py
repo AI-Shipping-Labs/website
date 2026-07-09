@@ -13,6 +13,7 @@ from playwright_tests.conftest import ensure_tiers as _ensure_tiers
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
+from django.utils import timezone  # noqa: E402
 
 pytestmark = pytest.mark.local_only
 
@@ -49,7 +50,7 @@ def _seed_board(owner_visibility="private", include_week2_task=True):
     sprint = Sprint.objects.create(
         name="Task Board Sprint",
         slug="task-board-sprint",
-        start_date=datetime.date(2026, 6, 1),
+        start_date=timezone.localdate() - datetime.timedelta(days=7),
         duration_weeks=2,
     )
     owner = User.objects.get(email="owner@test.com")
@@ -67,7 +68,7 @@ def _seed_board(owner_visibility="private", include_week2_task=True):
         week=week1,
         description="Ship demo",
         position=0,
-        done_at=datetime.datetime(2026, 6, 2, tzinfo=datetime.UTC),
+        done_at=timezone.now(),
     )
     Checkpoint.objects.create(
         week=week1,

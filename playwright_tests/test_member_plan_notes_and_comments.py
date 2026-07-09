@@ -78,6 +78,7 @@ def _seed_plan(
     sprint = Sprint.objects.create(
         name="Issue 499 Sprint",
         slug="i499-sprint",
+        # date-rot-ok: notes/comments fixture; current sprint state is not under test.
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=4)
     owner = User.objects.get(email=owner_email)

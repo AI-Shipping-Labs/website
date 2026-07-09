@@ -70,9 +70,11 @@ def _seed_sprint_a_and_b(member_email):
     member = User.objects.get(email=member_email)
     sprint_a = Sprint.objects.create(
         name="Sprint A", slug="sprint-a",
+        # date-rot-ok: fixed ordering fixture for carry-over source sprint.
         start_date=datetime.date(2026, 1, 1), duration_weeks=6)
     sprint_b = Sprint.objects.create(
         name="Sprint B", slug="sprint-b",
+        # date-rot-ok: fixed ordering fixture for carry-over target sprint.
         start_date=datetime.date(2026, 5, 1), duration_weeks=6)
     plan_a = _make_plan(member, sprint_a, 6)
     week1 = plan_a.weeks.get(week_number=1)
@@ -180,6 +182,7 @@ class TestCarryOverFlow:
         member = User.objects.get(email="newmain@test.com")
         sprint = Sprint.objects.create(
             name="First Sprint", slug="first-sprint",
+            # date-rot-ok: no-prior-plan fixture; current sprint state is not under test.
             start_date=datetime.date(2026, 5, 1), duration_weeks=4)
         plan = _make_plan(member, sprint, 4)
         plan_pk = plan.pk

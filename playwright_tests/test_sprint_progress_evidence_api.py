@@ -23,9 +23,9 @@ def _seed_progress_evidence_fixture():
     )
     token = Token.objects.create(user=staff, name="playwright-progress")
     source = Sprint.objects.create(
-        name="May 2026",
-        slug="pw-may-2026",
-        start_date=datetime.date(2026, 5, 1),
+        name="Active Progress Sprint",
+        slug="pw-active-progress-sprint",
+        start_date=timezone.localdate() - datetime.timedelta(days=7),
         duration_weeks=6,
         status="active",
     )

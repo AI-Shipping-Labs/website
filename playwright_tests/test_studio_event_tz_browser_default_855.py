@@ -194,12 +194,14 @@ class TestResolvedLineIsUnambiguous:
 
         _reset_event_state()
         _create_user("resolved-855@test.com", "Europe/Berlin")
+        fixed_start = datetime(2026, 6, 15, 14, 0, tzinfo=UTC)
+        fixed_end = datetime(2026, 6, 15, 15, 0, tzinfo=UTC)
         event = Event.objects.create(
             title="Resolved Line Event",
             slug="resolved-line-855",
             # 14:00 UTC == 16:00 Europe/Berlin (summer).
-            start_datetime=datetime(2026, 6, 15, 14, 0, tzinfo=UTC),
-            end_datetime=datetime(2026, 6, 15, 15, 0, tzinfo=UTC),
+            start_datetime=fixed_start,
+            end_datetime=fixed_end,
             timezone="Europe/Berlin",
             origin="studio",
         )

@@ -157,6 +157,7 @@ def _seed_plan(
     sprint = Sprint.objects.create(
         name="Issue 597 Sprint",
         slug="i597-sprint",
+        # date-rot-ok: zero-count display fixture; current sprint state is not under test.
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=4)
     owner = User.objects.get(email=owner_email)
@@ -453,6 +454,7 @@ class TestStaffSprintBulkEnrollResults:
         sprint = Sprint.objects.create(
             name="Paren Sprint 597",
             slug="paren-sprint-597",
+            # date-rot-ok: Studio count display fixture; current sprint state is not under test.
             start_date=datetime.date(2026, 6, 1))
         sprint_pk = sprint.pk
         connection.close()

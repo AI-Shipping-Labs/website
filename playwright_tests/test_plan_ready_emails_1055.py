@@ -51,6 +51,7 @@ def _seed_sprint_with_plans():
     sprint = Sprint.objects.create(
         name="May Sprint",
         slug="may-sprint",
+        # date-rot-ok: plan-ready email fixture; eligibility is independent of sprint dates.
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=4,
     )
@@ -122,6 +123,7 @@ def test_staff_sees_disabled_empty_plan_ready_action(django_server, browser):
     sprint = Sprint.objects.create(
         name="Empty Sprint",
         slug="empty-sprint",
+        # date-rot-ok: empty plan-ready fixture; current sprint state is not under test.
         start_date=datetime.date(2026, 6, 1),
     )
     sprint_id = sprint.pk

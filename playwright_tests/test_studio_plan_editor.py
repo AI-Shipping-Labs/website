@@ -76,6 +76,7 @@ def _seed_plan(staff_email, member_email, weeks_with_checkpoints):
 
     sprint = Sprint.objects.create(
         name="May 2026 sprint", slug="may-2026",
+        # date-rot-ok: Studio editor fixture; current sprint state is not under test.
         start_date=datetime.date(2026, 5, 1),
     )
     member = User.objects.get(email=member_email)

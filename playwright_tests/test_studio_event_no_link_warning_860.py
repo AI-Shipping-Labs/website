@@ -12,7 +12,7 @@ Usage:
 
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -47,6 +47,10 @@ def _reset_event_state():
 
 def _future_date():
     return (datetime.now() + timedelta(days=30)).strftime("%d/%m/%Y")
+
+
+def _future_datetime():
+    return datetime.now(timezone.utc) + timedelta(days=30)
 
 
 @pytest.mark.django_db(transaction=True)
@@ -215,7 +219,7 @@ class TestEditWarning:
         event = Event(
             title="Linkless Edit Event",
             slug="linkless-edit-event-860",
-            start_datetime=datetime(2026, 7, 1, 18, 0),
+            start_datetime=_future_datetime(),
             origin="studio",
             platform="zoom",
         )
@@ -277,7 +281,7 @@ class TestEditWarning:
         event = Event(
             title="Has Zoom Event",
             slug="has-zoom-event-860",
-            start_datetime=datetime(2026, 7, 1, 18, 0),
+            start_datetime=_future_datetime(),
             origin="studio",
             platform="zoom",
             zoom_meeting_id="9988776655",

@@ -65,6 +65,7 @@ def _make_sprint(*, slug, name, status="active"):
     sprint = Sprint.objects.create(
         name=name,
         slug=slug,
+        # date-rot-ok: destructive-control fixture; stored status drives behavior.
         start_date=date(2026, 5, 1),
         duration_weeks=6,
         status=status,

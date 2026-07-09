@@ -54,6 +54,7 @@ def _seed_polish_plan(owner_email="member@test.com", teammate_email="teammate@te
     sprint = Sprint.objects.create(
         name="Plan Polish Sprint",
         slug="plan-polish",
+        # date-rot-ok: plan polish fixture; current sprint state is not under test.
         start_date=datetime.date(2026, 5, 1),
         duration_weeks=6)
     owner = User.objects.get(email=owner_email)

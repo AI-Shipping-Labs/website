@@ -22,6 +22,7 @@ import datetime
 import os
 
 import pytest
+from django.utils import timezone
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -183,6 +184,20 @@ def _enroll_user_in_cohort(user, cohort):
     return enrollment
 
 
+def _future_cohort_window(start_offset_days=30, duration_days=90):
+    start_date = timezone.localdate() + datetime.timedelta(days=start_offset_days)
+    end_date = start_date + datetime.timedelta(days=duration_days)
+    return start_date, end_date
+
+
+def _cohort_name(start_date):
+    return start_date.strftime("%B %Y")
+
+
+def _display_date(value):
+    return f"{value:%B} {value.day}, {value.year}"
+
+
 # ---------------------------------------------------------------
 # Scenario 1: Main member discovers an upcoming cohort and enrolls
 #              from the course page
@@ -195,8 +210,8 @@ class TestScenario1MainMemberDiscoversCohortAndEnrolls:
     @pytest.mark.core
     def test_main_member_sees_cohort_info_and_enrolls(self, django_server, browser):
         """Given a Main-tier user, a published course with required_level=20,
-        and an active cohort 'March 2026' with 30 max_participants starting
-        March 1, 2026. Navigate to /courses, click the course, verify cohort
+        and an active upcoming cohort with 30 max_participants. Navigate
+        to /courses, click the course, verify cohort
         info, enroll, and verify the button changes to Enrolled."""
         _clear_courses()
         _ensure_tiers()
@@ -211,11 +226,13 @@ class TestScenario1MainMemberDiscoversCohortAndEnrolls:
         mod = _create_module(course, "Module 1", sort_order=1)
         _create_unit(mod, "Lesson 1", sort_order=1, body="# Lesson 1\nContent.")
 
+        start_date, end_date = _future_cohort_window()
+        cohort_name = _cohort_name(start_date)
         _create_cohort(
             course=course,
-            name="March 2026",
-            start_date=datetime.date(2026, 3, 1),
-            end_date=datetime.date(2026, 6, 1),
+            name=cohort_name,
+            start_date=start_date,
+            end_date=end_date,
             max_participants=30,
         )
 
@@ -242,8 +259,8 @@ class TestScenario1MainMemberDiscoversCohortAndEnrolls:
 
         # Then: Course detail page shows "Next cohort" with name and date
         assert "Next cohort" in body
-        assert "March 2026" in body
-        assert "March 1, 2026" in body
+        assert cohort_name in body
+        assert _display_date(start_date) in body
 
         # Then: Shows "30 of 30 spots remaining"
         assert "30 of 30 spots remaining" in body
@@ -280,7 +297,7 @@ class TestScenario2EnrolledMemberUnenrolls:
 
     @pytest.mark.core
     def test_enrolled_member_unenrolls(self, django_server, browser):
-        """Given a Main-tier user already enrolled in the March 2026 cohort
+        """Given a Main-tier user already enrolled in the upcoming cohort
         of LLM Engineering. Navigate to the course page, verify Enrolled
         button, click to unenroll, verify button changes back to Enroll."""
         _clear_courses()
@@ -296,11 +313,12 @@ class TestScenario2EnrolledMemberUnenrolls:
         mod = _create_module(course, "Module 1", sort_order=1)
         _create_unit(mod, "Lesson 1", sort_order=1, body="# Lesson 1\nContent.")
 
+        start_date, end_date = _future_cohort_window()
         cohort = _create_cohort(
             course=course,
-            name="March 2026",
-            start_date=datetime.date(2026, 3, 1),
-            end_date=datetime.date(2026, 6, 1),
+            name=_cohort_name(start_date),
+            start_date=start_date,
+            end_date=end_date,
             max_participants=30,
         )
         _enroll_user_in_cohort(user, cohort)
@@ -361,11 +379,12 @@ class TestScenario3CohortFullCannotEnroll:
         mod = _create_module(course, "Module 1", sort_order=1)
         _create_unit(mod, "Lesson 1", sort_order=1, body="# Lesson 1\nContent.")
 
+        start_date, end_date = _future_cohort_window()
         cohort = _create_cohort(
             course=course,
-            name="March 2026",
-            start_date=datetime.date(2026, 3, 1),
-            end_date=datetime.date(2026, 6, 1),
+            name=_cohort_name(start_date),
+            start_date=start_date,
+            end_date=end_date,
             max_participants=1,
         )
 
@@ -416,11 +435,13 @@ class TestScenario4FreeMemberCannotEnroll:
         mod = _create_module(course, "Module 1", sort_order=1)
         _create_unit(mod, "Lesson 1", sort_order=1, body="# Lesson 1\nContent.")
 
+        start_date, end_date = _future_cohort_window()
+        cohort_name = _cohort_name(start_date)
         _create_cohort(
             course=course,
-            name="March 2026",
-            start_date=datetime.date(2026, 3, 1),
-            end_date=datetime.date(2026, 6, 1),
+            name=cohort_name,
+            start_date=start_date,
+            end_date=end_date,
             max_participants=30,
         )
 
@@ -434,8 +455,8 @@ class TestScenario4FreeMemberCannotEnroll:
         body = page.content()
 
         # Then: The cohort name and start date are visible
-        assert "March 2026" in body
-        assert "March 1, 2026" in body
+        assert cohort_name in body
+        assert _display_date(start_date) in body
 
         # Then: No Enroll button is shown
         enroll_btn = page.locator(
@@ -476,11 +497,13 @@ class TestScenario5AnonymousVisitorSeesCohortAndPricing:
         mod = _create_module(course, "Module 1", sort_order=1)
         _create_unit(mod, "Lesson 1", sort_order=1, body="# Lesson 1\nContent.")
 
+        start_date, end_date = _future_cohort_window()
+        cohort_name = _cohort_name(start_date)
         _create_cohort(
             course=course,
-            name="March 2026",
-            start_date=datetime.date(2026, 3, 1),
-            end_date=datetime.date(2026, 6, 1),
+            name=cohort_name,
+            start_date=start_date,
+            end_date=end_date,
             max_participants=30,
         )
 
@@ -492,8 +515,8 @@ class TestScenario5AnonymousVisitorSeesCohortAndPricing:
         body = page.content()
 
         # Then: Cohort info is visible
-        assert "March 2026" in body
-        assert "March 1, 2026" in body
+        assert cohort_name in body
+        assert _display_date(start_date) in body
 
         # Then: No Enroll button
         enroll_btn = page.locator(
@@ -747,7 +770,7 @@ class TestScenario9FreeCourseEnrollment:
     @pytest.mark.core
     def test_free_tier_user_enrolls_in_free_course_cohort(self, django_server, browser):
         """Given a Free-tier user and a published free course 'Intro to AI'
-        with required_level=0 and an active cohort 'Spring 2026'. The
+        with required_level=0 and an active upcoming cohort. The
         cohort card shows an Enroll button, and clicking it enrolls the user."""
         _clear_courses()
         _ensure_tiers()
@@ -762,11 +785,13 @@ class TestScenario9FreeCourseEnrollment:
         mod = _create_module(course, "Module 1", sort_order=1)
         _create_unit(mod, "Lesson 1", sort_order=1, body="# Intro\nWelcome.")
 
+        start_date, end_date = _future_cohort_window(start_offset_days=45)
+        cohort_name = _cohort_name(start_date)
         _create_cohort(
             course=course,
-            name="Spring 2026",
-            start_date=datetime.date(2026, 4, 1),
-            end_date=datetime.date(2026, 7, 1),
+            name=cohort_name,
+            start_date=start_date,
+            end_date=end_date,
             max_participants=50,
         )
 
@@ -779,8 +804,8 @@ class TestScenario9FreeCourseEnrollment:
         )
         body = page.content()
 
-        # Then: Cohort card shows "Spring 2026" with Enroll button
-        assert "Spring 2026" in body
+        # Then: Cohort card shows the upcoming cohort with Enroll button
+        assert cohort_name in body
 
         enroll_btn = page.locator(
             'button[data-action="enroll"]'
@@ -915,12 +940,15 @@ class TestScenario11AdminCreatesCohort:
         course_select = page.locator("#id_course")
         course_select.select_option(str(course.pk))
 
+        start_date, end_date = _future_cohort_window(start_offset_days=60)
+        cohort_name = _cohort_name(start_date)
+
         # Step 3: Enter cohort name
-        page.locator("#id_name").fill("Summer 2026")
+        page.locator("#id_name").fill(cohort_name)
 
         # Step 4: Set start_date and end_date
-        page.locator("#id_start_date").fill("2026-06-01")
-        page.locator("#id_end_date").fill("2026-09-01")
+        page.locator("#id_start_date").fill(start_date.isoformat())
+        page.locator("#id_end_date").fill(end_date.isoformat())
 
         # Step 5: Set max_participants
         page.locator("#id_max_participants").fill("25")
@@ -932,7 +960,7 @@ class TestScenario11AdminCreatesCohort:
         # Then: Lands on the cohort list page
         assert "/admin/content/cohort/" in page.url
         body = page.content()
-        assert "Summer 2026" in body
+        assert cohort_name in body
 
         # Step 7: Navigate to /courses/llm-engineering
         page.goto(
@@ -943,6 +971,6 @@ class TestScenario11AdminCreatesCohort:
 
         # Then: Course detail page shows the new cohort
         assert "Next cohort" in body
-        assert "Summer 2026" in body
-        assert "June 1, 2026" in body
+        assert cohort_name in body
+        assert _display_date(start_date) in body
         assert "25 of 25 spots remaining" in body

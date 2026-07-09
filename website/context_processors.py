@@ -3,9 +3,9 @@ import re
 import uuid
 from urllib.parse import urlparse
 
-from django.apps import apps
 from django.conf import settings
 
+from content.nav_availability import has_published_downloads_for_nav
 from integrations.config import get_config, site_base_url
 from integrations.middleware import get_announcement_banner
 
@@ -246,10 +246,7 @@ def site_context(request):
     user = getattr(request, 'user', None)
     has_published_downloads = False
     if not getattr(user, 'is_authenticated', False):
-        download_model = apps.get_model('content', 'Download')
-        has_published_downloads = download_model.objects.filter(
-            published=True
-        ).exists()
+        has_published_downloads = has_published_downloads_for_nav()
 
     return {
         'VERSION': settings.VERSION,

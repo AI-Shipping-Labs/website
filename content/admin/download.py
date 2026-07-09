@@ -1,12 +1,14 @@
 from django.contrib import admin
 
 from content.models import Download
+from content.nav_availability import refresh_published_downloads_nav_cache
 from studio.admin_links import studio_link
 
 
 def publish_downloads(modeladmin, request, queryset):
     """Publish selected downloads and send notifications."""
     queryset.update(published=True)
+    refresh_published_downloads_nav_cache()
     for download in queryset:
         try:
             from notifications.services import NotificationService
@@ -21,6 +23,7 @@ publish_downloads.short_description = 'Publish selected downloads'
 def unpublish_downloads(modeladmin, request, queryset):
     """Unpublish selected downloads."""
     queryset.update(published=False)
+    refresh_published_downloads_nav_cache()
 
 
 unpublish_downloads.short_description = 'Unpublish selected downloads'

@@ -40,10 +40,10 @@ the series page, where visitors can inspect and register for all sessions.
       <a href="{{ row.series.get_absolute_url }}" class="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline" data-testid="series-card-see-more">
         See more
         <span class="text-muted-foreground">({{ row.remaining_count }} more)</span>
-        <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        <i data-lucide="arrow-right" class="hidden sm:block h-4 w-4"></i>
       </a>
       {% endif %}
     </div>
-    <i data-lucide="arrow-right" class="hidden h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent sm:block"></i>
+    <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
   </div>
 </article>

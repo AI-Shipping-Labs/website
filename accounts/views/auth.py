@@ -70,6 +70,7 @@ def login_view(request):
 
     context = get_oauth_provider_context()
     context["next_url"] = next_url if next_url != "/" else ""
+    context["hide_footer_newsletter"] = True
     return render(request, "accounts/login.html", context)
 
 
@@ -81,6 +82,7 @@ def register_view(request):
         return redirect(next_url)
     context = get_oauth_provider_context()
     context["next_url"] = next_url if next_url != "/" else ""
+    context["hide_footer_newsletter"] = True
     return render(request, "accounts/register.html", context)
 
 

@@ -23,7 +23,7 @@
       </div>
 
       {% if courses %}
-      <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div class="{{ course_grid_classes }}" data-testid="courses-grid">
         {% for course in courses %}
         <article class="group h-full overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50">
           {% with course_primary_instructor=course.primary_instructor %}

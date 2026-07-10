@@ -94,7 +94,7 @@
 
       <!-- Description (always shown when landing is accessible) -->
       {% if workshop.description_html %}
-      <div class="prose prose-tight mb-12" data-testid="workshop-description">
+      <div class="prose prose-tight mb-12 max-w-full overflow-x-auto" data-testid="workshop-description">
         {{ workshop.description_html|safe }}
       </div>
       {% endif %}

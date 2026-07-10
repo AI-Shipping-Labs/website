@@ -49,6 +49,14 @@ def courses_list(request):
 
     # Filter by tags if provided (AND logic)
     courses = _filter_by_tags(courses, selected_tags)
+    courses = list(courses)
+
+    if len(courses) == 1:
+        course_grid_classes = "grid gap-6 sm:grid-cols-1 lg:mx-auto lg:max-w-md"
+    elif len(courses) == 2:
+        course_grid_classes = "grid gap-6 sm:grid-cols-2 lg:mx-auto lg:max-w-4xl"
+    else:
+        course_grid_classes = "grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
 
     # Set of course IDs the user is currently enrolled in — drives the
     # "Enrolled" badge in the template (issue #236). Single query.
@@ -68,6 +76,7 @@ def courses_list(request):
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
         'base_path': '/courses',
         'enrolled_course_ids': enrolled_course_ids,
+        'course_grid_classes': course_grid_classes,
     }
     return render(request, 'content/courses_list.html', context)
 

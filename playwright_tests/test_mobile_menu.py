@@ -169,6 +169,7 @@ class TestMobileMenuTextNavAccordion:
                 "Membership",
                 "Community Sprints",
                 "Events",
+                "Past Recordings",
             ],
             "resources": [
                 "Blog",

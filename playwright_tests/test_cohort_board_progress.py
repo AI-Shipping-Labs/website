@@ -72,7 +72,8 @@ def _create_sprint(slug, name, start_date):
 def _create_plan_with_checkpoints(*, member_email, sprint_slug,
                                   visibility, total, done, title='',
                                   goal='', summary_goal='', focus_main='',
-                                  week_theme='', checkpoint_desc_prefix='cp'):
+                                  week_theme='', checkpoint_desc_prefix='cp',
+                                  shared=True):
     from django.utils import timezone
 
     from accounts.models import User
@@ -86,6 +87,7 @@ def _create_plan_with_checkpoints(*, member_email, sprint_slug,
         goal=goal,
         summary_goal=summary_goal,
         focus_main=focus_main,
+        shared_at=timezone.now() if shared else None,
     )
     week = Week.objects.create(
         plan=plan, week_number=1, theme=week_theme,

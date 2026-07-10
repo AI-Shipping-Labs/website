@@ -90,7 +90,7 @@ def test_public_catalog_filter_empty_states_clear_to_unfiltered_lists(
         ),
         (
             "/workshops?tag=missing-topic",
-            "No workshops found with the selected tags.",
+            "No workshops match the selected filters.",
             "View all workshops",
             "/workshops",
             "Agents Workshop",

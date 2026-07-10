@@ -25,6 +25,7 @@ COMMUNITY_LINKS = [
     ('Membership', '/pricing'),
     ('Community Sprints', '/sprints'),
     ('Events', '/events'),
+    ('Past Recordings', '/events?filter=past'),
 ]
 
 RESOURCES_LINKS = [
@@ -126,6 +127,7 @@ class HeaderTextNavigationIssue580Test(TestCase):
                 'nav-community-link-membership',
                 'nav-community-link-sprints',
                 'nav-community-link-events',
+                'nav-community-link-past-recordings',
             ],
         )
         for label, href in COMMUNITY_LINKS:
@@ -152,6 +154,9 @@ class HeaderTextNavigationIssue580Test(TestCase):
         for label, href in RESOURCES_LINKS:
             self.assertIn(f'href="{href}"', resources_panel)
             self.assertIn(label, resources_panel)
+        self.assertNotIn('Past Recordings', resources_panel)
+        self.assertNotIn('Event Recordings', resources_panel)
+        self.assertNotIn('/events?filter=past', resources_panel)
 
         # Mobile accordions: about, community, resources — in that order.
         mobile_section = header[header.index('id="mobile-menu"'):]
@@ -171,6 +176,47 @@ class HeaderTextNavigationIssue580Test(TestCase):
         idx_community = mobile_section.index('id="mobile-community-toggle"')
         idx_resources = mobile_section.index('id="mobile-resources-toggle"')
         self.assertLess(idx_community, idx_resources)
+
+        mobile_community = mobile_section[
+            mobile_section.index('id="mobile-community-list"'):idx_resources
+        ]
+        mobile_community_link_ids = re.findall(
+            r'data-testid="(mobile-nav-community-link-[^"]+)"',
+            mobile_community,
+        )
+        self.assertEqual(
+            mobile_community_link_ids,
+            [
+                'mobile-nav-community-link-membership',
+                'mobile-nav-community-link-sprints',
+                'mobile-nav-community-link-events',
+                'mobile-nav-community-link-past-recordings',
+            ],
+        )
+        self.assertIn('href="/events?filter=past"', mobile_community)
+
+        mobile_resources = mobile_section[
+            mobile_section.index('id="mobile-resources-list"'):
+        ]
+        mobile_resources_link_ids = re.findall(
+            r'data-testid="(mobile-nav-resources-link-[^"]+)"',
+            mobile_resources,
+        )
+        self.assertEqual(
+            mobile_resources_link_ids[:7],
+            [
+                'mobile-nav-resources-link-blog',
+                'mobile-nav-resources-link-courses',
+                'mobile-nav-resources-link-workshops',
+                'mobile-nav-resources-link-learning-paths',
+                'mobile-nav-resources-link-projects',
+                'mobile-nav-resources-link-interview',
+                'mobile-nav-resources-link-curated-links',
+            ],
+        )
+        self.assertNotIn('Past Recordings', mobile_resources)
+        self.assertNotIn('Event Recordings', mobile_resources)
+        self.assertNotIn('/events?filter=past', mobile_resources)
 
     @staticmethod
     def _slice_block(html, dropdown_id):

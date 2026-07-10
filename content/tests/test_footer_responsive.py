@@ -88,6 +88,32 @@ class FooterNewsletterFormMessageHooksTest(TestCase):
         self.assertIn("footer-subscribe-error", footer)
 
 
+class FooterPastRecordingsLinkTest(TestCase):
+    """Footer keeps core paths and adds the canonical past-recordings surface."""
+
+    def test_footer_community_links_include_past_recordings_without_removals(self):
+        response = self.client.get("/")
+        footer = _extract_footer(response.content.decode())
+        community_start = footer.index("<h3")
+        legal_start = footer.index("<h3", community_start + 1)
+        community = footer[community_start:legal_start]
+
+        self.assertIn('href="/about"', community)
+        self.assertIn('href="/pricing"', community)
+        self.assertIn('href="/faq"', community)
+        self.assertIn('href="/events?filter=past"', community)
+        self.assertIn("Past Recordings", community)
+        self.assertIn("Manage Subscription", community)
+        self.assertLess(
+            community.index('href="/faq"'),
+            community.index('href="/events?filter=past"'),
+        )
+
+        self.assertIn('href="/terms/"', footer)
+        self.assertIn('href="/privacy/"', footer)
+        self.assertIn('href="/impressum/"', footer)
+
+
 @tag("visual_regression")
 class FooterTapTargetsTest(TestCase):
     """Footer community links balance mobile tap targets with compact desktop rows."""

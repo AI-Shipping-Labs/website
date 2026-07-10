@@ -65,12 +65,13 @@ Access control logic: a user can access any content object where `user.tier.leve
 | Article detail | `/blog/<slug>` | Full article with cover image, author, date, reading time, tags, rendered markdown content, related articles, newsletter CTA after content; tag rule components; SEO (canonical, OG tags, structured data) | Open articles: everyone; gated articles: tier-dependent | Shipped |
 | Content gating overlay | (included partial) | Blurred placeholder with teaser text, lock icon, "Upgrade to [Tier] to read this article" CTA linking to `/pricing` | Shown when user lacks access | Shipped |
 
-### Content -- Event Recordings
+### Content -- Past Event Recordings
 
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
-| Recordings listing | `/events?filter=past` | Paginated list of published past events with recordings, date, tags, tag filtering; gated recordings show lock icon | Everyone (listing visible) | Shipped |
-| Recording detail | `/events/<slug>` | Full recording with embedded video player, timestamps, description, tags, materials; SEO metadata | Open recordings: everyone; gated: tier-dependent | Shipped |
+| Past recordings listing | `/events?filter=past` | Canonical Events surface for published completed events with recordings; includes date, tags, tag filtering, pagination, and gated context | Everyone (listing visible) | Shipped |
+| Workshop recording handoff | `/workshops/<slug>` -> `/workshops/<slug>/video` | Workshop-linked past recordings route from the past-recordings card to the workshop landing page, then to the workshop video page for playback, timestamps, and materials | Landing page: everyone if open; video: tier-dependent | Shipped |
+| Standalone event recording detail | `/events/<id>/<slug>` | Standalone past events without a linked Workshop use the canonical event detail page and show post-event resources according to existing access rules | Open recordings: everyone; gated: tier-dependent | Shipped |
 
 ### Content -- Tutorials
 
@@ -199,8 +200,9 @@ Access control logic: a user can access any content object where `user.tier.leve
 ### Header (Global)
 The fixed header appears on every page and contains:
 - Logo + site name linking to `/` (home)
-- Primary nav links (desktop): About, Activities, Membership (anchor to `/#tiers`), Resources dropdown, FAQ (anchor to `/#faq`)
-- Resources dropdown: Blog, Project Ideas, Event Recordings, Tutorials, Curated Links
+- Primary nav links (desktop): About dropdown, Community dropdown, Resources dropdown
+- Community dropdown: Membership, Community Sprints, Events, Past Recordings (`/events?filter=past`)
+- Resources dropdown: Blog, Courses, Workshops, Learning Paths, Project Ideas, Interview Prep, Curated Links, and Downloads when published. Resources is for content/reference surfaces and does not contain Past Recordings or Event Recordings.
 - Auth area (desktop): "Sign in" for anonymous users; for authenticated users: notification bell with unread badge dropdown, email link to account page, "Log out" button
 - Mobile menu: Hamburger toggle revealing all nav links plus account/notifications/logout
 
@@ -215,7 +217,7 @@ Appears on every page:
 The homepage serves as the primary conversion funnel for anonymous visitors:
 1. Hero: "Subscribe for updates" (scrolls to newsletter section) and "View Membership Tiers" (scrolls to tiers section)
 2. Tiers section: Payment links for each tier (monthly/annual toggle)
-3. Recordings section: "View all recordings" links to `/events?filter=past`
+3. Past event recordings section: "View all past recordings" links to `/events?filter=past`
 4. Blog section: "View all posts" links to `/blog`
 5. Projects section: "View all project ideas" links to `/projects`
 6. Collection section: "View all curated links" links to `/resources`
@@ -235,7 +237,7 @@ The dashboard surfaces personalized actions:
 - Gated content: When a user cannot access content, a CTA banner appears with "Upgrade to [Tier] to [action]" linking to `/pricing`
 - Article detail: Related articles section; newsletter CTA after content; tag links
 - Course detail: "Sign Up Free" CTA for free courses (unauthenticated users); "View Pricing" CTA for paid courses
-- Event listing: Past events link to their recordings
+- Event listing: the Past recordings filter (`/events?filter=past`) is the canonical past-recordings list; workshop-linked cards hand off to the linked Workshop page, while standalone recordings use the canonical event detail page.
 - Tag system: Tag chips on listings link to filtered views; global tag index at `/tags`
 
 ## Key User Journeys
@@ -250,7 +252,7 @@ Free member logs in -> sees dashboard with limited content -> browses blog and e
 Member navigates to `/courses` -> browses course catalog with tag filters -> clicks into a course -> reads syllabus and description -> enrolls in a cohort (if available) -> starts first unit -> watches embedded video, reads lesson text, completes homework -> clicks "Mark as completed" -> proceeds to next unit via "Next" button -> progress bar updates on course detail page -> returns to dashboard and sees course in "Continue Learning" section -> eventually completes all units.
 
 ### 4. Member Registers for an Event
-Member navigates to `/events` -> sees upcoming events with spots remaining -> clicks into an event detail page -> reads description and schedule -> clicks "Register" button -> event appears in their dashboard under "Upcoming Events" -> receives notification before event -> attends via the join link near start time -> after event, recording becomes available at `/events/<slug>`.
+Member navigates to `/events` -> sees upcoming events with spots remaining -> clicks into an event detail page -> reads description and schedule -> clicks "Register" button -> event appears in their dashboard under "Upcoming Events" -> receives notification before event -> attends via the join link near start time -> after event, the recording becomes discoverable at `/events?filter=past`. Workshop-linked recordings hand off to `/workshops/<slug>` and `/workshops/<slug>/video`; standalone recordings remain on the canonical event detail page.
 
 ### 5. Visitor to Paid Member via Pricing
 Visitor clicks "View Membership Tiers" on homepage or navigates to `/pricing` -> reviews all 4 tiers in the grid -> toggles between monthly and annual pricing (annual saves approximately 17%) -> clicks "Join" on their chosen tier -> redirected to Stripe Checkout -> creates account during checkout (or logs in) -> completes payment -> gains access at the purchased tier level.
@@ -271,7 +273,7 @@ Member goes to `/account/` -> sees current tier, billing period end date -> want
 | Tier | A membership level (Free, Basic, Main, Premium) | Plan, package, subscription level |
 | Level | The numeric access level associated with a tier (0, 10, 20, 30) | Rank, grade |
 | Article | A blog post on the site | Post, blog entry |
-| Recording | A recorded workshop video with timestamps and materials. Lives on the Workshop landing/video pages (`/workshops/<slug>` and `/workshops/<slug>/video`); the linked Event page only announces the session and links out to the workshop. Legacy past events that have not been promoted to a Workshop still host their recording inline on the event detail page. | Video, replay |
+| Past Recording | A completed Event with an available recording, listed canonically at `/events?filter=past`. Workshop-linked recordings live on the Workshop landing/video pages (`/workshops/<slug>` and `/workshops/<slug>/video`); standalone past event recordings use the canonical event detail page. | Video, replay, resource |
 | Tutorial | A focused step-by-step guide on a narrow topic | How-to, guide |
 | Course | A structured multi-module learning path with units | Class, program |
 | Module | A grouping of units within a course | Section, chapter |

@@ -57,7 +57,9 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
     def _section_html(self, response, testid):
         body = self._body(response)
         marker = f'data-testid="{testid}"'
-        start = body.index(marker)
+        marker_start = body.index(marker)
+        section_start = body.rfind('<section ', 0, marker_start)
+        start = section_start if section_start != -1 else marker_start
         next_section = body.find('<section ', start + 1)
         end = next_section if next_section != -1 else len(body)
         return body[start:end]
@@ -251,7 +253,16 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
 
         self.assertEqual(list(response.context['recordings']), [past_recording])
-        self.assertContains(response, 'Event Recordings')
+        section = self._section_html(response, 'home-past-recordings-section')
+        self.assertIn('id="resources"', section)
+        self.assertIn('Past event recordings', section)
+        self.assertIn('Past Event Recordings', section)
+        self.assertIn('View all past recordings', section)
+        self.assertIn('href="/events?filter=past"', section)
+        self.assertIn('data-testid="home-past-recordings-cta"', section)
+        self.assertIn(f'href="{past_recording.get_absolute_url()}"', section)
+        self.assertIn('View recording', section)
+        self.assertNotIn('Workshops &amp; Learning Materials', section)
         self.assertContains(response, 'Upcoming live events')
 
     def test_authenticated_member_keeps_dashboard_route(self):

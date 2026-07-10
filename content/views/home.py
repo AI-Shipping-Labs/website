@@ -172,7 +172,7 @@ SECTION_NAV = [
     {'id': 'sprint-story', 'label': 'Sprints'},
     {'id': 'upcoming-events', 'label': 'Live Events'},
     {'id': 'testimonials', 'label': 'Testimonials'},
-    {'id': 'resources', 'label': 'Workshops'},
+    {'id': 'resources', 'label': 'Past Recordings'},
     {'id': 'blog', 'label': 'Blog'},
     {'id': 'projects', 'label': 'Projects'},
     {'id': 'collection', 'label': 'Curated Links'},

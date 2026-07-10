@@ -12,6 +12,7 @@ earlier #545 grooming work.
 
 import datetime
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -211,6 +212,9 @@ def test_resources_dropdown_lists_blog_first(django_server, page):
     learning_link = page.get_by_test_id("nav-resources-link-learning-paths")
     assert learning_link.inner_text().strip() == "Learning Paths"
     assert learning_link.get_attribute("href") == "/learning-path/ai-engineer"
+    assert menu.get_by_text("Past Recordings", exact=True).count() == 0
+    assert menu.get_by_text("Event Recordings", exact=True).count() == 0
+    assert menu.locator('a[href="/events?filter=past"]').count() == 0
 
     page.get_by_test_id("nav-resources-link-blog").click()
     page.wait_for_url("**/blog")
@@ -254,6 +258,7 @@ def test_community_dropdown_groups_membership_sprints_events(django_server, page
         "nav-community-link-membership",
         "nav-community-link-sprints",
         "nav-community-link-events",
+        "nav-community-link-past-recordings",
     ]
 
     page.get_by_test_id("nav-community-link-membership").click()
@@ -280,9 +285,40 @@ def test_community_links_reach_membership_sprints_and_events(django_server, page
     page.get_by_test_id("nav-community-menu").wait_for(state="visible")
     events = page.get_by_test_id("nav-community-link-events")
     assert events.get_attribute("href") == "/events"
+    past_recordings = page.get_by_test_id("nav-community-link-past-recordings")
+    assert past_recordings.get_attribute("href") == "/events?filter=past"
     events.click()
     page.wait_for_url("**/events")
     _shot(page, "05-sprints-events-community")
+
+
+def test_desktop_community_past_recordings_link_opens_selected_filter(
+    django_server, page
+):
+    """Scenario: Visitor finds past recordings from desktop community navigation."""
+    page.set_viewport_size({"width": 1280, "height": 800})
+    page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+    page.get_by_test_id("nav-community-trigger").hover()
+    menu = page.get_by_test_id("nav-community-menu")
+    menu.wait_for(state="visible")
+
+    link_ids = menu.evaluate(
+        """
+        el => [...el.querySelectorAll('a[data-testid]')]
+            .map(a => a.getAttribute('data-testid'))
+        """
+    )
+    assert link_ids.index("nav-community-link-events") + 1 == link_ids.index(
+        "nav-community-link-past-recordings"
+    )
+
+    page.get_by_test_id("nav-community-link-past-recordings").click()
+    page.wait_for_url(re.compile(r".*/events\?filter=past$"))
+    assert page.get_by_test_id("events-filter-past").get_attribute(
+        "aria-selected"
+    ) == "true"
+    _shot(page, "05b-desktop-past-recordings")
 
 
 # ---------------------------------------------------------------------------
@@ -361,6 +397,40 @@ def test_mobile_resources_accordion_lists_blog_first(django_server, browser):
     context.close()
 
 
+def test_mobile_community_accordion_reaches_past_recordings(django_server, browser):
+    """Scenario: Mobile visitor reaches the same past-recordings list."""
+    context = browser.new_context(viewport={"width": 390, "height": 844})
+    page = context.new_page()
+    page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+    _open_mobile_menu(page)
+    page.get_by_test_id("mobile-nav-community-trigger").click()
+    community_menu = page.get_by_test_id("mobile-nav-community-menu")
+    community_menu.wait_for(state="visible")
+
+    link_ids = community_menu.evaluate(
+        """
+        el => [...el.querySelectorAll('a[data-testid]')]
+            .map(a => a.getAttribute('data-testid'))
+        """
+    )
+    assert link_ids == [
+        "mobile-nav-community-link-membership",
+        "mobile-nav-community-link-sprints",
+        "mobile-nav-community-link-events",
+        "mobile-nav-community-link-past-recordings",
+    ]
+
+    page.get_by_test_id("mobile-nav-community-link-past-recordings").click()
+    page.wait_for_url(re.compile(r".*/events\?filter=past$"))
+    assert page.get_by_test_id("events-filter-past").get_attribute(
+        "aria-selected"
+    ) == "true"
+    assert page.get_by_test_id("events-past-section").is_visible()
+    _shot(page, "07b-mobile-past-recordings")
+    context.close()
+
+
 def test_mobile_top_level_groups_appear_between_about_and_resources(django_server, browser):
     """Scenario: Mobile visitor sees Community as the only community surface group."""
     context = browser.new_context(viewport={"width": 390, "height": 844})
@@ -421,6 +491,7 @@ def test_mobile_320px_has_no_horizontal_overflow(django_server, browser):
     for test_id in [
         "mobile-nav-about-link-team",
         "mobile-nav-community-link-sprints",
+        "mobile-nav-community-link-past-recordings",
         "mobile-nav-resources-link-curated-links",
     ]:
         link = page.get_by_test_id(test_id)
@@ -459,18 +530,32 @@ def test_authenticated_member_sees_same_public_nav_plus_account(
     # Sign-in button is not present when authenticated.
     assert page.get_by_role("link", name="Sign in").count() == 0
 
-    page.get_by_test_id("nav-about-trigger").hover()
-    menu = page.get_by_test_id("nav-about-menu")
+    page.get_by_test_id("nav-community-trigger").hover()
+    menu = page.get_by_test_id("nav-community-menu")
     menu.wait_for(state="visible")
     link_ids = menu.evaluate(
         "el => [...el.querySelectorAll('a[data-testid]')]"
         ".map(a => a.getAttribute('data-testid'))"
     )
     assert link_ids == [
-        "nav-about-link-about",
-        "nav-about-link-team",
-        "nav-about-link-faq",
+        "nav-community-link-membership",
+        "nav-community-link-sprints",
+        "nav-community-link-events",
+        "nav-community-link-past-recordings",
     ]
+
+    page.get_by_test_id("nav-community-link-past-recordings").click()
+    page.wait_for_url(re.compile(r".*/events\?filter=past$"))
+    assert page.get_by_test_id("events-filter-past").get_attribute(
+        "aria-selected"
+    ) == "true"
+    assert page.locator("#notification-bell-btn").is_visible()
+    assert page.locator("#account-menu-trigger").is_visible()
+    page.locator("#account-menu-trigger").click()
+    dropdown = page.locator("#account-menu-dropdown")
+    dropdown.wait_for(state="visible")
+    assert dropdown.get_by_test_id("theme-toggle").is_visible()
+    assert dropdown.get_by_role("menuitem", name="Log out").is_visible()
     _shot(page, "10-member-nav")
     context.close()
 

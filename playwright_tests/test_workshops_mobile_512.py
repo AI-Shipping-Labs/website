@@ -1,4 +1,4 @@
-"""Issue #512 — Mobile homepage `Workshops & Learning Materials` (#resources)
+"""Issue #512 — Mobile homepage `Past Event Recordings` (#resources)
 section overflows the Pixel 7 viewport.
 
 The fix converts the section into a horizontal scroll-snap carousel on

@@ -414,30 +414,30 @@
     </div>
   </section>
 
-  <!-- Event Recordings / Resources Section -->
+  <!-- Past Event Recordings Section -->
   {% comment %}
     Issue #512: convert mobile layout to a horizontal scroll-snap carousel
     so the section never bursts the Pixel 7 viewport. Desktop grid
     (md:grid-cols-2 lg:grid-cols-3) is unchanged. `overflow-x-hidden` on
     the section is a belt-and-suspenders parent overflow guard.
   {% endcomment %}
-  <section id="resources" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28 overflow-x-hidden">
+  <section id="resources" data-testid="home-past-recordings-section" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28 overflow-x-hidden">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
             <i data-lucide="video" class="h-4 w-4"></i>
-            Event Recordings
+            Past event recordings
           </p>
           <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-            Workshops & Learning Materials
+            Past Event Recordings
           </h2>
           <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
-            Workshop recordings with embedded content, timestamps, descriptions, and materials. Learn from hands-on sessions on building AI agents and practical systems.
+            Catch up on completed community sessions from the Events archive. Each recording links to its event detail or linked workshop page with materials when available.
           </p>
         </div>
-        <a href="/events?filter=past" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80">
-          View all recordings
+        <a href="/events?filter=past" data-testid="home-past-recordings-cta" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80">
+          View all past recordings
           <i data-lucide="arrow-right" class="h-4 w-4"></i>
         </a>
       </div>
@@ -456,7 +456,7 @@
         card is clickable. Recordings here are Event objects with a
         recording_url; the public detail page lives at /events/<slug>
         (registered in events/urls.py, served by event_detail). The trailing
-        "View resource" affordance is a <span> now to avoid nested anchors —
+        "View recording" affordance is a <span> now to avoid nested anchors —
         the card itself is the link.
         {% endcomment %}
         <article class="group flex min-w-0 flex-col rounded-xl border border-border bg-card transition-colors hover:border-accent/50 max-md:w-[min(82vw,22rem)] max-md:flex-none max-md:snap-center" data-testid="home-recording-card">
@@ -483,7 +483,7 @@
               {% endif %}
             </div>
             <span class="mt-6 inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors group-hover:text-accent/80">
-              View resource
+              View recording
               <i data-lucide="arrow-right" class="h-4 w-4 transition-transform group-hover:translate-x-1"></i>
             </span>
           </a>

@@ -54,7 +54,10 @@ def _make_event(series, *, position, status='upcoming', location=''):
 
 def _warm_public_shell_caches():
     """Prime site-wide public caches outside strict view query guards."""
-    from content.nav_availability import refresh_published_downloads_nav_cache
+    from content.nav_availability import (
+        refresh_marketing_pages_nav_cache,
+        refresh_published_downloads_nav_cache,
+    )
     from integrations.config import clear_config_cache, get_config, site_base_url
     from integrations.middleware import (
         clear_announcement_banner_cache,
@@ -72,6 +75,7 @@ def _warm_public_shell_caches():
     clear_announcement_banner_cache()
     get_announcement_banner()
     refresh_published_downloads_nav_cache()
+    refresh_marketing_pages_nav_cache()
 
 
 class SprintEventSeriesRelationTest(TestCase):

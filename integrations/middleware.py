@@ -1,7 +1,9 @@
 """Middleware for URL redirects and trailing slash removal."""
 
+from django.conf import settings
 from django.core.cache import caches
 from django.http import HttpResponsePermanentRedirect, HttpResponseRedirect
+from django.urls import is_valid_path
 
 
 class RemoveTrailingSlashMiddleware:
@@ -24,7 +26,24 @@ class RemoveTrailingSlashMiddleware:
                 if request.META.get('QUERY_STRING'):
                     new_path = f'{new_path}?{request.META["QUERY_STRING"]}'
                 return HttpResponsePermanentRedirect(new_path)
+        elif self._should_restore_trailing_slash(request):
+            new_path = f'{path}/'
+            if request.META.get('QUERY_STRING'):
+                new_path = f'{new_path}?{request.META["QUERY_STRING"]}'
+            return HttpResponsePermanentRedirect(new_path)
         return self.get_response(request)
+
+    def _should_restore_trailing_slash(self, request):
+        """Let slash-required prefixes keep Django's APPEND_SLASH behavior."""
+        if not settings.APPEND_SLASH:
+            return False
+        path = request.path
+        if path == '/' or path.endswith('/'):
+            return False
+        slash_path = f'{path}/'
+        if not any(slash_path.startswith(prefix) for prefix in self.SKIP_PREFIXES):
+            return False
+        return is_valid_path(slash_path, getattr(request, 'urlconf', None))
 
 # --- Announcement banner cross-process cache -----------------------------
 # The banner singleton is read on every public page request, so we cache the

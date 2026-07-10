@@ -286,6 +286,25 @@ def _build_organization_jsonld():
     }
 
 
+def _build_marketing_page_jsonld(page):
+    """Build JSON-LD for a standalone marketing page."""
+    site_url = _get_site_url()
+    return {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        'name': page.title,
+        'description': _truncate_description(
+            getattr(page, 'effective_meta_description', ''),
+        ),
+        'url': f'{site_url}{page.get_absolute_url()}',
+        'publisher': {
+            '@type': 'Organization',
+            'name': SITE_NAME,
+            'url': site_url,
+        },
+    }
+
+
 def _format_date(obj):
     """Format a date field from an object. Handles both date and datetime."""
     date_val = getattr(obj, 'date', None)
@@ -376,6 +395,8 @@ JSONLD_BUILDERS = {
     'project': _build_article_jsonld,  # Projects use Article schema
     'tutorial': _build_article_jsonld,  # Tutorials use Article schema
     'workshop': _build_workshop_jsonld,
+    'marketing_page': _build_marketing_page_jsonld,
+    'marketingpage': _build_marketing_page_jsonld,
 }
 
 
@@ -450,6 +471,10 @@ def og_tags(context, content=None):
         title = getattr(content, 'title', SITE_NAME)
         if _get_content_type(content) == 'event':
             description = _event_preview_description(content)
+        elif _get_content_type(content) == 'marketingpage':
+            description = _truncate_description(
+                getattr(content, 'effective_meta_description', ''),
+            )
         else:
             description = _truncate_description(
                 getattr(content, 'description', ''),

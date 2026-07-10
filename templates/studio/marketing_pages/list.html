@@ -1,0 +1,87 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Marketing Pages{% endblock %}
+
+{% block studio_content %}
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Marketing Pages</h1>
+    <p class="text-muted-foreground mt-1 hidden md:block">Manage standalone public landing and orientation pages.</p>
+  </div>
+  <a href="{% url 'studio_marketing_page_new' %}"
+     class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:w-auto"
+     data-testid="new-marketing-page">
+    <i data-lucide="plus" class="h-4 w-4"></i>
+    New marketing page
+  </a>
+</div>
+
+{% studio_list_filter search status_filter "Search marketing pages..." %}
+
+{% if pages or search or status_filter %}
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
+      <tr>
+        <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Public path</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' %}">Navigation</th>
+        <th class="{% studio_list_class 'th' %}">Source</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="{% studio_list_class 'tbody' %}">
+      {% for page_obj in pages %}
+      <tr class="{% studio_list_class 'row' %}">
+        <td class="px-6 py-4">
+          <a href="{% url 'studio_marketing_page_edit' page_id=page_obj.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ page_obj.title }}</a>
+          {% studio_origin_badge page_obj show_path=False %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground font-mono" data-label="Public path">{{ page_obj.public_path }}</td>
+        <td class="px-6 py-4" data-label="Status">
+          {% if page_obj.status == 'published' %}
+          {% studio_status_badge 'published' 'Published' %}
+          {% else %}
+          {% studio_status_badge 'draft' 'Draft' %}
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Navigation">
+          {% if page_obj.nav_section == 'none' %}
+          -
+          {% else %}
+          {{ page_obj.nav_section }}{% if page_obj.nav_label %}: {{ page_obj.nav_label }}{% endif %}
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Source">
+          {% if page_obj.source_repo %}GitHub{% else %}Manual{% endif %}
+        </td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          {% url 'studio_marketing_page_edit' page_id=page_obj.pk as edit_url %}
+          <div class="{% studio_list_class 'action_group' %}">
+            {% if page_obj.source_repo %}
+            {% studio_list_action edit_url 'View' 'primary' %}
+            {% else %}
+            {% studio_list_action edit_url 'Edit' 'primary' %}
+            {% endif %}
+            {% if page_obj.status == 'published' %}
+            {% studio_list_action page_obj.get_absolute_url 'View on site' 'secondary' True %}
+            {% else %}
+            {% studio_list_action page_obj.get_preview_url 'Preview draft' 'secondary' True %}
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+        {% url 'studio_marketing_page_list' as pages_clear_url %}
+        {% studio_empty_state 'filter' entity_label='marketing page' entity_label_plural='marketing pages' clear_url=pages_clear_url colspan=6 %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  {% url 'studio_marketing_page_new' as new_page_url %}
+  {% studio_empty_state 'fresh' entity_label='marketing page' entity_label_plural='marketing pages' create_url=new_page_url %}
+{% endif %}
+{% endblock %}

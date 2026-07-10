@@ -129,6 +129,17 @@ class ForbiddenDeleteRoutesTest(TestCase):
                 "event_delete_not_available",
             ),
             (
+                reverse("api_marketing_pages_collection"),
+                "marketing_page_delete_not_available",
+            ),
+            (
+                reverse(
+                    "api_marketing_page_detail",
+                    args=["00000000-0000-0000-0000-000000000000"],
+                ),
+                "marketing_page_delete_not_available",
+            ),
+            (
                 reverse("api_event_series_collection"),
                 "series_delete_not_available",
             ),

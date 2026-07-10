@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% load download_tags %}
+{% load seo_tags %}
+
+{% block title %}{{ marketing_page.title }} | AI Shipping Labs{% endblock %}
+{% block meta_description %}{{ marketing_page.effective_meta_description|truncatechars:160 }}{% endblock %}
+{% block robots %}{% if draft_preview %}<meta name="robots" content="noindex,nofollow,noarchive">{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% block canonical %}{% if not draft_preview %}<link rel="canonical" href="{{ site_url }}{{ marketing_page.get_absolute_url }}">{% endif %}{% endblock %}
+{% block og_tags %}{% if not draft_preview %}{% og_tags marketing_page %}{% endif %}{% endblock %}
+{% block structured_data %}{% if not draft_preview %}{% structured_data marketing_page "marketing_page" %}{% endif %}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+{% include "includes/_studio_edit_button.html" with obj=marketing_page %}
+<main class="min-h-screen pt-24">
+  <article class="overflow-x-hidden py-10 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+      {% if draft_preview %}
+      <div class="mb-8 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4" data-testid="draft-preview-banner">
+        <p class="text-sm font-medium text-amber-800 dark:text-amber-200">Draft preview</p>
+        <p class="mt-1 text-sm text-muted-foreground">{{ marketing_page.title }} is currently {{ marketing_page.status }}.</p>
+      </div>
+      {% endif %}
+
+      {% if marketing_page.cover_image_url %}
+      <div class="mb-8">
+        <img src="{{ marketing_page.cover_image_url }}" alt="{{ marketing_page.title }}"
+             class="w-full rounded-lg border border-border object-cover" style="max-height: 420px;">
+      </div>
+      {% endif %}
+
+      <header class="mb-10">
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
+          {{ marketing_page.title }}
+        </h1>
+        {% if marketing_page.description %}
+        <p class="mt-4 text-xl text-muted-foreground">{{ marketing_page.description }}</p>
+        {% endif %}
+      </header>
+
+      <div class="prose min-w-0 max-w-full">
+        {{ marketing_page.content_html|render_download_shortcodes:request|safe }}
+      </div>
+    </div>
+  </article>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% include "_partials/mermaid_script.html" %}
+{% include "_partials/event_widget_script.html" %}
+{% endblock %}

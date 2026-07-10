@@ -25,6 +25,7 @@ Studio so ownership and sync rules stay explicit.
 | Endpoint (view) | Error code |
 | --- | --- |
 | `api/views/events.py` (`events_collection`, `event_detail`) | `event_delete_not_available` |
+| `api/views/marketing_pages.py` (`marketing_pages_collection`, `marketing_page_detail`) | `marketing_page_delete_not_available` |
 | `api/views/event_series.py` (`event_series_collection`, `event_series_detail`) | `series_delete_not_available` |
 | `api/views/event_series.py` (`event_series_occurrence_detail`) | `occurrence_delete_not_available` |
 | `api/views/sync_sources.py` (`sync_sources_collection`, `sync_source_trigger`) | `sync_source_delete_not_available` |

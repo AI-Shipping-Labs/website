@@ -37,6 +37,7 @@ from content.views.pages import (
     tutorial_detail,
     tutorials_list,
 )
+from content.views.marketing_pages import marketing_page_preview
 from content.views.peer_review import (
     api_review_dashboard,
     api_submit_project,
@@ -72,6 +73,11 @@ urlpatterns = [
     path('faq', faq, name='faq'),
     path('blog', blog_list, name='blog_list'),
     path('blog/preview/<uuid:preview_token>', blog_preview, name='blog_preview'),
+    path(
+        'marketing-pages/preview/<uuid:preview_token>',
+        marketing_page_preview,
+        name='marketing_page_preview',
+    ),
     path('blog/<slug:slug>', blog_detail, name='blog_detail'),
     path('projects', projects_list, name='projects_list'),
     path('projects/<slug:slug>', project_detail, name='project_detail'),

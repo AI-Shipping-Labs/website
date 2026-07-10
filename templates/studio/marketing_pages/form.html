@@ -1,0 +1,201 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}{% if is_synced %}View Marketing Page{% elif page_obj.pk %}Edit Marketing Page{% else %}New Marketing Page{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_marketing_page_list' %}" class="hover:text-foreground">Marketing Pages</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">{% if page_obj.pk %}{{ page_obj.title }}{% else %}New Marketing Page{% endif %}</span>
+  </div>
+  <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-testid="studio-header">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-semibold text-foreground">{% if is_synced %}View Marketing Page{% elif page_obj.pk %}Edit Marketing Page{% else %}New Marketing Page{% endif %}</h1>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="studio-header-actions">
+      {% if page_obj.pk %}
+      {% include "studio/includes/_admin_link.html" with obj=page_obj %}
+      {% if github_edit_url %}
+      <a href="{{ github_edit_url }}" target="_blank" rel="noopener noreferrer"
+         class="border border-blue-500/40 bg-blue-500/10 px-4 py-2 rounded-lg text-sm font-medium text-blue-200 transition-colors hover:bg-blue-500/20 flex items-center space-x-1"
+         data-testid="sticky-github-source-link">
+        {% include 'includes/_icon_github.html' with css='w-4 h-4' %}
+        <span>Edit on GitHub</span>
+      </a>
+      {% endif %}
+      <a href="{% if page_obj.status == 'published' %}{{ page_obj.get_absolute_url }}{% else %}{{ page_obj.get_preview_url }}{% endif %}" target="_blank" rel="noopener noreferrer" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1" data-testid="{% if page_obj.status == 'published' %}view-on-site{% else %}preview-draft{% endif %}">
+        <i data-lucide="external-link" class="w-4 h-4"></i>
+        <span>{% if page_obj.status == 'published' %}View on site{% else %}Preview draft{% endif %}</span>
+      </a>
+      {% if page_obj.source_repo %}
+      <form method="post"
+            action="{% url 'studio_sync_object_trigger' model_name=page_obj|model_name object_id=page_obj.pk %}"
+            class="inline-flex"
+            data-testid="sticky-resync-source-form">
+        {% csrf_token %}
+        <button type="submit"
+                class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors flex items-center space-x-1"
+                data-testid="sticky-resync-source-button">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span>Re-sync source</span>
+        </button>
+      </form>
+      {% endif %}
+      {% endif %}
+    </div>
+  </header>
+</div>
+
+{% url 'studio_marketing_page_list' as cancel_url %}
+<div class="grid gap-6 lg:grid-cols-[minmax(0,48rem)_20rem] lg:items-start">
+  <div class="min-w-0 pb-24 md:pb-0">
+    {% if is_synced %}
+    {% include "studio/includes/sticky_action_bar.html" with form_id="marketing-page-form" obj=page_obj title="Source-managed marketing page" subtitle="Edit source content in GitHub, then re-sync." can_save=False primary_label="Save Changes" cancel_url=cancel_url github_edit_url=github_edit_url %}
+    {% else %}
+    {% include "studio/includes/sticky_action_bar.html" with form_id="marketing-page-form" obj=page_obj title="Marketing page changes" subtitle="Save remains available while you review the long form." can_save=True primary_label="Save Changes" cancel_url=cancel_url %}
+    {% endif %}
+
+    {% if errors %}
+    <div class="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 p-4" data-testid="form-errors">
+      <p class="text-sm font-medium text-foreground">Could not save marketing page.</p>
+      <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+        {% for field, messages in errors.items %}
+          {% for message in messages %}
+          <li>{{ message }}</li>
+          {% endfor %}
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <form id="marketing-page-form" method="post" class="space-y-6">
+      {% csrf_token %}
+      <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+        {% include "studio/includes/forms/title.html" with value=page_obj.title disabled=is_synced %}
+
+        <div>
+          <label class="block text-sm font-medium text-foreground mb-1">Public path</label>
+          <input type="text" name="public_path" value="{{ page_obj.public_path|default:'' }}"
+                 {% if is_synced %}disabled{% endif %}
+                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}"
+                 data-testid="marketing-page-public-path">
+          {% if errors.public_path %}
+          <p class="mt-1 text-sm text-destructive">{{ errors.public_path.0 }}</p>
+          {% endif %}
+        </div>
+
+        {% include "studio/includes/forms/textarea.html" with label="Description" name="description" rows=3 value=page_obj.description disabled=is_synced %}
+
+        {% include "studio/includes/forms/textarea.html" with label="Meta description" name="meta_description" rows=3 value=page_obj.meta_description disabled=is_synced %}
+
+        {% include "studio/includes/forms/textarea.html" with label="Content (Markdown)" name="content_markdown" rows=16 value=page_obj.content_markdown disabled=is_synced monospace=True %}
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="block text-sm font-medium text-foreground mb-1">Status</label>
+            <select name="status" {% if is_synced %}disabled{% endif %} class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}" data-testid="marketing-page-status">
+              <option value="draft" {% if page_obj.status == 'draft' or not page_obj.status %}selected{% endif %}>Draft</option>
+              <option value="published" {% if page_obj.status == 'published' %}selected{% endif %}>Published</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-foreground mb-1">Sitemap</label>
+            <label class="flex min-h-[42px] items-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2 text-sm text-foreground{% if is_synced %} opacity-60{% endif %}">
+              <input type="checkbox" name="show_in_sitemap" {% if page_obj.show_in_sitemap %}checked{% endif %} {% if is_synced %}disabled{% endif %} class="h-4 w-4 rounded border-border bg-background">
+              Include when published
+            </label>
+          </div>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-3">
+          <div>
+            <label class="block text-sm font-medium text-foreground mb-1">Nav section</label>
+            <select name="nav_section" {% if is_synced %}disabled{% endif %} class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}" data-testid="marketing-page-nav-section">
+              <option value="none" {% if page_obj.nav_section == 'none' or not page_obj.nav_section %}selected{% endif %}>None</option>
+              <option value="about" {% if page_obj.nav_section == 'about' %}selected{% endif %}>About</option>
+              <option value="community" {% if page_obj.nav_section == 'community' %}selected{% endif %}>Community</option>
+              <option value="resources" {% if page_obj.nav_section == 'resources' %}selected{% endif %}>Resources</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-foreground mb-1">Nav label</label>
+            <input type="text" name="nav_label" value="{{ page_obj.nav_label|default:'' }}"
+                   {% if is_synced %}disabled{% endif %}
+                   class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}"
+                   data-testid="marketing-page-nav-label">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-foreground mb-1">Nav order</label>
+            <input type="number" name="nav_order" value="{{ page_obj.nav_order|default:0 }}"
+                   {% if is_synced %}disabled{% endif %}
+                   class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
+          </div>
+        </div>
+
+        {% include "studio/includes/forms/cover_image_url.html" with value=page_obj.cover_image_url disabled=is_synced %}
+
+        {% include "studio/includes/forms/tags.html" with tags=page_obj.tags disabled=is_synced %}
+      </div>
+
+      {% if page_obj.pk %}
+        {% include "studio/includes/forms/action_row.html" with is_synced=is_synced submit_label="Save Changes" cancel_url=cancel_url %}
+      {% else %}
+        {% include "studio/includes/forms/action_row.html" with is_synced=is_synced submit_label="Create Marketing Page" cancel_url=cancel_url %}
+      {% endif %}
+    </form>
+  </div>
+
+  {% if page_obj.pk %}
+  <aside class="space-y-4 lg:sticky lg:top-8" data-testid="studio-meta-actions-panel">
+    {% if is_synced %}
+    {% studio_origin_panel page_obj %}
+    {% endif %}
+
+    <div class="bg-card border border-border rounded-lg p-4" data-testid="marketing-page-state-panel">
+      <h2 class="text-sm font-medium text-foreground mb-3">State</h2>
+      <dl class="space-y-3 text-sm">
+        <div>
+          <dt class="text-muted-foreground">Publication</dt>
+          <dd class="text-foreground">{% if page_obj.status == 'published' %}Published{% else %}Draft{% endif %}</dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">Public path</dt>
+          <dd class="break-all font-mono text-foreground">{{ page_obj.public_path }}</dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">Navigation</dt>
+          <dd class="text-foreground">{{ page_obj.nav_section }}</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="bg-card border border-border rounded-lg p-4" data-testid="draft-preview-link-panel">
+      <h2 class="text-sm font-medium text-foreground mb-3">Draft preview link</h2>
+      <input type="url" readonly value="{{ preview_url }}"
+             class="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-xs text-foreground"
+             data-testid="draft-preview-url"
+             onclick="this.select()">
+      <div class="mt-3 flex flex-wrap gap-2">
+        <a href="{{ page_obj.get_preview_url }}" target="_blank" rel="noopener noreferrer"
+           class="inline-flex items-center gap-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+           data-testid="draft-preview-open">
+          <i data-lucide="external-link" class="w-4 h-4"></i>
+          Preview draft
+        </a>
+        <form method="post" action="{{ preview_regenerate_url }}">
+          {% csrf_token %}
+          <button type="submit"
+                  class="inline-flex items-center gap-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                  data-testid="draft-preview-regenerate">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+            Regenerate link
+          </button>
+        </form>
+      </div>
+    </div>
+  </aside>
+  {% endif %}
+</div>
+{% endblock %}

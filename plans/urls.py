@@ -22,6 +22,7 @@ from plans.views.notes import (
     week_note_delete,
     week_note_update,
 )
+from plans.views.slack_progress import undo_slack_progress
 from plans.views.sprints import (
     sprint_ask_team,
     sprint_detail,
@@ -120,6 +121,11 @@ urlpatterns = [
         'sprints/<slug:sprint_slug>/plan/<int:plan_id>/carry-over',
         carry_over_tasks,
         name='carry_over_tasks',
+    ),
+    path(
+        'sprints/<slug:sprint_slug>/plan/<int:plan_id>/slack-progress/<int:event_id>/undo',
+        undo_slack_progress,
+        name='undo_slack_progress',
     ),
     # Participant week notes (issue #499), now scoped to the sprint
     # workspace URL so form submits keep members in sprint context.

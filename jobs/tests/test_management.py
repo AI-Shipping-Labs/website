@@ -174,6 +174,7 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(Schedule.objects.filter(name='import-stripe-daily').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='remind-unverified-users').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='purge-unverified-users').count(), 1)
+        self.assertEqual(Schedule.objects.filter(name='sprint-cadence-notifications').count(), 1)
 
     def test_updates_stale_cadence_on_existing_rows(self):
         """Re-running setup_schedules updates an existing row's cron in place.
@@ -235,9 +236,27 @@ class SetupSchedulesCommandTest(TestCase):
             'remind-unverified-users',
             'purge-unverified-users',
             'ingest-plan-sprints',
+            'sprint-cadence-notifications',
             'onboarding-reminders',
         }
         self.assertEqual(names, expected)
+
+    def test_creates_sprint_cadence_schedule(self):
+        """Command registers the daily member sprint cadence task."""
+        out = StringIO()
+        call_command('setup_schedules', stdout=out)
+
+        schedule = Schedule.objects.get(name='sprint-cadence-notifications')
+        self.assertEqual(
+            schedule.func,
+            'plans.tasks.sprint_cadence.send_sprint_cadence_notifications',
+        )
+        self.assertEqual(schedule.cron, '15 5 * * *')
+        self.assertEqual(schedule.schedule_type, Schedule.CRON)
+        self.assertIn(
+            'sprint-cadence-notifications (daily at 05:15 UTC)',
+            out.getvalue(),
+        )
 
     def test_creates_daily_import_schedules(self):
         """Command creates daily Slack and Stripe import schedules.

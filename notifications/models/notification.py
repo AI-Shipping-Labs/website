@@ -18,6 +18,9 @@ NOTIFICATION_TYPE_CHOICES = [
     # user, mirroring the plan-request fan-out. Links to the member's CRM
     # record when tracked, else the Django admin user-change page.
     ('onboarding_submitted', 'Onboarding Submitted'),
+    ('sprint_week_start', 'Sprint Week Start'),
+    ('week_note_prompt', 'Week Note Prompt'),
+    ('slack_progress', 'Slack Progress'),
 ]
 
 

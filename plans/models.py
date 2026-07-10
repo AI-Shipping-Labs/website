@@ -90,6 +90,26 @@ PARTNER_INTRO_EMAIL_STATUS_CHOICES = [
     (PARTNER_INTRO_EMAIL_STATUS_FAILED, 'Failed'),
 ]
 
+SPRINT_CADENCE_KIND_WEEK_START = 'week_start'
+SPRINT_CADENCE_KIND_WEEK_NOTE_PROMPT = 'week_note_prompt'
+SPRINT_CADENCE_KIND_SLACK_PROGRESS = 'slack_progress'
+
+SPRINT_CADENCE_KIND_CHOICES = [
+    (SPRINT_CADENCE_KIND_WEEK_START, 'Week start'),
+    (SPRINT_CADENCE_KIND_WEEK_NOTE_PROMPT, 'Week note prompt'),
+    (SPRINT_CADENCE_KIND_SLACK_PROGRESS, 'Slack progress'),
+]
+
+SPRINT_CADENCE_STATUS_SENT = 'sent'
+SPRINT_CADENCE_STATUS_EMAIL_FAILED = 'email_failed'
+SPRINT_CADENCE_STATUS_SKIPPED = 'skipped'
+
+SPRINT_CADENCE_STATUS_CHOICES = [
+    (SPRINT_CADENCE_STATUS_SENT, 'Sent'),
+    (SPRINT_CADENCE_STATUS_EMAIL_FAILED, 'Email failed'),
+    (SPRINT_CADENCE_STATUS_SKIPPED, 'Skipped'),
+]
+
 KIND_CHOICES = [
     ('persona', 'Persona'),
     ('background', 'Background'),
@@ -886,6 +906,101 @@ class PlanReadyEmailLog(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return f'PlanReadyEmailLog(plan={self.plan_id}, status={self.status})'
+
+
+class SprintCadenceDeliveryLog(TimestampedModelMixin, models.Model):
+    """Idempotency and audit row for sprint cadence notifications."""
+
+    kind = models.CharField(
+        max_length=32,
+        choices=SPRINT_CADENCE_KIND_CHOICES,
+        db_index=True,
+    )
+    plan = models.ForeignKey(
+        Plan,
+        on_delete=models.CASCADE,
+        related_name='sprint_cadence_delivery_logs',
+    )
+    member = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sprint_cadence_delivery_logs',
+    )
+    week = models.ForeignKey(
+        'plans.Week',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='cadence_delivery_logs',
+    )
+    progress_event = models.ForeignKey(
+        'crm.IngestedProgressEvent',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='member_delivery_logs',
+    )
+    source_message_ts = models.CharField(max_length=64, blank=True, default='')
+    notification = models.ForeignKey(
+        'notifications.Notification',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    email_log = models.ForeignKey(
+        'email_app.EmailLog',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=SPRINT_CADENCE_STATUS_CHOICES,
+        default=SPRINT_CADENCE_STATUS_SKIPPED,
+        db_index=True,
+    )
+    last_error = models.TextField(blank=True, default='')
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['kind', 'plan', 'week'],
+                condition=(
+                    models.Q(
+                        kind__in=[
+                            SPRINT_CADENCE_KIND_WEEK_START,
+                            SPRINT_CADENCE_KIND_WEEK_NOTE_PROMPT,
+                        ],
+                    )
+                    & models.Q(week__isnull=False)
+                ),
+                name='unique_sprint_cadence_plan_week',
+            ),
+            models.UniqueConstraint(
+                fields=['kind', 'progress_event', 'source_message_ts'],
+                condition=(
+                    models.Q(kind=SPRINT_CADENCE_KIND_SLACK_PROGRESS)
+                    & models.Q(progress_event__isnull=False)
+                    & ~models.Q(source_message_ts='')
+                ),
+                name='unique_sprint_cadence_slack_progress',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['kind', 'status']),
+            models.Index(fields=['plan', 'kind']),
+            models.Index(fields=['member', 'kind']),
+        ]
+
+    def __str__(self):
+        return (
+            'SprintCadenceDeliveryLog('
+            f'kind={self.kind}, plan={self.plan_id}, status={self.status})'
+        )
 
 
 class SprintPartnerIntroEmailLog(TimestampedModelMixin, models.Model):

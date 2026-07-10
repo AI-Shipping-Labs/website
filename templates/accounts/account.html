@@ -261,6 +261,27 @@
         <p class="text-sm text-foreground mt-4" id="workshop-emails-status">
           {% if workshop_emails_enabled %}You will receive workshop announcement emails.{% else %}You will not receive workshop announcement emails.{% endif %}
         </p>
+
+        <div class="flex items-center justify-between mt-6 pt-6 border-t border-border">
+          <div>
+            <p class="text-foreground font-medium">Sprint reminders</p>
+            <p class="text-sm text-muted-foreground mt-1">Receive weekly sprint plan and note reminder emails.</p>
+          </div>
+          <div class="touch-target-toggle">
+            <button type="button"
+                    id="sprint-cadence-emails-toggle"
+                    data-testid="sprint-cadence-emails-toggle"
+                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors {% if sprint_cadence_emails_enabled %}bg-accent{% else %}bg-secondary{% endif %}"
+                    onclick="toggleSprintCadenceEmails()"
+                    aria-label="Toggle sprint reminder emails">
+              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full shadow ring-0 transition-transform {% if sprint_cadence_emails_enabled %}translate-x-5 bg-accent-foreground{% else %}translate-x-0 bg-foreground{% endif %}" id="sprint-cadence-emails-toggle-dot"></span>
+            </button>
+          </div>
+        </div>
+
+        <p class="text-sm text-foreground mt-4" id="sprint-cadence-emails-status" data-testid="sprint-cadence-emails-status">
+          {% if sprint_cadence_emails_enabled %}You will receive sprint reminder emails.{% else %}You will not receive sprint reminder emails.{% endif %}
+        </p>
       </div>
 
       {% if not is_newsletter_only %}
@@ -590,6 +611,46 @@ function toggleWorkshopEmails() {
         toggle.classList.remove('bg-accent');
         toggle.classList.add('bg-secondary');
         status.textContent = 'You will not receive workshop announcement emails.';
+      }
+    } else {
+      alert(data.error || 'Failed to update preferences');
+    }
+  })
+  .catch(function() {
+    alert('An error occurred. Please try again.');
+  });
+}
+
+function toggleSprintCadenceEmails() {
+  var toggle = document.getElementById('sprint-cadence-emails-toggle');
+  var dot = document.getElementById('sprint-cadence-emails-toggle-dot');
+  var status = document.getElementById('sprint-cadence-emails-status');
+  var isCurrentlyEnabled = dot.classList.contains('translate-x-5');
+  var newValue = !isCurrentlyEnabled;
+
+  fetch('/account/api/email-preferences', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrfToken(),
+    },
+    body: JSON.stringify({ sprint_cadence_emails: newValue }),
+  })
+  .then(function(resp) { return resp.json(); })
+  .then(function(data) {
+    if (data.status === 'ok') {
+      if (data.sprint_cadence_emails) {
+        dot.classList.add('translate-x-5', 'bg-accent-foreground');
+        dot.classList.remove('translate-x-0', 'bg-foreground');
+        toggle.classList.add('bg-accent');
+        toggle.classList.remove('bg-secondary');
+        status.textContent = 'You will receive sprint reminder emails.';
+      } else {
+        dot.classList.remove('translate-x-5', 'bg-accent-foreground');
+        dot.classList.add('translate-x-0', 'bg-foreground');
+        toggle.classList.remove('bg-accent');
+        toggle.classList.add('bg-secondary');
+        status.textContent = 'You will not receive sprint reminder emails.';
       }
     } else {
       alert(data.error || 'Failed to update preferences');

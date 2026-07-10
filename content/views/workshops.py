@@ -30,6 +30,7 @@ import re
 from datetime import date as date_cls
 from urllib.parse import quote, urlencode
 
+from django.db.models import Exists, OuterRef, Prefetch
 from django.http import Http404, HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -47,6 +48,7 @@ from content.access import (
 )
 from content.models import (
     SKILL_LEVEL_METADATA,
+    Instructor,
     Workshop,
     WorkshopPage,
     get_workshop_skill_level_label,
@@ -178,6 +180,50 @@ def _build_catalog_filter_url(
     if not query:
         return base_path
     return f'{base_path}?{query}'
+
+
+def _prepare_catalog_card_workshops(queryset, *, limit=None):
+    """Attach presentation-only card signals without template-side queries."""
+    workshops = (
+        queryset
+        .select_related('event')
+        .prefetch_related(
+            Prefetch(
+                'instructors',
+                queryset=Instructor.objects.order_by(
+                    'workshopinstructor__position',
+                    'pk',
+                ),
+                to_attr='card_instructors',
+            ),
+        )
+        .annotate(
+            card_has_tutorial_pages=Exists(
+                WorkshopPage.objects.filter(workshop=OuterRef('pk')),
+            ),
+        )
+    )
+    if limit is not None:
+        workshops = workshops[:limit]
+
+    prepared = list(workshops)
+    for workshop in prepared:
+        instructors = getattr(workshop, 'card_instructors', [])
+        workshop.card_primary_instructor = instructors[0] if instructors else None
+        workshop.card_has_recording = bool(
+            workshop.event_id
+            and workshop.event
+            and workshop.event.has_recording
+        )
+        workshop.card_has_code = bool(workshop.code_repo_url)
+        workshop.card_has_materials = bool(workshop.resolved_materials)
+        workshop.card_has_deliverables = any((
+            workshop.card_has_tutorial_pages,
+            workshop.card_has_recording,
+            workshop.card_has_code,
+            workshop.card_has_materials,
+        ))
+    return prepared
 
 
 def _tool_key(value):
@@ -434,8 +480,7 @@ def _build_workshops_catalog_context(
         or bool(selected_skill_level)
     )
 
-    if limit is not None:
-        workshops = workshops[:limit]
+    workshops = _prepare_catalog_card_workshops(workshops, limit=limit)
 
     access_filter_options = [
         {

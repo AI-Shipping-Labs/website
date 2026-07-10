@@ -18,6 +18,7 @@ Covers:
 """
 
 from datetime import date
+from html.parser import HTMLParser
 from pathlib import Path
 
 from django.apps import apps
@@ -25,7 +26,13 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_REGISTERED
+from content.access import (
+    LEVEL_BASIC,
+    LEVEL_MAIN,
+    LEVEL_OPEN,
+    LEVEL_PREMIUM,
+    LEVEL_REGISTERED,
+)
 from content.models import (
     Instructor,
     Workshop,
@@ -151,6 +158,32 @@ def _opening_tag_for_testid(body, tag_name, testid):
     return body[tag_start:tag_end]
 
 
+def _workshop_card_html(response, slug):
+    body = response.content.decode()
+    marker = f'data-workshop-slug="{slug}"'
+    if marker not in body:
+        raise AssertionError(f'Workshop card not found for slug {slug!r}')
+    return body.split(marker, 1)[1].split('</article>', 1)[0]
+
+
+class _NestedAnchorParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.anchor_depth = 0
+        self.found_nested_anchor = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag != 'a':
+            return
+        if self.anchor_depth > 0:
+            self.found_nested_anchor = True
+        self.anchor_depth += 1
+
+    def handle_endtag(self, tag):
+        if tag == 'a' and self.anchor_depth > 0:
+            self.anchor_depth -= 1
+
+
 class WorkshopsCatalogTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -266,6 +299,181 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         # Issue #481: badges read "Basic or above" not "Basic+".
         self.assertContains(response, 'Basic or above')
         self.assertNotContains(response, 'Basic+')
+
+    def test_catalog_card_hierarchy_labels_access_and_metadata(self):
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
+        card = _workshop_card_html(response, 'one')
+
+        self.assertIn('data-testid="workshop-card-primary-signals"', card)
+        self.assertIn('data-testid="workshop-card-type"', card)
+        self.assertIn('Workshop', card)
+        self.assertIn('data-testid="workshop-card-access"', card)
+        self.assertIn('Access', card)
+        self.assertIn('data-testid="workshop-tier-badge"', card)
+        self.assertIn('Basic or above', card)
+        self.assertIn('data-testid="workshop-card-title"', card)
+        self.assertIn('Visible Workshop', card)
+        self.assertIn('data-testid="workshop-card-metadata"', card)
+        self.assertIn('Instructor', card)
+        self.assertIn('Alice', card)
+        self.assertIn('Date', card)
+        self.assertIn('Apr 21, 2026', card)
+        self.assertIn('data-testid="workshop-card-description"', card)
+        self.assertIn('Description text.', card)
+        self.assertIn('data-testid="workshop-card-topics"', card)
+        self.assertIn('Topics', card)
+        self.assertIn('python', card)
+        self.assertIn('agents', card)
+
+        self.assertLess(
+            card.index('data-testid="workshop-card-primary-signals"'),
+            card.index('data-testid="workshop-card-title"'),
+        )
+        self.assertLess(
+            card.index('data-testid="workshop-card-title"'),
+            card.index('data-testid="workshop-card-metadata"'),
+        )
+        self.assertLess(
+            card.index('data-testid="workshop-card-metadata"'),
+            card.index('data-testid="workshop-card-description"'),
+        )
+        self.assertLess(
+            card.index('data-testid="workshop-card-description"'),
+            card.index('data-testid="workshop-card-topics"'),
+        )
+
+    def test_catalog_card_access_label_uses_pages_required_level(self):
+        Workshop.objects.all().delete()
+        _make_workshop(
+            slug='open-card', title='Open Card',
+            landing=LEVEL_OPEN, pages=LEVEL_OPEN, recording=LEVEL_OPEN,
+            description='', instructor=None,
+        )
+        _make_workshop(
+            slug='registered-card', title='Registered Card',
+            landing=LEVEL_OPEN, pages=LEVEL_REGISTERED,
+            recording=LEVEL_REGISTERED, description='', instructor=None,
+        )
+        _make_workshop(
+            slug='basic-card', title='Basic Card',
+            landing=LEVEL_OPEN, pages=LEVEL_BASIC, recording=LEVEL_MAIN,
+            description='', instructor=None,
+        )
+        _make_workshop(
+            slug='main-card', title='Main Card',
+            landing=LEVEL_OPEN, pages=LEVEL_MAIN, recording=LEVEL_MAIN,
+            description='', instructor=None,
+        )
+        _make_workshop(
+            slug='premium-card', title='Premium Card',
+            landing=LEVEL_OPEN, pages=LEVEL_PREMIUM,
+            recording=LEVEL_PREMIUM, description='', instructor=None,
+        )
+
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
+
+        self.assertIn(
+            'data-testid="workshop-free-badge">Free</span>',
+            _workshop_card_html(response, 'open-card'),
+        )
+        self.assertIn(
+            'data-testid="workshop-free-badge">Free with sign-in</span>',
+            _workshop_card_html(response, 'registered-card'),
+        )
+        basic_card = _workshop_card_html(response, 'basic-card')
+        self.assertIn('data-testid="workshop-tier-badge"', basic_card)
+        self.assertIn('Basic or above', basic_card)
+        self.assertNotIn('data-testid="workshop-free-badge"', basic_card)
+        self.assertIn(
+            'Main or above', _workshop_card_html(response, 'main-card'),
+        )
+        self.assertIn(
+            'Premium', _workshop_card_html(response, 'premium-card'),
+        )
+
+    def test_catalog_card_deliverable_signals_are_conditional(self):
+        Workshop.objects.all().delete()
+        complete = _make_workshop(
+            slug='complete-signals',
+            title='Complete Signals',
+            with_event=True,
+            materials=[{'title': 'Slides', 'url': 'https://example.com/slides'}],
+            code_repo_url='https://github.com/example/workshop',
+            tags=['agents'],
+        )
+        _make_page(complete, 'intro', 'Intro', 1)
+        _make_workshop(
+            slug='no-signals',
+            title='No Signals',
+            description='',
+            instructor=None,
+            tags=[],
+            with_event=True,
+            recording_url='',
+            materials=[],
+            code_repo_url='',
+        )
+        workshop_materials = _make_workshop(
+            slug='workshop-materials',
+            title='Workshop Materials',
+            description='',
+            instructor=None,
+            tags=[],
+            with_event=False,
+            code_repo_url='',
+        )
+        workshop_materials.materials = [
+            {'title': 'Workbook', 'url': 'https://example.com/workbook'},
+        ]
+        workshop_materials.save()
+
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
+
+        complete_card = _workshop_card_html(response, 'complete-signals')
+        self.assertIn('data-testid="workshop-card-deliverables"', complete_card)
+        self.assertIn(
+            'data-testid="workshop-card-deliverable-pages"', complete_card,
+        )
+        self.assertIn(
+            'data-testid="workshop-card-deliverable-recording"',
+            complete_card,
+        )
+        self.assertIn(
+            'data-testid="workshop-card-deliverable-code"', complete_card,
+        )
+        self.assertIn(
+            'data-testid="workshop-card-deliverable-materials"',
+            complete_card,
+        )
+
+        no_signals_card = _workshop_card_html(response, 'no-signals')
+        self.assertIn('data-testid="workshop-card-link"', no_signals_card)
+        self.assertIn('No Signals', no_signals_card)
+        self.assertNotIn('data-testid="workshop-card-description"', no_signals_card)
+        self.assertNotIn('data-testid="workshop-card-instructor"', no_signals_card)
+        self.assertNotIn('data-testid="workshop-card-topics"', no_signals_card)
+        self.assertNotIn('data-testid="workshop-card-deliverables"', no_signals_card)
+        self.assertNotIn('Recording', no_signals_card)
+        self.assertNotIn('Code', no_signals_card)
+        self.assertNotIn('Materials', no_signals_card)
+
+        self.assertIn(
+            'data-testid="workshop-card-deliverable-materials"',
+            _workshop_card_html(response, 'workshop-materials'),
+        )
+
+    def test_catalog_card_topic_links_stay_outside_detail_anchor(self):
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
+        card = _workshop_card_html(response, 'one')
+
+        parser = _NestedAnchorParser()
+        parser.feed(card)
+
+        self.assertFalse(parser.found_nested_anchor)
+        self.assertIn('data-testid="workshop-card-link"', card)
+        self.assertIn('href="/workshops/one"', card)
+        self.assertIn('data-testid="workshop-card-tags"', card)
+        self.assertIn('href="/workshops/catalog?tag=python"', card)
 
     def test_catalog_links_to_landing(self):
         response = self.client.get(WORKSHOPS_CATALOG_URL)
@@ -624,6 +832,37 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'alt="Cover image for Visible Workshop"')
         self.assertContains(response, 'loading="lazy"')
         self.assertNotContains(response, 'data-testid="workshop-card-preview-fallback"')
+
+    def test_catalog_draft_metadata_does_not_leak_through_card_signals(self):
+        draft = _make_workshop(
+            slug='secret-draft',
+            title='Secret Draft Workshop',
+            status='draft',
+            with_event=True,
+            recording_url='https://example.com/secret-recording',
+            materials=[{
+                'title': 'Secret Event Slides',
+                'url': 'https://example.com/secret-event-slides',
+            }],
+            code_repo_url='https://github.com/example/secret-draft',
+            tags=['secret-draft-tag'],
+            instructor='Secret Instructor',
+        )
+        draft.materials = [{
+            'title': 'Secret Workbook',
+            'url': 'https://example.com/secret-workbook',
+        }]
+        draft.save()
+        _make_page(draft, 'secret-page', 'Secret Page', 1)
+
+        response = self.client.get(WORKSHOPS_CATALOG_URL)
+
+        self.assertNotContains(response, 'Secret Draft Workshop')
+        self.assertNotContains(response, 'secret-draft-tag')
+        self.assertNotContains(response, 'Secret Instructor')
+        self.assertNotContains(response, 'Secret Event Slides')
+        self.assertNotContains(response, 'Secret Workbook')
+        self.assertNotContains(response, 'https://github.com/example/secret-draft')
 
 
 class WorkshopCatalogAccessFilterTest(TierSetupMixin, TestCase):

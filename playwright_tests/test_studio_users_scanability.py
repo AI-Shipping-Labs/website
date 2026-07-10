@@ -24,9 +24,6 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
-from playwright_tests.conftest import (
-    settle_click,
-)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -124,7 +121,7 @@ class TestStudioUsersScanability:
         staff_email = "scanability-admin@test.com"
         _create_staff_user(staff_email)
         _clear_users_except_staff(staff_email)
-        email, user_pk = _seed_scanability_user()
+        email, _user_pk = _seed_scanability_user()
 
         context = _auth_context(browser, staff_email)
         page = context.new_page()
@@ -191,25 +188,15 @@ class TestStudioUsersScanability:
 
         row = page.locator("tbody tr", has_text=email).first
         view = row.locator('[data-testid="user-view-link"]')
-        login_as = row.get_by_role("button", name="Login as")
         assert view.is_visible()
-        assert login_as.is_visible()
-        assert login_as.evaluate(
+        assert row.get_by_role("button", name="Login as").count() == 0
+        assert view.evaluate(
             "node => window.getComputedStyle(node).whiteSpace === 'nowrap'"
         )
-        assert row.locator('form[method="post"]').get_attribute("action").endswith(
-            f"/studio/impersonate/{user_pk}/"
-        )
+        assert row.locator('form[method="post"]').count() == 0
         _assert_row_actions_fit(page, row)
         _assert_no_horizontal_overflow(page)
         _capture_screenshot(page, "users-1280px")
-
-        # Settle on the Login-as control before clicking with a load-tolerant
-        # budget (#903): the dense table can finish settling after the default
-        # click timeout on a contended shard.
-        settle_click(login_as)
-        page.wait_for_load_state("domcontentloaded")
-        assert page.url == f"{django_server}/"
         context.close()
 
     def test_users_list_is_usable_at_390px(self, django_server, browser):
@@ -236,16 +223,14 @@ class TestStudioUsersScanability:
         ).is_visible()
 
         view = row.locator('[data-testid="user-view-link"]')
-        login_as = row.get_by_role("button", name="Login as")
         assert view.is_visible()
-        assert login_as.is_visible()
-        for action in [view, login_as]:
-            box = action.bounding_box()
-            assert box is not None
-            assert box["x"] + box["width"] <= MOBILE_VIEWPORT["width"]
-            assert action.evaluate(
-                "node => window.getComputedStyle(node).whiteSpace === 'nowrap'"
-            )
+        assert row.get_by_role("button", name="Login as").count() == 0
+        box = view.bounding_box()
+        assert box is not None
+        assert box["x"] + box["width"] <= MOBILE_VIEWPORT["width"]
+        assert view.evaluate(
+            "node => window.getComputedStyle(node).whiteSpace === 'nowrap'"
+        )
 
         _assert_row_actions_fit(page, row)
         _assert_no_horizontal_overflow(page)

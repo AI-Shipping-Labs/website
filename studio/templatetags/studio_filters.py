@@ -421,6 +421,7 @@ def studio_sidebar_state(path):
         p == '/studio/users/'
         or p == '/studio/users/export'
         or '/studio/users/payment-mismatches' in p
+        or p == '/studio/tags/'
         or '/studio/imports/' in p
         or 'tier-override' in p
         or 'tier_override' in p
@@ -462,6 +463,7 @@ def studio_sidebar_state(path):
         or '/api-tokens' in p
         or '/triggers/' in p
     )
+    triggers_active = '/triggers/' in p
 
     # Events is the dashboard default (#576) — when no other section is
     # active, Events renders expanded so the admin lands on its primary
@@ -487,6 +489,7 @@ def studio_sidebar_state(path):
         'communication_active': communication_active,
         'tracking_active': tracking_active,
         'operations_active': operations_active,
+        'triggers_active': triggers_active,
     }
 
 

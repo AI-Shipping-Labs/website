@@ -336,9 +336,8 @@
     {# the inline edit form has been removed because Slack IDs are #}
     {# rarely edited and the form added persistent visual weight to a #}
     {# row that, in practice, is set once during Slack OAuth signup. #}
-    {# When the ID is missing we still surface a path forward via the #}
-    {# Django admin change page so operators are not stranded. The #}
-    {# studio_user_slack_id_set route stays defined for non-template #}
+    {# The contextual Django admin escape hatch lives in the action row. #}
+    {# The studio_user_slack_id_set route stays defined for non-template #}
     {# surfaces (Django admin / scripts). #}
     <div class="flex justify-between gap-4" data-testid="user-detail-slack-id-row">
       <dt class="text-muted-foreground inline-flex items-center gap-1"
@@ -363,11 +362,6 @@
           {% endif %}
         {% else %}
         <span class="text-xs text-muted-foreground" data-testid="user-detail-slack-id-empty">Not linked</span>
-        <a href="{{ django_admin_url }}"
-           data-testid="user-detail-slack-id-admin-link"
-           class="ml-2 inline-flex items-center text-xs text-accent hover:underline">
-          Edit in Django admin
-        </a>
         {% endif %}
       </dd>
     </div>

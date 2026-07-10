@@ -334,7 +334,7 @@ class HeaderStopImpersonatingButtonTest(TestCase):
 
 
 class UserListLoginAsButtonTest(TestCase):
-    """The 'Login as' button on /studio/users/ works for any User row."""
+    """The Users list no longer exposes high-frequency impersonation."""
 
     @classmethod
     def setUpTestData(cls):
@@ -350,34 +350,36 @@ class UserListLoginAsButtonTest(TestCase):
             unsubscribed=True,
         )
 
-    def test_login_as_button_present_for_subscriber_user(self):
-        """A subscriber-User shows a Login as button on the default chip."""
+    def test_login_as_button_absent_for_subscriber_user(self):
+        """A subscriber-User row only offers the View action."""
         self.client.login(email='admin@test.com', password='testpass')
         response = self.client.get('/studio/users/')
-        self.assertContains(
+        self.assertNotContains(
             response, f'/studio/impersonate/{self.subscriber_user.pk}/'
         )
 
-    def test_login_as_button_present_for_any_user(self):
-        """Login as also works for non-subscriber Users (was missing before #271)."""
+    def test_login_as_button_absent_for_any_user(self):
+        """Non-subscriber rows also avoid impersonation prompts."""
         self.client.login(email='admin@test.com', password='testpass')
         response = self.client.get('/studio/users/?filter=all')
-        self.assertContains(
+        self.assertNotContains(
             response, f'/studio/impersonate/{self.non_subscriber_user.pk}/'
         )
 
-    def test_login_as_button_stays_post_in_row_action_area(self):
-        """The list action remains a CSRF-protected POST form."""
+    def test_row_action_area_only_links_to_user_detail(self):
+        """The list action area keeps the normal View affordance only."""
         self.client.login(email='admin@test.com', password='testpass')
         response = self.client.get('/studio/users/?q=registered')
 
         self.assertContains(response, 'data-testid="user-row-actions"')
-        self.assertContains(response, 'method="post"')
+        self.assertContains(response, 'data-testid="user-view-link"')
         self.assertContains(
+            response, f'href="/studio/users/{self.subscriber_user.pk}/"'
+        )
+        self.assertNotContains(
             response, f'action="/studio/impersonate/{self.subscriber_user.pk}/"'
         )
-        self.assertContains(response, 'name="csrfmiddlewaretoken"')
-        self.assertContains(response, 'whitespace-nowrap')
+        self.assertNotContains(response, 'Login as</button>')
 
     def test_subscriber_filter_uses_user_newsletter_state(self):
         """The subscriber chip is backed by User.unsubscribed."""

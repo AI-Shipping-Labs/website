@@ -140,9 +140,7 @@ class TestStudioUserCrmOverview:
 
         # The explicit View action stays alongside the identity link.
         assert row.locator('[data-testid="user-view-link"]').is_visible()
-        # The login-as control is still a POST button (no GET regression).
-        login_as = row.get_by_role("button", name="Login as")
-        assert login_as.is_visible()
+        assert row.get_by_role("button", name="Login as").count() == 0
 
         _capture_screenshot(page, "users-list-1280px")
         identity_link.click()

@@ -197,20 +197,18 @@ class StudioUserDetailSlackIdRowTest(_SlackTeamIdSettingMixin, TestCase):
             unlinked_html,
         )
 
-    def test_unlinked_row_offers_django_admin_path(self):
-        # Issue #586: when the user has no Slack ID, the row shows
-        # "Not linked" plus an "Edit in Django admin" link so operators
-        # still have a one-click route to fix it.
+    def test_unlinked_row_does_not_offer_second_django_admin_path(self):
+        # Issue #1198: when the user has no Slack ID, the row says
+        # "Not linked"; the action-row admin link is the only escape hatch.
         response = self.client.get(f'/studio/users/{self.unlinked.pk}/')
         self.assertContains(response, 'data-testid="user-detail-slack-id-empty"')
-        self.assertContains(
+        self.assertNotContains(
             response, 'data-testid="user-detail-slack-id-admin-link"',
         )
-        self.assertContains(response, 'Edit in Django admin')
-        # The link points at the user's Django admin change page.
-        self.assertContains(
-            response,
-            f'href="/admin/accounts/user/{self.unlinked.pk}/change/"',
+        self.assertNotContains(response, 'Edit in Django admin')
+        self.assertEqual(
+            response.content.decode().count('data-testid="studio-open-in-admin"'),
+            1,
         )
 
     def test_linked_row_does_not_render_admin_edit_link(self):

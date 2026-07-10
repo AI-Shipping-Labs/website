@@ -247,7 +247,7 @@ from studio.views.sync import (
     sync_status,
     sync_trigger,
 )
-from studio.views.tags import tag_delete, tag_rename
+from studio.views.tags import tag_delete, tag_list, tag_rename
 from studio.views.tier_overrides import (
     studio_user_search,
     tier_override_page,
@@ -810,6 +810,7 @@ urlpatterns = [
     # Global contact-tag namespace operations (issue #694). Rename / delete
     # a tag across every user that carries it. Staff-only, POST-only. The
     # ``<str:name>`` segment is the already-normalized slug.
+    path('tags/', tag_list, name='studio_tag_list'),
     path('tags/<str:name>/rename', tag_rename, name='studio_tag_rename'),
     path('tags/<str:name>/delete', tag_delete, name='studio_tag_delete'),
     # Manual Slack ID edit (issue #561). POST-only; the GET surface lives

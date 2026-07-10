@@ -14,6 +14,7 @@ class RemoveTrailingSlashMiddleware:
     """
 
     SKIP_PREFIXES = ('/admin/', '/accounts/', '/account/', '/onboarding/', '/studio/', '/static/', '/media/')
+    FALLBACK_URL_NAME = 'marketing_page_fallback'
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -43,7 +44,12 @@ class RemoveTrailingSlashMiddleware:
         slash_path = f'{path}/'
         if not any(slash_path.startswith(prefix) for prefix in self.SKIP_PREFIXES):
             return False
-        return is_valid_path(slash_path, getattr(request, 'urlconf', None))
+        urlconf = getattr(request, 'urlconf', None)
+        path_match = is_valid_path(path, urlconf)
+        if path_match and path_match.url_name != self.FALLBACK_URL_NAME:
+            return False
+        slash_match = is_valid_path(slash_path, urlconf)
+        return bool(slash_match and slash_match.url_name != self.FALLBACK_URL_NAME)
 
 # --- Announcement banner cross-process cache -----------------------------
 # The banner singleton is read on every public page request, so we cache the

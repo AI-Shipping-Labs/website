@@ -48,3 +48,9 @@ class RemoveTrailingSlashMiddlewareTest(TestCase):
         response = self.client.get('/accounts/login')
         self.assertEqual(response.status_code, 301)
         self.assertEqual(response['Location'], '/accounts/login/')
+
+    def test_existing_studio_no_slash_route_passes_through(self):
+        """Slashless Studio routes must not be preempted by fallback repair."""
+        response = self.client.get('/studio/marketing-pages/new')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])

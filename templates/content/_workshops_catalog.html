@@ -193,7 +193,7 @@
               <span class="flex items-center gap-1.5" data-testid="workshop-card-date">
                 <i data-lucide="calendar" class="h-3.5 w-3.5 flex-shrink-0"></i>
                 <span class="font-medium text-foreground/80">Date</span>
-                <time datetime="{{ workshop.date|date:'Y-m-d' }}">{{ workshop.date|member_short_date }}</time>
+                <time datetime="{{ workshop.date|form_date_value }}">{{ workshop.date|member_short_date }}</time>
               </span>
             </div>
             {% if workshop.description_html %}

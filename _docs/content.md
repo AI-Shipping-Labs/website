@@ -302,7 +302,7 @@ intentionally clear synced hosts.
 
 `core_tools:` is an optional top-level list of tool or technology display names
 used in the public workshop catalog. The sync stores the ordered list on the
-workshop, shows it on cards and detail pages, and powers `/workshops?tool=...`
+workshop, shows it on cards and detail pages, and powers `/workshops/catalog?tool=...`
 filtering. Missing or empty `core_tools` is valid. When present, each item must
 be a string; blank entries are ignored and duplicate names are removed
 case-insensitively while keeping the first spelling.

@@ -168,6 +168,13 @@ class TestVisitorBrowsesCatalog:
             recording=0,
             tags=['agents'],
         )
+        _create_workshop(
+            slug='second-landing-ws',
+            title='Second Shipping Workshop',
+            pages=0,
+            recording=0,
+            tags=['python'],
+        )
 
         response = page.goto(
             f'{django_server}/workshops',
@@ -190,7 +197,7 @@ class TestVisitorBrowsesCatalog:
                     '[data-testid="workshops-landing"]'
                 );
                 const card = document.querySelector(
-                    '[data-testid="workshop-card"]'
+                    '[data-testid="workshops-preview"] [data-testid="workshop-card"]'
                 );
                 return Boolean(
                     landing && card &&
@@ -201,11 +208,15 @@ class TestVisitorBrowsesCatalog:
         )
 
         page.locator('[data-testid="browse-workshops-cta"]').click()
-        page.wait_for_function(
-            "() => window.location.hash === '#workshop-catalog'",
-        )
-        assert page.url.endswith('/workshops#workshop-catalog')
+        page.wait_for_url('**/workshops/catalog')
+        assert page.url.endswith('/workshops/catalog')
         assert page.locator('[data-testid="workshop-catalog"]').is_visible()
+        assert page.locator('[data-testid="workshops-landing"]').count() == 0
+        assert page.locator('[data-testid="workshop-access-filter-all"]').is_visible()
+        assert page.locator('article:has(a[href="/workshops/landing-ws"])').is_visible()
+        assert page.locator(
+            'article:has(a[href="/workshops/second-landing-ws"])',
+        ).is_visible()
 
         card = page.locator('article:has(a[href="/workshops/landing-ws"])')
         assert card.is_visible()
@@ -225,7 +236,10 @@ class TestVisitorBrowsesCatalog:
         ensure_tiers()
         _create_workshop()
 
-        page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
+        page.goto(
+            f'{django_server}/workshops',
+            wait_until='domcontentloaded',
+        )
         page.locator('[data-testid="view-membership-options-cta"]').click()
         page.wait_for_load_state('domcontentloaded')
 
@@ -238,7 +252,7 @@ class TestVisitorBrowsesCatalog:
         }
         assert found_tiers == expected_tiers
 
-    def test_filtered_catalog_keeps_landing_and_clear_path(
+    def test_filtered_catalog_clear_path_stays_on_catalog_route(
         self, django_server, page,
     ):
         _clear_workshops()
@@ -258,11 +272,11 @@ class TestVisitorBrowsesCatalog:
         )
 
         page.goto(
-            f'{django_server}/workshops?tag=agents',
+            f'{django_server}/workshops/catalog?tag=agents',
             wait_until='domcontentloaded',
         )
 
-        assert page.locator('[data-testid="workshops-landing"]').is_visible()
+        assert page.locator('[data-testid="workshops-landing"]').count() == 0
         assert page.locator('[data-testid="workshop-catalog"]').is_visible()
         assert page.locator('[data-testid="workshop-active-filters"]').is_visible()
         assert 'agents' in page.locator(
@@ -272,11 +286,11 @@ class TestVisitorBrowsesCatalog:
         assert 'Python Workshop' not in page.content()
 
         clear_link = page.locator('[data-testid="clear-workshop-filter"]')
-        assert clear_link.get_attribute('href') == '/workshops'
+        assert clear_link.get_attribute('href') == '/workshops/catalog'
         clear_link.click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert page.url.endswith('/workshops')
+        assert page.url.endswith('/workshops/catalog')
         body = page.content()
         assert 'Agent Workshop' in body
         assert 'Python Workshop' in body
@@ -317,12 +331,12 @@ class TestVisitorBrowsesCatalog:
         )
 
         response = page.goto(
-            f'{django_server}/workshops',
+            f'{django_server}/workshops/catalog',
             wait_until='domcontentloaded',
         )
         assert response is not None and response.status == 200
 
-        assert page.locator('[data-testid="workshops-landing"]').is_visible()
+        assert page.locator('[data-testid="workshops-landing"]').count() == 0
         assert page.locator('[data-testid="workshop-catalog"]').is_visible()
         topics = page.locator('[data-testid="workshop-topic-browser"]')
         assert topics.is_visible()
@@ -342,7 +356,7 @@ class TestVisitorBrowsesCatalog:
         page.locator('[data-testid="workshop-topic-option-agents"]').click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert page.url.endswith('/workshops?tag=agents')
+        assert page.url.endswith('/workshops/catalog?tag=agents')
         agents_topic = page.locator('[data-testid="workshop-topic-option-agents"]')
         assert agents_topic.get_attribute('aria-current') == 'page'
         agents_body = page.content()
@@ -353,7 +367,7 @@ class TestVisitorBrowsesCatalog:
         page.locator('[data-testid="workshop-topic-option-rag"]').click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert page.url.endswith('/workshops?tag=agents&tag=rag')
+        assert page.url.endswith('/workshops/catalog?tag=agents&tag=rag')
         narrowed_body = page.content()
         assert 'Agents RAG Systems' in narrowed_body
         assert 'Agents Debugging' not in narrowed_body
@@ -368,11 +382,11 @@ class TestVisitorBrowsesCatalog:
             '[data-testid="workshop-active-tag"]',
             has_text='rag',
         )
-        assert rag_filter.get_attribute('href') == '/workshops?tag=agents'
+        assert rag_filter.get_attribute('href') == '/workshops/catalog?tag=agents'
         rag_filter.click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert page.url.endswith('/workshops?tag=agents')
+        assert page.url.endswith('/workshops/catalog?tag=agents')
         expanded_body = page.content()
         assert 'Agents RAG Systems' in expanded_body
         assert 'Agents Debugging' in expanded_body
@@ -420,7 +434,10 @@ class TestVisitorBrowsesCatalog:
             tags=['agents'],
         )
 
-        page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
+        page.goto(
+            f'{django_server}/workshops/catalog',
+            wait_until='domcontentloaded',
+        )
 
         all_filter = page.locator('[data-testid="workshop-access-filter-all"]')
         assert all_filter.get_attribute('aria-current') == 'page'
@@ -433,7 +450,7 @@ class TestVisitorBrowsesCatalog:
         page.locator('[data-testid="workshop-access-filter-free"]').click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert page.url.endswith('/workshops?access=free')
+        assert page.url.endswith('/workshops/catalog?access=free')
         free_filter = page.locator('[data-testid="workshop-access-filter-free"]')
         assert free_filter.get_attribute('aria-current') == 'page'
 
@@ -481,23 +498,25 @@ class TestVisitorBrowsesCatalog:
         )
 
         page.goto(
-            f'{django_server}/workshops?access=free&tag=agents',
+            f'{django_server}/workshops/catalog?access=free&tag=agents',
             wait_until='domcontentloaded',
         )
 
         paid_filter = page.locator('[data-testid="workshop-access-filter-paid"]')
-        assert paid_filter.get_attribute('href') == '/workshops?access=paid&tag=agents'
+        assert paid_filter.get_attribute('href') == (
+            '/workshops/catalog?access=paid&tag=agents'
+        )
         paid_filter.click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert page.url.endswith('/workshops?access=paid&tag=agents')
+        assert page.url.endswith('/workshops/catalog?access=paid&tag=agents')
         paid_agents_body = page.content()
         assert 'Paid Agents Workshop' in paid_agents_body
         assert 'Free Agents Workshop' not in paid_agents_body
         assert 'Paid Python Workshop' not in paid_agents_body
 
         page.goto(
-            f'{django_server}/workshops?access=paid',
+            f'{django_server}/workshops/catalog?access=paid',
             wait_until='domcontentloaded',
         )
         paid_python_card = page.locator(
@@ -505,6 +524,9 @@ class TestVisitorBrowsesCatalog:
         )
         python_tag = paid_python_card.locator(
             '[data-testid="workshop-card-tags"] a:has-text("python")',
+        )
+        assert python_tag.get_attribute('href') == (
+            '/workshops/catalog?access=paid&tag=python'
         )
         assert python_tag.is_visible()
         assert python_tag.evaluate(
@@ -518,11 +540,10 @@ class TestVisitorBrowsesCatalog:
         assert tag_box['y'] + tag_box['height'] <= (
             card_box['y'] + card_box['height'] + 1
         )
-        assert python_tag.get_attribute('href') == '/workshops?access=paid&tag=python'
         python_tag.click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert page.url.endswith('/workshops?access=paid&tag=python')
+        assert page.url.endswith('/workshops/catalog?access=paid&tag=python')
         python_body = page.content()
         assert 'Paid Python Workshop' in python_body
         assert 'Paid Agents Workshop' not in python_body
@@ -531,18 +552,20 @@ class TestVisitorBrowsesCatalog:
         )
 
         active_tag = page.locator('[data-testid="workshop-active-tag"]')
-        assert active_tag.get_attribute('href') == '/workshops?access=paid'
+        assert active_tag.get_attribute('href') == (
+            '/workshops/catalog?access=paid'
+        )
         active_tag.click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert page.url.endswith('/workshops?access=paid')
+        assert page.url.endswith('/workshops/catalog?access=paid')
 
         clear_link = page.locator('[data-testid="clear-workshop-filter"]')
-        assert clear_link.get_attribute('href') == '/workshops'
+        assert clear_link.get_attribute('href') == '/workshops/catalog'
         clear_link.click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert page.url.endswith('/workshops')
+        assert page.url.endswith('/workshops/catalog')
 
     @pytest.mark.core
     def test_visitor_filters_by_tool_and_opens_matching_workshop(
@@ -573,7 +596,10 @@ class TestVisitorBrowsesCatalog:
             tags=['agents'],
         )
 
-        page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
+        page.goto(
+            f'{django_server}/workshops/catalog',
+            wait_until='domcontentloaded',
+        )
 
         claude_card = page.locator(
             'article:has(a[href="/workshops/claude-agents"])',
@@ -590,7 +616,7 @@ class TestVisitorBrowsesCatalog:
         ).click()
         page.wait_for_load_state('domcontentloaded')
 
-        assert page.url.endswith('/workshops?tool=Claude%20Code')
+        assert page.url.endswith('/workshops/catalog?tool=Claude%20Code')
         body = page.content()
         assert 'Claude Agents Workshop' in body
         assert 'LangChain Agents Workshop' not in body
@@ -626,7 +652,10 @@ class TestVisitorBrowsesCatalog:
             cover_image_url='https://example.com/workshop-cover.jpg',
         )
 
-        page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
+        page.goto(
+            f'{django_server}/workshops/catalog',
+            wait_until='domcontentloaded',
+        )
         body = page.content()
 
         # Catalog renders the workshop card with title, instructor, date,
@@ -699,7 +728,10 @@ class TestVisitorBrowsesCatalog:
         )
 
         page.set_viewport_size({'width': 320, 'height': 844})
-        page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
+        page.goto(
+            f'{django_server}/workshops/catalog',
+            wait_until='domcontentloaded',
+        )
 
         assert page.evaluate(
             '() => document.documentElement.scrollWidth <= '
@@ -763,7 +795,10 @@ class TestWorkshopSkillFilters:
             tags=['architecture'],
         )
 
-        page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
+        page.goto(
+            f'{django_server}/workshops/catalog',
+            wait_until='domcontentloaded',
+        )
         beginner_card = page.locator(
             'article:has(a[href="/workshops/beginner-main"])',
         )
@@ -821,7 +856,7 @@ class TestWorkshopSkillFilters:
         )
 
         page.goto(
-            f'{django_server}/workshops?tag=agents&skill_level=beginner',
+            f'{django_server}/workshops/catalog?tag=agents&skill_level=beginner',
             wait_until='domcontentloaded',
         )
 
@@ -829,7 +864,7 @@ class TestWorkshopSkillFilters:
         advanced_href = page.locator(
             '[data-testid="workshop-skill-filter-advanced"]',
         ).get_attribute('href')
-        assert advanced_href == '/workshops?skill_level=advanced&tag=agents'
+        assert advanced_href == '/workshops/catalog?skill_level=advanced&tag=agents'
 
         page.locator('[data-testid="workshop-skill-filter-advanced"]').click()
         page.wait_for_load_state('domcontentloaded')
@@ -1233,7 +1268,7 @@ class TestDraftWorkshopHidden:
             slug='draft-ws', title='Hidden Draft Workshop', status='draft',
         )
 
-        page.goto(f'{django_server}/workshops')
+        page.goto(f'{django_server}/workshops/catalog')
         # 'Hidden' alone collides with Tailwind's `hidden` utility class —
         # use a workshop-specific phrase that wouldn't appear elsewhere.
         assert 'Hidden Draft Workshop' not in page.content()

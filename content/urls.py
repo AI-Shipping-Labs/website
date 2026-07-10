@@ -57,6 +57,7 @@ from content.views.workshops import (
     workshop_detail,
     workshop_page_detail,
     workshop_video,
+    workshops_catalog,
     workshops_list,
 )
 
@@ -102,6 +103,7 @@ urlpatterns = [
     # a published workshop; malformed, draft, unknown, or date-mismatched
     # dated links return 404.
     path('workshops', workshops_list, name='workshops_list'),
+    path('workshops/catalog', workshops_catalog, name='workshops_catalog'),
     re_path(
         r'^workshops/(?P<date_slug>\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*)$',
         legacy_workshop_detail_redirect,

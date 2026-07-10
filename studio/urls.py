@@ -123,6 +123,7 @@ from studio.views.events import (
     event_registrations_csv,
     event_send_followup,
 )
+from studio.views.global_search import global_search
 from studio.views.hosts import host_create, host_edit, host_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
 from studio.views.marketing_pages import (
@@ -317,6 +318,7 @@ from studio.views.workshops import (
 urlpatterns = [
     # Dashboard
     path('', dashboard, name='studio_dashboard'),
+    path('api/global-search/', global_search, name='studio_global_search'),
 
     # Courses
     path('courses/', course_list, name='studio_course_list'),

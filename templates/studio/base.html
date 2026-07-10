@@ -678,6 +678,28 @@ double-rendering. See issue #347.
       or the flash will render twice on the same page.
       {% endcomment %}
       {% include "_partials/messages.html" %}
+      <div class="relative mb-5 max-w-3xl" data-studio-global-search data-search-endpoint="{% url 'studio_global_search' %}">
+        <label for="studio-global-search-input" class="sr-only">Search Studio</label>
+        <div class="relative">
+          <i data-lucide="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"></i>
+          <input id="studio-global-search-input"
+                 type="search"
+                 class="h-11 w-full rounded-lg border border-border bg-card pl-9 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                 placeholder="Search users, content, events, campaigns"
+                 autocomplete="off"
+                 role="combobox"
+                 aria-expanded="false"
+                 aria-controls="studio-global-search-results"
+                 data-studio-global-search-input
+                 data-testid="studio-global-search-input">
+          <span class="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 text-xs text-muted-foreground md:block">/</span>
+        </div>
+        <div id="studio-global-search-results"
+             class="absolute z-30 mt-2 hidden max-h-[70vh] w-[min(48rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+             role="listbox"
+             data-studio-global-search-results
+             data-testid="studio-global-search-results"></div>
+      </div>
       {% block studio_content %}{% endblock %}
     </div>
   </main>
@@ -821,6 +843,211 @@ double-rendering. See issue #347.
     });
   });
 
+})();
+
+(function() {
+  var groupLabels = {
+    users: 'Users',
+    content: 'Content',
+    events: 'Events',
+    campaigns: 'Campaigns'
+  };
+  var groupOrder = ['users', 'content', 'events', 'campaigns'];
+
+  function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, function(char) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[char];
+    });
+  }
+
+  function parseGroups(root) {
+    var value = root.getAttribute('data-search-groups');
+    if (!value) {
+      return groupOrder;
+    }
+    return value.split(',').map(function(group) {
+      return group.trim();
+    }).filter(Boolean);
+  }
+
+  function setupStudioSearch(root) {
+    var endpoint = root.getAttribute('data-search-endpoint');
+    var input = root.querySelector('[data-studio-global-search-input]');
+    var results = root.querySelector('[data-studio-global-search-results]');
+    var allowedGroups = parseGroups(root);
+    var activeIndex = -1;
+    var activeItems = [];
+    var requestToken = 0;
+
+    if (!endpoint || !input || !results) {
+      return;
+    }
+
+    function setExpanded(expanded) {
+      input.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      results.classList.toggle('hidden', !expanded);
+    }
+
+    function renderMessage(message) {
+      activeIndex = -1;
+      activeItems = [];
+      results.innerHTML = '<p class="px-3 py-3 text-sm text-muted-foreground">' + escapeHtml(message) + '</p>';
+      setExpanded(true);
+    }
+
+    function updateActive() {
+      activeItems.forEach(function(item, index) {
+        item.classList.toggle('bg-secondary', index === activeIndex);
+        item.setAttribute('aria-selected', index === activeIndex ? 'true' : 'false');
+      });
+      if (activeIndex >= 0 && activeItems[activeIndex]) {
+        activeItems[activeIndex].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    function navigate(item) {
+      var url = item && item.getAttribute('data-result-url');
+      if (url) {
+        window.location.href = url;
+      }
+    }
+
+    function renderResults(payload) {
+      var groups = payload.results || {};
+      var html = '';
+      var total = 0;
+
+      allowedGroups.forEach(function(group) {
+        var items = groups[group] || [];
+        if (!items.length) {
+          return;
+        }
+        total += items.length;
+        html += '<section class="border-b border-border last:border-b-0">';
+        html += '<h3 class="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">' + escapeHtml(groupLabels[group] || group) + '</h3>';
+        html += '<div class="pb-2">';
+        items.forEach(function(item) {
+          html += '<button type="button" role="option" aria-selected="false" class="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-secondary" data-studio-search-result data-result-url="' + escapeHtml(item.url) + '">';
+          html += '<span class="mt-0.5 rounded border border-border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">' + escapeHtml(item.type) + '</span>';
+          html += '<span class="min-w-0 flex-1">';
+          html += '<span class="block truncate text-sm font-medium text-foreground">' + escapeHtml(item.label) + '</span>';
+          html += '<span class="block truncate text-xs text-muted-foreground">' + escapeHtml(item.summary) + '</span>';
+          if (item.metadata) {
+            html += '<span class="block truncate text-xs text-muted-foreground/80">' + escapeHtml(item.metadata) + '</span>';
+          }
+          html += '</span></button>';
+        });
+        html += '</div></section>';
+      });
+
+      if (!total) {
+        renderMessage('No results');
+        return;
+      }
+
+      activeIndex = -1;
+      results.innerHTML = html;
+      activeItems = Array.prototype.slice.call(results.querySelectorAll('[data-studio-search-result]'));
+      activeItems.forEach(function(item) {
+        item.addEventListener('mousedown', function(event) {
+          event.preventDefault();
+        });
+        item.addEventListener('click', function() {
+          navigate(item);
+        });
+      });
+      setExpanded(true);
+    }
+
+    function search() {
+      var query = input.value.trim();
+      var token = requestToken + 1;
+      requestToken = token;
+
+      if (query.length < 2) {
+        renderMessage('Keep typing');
+        return;
+      }
+
+      fetch(endpoint + '?q=' + encodeURIComponent(query), {
+        headers: { 'Accept': 'application/json' },
+        credentials: 'same-origin'
+      })
+        .then(function(response) {
+          if (!response.ok) {
+            throw new Error('Search request failed');
+          }
+          return response.json();
+        })
+        .then(function(payload) {
+          if (token === requestToken) {
+            renderResults(payload);
+          }
+        })
+        .catch(function() {
+          if (token === requestToken) {
+            renderMessage('Search unavailable');
+          }
+        });
+    }
+
+    input.addEventListener('input', search);
+    input.addEventListener('focus', function() {
+      if (input.value.trim().length < 2) {
+        renderMessage('Keep typing');
+      } else if (results.innerHTML) {
+        setExpanded(true);
+      }
+    });
+    input.addEventListener('keydown', function(event) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        if (!activeItems.length) { return; }
+        activeIndex = Math.min(activeIndex + 1, activeItems.length - 1);
+        updateActive();
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!activeItems.length) { return; }
+        activeIndex = Math.max(activeIndex - 1, 0);
+        updateActive();
+      } else if (event.key === 'Enter') {
+        if (activeIndex >= 0 && activeItems[activeIndex]) {
+          event.preventDefault();
+          navigate(activeItems[activeIndex]);
+        }
+      } else if (event.key === 'Escape') {
+        setExpanded(false);
+      }
+    });
+    document.addEventListener('mousedown', function(event) {
+      if (!root.contains(event.target)) {
+        setExpanded(false);
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-studio-global-search]').forEach(setupStudioSearch);
+
+  document.addEventListener('keydown', function(event) {
+    if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) {
+      return;
+    }
+    var target = event.target;
+    if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) {
+      return;
+    }
+    var input = document.querySelector('[data-testid="studio-global-search-input"]');
+    if (input) {
+      event.preventDefault();
+      input.focus();
+    }
+  });
 })();
 </script>
 {% endblock %}

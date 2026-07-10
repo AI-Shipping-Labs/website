@@ -103,6 +103,7 @@ from api.views.redirects import (
     redirects_collection,
 )
 from api.views.ses_events_list import ses_events_dispatch
+from api.views.signup_analytics import signup_analytics_report
 from api.views.sprints import (
     sprint_accountability_partners,
     sprint_accountability_randomize,
@@ -361,6 +362,12 @@ urlpatterns = [
         "utm-campaigns/<int:campaign_id>",
         utm_campaign_detail,
         name="api_utm_campaign_detail",
+    ),
+    # ---- Signup analytics (issue #1175) --------------------------------
+    path(
+        "signup-analytics",
+        signup_analytics_report,
+        name="api_signup_analytics",
     ),
     # ---- Contacts (issue #431) ----------------------------------------
     path(

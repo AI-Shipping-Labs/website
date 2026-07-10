@@ -202,7 +202,83 @@
   {% endif %}
 </div>
 
-{# ---- Section 7: recent signups ---- #}
+{# ---- Section 7: actionable sources ---- #}
+<div class="mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-3">Actionable sources</h2>
+  {% if actionable_source_rows %}
+  <div class="bg-card border border-border rounded-lg overflow-x-auto">
+    <table class="w-full" data-testid="signup-analytics-actionable-source-table">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Source</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Kind</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Signups</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">% share</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Top signup path</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Top landing path</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in actionable_source_rows %}
+        <tr class="hover:bg-secondary/50 transition-colors">
+          <td class="px-4 py-3 text-sm text-foreground">
+            {% if row.has_campaign %}
+              <a href="{% url 'studio_utm_campaign_analytics' campaign_slug=row.campaign_slug %}?range={{ filters.range_key }}"
+                 class="text-accent hover:underline" data-testid="actionable-source-campaign-drill-link"
+                 title="Opens UTM campaign analytics for {{ row.campaign_slug }}">{{ row.label }}</a>
+            {% else %}
+              {{ row.label }}
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.kind }}</td>
+          <td class="px-4 py-3 text-sm text-foreground text-right font-medium">{{ row.n }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground text-right">{{ row.pct }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.top_signup_path_label }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.top_landing_path }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No signups in this range.</p>
+  {% endif %}
+</div>
+
+{# ---- Section 8: pre-signup activity ---- #}
+<div class="mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-3">Pre-signup activity</h2>
+  {% if pre_signup_activity_rows %}
+  <div class="bg-card border border-border rounded-lg overflow-x-auto">
+    <table class="w-full" data-testid="signup-analytics-activity-table">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Category</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Path</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Signups</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tracked visits</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Top source</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in pre_signup_activity_rows %}
+        <tr class="hover:bg-secondary/50 transition-colors">
+          <td class="px-4 py-3 text-sm text-foreground">{{ row.category }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.path }}</td>
+          <td class="px-4 py-3 text-sm text-foreground text-right font-medium">{{ row.distinct_signup_count }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground text-right">{{ row.total_tracked_visits }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.top_actionable_source }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No tracked pre-signup visits.</p>
+  {% endif %}
+</div>
+
+{# ---- Section 9: recent signups ---- #}
 <div class="mb-8">
   <h2 class="text-lg font-semibold text-foreground mb-3">Recent signups</h2>
   {% if recent_signups %}
@@ -211,12 +287,12 @@
       <thead class="bg-secondary">
         <tr>
           <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actionable source</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">First landing path</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Last pre-signup path</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Visits</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Top categories</th>
           <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Signup path</th>
-          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">First-touch UTM source</th>
-          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">First-touch UTM campaign</th>
-          {% if recent_has_referrer %}
-          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Referrer source</th>
-          {% endif %}
           <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Signed up</th>
         </tr>
       </thead>
@@ -230,12 +306,12 @@
               <span class="text-muted-foreground">(deleted)</span>
             {% endif %}
           </td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.actionable_source_label }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.first_tracked_landing_path }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.last_tracked_pre_signup_path }}</td>
+          <td class="px-4 py-3 text-sm text-foreground text-right font-medium">{{ row.tracked_visit_count }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.top_categories_label }}</td>
           <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.get_signup_path_display }}</td>
-          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.first_touch_utm_source|default:"—" }}</td>
-          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.first_touch_utm_campaign|default:"—" }}</td>
-          {% if recent_has_referrer %}
-          <td class="px-4 py-3 text-sm text-muted-foreground">{{ row.first_touch_referrer_source|default:"—" }}</td>
-          {% endif %}
           <td class="px-4 py-3 text-sm text-muted-foreground text-right" title="{{ row.created_at|operator_datetime_tz }}">{{ row.created_at|timesince }} ago</td>
         </tr>
         {% endfor %}

@@ -27,7 +27,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
-from analytics.models import UserAttribution
+from analytics.models import CampaignVisit, UserAttribution
 from integrations.models import UtmCampaign
 from studio.templatetags.studio_filters import studio_sidebar_state
 
@@ -51,8 +51,9 @@ def _user_login(client, email='free@test.com'):
 
 
 def _make_attribution(*, email, signup_path='email_password',
-                      first_source='', first_campaign='', created_at=None,
-                      first_ts=None):
+                      first_source='', first_medium='', first_campaign='',
+                      first_campaign_obj=None, created_at=None, first_ts=None,
+                      anonymous_id='', referrer_host='', referrer_source=''):
     """Create a User + matching UserAttribution row.
 
     The ``post_save`` signal already creates a blank UserAttribution row
@@ -63,7 +64,12 @@ def _make_attribution(*, email, signup_path='email_password',
     attr, _ = UserAttribution.objects.get_or_create(user=user)
     attr.signup_path = signup_path
     attr.first_touch_utm_source = first_source
+    attr.first_touch_utm_medium = first_medium
     attr.first_touch_utm_campaign = first_campaign
+    attr.first_touch_campaign = first_campaign_obj
+    attr.anonymous_id = anonymous_id
+    attr.first_touch_referrer_host = referrer_host
+    attr.first_touch_referrer_source = referrer_source
     if first_ts:
         attr.first_touch_ts = first_ts
     attr.save()
@@ -73,6 +79,20 @@ def _make_attribution(*, email, signup_path='email_password',
         UserAttribution.objects.filter(pk=attr.pk).update(created_at=created_at)
         attr.refresh_from_db()
     return user, attr
+
+
+def _make_visit(*, anonymous_id, path, ts, source='newsletter',
+                medium='email', campaign='launch'):
+    visit = CampaignVisit.objects.create(
+        anonymous_id=anonymous_id,
+        path=path,
+        utm_source=source,
+        utm_medium=medium,
+        utm_campaign=campaign,
+    )
+    CampaignVisit.objects.filter(pk=visit.pk).update(ts=ts)
+    visit.refresh_from_db()
+    return visit
 
 
 # ---------------------------------------------------------------------------
@@ -552,7 +572,172 @@ class SignupAnalyticsCampaignsTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Section 7 — recent signups
+# Section 7 / 8 — actionable source and pre-signup activity (#1175)
+# ---------------------------------------------------------------------------
+
+class SignupAnalyticsActionableSourceTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='pw', is_staff=True,
+        )
+        UserAttribution.objects.filter(user=cls.staff).delete()
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='pw')
+
+    def test_actionable_source_priority_and_campaign_link(self):
+        now = timezone.now()
+        campaign = UtmCampaign.objects.create(
+            name='Spring Launch',
+            slug='spring_launch',
+            default_utm_source='newsletter',
+            default_utm_medium='email',
+        )
+        _make_attribution(
+            email='campaign@test.com',
+            first_campaign='spring_launch',
+            first_campaign_obj=campaign,
+            created_at=now - timedelta(hours=1),
+            anonymous_id='anon-campaign',
+        )
+        _make_visit(
+            anonymous_id='anon-campaign',
+            path='/pricing',
+            ts=now - timedelta(hours=2),
+            campaign='spring_launch',
+        )
+        external_code = 'external_launch_code'
+        _make_attribution(
+            email='external@test.com',
+            first_campaign=external_code,
+            created_at=now - timedelta(hours=1),
+        )
+        _make_attribution(
+            email='source@test.com',
+            first_source='linkedin',
+            first_medium='social',
+            created_at=now - timedelta(hours=1),
+        )
+        _make_attribution(
+            email='referrer@test.com',
+            referrer_host='youtube.com',
+            referrer_source='youtube',
+            created_at=now - timedelta(hours=1),
+        )
+        _make_attribution(
+            email='direct@test.com',
+            created_at=now - timedelta(hours=1),
+        )
+
+        response = self.client.get('/studio/signup-analytics/')
+        rows = {
+            row['label']: row
+            for row in response.context['actionable_source_rows']
+        }
+        self.assertEqual(
+            rows['Spring Launch (spring_launch)']['kind'],
+            'campaign',
+        )
+        self.assertTrue(rows['Spring Launch (spring_launch)']['has_campaign'])
+        self.assertEqual(rows[external_code]['kind'], 'utm')
+        self.assertEqual(rows['linkedin / social']['kind'], 'utm')
+        self.assertEqual(rows['YouTube (youtube.com)']['kind'], 'referrer')
+        self.assertEqual(rows['direct / no tracked source']['kind'], 'direct')
+        self.assertEqual(
+            rows['Spring Launch (spring_launch)']['top_landing_path'],
+            '/pricing',
+        )
+        self.assertContains(
+            response,
+            'data-testid="signup-analytics-actionable-source-table"',
+        )
+        self.assertContains(
+            response,
+            'href="/studio/utm-analytics/campaign/spring_launch/?range=7d"',
+        )
+
+
+class SignupAnalyticsPreSignupActivityTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='pw', is_staff=True,
+        )
+        UserAttribution.objects.filter(user=cls.staff).delete()
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='pw')
+
+    def test_activity_counts_matching_pre_signup_visits_only(self):
+        now = timezone.now()
+        _make_attribution(
+            email='one@test.com',
+            first_source='newsletter',
+            first_medium='email',
+            anonymous_id='anon-one',
+            created_at=now - timedelta(hours=1),
+        )
+        _make_attribution(
+            email='two@test.com',
+            first_source='newsletter',
+            first_medium='email',
+            anonymous_id='anon-two',
+            created_at=now - timedelta(hours=1),
+        )
+        _make_visit(
+            anonymous_id='anon-one',
+            path='/blog/source-attribution',
+            ts=now - timedelta(hours=3),
+        )
+        _make_visit(
+            anonymous_id='anon-one',
+            path='/pricing',
+            ts=now - timedelta(hours=2),
+        )
+        _make_visit(
+            anonymous_id='anon-one',
+            path='/events/after-signup',
+            ts=now,
+        )
+        _make_visit(
+            anonymous_id='anon-two',
+            path='/blog/source-attribution',
+            ts=now - timedelta(hours=2),
+        )
+        _make_visit(
+            anonymous_id='other-anon',
+            path='/pricing',
+            ts=now - timedelta(hours=2),
+        )
+
+        response = self.client.get('/studio/signup-analytics/')
+        rows = {
+            row['path']: row
+            for row in response.context['pre_signup_activity_rows']
+        }
+        self.assertEqual(rows['/blog/source-attribution']['category'], 'Blog')
+        self.assertEqual(
+            rows['/blog/source-attribution']['distinct_signup_count'],
+            2,
+        )
+        self.assertEqual(
+            rows['/blog/source-attribution']['total_tracked_visits'],
+            2,
+        )
+        self.assertEqual(rows['/pricing']['category'], 'Pricing')
+        self.assertEqual(rows['/pricing']['distinct_signup_count'], 1)
+        self.assertNotIn('/events/after-signup', rows)
+        self.assertContains(
+            response,
+            'data-testid="signup-analytics-activity-table"',
+        )
+
+
+# ---------------------------------------------------------------------------
+# Section 9 — recent signups
 # ---------------------------------------------------------------------------
 
 class SignupAnalyticsRecentTest(TestCase):
@@ -618,6 +803,101 @@ class SignupAnalyticsRecentTest(TestCase):
 
         response = self.client.get(f'/studio/users/{user.id}/')
         self.assertEqual(response.status_code, 200)
+
+    def test_recent_rows_include_inline_journey_context_and_fallbacks(self):
+        now = timezone.now()
+        _make_attribution(
+            email='journey@test.com',
+            first_source='linkedin',
+            first_medium='social',
+            anonymous_id='anon-journey',
+            created_at=now - timedelta(hours=1),
+        )
+        _make_visit(
+            anonymous_id='anon-journey',
+            path='/pricing',
+            ts=now - timedelta(hours=4),
+        )
+        _make_visit(
+            anonymous_id='anon-journey',
+            path='/blog/first',
+            ts=now - timedelta(hours=3),
+        )
+        _make_visit(
+            anonymous_id='anon-journey',
+            path='/blog/second',
+            ts=now - timedelta(hours=2),
+        )
+        _make_attribution(
+            email='fallback@test.com',
+            created_at=now - timedelta(minutes=30),
+        )
+
+        response = self.client.get('/studio/signup-analytics/')
+        rows = {
+            row.user.email: row
+            for row in response.context['recent_signups']
+        }
+        journey = rows['journey@test.com']
+        self.assertEqual(journey.actionable_source_label, 'linkedin / social')
+        self.assertEqual(journey.first_tracked_landing_path, '/pricing')
+        self.assertEqual(journey.last_tracked_pre_signup_path, '/blog/second')
+        self.assertEqual(journey.tracked_visit_count, 3)
+        self.assertEqual(journey.top_categories_label, 'Blog')
+        fallback = rows['fallback@test.com']
+        self.assertEqual(
+            fallback.actionable_source_label,
+            'direct / no tracked source',
+        )
+        self.assertEqual(
+            fallback.first_tracked_landing_path,
+            'No tracked pre-signup visits',
+        )
+        self.assertContains(response, 'linkedin / social')
+        self.assertContains(response, 'No tracked pre-signup visits')
+
+    def test_new_sections_respect_signup_path_filter(self):
+        now = timezone.now()
+        _make_attribution(
+            email='google@test.com',
+            signup_path='google_oauth',
+            first_source='google',
+            first_medium='oauth',
+            anonymous_id='anon-google',
+            created_at=now - timedelta(hours=1),
+        )
+        _make_visit(
+            anonymous_id='anon-google',
+            path='/courses/ai-agents',
+            ts=now - timedelta(hours=2),
+        )
+        _make_attribution(
+            email='email@test.com',
+            signup_path='email_password',
+            first_source='newsletter',
+            first_medium='email',
+            anonymous_id='anon-email',
+            created_at=now - timedelta(hours=1),
+        )
+        _make_visit(
+            anonymous_id='anon-email',
+            path='/pricing',
+            ts=now - timedelta(hours=2),
+        )
+
+        response = self.client.get(
+            '/studio/signup-analytics/?signup_path=google_oauth',
+        )
+        self.assertEqual(response.context['window_total'], 1)
+        self.assertEqual(
+            response.context['actionable_source_rows'][0]['label'],
+            'google / oauth',
+        )
+        activity_paths = {
+            row['path']
+            for row in response.context['pre_signup_activity_rows']
+        }
+        self.assertEqual(activity_paths, {'/courses/ai-agents'})
 
 
 # ---------------------------------------------------------------------------
@@ -826,6 +1106,7 @@ class SignupAnalyticsPaginationTest(TestCase):
         view_queries = [
             q for q in ctx.captured_queries
             if 'analytics_userattribution' in q['sql']
+            or 'analytics_campaignvisit' in q['sql']
             or 'integrations_utmcampaign' in q['sql']
         ]
         self.assertLess(
@@ -919,16 +1200,12 @@ class SignupAnalyticsQueryBudgetTest(TestCase):
     def test_default_render_under_ten_view_queries(self):
         """Dashboard issues fewer than 10 view-side queries.
 
-        We measure queries that target ``analytics_userattribution`` and
-        ``integrations_utmcampaign`` (the two tables the view reads from
-        directly). Framework queries (session, user, redirects, integration
-        settings, the email-verification-banner context processor) are
-        added by middleware and the base template, not the dashboard view,
-        and don't scale with seeded data — those are excluded from the
-        budget. The view itself should issue around 5 queries: 1 headline
-        aggregate, 1 signup_path breakdown, 1 UTM source breakdown, 1 UTM
-        campaign breakdown (with ``Exists`` so no separate UtmCampaign
-        lookup), and 1 recent signups select_related.
+        We measure queries that target ``analytics_userattribution``,
+        ``analytics_campaignvisit``, and ``integrations_utmcampaign``.
+        Framework queries (session, user, redirects, integration settings,
+        the email-verification-banner context processor) are added by
+        middleware and the base template, not the dashboard view, and don't
+        scale with seeded data; those are excluded from the budget.
         """
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
@@ -938,12 +1215,47 @@ class SignupAnalyticsQueryBudgetTest(TestCase):
         view_queries = [
             q for q in ctx.captured_queries
             if 'analytics_userattribution' in q['sql']
+            or 'analytics_campaignvisit' in q['sql']
             or 'integrations_utmcampaign' in q['sql']
         ]
         self.assertLess(
             len(view_queries), 10,
             msg=f'Expected <10 view queries, got {len(view_queries)}: '
                 + '\n---\n'.join(q['sql'] for q in view_queries),
+        )
+
+    def test_visit_journey_query_count_does_not_scale_per_recent_row(self):
+        """Pre-signup journeys are fetched in bulk, not per signup row."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        now = timezone.now()
+        for i in range(30):
+            _make_attribution(
+                email=f'journey-{i}@test.com',
+                first_source='newsletter',
+                first_medium='email',
+                anonymous_id=f'anon-budget-{i}',
+                created_at=now - timedelta(hours=1),
+            )
+            _make_visit(
+                anonymous_id=f'anon-budget-{i}',
+                path='/pricing',
+                ts=now - timedelta(hours=2),
+            )
+
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get('/studio/signup-analytics/')
+            self.assertEqual(response.status_code, 200)
+
+        visit_queries = [
+            q for q in ctx.captured_queries
+            if 'analytics_campaignvisit' in q['sql']
+        ]
+        self.assertLessEqual(
+            len(visit_queries),
+            1,
+            msg='Expected one bulk CampaignVisit query, got: '
+                + '\n---\n'.join(q['sql'] for q in visit_queries),
         )
 
     def test_total_query_count_does_not_scale_with_attribution_rows(self):

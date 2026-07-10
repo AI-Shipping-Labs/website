@@ -2,7 +2,7 @@
 name: tester
 description: Reviews software engineer's uncommitted work against specs and acceptance criteria. Gives concrete feedback. Approves before commit.
 tools: Read, Edit, Write, Bash, Glob, Grep
-model: opus
+model: opus-4.8
 ---
 
 # Tester Agent

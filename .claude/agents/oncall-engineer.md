@@ -2,7 +2,7 @@
 name: oncall-engineer
 description: Monitors CI/CD after push. If pipeline fails, identifies the related GitHub issue from commit messages, reopens it, fixes the code, and closes it again.
 tools: Read, Edit, Write, Bash, Glob, Grep
-model: opus
+model: opus-4.8
 ---
 
 # On-Call Engineer Agent

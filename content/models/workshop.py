@@ -292,10 +292,11 @@ class Workshop(
     def clean(self):
         """Validate the three-gate chain landing <= pages <= recording."""
         super().clean()
-        try:
-            self.skill_level = normalize_workshop_skill_level(self.skill_level)
-        except ValueError as exc:
-            raise ValidationError({'skill_level': str(exc)}) from exc
+        if 'skill_level' in self.__dict__:
+            try:
+                self.skill_level = normalize_workshop_skill_level(self.skill_level)
+            except ValueError as exc:
+                raise ValidationError({'skill_level': str(exc)}) from exc
         if self.landing_required_level > self.pages_required_level:
             raise ValidationError({
                 'landing_required_level': (
@@ -316,10 +317,11 @@ class Workshop(
         from content.utils.tags import normalize_tags
 
         self.tags = normalize_tags(self.tags)
-        try:
-            self.skill_level = normalize_workshop_skill_level(self.skill_level)
-        except ValueError as exc:
-            raise ValidationError({'skill_level': str(exc)}) from exc
+        if 'skill_level' in self.__dict__:
+            try:
+                self.skill_level = normalize_workshop_skill_level(self.skill_level)
+            except ValueError as exc:
+                raise ValidationError({'skill_level': str(exc)}) from exc
 
         # Validate gate ordering on every save so both admin and sync go
         # through the same invariant. ValidationError is the Django

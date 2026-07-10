@@ -239,7 +239,13 @@ def test_mobile_public_nav_accordions_keep_existing_aria_and_links(
 
         expected = {
             "about": ["About", "Team", "FAQ"],
-            "community": ["Community", "Membership", "Community Sprints", "Events"],
+            "community": [
+                "Overview",
+                "Membership",
+                "Activities",
+                "Community Sprints",
+                "Events",
+            ],
             "resources": [
                 "Blog",
                 "Courses",

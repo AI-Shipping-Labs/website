@@ -1,18 +1,76 @@
-"""Community member-facing views.
-
-Currently a single gated redirect endpoint (issue #953) that hands an
-eligible Main/Premium member into the Slack workspace without ever
-exposing the raw ``SLACK_INVITE_URL`` to ineligible users. Mirrors the
-``event_join_redirect`` pattern in ``events/views/pages.py``.
-"""
+"""Community member-facing views."""
 
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
+from django.http import Http404
 from django.shortcuts import redirect, render
 
 from analytics.activity import record_activity
 from analytics.models import UserActivity
 from content.access import LEVEL_MAIN, get_user_level
+from events.models import Event
+from events.services.time_windows import past_window_q
 from integrations.config import get_config
+
+COMMUNITY_LAUNCH_TITLE = 'AI Shipping Labs Community Launch'
+COMMUNITY_LAUNCH_SLUGS = (
+    'ai-shipping-labs-community-launch',
+    'community-launch',
+)
+
+
+def _published_launch_recap_events():
+    return (
+        Event.objects
+        .filter(
+            Q(slug__in=COMMUNITY_LAUNCH_SLUGS)
+            | Q(title__iexact=COMMUNITY_LAUNCH_TITLE),
+            published=True,
+            status='completed',
+        )
+        .filter(past_window_q())
+        .exclude(recap_html='')
+    )
+
+
+def _first_event_with_rendered_recap(queryset):
+    for event in queryset:
+        if (event.recap_html or '').strip():
+            return event
+    return None
+
+
+def _resolve_community_launch_event():
+    """Return the synced Community Launch event recap or raise 404."""
+    base = _published_launch_recap_events()
+
+    slug_match = _first_event_with_rendered_recap(
+        base.filter(slug__in=COMMUNITY_LAUNCH_SLUGS).order_by(
+            '-start_datetime',
+            '-pk',
+        )
+    )
+    if slug_match is not None:
+        return slug_match
+
+    title_match = _first_event_with_rendered_recap(
+        base.filter(title__iexact=COMMUNITY_LAUNCH_TITLE).order_by(
+            '-start_datetime',
+            '-pk',
+        )
+    )
+    if title_match is not None:
+        return title_match
+
+    raise Http404('Community launch recap not found.')
+
+
+def community_landing(request):
+    """Public landing page for the synced Community Launch recap."""
+    event = _resolve_community_launch_event()
+    return render(request, 'community/community_landing.html', {
+        'event': event,
+    })
 
 
 @login_required

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}AI Shipping Labs Community Launch | AI Shipping Labs{% endblock %}
+{% block meta_description %}Read the AI Shipping Labs Community Launch recap and see how builders use the community to ship AI projects, subscribe for updates, and compare membership tiers.{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{% url 'community_landing' %}">{% endblock %}
+{% block og_tags %}
+<meta property="og:title" content="AI Shipping Labs Community Launch">
+<meta property="og:description" content="Read the AI Shipping Labs Community Launch recap and see how builders use the community to ship AI projects.">
+<meta property="og:url" content="{{ site_url }}{% url 'community_landing' %}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="AI Shipping Labs">
+<meta property="og:image" content="{{ site_url }}{% static 'ai-shipping-labs.jpg' %}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="AI Shipping Labs community">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="AI Shipping Labs Community Launch">
+<meta name="twitter:description" content="Read the AI Shipping Labs Community Launch recap and see how builders use the community to ship AI projects.">
+<meta name="twitter:image" content="{{ site_url }}{% static 'ai-shipping-labs.jpg' %}">
+{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24" data-testid="community-landing-page">
+  <section class="border-b border-border bg-background">
+    <div class="mx-auto grid max-w-7xl gap-10 px-5 py-10 sm:px-6 sm:py-14 lg:grid-cols-[minmax(0,1fr)_minmax(280px,420px)] lg:items-center lg:px-8 lg:py-20">
+      <div>
+        <p class="text-sm font-medium uppercase text-accent">Community launch recap</p>
+        <h1 class="mt-4 text-3xl font-semibold sm:text-5xl" data-testid="community-landing-heading">
+          AI Shipping Labs Community Launch
+        </h1>
+        <p class="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
+          The launch story for a membership community where builders learn AI engineering by shipping real projects together.
+        </p>
+        <div class="mt-8 flex flex-wrap gap-3" data-testid="community-landing-ctas">
+          <a href="/subscribe"
+             class="inline-flex min-h-[44px] items-center justify-center rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+             data-testid="community-landing-subscribe-cta">Subscribe for updates</a>
+          <a href="/register"
+             class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+             data-testid="community-landing-register-cta">Register free</a>
+          <a href="/pricing"
+             class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+             data-testid="community-landing-pricing-cta">Compare tiers</a>
+        </div>
+      </div>
+      <figure class="overflow-hidden rounded-lg border border-border bg-card" data-testid="community-landing-visual">
+        <img src="{% if event.cover_image_url %}{{ event.cover_image_url }}{% else %}{% static 'ai-shipping-labs.jpg' %}{% endif %}"
+             alt="AI Shipping Labs community"
+             class="h-full min-h-56 w-full object-cover">
+      </figure>
+    </div>
+  </section>
+
+  <section class="py-10 sm:py-14 lg:py-20" aria-labelledby="community-launch-recap-heading">
+    <div class="mx-auto max-w-4xl px-5 sm:px-6 lg:px-8">
+      <h2 id="community-launch-recap-heading" class="sr-only">Community launch recap</h2>
+      <div class="event-recap prose max-w-none" data-testid="community-recap-content">
+        {{ event.recap_html|safe }}
+      </div>
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

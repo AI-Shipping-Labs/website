@@ -43,9 +43,9 @@
 <div class="min-w-0 pb-24 md:pb-0">
 {% if event %}
 {% if is_synced %}
-{% include "studio/includes/sticky_action_bar.html" with form_id="event-edit-form" obj=event title="Event operational fields" subtitle="Source content is read-only; status and delivery settings can still be updated." can_save=True primary_label="Save Operational Fields" cancel_url=event_cancel_url %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="event-edit-form" obj=event title="Event operational fields" subtitle="Source content is read-only; status and delivery settings can still be updated." can_save=True primary_label="Save Operational Fields" cancel_url=event_cancel_url show_save_status=True save_status=save_status clean_status_label="No unsaved changes" %}
 {% else %}
-{% include "studio/includes/sticky_action_bar.html" with form_id="event-edit-form" obj=event title="Event changes" subtitle="Save remains available while you review the long form." can_save=True primary_label="Save Changes" cancel_url=event_cancel_url %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="event-edit-form" obj=event title="Event changes" subtitle="Full-page POST save; changes are saved when you press Save." can_save=True primary_label="Save Changes" cancel_url=event_cancel_url show_save_status=True save_status=save_status clean_status_label="No unsaved changes" %}
 {% endif %}
 {% endif %}
 

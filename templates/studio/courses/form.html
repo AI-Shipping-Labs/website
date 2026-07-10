@@ -54,7 +54,7 @@
 {% if is_synced %}
 {% include "studio/includes/sticky_action_bar.html" with form_id="course-edit-form" obj=course title="Source-managed course" subtitle="Edit source content in GitHub, then re-sync." can_save=False primary_label="Save Changes" cancel_url=course_cancel_url github_edit_url=github_edit_url docs_url="https://github.com/AI-Shipping-Labs/website/blob/main/_docs/course_yaml.md" docs_label="Course YAML guide" %}
 {% else %}
-{% include "studio/includes/sticky_action_bar.html" with form_id="course-edit-form" obj=course title="Course changes" subtitle="Save remains available while you review the long form." can_save=True primary_label="Save Changes" cancel_url=course_cancel_url %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="course-edit-form" obj=course title="Course changes" subtitle="Full-page POST save; changes are saved when you press Save." can_save=True primary_label="Save Changes" cancel_url=course_cancel_url show_save_status=True save_status=save_status clean_status_label="No unsaved changes" %}
 {% endif %}
 
 <form id="course-edit-form" method="post" class="space-y-6">

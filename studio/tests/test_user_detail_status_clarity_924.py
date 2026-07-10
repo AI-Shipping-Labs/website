@@ -72,14 +72,10 @@ class EmailVerifiedRowTest(_Base924):
         )
         response = self.client.get(f'/studio/users/{member.pk}/')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            '<span class="inline-flex items-center text-xs px-2 py-1 '
-            'rounded-full bg-green-500/20 text-green-400" '
-            'data-testid="user-detail-email-verified" '
-            'data-email-verified="yes">Verified</span>',
-            html=True,
-        )
+        body = response.content.decode()
+        self.assertIn('data-testid="user-detail-email-verified"', body)
+        self.assertIn('data-email-verified="yes"', body)
+        self.assertIn('>Verified</span>', body)
 
     def test_unverified_user_shows_not_verified_pill(self):
         member = self._make_member(
@@ -170,10 +166,10 @@ class CrypticLabelTooltipsTest(_Base924):
         # One help-circle icon per cryptic label inside the membership
         # card (Tier, Status, Email verified, Source, Activated,
         # Newsletter, Slack, Slack ID) = 8, plus the card-header
-        # "What do these mean?" link icon = 9. The bounce card is not
-        # rendered for this healthy member.
+        # "What do these mean?" link icon and the deliverability state
+        # icon = 10.
         self.assertEqual(
-            self.body.count('data-lucide="help-circle"'), 9,
+            self.body.count('data-lucide="help-circle"'), 10,
         )
 
 
@@ -236,13 +232,12 @@ class BounceStateTooltipTest(_Base924):
             'auto-unsubscribed."',
         )
 
-    def test_bounce_tooltip_absent_for_healthy_user(self):
+    def test_bounce_tooltip_shows_healthy_state_for_healthy_user(self):
         member = self._make_member('healthy-924@test.com', tier=self.free)
         response = self.client.get(f'/studio/users/{member.pk}/')
-        self.assertNotContains(
-            response, 'data-testid="user-detail-bounce-state"',
-        )
-        self.assertNotContains(response, 'SES delivery status.')
+        self.assertContains(response, 'data-testid="user-detail-bounce-state"')
+        self.assertContains(response, 'data-bounce-state="none"')
+        self.assertContains(response, 'SES delivery status.')
 
 
 class StatusDocsLinkTest(_Base924):

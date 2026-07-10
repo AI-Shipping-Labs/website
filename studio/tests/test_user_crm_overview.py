@@ -202,11 +202,12 @@ class UserDetailSectionsTest(TestCase):
 
 
 class UserDetailNoPlansOrNotesInlineTest(TestCase):
-    """Issue #560: plans and notes are gone from the user profile.
+    """Issue #560: legacy inline plans and notes are gone from the profile.
 
-    All relationship-rich data now lives on the CRM record page. These
-    tests pin the absence so a regression that re-adds the inline
-    sections gets caught.
+    Relationship-rich narrative data lives on the CRM record page. The
+    profile may still expose compact operational context, such as the
+    Plans & sprints table, but must not re-add the old inline plans or
+    notes sections.
     """
 
     @classmethod
@@ -232,10 +233,9 @@ class UserDetailNoPlansOrNotesInlineTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="user-detail-plans-section"')
         self.assertNotContains(response, 'Sprints &amp; plans')
-        # The specific plan-detail link for this member's plan must
-        # not appear on the profile (the sidebar's /studio/plans/
-        # list link does, which is fine).
-        self.assertNotContains(response, f'/studio/plans/{plan.pk}/')
+        self.assertContains(response, 'data-testid="user-plans-sprints-section"')
+        self.assertContains(response, f'href="/studio/plans/{plan.pk}/"')
+        self.assertContains(response, 'data-testid="user-plan-link"')
 
     def test_user_profile_omits_member_notes_section_even_when_notes_exist(self):
         InterviewNote.objects.create(

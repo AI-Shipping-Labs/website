@@ -1,5 +1,7 @@
 """Template tags for tag filtering on listing pages."""
 
+from urllib.parse import quote, urlencode
+
 from django import template
 
 register = template.Library()
@@ -71,11 +73,20 @@ def _build_url(base_path, tags, extra_params=None):
     params = []
     if extra_params:
         if isinstance(extra_params, dict):
-            for key, val in extra_params.items():
-                if val:
-                    params.append(f'{key}={val}')
+            extra_items = extra_params.items()
+        else:
+            extra_items = extra_params
+        for key, val in extra_items:
+            if val in (None, ''):
+                continue
+            if isinstance(val, (list, tuple)):
+                for item in val:
+                    if item not in (None, ''):
+                        params.append((key, item))
+            else:
+                params.append((key, val))
     for tag in tags:
-        params.append(f'tag={tag}')
+        params.append(('tag', tag))
     if params:
-        return f'{base_path}?{"&".join(params)}'
+        return f'{base_path}?{urlencode(params, doseq=True, quote_via=quote)}'
     return base_path

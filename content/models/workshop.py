@@ -194,6 +194,15 @@ class Workshop(
             'membership access gates.'
         ),
     )
+    core_tools = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            'Ordered list of tool/technology display names authored in '
+            'workshop.yaml under `core_tools:`. Used for public workshop '
+            'catalog filtering.'
+        ),
+    )
     cover_image_url = models.URLField(max_length=500, blank=True, default='')
     auto_banner_url = models.URLField(
         max_length=500, blank=True, default='',

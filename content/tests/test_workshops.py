@@ -165,6 +165,26 @@ class WorkshopModelValidationTest(TierSetupMixin, TestCase):
         self.assertEqual(ws.skill_level_label, '')
         self.assertEqual(ws.skill_level_description, '')
 
+    def test_core_tools_defaults_to_empty_list(self):
+        ws = Workshop.objects.create(
+            slug='core-tools-default',
+            title='Core Tools Default',
+            date=date(2026, 4, 21),
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+        other = Workshop.objects.create(
+            slug='core-tools-default-other',
+            title='Core Tools Default Other',
+            date=date(2026, 4, 22),
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+
+        self.assertEqual(ws.core_tools, [])
+        self.assertEqual(other.core_tools, [])
+        self.assertIsNot(ws.core_tools, other.core_tools)
+
     def test_skill_level_vocabulary_labels_and_descriptions(self):
         self.assertEqual(
             get_workshop_skill_level_label(SKILL_LEVEL_BEGINNER),

@@ -128,6 +128,41 @@ def _validate_workshop_materials(raw, yaml_rel_path):
     return cleaned
 
 
+def _validate_workshop_core_tools(raw, yaml_rel_path):
+    """Validate workshop ``core_tools:`` and return normalized display names.
+
+    Missing, empty, or blank-only lists are valid and normalize to ``[]``.
+    Non-list values and non-string list items fail closed so malformed
+    metadata is visible in sync errors instead of silently landing in the
+    public filter surface.
+    """
+    if raw in (None, ''):
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(
+            f'workshop.yaml `core_tools:` must be a list of strings, got '
+            f'{type(raw).__name__} ({yaml_rel_path}).'
+        )
+
+    cleaned = []
+    seen = set()
+    for idx, item in enumerate(raw):
+        if not isinstance(item, str):
+            raise ValueError(
+                f'workshop.yaml `core_tools[{idx}]` must be a string, got '
+                f'{type(item).__name__} ({yaml_rel_path}).'
+            )
+        tool = item.strip()
+        if not tool:
+            continue
+        key = tool.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(tool)
+    return cleaned
+
+
 def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
                         known_images=None, cross_workshop_lookup=None,
                         workshops_repo_name=None):
@@ -342,6 +377,10 @@ def _sync_single_workshop(
             data.get('materials'), yaml_rel_path,
         )
 
+        core_tools = _validate_workshop_core_tools(
+            data.get('core_tools'), yaml_rel_path,
+        )
+
         # Issue #304: build the page lookup once and reuse it for the
         # landing-description copy_file resolution AND the per-page
         # rewriting in _sync_workshop_pages. The lookup includes virtual
@@ -379,6 +418,7 @@ def _sync_single_workshop(
             'date': workshop_date,
             'tags': data.get('tags', []) or [],
             'skill_level': skill_level,
+            'core_tools': core_tools,
             'cover_image_url': cover_image_url,
             'status': 'published',
             'landing_required_level': landing_required_level,

@@ -279,6 +279,10 @@ skill_level: beginner
 instructor_name: Alexey Grigorev
 hosts:
   - alexey-grigorev
+core_tools:
+  - Claude Code
+  - OpenAI API
+  - Django
 recording:
   url: https://www.youtube.com/watch?v=...
   required_level: 0
@@ -295,6 +299,13 @@ workshop explicitly linked to a Studio-origin event keeps the hosts managed in
 Studio/API. If `hosts:` is omitted, sync falls back to `instructor_name` by
 slugifying the name and matching an existing `Host.slug`. Use `hosts: []` to
 intentionally clear synced hosts.
+
+`core_tools:` is an optional top-level list of tool or technology display names
+used in the public workshop catalog. The sync stores the ordered list on the
+workshop, shows it on cards and detail pages, and powers `/workshops?tool=...`
+filtering. Missing or empty `core_tools` is valid. When present, each item must
+be a string; blank entries are ignored and duplicate names are removed
+case-insensitively while keeping the first spelling.
 
 ### Recording
 

@@ -78,6 +78,23 @@
           {% endif %}
         </dd>
       </div>
+      <div class="md:col-span-2" data-testid="studio-workshop-core-tools">
+        <dt class="text-muted-foreground">
+          Tools &amp; technologies
+          <span class="ml-2 inline-block text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">From workshop.yaml</span>
+        </dt>
+        <dd class="text-foreground mt-2">
+          {% if workshop.core_tools %}
+            <div class="flex flex-wrap gap-1.5">
+              {% for tool in workshop.core_tools %}
+              <span class="inline-block text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground">{{ tool }}</span>
+              {% endfor %}
+            </div>
+          {% else %}
+            &mdash;
+          {% endif %}
+        </dd>
+      </div>
       {% if workshop.cover_image_url %}
       <div class="md:col-span-2">
         <dt class="text-muted-foreground">Cover image</dt>

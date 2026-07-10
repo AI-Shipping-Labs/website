@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% load access_tags %}
+{% load accounts_extras %}
+{% load member_empty_state %}
 {% load tag_filters %}
 {% load teaser_tags %}
 
@@ -168,17 +169,12 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="rounded-lg border border-border bg-card p-12 text-center">
-        <i data-lucide="download" class="mx-auto h-12 w-12 text-muted-foreground"></i>
-        <p class="mt-4 text-lg text-muted-foreground">
-          {% if selected_tags %}
-          No downloads found with the selected tags.
-          <a href="/downloads" class="text-accent hover:underline">View all downloads</a>
-          {% else %}
-          No downloadable resources yet. Check back soon.
-          {% endif %}
-        </p>
-      </div>
+        {% if selected_tags %}
+          {% button_classes 'secondary' as downloads_empty_cta_classes %}
+          {% member_empty_state title='No downloads found' body='No downloads found with the selected tags.' icon='download' kind='filter' primary_cta_label='View all downloads' primary_cta_url='/downloads' primary_cta_icon='arrow-right' primary_cta_class=downloads_empty_cta_classes %}
+        {% else %}
+          {% member_empty_state title='No downloads yet' body='No downloadable resources yet. Check back soon.' icon='download' kind='fresh' %}
+        {% endif %}
       {% endif %}
     </div>
   </section>

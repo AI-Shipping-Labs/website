@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load access_tags %}
+{% load member_badges %}
 
 {% block title %}Events Calendar - {{ month_name }} {{ year }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}Monthly calendar view of scheduled AI Shipping Labs live community events and registration opportunities.{% endblock %}
@@ -107,10 +107,7 @@
             <a href="{{ event.get_absolute_url }}" class="block rounded-lg border border-border bg-secondary/50 p-3 hover:border-accent/50 transition-colors">
               <div class="flex items-center gap-2 mb-1 flex-wrap">
                 {% if event.required_level > 0 %}
-                <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent">
-                  <i data-lucide="lock" class="h-3 w-3"></i>
-                  {{ event.required_level|required_tier_label }}
-                </span>
+                {% member_tier_badge event.required_level tone="accent_strong" icon="lock" %}
                 {% endif %}
               </div>
               <div class="font-medium text-foreground">{{ event.title }}</div>
@@ -145,10 +142,7 @@
               <a href="{{ event.get_absolute_url }}" class="block rounded-lg border border-border bg-card p-4 hover:border-accent/50 transition-colors">
                 <div class="flex items-center gap-2 mb-2 flex-wrap">
                   {% if event.required_level > 0 %}
-                  <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent">
-                    <i data-lucide="lock" class="h-3 w-3"></i>
-                    {{ event.required_level|required_tier_label }}
-                  </span>
+                  {% member_tier_badge event.required_level tone="accent_strong" icon="lock" %}
                   {% endif %}
                 </div>
                 <div class="font-medium text-foreground">{{ event.title }}</div>

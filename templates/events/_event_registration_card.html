@@ -31,6 +31,16 @@
     </div>
   </div>
 </div>
+{% elif event.is_upcoming and not user.is_authenticated and event.required_level > 0 %}
+{% with event_next=event.get_absolute_url|urlencode %}
+{% with gated_heading="This event is for "|add:required_tier_name|add:" members" signin_url="/accounts/login/?next="|add:event_next %}
+  {% include "content/_gated_access_card.html" with gated_card_testid="event-anonymous-cta" gated_icon="lock" gated_heading=gated_heading gated_description="Membership is required before you can register for this event." required_tier_name=required_tier_name gated_extra_partial="events/_event_freestyle_evidence.html" gated_cta_url="/pricing" gated_cta_label="View membership options" gated_cta_testid="event-anonymous-pricing-cta" signup_cta_url=signin_url signup_cta_label="Sign in" signup_cta_testid="event-anonymous-signin-cta" %}
+{% endwith %}
+{% endwith %}
+{% elif event.is_upcoming and user.is_authenticated and not has_access and gated_reason != "unverified_email" %}
+{% with gated_heading="Upgrade to "|add:required_tier_name|add:" to attend" %}
+  {% include "content/_gated_access_card.html" with gated_card_testid="event-registration-card" gated_icon="lock" gated_heading=gated_heading gated_description="Membership is required before you can register for this event." required_tier_name=required_tier_name gated_extra_partial="events/_event_freestyle_evidence.html" gated_cta_url="/pricing" gated_cta_label="View Pricing" gated_cta_testid="event-under-tier-pricing-cta" %}
+{% endwith %}
 {% elif event.is_upcoming %}
 <div class="mb-12 rounded-lg border border-border bg-card p-6" data-testid="event-registration-card">
   {% if anon_registered_email %}
@@ -101,53 +111,9 @@
           to register.
         </p>
       </div>
-    {% else %}
-      <div class="text-center" data-testid="event-anonymous-cta">
-        <p class="text-lg font-semibold text-foreground">This event is for {{ required_tier_name }} members</p>
-        <p class="mt-2 text-sm text-muted-foreground" data-testid="event-anonymous-cta-body">
-          {% if required_tier_name == "Premium" %}
-          Registering for this event requires a Premium membership.
-          {% else %}
-          Registering for this event requires a {{ required_tier_name }} membership or above.
-          {% endif %}
-        </p>
-        {% include "events/_event_freestyle_evidence.html" %}
-        <div class="mt-4 flex flex-wrap items-center justify-center gap-3">
-          <a href="/pricing"
-             class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-             data-testid="event-anonymous-pricing-cta">
-            View membership options
-          </a>
-          <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}"
-             class="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
-             data-testid="event-anonymous-signin-cta">
-            Sign in
-          </a>
-        </div>
-      </div>
     {% endif %}
   {% elif not has_access and gated_reason == "unverified_email" %}
     {% include "content/_verify_email_required.html" %}
-  {% elif not has_access %}
-    <div class="text-center">
-      <div class="mb-4">
-        <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
-      </div>
-      <p class="text-lg font-semibold text-foreground">Upgrade to {{ required_tier_name }} to attend</p>
-      <p class="mt-2 text-sm text-muted-foreground" data-testid="event-required-tier-label">
-        {% if required_tier_name == "Premium" %}
-        Registering for this event requires a Premium membership.
-        {% else %}
-        Registering for this event requires a {{ required_tier_name }} membership or above.
-        {% endif %}
-      </p>
-      {% include "events/_event_freestyle_evidence.html" %}
-      <a href="/pricing"
-         class="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-        <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-        View Pricing
-      </a>
-    </div>
   {% elif is_effectively_registered %}
     {% comment %}
       Issue #1077: the registered block renders for both per-occurrence

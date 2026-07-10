@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load member_badges %}
 {% load sprint_extras %}
 
 {% block title %}Activities and Community Sprints | AI Shipping Labs{% endblock %}
@@ -220,12 +221,8 @@
             <article class="rounded-lg border border-border bg-card p-5 shadow-sm sm:p-6" data-testid="activities-sprint-card">
               <div class="space-y-5">
                 <div class="flex flex-wrap items-center gap-2">
-                  <span class="inline-flex items-center rounded-full border border-border px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="activities-sprint-status">
-                    {{ item.sprint.get_status_display }}
-                  </span>
-                  <span class="inline-flex items-center rounded-full bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent" data-testid="activities-sprint-tier">
-                    Membership: {{ item.required_tier_name }}
-                  </span>
+                  {% member_status_badge item.sprint.get_status_display size="sm" uppercase=True testid="activities-sprint-status" %}
+                  {% member_tier_badge item.required_tier_level tone="accent_strong" size="sm" icon="lock" testid="activities-sprint-tier" %}
                 </div>
                 <h2 class="text-xl font-semibold text-foreground" data-testid="activities-sprint-name">{{ item.sprint.name }}</h2>
                 <dl class="space-y-3 text-sm text-muted-foreground" data-testid="activities-sprint-facts">

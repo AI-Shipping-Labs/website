@@ -311,8 +311,8 @@ class TestAnonymousPaidEventCopy:
 
         # Heading names the tier.
         assert "This event is for Main members" in card_text
-        # Body sentence names the tier and links to pricing.
-        assert "requires a Main membership or above" in card_text
+        # Shared gated-card pill names the canonical tier requirement.
+        assert "Main or above required" in card_text
         # The misleading old copy is gone.
         assert "free account" not in card_text.lower()
         assert "create a free account" not in card_text.lower()
@@ -454,17 +454,15 @@ class TestAnonymousPaidEventCopy:
         card_text = card.inner_text()
 
         assert "This event is for Premium members" in card_text
-        assert "requires a Premium membership" in card_text
+        assert "Premium required" in card_text
         # The "or above" suffix must be dropped for Premium.
         assert "Premium membership or above" not in card_text
 
 
 @pytest.mark.django_db(transaction=True)
 class TestUnderTierCopyConsistency:
-    """Issue #671: authenticated user under the required tier sees the
-    same phrasing as the anonymous-on-paid CTA — "Registering for this
-    event requires a {tier} membership or above." and the Premium case
-    drops "or above".
+    """Authenticated users under the required tier see the shared gated
+    card and the canonical required-tier pill.
     """
 
     @pytest.mark.core
@@ -494,11 +492,7 @@ class TestUnderTierCopyConsistency:
 
         # Heading: upgrade to the named tier.
         assert "Upgrade to Main to attend" in card_text
-        # Body: same "Registering for this event requires…" phrasing as
-        # the anonymous-on-paid CTA.
-        assert (
-            "requires a Main membership or above" in card_text
-        )
+        assert "Main or above required" in card_text
         # "free account" must not appear anywhere in the under-tier card.
         assert "free account" not in card_text.lower()
 
@@ -535,7 +529,7 @@ class TestUnderTierCopyConsistency:
         card_text = card.inner_text()
 
         assert "Upgrade to Premium to attend" in card_text
-        assert "requires a Premium membership" in card_text
+        assert "Premium required" in card_text
         # No double-up: Premium is highest, so "or above" must be dropped.
         assert "Premium membership or above" not in card_text
         context.close()

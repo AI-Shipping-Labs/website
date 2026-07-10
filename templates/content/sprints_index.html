@@ -40,9 +40,7 @@
                   <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                       {% member_status_badge item.sprint.sprint_badge_current.label size="sm" extra_class=item.sprint.sprint_badge_current.css_class uppercase=True testid="sprints-sprint-status" %}
-                      {% with tier_label="Membership: "|add:item.required_tier_name %}
-                      {% member_label_badge tier_label tone="accent_strong" size="sm" testid="sprints-sprint-tier" %}
-                      {% endwith %}
+                      {% member_tier_badge item.required_tier_level tone="accent_strong" size="sm" icon="lock" testid="sprints-sprint-tier" %}
                     </div>
                     <h3 class="mt-4 text-xl font-semibold text-foreground" data-testid="sprints-sprint-name">
                       <a href="{% url 'sprint_detail' sprint_slug=item.sprint.slug %}" class="hover:text-accent">{{ item.sprint.name }}</a>

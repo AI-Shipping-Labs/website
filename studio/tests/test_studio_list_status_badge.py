@@ -102,7 +102,7 @@ class StudioStatusBadgePaletteTest(TestCase):
 
         self.assertEqual(
             STATUS_BADGE_CLASSES['active'],
-            'bg-green-500/20 text-green-400',
+            'bg-green-500/20 text-green-700 dark:text-green-300',
         )
         self.assertEqual(
             STATUS_BADGE_CLASSES['archived'],
@@ -110,9 +110,45 @@ class StudioStatusBadgePaletteTest(TestCase):
         )
         self.assertEqual(
             STATUS_BADGE_CLASSES['failed'],
-            'bg-red-500/20 text-red-400',
+            'bg-red-500/20 text-red-700 dark:text-red-300',
         )
         self.assertEqual(
             STATUS_BADGE_CLASSES['running'],
-            'bg-blue-500/20 text-blue-400',
+            'bg-blue-500/20 text-blue-700 dark:text-blue-300',
         )
+        self.assertEqual(
+            STATUS_BADGE_CLASSES['sent'],
+            'bg-green-500/20 text-green-700 dark:text-green-300',
+        )
+        self.assertEqual(
+            STATUS_BADGE_CLASSES['sending'],
+            'bg-blue-500/20 text-blue-700 dark:text-blue-300',
+        )
+
+    def test_tier_and_user_status_helpers_use_light_dark_foregrounds(self):
+        from studio.templatetags.studio_filters import (
+            TIER_PILL_CLASSES,
+            USER_STATUS_PILL_CLASSES,
+            studio_tier_pill_classes,
+            studio_user_status_pill_classes,
+        )
+
+        expected_tiers = {
+            'basic': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
+            'premium': 'bg-amber-500/20 text-amber-700 dark:text-amber-300',
+        }
+        expected_user_statuses = {
+            'active': 'bg-green-500/15 text-green-700 dark:text-green-300',
+            'staff': 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
+            'inactive': 'bg-red-500/15 text-red-700 dark:text-red-300',
+        }
+
+        for slug, classes in expected_tiers.items():
+            with self.subTest(tier=slug):
+                self.assertEqual(TIER_PILL_CLASSES[slug], classes)
+                self.assertEqual(studio_tier_pill_classes(slug), classes)
+
+        for status, classes in expected_user_statuses.items():
+            with self.subTest(status=status):
+                self.assertEqual(USER_STATUS_PILL_CLASSES[status], classes)
+                self.assertEqual(studio_user_status_pill_classes(status), classes)

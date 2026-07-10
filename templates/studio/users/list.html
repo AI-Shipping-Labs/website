@@ -274,7 +274,7 @@
                     data-testid="user-list-tier-pill"
                     data-tier="{{ row.tier_slug }}">{{ row.tier_name }}</span>
               {% if row.tier_source == 'override' %}
-              <span class="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-amber-300 border border-amber-500/30"
+              <span class="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-amber-700 dark:text-amber-300 border border-amber-500/30"
                     data-testid="user-list-tier-override-pill"
                     title="Tier override active"
                     aria-label="Tier override active">
@@ -291,16 +291,8 @@
           </a>
         </td>
         <td class="px-3 py-1.5 align-top" data-label="Status">
-          {% if row.status == 'Staff' %}
-          <span class="inline-flex items-center rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-blue-300"
-                data-testid="user-status">Staff</span>
-          {% elif row.status == 'Inactive' %}
-          <span class="inline-flex items-center rounded-full bg-red-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-red-300"
-                data-testid="user-status">Inactive</span>
-          {% else %}
-          <span class="inline-flex items-center rounded-full bg-green-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-green-300"
-                data-testid="user-status">Active</span>
-          {% endif %}
+          <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium leading-4 {{ row.status|lower|studio_user_status_pill_classes }}"
+                data-testid="user-status">{{ row.status }}</span>
         </td>
         <td class="px-3 py-1.5 align-top" data-label="Last login" data-testid="user-last-login">
           {% if row.last_login %}

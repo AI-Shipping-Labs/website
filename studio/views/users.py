@@ -1066,12 +1066,16 @@ def payment_mismatch_list(request):
     }:
         status = PaymentAccountMismatch.STATUS_OPEN
 
-    qs = _payment_mismatch_queryset()
+    base_qs = _payment_mismatch_queryset()
+    has_payment_mismatches = base_qs.exists()
+    payment_mismatch_filters_active = bool(request.GET)
+    qs = base_qs
     if status != 'all':
         qs = qs.filter(status=status)
 
     stripe_account_id = get_config('STRIPE_DASHBOARD_ACCOUNT_ID', '')
     rows = _payment_mismatch_rows(qs[:100], stripe_account_id)
+    clear_url = f"{reverse('studio_payment_mismatch_list')}?status=all"
     return render(request, 'studio/users/payment_mismatches.html', {
         'rows': rows,
         'active_status': status,
@@ -1079,6 +1083,9 @@ def payment_mismatch_list(request):
         'status_resolved': PaymentAccountMismatch.STATUS_RESOLVED,
         'status_ignored': PaymentAccountMismatch.STATUS_IGNORED,
         'stripe_account_id': stripe_account_id,
+        'has_payment_mismatches': has_payment_mismatches,
+        'payment_mismatch_filters_active': payment_mismatch_filters_active,
+        'payment_mismatches_clear_url': clear_url,
     })
 
 

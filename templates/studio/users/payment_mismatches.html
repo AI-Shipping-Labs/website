@@ -24,7 +24,9 @@
   {% endwith %}
 </div>
 
-<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="payment-mismatch-list">
+{% if rows or has_payment_mismatches or payment_mismatch_filters_active %}
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto"
+     data-testid="payment-mismatch-list">
   <table class="w-full table-fixed">
     <colgroup>
       <col class="w-[20%]">
@@ -43,6 +45,7 @@
       </tr>
     </thead>
     <tbody class="divide-y divide-border">
+      {% if rows %}
       {% for row in rows %}
       {% with mismatch=row.mismatch %}
       <tr data-testid="payment-mismatch-row">
@@ -75,7 +78,7 @@
           {% endif %}
         </td>
         <td class="px-4 py-3 align-top" data-label="Reason">
-          <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">{{ mismatch.reason }}</span>
+          <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">{{ mismatch.reason }}</span>
           <p class="text-xs text-muted-foreground mt-2">{{ mismatch.status }}</p>
         </td>
         <td class="px-4 py-3 align-top text-right studio-actions-cell" data-label="Actions">
@@ -103,12 +106,14 @@
         </td>
       </tr>
       {% endwith %}
-      {% empty %}
-      <tr>
-        <td colspan="5" class="px-4 py-10 text-center text-sm text-muted-foreground">No payment mismatches found.</td>
-      </tr>
       {% endfor %}
+      {% elif has_payment_mismatches or payment_mismatch_filters_active %}
+      {% studio_empty_state 'filter' entity_label='payment mismatch' entity_label_plural='payment mismatches' clear_url=payment_mismatches_clear_url colspan=5 testid_suffix='payment-mismatches' %}
+      {% endif %}
     </tbody>
   </table>
 </div>
+{% else %}
+{% studio_empty_state 'fresh' entity_label='payment mismatch' entity_label_plural='payment mismatches' create_url=None empty_message='Payment audit is clean. No payment mismatches are waiting for review.' testid_suffix='payment-mismatches' %}
+{% endif %}
 {% endblock %}

@@ -16,7 +16,7 @@ Covers the structural expectations the spec calls out:
 """
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from studio.templatetags.studio_filters import studio_sidebar_state
 
@@ -580,9 +580,27 @@ class StudioSidebarStructureTest(TestCase):
     # Footer
     # ------------------------------------------------------------------
 
+    @override_settings(VERSION='2026.07.09')
     def test_version_footer_renders_once_at_bottom(self):
         response = self._get_studio_dashboard()
         body = response.content.decode()
         # The version line ``v...`` is rendered exactly once in the nav.
         count = body.count('text-xs text-muted-foreground">v')
         self.assertEqual(count, 1, 'expected exactly one VERSION footer line')
+        self.assertContains(response, 'v2026.07.09')
+
+    @override_settings(VERSION='')
+    def test_version_footer_hidden_when_empty(self):
+        response = self._get_studio_dashboard()
+        self.assertNotContains(response, 'text-xs text-muted-foreground">v')
+
+    @override_settings(VERSION=None)
+    def test_version_footer_hidden_when_none(self):
+        response = self._get_studio_dashboard()
+        self.assertNotContains(response, 'text-xs text-muted-foreground">v')
+
+    @override_settings(VERSION='N/A')
+    def test_version_footer_hidden_when_fallback_na(self):
+        response = self._get_studio_dashboard()
+        self.assertNotContains(response, 'vN/A')
+        self.assertNotContains(response, 'text-xs text-muted-foreground">v')

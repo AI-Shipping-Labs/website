@@ -21,6 +21,7 @@
                             "New <entity_label>".
     testid_suffix        -- optional extra ``data-testid`` to keep page-specific
                             selectors working alongside the canonical testid.
+    empty_message        -- optional full-sentence override for the empty copy.
 
   Sub-issue C of #747 (the design-system audit) codifies the two-flavour
   convention. See _docs/design-system.md "Studio list pages".
@@ -30,7 +31,9 @@
      data-testid="studio-empty-state-fresh"
      {% if testid_suffix %}data-empty-state="{{ testid_suffix }}"{% endif %}>
   <i data-lucide="inbox" class="mx-auto h-10 w-10 text-muted-foreground/60"></i>
-  <p class="mt-4 text-sm text-muted-foreground">No {{ entity_label_plural }} yet.</p>
+  <p class="mt-4 text-sm text-muted-foreground">
+    {% if empty_message %}{{ empty_message }}{% else %}No {{ entity_label_plural }} yet.{% endif %}
+  </p>
   {% if create_url %}
   <a href="{{ create_url }}"
      class="mt-4 inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
@@ -43,7 +46,7 @@
 <tr data-testid="studio-empty-state-filter"
     {% if testid_suffix %}data-empty-state="{{ testid_suffix }}"{% endif %}>
   <td colspan="{{ colspan|default:8 }}" class="px-6 py-12 text-center text-sm text-muted-foreground">
-    No {{ entity_label_plural }} match your filters.
+    {% if empty_message %}{{ empty_message }}{% else %}No {{ entity_label_plural }} match your filters.{% endif %}
     {% if clear_url %}
     <a href="{{ clear_url }}" class="ml-2 text-accent hover:underline">Clear filters</a>
     {% endif %}

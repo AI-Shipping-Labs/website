@@ -26,15 +26,15 @@ a coloured `Premium` pill. If a temporary override is active, an amber
 | Field | Value | Tailwind classes |
 |---|---|---|
 | Tier | Free | `bg-muted text-muted-foreground` |
-| Tier | Basic | `bg-blue-500/20 text-blue-300` |
+| Tier | Basic | `bg-blue-500/20 text-blue-700 dark:text-blue-300` |
 | Tier | Main | `bg-accent/20 text-accent` |
-| Tier | Premium | `bg-amber-500/20 text-amber-300` |
-| Tier source | Override | `bg-amber-500/20 text-amber-300 border border-amber-500/30` plus the shield icon |
+| Tier | Premium | `bg-amber-500/20 text-amber-700 dark:text-amber-300` |
+| Tier source | Override | `bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30` plus the shield icon |
 | Tier source | From Stripe | `bg-muted text-muted-foreground` |
 | Tier source | Default | `bg-muted text-muted-foreground` |
-| User status | Active | `bg-green-500/15 text-green-300` |
-| User status | Staff | `bg-blue-500/15 text-blue-300` |
-| User status | Inactive | `bg-red-500/15 text-red-300` |
+| User status | Active | `bg-green-500/15 text-green-700 dark:text-green-300` |
+| User status | Staff | `bg-blue-500/15 text-blue-700 dark:text-blue-300` |
+| User status | Inactive | `bg-red-500/15 text-red-700 dark:text-red-300` |
 
 Newsletter and Slack pills keep their existing colours.
 

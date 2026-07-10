@@ -47,6 +47,34 @@ class StudioPaymentMismatchTest(TestCase):
         self.assertContains(response, "Merge preview")
         self.assertContains(response, "/studio/users/merge/")
 
+    def test_filtered_empty_queue_uses_shared_empty_state_with_clear_filters(self):
+        response = self.client.get(
+            "/studio/users/payment-mismatches/?status=resolved",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="studio-empty-state-filter"')
+        self.assertContains(response, 'data-empty-state="payment-mismatches"')
+        self.assertContains(response, "No payment mismatches match your filters.")
+        self.assertContains(response, "Clear filters")
+        self.assertContains(response, 'href="/studio/users/payment-mismatches/?status=all"')
+        self.assertNotContains(response, "No payment mismatches found.")
+
+    def test_fresh_empty_queue_uses_shared_empty_state_with_clean_audit_copy(self):
+        PaymentAccountMismatch.objects.all().delete()
+
+        response = self.client.get("/studio/users/payment-mismatches/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="studio-empty-state-fresh"')
+        self.assertContains(response, 'data-empty-state="payment-mismatches"')
+        self.assertContains(
+            response,
+            "Payment audit is clean. No payment mismatches are waiting for review.",
+        )
+        self.assertNotContains(response, 'data-testid="studio-empty-state-filter"')
+        self.assertNotContains(response, "No payment mismatches found.")
+
     def test_user_detail_shows_open_warning_and_hides_after_terminal(self):
         paid_response = self.client.get(f"/studio/users/{self.member.pk}/")
         candidate_response = self.client.get(f"/studio/users/{self.candidate.pk}/")

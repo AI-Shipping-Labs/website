@@ -184,14 +184,14 @@ class TestSignupAnalyticsPagination:
             wait_until="domcontentloaded",
         )
         # Page 1 rows are all Google OAuth.
-        path_cells = page.locator('[data-testid="signup-analytics-recent-table"] tbody tr td:nth-child(2)')
+        path_cells = page.locator('[data-testid="signup-analytics-recent-table"] tbody tr td:nth-child(7)')
         for i in range(path_cells.count()):
             expect(path_cells.nth(i)).to_have_text("Google OAuth")
 
         page.locator('[data-testid="signup-recent-pager-next"]').click()
         page.wait_for_url("**/signup-analytics/?*page=2*")
         assert "signup_path=google_oauth" in page.url
-        path_cells = page.locator('[data-testid="signup-analytics-recent-table"] tbody tr td:nth-child(2)')
+        path_cells = page.locator('[data-testid="signup-analytics-recent-table"] tbody tr td:nth-child(7)')
         assert path_cells.count() > 0
         for i in range(path_cells.count()):
             expect(path_cells.nth(i)).to_have_text("Google OAuth")

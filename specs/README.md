@@ -11,8 +11,8 @@ Technical requirements for the paid community platform at aishippinglabs.com.
 | [03-access-control](03-access-control.md) | Tier-based gating, per-item permissions |
 | [04-content-articles](04-content-articles.md) | Blog posts and articles |
 | [05-content-courses](05-content-courses.md) | Course catalog, modules, cohorts, progress tracking |
-| [06-content-resources](06-content-resources.md) | Event recordings, project showcase, curated links, downloads |
-| [07-events](07-events.md) | Live/async events, calendar, Zoom integration |
+| [06-content-resources](06-content-resources.md) | Project showcase, curated links, downloads, legacy past-event-recording discovery |
+| [07-events](07-events.md) | Scheduled live community events, calendar, registration, Zoom integration |
 | [08-video](08-video.md) | Video embedding, timestamps |
 | [09-community](09-community.md) | Slack integration, member lifecycle |
 | [10-email](10-email.md) | Newsletter, tier-granular sending, lead magnets |

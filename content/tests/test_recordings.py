@@ -211,11 +211,11 @@ class RecordingsListTagFilteringTest(TestCase):
         self.assertNotContains(response, 'Agent Workshop')
         self.assertNotContains(response, 'Django Workshop')
         self.assertNotContains(response, 'MCP Workshop')
-        self.assertContains(response, 'No events match this filter.')
+        self.assertContains(response, 'No past event recordings match this filter.')
         self.assertContains(response, 'data-testid="member-empty-state"')
         self.assertContains(response, 'data-empty-kind="filter"')
         self.assertContains(response, 'href="/events?filter=past"')
-        self.assertContains(response, 'View all recordings')
+        self.assertContains(response, 'View all past event recordings')
 
     def test_tag_links_in_listing(self):
         response = self.client.get('/events?filter=past')
@@ -369,7 +369,7 @@ class RecordingsListDisplayTest(TestCase):
     def test_empty_list_message(self):
         Event.objects.all().delete()
         response = self.client.get('/events?filter=past')
-        self.assertContains(response, 'No recordings yet')
+        self.assertContains(response, 'No past event recordings yet')
 
     def test_unpublished_not_shown(self):
         _create_recording_event('draft-recording', published=False)

@@ -456,14 +456,16 @@ class TestScenario8HeaderCopyReflectsNewGrouping:
         h1_text = h1.inner_text()
 
         # New copy
-        assert "Workshops, Courses & More" in h1_text
+        assert "Curated links for AI builders" in h1_text
         # Old copy is gone
         assert "Tools, Models & Courses" not in h1_text
 
-        # Intro paragraph mentions workshops and articles
+        # Intro paragraph mentions workshops and articles while staying scoped
+        # to curated links.
         body = page.content()
         assert "workshops" in body
         assert "articles" in body
+        assert "community activity or recording" in body
         # Old "GitHub repos, model hubs, and learning resources" copy is gone.
         assert (
             "Curated links to GitHub repos, model hubs, and learning resources."

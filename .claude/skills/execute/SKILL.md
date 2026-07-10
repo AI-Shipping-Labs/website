@@ -11,7 +11,7 @@ Run the full issue pipeline as defined in [`_docs/PROCESS.md`](_docs/PROCESS.md)
 
 The lifecycle: PM grooms → Engineer builds → Tester verifies → PM accepts → Ship. See PROCESS.md for the full agent workflow, issue lifecycle, and orchestrator responsibilities.
 
-Model policy: Codex role agents must use `gpt-5.5` with `reasoning_effort: "high"` and `service_tier: "priority"`. Do not fall back to `gpt-5.4`; if `gpt-5.5` capacity is unavailable, retry later or handle the work locally. Claude role agents must use Opus 4.8.
+Model policy: Codex role agents must use `gpt-5.6` with `reasoning_effort: "high"` and `service_tier: "priority"`. Do not fall back to `gpt-5.5` or `gpt-5.4`; if `gpt-5.6` capacity is unavailable, retry later or handle the work locally. Claude role agents must use Opus 4.8.
 
 ## Step 0: PM Grooming (parallel)
 

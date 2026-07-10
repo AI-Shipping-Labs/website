@@ -99,6 +99,7 @@ class StudioWorkshopListTest(TestCase):
         )
         cls.published = _make_workshop(
             slug='rag-basics', title='RAG basics', status='published',
+            skill_level='advanced',
         )
         cls.draft = _make_workshop(
             slug='fine-tuning', title='Fine-tuning LLMs', status='draft',
@@ -146,6 +147,12 @@ class StudioWorkshopListTest(TestCase):
     def test_view_on_site_link_in_row(self):
         response = self.client.get('/studio/workshops/')
         self.assertContains(response, '/workshops/rag-basics')
+
+    def test_list_shows_readonly_skill_level_metadata(self):
+        response = self.client.get('/studio/workshops/')
+
+        self.assertContains(response, 'data-testid="studio-workshop-skill-level"')
+        self.assertContains(response, 'Advanced')
 
     def test_empty_state_shown_when_no_workshops(self):
         """Workshops list renders the canonical fresh-zero empty state when
@@ -211,6 +218,7 @@ class StudioWorkshopDetailTest(TestCase):
             slug='demo', title='Demo Workshop', event=cls.event,
             cover_image_url='https://cdn.example.com/cover.png',
             code_repo_url='https://github.com/example/code',
+            skill_level='advanced',
         )
         cls.page1 = WorkshopPage.objects.create(
             workshop=cls.workshop, slug='setup', title='Setup',
@@ -236,6 +244,14 @@ class StudioWorkshopDetailTest(TestCase):
         self.assertContains(response, 'Demo Workshop')
         self.assertContains(response, 'Hands-on intro')
         self.assertContains(response, 'agents')
+
+    def test_shows_skill_level_metadata(self):
+        response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
+
+        self.assertContains(response, 'data-testid="studio-workshop-skill-level"')
+        self.assertContains(response, 'Advanced')
+        self.assertContains(response, 'data-testid="studio-workshop-skill-description"')
+        self.assertContains(response, 'production tradeoffs')
 
     def test_shows_three_tier_gates(self):
         response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
@@ -391,6 +407,7 @@ class StudioWorkshopEditFormTest(TestCase):
             landing_required_level=0,
             pages_required_level=10,
             recording_required_level=20,
+            skill_level='intermediate',
         )
 
     def test_get_returns_200(self):
@@ -409,6 +426,15 @@ class StudioWorkshopEditFormTest(TestCase):
         self.assertContains(response, 'name="landing_required_level"')
         self.assertContains(response, 'name="pages_required_level"')
         self.assertContains(response, 'name="recording_required_level"')
+
+    def test_form_shows_readonly_skill_level_metadata(self):
+        response = self.client.get(
+            f'/studio/workshops/{self.workshop.pk}/edit',
+        )
+
+        self.assertContains(response, 'data-testid="studio-workshop-skill-level"')
+        self.assertContains(response, 'Intermediate')
+        self.assertContains(response, 'connect APIs')
 
     def test_yaml_fields_are_not_editable_inputs(self):
         # title/description/tags/date/code_repo_url appear on the page but
@@ -431,7 +457,7 @@ class StudioWorkshopEditFormTest(TestCase):
         # No form input has any of these names.
         for fname in (
             'title', 'description', 'tags',
-            'date', 'code_repo_url', 'instructor_name',
+            'date', 'code_repo_url', 'instructor_name', 'skill_level',
         ):
             self.assertNotIn(
                 f'name="{fname}"', form_html,

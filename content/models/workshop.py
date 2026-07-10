@@ -35,6 +35,70 @@ STATUS_CHOICES = [
     ('published', 'Published'),
 ]
 
+SKILL_LEVEL_BEGINNER = 'beginner'
+SKILL_LEVEL_INTERMEDIATE = 'intermediate'
+SKILL_LEVEL_ADVANCED = 'advanced'
+
+SKILL_LEVEL_METADATA = {
+    SKILL_LEVEL_BEGINNER: {
+        'label': 'Beginner-friendly',
+        'description': (
+            'For builders comfortable with basic Python and command-line '
+            'workflows; prior AI-agent/topic experience is not required.'
+        ),
+    },
+    SKILL_LEVEL_INTERMEDIATE: {
+        'label': 'Intermediate',
+        'description': (
+            'For builders who have shipped small scripts/apps and are ready '
+            'to modify code, connect APIs, and debug guided workflows.'
+        ),
+    },
+    SKILL_LEVEL_ADVANCED: {
+        'label': 'Advanced',
+        'description': (
+            'For builders comfortable with architecture, production '
+            'tradeoffs, and less-guided debugging.'
+        ),
+    },
+}
+SKILL_LEVEL_CHOICES = [
+    (slug, metadata['label'])
+    for slug, metadata in SKILL_LEVEL_METADATA.items()
+]
+SKILL_LEVEL_ALLOWED_VALUES = tuple(SKILL_LEVEL_METADATA.keys())
+
+
+def normalize_workshop_skill_level(value):
+    """Normalize an authored workshop skill level or raise ``ValueError``."""
+    if value in (None, ''):
+        return ''
+    normalized = str(value).strip().lower()
+    if not normalized:
+        return ''
+    if normalized not in SKILL_LEVEL_METADATA:
+        allowed = ', '.join(SKILL_LEVEL_ALLOWED_VALUES)
+        raise ValueError(
+            f'Invalid skill_level={value!r}; allowed values: {allowed}.',
+        )
+    return normalized
+
+
+def get_workshop_skill_level_label(value):
+    """Return the visitor-facing skill-level label, or ``''`` when blank."""
+    metadata = SKILL_LEVEL_METADATA.get(value or '')
+    if metadata is None:
+        return ''
+    return metadata['label']
+
+
+def get_workshop_skill_level_description(value):
+    """Return the standard prerequisite description, or ``''`` when blank."""
+    metadata = SKILL_LEVEL_METADATA.get(value or '')
+    if metadata is None:
+        return ''
+    return metadata['description']
+
 
 def _can_access_level(user, required_level):
     """Decide whether ``user`` clears a workshop gate at ``required_level``.
@@ -119,6 +183,17 @@ class Workshop(
         ),
     )
     tags = models.JSONField(default=list, blank=True)
+    skill_level = models.CharField(
+        max_length=20,
+        choices=SKILL_LEVEL_CHOICES,
+        blank=True,
+        default='',
+        help_text=(
+            'Visitor-facing prerequisite level from workshop.yaml. Blank '
+            'means no skill badge/filter match; this is separate from '
+            'membership access gates.'
+        ),
+    )
     cover_image_url = models.URLField(max_length=500, blank=True, default='')
     auto_banner_url = models.URLField(
         max_length=500, blank=True, default='',
@@ -217,6 +292,10 @@ class Workshop(
     def clean(self):
         """Validate the three-gate chain landing <= pages <= recording."""
         super().clean()
+        try:
+            self.skill_level = normalize_workshop_skill_level(self.skill_level)
+        except ValueError as exc:
+            raise ValidationError({'skill_level': str(exc)}) from exc
         if self.landing_required_level > self.pages_required_level:
             raise ValidationError({
                 'landing_required_level': (
@@ -237,6 +316,10 @@ class Workshop(
         from content.utils.tags import normalize_tags
 
         self.tags = normalize_tags(self.tags)
+        try:
+            self.skill_level = normalize_workshop_skill_level(self.skill_level)
+        except ValueError as exc:
+            raise ValidationError({'skill_level': str(exc)}) from exc
 
         # Validate gate ordering on every save so both admin and sync go
         # through the same invariant. ValidationError is the Django
@@ -282,6 +365,16 @@ class Workshop(
         return self.instructors.order_by(
             'workshopinstructor__position',
         ).first()
+
+    @property
+    def skill_level_label(self):
+        """Visitor-facing skill-level label, or ``''`` when unset."""
+        return get_workshop_skill_level_label(self.skill_level)
+
+    @property
+    def skill_level_description(self):
+        """Standard prerequisite description, or ``''`` when unset."""
+        return get_workshop_skill_level_description(self.skill_level)
 
     @property
     def display_image_url(self):

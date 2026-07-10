@@ -275,6 +275,7 @@ slug: example-workshop
 title: Example Workshop
 date: "2026-04-28"
 pages_required_level: 0
+skill_level: beginner
 instructor_name: Alexey Grigorev
 hosts:
   - alexey-grigorev
@@ -282,6 +283,11 @@ recording:
   url: https://www.youtube.com/watch?v=...
   required_level: 0
 ```
+
+`skill_level:` is optional and describes the visitor prerequisite level, not
+membership access. Allowed values are `beginner`, `intermediate`, and
+`advanced`; omit it or leave it blank when the workshop should not show a
+skill badge or match a skill filter.
 
 `hosts:` is an ordered list of existing `Host.slug` strings. It updates
 `EventHost` rows on GitHub-origin generated/linked workshop events only; a

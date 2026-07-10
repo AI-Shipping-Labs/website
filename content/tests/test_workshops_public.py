@@ -79,7 +79,7 @@ def _make_workshop(slug='ws', title='Workshop', status='published',
                    recording_url='https://www.youtube.com/watch?v=abc',
                    materials=None, code_repo_url='', cover_image_url='',
                    description='# Hello\n\nDescription text.',
-                   tags=None, instructor='Alice'):
+                   tags=None, instructor='Alice', skill_level=''):
     """Create a workshop (and optional linked event) for tests."""
     event = None
     if with_event:
@@ -102,6 +102,7 @@ def _make_workshop(slug='ws', title='Workshop', status='published',
         code_repo_url=code_repo_url,
         cover_image_url=cover_image_url,
         tags=tags or [],
+        skill_level=skill_level,
         event=event,
     )
     if instructor:
@@ -220,6 +221,132 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'No workshops match the selected filters.')
         self.assertContains(response, 'href="/workshops"')
         self.assertContains(response, 'View all workshops')
+
+    def test_catalog_renders_skill_filters_for_represented_levels(self):
+        _make_workshop(
+            slug='beginner-ws', title='Beginner Workshop',
+            skill_level='beginner',
+        )
+        _make_workshop(
+            slug='intermediate-ws', title='Intermediate Workshop',
+            skill_level='intermediate',
+        )
+        _make_workshop(
+            slug='draft-advanced', title='Draft Advanced',
+            status='draft', skill_level='advanced',
+        )
+
+        response = self.client.get('/workshops')
+
+        self.assertContains(response, 'data-testid="workshop-skill-filters"')
+        self.assertContains(response, 'data-testid="workshop-skill-filter-beginner"')
+        self.assertContains(response, 'data-testid="workshop-skill-filter-intermediate"')
+        self.assertNotContains(response, 'data-testid="workshop-skill-filter-advanced"')
+        self.assertContains(response, 'href="/workshops?skill_level=beginner"')
+
+    def test_catalog_renders_skill_badge_separate_from_access_badge(self):
+        _make_workshop(
+            slug='main-beginner', title='Main Beginner Workshop',
+            pages=20, recording=20, skill_level='beginner',
+        )
+
+        response = self.client.get('/workshops?skill_level=beginner')
+
+        self.assertContains(response, 'Main Beginner Workshop')
+        self.assertContains(response, 'data-testid="workshop-skill-badge"')
+        self.assertContains(response, 'Skill: Beginner-friendly')
+        self.assertContains(response, 'data-testid="workshop-tier-badge"')
+        self.assertContains(response, 'Main or above')
+
+    def test_catalog_filters_by_skill_and_tag_with_and_semantics(self):
+        _make_workshop(
+            slug='beginner-agents', title='Beginner Agents',
+            skill_level='beginner', tags=['agents'],
+        )
+        _make_workshop(
+            slug='intermediate-agents', title='Intermediate Agents',
+            skill_level='intermediate', tags=['agents'],
+        )
+        _make_workshop(
+            slug='intermediate-python', title='Intermediate Python',
+            skill_level='intermediate', tags=['python'],
+        )
+
+        response = self.client.get('/workshops?skill_level=intermediate&tag=agents')
+
+        self.assertContains(response, 'Intermediate Agents')
+        self.assertNotContains(response, 'Beginner Agents')
+        self.assertNotContains(response, 'Intermediate Python')
+        self.assertContains(response, 'data-testid="workshop-active-skill"')
+        self.assertContains(response, 'Intermediate')
+        self.assertContains(response, 'data-testid="workshop-active-tag"')
+        self.assertContains(response, 'agents')
+
+    def test_skill_filter_links_preserve_tags_and_tag_links_preserve_skill(self):
+        _make_workshop(
+            slug='beginner-agents', title='Beginner Agents',
+            skill_level='beginner', tags=['agents'],
+        )
+        _make_workshop(
+            slug='advanced-agents', title='Advanced Agents',
+            skill_level='advanced', tags=['agents'],
+        )
+
+        response = self.client.get('/workshops?skill_level=beginner&tag=agents')
+
+        self.assertContains(
+            response,
+            'href="/workshops?skill_level=advanced&amp;tag=agents"',
+        )
+        self.assertContains(
+            response,
+            'href="/workshops?skill_level=beginner"',
+        )
+
+        response = self.client.get('/workshops?skill_level=beginner')
+        self.assertContains(
+            response,
+            'href="/workshops?skill_level=beginner&amp;tag=agents"',
+        )
+
+    def test_invalid_skill_filter_is_ignored(self):
+        _make_workshop(
+            slug='beginner-ws', title='Beginner Workshop',
+            skill_level='beginner',
+        )
+
+        response = self.client.get('/workshops?skill_level=expert')
+
+        self.assertContains(response, 'Visible Workshop')
+        self.assertContains(response, 'Beginner Workshop')
+        self.assertNotContains(response, 'data-testid="workshop-active-skill"')
+        self.assertNotContains(response, 'No workshops found')
+
+    def test_valid_skill_filter_no_matches_uses_filter_empty_state(self):
+        response = self.client.get('/workshops?skill_level=advanced')
+
+        self.assertContains(response, 'data-testid="workshop-active-skill"')
+        self.assertContains(response, 'Advanced')
+        self.assertContains(response, 'No workshops found')
+        self.assertContains(response, 'No workshops match the selected filters.')
+        self.assertContains(response, 'data-empty-kind="filter"')
+        self.assertContains(response, 'href="/workshops"')
+
+    def test_draft_skill_workshops_stay_hidden_from_filtered_catalog(self):
+        _make_workshop(
+            slug='draft-beginner', title='Draft Beginner',
+            status='draft', skill_level='beginner',
+        )
+        _make_workshop(
+            slug='published-intermediate', title='Published Intermediate',
+            skill_level='intermediate',
+        )
+
+        response = self.client.get('/workshops?skill_level=beginner')
+
+        self.assertNotContains(response, 'Draft Beginner')
+        self.assertNotContains(response, 'Published Intermediate')
+        self.assertContains(response, 'No workshops found')
 
     def test_catalog_does_not_add_workshops_listing_api_endpoint(self):
         response = self.client.get('/api/workshops')
@@ -494,6 +621,19 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/ws')
         self.assertContains(response, 'Alice')
         self.assertContains(response, 'April 21, 2026')
+
+    def test_landing_shows_skill_level_and_standard_description(self):
+        ws = _make_workshop(
+            slug='skill-detail',
+            title='Skill Detail',
+            skill_level='intermediate',
+        )
+
+        response = self.client.get(ws.get_absolute_url())
+
+        self.assertContains(response, 'data-testid="workshop-skill-level"')
+        self.assertContains(response, 'Skill level: Intermediate')
+        self.assertContains(response, 'modify code, connect APIs')
 
     def test_landing_shows_code_repo_button(self):
         response = self.client.get('/workshops/ws')

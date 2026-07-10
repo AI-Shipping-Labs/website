@@ -392,7 +392,7 @@ class HomepageRecordingsCardTest(TestCase):
         )
 
     def test_homepage_recording_card_no_nested_anchor(self):
-        """The "View resource" trailing affordance must not be a second <a>
+        """The "View recording" trailing affordance must not be a second <a>
         inside the wrapper (it should be a <span> now)."""
         response = self.client.get('/')
         scan = _scan_anchors(response.content.decode())

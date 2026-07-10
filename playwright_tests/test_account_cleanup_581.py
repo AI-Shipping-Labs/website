@@ -131,7 +131,11 @@ def _seed_users():
         })
     Plan.objects.filter(member=main_user).delete()
     Plan.objects.create(
-        member=main_user, sprint=sprint, visibility="cohort")
+        member=main_user,
+        sprint=sprint,
+        visibility="cohort",
+        shared_at=timezone.now(),
+    )
     teammate, _ = User.objects.get_or_create(
         email="teammate-581@test.com",
         defaults={"email_verified": True, "tier": tiers["main"]})

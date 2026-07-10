@@ -89,11 +89,14 @@ class FooterNewsletterFormMessageHooksTest(TestCase):
 
 
 class FooterCommunityNavigationTest(TestCase):
-    """Footer exposes the compact Community map from issue #1183."""
+    """Footer exposes the compact Community map with past recordings."""
 
     def test_footer_community_column_lists_major_destinations(self):
         response = self.client.get("/")
         footer = _extract_footer(response.content.decode())
+        community_start = footer.index("<h3")
+        legal_start = footer.index("<h3", community_start + 1)
+        community = footer[community_start:legal_start]
 
         expected = [
             ('About', '/about'),
@@ -102,19 +105,23 @@ class FooterCommunityNavigationTest(TestCase):
             ('Community Sprints', '/sprints'),
             ('Events', '/events'),
             ('FAQ', '/faq'),
+            ('Past Recordings', '/events?filter=past'),
         ]
         positions = []
         for label, href in expected:
             with self.subTest(label=label):
                 match = re.search(
                     rf'<a[^>]*href="{re.escape(href)}"[^>]*>{re.escape(label)}</a>',
-                    footer,
+                    community,
                 )
                 self.assertIsNotNone(match)
                 positions.append(match.start())
 
         self.assertEqual(positions, sorted(positions))
-        self.assertIn('Manage Subscription', footer)
+        self.assertIn("Manage Subscription", community)
+        self.assertIn('href="/terms/"', footer)
+        self.assertIn('href="/privacy/"', footer)
+        self.assertIn('href="/impressum/"', footer)
 
 
 @tag("visual_regression")

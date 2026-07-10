@@ -125,6 +125,8 @@ class HeaderMobileMenuTest(TestCase):
         self.assertIn('href="/events"', content)
         self.assertIn('href="/activities#access-by-tier"', content)
         self.assertIn('data-testid="mobile-nav-community-link-activities"', content)
+        self.assertIn('href="/events?filter=past"', content)
+        self.assertIn('data-testid="mobile-nav-community-link-past-recordings"', content)
         self.assertIn('href="/resources"', content)
 
         header = content[:content.index("</header>")]

@@ -59,7 +59,7 @@ def test_resources_courses_and_workshops_start_with_browse_content(
     for path, heading in (
         ("/resources", "Curated links for AI builders"),
         ("/courses", "Structured Learning Paths"),
-        ("/workshops", "Hands-on Workshops"),
+        ("/workshops", "Hands-on AI workshops"),
     ):
         _goto(page, django_server, path)
         main = page.locator("main")

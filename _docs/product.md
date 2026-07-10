@@ -82,8 +82,9 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
-| Past event recordings listing | `/events?filter=past` | Paginated legacy discovery surface for published past events with recordings; workshop-linked rows hand off to the workshop, standalone rows keep existing event detail URLs; tag filtering and gated tier cues remain visible | Everyone (listing visible) | Shipped |
-| Standalone recording detail | `/events/<id>/<slug>` | Event detail page for a completed standalone event with inline recording, timestamps, description, tags, and materials; workshop-linked events show the workshop handoff instead | Open recordings: everyone; gated: tier-dependent | Shipped |
+| Past recordings listing | `/events?filter=past` | Canonical Events surface for published completed events with recordings; includes date, tags, tag filtering, pagination, gated context, and workshop-linked handoffs | Everyone (listing visible) | Shipped |
+| Workshop recording handoff | `/workshops/<slug>` -> `/workshops/<slug>/video` | Workshop-linked past recordings route from the past-recordings card to the workshop landing page, then to the workshop video page for playback, timestamps, and materials | Landing page: everyone if open; video: tier-dependent | Shipped |
+| Standalone event recording detail | `/events/<id>/<slug>` | Standalone past events without a linked Workshop use the canonical event detail page and show post-event resources according to existing access rules | Open recordings: everyone; gated: tier-dependent | Shipped |
 
 ### Content -- Workshops
 
@@ -225,8 +226,8 @@ The fixed header appears on every page and contains:
 - Logo + site name linking to `/` (home)
 - Primary nav groups (desktop): About, Community, Resources
 - About dropdown: About, Team, FAQ
-- Community dropdown: Overview (`/community`) when the launch recap exists, Membership (`/pricing`), Activities (`/activities#access-by-tier`), Community Sprints (`/sprints`), Events (`/events`)
-- Resources dropdown: Blog, Courses, Workshops, Learning Paths, Project Ideas, Interview Prep, Curated Links (`/resources`), and Downloads when published downloads exist
+- Community dropdown: Overview (`/community`), Membership (`/pricing`), Activities (`/activities#access-by-tier`), Community Sprints (`/sprints`), Events (`/events`), Past Recordings (`/events?filter=past`)
+- Resources dropdown: Blog, Courses, Workshops, Learning Paths, Project Ideas, Interview Prep, Curated Links (`/resources`), and Downloads when published downloads exist. Resources is for content/reference surfaces and does not contain Past Recordings or Event Recordings.
 - Auth area (desktop): "Sign in" for anonymous users; for authenticated users: notification bell with unread badge dropdown, email link to account page, "Log out" button
 - Mobile menu: Hamburger toggle with About, Community, and Resources accordions plus account/notifications/logout controls
 
@@ -234,14 +235,14 @@ The fixed header appears on every page and contains:
 Appears on every page:
 - Newsletter signup form (email input + subscribe button, calls `/api/subscribe`)
 - Site logo + tagline: "Where action-oriented builders turn AI ideas into real projects"
-- Community links: About, Membership Tiers, Activities, Community Sprints, Events, FAQ, Manage Subscription (Stripe customer portal)
+- Community links: About, Membership Tiers, Activities, Community Sprints, Events, FAQ, Past Recordings, Manage Subscription (Stripe customer portal)
 - Copyright notice
 
 ### Homepage CTAs (Anonymous)
 The homepage serves as the primary conversion funnel for anonymous visitors:
 1. Hero: "Subscribe for updates" (scrolls to newsletter section) and "View Membership Tiers" (scrolls to tiers section)
 2. Tiers section: Payment links for each tier (monthly/annual toggle)
-3. Past event recordings section: "View past event recordings" links to `/events?filter=past`
+3. Past event recordings section: "View all past recordings" links to `/events?filter=past`
 4. Blog section: "View all posts" links to `/blog`
 5. Projects section: "View all project ideas" links to `/projects`
 6. Collection section: "View all curated links" links to `/resources`
@@ -261,7 +262,7 @@ The dashboard surfaces personalized actions:
 - Gated content: When a user cannot access content, a CTA banner appears with "Upgrade to [Tier] to [action]" linking to `/pricing`
 - Article detail: Related articles section; newsletter CTA after content; tag links
 - Course detail: "Sign Up Free" CTA for free courses (unauthenticated users); "View Pricing" CTA for paid courses
-- Event listing: Past event recordings link to the workshop when one is linked; legacy standalone recordings keep the event detail URL
+- Event listing: the Past recordings filter (`/events?filter=past`) is the canonical past-recordings list; workshop-linked cards hand off to the linked Workshop page, while standalone recordings use the canonical event detail page.
 - Tag system: Tag chips on listings link to filtered views; global tag index at `/tags`
 
 ## Key User Journeys
@@ -276,7 +277,7 @@ Free member logs in -> sees dashboard with limited content -> browses blog and e
 Member navigates to `/courses` -> browses course catalog with tag filters -> clicks into a course -> reads syllabus and description -> enrolls in a cohort (if available) -> starts first unit -> watches embedded video, reads lesson text, completes homework -> clicks "Mark as completed" -> proceeds to next unit via "Next" button -> progress bar updates on course detail page -> returns to dashboard and sees course in "Continue Learning" section -> eventually completes all units.
 
 ### 4. Member Registers for an Event
-Member navigates to `/events` -> sees scheduled live/community events -> clicks into an event detail page -> reads description and schedule -> clicks "Register" button -> event appears in their dashboard under "Upcoming Events" -> receives notification before event -> attends via the join link near start time -> after the event, a workshop-linked session points to `/workshops/<slug>` / `/workshops/<slug>/video`, while a legacy standalone recording remains available from the event detail URL and `/events?filter=past`.
+Member navigates to `/events` -> sees upcoming events with spots remaining -> clicks into an event detail page -> reads description and schedule -> clicks "Register" button -> event appears in their dashboard under "Upcoming Events" -> receives notification before event -> attends via the join link near start time -> after event, the recording becomes discoverable at `/events?filter=past`. Workshop-linked recordings hand off to `/workshops/<slug>` and `/workshops/<slug>/video`; standalone recordings remain on the canonical event detail page.
 
 ### 5. Visitor Uses Workshops and Past Event Recordings
 Visitor opens `/workshops` from the Resources dropdown -> scans durable hands-on learning artifacts with writeups, recordings, tutorial pages, tools, and materials -> opens a workshop landing page -> watches the recording or reads tutorial pages if their tier allows it. If the visitor starts from `/events?filter=past`, workshop-linked recordings hand off to the workshop and standalone recordings keep the existing event detail URL.
@@ -303,6 +304,7 @@ Member goes to `/account/` -> sees current tier, billing period end date -> want
 | Article | A blog post on the site | Post, blog entry |
 | Workshop | A durable hands-on learning artifact with writeup/tutorial pages, recording, materials, tools, and optional code repository | Past event, webinar |
 | Recording | A recorded learning resource created from an event. Workshop-linked recordings live on the workshop landing/video pages (`/workshops/<slug>` and `/workshops/<slug>/video`); the linked Event page announces the session and links out to the workshop. Legacy past events that have not been promoted to a Workshop still host their recording inline on the event detail page and list at `/events?filter=past`. | Generic event, workshop |
+| Past Recording | A completed Event with an available recording, listed canonically at `/events?filter=past`. Workshop-linked recordings live on the Workshop landing/video pages (`/workshops/<slug>` and `/workshops/<slug>/video`); standalone past event recordings use the canonical event detail page. | Video, replay, resource |
 | Tutorial | A focused step-by-step guide on a narrow topic | How-to, guide |
 | Course | A structured multi-module learning path with units | Class, program |
 | Module | A grouping of units within a course | Section, chapter |

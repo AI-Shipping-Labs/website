@@ -9,11 +9,16 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from accounts.tier_audience import effective_level_at_least_q
 from accounts.utils.tags import normalize_tags
 from email_app.models import EmailCampaign
+from email_app.services.campaign_recipients import (
+    build_campaign_recipient_rows,
+    campaign_recipient_mode,
+)
 from email_app.services.email_service import EmailService, EmailServiceError
 from email_app.services.recording_available_prefill import (
     RECORDING_AVAILABLE_TEMPLATE,
@@ -161,6 +166,13 @@ def _build_campaign_detail_context(campaign, *, test_recipients="", test_recipie
         },
         "test_recipients": test_recipients,
         "test_recipient_suggestions": test_recipient_suggestions or [],
+        "recipients_url": reverse(
+            "studio_campaign_recipients",
+            kwargs={"campaign_id": campaign.pk},
+        ),
+        "ses_campaign_url": (
+            f"{reverse('studio_ses_event_list')}?campaign={campaign.pk}"
+        ),
     }
 
 
@@ -502,6 +514,33 @@ def campaign_detail(request, campaign_id):
     )
     context["preview_html"] = preview_html
     return render(request, "studio/campaigns/detail.html", context)
+
+
+@staff_required
+def campaign_recipients(request, campaign_id):
+    """Show draft recipient preview or actual sent campaign recipients."""
+    campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
+    mode = campaign_recipient_mode(campaign)
+    rows = build_campaign_recipient_rows(campaign)
+    for row in rows:
+        row["user_url"] = (
+            reverse("studio_user_detail", kwargs={"user_id": row["user_id"]})
+            if row["user_id"]
+            else ""
+        )
+    return render(
+        request,
+        "studio/campaigns/recipients.html",
+        {
+            "campaign": campaign,
+            "mode": mode,
+            "rows": rows,
+            "recipient_count": len(rows),
+            "ses_campaign_url": (
+                f"{reverse('studio_ses_event_list')}?campaign={campaign.pk}"
+            ),
+        },
+    )
 
 
 def _recipient_count_for_level(target_min_level):

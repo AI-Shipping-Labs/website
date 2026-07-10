@@ -1222,6 +1222,7 @@ def user_tags_add(request, email):
 # Body keys accepted by the mark-bounced endpoint. Any other key returns
 # 422 ``unknown_field`` (mirrors PATCH's strict-keys behaviour).
 _MARK_BOUNCED_ALLOWED_FIELDS = {"bounce_type", "diagnostic", "reason"}
+_CLEAR_BOUNCE_ALLOWED_FIELDS = {"reason"}
 
 # Allowed ``bounce_type`` values. Order matters: matches the spec's
 # ``["permanent", "soft"]`` so 422 ``details.allowed`` is stable.
@@ -1456,6 +1457,113 @@ def user_mark_bounced(request, email):
                 details = f"{details}; reason={reason!r}"
             _audit(locked, "api_mark_bounced", details)
             user = locked
+
+    return JsonResponse(serialize_user_state(user), status=200)
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Users",
+    summary="Clear a user's bounce state",
+    methods={
+        "POST": {
+            "summary": "Clear/reactivate structured bounce state",
+            "description": (
+                "Clears ``bounce_state`` back to ``none`` and resets "
+                "``bounce_recorded_at``, ``last_bounce_diagnostic``, and "
+                "``soft_bounce_count``. This endpoint deliberately does not "
+                "resubscribe the user; ``unsubscribed`` remains unchanged."
+            ),
+            "request_body": {
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "Optional operator note recorded in audit.",
+                    },
+                },
+                "example": {"reason": "Mailbox fixed by member"},
+            },
+            "responses": {
+                200: {
+                    "description": "User payload after clear.",
+                    "example": _USER_EXAMPLE,
+                },
+                404: {
+                    "description": "Unknown email.",
+                    "example": {
+                        "error": "User not found",
+                        "code": "user_not_found",
+                    },
+                },
+                422: {
+                    "description": "Unknown body field.",
+                    "example": {
+                        "error": "Unknown field: resubscribe",
+                        "code": "unknown_field",
+                        "details": {"field": "resubscribe"},
+                    },
+                },
+            },
+        },
+    },
+)
+def user_clear_bounce(request, email):
+    """``POST /api/users/<email>/clear-bounce`` -- clear bounce state."""
+    user = _find_user(email)
+    if user is None:
+        return _user_not_found_response()
+
+    data, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return parse_error
+    if not isinstance(data, dict):
+        return error_response(
+            "Body must be a JSON object",
+            "invalid_type",
+            details={"field": "body", "expected": "object"},
+        )
+
+    for key in data:
+        if key not in _CLEAR_BOUNCE_ALLOWED_FIELDS:
+            return error_response(
+                f"Unknown field: {key}",
+                "unknown_field",
+                status=422,
+                details={"field": key},
+            )
+
+    reason = data.get("reason")
+    if reason is not None:
+        reason = str(reason)
+    actor = _actor_label(request)
+
+    with transaction.atomic():
+        locked = User.objects.select_for_update().get(pk=user.pk)
+        previous_state = locked.bounce_state
+        previous_unsubscribed = locked.unsubscribed
+        locked.bounce_state = User.BounceState.NONE
+        locked.bounce_recorded_at = None
+        locked.last_bounce_diagnostic = ""
+        locked.soft_bounce_count = 0
+        locked.save(update_fields=[
+            "bounce_state",
+            "bounce_recorded_at",
+            "last_bounce_diagnostic",
+            "soft_bounce_count",
+        ])
+        details = (
+            "cleared bounce state; "
+            f"actor_token={actor}; "
+            f"previous_state={previous_state!r}; "
+            f"new_state={str(locked.bounce_state)!r}; "
+            f"unsubscribed_preserved={previous_unsubscribed}"
+        )
+        if reason is not None:
+            details = f"{details}; reason={reason!r}"
+        _audit(locked, "api_mark_bounced", details)
+        user = locked
 
     return JsonResponse(serialize_user_state(user), status=200)
 

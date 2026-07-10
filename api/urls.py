@@ -21,7 +21,7 @@ from api.views.articles import (
     article_preview_token_regenerate,
 )
 from api.views.boot_timing import boot_timing_diagnostics
-from api.views.campaigns import campaign_detail, campaigns_collection
+from api.views.campaigns import campaign_detail, campaign_recipients, campaigns_collection
 from api.views.checkpoints import (
     checkpoint_detail,
     checkpoint_move,
@@ -134,6 +134,7 @@ from api.views.triggers import (
 from api.views.user_merge import merge_users
 from api.views.users import (
     user_activity,
+    user_clear_bounce,
     user_crm_record,
     user_detail,
     user_email_log,
@@ -208,6 +209,11 @@ urlpatterns = [
         "campaigns/<int:campaign_id>",
         campaign_detail,
         name="api_campaign_detail",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/recipients",
+        campaign_recipients,
+        name="api_campaign_recipients",
     ),
     # ---- Articles ------------------------------------------------------
     path(
@@ -651,6 +657,11 @@ urlpatterns = [
         "users/<path:email>/mark-bounced",
         user_mark_bounced,
         name="api_user_mark_bounced",
+    ),
+    path(
+        "users/<path:email>/clear-bounce",
+        user_clear_bounce,
+        name="api_user_clear_bounce",
     ),
     # Email aliases (issue #840a). Staff-token add/remove of an alias that
     # routes a billing/relay email to a canonical account so future Stripe

@@ -453,6 +453,70 @@
         ]
       }
     },
+    "/api/campaigns/{campaign_id}/recipients": {
+      "get": {
+        "description": "Returns campaign recipient visibility for staff automation. Draft campaigns return ``mode=preview`` from the same ``EmailCampaign.get_eligible_recipients()`` audience logic used by Studio. Sending/sent campaigns return ``mode=sent`` with actual ``EmailLog`` rows, including engagement and bounce/complaint disposition.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign_id": 1,
+                  "count": 1,
+                  "mode": "sent",
+                  "recipients": [
+                    {
+                      "bounce_diagnostic": "smtp; 550 no mailbox",
+                      "bounce_subtype": "General",
+                      "bounce_type": "Permanent",
+                      "clicks": 0,
+                      "disposition": "bounced",
+                      "email": "alice@example.com",
+                      "email_log_id": 10,
+                      "opens": 1,
+                      "sent_at": "2026-04-15T12:00:00+00:00",
+                      "user": {
+                        "email": "alice@example.com",
+                        "id": 42
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Recipient visibility."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_campaign",
+                  "error": "Campaign not found"
+                }
+              }
+            },
+            "description": "Campaign not found."
+          }
+        },
+        "summary": "List campaign recipient preview or sent logs",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
     "/api/checkpoints/{checkpoint_id}": {
       "delete": {
         "description": "Deletes the checkpoint and re-packs the sibling positions inside the same week so there are no gaps.",
@@ -10714,6 +10778,116 @@
           }
         },
         "summary": "Remove an email alias (idempotent)",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/api/users/{email}/clear-bounce": {
+      "post": {
+        "description": "Clears ``bounce_state`` back to ``none`` and resets ``bounce_recorded_at``, ``last_bounce_diagnostic``, and ``soft_bounce_count``. This endpoint deliberately does not resubscribe the user; ``unsubscribed`` remains unchanged.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "reason": "Mailbox fixed by member"
+              },
+              "schema": {
+                "properties": {
+                  "reason": {
+                    "description": "Optional operator note recorded in audit.",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "aliases": [
+                    "47-gentle.virtual@icloud.com"
+                  ],
+                  "base_tier": {
+                    "level": 0,
+                    "slug": "free"
+                  },
+                  "bounce_state": "none",
+                  "date_joined": "2026-04-15T12:00:00+00:00",
+                  "display_name": "Alice Doe",
+                  "email": "alice@example.com",
+                  "email_verified": true,
+                  "first_name": "Alice",
+                  "last_login": "2026-05-19T08:30:00+00:00",
+                  "last_name": "Doe",
+                  "slack_member": true,
+                  "slack_user_id": "U01ABCDEF",
+                  "soft_bounce_count": 0,
+                  "stripe_customer_id": "cus_xyz",
+                  "subscription_id": "sub_xyz",
+                  "tags": [
+                    "sprint:may-2026"
+                  ],
+                  "tier": {
+                    "level": 20,
+                    "slug": "main",
+                    "source": "override"
+                  },
+                  "tier_override": {
+                    "expires_at": "2036-05-06T00:00:00+00:00",
+                    "granted_by": "ops@aishippinglabs.com",
+                    "level": 20,
+                    "tier_slug": "main"
+                  },
+                  "tier_override_active": true,
+                  "unsubscribed": false
+                }
+              }
+            },
+            "description": "User payload after clear."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown email."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_field",
+                  "details": {
+                    "field": "resubscribe"
+                  },
+                  "error": "Unknown field: resubscribe"
+                }
+              }
+            },
+            "description": "Unknown body field."
+          }
+        },
+        "summary": "Clear/reactivate structured bounce state",
         "tags": [
           "Users"
         ]

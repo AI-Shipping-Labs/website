@@ -27,6 +27,7 @@ from api.utils import (
     validation_response,
 )
 from email_app.models import EmailCampaign
+from email_app.services.campaign_recipients import serialize_campaign_recipients
 from events.models import Event
 
 READ_ONLY_FIELDS = {
@@ -475,3 +476,67 @@ def campaign_detail(request, campaign_id):
     _apply_campaign_values(campaign, values)
     campaign.save()
     return JsonResponse(_serialize_campaign(campaign), status=200)
+
+
+@token_required
+@csrf_exempt
+@require_methods("GET")
+@openapi_spec(
+    tag="Campaigns",
+    summary="List campaign recipients",
+    methods={
+        "GET": {
+            "summary": "List campaign recipient preview or sent logs",
+            "description": (
+                "Returns campaign recipient visibility for staff automation. "
+                "Draft campaigns return ``mode=preview`` from the same "
+                "``EmailCampaign.get_eligible_recipients()`` audience logic "
+                "used by Studio. Sending/sent campaigns return ``mode=sent`` "
+                "with actual ``EmailLog`` rows, including engagement and "
+                "bounce/complaint disposition."
+            ),
+            "responses": {
+                200: {
+                    "description": "Recipient visibility.",
+                    "example": {
+                        "campaign_id": 1,
+                        "mode": "sent",
+                        "count": 1,
+                        "recipients": [
+                            {
+                                "email": "alice@example.com",
+                                "user": {"id": 42, "email": "alice@example.com"},
+                                "sent_at": "2026-04-15T12:00:00+00:00",
+                                "opens": 1,
+                                "clicks": 0,
+                                "disposition": "bounced",
+                                "bounce_type": "Permanent",
+                                "bounce_subtype": "General",
+                                "bounce_diagnostic": "smtp; 550 no mailbox",
+                                "email_log_id": 10,
+                            }
+                        ],
+                    },
+                },
+                401: {"description": "Missing or invalid staff token."},
+                404: {
+                    "description": "Campaign not found.",
+                    "example": {
+                        "error": "Campaign not found",
+                        "code": "unknown_campaign",
+                    },
+                },
+            },
+        },
+    },
+)
+def campaign_recipients(request, campaign_id):
+    """GET ``/api/campaigns/<id>/recipients``."""
+    campaign = EmailCampaign.objects.filter(pk=campaign_id).first()
+    if campaign is None:
+        return error_response(
+            "Campaign not found",
+            "unknown_campaign",
+            status=404,
+        )
+    return JsonResponse(serialize_campaign_recipients(campaign), status=200)

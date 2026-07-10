@@ -100,7 +100,7 @@
             {% endfor %}
           </div>
           {% endif %}
-          {% if has_active_filters %}
+          {% if has_published_workshops and has_active_filters %}
           <a href="/workshops" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="clear-workshop-filter">
             View all workshops
           </a>
@@ -130,9 +130,42 @@
       </div>
       {% endif %}
 
-      {% if has_active_filters %}
+      {% if topic_options %}
+      <div class="mb-6 rounded-lg border border-border bg-secondary/20 px-4 py-4 sm:px-5" data-testid="workshop-topic-browser">
+        <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p class="text-sm font-medium text-foreground">Browse by topic</p>
+            <p class="text-xs uppercase tracking-widest text-muted-foreground">Topics</p>
+          </div>
+          {% if selected_topic_summary %}
+          <p class="text-sm text-muted-foreground" data-testid="workshop-topic-summary">{{ selected_topic_summary }}</p>
+          {% endif %}
+        </div>
+        <div class="flex flex-wrap gap-2" aria-label="Workshop topics" data-testid="workshop-topic-options">
+          {% for topic in topic_options %}
+          <a
+            href="{{ topic.url }}"
+            class="inline-flex min-h-[40px] max-w-full items-center rounded-full px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if topic.is_active %}bg-accent text-accent-foreground{% else %}bg-background text-muted-foreground hover:bg-background/80 hover:text-foreground{% endif %}"
+            data-testid="workshop-topic-option-{{ topic.slug }}"
+            data-topic="{{ topic.slug }}"
+            {% if topic.is_active %}aria-current="page" aria-label="Remove {{ topic.label }} topic filter"{% else %}aria-label="Browse {{ topic.label }} workshops"{% endif %}
+          >
+            {{ topic.label }}
+            {% if topic.is_active %}
+            <i data-lucide="x" class="ml-1.5 h-3.5 w-3.5"></i>
+            {% endif %}
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if has_published_workshops and has_active_filters %}
       <div class="mb-6 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary/30 px-4 py-3 text-sm" data-testid="workshop-active-filters">
         <span class="font-medium text-foreground">Filters</span>
+        {% if selected_topic_summary %}
+        <span class="text-muted-foreground" data-testid="workshop-selected-topic-summary">{{ selected_topic_summary }}</span>
+        {% endif %}
         {% if selected_access != "all" %}
         <span class="inline-flex min-h-[36px] items-center rounded-full bg-background px-3 py-1 text-xs font-medium text-foreground" data-testid="workshop-active-access">
           {{ selected_access_label }}
@@ -159,7 +192,7 @@
           href="{% tag_remove_url base_path selected_tags tag catalog_extra_params %}"
           class="inline-flex min-h-[36px] items-center gap-1 rounded-full bg-background px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
           data-testid="workshop-active-tag"
-          aria-label="Remove {{ tag }} filter"
+          aria-label="Remove {{ tag }} topic filter"
         >
           {{ tag }}
           <i data-lucide="x" class="h-3 w-3"></i>
@@ -172,8 +205,8 @@
       <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" data-testid="workshops-grid">
         {% for workshop in workshops %}
         {% with workshop_primary_instructor=workshop.primary_instructor %}
-        <article class="group h-full overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50" data-testid="workshop-card">
-          <a href="{{ workshop.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %} h-full">
+        <article class="group flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50" data-testid="workshop-card">
+          <a href="{{ workshop.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %} flex flex-1 flex-col">
             {% if workshop.pages_required_level >= 10 %}
               {% include "content/_content_preview.html" with preview_cover_url=workshop.display_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_label preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|member_short_date preview_tags=workshop.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
             {% else %}
@@ -232,6 +265,8 @@
               <a
                 href="{% tag_add_url base_path selected_tags tag catalog_extra_params %}"
                 class="inline-flex min-h-[36px] max-w-full items-center truncate rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground"
+                data-testid="workshop-card-topic"
+                aria-label="Browse {{ tag }} workshops"
                 onclick="event.stopPropagation();"
               >
                 {{ tag }}
@@ -248,7 +283,11 @@
         {% endfor %}
       </div>
       {% else %}
-      {% if has_active_filters %}
+      {% if not has_published_workshops %}
+      {% member_empty_state title='No workshops published yet' body='Check back soon.' icon='graduation-cap' kind='fresh' testid='workshops-empty-state' %}
+      {% elif selected_tags %}
+      {% member_empty_state title='No workshops match these topics' body='No workshops match the selected topics.' icon='graduation-cap' kind='filter' primary_cta_label='View all workshops' primary_cta_url='/workshops' testid='workshops-empty-state' %}
+      {% elif has_active_filters %}
       {% member_empty_state title='No workshops found' body='No workshops match the selected filters.' icon='graduation-cap' kind='filter' primary_cta_label='View all workshops' primary_cta_url='/workshops' testid='workshops-empty-state' %}
       {% else %}
       {% member_empty_state title='No workshops published yet' body='Check back soon.' icon='graduation-cap' kind='fresh' testid='workshops-empty-state' %}

@@ -282,6 +282,110 @@ class TestVisitorBrowsesCatalog:
         assert 'Python Workshop' in body
 
     @pytest.mark.core
+    def test_visitor_browses_topics_filters_and_opens_detail(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='agents-rag',
+            title='Agents RAG Systems',
+            pages=0,
+            recording=0,
+            tags=['agents', 'rag', 'evaluation'],
+        )
+        _create_workshop(
+            slug='agents-only',
+            title='Agents Debugging',
+            pages=0,
+            recording=0,
+            tags=['agents'],
+        )
+        _create_workshop(
+            slug='python-only',
+            title='Python Automation',
+            pages=0,
+            recording=0,
+            tags=['python'],
+        )
+        _create_workshop(
+            slug='secret-draft',
+            title='Secret Draft Workshop',
+            status='draft',
+            pages=0,
+            recording=0,
+            tags=['secret-topic'],
+        )
+
+        response = page.goto(
+            f'{django_server}/workshops',
+            wait_until='domcontentloaded',
+        )
+        assert response is not None and response.status == 200
+
+        assert page.locator('[data-testid="workshops-landing"]').is_visible()
+        assert page.locator('[data-testid="workshop-catalog"]').is_visible()
+        topics = page.locator('[data-testid="workshop-topic-browser"]')
+        assert topics.is_visible()
+        topic_text = topics.inner_text()
+        assert 'Browse by topic' in topic_text
+        assert 'agents' in topic_text
+        assert 'rag' in topic_text
+        assert 'evaluation' in topic_text
+        assert 'secret-topic' not in topic_text
+
+        body = page.content()
+        assert 'Agents RAG Systems' in body
+        assert 'Agents Debugging' in body
+        assert 'Python Automation' in body
+        assert 'Secret Draft Workshop' not in body
+
+        page.locator('[data-testid="workshop-topic-option-agents"]').click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops?tag=agents')
+        agents_topic = page.locator('[data-testid="workshop-topic-option-agents"]')
+        assert agents_topic.get_attribute('aria-current') == 'page'
+        agents_body = page.content()
+        assert 'Agents RAG Systems' in agents_body
+        assert 'Agents Debugging' in agents_body
+        assert 'Python Automation' not in agents_body
+
+        page.locator('[data-testid="workshop-topic-option-rag"]').click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops?tag=agents&tag=rag')
+        narrowed_body = page.content()
+        assert 'Agents RAG Systems' in narrowed_body
+        assert 'Agents Debugging' not in narrowed_body
+        assert 'Python Automation' not in narrowed_body
+        assert 'Workshops matching selected topics' in narrowed_body
+        assert (
+            page.locator('[data-testid="workshop-topic-option-rag"]')
+            .get_attribute('aria-current') == 'page'
+        )
+
+        rag_filter = page.locator(
+            '[data-testid="workshop-active-tag"]',
+            has_text='rag',
+        )
+        assert rag_filter.get_attribute('href') == '/workshops?tag=agents'
+        rag_filter.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops?tag=agents')
+        expanded_body = page.content()
+        assert 'Agents RAG Systems' in expanded_body
+        assert 'Agents Debugging' in expanded_body
+
+        page.locator('article:has(a[href="/workshops/agents-rag"]) a').first.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops/agents-rag')
+        assert page.locator('[data-testid="workshop-title"]').inner_text() == (
+            'Agents RAG Systems'
+        )
+
+    @pytest.mark.core
     def test_visitor_filters_free_catalog_and_opens_matching_workshop(
         self, django_server, page,
     ):
@@ -396,9 +500,23 @@ class TestVisitorBrowsesCatalog:
             f'{django_server}/workshops?access=paid',
             wait_until='domcontentloaded',
         )
-        python_tag = page.locator(
-            'article:has(a[href="/workshops/paid-python"]) '
+        paid_python_card = page.locator(
+            'article:has(a[href="/workshops/paid-python"])',
+        )
+        python_tag = paid_python_card.locator(
             '[data-testid="workshop-card-tags"] a:has-text("python")',
+        )
+        assert python_tag.is_visible()
+        assert python_tag.evaluate(
+            """node => node.closest('a[href="/workshops/paid-python"]') === null""",
+        )
+        card_box = paid_python_card.bounding_box()
+        tag_box = python_tag.bounding_box()
+        assert card_box is not None
+        assert tag_box is not None
+        assert tag_box['y'] >= card_box['y']
+        assert tag_box['y'] + tag_box['height'] <= (
+            card_box['y'] + card_box['height'] + 1
         )
         assert python_tag.get_attribute('href') == '/workshops?access=paid&tag=python'
         python_tag.click()

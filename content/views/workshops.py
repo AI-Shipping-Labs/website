@@ -297,9 +297,63 @@ def _build_selected_tool_filters(*, selected_tools, selected_tags,
     return filters
 
 
+def _build_catalog_topic_url(
+    *,
+    selected_tags,
+    tag,
+    selected_tools,
+    selected_access,
+    selected_skill_level,
+):
+    """Return a catalog URL that toggles ``tag`` in the topic selection."""
+    next_tags = list(selected_tags)
+    if tag in next_tags:
+        next_tags = [
+            selected_tag for selected_tag in next_tags
+            if selected_tag != tag
+        ]
+    else:
+        next_tags.append(tag)
+    return _build_catalog_filter_url(
+        selected_tags=next_tags,
+        selected_tools=selected_tools,
+        access_slug=selected_access,
+        skill_level=selected_skill_level,
+    )
+
+
+def _build_topic_options(*, all_tags, selected_tags, selected_tools,
+                         selected_access, selected_skill_level):
+    selected = set(selected_tags)
+    return [
+        {
+            'slug': tag,
+            'label': tag,
+            'url': _build_catalog_topic_url(
+                selected_tags=selected_tags,
+                tag=tag,
+                selected_tools=selected_tools,
+                selected_access=selected_access,
+                selected_skill_level=selected_skill_level,
+            ),
+            'is_active': tag in selected,
+        }
+        for tag in all_tags
+    ]
+
+
+def _build_selected_topic_summary(selected_tags):
+    if len(selected_tags) == 1:
+        return f'Workshops about {selected_tags[0]}'
+    if selected_tags:
+        return 'Workshops matching selected topics'
+    return ''
+
+
 def workshops_list(request):
     """Catalog page: grid of all published workshops."""
     workshops = Workshop.objects.filter(status='published').order_by('-date')
+    has_published_workshops = workshops.exists()
     selected_tags = _get_selected_tags(request)
     selected_tools = _get_selected_tools(request)
     selected_access = _normalize_catalog_access(request.GET.get('access'))
@@ -309,7 +363,8 @@ def workshops_list(request):
 
     # Collect options from all published workshops before active filters are
     # applied. That keeps the filter surface stable while visitors switch
-    # between access/tag/tool combinations.
+    # between access/tag/tool combinations. Draft workshop tags must not leak
+    # into public topic filters.
     all_tags = set()
     all_tools = _collect_catalog_tools(workshops)
     selected_tools = _canonicalize_selected_tools(selected_tools, all_tools)
@@ -385,6 +440,13 @@ def workshops_list(request):
         selected_access=selected_access,
         selected_skill_level=selected_skill_level,
     )
+    topic_options = _build_topic_options(
+        all_tags=all_tags,
+        selected_tags=selected_tags,
+        selected_tools=selected_tools,
+        selected_access=selected_access,
+        selected_skill_level=selected_skill_level,
+    )
     catalog_extra_params = _build_catalog_extra_params(
         selected_access=selected_access,
         selected_skill_level=selected_skill_level,
@@ -394,8 +456,10 @@ def workshops_list(request):
     context = {
         'workshops': workshops,
         'all_tags': all_tags,
+        'topic_options': topic_options,
         'all_tools': all_tools,
         'selected_tags': selected_tags,
+        'selected_topic_summary': _build_selected_topic_summary(selected_tags),
         'selected_tools': selected_tools,
         'selected_access': selected_access,
         'selected_access_label': dict(CATALOG_ACCESS_OPTIONS)[selected_access],
@@ -404,6 +468,7 @@ def workshops_list(request):
         'selected_skill_level_label': get_workshop_skill_level_label(
             selected_skill_level,
         ),
+        'has_published_workshops': has_published_workshops,
         'skill_filter_options': skill_filter_options,
         'tool_filter_options': tool_filter_options,
         'selected_tool_filters': selected_tool_filters,

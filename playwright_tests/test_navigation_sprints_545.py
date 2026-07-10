@@ -1,10 +1,10 @@
 """Playwright coverage for the top nav restructure (issue #580).
 
-Covers all 11 scenarios from the spec: the desktop primary nav reads
-About / Membership / Community / Sprints / Events / Resources, About is
-a dropdown containing About / Team / FAQ, Resources is reordered with
-Blog first, Community surfaces Membership + Sprints + Events, and the
-mobile menu mirrors the same structure with three accordions.
+Covers the top nav structure: the desktop primary nav groups About,
+Community, and Resources; About contains About / Team / FAQ, Resources is
+ordered with Blog first, Community surfaces the overview plus Membership,
+Sprints, and Events, and the mobile menu mirrors the same structure with
+three accordions.
 
 File name preserved so historical test history stays grouped with the
 earlier #545 grooming work.
@@ -251,6 +251,7 @@ def test_community_dropdown_groups_membership_sprints_events(django_server, page
         """
     )
     assert link_ids == [
+        "nav-community-link-overview",
         "nav-community-link-membership",
         "nav-community-link-sprints",
         "nav-community-link-events",
@@ -259,6 +260,29 @@ def test_community_dropdown_groups_membership_sprints_events(django_server, page
     page.get_by_test_id("nav-community-link-membership").click()
     page.wait_for_url("**/pricing")
     _shot(page, "04-community-membership")
+
+
+def test_community_dropdown_links_overview_first(django_server, page):
+    """Scenario: Visitor opens Community and starts at the restored overview."""
+    page.set_viewport_size({"width": 1280, "height": 800})
+    page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+    page.get_by_test_id("nav-community-trigger").hover()
+    menu = page.get_by_test_id("nav-community-menu")
+    menu.wait_for(state="visible")
+
+    links = menu.evaluate(
+        """
+        el => [...el.querySelectorAll('a[data-testid]')]
+            .map(a => [a.getAttribute('data-testid'), a.getAttribute('href')])
+        """
+    )
+    assert links[:4] == [
+        ["nav-community-link-overview", "/community"],
+        ["nav-community-link-membership", "/pricing"],
+        ["nav-community-link-sprints", "/sprints"],
+        ["nav-community-link-events", "/events"],
+    ]
 
 
 def test_community_links_reach_membership_sprints_and_events(django_server, page):
@@ -420,6 +444,7 @@ def test_mobile_320px_has_no_horizontal_overflow(django_server, browser):
     # the menu container (no horizontal overflow forcing them off-canvas).
     for test_id in [
         "mobile-nav-about-link-team",
+        "mobile-nav-community-link-overview",
         "mobile-nav-community-link-sprints",
         "mobile-nav-resources-link-curated-links",
     ]:

@@ -22,6 +22,7 @@ ABOUT_LINKS = [
 ]
 
 COMMUNITY_LINKS = [
+    ('Community', '/community'),
     ('Membership', '/pricing'),
     ('Community Sprints', '/sprints'),
     ('Events', '/events'),
@@ -123,6 +124,7 @@ class HeaderTextNavigationIssue580Test(TestCase):
         self.assertEqual(
             community_link_ids,
             [
+                'nav-community-link-overview',
                 'nav-community-link-membership',
                 'nav-community-link-sprints',
                 'nav-community-link-events',
@@ -239,6 +241,7 @@ class HeaderTextNavigationIssue580Test(TestCase):
     def test_public_nav_destinations_continue_to_resolve(self):
         for path in [
             '/activities',
+            '/community',
             '/about',
             '/pricing',
             '/faq',

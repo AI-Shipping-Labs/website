@@ -156,6 +156,7 @@ class StaticViewSitemap(Sitemap):
     def items(self):
         return [
             'home',
+            'community_landing',
             'about',
             'blog_list',
             'projects_list',

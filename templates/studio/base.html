@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load studio_filters %}
+{% load static studio_filters %}
 
 {% block title %}Studio - {% block studio_title %}Dashboard{% endblock %} | {{ site_name }}{% endblock %}
 
@@ -823,4 +823,5 @@ double-rendering. See issue #347.
 
 })();
 </script>
+<script src="{% static 'js/studio/dirty_form_guard.js' %}"></script>
 {% endblock %}

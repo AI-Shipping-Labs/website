@@ -15,8 +15,10 @@ import datetime
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
-from events.models import EventSeries
+from content.models import Course
+from events.models import Event, EventSeries
 from integrations.models import Redirect
 from plans.models import Sprint
 
@@ -243,3 +245,89 @@ class EventSeriesFormActionBarTest(StaffClientMixin, TestCase):
         # 302 redirect to series detail on success.
         self.assertEqual(response.status_code, 302)
         self.assertEqual(EventSeries.objects.count(), before + 1)
+
+
+class DirtyFormGuardActionBarTest(StaffClientMixin, TestCase):
+    """Dirty-form guard markup is driven by the shared action bar."""
+
+    def test_edit_redirect_form_opts_into_dirty_guard(self):
+        response = self.client.get('/studio/redirects/new')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'data-studio-dirty-guard-form="redirect-edit-form"',
+        )
+
+    def test_event_editor_renders_save_status_and_dirty_guard(self):
+        event = Event.objects.create(
+            title='Guarded Event',
+            slug='guarded-event',
+            start_datetime=timezone.now() + datetime.timedelta(days=7),
+            end_datetime=timezone.now() + datetime.timedelta(days=7, hours=1),
+            origin='studio',
+        )
+        response = self.client.get(f'/studio/events/{event.pk}/edit')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'data-studio-dirty-guard-form="event-edit-form"',
+        )
+        self.assertContains(response, 'data-testid="sticky-save-status"')
+        self.assertContains(response, 'No unsaved changes')
+
+    def test_course_editor_renders_save_status_and_dirty_guard(self):
+        course = Course.objects.create(
+            title='Guarded Course',
+            slug='guarded-course',
+            description='Course description',
+        )
+        response = self.client.get(f'/studio/courses/{course.pk}/edit')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'data-studio-dirty-guard-form="course-edit-form"',
+        )
+        self.assertContains(response, 'data-testid="sticky-save-status"')
+        self.assertContains(response, 'No unsaved changes')
+
+    def test_source_managed_course_does_not_opt_into_dirty_guard(self):
+        course = Course.objects.create(
+            title='Synced Course',
+            slug='synced-course-guard',
+            description='Course description',
+            source_repo='AI-Shipping-Labs/content',
+            source_path='courses/synced-course-guard/course.yaml',
+        )
+        response = self.client.get(f'/studio/courses/{course.pk}/edit')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-studio-dirty-guard-form')
+        self.assertNotContains(response, 'data-testid="sticky-save-status"')
+
+    def test_event_validation_error_renders_save_failed_status(self):
+        event = Event.objects.create(
+            title='Invalid Timezone Event',
+            slug='invalid-timezone-event',
+            start_datetime=timezone.now() + datetime.timedelta(days=7),
+            end_datetime=timezone.now() + datetime.timedelta(days=7, hours=1),
+            origin='studio',
+        )
+        response = self.client.post(f'/studio/events/{event.pk}/edit', {
+            'title': event.title,
+            'slug': event.slug,
+            'description': '',
+            'status': 'draft',
+            'platform': 'zoom',
+            'external_host': '',
+            'event_date': '20/07/2026',
+            'event_time': '18:00',
+            'duration_hours': '1',
+            'timezone': 'Not/AZone',
+            'location': '',
+            'host_email': '',
+            'required_level': '0',
+            'tags': '',
+            'post_event_summary': '',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Save failed - fix errors')
+        self.assertContains(response, 'data-studio-dirty-status-state="error"')

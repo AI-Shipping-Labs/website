@@ -1,10 +1,22 @@
 {% load studio_filters %}
-<div class="sticky bottom-0 md:top-4 md:bottom-auto z-30 -mx-4 md:mx-0 mb-6" data-testid="sticky-action-bar">
+<div class="sticky bottom-0 md:top-4 md:bottom-auto z-30 -mx-4 md:mx-0 mb-6"
+     data-testid="sticky-action-bar"
+     {% if can_save and form_id %}data-studio-dirty-guard-form="{{ form_id }}"{% endif %}>
   <div class="border border-border bg-card/95 px-4 py-3 shadow-lg backdrop-blur md:rounded-lg">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div class="min-w-0">
         <p class="text-sm font-medium text-foreground">{{ title }}</p>
         <p class="text-xs text-muted-foreground">{{ subtitle }}{% if docs_url %} <a href="{{ docs_url }}" target="_blank" rel="noopener noreferrer" class="ml-1 text-accent hover:underline" data-testid="sticky-docs-link">{{ docs_label|default:"Docs" }}</a>{% endif %}</p>
+        {% if can_save and show_save_status %}
+        <p class="mt-2">
+          <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium {% if save_status == 'error' %}border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400{% else %}border-border bg-secondary text-muted-foreground{% endif %}"
+                data-testid="sticky-save-status"
+                data-studio-dirty-status
+                data-studio-dirty-status-state="{% if save_status == 'error' %}error{% else %}clean{% endif %}">
+            {% if save_status == 'error' %}Save failed - fix errors{% else %}{{ clean_status_label|default:"No unsaved changes" }}{% endif %}
+          </span>
+        </p>
+        {% endif %}
       </div>
       <div class="flex flex-nowrap items-center gap-2 overflow-x-auto sm:flex-shrink-0 sm:flex-nowrap sm:overflow-visible" data-testid="sticky-action-row">
         {% if can_save %}

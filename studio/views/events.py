@@ -700,6 +700,7 @@ def event_edit(request, event_id):
             )
             context['form_values'] = {}
             context['errors'] = {'host_ids': host_error}
+            context['save_status'] = 'error'
             context['external_host_choices'] = EXTERNAL_HOST_CHOICES
             tz_value = context['timezone_value']
             context['timezone_label'] = get_timezone_label(tz_value) or tz_value
@@ -794,6 +795,7 @@ def event_edit(request, event_id):
                 )
                 context['form_values'] = {}
                 context['errors'] = {'timezone': 'Unknown timezone.'}
+                context['save_status'] = 'error'
                 context['external_host_choices'] = EXTERNAL_HOST_CHOICES
                 tz_value = context['timezone_value']
                 context['timezone_label'] = (
@@ -913,6 +915,7 @@ def event_edit(request, event_id):
     # ``form_values.foo`` lookups resolve cleanly when rendering edit.
     context['form_values'] = {}
     context['errors'] = {}
+    context['save_status'] = ''
     context['external_host_choices'] = EXTERNAL_HOST_CHOICES
     tz_value = context['timezone_value']
     context['timezone_label'] = get_timezone_label(tz_value) or tz_value

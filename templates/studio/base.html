@@ -659,7 +659,9 @@ double-rendering. See issue #347.
           </ul>
         </div>
 
+        {% if VERSION and VERSION != 'N/A' and VERSION != 'None' %}
         <p class="px-3 mt-6 text-xs text-muted-foreground">v{{ VERSION }}</p>
+        {% endif %}
       </nav>
       <div id="studio-sidebar-scroll-affordance" class="pointer-events-none absolute inset-x-0 bottom-0 hidden h-14 bg-gradient-to-t from-card via-card/95 to-transparent md:hidden" aria-hidden="true">
         <span class="absolute bottom-2 left-1/2 h-1 w-10 -translate-x-1/2 rounded-full bg-muted-foreground/35"></span>

@@ -46,7 +46,7 @@
       <button type="button"
               id="series-slack-btn"
               onclick="postSeriesToSlack()"
-              class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors"
               data-testid="event-series-announce-slack">
         Post to Slack
       </button>
@@ -58,7 +58,7 @@
             class="inline-flex flex-col items-start" data-testid="series-create-zoom-form">
         {% csrf_token %}
         <button type="submit"
-                class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors"
                 data-testid="series-create-zoom">
           Create Zoom meetings for all events
         </button>
@@ -161,13 +161,13 @@
               <span class="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground"
                     data-testid="event-publish-state" data-status="{{ event.derived_status }}">Not published</span>
               {% elif event.status == 'cancelled' %}
-              <span class="inline-flex items-center rounded-full bg-red-500/15 px-2.5 py-1 text-xs font-medium text-red-300"
+              <span class="inline-flex items-center rounded-full bg-red-500/15 px-2.5 py-1 text-xs font-medium text-red-700 dark:text-red-300"
                     data-testid="event-publish-state" data-status="{{ event.derived_status }}">Cancelled</span>
               {% elif event.status == 'completed' %}
               <span class="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground"
                     data-testid="event-publish-state" data-status="{{ event.derived_status }}">Completed</span>
               {% else %}
-              <span class="inline-flex items-center rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-400"
+              <span class="inline-flex items-center rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-700 dark:text-green-300"
                     data-testid="event-publish-state" data-status="{{ event.derived_status }}">Published</span>
               {% endif %}
             </td>

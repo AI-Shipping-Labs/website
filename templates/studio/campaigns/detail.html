@@ -52,11 +52,8 @@
     <div class="grid grid-cols-2 gap-6">
       <div>
         <p class="text-sm text-muted-foreground">Status</p>
-        <span class="text-xs px-2 py-1 rounded-full inline-block mt-1
-          {% if campaign.status == 'sent' %}bg-green-500/20 text-green-400
-          {% elif campaign.status == 'sending' %}bg-blue-500/20 text-blue-400
-          {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
-          {{ campaign.get_status_display }}
+        <span class="inline-block mt-1">
+          {% studio_status_badge campaign.status campaign.get_status_display %}
         </span>
       </div>
       <div>

@@ -89,12 +89,7 @@ class StudioListCtaConsistencyTest(SimpleTestCase):
         self.assertEqual(offenders, [], offenders)
 
     def test_events_list_new_buttons_use_canonical_shape(self):
-        """``events/list.html`` has two icon+label CTAs at lines 14/20.
-
-        Both must use ``inline-flex items-center justify-center`` so
-        the leading ``plus`` icon lines up with the label, plus the
-        canonical ``rounded-lg`` + ``transition-opacity`` pair.
-        """
+        """The event create buttons keep icon+label alignment."""
         source = (REPO_ROOT / 'templates' / 'studio' / 'events' / 'list.html').read_text()
         for testid in ('event-new-button', 'event-series-new-button'):
             with self.subTest(testid=testid):
@@ -118,8 +113,39 @@ class StudioListCtaConsistencyTest(SimpleTestCase):
                 self.assertIn('items-center', class_value)
                 self.assertIn('justify-center', class_value)
                 self.assertIn('rounded-lg', class_value)
-                self.assertIn('transition-opacity', class_value)
+                self.assertTrue(
+                    'transition-opacity' in class_value
+                    or 'transition-colors' in class_value,
+                    class_value,
+                )
                 self.assertNotIn('rounded-md', class_value)
+
+    def test_events_list_has_one_primary_create_cta(self):
+        source = (REPO_ROOT / 'templates' / 'studio' / 'events' / 'list.html').read_text()
+        new_event = re.search(
+            r'<a\b[^>]*\bdata-testid="event-new-button"[^>]*>',
+            source,
+            re.DOTALL,
+        )
+        new_series = re.search(
+            r'<a\b[^>]*\bdata-testid="event-series-new-button"[^>]*>',
+            source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(new_event)
+        self.assertIsNotNone(new_series)
+        new_event_class = re.search(r'class="([^"]+)"', new_event.group(0)).group(1)
+        new_series_class = re.search(r'class="([^"]+)"', new_series.group(0)).group(1)
+
+        self.assertIn('bg-accent', new_event_class)
+        self.assertIn('text-accent-foreground', new_event_class)
+        self.assertNotIn('border-border', new_event_class)
+
+        self.assertIn('border', new_series_class)
+        self.assertIn('border-border', new_series_class)
+        self.assertIn('text-foreground', new_series_class)
+        self.assertNotIn('bg-accent', new_series_class)
+        self.assertIn('data-testid="event-series-new-button"', new_series.group(0))
 
     def test_event_series_list_new_button_uses_canonical_shape(self):
         """``event_series/list.html`` line 13 — icon+label CTA."""

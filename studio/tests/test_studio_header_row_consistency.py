@@ -299,7 +299,7 @@ class StudioListHeaderRowConsistencyTest(SimpleTestCase):
         # so the sprint pill reads as in-progress, not neutral.
         self.assertEqual(
             STATUS_BADGE_CLASSES['active'],
-            'bg-green-500/20 text-green-400',
+            'bg-green-500/20 text-green-700 dark:text-green-300',
         )
         # ``completed`` (alias of "archived") stays grey/muted.
         self.assertEqual(

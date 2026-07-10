@@ -193,7 +193,10 @@ class StudioListComponentRenderTest(TestCase):
     def test_shared_status_badges_keep_publication_and_event_colors(self):
         article_response = self.client.get('/studio/articles/')
         self.assertContains(article_response, 'data-component="studio-status-badge"')
-        self.assertContains(article_response, 'bg-green-500/20 text-green-400')
+        self.assertContains(
+            article_response,
+            'bg-green-500/20 text-green-700 dark:text-green-300',
+        )
         self.assertContains(article_response, 'Published')
 
     def test_shared_origin_badge_and_actions_preserve_list_links(self):

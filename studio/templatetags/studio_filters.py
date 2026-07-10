@@ -45,38 +45,40 @@ ACTION_KIND_CLASSES = {
 }
 
 STATUS_BADGE_CLASSES = {
-    'published': 'bg-green-500/20 text-green-400',
-    'draft': 'bg-yellow-500/20 text-yellow-400',
-    'upcoming': 'bg-blue-500/20 text-blue-400',
+    'published': 'bg-green-500/20 text-green-700 dark:text-green-300',
+    'draft': 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300',
+    'upcoming': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
+    'sending': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
+    'sent': 'bg-green-500/20 text-green-700 dark:text-green-300',
     # ``active`` reads as the "currently happening" / "in-progress" state
     # across surfaces (content publishing, sprints, etc.) — same green as
     # ``published`` so the two read consistently. ``completed`` is the
     # archived/done state and stays grey-muted; ``archived`` aliases it
     # for the sprint vocabulary.
-    'active': 'bg-green-500/20 text-green-400',
+    'active': 'bg-green-500/20 text-green-700 dark:text-green-300',
     'completed': 'bg-secondary text-muted-foreground',
     'archived': 'bg-secondary text-muted-foreground',
     # Time-derived label for the Studio events list (#820): a finished
     # (or past-grouped) event reads grey-muted, same as ``completed``.
     'past': 'bg-secondary text-muted-foreground',
-    'cancelled': 'bg-red-500/20 text-red-400',
+    'cancelled': 'bg-red-500/20 text-red-700 dark:text-red-300',
     # User-import batch statuses (#753): align the imports list pill colors
     # with the canonical palette instead of inline ``{% if %}`` blocks.
-    'failed': 'bg-red-500/20 text-red-400',
-    'running': 'bg-blue-500/20 text-blue-400',
+    'failed': 'bg-red-500/20 text-red-700 dark:text-red-300',
+    'running': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
 }
 
 TIER_PILL_CLASSES = {
     'free': 'bg-muted text-muted-foreground',
-    'basic': 'bg-blue-500/20 text-blue-300',
+    'basic': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
     'main': 'bg-accent/20 text-accent',
-    'premium': 'bg-amber-500/20 text-amber-300',
+    'premium': 'bg-amber-500/20 text-amber-700 dark:text-amber-300',
 }
 
 USER_STATUS_PILL_CLASSES = {
-    'active': 'bg-green-500/15 text-green-300',
-    'staff': 'bg-blue-500/15 text-blue-300',
-    'inactive': 'bg-red-500/15 text-red-300',
+    'active': 'bg-green-500/15 text-green-700 dark:text-green-300',
+    'staff': 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
+    'inactive': 'bg-red-500/15 text-red-700 dark:text-red-300',
 }
 
 STATUS_OPTIONS = {
@@ -177,6 +179,7 @@ def studio_empty_state(
     colspan=8,
     cta_label=None,
     testid_suffix='',
+    empty_message='',
 ):
     """Render the canonical Studio list-page empty state.
 
@@ -199,6 +202,7 @@ def studio_empty_state(
         'colspan': colspan,
         'cta_label': cta_label,
         'testid_suffix': testid_suffix,
+        'empty_message': empty_message,
     }
 
 

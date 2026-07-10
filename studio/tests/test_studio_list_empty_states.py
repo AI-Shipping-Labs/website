@@ -116,7 +116,8 @@ class StudioEmptyStateRenderTest(SimpleTestCase):
             'clear_url=clear_url '
             'colspan=colspan '
             'cta_label=cta_label '
-            'testid_suffix=testid_suffix %}'
+            'testid_suffix=testid_suffix '
+            'empty_message=empty_message %}'
         )
         ctx = {
             'kind': kwargs.get('kind'),
@@ -127,6 +128,7 @@ class StudioEmptyStateRenderTest(SimpleTestCase):
             'colspan': kwargs.get('colspan', 8),
             'cta_label': kwargs.get('cta_label'),
             'testid_suffix': kwargs.get('testid_suffix', ''),
+            'empty_message': kwargs.get('empty_message', ''),
         }
         return template.render(Context(ctx))
 
@@ -194,6 +196,22 @@ class StudioEmptyStateRenderTest(SimpleTestCase):
         # The default ``New <entity_label>`` text must NOT appear when
         # an explicit label is supplied.
         self.assertNotIn('New token', html)
+
+    def test_empty_state_supports_custom_message(self):
+        html = self._render(
+            kind='fresh',
+            entity_label='payment mismatch',
+            entity_label_plural='payment mismatches',
+            empty_message=(
+                'Payment audit is clean. No payment mismatches are waiting '
+                'for review.'
+            ),
+        )
+        self.assertIn(
+            'Payment audit is clean. No payment mismatches are waiting for review.',
+            html,
+        )
+        self.assertNotIn('No payment mismatches yet.', html)
 
     def test_testid_suffix_emits_secondary_data_attribute(self):
         """Pages with legacy selectors keep using a secondary attribute

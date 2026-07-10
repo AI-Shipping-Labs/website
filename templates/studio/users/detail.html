@@ -198,7 +198,7 @@
              title="View this user's tier overrides"
              data-testid="user-detail-tier-badge-link"
              class="inline-flex">
-            <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30"
+            <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
                   data-testid="user-detail-tier-badge"
                   data-tier-source="override"
                   title="Tier comes from an active temporary upgrade granted in Studio. Click to view override history.">
@@ -257,11 +257,11 @@
       </dt>
       <dd>
         {% if detail_user.email_verified %}
-        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400"
+        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-700 dark:text-green-300"
               data-testid="user-detail-email-verified"
               data-email-verified="yes">Verified</span>
         {% else %}
-        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30"
+        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
               data-testid="user-detail-email-verified"
               data-email-verified="no">Not verified</span>
         {% endif %}

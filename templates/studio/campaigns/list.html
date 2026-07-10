@@ -42,12 +42,7 @@
           <a href="{% url 'studio_campaign_detail' campaign_id=campaign.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ campaign.subject }}</a>
         </td>
         <td class="px-6 py-4">
-          <span class="text-xs px-2 py-1 rounded-full
-            {% if campaign.status == 'sent' %}bg-green-500/20 text-green-400
-            {% elif campaign.status == 'sending' %}bg-blue-500/20 text-blue-400
-            {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
-            {{ campaign.get_status_display }}
-          </span>
+          {% studio_status_badge campaign.status campaign.get_status_display %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.get_target_min_level_display }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.sent_count }}</td>

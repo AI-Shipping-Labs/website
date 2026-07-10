@@ -102,9 +102,9 @@ class UserTierAndStatusPillTest(TierLabelCleanupTestBase):
         inactive = self._user('inactive-589@test.com', is_active=False)
 
         cases = [
-            (active, 'active', 'bg-green-500/15 text-green-300'),
-            (staff, 'staff', 'bg-blue-500/15 text-blue-300'),
-            (inactive, 'inactive', 'bg-red-500/15 text-red-300'),
+            (active, 'active', 'bg-green-500/15 text-green-700 dark:text-green-300'),
+            (staff, 'staff', 'bg-blue-500/15 text-blue-700 dark:text-blue-300'),
+            (inactive, 'inactive', 'bg-red-500/15 text-red-700 dark:text-red-300'),
         ]
         for user, status, classes in cases:
             response = self.client.get(reverse('studio_user_detail', args=[user.pk]))

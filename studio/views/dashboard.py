@@ -210,14 +210,14 @@ def dashboard(request):
         ))
 
     quick_actions = [
+        _quick_action('New event', 'studio_event_new', 'calendar-plus', 'Schedule a live session.'),
+        _quick_action('New campaign', 'studio_campaign_create', 'send', 'Draft an email campaign.'),
+        _quick_action('New plan', 'studio_plan_create', 'clipboard-list', 'Create a member sprint plan.'),
         _quick_action('Sync Dashboard', 'studio_sync_dashboard', 'refresh-cw', 'Run or inspect content syncs.'),
-        _quick_action('Courses', 'studio_course_list', 'book-open', 'Review course content.'),
-        _quick_action('Users', 'studio_user_list', 'users', 'Search subscribers and members.'),
         _quick_action('Project reviews', 'studio_project_list', 'folder-kanban', 'Approve pending projects.'),
-        _quick_action('Events', 'studio_event_list', 'calendar', 'Check upcoming sessions.'),
         _quick_action('Worker dashboard', 'studio_worker', 'server', 'Inspect queue and failures.'),
     ]
-    quick_actions[3]['url'] += '?status=pending_review'
+    quick_actions[4]['url'] += '?status=pending_review'
 
     summary_metrics = [
         {'label': 'Courses', 'value': stats['total_courses'], 'detail': f"{stats['published_courses']} published"},

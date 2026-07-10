@@ -83,6 +83,27 @@
 
   <section class="bg-card border border-border rounded-lg p-5" data-testid="studio-dashboard-quick-actions" aria-labelledby="quick-actions-heading">
     <h2 id="quick-actions-heading" class="text-lg font-semibold text-foreground mb-4">Quick actions</h2>
+    <div class="relative mb-4" data-studio-global-search data-search-endpoint="{% url 'studio_global_search' %}" data-search-groups="users" data-testid="studio-dashboard-user-lookup">
+      <label for="studio-dashboard-user-lookup-input" class="block text-sm font-medium text-foreground mb-2">User lookup</label>
+      <div class="relative">
+        <i data-lucide="user-search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"></i>
+        <input id="studio-dashboard-user-lookup-input"
+               type="search"
+               class="h-11 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+               placeholder="Find member by email or name"
+               autocomplete="off"
+               role="combobox"
+               aria-expanded="false"
+               aria-controls="studio-dashboard-user-lookup-results"
+               data-studio-global-search-input
+               data-testid="studio-dashboard-user-lookup-input">
+      </div>
+      <div id="studio-dashboard-user-lookup-results"
+           class="absolute z-30 mt-2 hidden max-h-80 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+           role="listbox"
+           data-studio-global-search-results
+           data-testid="studio-dashboard-user-lookup-results"></div>
+    </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2">
       {% for action in quick_actions %}
         <a href="{{ action.url }}" class="flex items-center gap-3 rounded-lg border border-border px-3 py-3 hover:bg-secondary hover:text-foreground transition-colors" data-testid="studio-dashboard-quick-action">

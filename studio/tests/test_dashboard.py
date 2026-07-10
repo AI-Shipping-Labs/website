@@ -197,6 +197,20 @@ class StudioDashboardTest(TestCase):
         response = self.client.get('/studio/')
         self.assertContains(response, 'Studio')
 
+    def test_dashboard_and_studio_pages_render_global_search_control(self):
+        dashboard_response = self.client.get('/studio/')
+        events_response = self.client.get('/studio/events/')
+
+        for response in (dashboard_response, events_response):
+            self.assertContains(response, 'data-testid="studio-global-search-input"')
+            self.assertContains(response, reverse('studio_global_search'))
+
+    def test_dashboard_renders_user_lookup_action(self):
+        response = self.client.get('/studio/')
+
+        self.assertContains(response, 'data-testid="studio-dashboard-user-lookup"')
+        self.assertContains(response, 'Find member by email or name')
+
     def test_dashboard_context_prioritizes_operational_sections(self):
         Project.objects.create(
             title='Needs Review',
@@ -364,14 +378,22 @@ class StudioDashboardTest(TestCase):
         self.assertEqual(
             {action['label'] for action in quick_actions},
             {
+                'New event',
+                'New campaign',
+                'New plan',
                 'Sync Dashboard',
-                'Courses',
-                'Users',
                 'Project reviews',
-                'Events',
                 'Worker dashboard',
             },
         )
+
+        urls_by_label = {action['label']: action['url'] for action in quick_actions}
+        self.assertEqual(urls_by_label['New event'], reverse('studio_event_new'))
+        self.assertEqual(
+            urls_by_label['New campaign'],
+            reverse('studio_campaign_create'),
+        )
+        self.assertEqual(urls_by_label['New plan'], reverse('studio_plan_create'))
 
         for action in quick_actions:
             action_response = self.client.get(action['url'])

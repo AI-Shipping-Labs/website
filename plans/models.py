@@ -110,6 +110,16 @@ SPRINT_CADENCE_STATUS_CHOICES = [
     (SPRINT_CADENCE_STATUS_SKIPPED, 'Skipped'),
 ]
 
+SPRINT_END_DELIVERY_STATUS_SENT = 'sent'
+SPRINT_END_DELIVERY_STATUS_EMAIL_FAILED = 'email_failed'
+SPRINT_END_DELIVERY_STATUS_SKIPPED = 'skipped'
+
+SPRINT_END_DELIVERY_STATUS_CHOICES = [
+    (SPRINT_END_DELIVERY_STATUS_SENT, 'Sent'),
+    (SPRINT_END_DELIVERY_STATUS_EMAIL_FAILED, 'Email failed'),
+    (SPRINT_END_DELIVERY_STATUS_SKIPPED, 'Skipped'),
+]
+
 KIND_CHOICES = [
     ('persona', 'Persona'),
     ('background', 'Background'),
@@ -1056,6 +1066,84 @@ class SprintPartnerIntroEmailLog(TimestampedModelMixin, models.Model):
     def __str__(self):
         return (
             'SprintPartnerIntroEmailLog('
+            f'sprint={self.sprint_id}, member={self.member_id}, '
+            f'status={self.status})'
+        )
+
+
+class SprintEndDeliveryLog(TimestampedModelMixin, models.Model):
+    """Durable one-shot audit row for sprint-end member recaps."""
+
+    sprint = models.ForeignKey(
+        Sprint,
+        on_delete=models.CASCADE,
+        related_name='sprint_end_delivery_logs',
+    )
+    member = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sprint_end_delivery_logs',
+    )
+    plan = models.ForeignKey(
+        Plan,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sprint_end_delivery_logs',
+    )
+    notification = models.ForeignKey(
+        'notifications.Notification',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    email_log = models.ForeignKey(
+        'email_app.EmailLog',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    feedback_response = models.ForeignKey(
+        'questionnaires.Response',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    next_sprint = models.ForeignKey(
+        Sprint,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=SPRINT_END_DELIVERY_STATUS_CHOICES,
+        default=SPRINT_END_DELIVERY_STATUS_SENT,
+        db_index=True,
+    )
+    sent_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['-updated_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sprint', 'member'],
+                name='unique_sprint_end_delivery_recipient',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['sprint', 'status']),
+            models.Index(fields=['member', 'status']),
+        ]
+
+    def __str__(self):
+        return (
+            'SprintEndDeliveryLog('
             f'sprint={self.sprint_id}, member={self.member_id}, '
             f'status={self.status})'
         )

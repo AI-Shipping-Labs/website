@@ -13,6 +13,8 @@ NOTIFICATION_TYPE_CHOICES = [
     # (Studio button OR PATCH /api/plans/<id>/ with {"shared_at": ...}).
     # Targets exactly one user (the plan owner) — no tier fan-out.
     ('plan_shared', 'Plan Shared'),
+    # Sprint-end progress recap for enrolled members with shared plans.
+    ('sprint_recap', 'Sprint Recap'),
     # Issue #882: fired when a member submits the onboarding form (or
     # finishes the AI onboarding chat). Created for every active staff
     # user, mirroring the plan-request fan-out. Links to the member's CRM

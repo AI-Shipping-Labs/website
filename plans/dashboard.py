@@ -22,6 +22,10 @@ from django.utils import timezone
 from accounts.utils.user_checks import is_authenticated_user
 from plans.models import Plan, Sprint, SprintEnrollment
 from plans.services import annotate_plan_progress
+from plans.tasks.sprint_end import (
+    build_sprint_end_next_action,
+    get_member_sprint_feedback_response,
+)
 
 
 def _created_timestamp(obj):
@@ -111,14 +115,20 @@ def build_sprint_plan_card_context(user):
             'plan_progress_total': 0,
             'plan_progress_done': 0,
             'cohort_has_other_members': False,
+            'plan_has_ended': False,
+            'sprint_end_feedback_response': None,
+            'sprint_end_feedback_url': '',
+            'sprint_end_feedback_label': '',
+            'sprint_end_next_action': None,
         }
 
+    today = timezone.localdate()
     plans = list(
         annotate_plan_progress(Plan.objects.filter(member=user))
         .select_related('sprint')
     )
     has_any_plan = bool(plans)
-    plan = _select_dashboard_shared_plan(plans)
+    plan = _select_dashboard_shared_plan(plans, today=today)
 
     if plan is None:
         return {
@@ -127,6 +137,11 @@ def build_sprint_plan_card_context(user):
             'plan_progress_total': 0,
             'plan_progress_done': 0,
             'cohort_has_other_members': False,
+            'plan_has_ended': False,
+            'sprint_end_feedback_response': None,
+            'sprint_end_feedback_url': '',
+            'sprint_end_feedback_label': '',
+            'sprint_end_next_action': None,
         }
 
     cohort_has_other_members = (
@@ -135,6 +150,33 @@ def build_sprint_plan_card_context(user):
         .exclude(user=user)
         .exists()
     )
+    plan_has_ended = plan.sprint.has_ended(today=today)
+    feedback_response = None
+    feedback_url = ''
+    feedback_label = ''
+    next_action = None
+    if plan_has_ended:
+        feedback_response = get_member_sprint_feedback_response(
+            sprint=plan.sprint,
+            member=user,
+        )
+        if feedback_response is not None:
+            feedback_url = reverse(
+                'sprint_feedback_fill',
+                kwargs={
+                    'sprint_slug': plan.sprint.slug,
+                    'response_id': feedback_response.pk,
+                },
+            )
+            feedback_label = (
+                'View feedback'
+                if feedback_response.status == 'submitted'
+                else 'Share feedback'
+            )
+        next_action = build_sprint_end_next_action(
+            ended_sprint=plan.sprint,
+            member=user,
+        )
 
     return {
         'plan': plan,
@@ -142,6 +184,11 @@ def build_sprint_plan_card_context(user):
         'plan_progress_total': plan.progress_total,
         'plan_progress_done': plan.progress_done,
         'cohort_has_other_members': cohort_has_other_members,
+        'plan_has_ended': plan_has_ended,
+        'sprint_end_feedback_response': feedback_response,
+        'sprint_end_feedback_url': feedback_url,
+        'sprint_end_feedback_label': feedback_label,
+        'sprint_end_next_action': next_action,
     }
 
 

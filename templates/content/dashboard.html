@@ -200,7 +200,16 @@
           &middot;
           {% member_status_badge plan.sprint.sprint_badge_current.label size="xs" extra_class=plan.sprint.sprint_badge_current.css_class testid="account-sprint-plan-status" %}
         </p>
-        {% if plan_progress_total %}
+        {% if plan_has_ended %}
+        <div class="mt-4 rounded-md border border-accent/30 bg-accent/10 p-3" data-testid="account-sprint-plan-recap">
+          <p class="text-sm font-medium text-foreground">
+            Sprint recap
+          </p>
+          <p class="mt-1 text-sm text-muted-foreground" data-testid="account-sprint-plan-progress">
+            {{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done
+          </p>
+        </div>
+        {% elif plan_progress_total %}
         <p class="text-sm text-foreground mt-3" data-testid="account-sprint-plan-progress">
           {{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done
         </p>
@@ -218,6 +227,22 @@
              data-testid="account-sprint-plan-cohort">
             <i data-lucide="users" class="h-4 w-4"></i>
             View cohort
+          </a>
+          {% endif %}
+          {% if plan_has_ended and sprint_end_feedback_url %}
+          <a href="{{ sprint_end_feedback_url }}"
+             class="{% button_classes 'secondary' %}"
+             data-testid="account-sprint-plan-feedback">
+            <i data-lucide="message-square-text" class="h-4 w-4"></i>
+            {{ sprint_end_feedback_label }}
+          </a>
+          {% endif %}
+          {% if plan_has_ended and sprint_end_next_action %}
+          <a href="{{ sprint_end_next_action.url }}"
+             class="{% button_classes 'secondary' %}"
+             data-testid="account-sprint-plan-next-action">
+            <i data-lucide="move-right" class="h-4 w-4"></i>
+            {{ sprint_end_next_action.label }}
           </a>
           {% endif %}
         </div>

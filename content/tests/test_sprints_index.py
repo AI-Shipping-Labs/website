@@ -330,6 +330,8 @@ class SprintsIndexTest(TestCase):
         response = self.client.get('/sprints')
 
         self.assertContains(response, 'Open my plan')
+        self.assertContains(response, "You're enrolled")
+        self.assertNotContains(response, 'Use the next step below to continue')
         self.assertContains(
             response,
             reverse(
@@ -349,6 +351,8 @@ class SprintsIndexTest(TestCase):
         response = self.client.get('/sprints')
 
         self.assertContains(response, 'Open cohort board')
+        self.assertContains(response, "You're enrolled")
+        self.assertNotContains(response, 'Use the next step below to continue')
         self.assertContains(
             response,
             reverse('cohort_board', kwargs={'sprint_slug': sprint.slug}),

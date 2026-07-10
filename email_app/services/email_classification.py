@@ -76,6 +76,9 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # enrolled members to their accountability partners. Transactional
     # because it is operational information for named sprint participants.
     "sprint_partner_intro",
+    # Sprint-end progress recap for named sprint participants with a
+    # member-owned shared plan. Transactional operational membership email.
+    "sprint_end_recap",
     # Issue #960: Maven cohort auto-onboarding. The course welcome is
     # transactional — a Maven enrollee receives it as part of enrolling,
     # so an unsubscribed user still gets it. The removal heads-up is an

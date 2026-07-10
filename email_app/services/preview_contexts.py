@@ -204,6 +204,29 @@ PREVIEW_CONTEXTS = {
             'https://aishippinglabs.com/sprints/may-2026/plan/42#week-2'
         ),
     },
+    'sprint_end_recap': {
+        'user_name': 'Ada',
+        'sprint_name': 'May 2026',
+        'completed_count': 9,
+        'total_count': 12,
+        'progress_sentence': 'You completed 9 of 12 checkpoints.',
+        'plan_url': 'https://aishippinglabs.com/sprints/may-2026/plan/42',
+        'has_feedback': True,
+        'feedback_url': (
+            'https://aishippinglabs.com/sprints/may-2026/feedback/7'
+        ),
+        'feedback_cta_label': 'Share sprint feedback',
+        'feedback_copy': (
+            'A short feedback form is ready when you have a minute.'
+        ),
+        'has_next_action': True,
+        'next_action_url': 'https://aishippinglabs.com/sprints/june-2026',
+        'next_action_label': 'Join the next sprint',
+        'next_action_copy': (
+            'June 2026 is open to your tier. Join when you are ready for '
+            'the next cohort window.'
+        ),
+    },
     'lead_magnet_delivery': {
         'user_name': 'Ada',
         'resource_title': 'AI Cheat Sheet',

@@ -518,6 +518,20 @@ INTEGRATION_GROUPS = [
                 'docs_url': '_docs/integrations/site.md#sprint_badge_window_days',
             },
             {
+                'key': 'SPRINT_END_AUTO_DISTRIBUTE_FEEDBACK_ENABLED',
+                'is_secret': False,
+                'is_boolean': True,
+                'optional': True,
+                'default': 'false',
+                'description': (
+                    'When on, the daily sprint-end recap job distributes '
+                    'attached sprint feedback requests before sending member '
+                    'recaps, so the recap can link to each member feedback '
+                    'form. Defaults off for staff-controlled distribution.'
+                ),
+                'docs_url': '_docs/integrations/site.md#sprint_end_auto_distribute_feedback_enabled',
+            },
+            {
                 'key': 'CRM_EXPORT_MAX_LIMIT',
                 'is_secret': False,
                 'optional': True,

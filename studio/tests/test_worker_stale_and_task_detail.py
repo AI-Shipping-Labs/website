@@ -200,8 +200,8 @@ class TaskDetailViewTest(TestCase):
         response = self.client.get(f'/studio/worker/task/{task.id}/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'ran-ok')
-        # Duration in seconds with millisecond precision.
-        self.assertContains(response, '8.500s')
+        # Duration uses the compact human-readable Studio formatter.
+        self.assertContains(response, '8s')
         # Args + kwargs render as pretty-printed Python literals — assert on
         # the marker substrings that don't appear anywhere else on the page.
         self.assertContains(response, 'source-uuid-very-distinctive')

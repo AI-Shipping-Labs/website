@@ -95,6 +95,10 @@ STATUS_OPTIONS = {
         ('sending', 'Sending'),
         ('sent', 'Sent'),
     ],
+    'project': [
+        ('pending_review', 'Pending Review'),
+        ('published', 'Published'),
+    ],
 }
 
 

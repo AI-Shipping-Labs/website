@@ -7,7 +7,7 @@ from django.utils.text import slugify
 
 from events.models import Event
 from studio.decorators import staff_required
-from studio.utils import get_github_edit_url, is_synced
+from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
 
 
 @staff_required
@@ -20,10 +20,12 @@ def recording_list(request):
     ).exclude(recording_url='')
     if search:
         recordings = recordings.filter(title__icontains=search)
+    pager = studio_pagination_context(request, recordings)
 
     return render(request, 'studio/recordings/list.html', {
-        'recordings': recordings,
+        'recordings': pager['page'].object_list,
         'search': search,
+        **pager,
     })
 
 

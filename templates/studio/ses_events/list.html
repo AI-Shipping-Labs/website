@@ -115,7 +115,7 @@
 
 {% if has_any_event %}
 <div class="{% studio_list_class 'wrapper' %}" data-testid="studio-ses-events-list">
-  {% if show_pager %}{% include "studio/ses_events/_pager.html" %}{% endif %}
+  {% if show_pager %}{% include "studio/includes/list_pager.html" with pager_testid_prefix="ses-event-list-pager" %}{% endif %}
   <table class="{% studio_list_class 'table' %}">
     <thead class="{% studio_list_class 'thead' %}">
       <tr>
@@ -132,7 +132,7 @@
       {% for row in rows %}
       <tr class="{% studio_list_class 'row' %}"
           data-testid="ses-event-row-{{ row.event.pk }}">
-        <td class="px-6 py-3 text-sm text-foreground" data-label="Received">
+        <td class="px-6 py-3 text-sm text-foreground whitespace-nowrap" data-label="Received">
           <span title="{{ row.event.received_at|operator_datetime_seconds }} UTC">{{ row.event.received_at|operator_datetime }}</span>
         </td>
         <td class="px-6 py-3" data-label="Type">
@@ -241,7 +241,7 @@
       {% endfor %}
     </tbody>
   </table>
-  {% if show_pager %}{% include "studio/ses_events/_pager.html" %}{% endif %}
+  {% if show_pager %}{% include "studio/includes/list_pager.html" with pager_testid_prefix="ses-event-list-pager" %}{% endif %}
 </div>
 {% else %}
   {% comment %}

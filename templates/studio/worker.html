@@ -145,10 +145,10 @@
                 <td class="px-4 py-3 text-muted-foreground" data-label="Host">{{ c.host }}</td>
                 <td class="px-4 py-3 text-foreground" data-label="Workers">{{ c.worker_count }}</td>
                 <td class="px-4 py-3 text-muted-foreground" data-label="Status">{{ c.status|default:"—" }}</td>
-                <td class="px-4 py-3 text-muted-foreground" data-label="Heartbeat">
+                <td class="px-4 py-3 text-muted-foreground whitespace-nowrap" data-label="Heartbeat">
                   {% if c.heartbeat_age is not None %}{{ c.heartbeat_age|floatformat:0 }}s ago{% else %}—{% endif %}
                 </td>
-                <td class="px-4 py-3 text-muted-foreground" data-label="Uptime">
+                <td class="px-4 py-3 text-muted-foreground whitespace-nowrap" data-label="Uptime">
                   {% if c.uptime is not None %}{{ c.uptime|floatformat:0 }}s{% else %}—{% endif %}
                 </td>
               </tr>
@@ -193,8 +193,8 @@
                      class="hover:underline"
                      onclick="event.stopPropagation();">{{ item.display_name|default:"—" }}</a>
                 </td>
-                <td class="px-4 py-3 text-muted-foreground" data-label="Started">{{ item.task.started|operator_datetime_seconds }}</td>
-                <td class="px-4 py-3 text-muted-foreground" data-label="Duration">
+                <td class="px-4 py-3 text-muted-foreground whitespace-nowrap" data-label="Started">{{ item.task.started|operator_datetime_seconds }}</td>
+                <td class="px-4 py-3 text-muted-foreground whitespace-nowrap" data-label="Duration">
                   {% if item.duration %}
                     {{ item.duration.total_seconds|floatformat:1 }}s
                   {% else %}

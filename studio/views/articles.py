@@ -8,7 +8,7 @@ from django.views.decorators.http import require_POST
 from content.models import Article
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
-from studio.utils import get_github_edit_url, is_synced
+from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
 from studio.views.form_helpers import (
     parse_comma_separated_tags,
     reject_synced_content_post,
@@ -28,11 +28,13 @@ def article_list(request):
         articles = articles.filter(published=False)
     if search:
         articles = articles.filter(title__icontains=search)
+    pager = studio_pagination_context(request, articles)
 
     return render(request, 'studio/articles/list.html', {
-        'articles': articles,
+        'articles': pager['page'].object_list,
         'status_filter': status_filter,
         'search': search,
+        **pager,
     })
 
 

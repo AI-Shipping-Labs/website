@@ -32,7 +32,7 @@ poller swaps in place every ~3s.
             <tr class="border-b border-border last:border-0 hover:bg-secondary/50" data-queued-task-id="{{ q.id }}">
               <td class="px-4 py-3 text-foreground">{{ q.display_name|default:"—" }}</td>
               <td class="px-4 py-3 text-muted-foreground font-mono text-xs" data-label="Func">{{ q.func|default:"—"|truncatechars:60 }}</td>
-              <td class="px-4 py-3 text-muted-foreground" data-label="Lock expires">
+              <td class="px-4 py-3 text-muted-foreground whitespace-nowrap" data-label="Lock expires">
                 {% if q.lock_state == 'future' %}in {{ q.lock_seconds|floatformat:0 }}s{% elif q.lock_state == 'expired' %}expired {{ q.lock_seconds|floatformat:0 }}s ago{% else %}—{% endif %}
               </td>
               <td class="px-4 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
@@ -55,6 +55,9 @@ poller swaps in place every ~3s.
         </tbody>
       </table>
     </div>
+    {% if show_pager %}
+      {% include "studio/includes/list_pager.html" with pager_testid_prefix="worker-pending-list-pager" %}
+    {% endif %}
   </div>
 {% else %}
   {% comment %}Empty placeholder so the poller can still locate (and replace) the section when the queue drains to zero.{% endcomment %}

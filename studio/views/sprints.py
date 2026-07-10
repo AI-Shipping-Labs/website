@@ -22,7 +22,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db.models import Count, Max
+from django.db.models import Count, Max, Q
 from django.http import Http404, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -72,6 +72,7 @@ from plans.services import (
 from questionnaires.models import Questionnaire, Response
 from questionnaires.onboarding import get_onboarding_response
 from studio.decorators import staff_required
+from studio.utils import studio_pagination_context
 
 User = get_user_model()
 
@@ -302,19 +303,32 @@ def sprint_list(request):
     and no ``Plan`` in the sprint. Clicking the count deep-links to
     the sprint detail page's ``#pending-requests`` anchor (issue #718).
     """
-    sprints = list(
+    search = (request.GET.get('q') or '').strip()
+    sprints = (
         Sprint.objects
         .annotate(plan_count=Count('plans'))
         .order_by('-start_date')
     )
+    if search:
+        sprints = sprints.filter(
+            Q(name__icontains=search)
+            | Q(slug__icontains=search)
+            | Q(status__icontains=search)
+            | Q(event_series__name__icontains=search)
+            | Q(event_series__slug__icontains=search)
+        )
+    pager = studio_pagination_context(request, sprints)
+    page_sprints = list(pager['page'].object_list)
     # Compute pending counts in Python because the left-anti-join is
     # awkward to express as a single annotation across both PlanRequest
     # and Plan with distinct counts. N is bounded by the number of
     # sprints (small) so the extra round trips are cheap.
-    for sprint in sprints:
+    for sprint in page_sprints:
         sprint.pending_request_count = len(_pending_request_member_ids(sprint))
     return render(request, 'studio/sprints/list.html', {
-        'sprints': sprints,
+        'sprints': page_sprints,
+        'search': search,
+        **pager,
     })
 
 

@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.contrib import messages
-from django.core.paginator import Paginator
 from django.db.models import Avg, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -42,14 +41,14 @@ from integrations.services.banner_generator.dispatch import enqueue_if_missing
 from integrations.services.zoom import create_meeting
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
-from studio.utils import coerce_page_number, get_github_edit_url, is_synced
+from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
 from studio.views.form_helpers import parse_comma_separated_tags
 
 logger = logging.getLogger(__name__)
 
 _VALID_EXTERNAL_HOSTS = {value for value, _ in EXTERNAL_HOST_CHOICES}
 _VALID_EVENT_REQUIRED_LEVELS = {value for value, _ in VISIBILITY_CHOICES}
-EVENT_LIST_PAST_PAGE_SIZE = 25
+EVENT_LIST_PAGE_SIZE = 25
 
 EVENT_KIND_ICON_MAP = {
     'standard': 'calendar',
@@ -344,7 +343,7 @@ def _decorate_event_list_row(event, user, now=None):
     event.start_datetime_display = format_user_datetime(
         event.start_datetime,
         user,
-        fmt='%a, %b %d, %Y, %H:%M',
+        fmt='%Y-%m-%d %H:%M',
     )
     return event
 
@@ -388,42 +387,6 @@ def _split_events_for_studio(events, user):
     upcoming_events.sort(key=lambda e: e.start_datetime)
     past_events.sort(key=lambda e: e.start_datetime, reverse=True)
     return upcoming_events, past_events
-
-
-def _pager_querystring(request, page_number):
-    """Build a pager querystring while preserving active filters."""
-    params = request.GET.copy()
-    params['page'] = str(page_number)
-    return '?' + params.urlencode()
-
-
-def _event_pager_context(request, page, paginator):
-    """Build template context for the past-events pager partial."""
-    if page.has_previous():
-        first_url = _pager_querystring(request, 1)
-        prev_url = _pager_querystring(request, page.previous_page_number())
-    else:
-        first_url = None
-        prev_url = None
-    if page.has_next():
-        next_url = _pager_querystring(request, page.next_page_number())
-        last_url = _pager_querystring(request, paginator.num_pages)
-    else:
-        next_url = None
-        last_url = None
-
-    return {
-        'page': page,
-        'paginator': paginator,
-        'show_pager': paginator.num_pages > 1,
-        'pager_first_url': first_url,
-        'pager_prev_url': prev_url,
-        'pager_next_url': next_url,
-        'pager_last_url': last_url,
-        'page_start_index': page.start_index(),
-        'page_end_index': page.end_index(),
-        'filtered_total': paginator.count,
-    }
 
 
 def _maybe_notify_reschedule(request, event, old_start, old_end=None):
@@ -486,16 +449,21 @@ def event_list(request):
         events,
         request.user,
     )
+    pager = studio_pagination_context(
+        request, upcoming_events, per_page=EVENT_LIST_PAGE_SIZE,
+    )
+    upcoming_count = pager['paginator'].count
 
     return render(request, 'studio/events/list.html', {
-        'upcoming_events': upcoming_events,
-        'upcoming_count': len(upcoming_events),
+        'upcoming_events': pager['page'].object_list,
+        'upcoming_count': upcoming_count,
         'past_count': len(past_events),
-        'has_events': bool(upcoming_events),
+        'has_events': bool(upcoming_count),
         'has_any_events': Event.objects.exists(),
         'status_filter': status_filter,
         'search': search,
         'is_past_view': False,
+        **pager,
     })
 
 
@@ -507,18 +475,14 @@ def event_list_past(request):
         events,
         request.user,
     )
-    paginator = Paginator(past_events, EVENT_LIST_PAST_PAGE_SIZE)
-    page_number = coerce_page_number(
-        request.GET.get('page'),
-        paginator.num_pages or 1,
+    pager_context = studio_pagination_context(
+        request, past_events, per_page=EVENT_LIST_PAGE_SIZE,
     )
-    page = paginator.page(page_number)
-    pager_context = _event_pager_context(request, page, paginator)
 
     return render(request, 'studio/events/list.html', {
-        'past_events': page.object_list,
-        'past_count': paginator.count,
-        'has_events': bool(page.object_list),
+        'past_events': pager_context['page'].object_list,
+        'past_count': pager_context['paginator'].count,
+        'has_events': bool(pager_context['paginator'].count),
         'has_any_events': Event.objects.exists(),
         'status_filter': status_filter,
         'search': search,

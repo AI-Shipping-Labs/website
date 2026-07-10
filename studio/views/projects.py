@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from content.models import Project
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
-from studio.utils import get_github_edit_url, is_synced
+from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
 
 
 @staff_required
@@ -20,12 +20,14 @@ def project_list(request):
         projects = projects.filter(status=status_filter)
     if search:
         projects = projects.filter(title__icontains=search)
+    pager = studio_pagination_context(request, projects)
 
     return render(request, 'studio/projects/list.html', {
-        'projects': projects,
+        'projects': pager['page'].object_list,
         'status_filter': status_filter,
         'search': search,
         'pending_count': Project.objects.filter(status='pending_review').count(),
+        **pager,
     })
 
 

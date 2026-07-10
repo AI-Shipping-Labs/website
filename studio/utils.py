@@ -2,7 +2,11 @@
 
 import logging
 
+from django.core.paginator import Paginator
+
 logger = logging.getLogger(__name__)
+
+STUDIO_LIST_PAGE_SIZE = 25
 
 
 def coerce_page_number(raw, num_pages):
@@ -18,6 +22,64 @@ def coerce_page_number(raw, num_pages):
     if page_num > last_page:
         return last_page
     return page_num
+
+
+def studio_pager_querystring(request, page_number, *, page_param='page'):
+    """Build a pager query string while preserving active list filters."""
+    params = request.GET.copy()
+    params[page_param] = str(page_number)
+    return '?' + params.urlencode()
+
+
+def studio_pagination_context(
+    request,
+    queryset,
+    *,
+    per_page=STUDIO_LIST_PAGE_SIZE,
+    page_param='page',
+):
+    """Return a clamped Page and generic pager context for Studio lists."""
+    paginator = Paginator(queryset, per_page)
+    page_number = coerce_page_number(
+        request.GET.get(page_param),
+        paginator.num_pages or 1,
+    )
+    page = paginator.page(page_number)
+
+    if page.has_previous():
+        first_url = studio_pager_querystring(
+            request, 1, page_param=page_param,
+        )
+        prev_url = studio_pager_querystring(
+            request, page.previous_page_number(), page_param=page_param,
+        )
+    else:
+        first_url = None
+        prev_url = None
+
+    if page.has_next():
+        next_url = studio_pager_querystring(
+            request, page.next_page_number(), page_param=page_param,
+        )
+        last_url = studio_pager_querystring(
+            request, paginator.num_pages, page_param=page_param,
+        )
+    else:
+        next_url = None
+        last_url = None
+
+    return {
+        'page': page,
+        'paginator': paginator,
+        'show_pager': paginator.num_pages > 1,
+        'pager_first_url': first_url,
+        'pager_prev_url': prev_url,
+        'pager_next_url': next_url,
+        'pager_last_url': last_url,
+        'page_start_index': page.start_index(),
+        'page_end_index': page.end_index(),
+        'filtered_total': paginator.count,
+    }
 
 
 def is_synced(obj):

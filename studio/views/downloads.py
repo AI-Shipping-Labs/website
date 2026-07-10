@@ -7,7 +7,7 @@ from django.utils.text import slugify
 from content.models import Download
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
-from studio.utils import get_github_edit_url, is_synced
+from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
 from studio.views.form_helpers import (
     parse_comma_separated_tags,
     reject_synced_content_post,
@@ -22,10 +22,12 @@ def download_list(request):
     downloads = Download.objects.all()
     if search:
         downloads = downloads.filter(title__icontains=search)
+    pager = studio_pagination_context(request, downloads)
 
     return render(request, 'studio/downloads/list.html', {
-        'downloads': downloads,
+        'downloads': pager['page'].object_list,
         'search': search,
+        **pager,
     })
 
 

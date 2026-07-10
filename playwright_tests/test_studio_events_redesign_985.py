@@ -26,9 +26,9 @@ def _reset_event_state():
     connection.close()
 
 
-def _event_row_date_label(value, timezone_name):
+def _event_row_operator_date_label(value, timezone_name):
     local_value = value.astimezone(ZoneInfo(timezone_name))
-    return f"{local_value:%a, %b} {local_value.day}, {local_value:%Y, %H:%M} {timezone_name}"
+    return f"{local_value:%Y-%m-%d %H:%M} {timezone_name}"
 
 
 @pytest.mark.core
@@ -137,9 +137,12 @@ def test_studio_events_redesigned_list_and_past_pagination(django_server, browse
     berlin_row = page.locator(
         f'tr:has(a[href="/studio/events/{berlin_event.pk}/edit"])'
     ).first
-    assert _event_row_date_label(berlin_start, "Europe/Berlin") in berlin_row.locator(
-        '[data-testid="event-row-date"]'
-    ).inner_text()
+    berlin_date_text = berlin_row.locator('[data-testid="event-row-date"]').inner_text()
+    expected_berlin_date = _event_row_operator_date_label(
+        berlin_start, "Europe/Berlin",
+    )
+    assert expected_berlin_date in berlin_date_text
+    assert "Fri, Jul" not in berlin_date_text
 
     github_row.locator('[data-testid="event-series-link"]').click()
     page.wait_for_url(f"**/studio/event-series/{series.pk}/")

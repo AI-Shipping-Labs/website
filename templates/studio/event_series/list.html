@@ -17,7 +17,9 @@
   </a>
 </div>
 
-{% if series_list %}
+{% studio_list_filter search "" "Search event series..." None False %}
+
+{% if series_list or search %}
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="{% studio_list_class 'table' %}">
     <thead class="{% studio_list_class 'thead' %}">
@@ -42,21 +44,27 @@
         nothing rather than a false weekly claim.
         {% endcomment %}
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Cadence">
-          {{ series.schedule_label }}
+          {{ series.schedule_label|default:"No occurrences scheduled" }}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Events">{{ series.event_count }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Created">{{ series.created_at|operator_date }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap" data-label="Created">{{ series.created_at|operator_date }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_event_series_detail' series_id=series.pk as detail_url %}
-            {% studio_list_action detail_url 'View' 'primary' %}
+            {% studio_list_action detail_url 'Manage' 'primary' %}
           </div>
         </td>
       </tr>
+      {% empty %}
+        {% url 'studio_event_series_list' as event_series_clear_url %}
+        {% studio_empty_state 'filter' entity_label='event series' entity_label_plural='event series' clear_url=event_series_clear_url colspan=5 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="event-series-list-pager" %}
+{% endif %}
 {% else %}
   {% url 'studio_event_series_new' as event_series_create_url %}
   {% studio_empty_state 'fresh' entity_label='event series' entity_label_plural='event series' create_url=event_series_create_url %}

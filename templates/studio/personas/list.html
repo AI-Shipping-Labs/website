@@ -16,7 +16,9 @@
   </a>
 </div>
 
-{% if personas %}
+{% studio_list_filter search "" "Search personas..." None False %}
+
+{% if personas or search %}
 {% csrf_token %}
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="w-full"
@@ -68,15 +70,21 @@
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_persona_detail' persona_id=persona.pk as persona_detail_url %}
             {% url 'studio_persona_edit' persona_id=persona.pk as persona_edit_url %}
-            {% studio_list_action persona_detail_url 'View' 'primary' %}
-            {% studio_list_action persona_edit_url 'Edit' 'secondary' %}
+            {% studio_list_action persona_edit_url 'Edit' 'primary' %}
+            {% studio_list_action persona_detail_url 'View' 'secondary' %}
           </div>
         </td>
       </tr>
+      {% empty %}
+        {% url 'studio_persona_list' as personas_clear_url %}
+        {% studio_empty_state 'filter' entity_label='persona' entity_label_plural='personas' clear_url=personas_clear_url colspan=6 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="persona-list-pager" %}
+{% endif %}
 {% else %}
   {% url 'studio_persona_create' as personas_create_url %}
   {% studio_empty_state 'fresh' entity_label='persona' entity_label_plural='personas' create_url=personas_create_url %}

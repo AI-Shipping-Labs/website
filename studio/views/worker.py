@@ -51,6 +51,7 @@ from jobs.tasks.names import (
     humanize_task_name,
 )
 from studio.decorators import staff_required
+from studio.utils import studio_pagination_context
 from studio.worker_health import get_worker_status
 
 logger = logging.getLogger(__name__)
@@ -123,7 +124,7 @@ def _ormq_summary(ormq, now=None):
     }
 
 
-def _build_pending_context():
+def _build_pending_context(request):
     """Build the queue-depth + per-task-summary payload for the pending table.
 
     Extracted so the auto-refresh fragment endpoint can reuse it without
@@ -131,9 +132,20 @@ def _build_pending_context():
     """
     queued = OrmQ.objects.all().order_by('pk')
     queue_depth = queued.count()
+    pager = studio_pagination_context(
+        request,
+        queued,
+        page_param='pending_page',
+    )
     now = timezone.now()
-    queued_summaries = [_ormq_summary(q, now=now) for q in queued]
-    return {'queue_depth': queue_depth, 'queued_tasks': queued_summaries}
+    queued_summaries = [
+        _ormq_summary(q, now=now) for q in pager['page'].object_list
+    ]
+    return {
+        'queue_depth': queue_depth,
+        'queued_tasks': queued_summaries,
+        **pager,
+    }
 
 
 @staff_required
@@ -144,7 +156,7 @@ def worker_status(request):
     pending-tasks table partial. Used by the lightweight JS poller on the
     dashboard so the queue snapshot doesn't go stale between page loads.
     """
-    pending = _build_pending_context()
+    pending = _build_pending_context(request)
 
     if request.GET.get('fragment') == 'pending':
         # Auto-refresh endpoint: just the pending table, no chrome.

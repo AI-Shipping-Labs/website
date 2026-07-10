@@ -15,15 +15,18 @@
   </a>
 </div>
 
+{% studio_list_filter search "" "Search payment mismatches..." None False %}
+
 <div class="mb-6 flex flex-wrap items-center gap-2">
   {% with chip_base="px-4 py-1.5 rounded-full text-sm border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
-  <a href="?status={{ status_open }}" class="{{ chip_base }} {% if active_status == status_open %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Open</a>
-  <a href="?status={{ status_resolved }}" class="{{ chip_base }} {% if active_status == status_resolved %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Resolved</a>
-  <a href="?status={{ status_ignored }}" class="{{ chip_base }} {% if active_status == status_ignored %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Ignored</a>
-  <a href="?status=all" class="{{ chip_base }} {% if active_status == 'all' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">All</a>
+  <a href="?status={{ status_open }}{% if search %}&amp;q={{ search }}{% endif %}" class="{{ chip_base }} {% if active_status == status_open %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Open</a>
+  <a href="?status={{ status_resolved }}{% if search %}&amp;q={{ search }}{% endif %}" class="{{ chip_base }} {% if active_status == status_resolved %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Resolved</a>
+  <a href="?status={{ status_ignored }}{% if search %}&amp;q={{ search }}{% endif %}" class="{{ chip_base }} {% if active_status == status_ignored %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Ignored</a>
+  <a href="?status=all{% if search %}&amp;q={{ search }}{% endif %}" class="{{ chip_base }} {% if active_status == 'all' %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">All</a>
   {% endwith %}
 </div>
 
+{% if rows or search or active_status != status_open or has_any_mismatch %}
 <div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="payment-mismatch-list">
   <table class="w-full table-fixed">
     <colgroup>
@@ -50,7 +53,7 @@
           <div class="space-y-1 text-sm">
             <p class="font-mono text-foreground break-all">{{ mismatch.stripe_session_id }}</p>
             <p class="font-mono text-xs text-muted-foreground break-all">{{ mismatch.stripe_email }}</p>
-            <p class="text-xs text-muted-foreground">{{ mismatch.created_at|operator_datetime }} UTC</p>
+            <p class="text-xs text-muted-foreground whitespace-nowrap">{{ mismatch.created_at|operator_datetime }} UTC</p>
             {% if row.stripe_customer_url %}
             <a href="{{ row.stripe_customer_url }}" target="_blank" rel="noopener" class="inline-flex text-xs text-accent hover:underline">Stripe customer</a>
             {% elif mismatch.stripe_customer_id %}
@@ -104,11 +107,16 @@
       </tr>
       {% endwith %}
       {% empty %}
-      <tr>
-        <td colspan="5" class="px-4 py-10 text-center text-sm text-muted-foreground">No payment mismatches found.</td>
-      </tr>
+        {% url 'studio_payment_mismatch_list' as payment_mismatches_clear_url %}
+        {% studio_empty_state 'filter' entity_label='payment mismatch' entity_label_plural='payment mismatches' clear_url=payment_mismatches_clear_url colspan=5 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="payment-mismatch-list-pager" %}
+{% endif %}
+{% else %}
+  {% studio_empty_state 'fresh' entity_label='payment mismatch' entity_label_plural='payment mismatches' %}
+{% endif %}
 {% endblock %}

@@ -18,7 +18,7 @@ import json
 
 from django.contrib import messages
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
@@ -33,6 +33,7 @@ from questionnaires.models import (
     ResponseQuestionOption,
 )
 from studio.decorators import staff_required
+from studio.utils import studio_pagination_context
 
 
 def _parse_reorder_payload(request):
@@ -140,7 +141,8 @@ def _form_data_from_questionnaire(questionnaire):
 @staff_required
 def questionnaire_list(request):
     """Table of questionnaires with purpose, question + response counts."""
-    questionnaires = list(
+    search = (request.GET.get('q') or '').strip()
+    questionnaires = (
         Questionnaire.objects
         .annotate(
             num_questions=Count('questions', distinct=True),
@@ -148,8 +150,18 @@ def questionnaire_list(request):
         )
         .order_by('-created_at')
     )
+    if search:
+        questionnaires = questionnaires.filter(
+            Q(title__icontains=search)
+            | Q(slug__icontains=search)
+            | Q(purpose__icontains=search)
+            | Q(description__icontains=search)
+        )
+    pager = studio_pagination_context(request, questionnaires)
     return render(request, 'studio/questionnaires/list.html', {
-        'questionnaires': questionnaires,
+        'questionnaires': pager['page'].object_list,
+        'search': search,
+        **pager,
     })
 
 

@@ -17,13 +17,14 @@ optional, so staff can tell the personas apart.
 
 from django.contrib import messages
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 
 from questionnaires.models import Persona, Questionnaire
 from studio.decorators import staff_required
+from studio.utils import studio_pagination_context
 from studio.views.questionnaires import _parse_reorder_payload
 
 # Only onboarding-purpose questionnaires are offered in the
@@ -120,7 +121,8 @@ def _form_data_from_persona(persona):
 @staff_required
 def persona_list(request):
     """Table of personas: name + archetype, active flag, default questionnaire."""
-    personas = list(
+    search = (request.GET.get('q') or '').strip()
+    personas = (
         Persona.objects
         .select_related('default_questionnaire')
         .annotate(
@@ -128,8 +130,20 @@ def persona_list(request):
         )
         .order_by('order', 'name')
     )
+    if search:
+        personas = personas.filter(
+            Q(name__icontains=search)
+            | Q(archetype__icontains=search)
+            | Q(slug__icontains=search)
+            | Q(description__icontains=search)
+            | Q(default_questionnaire__title__icontains=search)
+            | Q(default_questionnaire__slug__icontains=search)
+        )
+    pager = studio_pagination_context(request, personas)
     return render(request, 'studio/personas/list.html', {
-        'personas': personas,
+        'personas': pager['page'].object_list,
+        'search': search,
+        **pager,
     })
 
 

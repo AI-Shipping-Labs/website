@@ -64,6 +64,9 @@
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="download-list-pager" %}
+{% endif %}
 {% else %}
   {% studio_empty_state 'fresh' entity_label='download' entity_label_plural='downloads' %}
 {% endif %}

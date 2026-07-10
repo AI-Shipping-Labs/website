@@ -138,7 +138,7 @@ class StudioEventListTest(StaffUserMixin, TestCase):
         )
         response = self.client.get('/studio/events/')
         self.assertContains(response, 'data-testid="event-row-date"')
-        self.assertContains(response, 'Mon, Jul 20, 2026, 14:00 Europe/Berlin')
+        self.assertContains(response, '2026-07-20 14:00 Europe/Berlin')
         self.assertNotContains(response, '>Jul 20, 2026, 12:00<')
 
     def test_list_renders_utc_label_without_preference(self):
@@ -150,7 +150,7 @@ class StudioEventListTest(StaffUserMixin, TestCase):
             ),
         )
         response = self.client.get('/studio/events/')
-        self.assertContains(response, 'Mon, Jul 20, 2026, 12:00 UTC')
+        self.assertContains(response, '2026-07-20 12:00 UTC')
 
     def test_list_renders_create_buttons(self):
         """Both ``New event`` and ``New event series`` buttons are present."""

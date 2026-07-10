@@ -31,7 +31,7 @@ from content.models import Workshop
 from integrations.models import ContentSource
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
-from studio.utils import get_github_edit_url
+from studio.utils import get_github_edit_url, studio_pagination_context
 from studio.views.sync import _mark_source_queued, _worker_warning_suffix
 
 logger = logging.getLogger(__name__)
@@ -84,11 +84,13 @@ def workshop_list(request):
         workshops = workshops.filter(
             Q(title__icontains=search) | Q(slug__icontains=search),
         )
+    pager = studio_pagination_context(request, workshops)
 
     return render(request, 'studio/workshops/list.html', {
-        'workshops': workshops,
+        'workshops': pager['page'].object_list,
         'status_filter': status_filter,
         'search': search,
+        **pager,
     })
 
 

@@ -30,7 +30,7 @@
         <td class="px-6 py-4 text-sm font-medium text-foreground">{{ batch.title }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">
           {% if batch.url %}
-          <a href="{{ batch.url }}" class="text-accent hover:underline">{{ batch.url }}</a>
+          <a href="{{ batch.url|normalize_site_url }}" class="text-accent hover:underline">{{ batch.url|normalize_site_url }}</a>
           {% else %}
           -
           {% endif %}

@@ -31,7 +31,7 @@
           <code>{{ row.template_name }}</code>
         </td>
         <td class="px-4 py-3 text-muted-foreground" data-label="Subject">
-          {{ row.subject }}
+          <span title="{{ row.subject|subject_preview:160 }}">{{ row.subject|subject_preview:96 }}</span>
         </td>
         <td class="px-4 py-3" data-label="Status">
           {% if row.edited %}

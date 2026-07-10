@@ -64,7 +64,7 @@
         <td class="px-6 py-4 text-sm">
           <a href="{% url 'studio_user_detail' user_id=plan.member.pk %}" class="text-accent hover:underline" data-testid="plan-list-member-link">{{ plan.member.email }}</a>
         </td>
-        <td class="px-6 py-4 text-sm text-foreground">{{ plan.display_title }}</td>
+        <td class="px-6 py-4 text-sm text-foreground" title="{{ plan.display_title|plain_text_preview:160 }}">{{ plan.display_title|plain_text_preview:96 }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ plan.sprint.name }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">
           {% if plan.shared_at %}{{ plan.shared_at|operator_date }}{% else %}-{% endif %}

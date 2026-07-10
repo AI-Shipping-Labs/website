@@ -33,7 +33,7 @@ poller swaps in place every ~3s.
               <td class="px-4 py-3 text-foreground">{{ q.display_name|default:"—" }}</td>
               <td class="px-4 py-3 text-muted-foreground font-mono text-xs" data-label="Func">{{ q.func|default:"—"|truncatechars:60 }}</td>
               <td class="px-4 py-3 text-muted-foreground whitespace-nowrap" data-label="Lock expires">
-                {% if q.lock_state == 'future' %}in {{ q.lock_seconds|floatformat:0 }}s{% elif q.lock_state == 'expired' %}expired {{ q.lock_seconds|floatformat:0 }}s ago{% else %}—{% endif %}
+                {% if q.lock_state == 'future' %}in {{ q.lock_seconds|compact_duration }}{% elif q.lock_state == 'expired' %}expired {{ q.lock_seconds|compact_duration }} ago{% else %}—{% endif %}
               </td>
               <td class="px-4 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
                 <div class="{% studio_list_class 'action_group' %}">

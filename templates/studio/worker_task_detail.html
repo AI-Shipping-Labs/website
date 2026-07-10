@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Task Detail{% endblock %}
 
@@ -60,7 +61,7 @@
       <div>
         <p class="text-xs text-muted-foreground uppercase">Duration</p>
         <p class="text-foreground" data-task-duration>
-          {% if duration_seconds is not None %}{{ duration_seconds|floatformat:3 }}s{% else %}—{% endif %}
+          {% if duration_seconds is not None %}{{ duration_seconds|compact_duration }}{% else %}—{% endif %}
         </p>
       </div>
       <div>

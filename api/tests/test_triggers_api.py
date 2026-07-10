@@ -101,6 +101,22 @@ class SubscriptionApiTest(TriggersApiTestBase):
         self.assertEqual(resp.status_code, 200)
         self.assertNotIn("secret", resp.json())
 
+    def test_detail_keeps_raw_property_filter_shape(self):
+        sub = TriggerSubscription.objects.create(
+            event_type="custom",
+            property_filter={"name": "experiment_demo"},
+            target_url="https://h.example.com/a",
+            secret="s3cr3t",
+        )
+        resp = self.client.get(
+            f"/api/triggers/subscriptions/{sub.id}", **self._auth(),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.json()["property_filter"],
+            {"name": "experiment_demo"},
+        )
+
     def test_patch_toggles_is_active(self):
         sub = TriggerSubscription.objects.create(
             event_type="custom",

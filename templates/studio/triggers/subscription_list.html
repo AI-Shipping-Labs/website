@@ -38,7 +38,7 @@
       {% for sub in subscriptions %}
       <tr class="hover:bg-secondary/50 transition-colors" data-testid="subscription-row">
         <td class="px-4 py-2.5 align-top text-sm text-foreground" data-label="Event type">{{ sub.event_type }}</td>
-        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono" data-label="Filter">{{ sub.property_filter|default:"{}" }}</td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground" data-label="Filter">{{ sub.property_filter|property_filter_preview }}</td>
         <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono break-all" data-label="Target URL">{{ sub.target_url }}</td>
         <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono" data-label="Secret" data-testid="subscription-secret-masked">••••••••</td>
         <td class="px-4 py-2.5 align-top text-sm" data-label="Status">

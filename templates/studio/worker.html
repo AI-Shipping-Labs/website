@@ -22,14 +22,14 @@
             <p class="text-sm font-medium text-foreground">
               Worker running (idle)
               {% if worker_info.last_heartbeat_age is not None %}
-                <span class="text-muted-foreground font-normal">— last heartbeat {{ worker_info.last_heartbeat_age|floatformat:0 }}s ago</span>
+                <span class="text-muted-foreground font-normal">— last heartbeat {{ worker_info.last_heartbeat_age|compact_duration }} ago</span>
               {% endif %}
             </p>
           {% else %}
             <p class="text-sm font-medium text-foreground">
               Worker running
               {% if worker_info.last_heartbeat_age is not None %}
-                <span class="text-muted-foreground font-normal">(heartbeat {{ worker_info.last_heartbeat_age|floatformat:0 }}s ago)</span>
+                <span class="text-muted-foreground font-normal">(heartbeat {{ worker_info.last_heartbeat_age|compact_duration }} ago)</span>
               {% endif %}
             </p>
           {% endif %}
@@ -146,10 +146,10 @@
                 <td class="px-4 py-3 text-foreground" data-label="Workers">{{ c.worker_count }}</td>
                 <td class="px-4 py-3 text-muted-foreground" data-label="Status">{{ c.status|default:"—" }}</td>
                 <td class="px-4 py-3 text-muted-foreground" data-label="Heartbeat">
-                  {% if c.heartbeat_age is not None %}{{ c.heartbeat_age|floatformat:0 }}s ago{% else %}—{% endif %}
+                  {% if c.heartbeat_age is not None %}{{ c.heartbeat_age|compact_duration }} ago{% else %}—{% endif %}
                 </td>
                 <td class="px-4 py-3 text-muted-foreground" data-label="Uptime">
-                  {% if c.uptime is not None %}{{ c.uptime|floatformat:0 }}s{% else %}—{% endif %}
+                  {% if c.uptime is not None %}{{ c.uptime|compact_duration }}{% else %}—{% endif %}
                 </td>
               </tr>
             {% endfor %}
@@ -196,7 +196,7 @@
                 <td class="px-4 py-3 text-muted-foreground" data-label="Started">{{ item.task.started|operator_datetime_seconds }}</td>
                 <td class="px-4 py-3 text-muted-foreground" data-label="Duration">
                   {% if item.duration %}
-                    {{ item.duration.total_seconds|floatformat:1 }}s
+                    {{ item.duration|compact_duration }}
                   {% else %}
                     --
                   {% endif %}

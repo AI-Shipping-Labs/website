@@ -51,7 +51,10 @@
       <div class="flex items-start justify-between gap-4">
         <div>
           <div class="text-sm font-medium text-foreground">{{ item.label }}</div>
-          <div class="text-xs text-muted-foreground mt-1">{{ item.run_time }} · {{ item.cron }}</div>
+          <div class="text-xs text-muted-foreground mt-1">
+            <span>{{ item.cron|cron_gloss }}</span>
+            <code class="ml-2 text-[11px]" title="Raw cron">{{ item.cron }}</code>
+          </div>
         </div>
         {% if item.enabled %}
         <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">enabled</span>

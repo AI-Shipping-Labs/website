@@ -1,4 +1,13 @@
+import json
+import re
+from datetime import timedelta
+from urllib.parse import urlsplit, urlunsplit
+
 from django import template
+from django.conf import settings
+from django.template.defaultfilters import stringfilter
+from django.utils.html import strip_tags
+from django.utils.text import Truncator
 from django_q.models import OrmQ
 
 from content.access import (
@@ -9,6 +18,7 @@ from content.access import (
     LEVEL_REGISTERED,
 )
 from email_app import ses_explain
+from integrations.config import site_base_url
 from integrations.models.utm_campaign import UTM_MEDIUM_PRESETS, UTM_SOURCE_PRESETS
 from studio.utils import get_github_edit_url, is_synced
 from studio.worker_health import get_worker_status
@@ -97,6 +107,14 @@ STATUS_OPTIONS = {
     ],
 }
 
+_DJANGO_TAG_RE = re.compile(r'{%.*?%}', re.DOTALL)
+_DJANGO_VARIABLE_RE = re.compile(r'{{\s*(.*?)\s*}}', re.DOTALL)
+_MARKDOWN_IMAGE_RE = re.compile(r'!\[([^\]]*)\]\([^)]+\)')
+_MARKDOWN_LINK_RE = re.compile(r'\[([^\]]+)\]\([^)]+\)')
+_MARKDOWN_MARKER_RE = re.compile(r'(?m)^\s{0,3}(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s?)')
+_WHITESPACE_RE = re.compile(r'\s+')
+_LOCAL_SITE_HOSTS = {'localhost', '127.0.0.1', '0.0.0.0', '::1'}
+
 
 @register.filter
 def dict_get(dictionary, key):
@@ -104,6 +122,138 @@ def dict_get(dictionary, key):
     if isinstance(dictionary, dict):
         return dictionary.get(key)
     return None
+
+
+def _seconds_from_duration(value):
+    if value in (None, ''):
+        return None
+    if isinstance(value, timedelta):
+        return value.total_seconds()
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+@register.filter
+def compact_duration(value):
+    """Render seconds/timedeltas as compact operator units: 45s, 3m, 2h, 15d."""
+    seconds = _seconds_from_duration(value)
+    if seconds is None:
+        return ''
+    seconds = abs(seconds)
+    if seconds < 60:
+        return f'{max(0, int(round(seconds)))}s'
+    if seconds < 3600:
+        return f'{max(1, int(round(seconds / 60)))}m'
+    if seconds < 86400:
+        return f'{max(1, int(round(seconds / 3600)))}h'
+    return f'{max(1, int(round(seconds / 86400)))}d'
+
+
+def _plain_text_preview(value, *, limit=96, strip_template_tags=False):
+    text = '' if value is None else str(value)
+    if strip_template_tags:
+        text = _DJANGO_TAG_RE.sub(' ', text)
+        text = _DJANGO_VARIABLE_RE.sub(r'\1', text)
+    text = strip_tags(text)
+    text = _MARKDOWN_IMAGE_RE.sub(r'\1', text)
+    text = _MARKDOWN_LINK_RE.sub(r'\1', text)
+    text = text.replace('```', ' ').replace('`', '')
+    text = re.sub(r'(\*\*|__)(.*?)\1', r'\2', text)
+    text = re.sub(r'(?<!\w)([*_])([^*_]+)\1(?!\w)', r'\2', text)
+    text = _MARKDOWN_MARKER_RE.sub('', text)
+    text = text.replace('[', '').replace(']', '')
+    text = _WHITESPACE_RE.sub(' ', text).strip()
+    return Truncator(text).chars(limit)
+
+
+@register.filter
+def plain_text_preview(value, limit=96):
+    """Strip markdown/control markup for dense Studio table previews."""
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = 96
+    return _plain_text_preview(value, limit=limit)
+
+
+@register.filter
+def subject_preview(value, limit=96):
+    """Render a compact email-subject preview without Django control-flow tags."""
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = 96
+    return _plain_text_preview(value, limit=limit, strip_template_tags=True)
+
+
+@register.filter
+def property_filter_preview(value):
+    """Render trigger filters without leaking Python dict reprs."""
+    if not value:
+        return 'All events'
+    if isinstance(value, dict):
+        if all(not isinstance(v, (dict, list, tuple)) for v in value.values()):
+            return ' · '.join(
+                f'{key} = {value[key]}' for key in sorted(value)
+            )
+        return json.dumps(value, sort_keys=True)
+    return str(value)
+
+
+@register.filter
+@stringfilter
+def cron_gloss(value):
+    """Human gloss for simple daily cron expressions."""
+    fields = value.split()
+    if len(fields) != 5:
+        return value
+    minute, hour, day_of_month, month, day_of_week = fields
+    if day_of_month == month == day_of_week == '*':
+        try:
+            minute_i = int(minute)
+            hour_i = int(hour)
+        except ValueError:
+            return value
+        if 0 <= minute_i <= 59 and 0 <= hour_i <= 23:
+            return f'daily {hour_i:02d}:{minute_i:02d} UTC'
+    return value
+
+
+def _site_hosts():
+    hosts = set(_LOCAL_SITE_HOSTS)
+    for raw in (
+        site_base_url(),
+        getattr(settings, 'SITE_BASE_URL', ''),
+        'https://aishippinglabs.com',
+    ):
+        try:
+            host = (urlsplit(raw).hostname or '').lower()
+        except (TypeError, ValueError):
+            host = ''
+        if host:
+            hosts.add(host)
+    return hosts
+
+
+@register.filter
+@stringfilter
+def normalize_site_url(value):
+    """Collapse site-local absolute URLs to relative paths for Studio display."""
+    if value.startswith('/'):
+        return value
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return value
+    if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+        return value
+    host = (parsed.hostname or '').lower()
+    if host not in _site_hosts():
+        return value
+    path = parsed.path or '/'
+    return urlunsplit(('', '', path, parsed.query, parsed.fragment))
 
 
 @register.filter

@@ -149,7 +149,9 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
 
         self.assertEqual(response.context['featured_sprint'], current)
         self.assertContains(response, current.name)
-        self.assertContains(response, 'Membership: Premium')
+        self.assertContains(response, 'data-testid="home-featured-sprint-tier"')
+        self.assertContains(response, 'Premium')
+        self.assertContains(response, 'data-component="member-badge"')
         self.assertContains(response, current.get_absolute_url())
         self.assertNotContains(response, ended_active.name)
 

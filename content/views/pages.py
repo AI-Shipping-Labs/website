@@ -131,6 +131,7 @@ def _build_sprint_summaries(sprints, user):
 
         summaries.append({
             'sprint': sprint,
+            'required_tier_level': sprint.min_tier_level,
             'required_tier_name': required_tier_name,
             'cta_url': cta_url,
             'cta_label': cta_label,

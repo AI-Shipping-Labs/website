@@ -1,0 +1,67 @@
+{% load member_badges %}
+{% load teaser_tags %}
+{% comment %}
+Shared public project card for the homepage and /projects listing.
+The homepage may pass project_card_surface_class="bg-background" and a
+page-specific test id; the entity hierarchy stays the same.
+{% endcomment %}
+<article class="group h-full overflow-hidden rounded-lg border border-border {% if project_card_surface_class %}{{ project_card_surface_class }}{% else %}bg-card{% endif %} transition-colors hover:border-accent/50" data-testid="{% if project_card_testid %}{{ project_card_testid }}{% else %}project-card{% endif %}">
+  <a href="{{ project.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %} flex h-full flex-col">
+    {% if project.cover_image_url %}
+    <div class="aspect-video w-full overflow-hidden bg-muted">
+      <img src="{{ project.cover_image_url }}" alt="{{ project.title }}" class="h-full w-full object-cover transition-transform group-hover:scale-105" loading="lazy">
+    </div>
+    {% endif %}
+    <div class="flex min-w-0 flex-1 flex-col p-4 sm:p-5">
+      <div class="mb-3 flex items-start justify-between gap-3">
+        <div class="flex min-w-0 flex-wrap items-center gap-2">
+          {% if project.difficulty %}
+          <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ project.difficulty_color }}">{{ project.difficulty }}</span>
+          {% endif %}
+          {% if project.required_level > 0 %}
+          {% member_tier_badge project.required_level tone="accent_strong" icon="lock" testid="project-tier-badge" %}
+          {% endif %}
+        </div>
+        <i data-lucide="arrow-right" class="hidden h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent sm:block"></i>
+      </div>
+      <h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">
+        {{ project.title }}
+      </h2>
+      {% if project.author %}
+      <div class="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <span class="min-w-0 truncate">by {{ project.author }}</span>
+        {% if project.author == "AI Shipping Labs" or project.author == "Alexey Grigorev" %}
+        {% member_label_badge "Official" tone="neutral" icon="badge-check" testid="project-official-badge" %}
+        {% endif %}
+      </div>
+      {% endif %}
+      <p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ project.description|strip_markdown }}</p>
+      {% if project.reading_time or project.estimated_time %}
+      <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+        {% if project.reading_time %}
+        <span class="inline-flex items-center gap-1.5">
+          <i data-lucide="clock" class="h-4 w-4"></i>
+          {{ project.reading_time }}
+        </span>
+        {% endif %}
+        {% if project.estimated_time %}
+        <span class="inline-flex items-center gap-1.5">
+          <i data-lucide="code" class="h-4 w-4"></i>
+          {{ project.estimated_time }}
+        </span>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% if project.tags %}
+      <div class="mt-4 flex flex-wrap gap-1.5" data-testid="project-card-tags">
+        {% for tag in project.tags|slice:":3" %}
+        <span class="max-w-full truncate rounded-full bg-secondary px-2 py-0.5 text-xs text-foreground/80">{{ tag }}</span>
+        {% endfor %}
+        {% if project.tags|length > 3 %}
+        <span class="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground">+{{ project.tags|length|add:"-3" }}</span>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </a>
+</article>

@@ -201,7 +201,7 @@ class TestActivitiesAccessByTierLayout:
         assert "May Shipping Sprint" in body
         assert "Active" in body
         assert _expected_sprint_range(_active_sprint_start(), 4) in body
-        assert "Membership: Main" in body
+        assert "Main or above" in body
         cta = card.locator('[data-testid="activities-sprint-cta"]')
         assert "Log in to join" in cta.inner_text()
         assert "/accounts/login/?next=/sprints/may-shipping-sprint" in (
@@ -318,7 +318,8 @@ class TestActivitiesAccessByTierLayout:
         page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
 
         card = page.locator('[data-testid="activities-sprint-card"]').first
-        assert "Membership: Premium" in card.inner_text()
+        assert "Premium" in card.inner_text()
+        assert "Membership:" not in card.inner_text()
         cta = card.locator('[data-testid="activities-sprint-cta"]')
         assert "Upgrade to Premium" in cta.inner_text()
         assert cta.get_attribute("href") == "/pricing"

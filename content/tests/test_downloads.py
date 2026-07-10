@@ -287,6 +287,12 @@ class DownloadsListTagFilterTest(TestCase):
         response = self.client.get('/downloads?tag=nonexistent')
         self.assertNotContains(response, 'AI Guide')
         self.assertNotContains(response, 'Django Templates')
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="filter"')
+        self.assertContains(response, 'No downloads found')
+        self.assertContains(response, 'No downloads found with the selected tags.')
+        self.assertContains(response, 'href="/downloads"')
+        self.assertContains(response, 'View all downloads')
 
     def test_tag_links_in_listing(self):
         response = self.client.get('/downloads')
@@ -303,6 +309,21 @@ class DownloadsListTagFilterTest(TestCase):
         response = self.client.get('/downloads?tag=')
         self.assertContains(response, 'AI Guide')
         self.assertContains(response, 'Django Templates')
+
+
+class DownloadsListEmptyStateTest(TestCase):
+    def test_fresh_empty_state_uses_member_empty_state_component(self):
+        response = self.client.get('/downloads')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="member-empty-state"')
+        self.assertContains(response, 'data-empty-kind="fresh"')
+        self.assertContains(response, 'No downloads yet')
+        self.assertContains(
+            response,
+            'No downloadable resources yet. Check back soon.',
+        )
+        self.assertNotContains(response, 'data-testid="download-card"')
 
 
 # --- Download access control on listing page ---

@@ -5,8 +5,9 @@ the visible hierarchy for issue #402 and can be reverted independently.
 
 Expected context:
   gated_card_testid, gated_icon, gated_heading, gated_description,
-  required_tier_name, current_user_state, gated_cta_url, gated_cta_label,
-  gated_cta_testid, signup_cta_url, signup_cta_label
+  required_tier_name, current_user_state, gated_extra_partial,
+  gated_cta_url, gated_cta_label, gated_cta_testid, signup_cta_url,
+  signup_cta_label, signup_cta_testid
 
 Issue #481: ``required_tier_name`` carries the bare tier name (Basic /
 Main / Premium / Free) and we render the public-facing label here so the
@@ -45,6 +46,11 @@ in the extra_scripts block.
   {% if current_user_state %}
   <p class="mt-3 text-sm text-muted-foreground" data-testid="gated-current-state">{{ current_user_state }}</p>
   {% endif %}
+  {% if gated_extra_partial %}
+  <div class="mt-5">
+    {% include gated_extra_partial %}
+  </div>
+  {% endif %}
   <a href="{{ gated_cta_url }}"
      class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
      data-testid="{{ gated_cta_testid }}">
@@ -53,14 +59,14 @@ in the extra_scripts block.
   </a>
   {% if signup_cta_url %}
     {% if signup_inline %}
-    <div class="mt-6" data-testid="teaser-signup-cta">
+    <div class="mt-6" data-testid="{{ signup_cta_testid|default:'teaser-signup-cta' }}">
       {% include "accounts/includes/_inline_register_card.html" %}
     </div>
     {% else %}
     <div class="mt-4">
       <a href="{{ signup_cta_url }}"
          class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-         data-testid="teaser-signup-cta">
+         data-testid="{{ signup_cta_testid|default:'teaser-signup-cta' }}">
         <i data-lucide="user-plus" class="h-4 w-4"></i>
         {{ signup_cta_label }}
       </a>

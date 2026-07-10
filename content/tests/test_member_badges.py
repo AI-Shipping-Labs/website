@@ -56,12 +56,17 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
             'templates/accounts/account.html',
             'templates/content/blog_list.html',
             'templates/content/courses_list.html',
+            'templates/content/_project_card.html',
+            'templates/content/activities.html',
             'templates/content/_workshops_catalog.html',
             'templates/content/workshop_detail.html',
             'templates/content/sprints_index.html',
+            'templates/home.html',
             'templates/plans/sprint_detail.html',
             'templates/events/_event_header.html',
             'templates/events/_upcoming_event_card.html',
+            'templates/events/events_calendar.html',
+            'templates/events/events_list.html',
             'templates/voting/poll_list.html',
             'templates/voting/poll_detail.html',
         ]
@@ -71,6 +76,18 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
                 source = (ROOT / template_path).read_text()
                 self.assertIn('{% load member_badges %}', source)
                 self.assertRegex(source, r'{% member_(?:badge|tier_badge|status_badge|label_badge) ')
+
+    def test_scoped_guest_templates_do_not_use_legacy_membership_prefix(self):
+        template_paths = [
+            'templates/content/activities.html',
+            'templates/content/sprints_index.html',
+            'templates/home.html',
+        ]
+
+        for template_path in template_paths:
+            with self.subTest(template=template_path):
+                source = (ROOT / template_path).read_text()
+                self.assertNotIn('Membership:', source)
 
     def test_studio_badge_partial_remains_separate(self):
         source = (ROOT / 'templates' / 'studio' / 'includes' / 'status_badge.html').read_text()

@@ -545,7 +545,7 @@ def test_sprints_page_lists_active_sprint(django_server, page, django_db_blocker
     # runs four weeks, so it reads ACTIVE (CSS-uppercased) on any run date.
     assert "ACTIVE" in text
     assert "(4 weeks)" in text
-    assert "Membership: Main" in text
+    assert "Main or above" in text
     assert card.locator('[data-testid="sprints-sprint-cta"]').get_attribute("href") == (
         "/accounts/login/?next=/sprints/may-shipping-sprint"
     )

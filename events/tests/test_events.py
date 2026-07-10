@@ -995,14 +995,8 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         self.client.login(email='basic@test.com', password='pass')
         response = self.client.get(self.gated_event.get_absolute_url())
         self.assertContains(response, 'Upgrade to Main to attend')
-        # Issue #481: Main event copy still uses "or above" because Main
-        # is not the highest tier. Issue #671: copy starts with
-        # "Registering for this event" to stay consistent with the
-        # anonymous-on-paid CTA.
-        self.assertContains(
-            response,
-            'Registering for this event requires a Main membership or above.',
-        )
+        self.assertContains(response, 'Main or above required')
+        self.assertContains(response, 'data-testid="gated-required-tier"')
 
     def test_premium_event_drops_or_above_suffix(self):
         """Issue #481 AC: Premium-only CTAs do not say "or above".
@@ -1028,10 +1022,7 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         self.client.login(email='basic-premium@test.com', password='pass')
         response = self.client.get(premium_event.get_absolute_url())
         self.assertContains(response, 'Upgrade to Premium to attend')
-        self.assertContains(
-            response,
-            'Registering for this event requires a Premium membership.',
-        )
+        self.assertContains(response, 'Premium required')
         self.assertNotContains(response, 'Premium membership or above')
         # And the lock badge in the header is "Premium" (no "+").
         self.assertNotContains(response, 'Premium+')
@@ -2250,9 +2241,7 @@ class EventDetailAnonymousFlowTest(TestCase):
         self.assertNotContains(resp, 'free account is required')
         # New tier-aware copy names the required tier and links to /pricing.
         self.assertContains(resp, 'This event is for Main members')
-        self.assertContains(
-            resp, 'Registering for this event requires a Main membership or above',
-        )
+        self.assertContains(resp, 'Main or above required')
         self.assertContains(resp, 'View membership options')
 
     def test_confirmation_block_renders_for_registered_query_param(self):
@@ -2318,10 +2307,8 @@ class EventAnonymousPaidCopyTest(TestCase):
         resp = self.client.get(self.basic_event.get_absolute_url())
         self.assertContains(resp, 'data-testid="event-anonymous-cta"')
         self.assertContains(resp, 'This event is for Basic members')
-        self.assertContains(
-            resp,
-            'Registering for this event requires a Basic membership or above',
-        )
+        self.assertContains(resp, 'Basic or above required')
+        self.assertContains(resp, 'data-testid="gated-required-tier"')
         # The misleading copy is gone.
         self.assertNotContains(resp, 'free account is required')
         self.assertNotContains(resp, 'A free account is required to register')
@@ -2329,19 +2316,13 @@ class EventAnonymousPaidCopyTest(TestCase):
     def test_main_event_anonymous_cta_names_tier(self):
         resp = self.client.get(self.main_event.get_absolute_url())
         self.assertContains(resp, 'This event is for Main members')
-        self.assertContains(
-            resp,
-            'Registering for this event requires a Main membership or above',
-        )
+        self.assertContains(resp, 'Main or above required')
         self.assertNotContains(resp, 'free account is required')
 
     def test_premium_event_anonymous_cta_drops_or_above(self):
         resp = self.client.get(self.premium_event.get_absolute_url())
         self.assertContains(resp, 'This event is for Premium members')
-        self.assertContains(
-            resp,
-            'Registering for this event requires a Premium membership.',
-        )
+        self.assertContains(resp, 'Premium required')
         # Premium is the highest tier — "or above" must NOT appear.
         self.assertNotContains(resp, 'Premium membership or above')
 
@@ -2448,10 +2429,7 @@ class EventUnderTierCopyConsistencyTest(TierSetupMixin, TestCase):
         self._login_at(self.free_tier)
         response = self.client.get(self.main_event.get_absolute_url())
         self.assertContains(response, 'Upgrade to Main to attend')
-        self.assertContains(
-            response,
-            'Registering for this event requires a Main membership or above.',
-        )
+        self.assertContains(response, 'Main or above required')
         self.assertNotContains(response, 'free account')
         self.assertContains(response, 'href="/pricing"')
 
@@ -2459,8 +2437,5 @@ class EventUnderTierCopyConsistencyTest(TierSetupMixin, TestCase):
         self._login_at(self.basic_tier)
         response = self.client.get(self.premium_event.get_absolute_url())
         self.assertContains(response, 'Upgrade to Premium to attend')
-        self.assertContains(
-            response,
-            'Registering for this event requires a Premium membership.',
-        )
+        self.assertContains(response, 'Premium required')
         self.assertNotContains(response, 'Premium membership or above')

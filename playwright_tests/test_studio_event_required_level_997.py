@@ -109,8 +109,8 @@ class TestStudioEventRequiredLevel997:
         free_ctx = _auth_context(browser, "free@test.com")
         free_page = free_ctx.new_page()
         free_page.goto(f"{django_server}{event_path}", wait_until="domcontentloaded")
-        expect(free_page.locator('[data-testid="event-required-tier-label"]')).to_contain_text(
-            "Main membership or above",
+        expect(free_page.locator('[data-testid="gated-required-tier"]')).to_contain_text(
+            "Main or above required",
         )
         expect(free_page.locator("#register-btn")).to_have_count(0)
         free_ctx.close()
@@ -119,7 +119,7 @@ class TestStudioEventRequiredLevel997:
         main_page = main_ctx.new_page()
         main_page.goto(f"{django_server}{event_path}", wait_until="domcontentloaded")
         expect(main_page.locator("#register-btn")).to_be_visible()
-        expect(main_page.locator('[data-testid="event-required-tier-label"]')).to_have_count(0)
+        expect(main_page.locator('[data-testid="gated-required-tier"]')).to_have_count(0)
         main_ctx.close()
 
         admin_ctx = _auth_context(browser, "staff-997@test.com")
@@ -138,7 +138,7 @@ class TestStudioEventRequiredLevel997:
         free_page = free_ctx.new_page()
         free_page.goto(f"{django_server}{event_path}", wait_until="domcontentloaded")
         expect(free_page.locator("#register-btn")).to_be_visible()
-        expect(free_page.locator('[data-testid="event-required-tier-label"]')).to_have_count(0)
+        expect(free_page.locator('[data-testid="gated-required-tier"]')).to_have_count(0)
         free_ctx.close()
 
     @pytest.mark.core

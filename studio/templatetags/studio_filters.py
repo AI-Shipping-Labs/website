@@ -402,6 +402,7 @@ def studio_sidebar_state(path):
 
     content_active = (
         'articles' in p
+        or 'marketing-pages' in p
         or 'courses' in p
         or 'projects' in p
         or '/workshops' in p

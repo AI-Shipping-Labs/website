@@ -23,6 +23,8 @@ stem) so the guard can match the grep output without importing every view.
 FORBIDDEN_DELETE_HANDLERS = {
     "events.events_collection": "event_delete_not_available",
     "events.event_detail": "event_delete_not_available",
+    "marketing_pages.marketing_pages_collection": "marketing_page_delete_not_available",
+    "marketing_pages.marketing_page_detail": "marketing_page_delete_not_available",
     "event_series.event_series_collection": "series_delete_not_available",
     "event_series.event_series_detail": "series_delete_not_available",
     "event_series.event_series_occurrence_detail": "occurrence_delete_not_available",

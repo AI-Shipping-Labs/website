@@ -58,6 +58,7 @@ from integrations.services.github_sync.dispatchers.instructors import (
     _resolve_instructors_for_yaml,
 )
 from integrations.services.github_sync.dispatchers.interview_questions import _dispatch_interview_questions
+from integrations.services.github_sync.dispatchers.marketing_pages import _dispatch_marketing_pages
 from integrations.services.github_sync.dispatchers.projects import _dispatch_projects
 from integrations.services.github_sync.dispatchers.workshops import (
     _coerce_workshop_date,

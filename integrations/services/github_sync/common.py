@@ -21,6 +21,7 @@ REQUIRED_FIELDS = {
     'project': ['title'],
     'curated_link': ['title', 'url', 'item_id'],
     'download': ['title'],
+    'marketing_page': ['content_id', 'title', 'public_path'],
     'workshop': ['content_id', 'slug', 'title', 'pages_required_level'],
     'workshop_page': ['title'],
     'instructor': ['id', 'name'],
@@ -32,4 +33,3 @@ SYNC_LOCK_TIMEOUT_MINUTES = 10
 
 class GitHubSyncError(Exception):
     """Raised when a GitHub sync operation fails."""
-

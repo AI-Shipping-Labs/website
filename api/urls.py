@@ -69,6 +69,12 @@ from api.views.interview_notes import (
     plan_interview_notes,
     user_interview_notes,
 )
+from api.views.marketing_pages import (
+    marketing_page_detail,
+    marketing_page_preview_link,
+    marketing_page_preview_token_regenerate,
+    marketing_pages_collection,
+)
 from api.views.onboarding import (
     onboarding_personas,
     onboarding_questionnaires,
@@ -213,6 +219,27 @@ urlpatterns = [
         "articles/<uuid:content_id>/preview-token/regenerate",
         article_preview_token_regenerate,
         name="api_article_preview_token_regenerate",
+    ),
+    # ---- Marketing pages ----------------------------------------------
+    path(
+        "marketing-pages",
+        marketing_pages_collection,
+        name="api_marketing_pages_collection",
+    ),
+    path(
+        "marketing-pages/<uuid:content_id>/preview-link",
+        marketing_page_preview_link,
+        name="api_marketing_page_preview_link",
+    ),
+    path(
+        "marketing-pages/<uuid:content_id>/preview-token/regenerate",
+        marketing_page_preview_token_regenerate,
+        name="api_marketing_page_preview_token_regenerate",
+    ),
+    path(
+        "marketing-pages/<uuid:content_id>",
+        marketing_page_detail,
+        name="api_marketing_page_detail",
     ),
     # ---- Events (issue #627) ------------------------------------------
     path(

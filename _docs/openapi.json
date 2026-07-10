@@ -4103,6 +4103,425 @@
         ]
       }
     },
+    "/api/marketing-pages": {
+      "delete": {
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "marketing_page_delete_not_available",
+                  "error": "Marketing page deletion is not available through the API. Use Studio or set status=draft to unpublish this page."
+                }
+              }
+            },
+            "description": "Marketing page deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Marketing Pages"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "draft",
+                "published"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "nav_section",
+            "required": false,
+            "schema": {
+              "enum": [
+                "about",
+                "community",
+                "none",
+                "resources"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "marketing_pages": [
+                    {
+                      "content_html": "<p>Ship projects with us.</p>",
+                      "content_id": "11111111-1111-1111-1111-111111111111",
+                      "content_markdown": "# Community Story\n\nShip projects with us.",
+                      "cover_image_url": "",
+                      "created_at": "2026-07-10T10:00:00+00:00",
+                      "description": "A standalone landing page.",
+                      "editable": true,
+                      "id": 42,
+                      "meta_description": "A standalone landing page for AI Shipping Labs.",
+                      "nav_label": "Community Story",
+                      "nav_order": 10,
+                      "nav_section": "community",
+                      "public_path": "/community-story",
+                      "public_url": "https://aishippinglabs.com/community-story",
+                      "show_in_sitemap": true,
+                      "source_path": "",
+                      "source_repo": "",
+                      "status": "published",
+                      "tags": [
+                        "community"
+                      ],
+                      "title": "AI Shipping Labs Community Story",
+                      "updated_at": "2026-07-10T10:00:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of marketing pages."
+          },
+          "422": {
+            "description": "Unknown filter value."
+          }
+        },
+        "summary": "List marketing pages",
+        "tags": [
+          "Marketing Pages"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "content_markdown": "# Campaign Overview\n\nDetails.",
+                "nav_section": "none",
+                "public_path": "/campaign-overview",
+                "status": "published",
+                "title": "Campaign Overview"
+              },
+              "schema": {
+                "properties": {
+                  "content_markdown": {
+                    "type": "string"
+                  },
+                  "cover_image_url": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "meta_description": {
+                    "type": "string"
+                  },
+                  "nav_label": {
+                    "type": "string"
+                  },
+                  "nav_order": {
+                    "type": "integer"
+                  },
+                  "nav_section": {
+                    "enum": [
+                      "about",
+                      "community",
+                      "none",
+                      "resources"
+                    ],
+                    "type": "string"
+                  },
+                  "public_path": {
+                    "type": "string"
+                  },
+                  "show_in_sitemap": {
+                    "type": "boolean"
+                  },
+                  "status": {
+                    "enum": [
+                      "draft",
+                      "published"
+                    ],
+                    "type": "string"
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "public_path"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "content_html": "<p>Ship projects with us.</p>",
+                  "content_id": "11111111-1111-1111-1111-111111111111",
+                  "content_markdown": "# Community Story\n\nShip projects with us.",
+                  "cover_image_url": "",
+                  "created_at": "2026-07-10T10:00:00+00:00",
+                  "description": "A standalone landing page.",
+                  "editable": true,
+                  "id": 42,
+                  "meta_description": "A standalone landing page for AI Shipping Labs.",
+                  "nav_label": "Community Story",
+                  "nav_order": 10,
+                  "nav_section": "community",
+                  "public_path": "/community-story",
+                  "public_url": "https://aishippinglabs.com/community-story",
+                  "show_in_sitemap": true,
+                  "source_path": "",
+                  "source_repo": "",
+                  "status": "published",
+                  "tags": [
+                    "community"
+                  ],
+                  "title": "AI Shipping Labs Community Story",
+                  "updated_at": "2026-07-10T10:00:00+00:00"
+                }
+              }
+            },
+            "description": "Marketing page created."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "422": {
+            "description": "Validation error."
+          }
+        },
+        "summary": "Create a marketing page",
+        "tags": [
+          "Marketing Pages"
+        ]
+      }
+    },
+    "/api/marketing-pages/{content_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "marketing_page_delete_not_available",
+                  "error": "Marketing page deletion is not available through the API. Use Studio or set status=draft to unpublish this page."
+                }
+              }
+            },
+            "description": "Marketing page deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Marketing Pages"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "content_html": "<p>Ship projects with us.</p>",
+                  "content_id": "11111111-1111-1111-1111-111111111111",
+                  "content_markdown": "# Community Story\n\nShip projects with us.",
+                  "cover_image_url": "",
+                  "created_at": "2026-07-10T10:00:00+00:00",
+                  "description": "A standalone landing page.",
+                  "editable": true,
+                  "id": 42,
+                  "meta_description": "A standalone landing page for AI Shipping Labs.",
+                  "nav_label": "Community Story",
+                  "nav_order": 10,
+                  "nav_section": "community",
+                  "public_path": "/community-story",
+                  "public_url": "https://aishippinglabs.com/community-story",
+                  "show_in_sitemap": true,
+                  "source_path": "",
+                  "source_repo": "",
+                  "status": "published",
+                  "tags": [
+                    "community"
+                  ],
+                  "title": "AI Shipping Labs Community Story",
+                  "updated_at": "2026-07-10T10:00:00+00:00"
+                }
+              }
+            },
+            "description": "Marketing page detail."
+          },
+          "404": {
+            "description": "Marketing page not found."
+          }
+        },
+        "summary": "Retrieve a marketing page by content_id",
+        "tags": [
+          "Marketing Pages"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "content_html": "<p>Ship projects with us.</p>",
+                  "content_id": "11111111-1111-1111-1111-111111111111",
+                  "content_markdown": "# Community Story\n\nShip projects with us.",
+                  "cover_image_url": "",
+                  "created_at": "2026-07-10T10:00:00+00:00",
+                  "description": "A standalone landing page.",
+                  "editable": true,
+                  "id": 42,
+                  "meta_description": "A standalone landing page for AI Shipping Labs.",
+                  "nav_label": "Community Story",
+                  "nav_order": 10,
+                  "nav_section": "community",
+                  "public_path": "/community-story",
+                  "public_url": "https://aishippinglabs.com/community-story",
+                  "show_in_sitemap": true,
+                  "source_path": "",
+                  "source_repo": "",
+                  "status": "published",
+                  "tags": [
+                    "community"
+                  ],
+                  "title": "AI Shipping Labs Community Story",
+                  "updated_at": "2026-07-10T10:00:00+00:00"
+                }
+              }
+            },
+            "description": "Marketing page updated."
+          },
+          "409": {
+            "description": "Synced page is read-only."
+          },
+          "422": {
+            "description": "Validation error."
+          }
+        },
+        "summary": "Update a manual marketing page",
+        "tags": [
+          "Marketing Pages"
+        ]
+      }
+    },
+    "/api/marketing-pages/{content_id}/preview-link": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preview URL for the marketing page."
+          },
+          "404": {
+            "description": "Marketing page not found."
+          }
+        },
+        "summary": "Get marketing page draft preview link",
+        "tags": [
+          "Marketing Pages"
+        ]
+      }
+    },
+    "/api/marketing-pages/{content_id}/preview-token/regenerate": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "New preview URL for the marketing page."
+          },
+          "404": {
+            "description": "Marketing page not found."
+          }
+        },
+        "summary": "Regenerate marketing page draft preview token",
+        "tags": [
+          "Marketing Pages"
+        ]
+      }
+    },
     "/api/member-notes": {
       "post": {
         "description": "Non-staff bearers cannot create a note with ``visibility=internal``. The plan_id is optional; when supplied it must reference a plan the bearer can see.",

@@ -280,6 +280,13 @@ double-rendering. See issue #347.
               </a>
             </li>
             <li>
+              <a href="{% url 'studio_marketing_page_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'marketing-pages' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="panel-top" class="w-4 h-4"></i>
+                <span>Marketing pages</span>
+              </a>
+            </li>
+            <li>
               <a href="{% url 'studio_course_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'courses' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="book-open" class="w-4 h-4"></i>

@@ -39,6 +39,8 @@ CONTENT_TYPE_LABELS = {
     'article': 'article',
     'course': 'course',
     'event': 'event',
+    'marketing_page': 'marketing page',
+    'marketingpage': 'marketing page',
     'module': 'course module',
     'project': 'project',
     'recording': 'recording',
@@ -153,6 +155,12 @@ def _description_source(obj, content_type):
         return _body_source_without_duplicate_h1(obj, 'overview')
     if content_type == 'unit':
         return _body_source_without_duplicate_h1(obj, 'body')
+    if content_type in ('marketing_page', 'marketingpage'):
+        return (
+            getattr(obj, 'effective_meta_description', '')
+            or getattr(obj, 'meta_description', '')
+            or getattr(obj, 'description', '')
+        )
     if content_type in ('workshop_page', 'workshoppage'):
         return _body_source_without_duplicate_h1(obj, 'body')
     if content_type == 'workshop_video':
@@ -504,6 +512,25 @@ def _build_organization_jsonld():
     }
 
 
+def _build_marketing_page_jsonld(page):
+    """Build JSON-LD for a standalone marketing page."""
+    site_url = _get_site_url()
+    return {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        'name': page.title,
+        'description': _truncate_description(
+            getattr(page, 'effective_meta_description', ''),
+        ),
+        'url': f'{site_url}{page.get_absolute_url()}',
+        'publisher': {
+            '@type': 'Organization',
+            'name': SITE_NAME,
+            'url': site_url,
+        },
+    }
+
+
 def _format_date(obj):
     """Format a date field from an object. Handles both date and datetime."""
     date_val = getattr(obj, 'date', None)
@@ -600,6 +627,8 @@ JSONLD_BUILDERS = {
     'workshop_page': _build_workshop_page_jsonld,
     'workshoppage': _build_workshop_page_jsonld,
     'workshop_video': _build_workshop_video_jsonld,
+    'marketing_page': _build_marketing_page_jsonld,
+    'marketingpage': _build_marketing_page_jsonld,
 }
 
 

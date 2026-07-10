@@ -36,12 +36,16 @@
         <article class="group rounded-lg border border-border bg-card p-4 sm:p-6 transition-colors hover:border-accent/50">
           <a href="/blog/{{ article.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              {% if article.cover_image_url %}
-              <div class="sm:w-48 sm:flex-shrink-0">
+              <div class="sm:w-48 sm:flex-shrink-0" data-testid="blog-card-thumbnail">
+                {% if article.cover_image_url %}
                 <img src="{{ article.cover_image_url }}" alt="{{ article.title }}"
                      class="w-full aspect-video sm:aspect-auto sm:h-32 object-cover rounded-lg border border-border">
+                {% else %}
+                <div class="flex aspect-video w-full items-center justify-center rounded-lg border border-border bg-secondary sm:h-32 sm:aspect-auto" data-testid="blog-card-thumbnail-fallback" aria-hidden="true">
+                  <i data-lucide="file-text" class="h-8 w-8 text-muted-foreground/50"></i>
+                </div>
+                {% endif %}
               </div>
-              {% endif %}
               <div class="flex-1">
                 <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
                   {% if article.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ article.title }}

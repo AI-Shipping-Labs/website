@@ -282,6 +282,8 @@ class ActivitiesSprintHubTest(TestCase):
         response = self.client.get('/activities')
 
         self.assertContains(response, 'Open my plan')
+        self.assertContains(response, "You're enrolled")
+        self.assertNotContains(response, 'Use the next step below to continue')
         self.assertContains(
             response,
             reverse(

@@ -98,6 +98,7 @@ def _build_sprint_summaries(sprints, user):
         )
         cta_url = detail_url
         cta_label = 'View sprint'
+        enrolled = False
 
         if not user.is_authenticated:
             cta_url = f'{reverse("account_login")}?next={detail_url}'
@@ -135,6 +136,7 @@ def _build_sprint_summaries(sprints, user):
             'required_tier_name': required_tier_name,
             'cta_url': cta_url,
             'cta_label': cta_label,
+            'enrolled': enrolled,
         })
 
     return summaries

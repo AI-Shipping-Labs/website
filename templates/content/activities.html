@@ -223,6 +223,12 @@
                 <div class="flex flex-wrap items-center gap-2">
                   {% member_status_badge item.sprint.get_status_display size="sm" uppercase=True testid="activities-sprint-status" %}
                   {% member_tier_badge item.required_tier_level tone="accent_strong" size="sm" icon="lock" testid="activities-sprint-tier" %}
+                  {% if item.enrolled %}
+                  <span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300" data-testid="activities-sprint-enrolled">
+                    <i data-lucide="check" class="h-3.5 w-3.5"></i>
+                    You're enrolled
+                  </span>
+                  {% endif %}
                 </div>
                 <h2 class="text-xl font-semibold text-foreground" data-testid="activities-sprint-name">{{ item.sprint.name }}</h2>
                 <dl class="space-y-3 text-sm text-muted-foreground" data-testid="activities-sprint-facts">
@@ -232,7 +238,7 @@
                   </div>
                 </dl>
                 <p class="text-sm leading-relaxed text-muted-foreground" data-testid="activities-sprint-guidance">
-                  Joining requires {{ item.required_tier_name }} membership. Use the next step below to continue.
+                  Joining requires {{ item.required_tier_name }} membership.
                 </p>
                 <a href="{{ item.cta_url }}"
                    class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 sm:w-fit"

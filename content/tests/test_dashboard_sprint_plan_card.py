@@ -15,7 +15,15 @@ from django.urls import reverse
 from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_PREMIUM
-from plans.models import Plan, Sprint, SprintEnrollment
+from plans.models import (
+    Checkpoint,
+    Plan,
+    Sprint,
+    SprintEnrollment,
+    SprintFeedbackRequest,
+    Week,
+)
+from questionnaires.models import Questionnaire, Response
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -73,6 +81,85 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         # Sprint metadata is rendered.
         self.assertContains(response, 'August 2026')
         self.assertContains(response, _expected_sprint_range(start_date, 8))
+
+    def test_ended_shared_plan_card_shows_recap_feedback_and_next_action(self):
+        user = User.objects.create_user(
+            email='ended-card@test.com',
+            password='pw',
+            tier=self.main_tier,
+        )
+        ended = Sprint.objects.create(
+            name='Ended Sprint',
+            slug='ended-sprint',
+            start_date=datetime.date.today() - datetime.timedelta(weeks=8),
+            duration_weeks=4,
+            status='active',
+            min_tier_level=LEVEL_MAIN,
+        )
+        next_sprint = Sprint.objects.create(
+            name='Next Sprint',
+            slug='next-sprint',
+            start_date=ended.end_date,
+            duration_weeks=4,
+            status='active',
+            min_tier_level=LEVEL_MAIN,
+        )
+        plan = Plan.objects.create(
+            member=user,
+            sprint=ended,
+            shared_at=timezone.now(),
+        )
+        week = Week.objects.create(plan=plan, week_number=1, position=0)
+        Checkpoint.objects.create(
+            week=week,
+            description='Done',
+            position=0,
+            done_at=timezone.now(),
+        )
+        Checkpoint.objects.create(
+            week=week,
+            description='Open',
+            position=1,
+        )
+        questionnaire = Questionnaire.objects.create(
+            title='Ended Feedback',
+            slug='ended-feedback',
+            purpose='feedback',
+        )
+        SprintFeedbackRequest.objects.create(
+            sprint=ended,
+            questionnaire=questionnaire,
+            distributed_at=timezone.now(),
+        )
+        response = Response.objects.create(
+            questionnaire=questionnaire,
+            respondent=user,
+        )
+
+        self.client.login(email='ended-card@test.com', password='pw')
+        page = self.client.get('/')
+
+        self.assertContains(page, 'data-testid="account-sprint-plan-recap"')
+        self.assertContains(page, '1 of 2 checkpoints done')
+        self.assertContains(page, 'Share feedback')
+        self.assertContains(
+            page,
+            reverse(
+                'sprint_feedback_fill',
+                kwargs={
+                    'sprint_slug': ended.slug,
+                    'response_id': response.pk,
+                },
+            ),
+        )
+        self.assertContains(page, 'Join the next sprint')
+        self.assertContains(
+            page,
+            reverse(
+                'sprint_detail',
+                kwargs={'sprint_slug': next_sprint.slug},
+            ),
+        )
 
     def test_dashboard_card_hidden_when_user_has_no_plan(self):
         User.objects.create_user(

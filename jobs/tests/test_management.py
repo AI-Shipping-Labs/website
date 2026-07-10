@@ -111,6 +111,22 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertIn('slack-membership-refresh (daily at 06:00 UTC)', out.getvalue())
         self.assertNotIn('every 30 min', out.getvalue())
 
+    def test_creates_sprint_end_recap_schedule(self):
+        """Command registers sprint-end recaps after plan-sprints ingest."""
+        out = StringIO()
+        call_command('setup_schedules', stdout=out)
+        schedule = Schedule.objects.get(name='sprint-end-recaps')
+        self.assertEqual(
+            schedule.func,
+            'plans.tasks.sprint_end.send_sprint_end_recaps',
+        )
+        self.assertEqual(schedule.cron, '30 5 * * *')
+        self.assertEqual(schedule.schedule_type, Schedule.CRON)
+        self.assertIn(
+            'sprint-end-recaps (daily at 05:30 UTC)',
+            out.getvalue(),
+        )
+
     def test_creates_remind_unverified_users_schedule(self):
         """Command creates remind-unverified-users schedule (issue #452).
 
@@ -174,6 +190,7 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(Schedule.objects.filter(name='import-stripe-daily').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='remind-unverified-users').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='purge-unverified-users').count(), 1)
+        self.assertEqual(Schedule.objects.filter(name='sprint-end-recaps').count(), 1)
 
     def test_updates_stale_cadence_on_existing_rows(self):
         """Re-running setup_schedules updates an existing row's cron in place.
@@ -235,6 +252,7 @@ class SetupSchedulesCommandTest(TestCase):
             'remind-unverified-users',
             'purge-unverified-users',
             'ingest-plan-sprints',
+            'sprint-end-recaps',
             'onboarding-reminders',
         }
         self.assertEqual(names, expected)

@@ -147,6 +147,16 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: ingest-plan-sprints (daily at 05:00 UTC)'))
 
+        # Daily sprint-end recap after the #plan-sprints ingest slot.
+        # The task is idempotent via SprintEndDeliveryLog, so reruns never
+        # duplicate member recap notifications or emails.
+        schedule(
+            'plans.tasks.sprint_end.send_sprint_end_recaps',
+            cron='30 5 * * *',
+            name='sprint-end-recaps',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: sprint-end-recaps (daily at 05:30 UTC)'))
+
         # One-week onboarding reminder sweep (issue #1133). Runs daily at
         # 06:30 UTC, an off-peak slot clear of the 03:00-05:00 import/ingest
         # jobs, the 06:00 Slack-membership refresh, and the 07:00-08:00

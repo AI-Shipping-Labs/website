@@ -33,6 +33,7 @@
         <th class="{% studio_list_class 'th' %}">Title</th>
         <th class="{% studio_list_class 'th' %}">Status</th>
         <th class="{% studio_list_class 'th' %}">Date</th>
+        <th class="{% studio_list_class 'th' %}">Skill level</th>
         <th class="{% studio_list_class 'th' %}">Landing gate</th>
         <th class="{% studio_list_class 'th' %}">Pages gate</th>
         <th class="{% studio_list_class 'th' %}">Recording gate</th>
@@ -53,6 +54,7 @@
           {% studio_status_badge workshop.status workshop.get_status_display %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ workshop.date|operator_date }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Skill level" data-testid="studio-workshop-skill-level">{% if workshop.skill_level %}{{ workshop.skill_level_label }}{% else %}&mdash;{% endif %}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Landing gate">{{ workshop.get_landing_required_level_display }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Pages gate">{{ workshop.get_pages_required_level_display }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Recording gate">{{ workshop.get_recording_required_level_display }}</td>
@@ -77,7 +79,7 @@
       </tr>
       {% empty %}
         {% url 'studio_workshop_list' as workshops_clear_url %}
-        {% studio_empty_state 'filter' entity_label='workshop' entity_label_plural='workshops' clear_url=workshops_clear_url colspan=10 testid_suffix='workshops-empty-state' %}
+        {% studio_empty_state 'filter' entity_label='workshop' entity_label_plural='workshops' clear_url=workshops_clear_url colspan=11 testid_suffix='workshops-empty-state' %}
       {% endfor %}
     </tbody>
   </table>

@@ -49,6 +49,14 @@ def _completed_future(slug='completed-future', **overrides):
     return Event.objects.create(slug=slug, **defaults)
 
 
+def _register_users(event, count):
+    for index in range(count):
+        user = User.objects.create_user(
+            email=f'attendee-{event.slug}-{index}@example.com',
+        )
+        EventRegistration.objects.create(event=event, user=user)
+
+
 class EventDetailHeaderTest(TestCase):
     """Stale upcoming row renders the Past pill on the detail page."""
 
@@ -91,15 +99,22 @@ class EventDetailRegistrationCardTest(TestCase):
 
 
 class EventDetailAttendeeChipTest(TestCase):
-    """Attendee chip switches to past-tense for stale upcoming row."""
+    """Attendee chip follows the social-proof threshold for stale rows."""
+
+    def test_stale_event_below_threshold_hides_attendee_chip(self):
+        event = _stale_upcoming()
+        _register_users(event, 4)
+        response = self.client.get(event.get_absolute_url())
+        self.assertNotContains(response, 'data-testid="event-attendee-count"')
+        self.assertNotContains(response, 'people attended')
+        self.assertNotContains(response, 'are going')
 
     def test_stale_event_shows_past_tense_attendee_chip(self):
         event = _stale_upcoming()
-        user = User.objects.create_user(email='att1@test.com')
-        EventRegistration.objects.create(event=event, user=user)
+        _register_users(event, 5)
         response = self.client.get(event.get_absolute_url())
         # Past-tense copy on the chip.
-        self.assertContains(response, 'attended')
+        self.assertContains(response, '5 people attended')
         self.assertNotContains(response, 'is going')
         self.assertNotContains(response, 'are going')
 

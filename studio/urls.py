@@ -125,6 +125,12 @@ from studio.views.events import (
 )
 from studio.views.hosts import host_create, host_edit, host_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
+from studio.views.marketing_pages import (
+    marketing_page_edit,
+    marketing_page_list,
+    marketing_page_new,
+    marketing_page_regenerate_preview_token,
+)
 from studio.views.member_notes import (
     member_note_create,
     member_note_delete,
@@ -399,6 +405,20 @@ urlpatterns = [
         'articles/<int:article_id>/remove-banner',
         studio_article_remove_banner,
         name='studio_article_remove_banner',
+    ),
+
+    # Standalone marketing pages
+    path('marketing-pages/', marketing_page_list, name='studio_marketing_page_list'),
+    path('marketing-pages/new', marketing_page_new, name='studio_marketing_page_new'),
+    path(
+        'marketing-pages/<int:page_id>/edit',
+        marketing_page_edit,
+        name='studio_marketing_page_edit',
+    ),
+    path(
+        'marketing-pages/<int:page_id>/preview-token/regenerate',
+        marketing_page_regenerate_preview_token,
+        name='studio_marketing_page_regenerate_preview_token',
     ),
 
     # Events. The literal ``new`` route is registered before the

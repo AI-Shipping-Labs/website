@@ -12,6 +12,7 @@ from content.access import (
     get_user_level,
 )
 from content.models import Article, CuratedLink, Download, Project, TagRule, Tutorial
+from content.services.related_content import build_related_content_rail
 from content.tier_config import get_activities
 from plans.models import Plan, Sprint, SprintEnrollment
 
@@ -60,6 +61,13 @@ def _filter_by_tags(queryset, selected_tags):
         if all(tag in obj_tags for tag in selected_tags):
             matching_ids.append(obj.pk)
     return queryset.filter(pk__in=matching_ids)
+
+
+def _clean_guest_surface_text(value):
+    """Normalize stale sync-managed text before rendering public pages."""
+    if value is None:
+        return ''
+    return str(value).replace('\\"', '"').replace("\\'", "'").strip()
 
 
 def _get_tag_rules_for_tags(tags):
@@ -133,13 +141,21 @@ def _build_sprint_summaries(sprints, user):
 
 def _get_activity_sprints(user):
     """Return public activity-hub sprint summaries for the current viewer."""
-    statuses = ['active']
-    if user.is_authenticated and user.is_staff:
-        statuses.append('draft')
+    today = timezone.localdate()
+    sprints = []
 
-    sprints = Sprint.objects.filter(status__in=statuses).order_by(
+    active_sprints = Sprint.objects.filter(status='active').order_by(
         'start_date', 'name',
     )
+    for sprint in active_sprints:
+        if sprint.start_date <= today <= sprint.end_date:
+            sprints.append(sprint)
+
+    if user.is_authenticated and user.is_staff:
+        sprints.extend(
+            Sprint.objects.filter(status='draft').order_by('start_date', 'name')
+        )
+
     return _build_sprint_summaries(sprints, user)
 
 
@@ -265,11 +281,10 @@ def blog_detail(request, slug):
     """Blog post detail page with related articles."""
     article = get_object_or_404(Article, slug=slug, published=True)
 
-    related_articles = article.get_related_articles(limit=3)
     tag_rules = _get_tag_rules_for_tags(article.tags)
     context = {
         'article': article,
-        'related_articles': related_articles,
+        'related_content': build_related_content_rail(article),
         'tag_rules': tag_rules,
         'learning_stages': article.data_json.get('learning_stages', []),
     }
@@ -342,7 +357,11 @@ def project_detail(request, slug):
     """Project detail page."""
     project = get_object_or_404(Project, slug=slug, published=True)
     tag_rules = _get_tag_rules_for_tags(project.tags)
-    context = {'project': project, 'tag_rules': tag_rules}
+    context = {
+        'project': project,
+        'related_content': build_related_content_rail(project),
+        'tag_rules': tag_rules,
+    }
     context.update(build_gating_context(request.user, project, 'project'))
     _record_resource_view_if_accessible(
         request, project, 'project', project.slug, 'project_detail', slug,
@@ -376,6 +395,8 @@ def collection_list(request):
     # Build per-link access info and strip URLs from gated links
     annotated_links = []
     for link in links:
+        link.title = _clean_guest_surface_text(link.title)
+        link.description = _clean_guest_surface_text(link.description)
         gated_reason = get_gated_reason(request.user, link)
         has_access = not gated_reason or gated_reason == 'unverified_email'
         url = link.url if not gated_reason else None
@@ -457,7 +478,11 @@ def tutorial_detail(request, slug):
     """Tutorial detail page."""
     tutorial = get_object_or_404(Tutorial, slug=slug, published=True)
     tag_rules = _get_tag_rules_for_tags(tutorial.tags)
-    context = {'tutorial': tutorial, 'tag_rules': tag_rules}
+    context = {
+        'tutorial': tutorial,
+        'related_content': build_related_content_rail(tutorial),
+        'tag_rules': tag_rules,
+    }
     context.update(build_gating_context(request.user, tutorial, 'tutorial'))
     _record_resource_view_if_accessible(
         request, tutorial, 'tutorial', tutorial.slug, 'tutorial_detail', slug,
@@ -465,6 +490,7 @@ def tutorial_detail(request, slug):
     return render(request, 'content/tutorial_detail.html', context)
 
 
+@ensure_csrf_cookie
 def downloads_list(request):
     """Downloadable resources listing page with optional tag filtering."""
     downloads = Download.objects.filter(published=True)

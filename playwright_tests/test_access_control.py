@@ -502,7 +502,8 @@ class TestScenario449UnverifiedSignupFreeArticle:
         final_body = page.content()
         assert "Full article body after verification" in final_body
         assert 'data-testid="verify-email-required-card"' not in final_body
-        assert "Related Articles" in final_body
+        assert "Related content" in final_body
+        assert "Related Verification Article" in final_body
 
 
 # ---------------------------------------------------------------
@@ -1673,9 +1674,15 @@ class TestScenario11FreeMemberGatedDownloads:
         assert "Free Lead Magnet" in body
         assert "Main Gated Resource" in body
 
-        # Lead magnet has a download option (for authenticated user)
-        download_btn = page.locator('a:has-text("Download")').first
+        # Lead magnet has an in-card download option (for authenticated user)
+        lead_magnet_card = page.get_by_test_id("download-card").filter(
+            has_text="Free Lead Magnet"
+        )
+        download_btn = lead_magnet_card.get_by_test_id("download-card-file-cta")
         assert download_btn.is_visible()
+        assert "/api/downloads/free-lead-magnet/file" in download_btn.get_attribute(
+            "href"
+        )
 
         # Main-gated download has upgrade CTA
         assert "Upgrade to Main to download" in body

@@ -2,7 +2,7 @@
 name: product-manager
 description: Grooms raw issues into agent-ready specs AND does final user-perspective acceptance review after tester passes.
 tools: Read, Edit, Write, Bash, Glob, Grep
-model: opus
+model: opus-4.8
 ---
 
 # Product Manager Agent

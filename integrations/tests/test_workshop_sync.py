@@ -412,6 +412,102 @@ class WorkshopSyncTutorialOnlyNoEventTest(_WorkshopSyncFixtureBase):
         self.assertTrue(studio_event.published)
 
 
+class WorkshopSyncCoreToolsTest(_WorkshopSyncFixtureBase):
+    """Workshop ``core_tools:`` frontmatter normalization and validation."""
+
+    def test_sync_normalizes_core_tools_list(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml=(
+                'core_tools:\n'
+                '  - " Claude Code "\n'
+                '  - ""\n'
+                '  - "OpenAI API"\n'
+                '  - "claude code"\n'
+                '  - "Django"\n'
+            ),
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(
+            workshop.core_tools,
+            ['Claude Code', 'OpenAI API', 'Django'],
+        )
+
+    def test_sync_accepts_missing_and_empty_core_tools(self):
+        missing_folder = '2026/2026-04-21-missing-tools'
+        empty_folder = '2026/2026-04-22-empty-tools'
+        self._write_workshop_yaml(
+            folder=missing_folder,
+            slug='missing-tools',
+            title='Missing Tools',
+            content_id='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+        )
+        self._write_page(missing_folder, '01-overview.md', title='Overview')
+        self._write_workshop_yaml(
+            folder=empty_folder,
+            slug='empty-tools',
+            title='Empty Tools',
+            content_id='cccccccc-cccc-cccc-cccc-cccccccccccc',
+            extra_yaml='core_tools: []\n',
+        )
+        self._write_page(empty_folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        self.assertEqual(
+            Workshop.objects.get(slug='missing-tools').core_tools,
+            [],
+        )
+        self.assertEqual(
+            Workshop.objects.get(slug='empty-tools').core_tools,
+            [],
+        )
+
+    def test_sync_reports_error_for_non_list_core_tools(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml='core_tools: Claude Code\n',
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(Workshop.objects.count(), 0)
+        self.assertTrue(
+            any('core_tools' in err.get('error', '') for err in sync_log.errors),
+            f'Expected a core_tools error, got: {sync_log.errors}',
+        )
+
+    def test_sync_reports_error_for_non_string_core_tool_item(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml=(
+                'core_tools:\n'
+                '  - Claude Code\n'
+                '  - 123\n'
+            ),
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(Workshop.objects.count(), 0)
+        self.assertTrue(
+            any(
+                'core_tools[1]' in err.get('error', '')
+                for err in sync_log.errors
+            ),
+            f'Expected a core_tools[1] error, got: {sync_log.errors}',
+        )
+
+
 class WorkshopSyncReusesExistingEventTest(_WorkshopSyncFixtureBase):
     """If an Event with the same slug exists, reuse it — don't overwrite ops fields."""
 
@@ -884,6 +980,89 @@ class WorkshopSyncLandingGateValidationTest(_WorkshopSyncFixtureBase):
             any('landing_required_level' in err.get('error', '')
                 for err in sync_log.errors),
             f'Expected a landing_required_level error, got: {sync_log.errors}',
+        )
+
+
+class WorkshopSyncSkillLevelTest(_WorkshopSyncFixtureBase):
+    """Top-level ``skill_level:`` parsing for workshop metadata."""
+
+    def test_sync_normalizes_and_persists_skill_level(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml='skill_level: " Intermediate "\n',
+        )
+        self._write_page(folder, '01-p.md', title='P')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(
+            sync_log.errors, [],
+            f'Expected no errors, got: {sync_log.errors}',
+        )
+        self.assertEqual(Workshop.objects.get().skill_level, 'intermediate')
+
+    def test_sync_missing_or_blank_skill_level_stays_blank(self):
+        first_folder = '2026/2026-04-21-demo'
+        second_folder = '2026/2026-04-22-blank'
+        self._write_workshop_yaml(folder=first_folder)
+        self._write_page(first_folder, '01-p.md', title='P')
+        self._write_workshop_yaml(
+            folder=second_folder,
+            content_id=str(uuid.uuid4()),
+            slug='blank',
+            title='Blank Skill',
+            extra_yaml='skill_level: " "\n',
+        )
+        self._write_page(second_folder, '01-p.md', title='P')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(
+            sync_log.errors, [],
+            f'Expected no errors, got: {sync_log.errors}',
+        )
+        self.assertEqual(
+            set(Workshop.objects.values_list('skill_level', flat=True)),
+            {''},
+        )
+
+    def test_invalid_skill_level_logs_error_and_sibling_still_syncs(self):
+        bad_path = '2026/2026-04-21-bad/workshop.yaml'
+        self._write(
+            bad_path,
+            'content_id: ' + str(uuid.uuid4()) + '\n'
+            'slug: bad-skill\n'
+            'title: Bad Skill\n'
+            'date: 2026-04-21\n'
+            'pages_required_level: 10\n'
+            'skill_level: expert\n',
+        )
+        self._write_workshop_yaml(
+            folder='2026/2026-04-22-good',
+            content_id=str(uuid.uuid4()),
+            slug='good-skill',
+            title='Good Skill',
+            extra_yaml='skill_level: advanced\n',
+        )
+        self._write_page('2026/2026-04-22-good', '01-p.md', title='P')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(Workshop.objects.count(), 1)
+        workshop = Workshop.objects.get()
+        self.assertEqual(workshop.slug, 'good-skill')
+        self.assertEqual(workshop.skill_level, 'advanced')
+        self.assertTrue(
+            any(
+                err.get('file') == bad_path
+                and 'allowed values: beginner, intermediate, advanced'
+                in err.get('error', '')
+                and bad_path in err.get('error', '')
+                for err in sync_log.errors
+            ),
+            f'Expected a skill_level error for {bad_path}, got: '
+            f'{sync_log.errors}',
         )
 
 

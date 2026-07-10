@@ -12,11 +12,14 @@ Usage in templates:
 """
 
 import json
+import re
 
 from django import template
 from django.conf import settings
 from django.utils.safestring import mark_safe
 
+from content.templatetags.teaser_tags import strip_markdown
+from content.utils.h1 import strip_leading_title_h1
 from events.services.display_time import format_event_tz_strip
 from integrations.config import site_base_url
 from integrations.services.banner_generator.resolve import effective_banner_url
@@ -27,6 +30,27 @@ register = template.Library()
 SITE_NAME = 'AI Shipping Labs'
 DEFAULT_OG_IMAGE_PATH = '/static/ai-shipping-labs.jpg'
 DEFAULT_OG_IMAGE_ALT = 'AI Shipping Labs'
+_FENCED_CODE_BLOCK_RE = re.compile(r'(?ms)(```.*?```|~~~.*?~~~)')
+_MARKDOWN_IMAGE_RE = re.compile(r'!\[[^\]]*\]\([^)]*\)')
+_HTML_COMMENT_RE = re.compile(r'(?s)<!--.*?-->')
+_WHITESPACE_RE = re.compile(r'\s+')
+
+CONTENT_TYPE_LABELS = {
+    'article': 'article',
+    'course': 'course',
+    'event': 'event',
+    'marketing_page': 'marketing page',
+    'marketingpage': 'marketing page',
+    'module': 'course module',
+    'project': 'project',
+    'recording': 'recording',
+    'tutorial': 'tutorial',
+    'unit': 'course unit',
+    'workshop': 'workshop',
+    'workshop_page': 'workshop tutorial page',
+    'workshoppage': 'workshop tutorial page',
+    'workshop_video': 'workshop recording',
+}
 
 
 def _get_site_url():
@@ -38,6 +62,8 @@ def _truncate_description(text, max_length=160):
     """Truncate description to max_length characters."""
     if not text:
         return ''
+    if max_length <= 3:
+        return text[:max_length]
     text = text.strip()
     if len(text) <= max_length:
         return text
@@ -48,6 +74,167 @@ def _get_content_type(obj):
     """Determine the content type from the model class name."""
     class_name = obj.__class__.__name__
     return class_name.lower()
+
+
+def _resolve_content_type(obj, content_type=None):
+    """Return the explicit SEO content type, or infer it from the object."""
+    if content_type:
+        return content_type
+    return _get_content_type(obj)
+
+
+def _clean_seo_source(value):
+    """Return plain text suitable for metadata descriptions.
+
+    The normal teaser ``strip_markdown`` filter intentionally preserves code
+    text. SEO snippets should lead with prose, so fenced code blocks and image
+    syntax are removed before markdown is rendered to plain text.
+    """
+    if not value:
+        return ''
+    text = str(value)
+    text = _HTML_COMMENT_RE.sub(' ', text)
+    text = _FENCED_CODE_BLOCK_RE.sub(' ', text)
+    text = _MARKDOWN_IMAGE_RE.sub(' ', text)
+    return _WHITESPACE_RE.sub(' ', strip_markdown(text)).strip()
+
+
+def _fallback_description_from_title(title, content_type):
+    """Build a content-specific fallback instead of using the site default."""
+    label = CONTENT_TYPE_LABELS.get(content_type, 'page')
+    if title:
+        return f'Explore {title}, an AI Shipping Labs {label}.'
+    return f'Explore this AI Shipping Labs {label}.'
+
+
+def _content_specific_fallback(obj, content_type):
+    """Build a non-empty fallback for the object/content-type pair."""
+    title = getattr(obj, 'title', '')
+
+    if content_type in ('workshop_page', 'workshoppage'):
+        workshop_title = getattr(getattr(obj, 'workshop', None), 'title', '')
+        if title and workshop_title:
+            return f'{title} is a workshop tutorial page for {workshop_title}.'
+
+    if content_type == 'workshop_video':
+        if title:
+            return f'Watch the recording for {title}, an AI Shipping Labs workshop.'
+
+    if content_type == 'module':
+        course_title = getattr(getattr(obj, 'course', None), 'title', '')
+        if title and course_title:
+            return f'{title} is a course module in {course_title}.'
+
+    if content_type == 'unit':
+        module = getattr(obj, 'module', None)
+        course_title = getattr(getattr(module, 'course', None), 'title', '')
+        if title and course_title:
+            return f'{title} is a course unit in {course_title}.'
+
+    return _fallback_description_from_title(title, content_type)
+
+
+def _body_source_without_duplicate_h1(obj, attr, title_attr='title'):
+    """Return markdown body text with a duplicate leading H1 removed."""
+    source = getattr(obj, attr, '') or ''
+    title = getattr(obj, title_attr, '') or ''
+    if source and title:
+        return strip_leading_title_h1(source, title)
+    return source
+
+
+def _description_source(obj, content_type):
+    """Choose the best source text for a content object's SEO description."""
+    explicit_description = getattr(obj, 'description', '') or ''
+    if explicit_description:
+        return explicit_description
+
+    if content_type in ('article', 'project', 'tutorial'):
+        return _body_source_without_duplicate_h1(obj, 'content_markdown')
+    if content_type == 'module':
+        return _body_source_without_duplicate_h1(obj, 'overview')
+    if content_type == 'unit':
+        return _body_source_without_duplicate_h1(obj, 'body')
+    if content_type in ('marketing_page', 'marketingpage'):
+        return (
+            getattr(obj, 'effective_meta_description', '')
+            or getattr(obj, 'meta_description', '')
+            or getattr(obj, 'description', '')
+        )
+    if content_type in ('workshop_page', 'workshoppage'):
+        return _body_source_without_duplicate_h1(obj, 'body')
+    if content_type == 'workshop_video':
+        return getattr(obj, 'description', '') or ''
+
+    return ''
+
+
+def _description_with_context(obj, content_type, description):
+    """Add parent/page context for child pages that otherwise duplicate snippets."""
+    if not description:
+        return _content_specific_fallback(obj, content_type)
+
+    title = getattr(obj, 'title', '')
+    if content_type in ('workshop_page', 'workshoppage'):
+        workshop_title = getattr(getattr(obj, 'workshop', None), 'title', '')
+        if title and workshop_title:
+            return f'{title} in {workshop_title}: {description}'
+    if content_type == 'workshop_video' and title:
+        return f'Recording for {title}: {description}'
+    if content_type == 'module':
+        course_title = getattr(getattr(obj, 'course', None), 'title', '')
+        if title and course_title:
+            return f'{title} in {course_title}: {description}'
+    if content_type == 'unit':
+        module = getattr(obj, 'module', None)
+        course_title = getattr(getattr(module, 'course', None), 'title', '')
+        if title and course_title:
+            return f'{title} in {course_title}: {description}'
+    return description
+
+
+def build_seo_description(content, content_type=None, max_length=160):
+    """Build a cleaned, content-specific SEO description string."""
+    resolved_type = _resolve_content_type(content, content_type)
+    if resolved_type == 'event':
+        return _event_preview_description(content)
+
+    source = _description_source(content, resolved_type)
+    description = _clean_seo_source(source)
+    description = _description_with_context(content, resolved_type, description)
+    return _truncate_description(description, max_length=max_length)
+
+
+@register.simple_tag
+def seo_description(content, content_type=None, max_length=160):
+    """Template tag wrapper for ``build_seo_description``."""
+    return build_seo_description(content, content_type, max_length=max_length)
+
+
+def _seo_title(content, content_type):
+    """Return the metadata/social title for a content object."""
+    title = getattr(content, 'title', SITE_NAME)
+    if content_type in ('workshop_page', 'workshoppage'):
+        workshop_title = getattr(getattr(content, 'workshop', None), 'title', '')
+        if workshop_title:
+            return f'{title} | {workshop_title}'
+    if content_type == 'workshop_video':
+        return f'{title} - Recording'
+    return title
+
+
+def _canonical_path(content, content_type):
+    """Return the canonical path for a content object or variant page."""
+    if content_type == 'workshop_video':
+        return f'{content.get_absolute_url()}/video'
+    return content.get_absolute_url()
+
+
+def _image_source(content, content_type):
+    """Return the record whose banner fields should feed OG/Twitter images."""
+    if content_type in ('workshop_page', 'workshoppage'):
+        return getattr(content, 'workshop', content)
+    return content
 
 
 # Issue #817: event link previews lead with the same multi-timezone time strip
@@ -65,9 +252,11 @@ def _event_preview_description(event):
     description when ``start_datetime`` is missing (defensive guard).
     """
     time_strip = format_event_tz_strip(getattr(event, 'start_datetime', None))
-    description = (getattr(event, 'description', '') or '').strip()
+    description = _clean_seo_source(getattr(event, 'description', '') or '')
 
     if not time_strip:
+        if not description:
+            description = _content_specific_fallback(event, 'event')
         return _truncate_description(description)
 
     if not description:
@@ -86,9 +275,7 @@ def _build_article_jsonld(article):
         '@context': 'https://schema.org',
         '@type': 'Article',
         'headline': article.title,
-        'description': _truncate_description(
-            getattr(article, 'description', ''),
-        ),
+        'description': build_seo_description(article),
         'datePublished': _format_date(article),
         'dateModified': _format_datetime(
             getattr(article, 'updated_at', None),
@@ -119,9 +306,7 @@ def _build_course_jsonld(course):
         '@context': 'https://schema.org',
         '@type': 'Course',
         'name': course.title,
-        'description': _truncate_description(
-            getattr(course, 'description', ''),
-        ),
+        'description': build_seo_description(course, 'course'),
         'provider': {
             '@type': 'Organization',
             'name': SITE_NAME,
@@ -153,9 +338,7 @@ def _build_workshop_jsonld(workshop):
         '@context': 'https://schema.org',
         '@type': 'Course',
         'name': workshop.title,
-        'description': _truncate_description(
-            getattr(workshop, 'description', ''),
-        ),
+        'description': build_seo_description(workshop, 'workshop'),
         'provider': {
             '@type': 'Organization',
             'name': SITE_NAME,
@@ -192,9 +375,7 @@ def _build_recording_jsonld(event):
             '@context': 'https://schema.org',
             '@type': 'VideoObject',
             'name': event.title,
-            'description': _truncate_description(
-                getattr(event, 'description', ''),
-            ),
+            'description': build_seo_description(event, 'recording'),
             'embedUrl': video_url,
             'uploadDate': _format_date(event),
             'url': f'{site_url}{page_url}',
@@ -204,9 +385,7 @@ def _build_recording_jsonld(event):
             '@context': 'https://schema.org',
             '@type': 'LearningResource',
             'name': event.title,
-            'description': _truncate_description(
-                getattr(event, 'description', ''),
-            ),
+            'description': build_seo_description(event, 'recording'),
             'url': f'{site_url}{page_url}',
         }
     return data
@@ -219,9 +398,7 @@ def _build_event_jsonld(event):
         '@context': 'https://schema.org',
         '@type': 'Event',
         'name': event.title,
-        'description': _truncate_description(
-            getattr(event, 'description', ''),
-        ),
+        'description': build_seo_description(event, 'event'),
         'startDate': _format_datetime(
             getattr(event, 'start_datetime', None),
         ),
@@ -255,6 +432,7 @@ def _build_unit_jsonld(unit):
         '@context': 'https://schema.org',
         '@type': 'LearningResource',
         'name': unit.title,
+        'description': build_seo_description(unit, 'unit'),
         'url': f'{site_url}{unit.get_absolute_url()}',
     }
     if getattr(unit, 'video_url', ''):
@@ -262,6 +440,54 @@ def _build_unit_jsonld(unit):
             '@type': 'VideoObject',
             'embedUrl': unit.video_url,
         }
+    return data
+
+
+def _build_workshop_page_jsonld(page):
+    """Build JSON-LD for a workshop tutorial page."""
+    site_url = _get_site_url()
+    return {
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        'headline': page.title,
+        'description': build_seo_description(page, 'workshop_page'),
+        'publisher': {
+            '@type': 'Organization',
+            'name': SITE_NAME,
+            'url': site_url,
+        },
+        'mainEntityOfPage': {
+            '@type': 'WebPage',
+            '@id': f'{site_url}{page.get_absolute_url()}',
+        },
+    }
+
+
+def _build_workshop_video_jsonld(workshop):
+    """Build JSON-LD for a workshop recording page."""
+    site_url = _get_site_url()
+    page_url = f'{workshop.get_absolute_url()}/video'
+    event = getattr(workshop, 'event', None)
+    video_url = ''
+    upload_date = ''
+    if event is not None:
+        video_url = (
+            getattr(event, 'recording_url', '')
+            or getattr(event, 'recording_embed_url', '')
+        )
+        upload_date = _format_date(event)
+
+    data = {
+        '@context': 'https://schema.org',
+        '@type': 'VideoObject' if video_url else 'LearningResource',
+        'name': _seo_title(workshop, 'workshop_video'),
+        'description': build_seo_description(workshop, 'workshop_video'),
+        'url': f'{site_url}{page_url}',
+    }
+    if video_url:
+        data['embedUrl'] = video_url
+    if upload_date:
+        data['uploadDate'] = upload_date
     return data
 
 
@@ -283,6 +509,25 @@ def _build_organization_jsonld():
             'https://twitter.com/Al_Grigor',
             'https://github.com/AI-Shipping-Labs',
         ],
+    }
+
+
+def _build_marketing_page_jsonld(page):
+    """Build JSON-LD for a standalone marketing page."""
+    site_url = _get_site_url()
+    return {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        'name': page.title,
+        'description': _truncate_description(
+            getattr(page, 'effective_meta_description', ''),
+        ),
+        'url': f'{site_url}{page.get_absolute_url()}',
+        'publisher': {
+            '@type': 'Organization',
+            'name': SITE_NAME,
+            'url': site_url,
+        },
     }
 
 
@@ -340,11 +585,14 @@ def build_course_learning_path_jsonld(title, description, learning_stages):
     learning_stages is a list of dicts with 'title' and optional 'items'.
     """
     site_url = _get_site_url()
+    cleaned_description = _clean_seo_source(description)
+    if not cleaned_description:
+        cleaned_description = _fallback_description_from_title(title, 'course')
     data = {
         '@context': 'https://schema.org',
         '@type': 'Course',
         'name': title,
-        'description': _truncate_description(description),
+        'description': _truncate_description(cleaned_description),
         'provider': {
             '@type': 'Organization',
             'name': SITE_NAME,
@@ -376,6 +624,11 @@ JSONLD_BUILDERS = {
     'project': _build_article_jsonld,  # Projects use Article schema
     'tutorial': _build_article_jsonld,  # Tutorials use Article schema
     'workshop': _build_workshop_jsonld,
+    'workshop_page': _build_workshop_page_jsonld,
+    'workshoppage': _build_workshop_page_jsonld,
+    'workshop_video': _build_workshop_video_jsonld,
+    'marketing_page': _build_marketing_page_jsonld,
+    'marketingpage': _build_marketing_page_jsonld,
 }
 
 
@@ -405,12 +658,20 @@ def structured_data(content=None, content_type=None):
     )
 
 
-def _get_og_type(obj):
+def _get_og_type(obj, content_type=None):
     """Determine the OpenGraph type for a content object."""
-    content_type = _get_content_type(obj)
+    content_type = _resolve_content_type(obj, content_type)
     if content_type == 'event':
         return 'event'
-    if content_type in ('article', 'project', 'tutorial', 'workshop'):
+    if content_type in (
+        'article',
+        'project',
+        'tutorial',
+        'workshop',
+        'workshop_page',
+        'workshoppage',
+        'workshop_video',
+    ):
         return 'article'
     return 'website'
 
@@ -430,7 +691,7 @@ def _get_image_url(obj):
 
 
 @register.simple_tag(takes_context=True)
-def og_tags(context, content=None):
+def og_tags(context, content=None, content_type=None):
     """Generate OpenGraph and Twitter Card meta tags.
 
     Usage:
@@ -447,16 +708,12 @@ def og_tags(context, content=None):
         canonical_url = site_url
         image_url = ''
     else:
-        title = getattr(content, 'title', SITE_NAME)
-        if _get_content_type(content) == 'event':
-            description = _event_preview_description(content)
-        else:
-            description = _truncate_description(
-                getattr(content, 'description', ''),
-            )
-        og_type = _get_og_type(content)
-        canonical_url = f'{site_url}{content.get_absolute_url()}'
-        image_url = _get_image_url(content)
+        resolved_type = _resolve_content_type(content, content_type)
+        title = _seo_title(content, resolved_type)
+        description = build_seo_description(content, resolved_type)
+        og_type = _get_og_type(content, resolved_type)
+        canonical_url = f'{site_url}{_canonical_path(content, resolved_type)}'
+        image_url = _get_image_url(_image_source(content, resolved_type))
 
     # Use default OG image as fallback when no content-specific image
     default_image_url = f'{site_url}{DEFAULT_OG_IMAGE_PATH}'

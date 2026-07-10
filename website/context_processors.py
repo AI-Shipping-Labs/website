@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 
+from content.models import MarketingPage
+from content.nav_availability import has_published_downloads_for_nav
 from integrations.config import get_config, site_base_url
 from integrations.middleware import get_announcement_banner
 
@@ -242,6 +244,21 @@ def site_context(request):
         'login_state': ga_login_state,
         'member_tier': ga_member_tier,
     }
+    user = getattr(request, 'user', None)
+    has_published_downloads = False
+    if not getattr(user, 'is_authenticated', False):
+        has_published_downloads = has_published_downloads_for_nav()
+    marketing_nav = {'about': [], 'community': [], 'resources': []}
+    try:
+        for page in MarketingPage.objects.filter(
+            status='published',
+        ).exclude(nav_section='none').order_by('nav_section', 'nav_order', 'title'):
+            if page.nav_section in marketing_nav:
+                marketing_nav[page.nav_section].append(page)
+    except Exception:
+        # Context processors should not break public rendering during
+        # migrations or partial deploys before the table exists.
+        marketing_nav = {'about': [], 'community': [], 'resources': []}
 
     return {
         'VERSION': settings.VERSION,
@@ -258,6 +275,8 @@ def site_context(request):
         'ga_client_context_json': json.dumps(ga_client_context),
         'gtag_pending_event': pending_event,
         'current_year': __import__('datetime').datetime.now().year,
+        'has_published_downloads': has_published_downloads,
+        'marketing_nav': marketing_nav,
     }
 
 

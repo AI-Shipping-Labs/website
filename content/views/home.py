@@ -449,6 +449,7 @@ def _dashboard(request):
             user,
             user_level,
             plan=sprint_plan_context['plan'],
+            has_any_plan=has_any_plan,
         )
     )
     return render(request, 'content/dashboard.html', context)
@@ -527,7 +528,7 @@ def _get_in_progress_courses(user, user_level):
     units_by_course: dict[int, list[Unit]] = {cid: [] for cid in course_ids}
     units_qs = (
         Unit.objects.filter(module__course_id__in=course_ids)
-        .select_related('module')
+        .select_related('module__course')
         .order_by('module__sort_order', 'sort_order')
     )
     for unit in units_qs:

@@ -11,6 +11,8 @@ Run the full issue pipeline as defined in [`_docs/PROCESS.md`](_docs/PROCESS.md)
 
 The lifecycle: PM grooms → Engineer builds → Tester verifies → PM accepts → Ship. See PROCESS.md for the full agent workflow, issue lifecycle, and orchestrator responsibilities.
 
+Model policy: Codex role agents must use `gpt-5.5` with `reasoning_effort: "high"` and `service_tier: "priority"`. Do not fall back to `gpt-5.4`; if `gpt-5.5` capacity is unavailable, retry later or handle the work locally. Claude role agents must use Opus 4.8.
+
 ## Step 0: PM Grooming (parallel)
 
 Before picking issues for implementation, check for ungroomed issues and groom them:
@@ -23,7 +25,7 @@ gh issue list --repo AI-Shipping-Labs/website --state open --limit 50 --json num
 For each ungroomed issue, launch a PM agent in parallel:
 
 ```
-Task(subagent_type="general-purpose", model="sonnet", run_in_background=true, prompt="You are the Product Manager agent. Read _docs/PRODUCT.md and _docs/PROCESS.md first, then read .claude/agents/product-manager.md for your role. Groom issue #N: gh issue view N --repo AI-Shipping-Labs/website. Add BDD test scenarios (Given/When/Then format), clarify acceptance criteria, ensure it is implementation-ready. Update with gh issue edit N --body '...'. Do NOT use bold formatting. Use backticks for code, headings for structure. Keep existing content and add to it.")
+Task(subagent_type="general-purpose", model="opus-4.8", run_in_background=true, prompt="You are the Product Manager agent. Read _docs/PRODUCT.md and _docs/PROCESS.md first, then read .claude/agents/product-manager.md for your role. Groom issue #N: gh issue view N --repo AI-Shipping-Labs/website. Add BDD test scenarios (Given/When/Then format), clarify acceptance criteria, ensure it is implementation-ready. Update with gh issue edit N --body '...'. Do NOT use bold formatting. Use backticks for code, headings for structure. Keep existing content and add to it.")
 ```
 
 Do NOT wait for grooming to finish before picking issues — run grooming in the background. Issues that already have BDD scenarios are ready for implementation. Newly groomed issues will be available for the next batch.
@@ -72,13 +74,13 @@ Launch engineers in parallel for each picked issue.
 ### For new features (open issues):
 
 ```
-Task(subagent_type="implementer", model="opus", prompt="Implement issue #N. Read the issue with gh issue view N --repo AI-Shipping-Labs/website. Read _docs/PRODUCT.md and _docs/PROCESS.md first. Follow the spec and acceptance criteria. Write code and tests. Do NOT commit.")
+Task(subagent_type="implementer", model="opus-4.8", prompt="Implement issue #N. Read the issue with gh issue view N --repo AI-Shipping-Labs/website. Read _docs/PRODUCT.md and _docs/PROCESS.md first. Follow the spec and acceptance criteria. Write code and tests. Do NOT commit.")
 ```
 
 ### For Playwright tests (needs-testing issues):
 
 ```
-Task(subagent_type="implementer", model="opus", prompt="Implement Playwright E2E tests for issue #N. Read _docs/PRODUCT.md and _docs/PROCESS.md first. Read the issue (gh issue view N --repo AI-Shipping-Labs/website) for BDD scenarios. Read existing tests in playwright_tests/ for patterns and conventions. Write Playwright tests matching each BDD scenario. Run them: uv run pytest playwright_tests/test_{feature}.py -v. Do NOT commit.")
+Task(subagent_type="implementer", model="opus-4.8", prompt="Implement Playwright E2E tests for issue #N. Read _docs/PRODUCT.md and _docs/PROCESS.md first. Read the issue (gh issue view N --repo AI-Shipping-Labs/website) for BDD scenarios. Read existing tests in playwright_tests/ for patterns and conventions. Write Playwright tests matching each BDD scenario. Run them: uv run pytest playwright_tests/test_{feature}.py -v. Do NOT commit.")
 ```
 
 Wait for all engineers to complete. If an engineer reports a blocker, skip that issue and note it.
@@ -88,7 +90,7 @@ Wait for all engineers to complete. If an engineer reports a blocker, skip that 
 For each completed implementation, launch a tester agent:
 
 ```
-Task(subagent_type="qa", model="opus", prompt="QA issue #N. Read _docs/PRODUCT.md and _docs/PROCESS.md first. The engineer wrote {description}. Review the code, run ALL tests (uv run python manage.py test AND uv run pytest playwright_tests/ -v). After tests pass, capture screenshots to .tmp/screenshots/ and upload each one via the sandbox-screenshots service per tester.md Step 7 (capture: uv run python scripts/capture_screenshots.py --urls {relevant URLs} --output .tmp/screenshots; then upload each PNG with upload-screenshot; then post a single ## Screenshots comment on the issue). Report pass/fail with specifics.")
+Task(subagent_type="qa", model="opus-4.8", prompt="QA issue #N. Read _docs/PRODUCT.md and _docs/PROCESS.md first. The engineer wrote {description}. Review the code, run ALL tests (uv run python manage.py test AND uv run pytest playwright_tests/ -v). After tests pass, capture screenshots to .tmp/screenshots/ and upload each one via the sandbox-screenshots service per tester.md Step 7 (capture: uv run python scripts/capture_screenshots.py --urls {relevant URLs} --output .tmp/screenshots; then upload each PNG with upload-screenshot; then post a single ## Screenshots comment on the issue). Report pass/fail with specifics.")
 ```
 
 ## Step 4: Handle QA Results
@@ -106,7 +108,7 @@ Skip this step for Playwright test issues. For new features only:
 - Infrastructure tasks (labels: `infra`, `integration` without `frontend`): DX review
 
 ```
-Task(subagent_type="general-purpose", model="opus", prompt="You are the Product Manager agent doing acceptance review for issue #N. Read _docs/PRODUCT.md first. Read .claude/agents/product-manager.md for your review checklist. Read the templates, views, and copy. Report ACCEPT or REJECT with specifics.")
+Task(subagent_type="general-purpose", model="opus-4.8", prompt="You are the Product Manager agent doing acceptance review for issue #N. Read _docs/PRODUCT.md first. Read .claude/agents/product-manager.md for your review checklist. Read the templates, views, and copy. Report ACCEPT or REJECT with specifics.")
 ```
 
 ## Step 6: Handle PM Results

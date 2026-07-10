@@ -128,6 +128,41 @@ def _validate_workshop_materials(raw, yaml_rel_path):
     return cleaned
 
 
+def _validate_workshop_core_tools(raw, yaml_rel_path):
+    """Validate workshop ``core_tools:`` and return normalized display names.
+
+    Missing, empty, or blank-only lists are valid and normalize to ``[]``.
+    Non-list values and non-string list items fail closed so malformed
+    metadata is visible in sync errors instead of silently landing in the
+    public filter surface.
+    """
+    if raw in (None, ''):
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(
+            f'workshop.yaml `core_tools:` must be a list of strings, got '
+            f'{type(raw).__name__} ({yaml_rel_path}).'
+        )
+
+    cleaned = []
+    seen = set()
+    for idx, item in enumerate(raw):
+        if not isinstance(item, str):
+            raise ValueError(
+                f'workshop.yaml `core_tools[{idx}]` must be a string, got '
+                f'{type(item).__name__} ({yaml_rel_path}).'
+            )
+        tool = item.strip()
+        if not tool:
+            continue
+        key = tool.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(tool)
+    return cleaned
+
+
 def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
                         known_images=None, cross_workshop_lookup=None,
                         workshops_repo_name=None):
@@ -209,7 +244,7 @@ def _sync_single_workshop(
     # would tie those apps' import timing to this one. Matches the pattern
     # used by every other ``_sync_*`` helper in this file.
     from content.access import UNIT_VISIBILITY_CHOICES
-    from content.models import Workshop
+    from content.models import Workshop, normalize_workshop_skill_level
 
     yaml_path = os.path.join(workshop_dir, 'workshop.yaml')
     data = None
@@ -324,6 +359,13 @@ def _sync_single_workshop(
             known_images=known_images, errors=stats['errors'],
         )
 
+        try:
+            skill_level = normalize_workshop_skill_level(
+                data.get('skill_level'),
+            )
+        except ValueError as exc:
+            raise ValueError(f'{exc} ({yaml_rel_path})') from exc
+
         # Issue #646: top-level ``materials:`` key on the workshop yaml.
         # Workshop-scoped materials are gated by ``pages_required_level``;
         # they coexist with (and override) ``recording.materials`` which
@@ -333,6 +375,10 @@ def _sync_single_workshop(
         # — the resolution rule falls back to ``Event.materials``.
         workshop_materials = _validate_workshop_materials(
             data.get('materials'), yaml_rel_path,
+        )
+
+        core_tools = _validate_workshop_core_tools(
+            data.get('core_tools'), yaml_rel_path,
         )
 
         # Issue #304: build the page lookup once and reuse it for the
@@ -371,6 +417,8 @@ def _sync_single_workshop(
             'description': landing_description,
             'date': workshop_date,
             'tags': data.get('tags', []) or [],
+            'skill_level': skill_level,
+            'core_tools': core_tools,
             'cover_image_url': cover_image_url,
             'status': 'published',
             'landing_required_level': landing_required_level,

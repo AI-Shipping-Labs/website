@@ -6,6 +6,7 @@ from .download import *
 from .enrollment import *
 from .instructor import *
 from .interview_category import *
+from .marketing_page import *
 from .peer_review import *
 from .project import *
 from .tag_rule import *

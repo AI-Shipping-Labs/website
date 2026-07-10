@@ -52,6 +52,28 @@ def _make_event(series, *, position, status='upcoming', location=''):
     )
 
 
+def _warm_public_shell_caches():
+    """Prime site-wide public caches outside strict view query guards."""
+    from content.nav_availability import refresh_published_downloads_nav_cache
+    from integrations.config import clear_config_cache, get_config, site_base_url
+    from integrations.middleware import (
+        clear_announcement_banner_cache,
+        clear_redirect_cache,
+        get_active_redirects,
+        get_announcement_banner,
+    )
+
+    clear_redirect_cache()
+    get_active_redirects()
+    clear_config_cache()
+    site_base_url()
+    get_config('STRIPE_CUSTOMER_PORTAL_URL', '')
+    get_config('GOOGLE_ANALYTICS_ID', '')
+    clear_announcement_banner_cache()
+    get_announcement_banner()
+    refresh_published_downloads_nav_cache()
+
+
 class SprintEventSeriesRelationTest(TestCase):
     """Model-level FK semantics: ``SET_NULL`` + many-sprints-per-series."""
 
@@ -242,6 +264,7 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
             'sprint_detail',
             kwargs={'sprint_slug': self.linked_sprint.slug},
         )
+        _warm_public_shell_caches()
         with self.assertNumQueries(2):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)

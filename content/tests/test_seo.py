@@ -2,6 +2,7 @@
 Tests for SEO features: structured data, meta tags, OpenGraph tags, and sitemap.
 """
 
+import html
 import json
 import re
 from datetime import date, datetime
@@ -21,8 +22,29 @@ from content.models import (
     Tutorial,
     Unit,
     Workshop,
+    WorkshopPage,
 )
+from content.templatetags.seo_tags import build_seo_description
 from events.models import Event
+
+
+def _meta_content(content, attr, key):
+    match = re.search(
+        rf'<meta {attr}="{re.escape(key)}" content="([^"]*)">',
+        content,
+    )
+    if match is None:
+        return None
+    return html.unescape(match.group(1))
+
+
+def _jsonld_objects(content):
+    scripts = re.findall(
+        r'<script type="application/ld\+json">\s*(.*?)\s*</script>',
+        content,
+        flags=re.S,
+    )
+    return [json.loads(script) for script in scripts]
 
 
 class StructuredDataArticleTest(TestCase):
@@ -779,6 +801,355 @@ class EventPreviewDescriptionTest(TestCase):
         for label in ('NYC', 'UTC', 'CET', 'IST'):
             self.assertNotIn(label, og_desc)
         self.assertEqual(og_desc, 'An article about AI engineering.')
+
+
+class SEODescriptionHelperTest(TestCase):
+    """Issue #1174: shared SEO descriptions clean markdown and fall back well."""
+
+    def test_prefers_explicit_description_and_cleans_markdown(self):
+        article = Article(
+            title='Markdown Heavy Article',
+            description=(
+                'Build **agents** with [retrieval](https://example.com).\n\n'
+                '```python\nprint("not a snippet")\n```\n'
+                '<strong>Ship faster</strong> ![diagram](diagram.png)'
+            ),
+        )
+
+        description = build_seo_description(article, 'article')
+
+        self.assertEqual(
+            description,
+            'Build agents with retrieval. Ship faster',
+        )
+        self.assertNotIn('**', description)
+        self.assertNotIn('```', description)
+        self.assertNotIn('print', description)
+        self.assertNotIn('![', description)
+        self.assertNotIn('<strong>', description)
+
+    def test_truncates_at_word_boundary(self):
+        course = Course(
+            title='Long Course',
+            description=' '.join(f'word{i}' for i in range(40)),
+        )
+
+        description = build_seo_description(course, 'course')
+
+        self.assertLessEqual(len(description), 160)
+        self.assertTrue(description.endswith('...'))
+        self.assertNotRegex(description, r'word\d+$')
+
+    def test_sparse_content_falls_back_to_title_and_type(self):
+        project = Project(title='Sparse Project')
+
+        description = build_seo_description(project, 'project')
+
+        self.assertEqual(
+            description,
+            'Explore Sparse Project, an AI Shipping Labs project.',
+        )
+
+    def test_workshop_page_descriptions_include_page_and_parent_context(self):
+        workshop = Workshop(
+            title='Vector Search Workshop',
+            slug='vector-search',
+            date=date(2026, 6, 1),
+        )
+        first_page = WorkshopPage(
+            workshop=workshop,
+            title='Indexing Documents',
+            slug='indexing',
+            body='# Indexing Documents\n\nBuild a vector index from markdown files.',
+        )
+        second_page = WorkshopPage(
+            workshop=workshop,
+            title='Evaluating Retrieval',
+            slug='evaluating',
+            body='Measure retrieval quality with labeled examples.',
+        )
+
+        first_description = build_seo_description(first_page, 'workshop_page')
+        second_description = build_seo_description(second_page, 'workshop_page')
+
+        self.assertIn('Indexing Documents in Vector Search Workshop', first_description)
+        self.assertIn('Build a vector index', first_description)
+        self.assertIn('Evaluating Retrieval in Vector Search Workshop', second_description)
+        self.assertIn('Measure retrieval quality', second_description)
+        self.assertNotEqual(first_description, second_description)
+
+    def test_course_unit_description_uses_readable_lesson_prose(self):
+        course = Course(title='SEO Course', slug='seo-course')
+        module = Module(course=course, title='Module One', slug='module-one')
+        unit = Unit(
+            module=module,
+            title='Lesson One',
+            slug='lesson-one',
+            body=(
+                '# Lesson One\n\n'
+                '```python\nprint("setup code")\n```\n'
+                'Learn to turn raw notes into concise crawler snippets.\n\n'
+                '<em>Readable prose</em> stays.'
+            ),
+        )
+
+        description = build_seo_description(unit, 'unit')
+
+        self.assertTrue(description.startswith('Lesson One in SEO Course: Learn'))
+        self.assertNotIn('#', description)
+        self.assertNotIn('```', description)
+        self.assertNotIn('setup code', description)
+        self.assertNotIn('<em>', description)
+        self.assertNotRegex(description, r'\s{2,}')
+
+
+class SEODescriptionRenderedHeadTest(TestCase):
+    """Issue #1174: rendered public pages use cleaned content-specific metadata."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.article = Article.objects.create(
+            title='Markdown SEO Article',
+            slug='markdown-seo-article',
+            description=(
+                'A **focused** article with [links](https://example.com) '
+                'and <span>HTML</span>.'
+            ),
+            content_markdown='# Markdown SEO Article\n\nBody text.',
+            date=date(2026, 6, 1),
+            published=True,
+            required_level=0,
+        )
+        cls.tutorial = Tutorial.objects.create(
+            title='Public Tutorial',
+            slug='public-tutorial',
+            description='Follow a practical tutorial for AI builders.',
+            content_markdown='# Public Tutorial\n\nTutorial body.',
+            date=date(2026, 6, 2),
+            published=True,
+            required_level=0,
+        )
+        cls.project = Project.objects.create(
+            title='Sparse Project',
+            slug='sparse-project',
+            description='',
+            content_markdown='',
+            date=date(2026, 6, 3),
+            published=True,
+            required_level=0,
+        )
+        cls.course = Course.objects.create(
+            title='SEO Course',
+            slug='seo-course',
+            description='A course about crawler-friendly content metadata.',
+            status='published',
+        )
+        cls.module = Module.objects.create(
+            course=cls.course,
+            title='Module One',
+            slug='module-one',
+            sort_order=1,
+            overview=(
+                '# Module One\n\n'
+                'Learn the overview without repeating the module title twice.'
+            ),
+        )
+        cls.unit = Unit.objects.create(
+            module=cls.module,
+            title='Lesson One',
+            slug='lesson-one',
+            sort_order=1,
+            body=(
+                '# Lesson One\n\n'
+                '```python\nprint("raw code")\n```\n'
+                'Turn lesson notes into readable search snippets.'
+            ),
+        )
+        cls.event = Event.objects.create(
+            title='SEO Event',
+            slug='seo-event',
+            description='A **live** event about AI metadata snippets.',
+            start_datetime=datetime(2026, 5, 21, 14, 0, 0, tzinfo=dt_tz.utc),
+            status='upcoming',
+            published=True,
+            required_level=0,
+        )
+        cls.workshop = Workshop.objects.create(
+            title='SEO Workshop',
+            slug='seo-workshop',
+            description='A workshop about search previews for AI pages.',
+            date=date(2026, 6, 4),
+            status='published',
+            landing_required_level=0,
+            pages_required_level=0,
+            recording_required_level=0,
+            event=cls.event,
+        )
+        cls.workshop_page = WorkshopPage.objects.create(
+            workshop=cls.workshop,
+            title='Clean Tutorial Metadata',
+            slug='clean-tutorial-metadata',
+            sort_order=1,
+            body=(
+                '# Clean Tutorial Metadata\n\n'
+                'Write page-specific tutorial snippets for crawlers.'
+            ),
+        )
+
+    def test_article_descriptions_are_cleaned_across_meta_social_and_jsonld(self):
+        response = self.client.get(self.article.get_absolute_url())
+        content = response.content.decode()
+
+        meta_description = _meta_content(content, 'name', 'description')
+        og_description = _meta_content(content, 'property', 'og:description')
+        twitter_description = _meta_content(content, 'name', 'twitter:description')
+        jsonld = _jsonld_objects(content)[0]
+
+        self.assertEqual(meta_description, 'A focused article with links and HTML.')
+        self.assertEqual(og_description, meta_description)
+        self.assertEqual(twitter_description, meta_description)
+        self.assertEqual(jsonld['description'], meta_description)
+        self.assertNotIn('**', meta_description)
+        self.assertNotIn('<span>', meta_description)
+
+    def test_workshop_tutorial_page_uses_page_specific_metadata(self):
+        response = self.client.get(self.workshop_page.get_absolute_url())
+        content = response.content.decode()
+        tutorial_url = f'https://aishippinglabs.com{self.workshop_page.get_absolute_url()}'
+
+        meta_description = _meta_content(content, 'name', 'description')
+        og_description = _meta_content(content, 'property', 'og:description')
+        twitter_description = _meta_content(content, 'name', 'twitter:description')
+        og_title = _meta_content(content, 'property', 'og:title')
+        og_url = _meta_content(content, 'property', 'og:url')
+        jsonld = _jsonld_objects(content)[0]
+
+        self.assertIn('Clean Tutorial Metadata in SEO Workshop', meta_description)
+        self.assertIn('page-specific tutorial snippets', meta_description)
+        self.assertEqual(og_description, meta_description)
+        self.assertEqual(twitter_description, meta_description)
+        self.assertEqual(og_title, 'Clean Tutorial Metadata | SEO Workshop')
+        self.assertEqual(og_url, tutorial_url)
+        self.assertIn(f'<link rel="canonical" href="{tutorial_url}">', content)
+        self.assertEqual(jsonld['description'], meta_description)
+        self.assertEqual(jsonld['mainEntityOfPage']['@id'], tutorial_url)
+
+    def test_workshop_video_page_uses_recording_metadata_and_url(self):
+        response = self.client.get(f'{self.workshop.get_absolute_url()}/video')
+        content = response.content.decode()
+        video_url = f'https://aishippinglabs.com{self.workshop.get_absolute_url()}/video'
+
+        meta_description = _meta_content(content, 'name', 'description')
+        og_title = _meta_content(content, 'property', 'og:title')
+        og_url = _meta_content(content, 'property', 'og:url')
+        twitter_description = _meta_content(content, 'name', 'twitter:description')
+        jsonld = _jsonld_objects(content)[0]
+
+        self.assertTrue(meta_description.startswith('Recording for SEO Workshop:'))
+        self.assertEqual(twitter_description, meta_description)
+        self.assertEqual(og_title, 'SEO Workshop - Recording')
+        self.assertEqual(og_url, video_url)
+        self.assertIn(f'<link rel="canonical" href="{video_url}">', content)
+        self.assertEqual(jsonld['description'], meta_description)
+        self.assertEqual(jsonld['url'], video_url)
+
+    def test_workshop_video_jsonld_omits_protected_s3_recording_url(self):
+        s3_event = Event.objects.create(
+            title='S3 SEO Event',
+            slug='s3-seo-event',
+            description='A private S3 recording.',
+            start_datetime=timezone.now(),
+            status='completed',
+            recording_s3_url=(
+                'https://private-recordings.s3.amazonaws.com/events/secret.mp4'
+                '?X-Amz-Signature=abc123'
+            ),
+            published=True,
+            required_level=0,
+        )
+        s3_workshop = Workshop.objects.create(
+            title='S3 SEO Workshop',
+            slug='s3-seo-workshop',
+            description='A workshop with private S3 recording media.',
+            date=date(2026, 6, 5),
+            status='published',
+            landing_required_level=0,
+            pages_required_level=0,
+            recording_required_level=0,
+            event=s3_event,
+        )
+
+        response = self.client.get(f'{s3_workshop.get_absolute_url()}/video')
+        content = response.content.decode()
+        jsonld = _jsonld_objects(content)[0]
+
+        self.assertEqual(jsonld['@type'], 'LearningResource')
+        self.assertEqual(
+            jsonld['url'],
+            f'https://aishippinglabs.com{s3_workshop.get_absolute_url()}/video',
+        )
+        self.assertNotIn('embedUrl', jsonld)
+        self.assertNotIn('amazonaws.com', content)
+        self.assertNotIn('X-Amz-Signature', content)
+
+    def test_course_unit_and_module_overview_clean_raw_markdown(self):
+        unit_response = self.client.get(self.unit.get_absolute_url())
+        unit_content = unit_response.content.decode()
+        unit_description = _meta_content(unit_content, 'name', 'description')
+        unit_jsonld = _jsonld_objects(unit_content)[0]
+
+        self.assertIn('Turn lesson notes into readable search snippets.', unit_description)
+        self.assertNotIn('#', unit_description)
+        self.assertNotIn('```', unit_description)
+        self.assertNotIn('raw code', unit_description)
+        self.assertEqual(unit_jsonld['description'], unit_description)
+
+        module_response = self.client.get(self.module.get_absolute_url())
+        module_content = module_response.content.decode()
+        module_description = _meta_content(module_content, 'name', 'description')
+
+        self.assertEqual(
+            module_description.count('Module One'),
+            1,
+            module_description,
+        )
+        self.assertIn('Learn the overview', module_description)
+
+    def test_public_detail_surfaces_emit_non_empty_descriptions(self):
+        urls = [
+            self.workshop.get_absolute_url(),
+            self.article.get_absolute_url(),
+            self.tutorial.get_absolute_url(),
+            self.project.get_absolute_url(),
+            self.course.get_absolute_url(),
+            self.unit.get_absolute_url(),
+            self.module.get_absolute_url(),
+            self.event.get_absolute_url(),
+        ]
+
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertIn(response.status_code, (200, 403))
+                description = _meta_content(
+                    response.content.decode(),
+                    'name',
+                    'description',
+                )
+                self.assertIsNotNone(description)
+                self.assertNotEqual(description.strip(), '')
+                if url != self.event.get_absolute_url():
+                    self.assertLessEqual(len(description), 160)
+
+    def test_event_jsonld_preserves_timezone_leading_preview(self):
+        response = self.client.get(self.event.get_absolute_url())
+        content = response.content.decode()
+        meta_description = _meta_content(content, 'name', 'description')
+        jsonld = _jsonld_objects(content)[0]
+
+        self.assertTrue(meta_description.startswith(EventPreviewDescriptionTest.KNOWN_STRIP))
+        self.assertLessEqual(len(meta_description), 200)
+        self.assertEqual(jsonld['description'], meta_description)
 
 
 class MetaTagsInViewTest(TestCase):

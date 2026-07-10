@@ -1,0 +1,54 @@
+{% if related_content.items %}
+<section class="mt-12 border-t border-border pt-8 sm:pt-10" data-testid="related-content-rail" aria-labelledby="related-content-heading">
+  <div class="mb-5 flex items-center gap-2">
+    <i data-lucide="sparkles" class="h-5 w-5 text-accent" aria-hidden="true"></i>
+    <h2 id="related-content-heading" class="text-xl font-semibold tracking-tight sm:text-2xl">{{ related_content.title }}</h2>
+  </div>
+
+  <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    {% for item in related_content.items %}
+    <a href="{{ item.url }}"
+       class="group flex h-full min-h-[220px] flex-col rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+       aria-label="Open related {{ item.content_type_label }}: {{ item.title }}"
+       data-testid="related-content-card"
+       data-related-type="{{ item.content_type }}"
+       data-related-url="{{ item.url }}">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <span class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent" data-testid="related-content-type">
+          <i data-lucide="{{ item.icon }}" class="h-3.5 w-3.5" aria-hidden="true"></i>
+          {{ item.content_type_label }}
+        </span>
+        {% if item.is_gated %}
+        <span class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground" data-testid="related-content-tier">
+          <i data-lucide="lock" class="h-3.5 w-3.5" aria-hidden="true"></i>
+          {{ item.tier_label }}
+        </span>
+        {% endif %}
+      </div>
+
+      <h3 class="mt-4 line-clamp-3 break-words text-base font-semibold leading-snug text-foreground transition-colors group-hover:text-accent" data-testid="related-content-title">{{ item.title }}</h3>
+
+      {% if item.description %}
+      <p class="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground" data-testid="related-content-description">{{ item.description }}</p>
+      {% endif %}
+
+      <div class="mt-auto pt-4">
+        {% if item.date_label %}
+        <p class="mb-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="related-content-date">
+          <i data-lucide="calendar" class="h-3.5 w-3.5" aria-hidden="true"></i>
+          {{ item.date_label }}
+        </p>
+        {% endif %}
+        {% if item.tags %}
+        <div class="flex flex-wrap gap-1.5" data-testid="related-content-tags">
+          {% for tag in item.tags %}
+          <span class="max-w-full truncate rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}

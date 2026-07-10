@@ -320,6 +320,29 @@ class VerifyEmailAPITest(TestCase):
         self.assertContains(resp, 'href="/account/"')
         self.assertContains(resp, "Continue to Account")
 
+    def test_verify_newsletter_only_success_links_to_password_setup(self):
+        user = User.objects.create_user(
+            email="newsletter-only@example.com",
+            signup_source="newsletter",
+            account_activated=False,
+            verification_expires_at=timezone.now() + datetime.timedelta(days=1),
+        )
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+
+        token = _make_verification_token(user.pk)
+        resp = self.client.get(f"{self.url}?token={token}")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assert_html_result(resp, heading="Email Verified")
+        self.assertContains(
+            resp,
+            'href="/accounts/password-reset-request?email='
+            'newsletter-only%40example.com"',
+        )
+        self.assertContains(resp, "Set a password")
+        self.assertNotContains(resp, 'href="/accounts/login/"')
+
     def test_verify_success_redirects_to_signed_return_path(self):
         user = User.objects.create_user(
             email="return-path@example.com",

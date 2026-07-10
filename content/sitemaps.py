@@ -18,6 +18,7 @@ from content.models import (
     Article,
     Course,
     Download,
+    MarketingPage,
     Project,
     Tutorial,
     Workshop,
@@ -148,6 +149,24 @@ class WorkshopPageSitemap(Sitemap):
         return obj.get_absolute_url()
 
 
+class MarketingPageSitemap(Sitemap):
+    """Sitemap for published standalone marketing pages."""
+    changefreq = 'monthly'
+    priority = 0.6
+
+    def items(self):
+        return MarketingPage.objects.filter(
+            status='published',
+            show_in_sitemap=True,
+        ).order_by('public_path')
+
+    def lastmod(self, obj):
+        return obj.updated_at
+
+    def location(self, obj):
+        return obj.get_absolute_url()
+
+
 class StaticViewSitemap(Sitemap):
     """Sitemap for static pages."""
     changefreq = 'monthly'
@@ -156,6 +175,7 @@ class StaticViewSitemap(Sitemap):
     def items(self):
         return [
             'home',
+            'community_landing',
             'about',
             'blog_list',
             'projects_list',
@@ -218,6 +238,7 @@ sitemaps = {
     'tutorials': TutorialSitemap,
     'workshops': WorkshopSitemap,
     'workshop_pages': WorkshopPageSitemap,
+    'marketing_pages': MarketingPageSitemap,
     'tags': TagSitemap,
     'static': StaticViewSitemap,
 }

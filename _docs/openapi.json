@@ -4103,6 +4103,425 @@
         ]
       }
     },
+    "/api/marketing-pages": {
+      "delete": {
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "marketing_page_delete_not_available",
+                  "error": "Marketing page deletion is not available through the API. Use Studio or set status=draft to unpublish this page."
+                }
+              }
+            },
+            "description": "Marketing page deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Marketing Pages"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "draft",
+                "published"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "nav_section",
+            "required": false,
+            "schema": {
+              "enum": [
+                "about",
+                "community",
+                "none",
+                "resources"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "marketing_pages": [
+                    {
+                      "content_html": "<p>Ship projects with us.</p>",
+                      "content_id": "11111111-1111-1111-1111-111111111111",
+                      "content_markdown": "# Community Story\n\nShip projects with us.",
+                      "cover_image_url": "",
+                      "created_at": "2026-07-10T10:00:00+00:00",
+                      "description": "A standalone landing page.",
+                      "editable": true,
+                      "id": 42,
+                      "meta_description": "A standalone landing page for AI Shipping Labs.",
+                      "nav_label": "Community Story",
+                      "nav_order": 10,
+                      "nav_section": "community",
+                      "public_path": "/community-story",
+                      "public_url": "https://aishippinglabs.com/community-story",
+                      "show_in_sitemap": true,
+                      "source_path": "",
+                      "source_repo": "",
+                      "status": "published",
+                      "tags": [
+                        "community"
+                      ],
+                      "title": "AI Shipping Labs Community Story",
+                      "updated_at": "2026-07-10T10:00:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "List of marketing pages."
+          },
+          "422": {
+            "description": "Unknown filter value."
+          }
+        },
+        "summary": "List marketing pages",
+        "tags": [
+          "Marketing Pages"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "content_markdown": "# Campaign Overview\n\nDetails.",
+                "nav_section": "none",
+                "public_path": "/campaign-overview",
+                "status": "published",
+                "title": "Campaign Overview"
+              },
+              "schema": {
+                "properties": {
+                  "content_markdown": {
+                    "type": "string"
+                  },
+                  "cover_image_url": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "meta_description": {
+                    "type": "string"
+                  },
+                  "nav_label": {
+                    "type": "string"
+                  },
+                  "nav_order": {
+                    "type": "integer"
+                  },
+                  "nav_section": {
+                    "enum": [
+                      "about",
+                      "community",
+                      "none",
+                      "resources"
+                    ],
+                    "type": "string"
+                  },
+                  "public_path": {
+                    "type": "string"
+                  },
+                  "show_in_sitemap": {
+                    "type": "boolean"
+                  },
+                  "status": {
+                    "enum": [
+                      "draft",
+                      "published"
+                    ],
+                    "type": "string"
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "public_path"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "content_html": "<p>Ship projects with us.</p>",
+                  "content_id": "11111111-1111-1111-1111-111111111111",
+                  "content_markdown": "# Community Story\n\nShip projects with us.",
+                  "cover_image_url": "",
+                  "created_at": "2026-07-10T10:00:00+00:00",
+                  "description": "A standalone landing page.",
+                  "editable": true,
+                  "id": 42,
+                  "meta_description": "A standalone landing page for AI Shipping Labs.",
+                  "nav_label": "Community Story",
+                  "nav_order": 10,
+                  "nav_section": "community",
+                  "public_path": "/community-story",
+                  "public_url": "https://aishippinglabs.com/community-story",
+                  "show_in_sitemap": true,
+                  "source_path": "",
+                  "source_repo": "",
+                  "status": "published",
+                  "tags": [
+                    "community"
+                  ],
+                  "title": "AI Shipping Labs Community Story",
+                  "updated_at": "2026-07-10T10:00:00+00:00"
+                }
+              }
+            },
+            "description": "Marketing page created."
+          },
+          "400": {
+            "description": "Invalid JSON body."
+          },
+          "422": {
+            "description": "Validation error."
+          }
+        },
+        "summary": "Create a marketing page",
+        "tags": [
+          "Marketing Pages"
+        ]
+      }
+    },
+    "/api/marketing-pages/{content_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "marketing_page_delete_not_available",
+                  "error": "Marketing page deletion is not available through the API. Use Studio or set status=draft to unpublish this page."
+                }
+              }
+            },
+            "description": "Marketing page deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Marketing Pages"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "content_html": "<p>Ship projects with us.</p>",
+                  "content_id": "11111111-1111-1111-1111-111111111111",
+                  "content_markdown": "# Community Story\n\nShip projects with us.",
+                  "cover_image_url": "",
+                  "created_at": "2026-07-10T10:00:00+00:00",
+                  "description": "A standalone landing page.",
+                  "editable": true,
+                  "id": 42,
+                  "meta_description": "A standalone landing page for AI Shipping Labs.",
+                  "nav_label": "Community Story",
+                  "nav_order": 10,
+                  "nav_section": "community",
+                  "public_path": "/community-story",
+                  "public_url": "https://aishippinglabs.com/community-story",
+                  "show_in_sitemap": true,
+                  "source_path": "",
+                  "source_repo": "",
+                  "status": "published",
+                  "tags": [
+                    "community"
+                  ],
+                  "title": "AI Shipping Labs Community Story",
+                  "updated_at": "2026-07-10T10:00:00+00:00"
+                }
+              }
+            },
+            "description": "Marketing page detail."
+          },
+          "404": {
+            "description": "Marketing page not found."
+          }
+        },
+        "summary": "Retrieve a marketing page by content_id",
+        "tags": [
+          "Marketing Pages"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "content_html": "<p>Ship projects with us.</p>",
+                  "content_id": "11111111-1111-1111-1111-111111111111",
+                  "content_markdown": "# Community Story\n\nShip projects with us.",
+                  "cover_image_url": "",
+                  "created_at": "2026-07-10T10:00:00+00:00",
+                  "description": "A standalone landing page.",
+                  "editable": true,
+                  "id": 42,
+                  "meta_description": "A standalone landing page for AI Shipping Labs.",
+                  "nav_label": "Community Story",
+                  "nav_order": 10,
+                  "nav_section": "community",
+                  "public_path": "/community-story",
+                  "public_url": "https://aishippinglabs.com/community-story",
+                  "show_in_sitemap": true,
+                  "source_path": "",
+                  "source_repo": "",
+                  "status": "published",
+                  "tags": [
+                    "community"
+                  ],
+                  "title": "AI Shipping Labs Community Story",
+                  "updated_at": "2026-07-10T10:00:00+00:00"
+                }
+              }
+            },
+            "description": "Marketing page updated."
+          },
+          "409": {
+            "description": "Synced page is read-only."
+          },
+          "422": {
+            "description": "Validation error."
+          }
+        },
+        "summary": "Update a manual marketing page",
+        "tags": [
+          "Marketing Pages"
+        ]
+      }
+    },
+    "/api/marketing-pages/{content_id}/preview-link": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preview URL for the marketing page."
+          },
+          "404": {
+            "description": "Marketing page not found."
+          }
+        },
+        "summary": "Get marketing page draft preview link",
+        "tags": [
+          "Marketing Pages"
+        ]
+      }
+    },
+    "/api/marketing-pages/{content_id}/preview-token/regenerate": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "New preview URL for the marketing page."
+          },
+          "404": {
+            "description": "Marketing page not found."
+          }
+        },
+        "summary": "Regenerate marketing page draft preview token",
+        "tags": [
+          "Marketing Pages"
+        ]
+      }
+    },
     "/api/member-notes": {
       "post": {
         "description": "Non-staff bearers cannot create a note with ``visibility=internal``. The plan_id is optional; when supplied it must reference a plan the bearer can see.",
@@ -6972,6 +7391,166 @@
         "summary": "Receive an SNS-delivered SES event",
         "tags": [
           "SES Webhook"
+        ]
+      }
+    },
+    "/api/signup-analytics": {
+      "get": {
+        "description": "Returns the same signup analytics report used by Studio: normalized filters, headline cards, actionable source rows, pre-signup activity rows, and recent signup journey rows. Staff-token only, read-only. The response never includes raw IPs, raw user agents, full query strings, or anonymous IDs.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "description": "Date range for aggregate sections.",
+              "enum": [
+                "24h",
+                "7d",
+                "30d",
+                "custom"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "description": "Custom range start date, YYYY-MM-DD.",
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "description": "Custom range end date, YYYY-MM-DD.",
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "signup_path",
+            "required": false,
+            "schema": {
+              "description": "Optional signup path filter.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Recent-signup row limit. Values above the safe cap are capped at 100.",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "actionable_source_rows": [
+                    {
+                      "campaign": {
+                        "id": 1,
+                        "name": "Spring Launch",
+                        "slug": "spring_launch",
+                        "studio_url": "/studio/utm-analytics/campaign/spring_launch/"
+                      },
+                      "kind": "campaign",
+                      "label": "Spring Launch (spring_launch)",
+                      "percent_share": "41.7%",
+                      "signup_count": 5,
+                      "top_pre_signup_landing_path": "/pricing",
+                      "top_signup_path": "email_password",
+                      "top_signup_path_label": "Email + password"
+                    }
+                  ],
+                  "filters": {
+                    "end": "2026-07-09",
+                    "end_at": "2026-07-09T12:00:00+00:00",
+                    "limit": 50,
+                    "range": "7d",
+                    "signup_path": "",
+                    "signup_path_label": "All paths",
+                    "start": "2026-07-02",
+                    "start_at": "2026-07-02T12:00:00+00:00"
+                  },
+                  "headline_cards": [
+                    {
+                      "count": 12,
+                      "delta": {
+                        "diff": 3,
+                        "sign": "+"
+                      },
+                      "label": "Last 7d",
+                      "window_label": "7d"
+                    }
+                  ],
+                  "pre_signup_activity_rows": [
+                    {
+                      "category": "Pricing",
+                      "distinct_signup_count": 4,
+                      "path": "/pricing",
+                      "top_actionable_source": "Spring Launch (spring_launch)",
+                      "total_tracked_visits": 6
+                    }
+                  ],
+                  "recent_signups": [
+                    {
+                      "actionable_source": {
+                        "campaign_slug": "spring_launch",
+                        "kind": "campaign",
+                        "label": "Spring Launch (spring_launch)"
+                      },
+                      "email": "member@example.com",
+                      "first_tracked_landing_path": "/pricing",
+                      "last_tracked_pre_signup_path": "/accounts/register/",
+                      "signed_up_at": "2026-07-09T12:00:00+00:00",
+                      "signup_path": "email_password",
+                      "signup_path_label": "Email + password",
+                      "top_categories": [
+                        "Pricing"
+                      ],
+                      "top_categories_label": "Pricing",
+                      "tracked_visit_count": 3,
+                      "user_id": 42,
+                      "user_studio_url": "/studio/users/42/"
+                    }
+                  ],
+                  "window_total": 12
+                }
+              }
+            },
+            "description": "Signup analytics report."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid filter value."
+          }
+        },
+        "summary": "Read signup source and pre-signup activity analytics",
+        "tags": [
+          "Analytics"
         ]
       }
     },

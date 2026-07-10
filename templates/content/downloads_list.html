@@ -30,22 +30,31 @@
       {% if downloads %}
       <div class="grid gap-6 sm:grid-cols-2">
         {% for item in downloads %}
-        {% comment %}
-        Issue #523 — there is no /downloads/<slug> detail page in content/urls.py,
-        only /api/downloads/<slug>/file (the file endpoint) and the access-state
-        CTAs (signup / pricing). To make the card body clickable while keeping
-        the in-card CTA semantics intact, the outer <a> matches the SAME
-        destination as the primary CTA below — lead-magnet → signup-with-next,
-        authorised → /api/downloads/<slug>/file, gated → /pricing — so the
-        card click and the button click do exactly the same thing. The CTA
-        block stays as a sibling block OUTSIDE the wrapping <a>; tag chips
-        also live outside so they remain real anchors (no nested <a>).
-        {% endcomment %}
         {% if item.show_email_form %}
-          {% with card_href="/accounts/signup?next=/api/downloads/"|add:item.download.slug|add:"/file" %}
         <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
-          <a href="{{ card_href }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="download-card-body-link">
-          {% endwith %}
+          {% if item.download.cover_image_url %}
+          <div class="aspect-video w-full overflow-hidden bg-muted">
+            <img src="{{ item.download.cover_image_url }}" alt="{{ item.download.title }}" class="h-full w-full object-cover">
+          </div>
+          {% endif %}
+          <div class="p-4 pb-3 sm:p-5 sm:pb-3">
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+              <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ item.download.file_type_color }}">
+                {{ item.download.file_type_label }}
+              </span>
+              {% if item.download.human_file_size %}
+              <span class="text-xs text-muted-foreground">{{ item.download.human_file_size }}</span>
+              {% endif %}
+            </div>
+
+            <h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground">
+              {{ item.download.title }}
+            </h2>
+
+            {% if item.download.description %}
+            <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ item.download.description|strip_markdown }}</p>
+            {% endif %}
+          </div>
         {% elif item.requires_email_verification %}
         <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
           <a href="#verify-downloads-email" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="download-card-body-link">
@@ -56,6 +65,7 @@
         <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
           <a href="/pricing" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="download-card-body-link">
         {% endif %}
+          {% if not item.show_email_form %}
             {% if item.download.cover_image_url %}
             <div class="aspect-video w-full overflow-hidden bg-muted">
               <img src="{{ item.download.cover_image_url }}" alt="{{ item.download.title }}" class="h-full w-full object-cover transition-transform group-hover:scale-105">
@@ -83,6 +93,7 @@
               {% endif %}
             </div>
           </a>
+          {% endif %}
 
           {% comment %}
           Tag chips and CTA block live OUTSIDE the wrapping <a> so they stay
@@ -103,14 +114,25 @@
 
             <div class="mt-4">
               {% if item.show_email_form %}
-                <!-- Lead magnet: show email signup prompt -->
-                <div class="rounded-lg border border-accent/30 bg-accent/5 p-4 text-center">
-                  <p class="text-sm text-muted-foreground mb-2">Enter your email to download for free</p>
-                  <a href="/accounts/signup?next=/api/downloads/{{ item.download.slug }}/file"
-                     class="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-                    <i data-lucide="mail" class="h-4 w-4"></i>
-                    Sign Up to Download
-                  </a>
+                <div class="rounded-lg border border-accent/30 bg-accent/5 p-4" data-testid="download-inline-subscribe-container" data-redirect-to="/api/downloads/{{ item.download.slug }}/file">
+                  <p class="mb-3 text-sm text-muted-foreground">Enter your email to download for free</p>
+                  <form class="download-inline-subscribe-form flex flex-col gap-3 sm:flex-row" data-testid="download-inline-subscribe-form" onsubmit="return handleDownloadInlineSubscribe(event, this)">
+                    <label class="sr-only" for="download-inline-email-{{ item.download.slug }}">Email address</label>
+                    <input id="download-inline-email-{{ item.download.slug }}"
+                           type="email"
+                           name="email"
+                           required
+                           autocomplete="email"
+                           placeholder="you@example.com"
+                           class="min-h-[44px] w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent sm:flex-1">
+                    <button type="submit"
+                            class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                      <i data-lucide="mail" class="h-4 w-4"></i>
+                      Sign Up to Download
+                    </button>
+                  </form>
+                  <p class="download-inline-subscribe-message mt-3 hidden text-sm text-green-400" data-testid="download-inline-subscribe-message"></p>
+                  <p class="download-inline-subscribe-error mt-3 hidden text-sm text-red-400"></p>
                 </div>
               {% elif item.requires_email_verification %}
                 <div class="text-sm">
@@ -124,6 +146,7 @@
               {% elif item.has_access %}
                 <!-- Authorized: show download button -->
                 <a href="/api/downloads/{{ item.download.slug }}/file"
+                   data-testid="download-card-file-cta"
                    class="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
                   <i data-lucide="download" class="h-4 w-4"></i>
                   Download
@@ -161,4 +184,88 @@
   </section>
 </main>
 {% include "includes/footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script>
+function handleDownloadInlineSubscribe(event, form) {
+  event.preventDefault();
+  var container = form.closest('[data-testid="download-inline-subscribe-container"]');
+  var emailInput = form.querySelector('input[name="email"]');
+  var submitBtn = form.querySelector('button[type="submit"]');
+  var messageEl = container.querySelector('.download-inline-subscribe-message');
+  var errorEl = container.querySelector('.download-inline-subscribe-error');
+  var redirectTo = container.dataset.redirectTo || '';
+
+  messageEl.classList.add('hidden');
+  errorEl.classList.add('hidden');
+
+  if (!emailInput.value.trim()) {
+    errorEl.textContent = 'Please enter your email address.';
+    errorEl.classList.remove('hidden');
+    emailInput.focus();
+    return false;
+  }
+  if (!emailInput.validity.valid) {
+    errorEl.textContent = 'Please enter a valid email address.';
+    errorEl.classList.remove('hidden');
+    emailInput.focus();
+    return false;
+  }
+
+  submitBtn.disabled = true;
+  var originalButtonHtml = submitBtn.innerHTML;
+  submitBtn.textContent = 'Submitting...';
+
+  var csrfToken = '';
+  var cookies = document.cookie.split(';');
+  for (var i = 0; i < cookies.length; i++) {
+    var cookie = cookies[i].trim();
+    if (cookie.startsWith('csrftoken=')) {
+      csrfToken = cookie.substring('csrftoken='.length);
+      break;
+    }
+  }
+
+  fetch('/api/subscribe', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrfToken,
+    },
+    body: JSON.stringify({
+      email: emailInput.value,
+      redirect_to: redirectTo,
+    }),
+  })
+  .then(function(resp) { return resp.json(); })
+  .then(function(data) {
+    if (data.status === 'ok') {
+      form.classList.add('hidden');
+      messageEl.textContent = data.message;
+      messageEl.classList.remove('hidden');
+      if (typeof gtag === 'function') {
+        gtag('event', 'sign_up', { method: 'newsletter' });
+      }
+      return;
+    }
+
+    errorEl.textContent = data.error || 'Something went wrong. Please try again.';
+    errorEl.classList.remove('hidden');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalButtonHtml;
+    if (typeof lucide !== 'undefined') { lucide.createIcons(); }
+  })
+  .catch(function() {
+    errorEl.textContent = 'An error occurred. Please try again.';
+    errorEl.classList.remove('hidden');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalButtonHtml;
+    if (typeof lucide !== 'undefined') { lucide.createIcons(); }
+  });
+
+  return false;
+}
+</script>
 {% endblock %}

@@ -3,5 +3,6 @@ from .api import *
 from .courses import *
 from .home import *
 from .interview import *
+from .marketing_pages import *
 from .pages import *
 from .tags import *

@@ -99,6 +99,7 @@ class StudioWorkshopListTest(TestCase):
         )
         cls.published = _make_workshop(
             slug='rag-basics', title='RAG basics', status='published',
+            skill_level='advanced',
         )
         cls.draft = _make_workshop(
             slug='fine-tuning', title='Fine-tuning LLMs', status='draft',
@@ -146,6 +147,12 @@ class StudioWorkshopListTest(TestCase):
     def test_view_on_site_link_in_row(self):
         response = self.client.get('/studio/workshops/')
         self.assertContains(response, '/workshops/rag-basics')
+
+    def test_list_shows_readonly_skill_level_metadata(self):
+        response = self.client.get('/studio/workshops/')
+
+        self.assertContains(response, 'data-testid="studio-workshop-skill-level"')
+        self.assertContains(response, 'Advanced')
 
     def test_empty_state_shown_when_no_workshops(self):
         """Workshops list renders the canonical fresh-zero empty state when
@@ -211,6 +218,7 @@ class StudioWorkshopDetailTest(TestCase):
             slug='demo', title='Demo Workshop', event=cls.event,
             cover_image_url='https://cdn.example.com/cover.png',
             code_repo_url='https://github.com/example/code',
+            skill_level='advanced',
         )
         cls.page1 = WorkshopPage.objects.create(
             workshop=cls.workshop, slug='setup', title='Setup',
@@ -236,6 +244,28 @@ class StudioWorkshopDetailTest(TestCase):
         self.assertContains(response, 'Demo Workshop')
         self.assertContains(response, 'Hands-on intro')
         self.assertContains(response, 'agents')
+
+    def test_shows_skill_level_metadata(self):
+        response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
+
+        self.assertContains(response, 'data-testid="studio-workshop-skill-level"')
+        self.assertContains(response, 'Advanced')
+        self.assertContains(response, 'data-testid="studio-workshop-skill-description"')
+        self.assertContains(response, 'production tradeoffs')
+
+    def test_shows_core_tools_as_yaml_sourced_metadata(self):
+        Workshop.objects.filter(pk=self.workshop.pk).update(
+            core_tools=['Claude Code', 'OpenAI API', 'Django'],
+        )
+
+        response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
+
+        self.assertContains(response, 'data-testid="studio-workshop-core-tools"')
+        self.assertContains(response, 'Tools &amp; technologies')
+        self.assertContains(response, 'From workshop.yaml')
+        self.assertContains(response, 'Claude Code')
+        self.assertContains(response, 'OpenAI API')
+        self.assertContains(response, 'Django')
 
     def test_shows_three_tier_gates(self):
         response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
@@ -391,6 +421,7 @@ class StudioWorkshopEditFormTest(TestCase):
             landing_required_level=0,
             pages_required_level=10,
             recording_required_level=20,
+            skill_level='intermediate',
         )
 
     def test_get_returns_200(self):
@@ -410,6 +441,15 @@ class StudioWorkshopEditFormTest(TestCase):
         self.assertContains(response, 'name="pages_required_level"')
         self.assertContains(response, 'name="recording_required_level"')
 
+    def test_form_shows_readonly_skill_level_metadata(self):
+        response = self.client.get(
+            f'/studio/workshops/{self.workshop.pk}/edit',
+        )
+
+        self.assertContains(response, 'data-testid="studio-workshop-skill-level"')
+        self.assertContains(response, 'Intermediate')
+        self.assertContains(response, 'connect APIs')
+
     def test_yaml_fields_are_not_editable_inputs(self):
         # title/description/tags/date/code_repo_url appear on the page but
         # as <dd>/<dt>, never in form <input>/<textarea>/<select>
@@ -422,6 +462,9 @@ class StudioWorkshopEditFormTest(TestCase):
         response = self.client.get(
             f'/studio/workshops/{self.workshop.pk}/edit',
         )
+        self.assertContains(response, 'data-testid="studio-workshop-core-tools"')
+        self.assertContains(response, 'Tools &amp; technologies')
+        self.assertContains(response, 'From workshop.yaml')
         body = response.content.decode()
         # Slice to the editable form section.
         form_start = body.find('data-testid="workshop-edit-form"')
@@ -431,7 +474,8 @@ class StudioWorkshopEditFormTest(TestCase):
         # No form input has any of these names.
         for fname in (
             'title', 'description', 'tags',
-            'date', 'code_repo_url', 'instructor_name',
+            'date', 'code_repo_url', 'instructor_name', 'skill_level',
+            'core_tools',
         ):
             self.assertNotIn(
                 f'name="{fname}"', form_html,
@@ -466,6 +510,8 @@ class StudioWorkshopEditFormTest(TestCase):
         # Any attempt to mutate yaml-sourced fields via the POST is silently
         # ignored — the original values must be preserved.
         original_title = self.workshop.title
+        self.workshop.core_tools = ['Claude Code']
+        self.workshop.save()
         response = self.client.post(
             f'/studio/workshops/{self.workshop.pk}/edit',
             {
@@ -477,11 +523,13 @@ class StudioWorkshopEditFormTest(TestCase):
                 'title': 'HACKED',
                 'description': 'evil',
                 'instructor_name': 'evil',
+                'core_tools': 'evil',
             },
         )
         self.assertEqual(response.status_code, 302)
         self.workshop.refresh_from_db()
         self.assertEqual(self.workshop.title, original_title)
+        self.assertEqual(self.workshop.core_tools, ['Claude Code'])
         self.assertNotIn('evil', self.workshop.description)
 
     def test_post_invariant_violation_recording_below_pages(self):

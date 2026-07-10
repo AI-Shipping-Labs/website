@@ -1869,6 +1869,29 @@ class SyncResourcesTest(TestCase):
         self.assertEqual(link2.title, 'Cool Model')
         self.assertEqual(link2.description, 'An impressive open-source model.')
 
+    def test_sync_curated_links_markdown_cleans_literal_escaped_quotes(self):
+        links_dir = os.path.join(self.temp_dir, 'curated-links')
+        os.makedirs(links_dir)
+        with open(os.path.join(links_dir, 'quoted-tool.md'), 'w') as f:
+            f.write('---\n')
+            f.write('content_id: quoted-tool\n')
+            f.write("title: 'The \\\"Claude Code\\\" guide'\n")
+            f.write('url: "https://example.com/quoted-tool"\n')
+            f.write('category: articles\n')
+            f.write('---\n\n')
+            f.write(
+                'A full \\\"quoted\\\" description stays intact across syncs.\n',
+            )
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        link = CuratedLink.objects.get(item_id='quoted-tool')
+        self.assertEqual(link.title, 'The "Claude Code" guide')
+        self.assertEqual(
+            link.description,
+            'A full "quoted" description stays intact across syncs.',
+        )
+
     def test_sync_curated_links_from_yaml_manifest(self):
         links_dir = os.path.join(self.temp_dir, 'resources', 'curated-links')
         os.makedirs(links_dir)
@@ -1912,6 +1935,27 @@ class SyncResourcesTest(TestCase):
         self.assertEqual(defaulted.sort_order, 0)
         self.assertEqual(defaulted.required_level, 0)
         self.assertTrue(defaulted.published)
+
+    def test_sync_curated_links_yaml_cleans_literal_escaped_quotes(self):
+        links_dir = os.path.join(self.temp_dir, 'resources', 'curated-links')
+        os.makedirs(links_dir)
+        with open(os.path.join(links_dir, 'links.yaml'), 'w') as f:
+            f.write('- content_id: yaml-quoted-link\n')
+            f.write("  title: 'Quoted \\\"Tool\\\"'\n")
+            f.write(
+                "  description: 'The \\\"batch API\\\" notes keep every sentence.'\n",
+            )
+            f.write('  url: "https://example.com/quoted-tool"\n')
+            f.write('  category: tools\n')
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        link = CuratedLink.objects.get(item_id='yaml-quoted-link')
+        self.assertEqual(link.title, 'Quoted "Tool"')
+        self.assertEqual(
+            link.description,
+            'The "batch API" notes keep every sentence.',
+        )
 
     def test_sync_curated_links_yaml_manifest_updates_existing_row(self):
         links_dir = os.path.join(self.temp_dir, 'resources', 'curated-links')

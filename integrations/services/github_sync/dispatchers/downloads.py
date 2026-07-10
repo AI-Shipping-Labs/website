@@ -41,6 +41,7 @@ def _dispatch_downloads(source, repo_dir, file_list, commit_sha, stats,
     pointing at nothing.
     """
     from content.models import Download
+    from content.nav_availability import refresh_published_downloads_nav_cache
 
     seen_slugs = set()
     failed_slugs = set()
@@ -165,5 +166,5 @@ def _dispatch_downloads(source, repo_dir, file_list, commit_sha, stats,
     deleted_count = stale.count()
     stale.update(published=False)
     stats['deleted'] += deleted_count
-
+    refresh_published_downloads_nav_cache()
 

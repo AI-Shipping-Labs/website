@@ -69,6 +69,12 @@ from api.views.interview_notes import (
     plan_interview_notes,
     user_interview_notes,
 )
+from api.views.marketing_pages import (
+    marketing_page_detail,
+    marketing_page_preview_link,
+    marketing_page_preview_token_regenerate,
+    marketing_pages_collection,
+)
 from api.views.onboarding import (
     onboarding_personas,
     onboarding_questionnaires,
@@ -103,6 +109,7 @@ from api.views.redirects import (
     redirects_collection,
 )
 from api.views.ses_events_list import ses_events_dispatch
+from api.views.signup_analytics import signup_analytics_report
 from api.views.sprints import (
     sprint_accountability_partners,
     sprint_accountability_randomize,
@@ -212,6 +219,27 @@ urlpatterns = [
         "articles/<uuid:content_id>/preview-token/regenerate",
         article_preview_token_regenerate,
         name="api_article_preview_token_regenerate",
+    ),
+    # ---- Marketing pages ----------------------------------------------
+    path(
+        "marketing-pages",
+        marketing_pages_collection,
+        name="api_marketing_pages_collection",
+    ),
+    path(
+        "marketing-pages/<uuid:content_id>/preview-link",
+        marketing_page_preview_link,
+        name="api_marketing_page_preview_link",
+    ),
+    path(
+        "marketing-pages/<uuid:content_id>/preview-token/regenerate",
+        marketing_page_preview_token_regenerate,
+        name="api_marketing_page_preview_token_regenerate",
+    ),
+    path(
+        "marketing-pages/<uuid:content_id>",
+        marketing_page_detail,
+        name="api_marketing_page_detail",
     ),
     # ---- Events (issue #627) ------------------------------------------
     path(
@@ -361,6 +389,12 @@ urlpatterns = [
         "utm-campaigns/<int:campaign_id>",
         utm_campaign_detail,
         name="api_utm_campaign_detail",
+    ),
+    # ---- Signup analytics (issue #1175) --------------------------------
+    path(
+        "signup-analytics",
+        signup_analytics_report,
+        name="api_signup_analytics",
     ),
     # ---- Contacts (issue #431) ----------------------------------------
     path(

@@ -182,7 +182,7 @@ class TestBlogCardTagChipClick:
 
 @pytest.mark.django_db(transaction=True)
 class TestDownloadCardBodyClickLeadMagnet:
-    def test_anonymous_clicking_lead_magnet_card_body_navigates_to_signup(
+    def test_anonymous_clicking_lead_magnet_card_body_stays_on_downloads(
         self, django_server, page,
     ):
         _clear_all()
@@ -197,10 +197,8 @@ class TestDownloadCardBodyClickLeadMagnet:
         page.locator('text="A free PDF for everyone."').first.click()
         page.wait_for_load_state('domcontentloaded')
 
-        # Anonymous visitor on a lead magnet → signup-with-next URL.
-        # /accounts/signup redirects to /accounts/register/ on this platform.
-        assert '/accounts/signup' in page.url or '/accounts/register' in page.url
-        assert 'free-cheatsheet' in page.url
+        assert page.url == f'{django_server}/downloads'
+        assert page.get_by_test_id('download-inline-subscribe-form').count() == 1
 
 
 # ---------------------------------------------------------------
@@ -226,9 +224,11 @@ class TestDownloadCardInnerCtaClick:
         page = context.new_page()
         page.goto(f'{django_server}/downloads', wait_until='domcontentloaded')
 
+        card = page.get_by_test_id('download-card').filter(has_text='Basic Cheatsheet')
+
         # Capture the request fired by clicking the green Download button.
         with page.expect_request('**/api/downloads/basic-cheatsheet/file') as req_info:
-            page.locator('a:has-text("Download")').first.click()
+            card.get_by_test_id('download-card-file-cta').click()
         request = req_info.value
         # The request was made — that's the inner-CTA action.
         assert '/api/downloads/basic-cheatsheet/file' in request.url
@@ -241,7 +241,9 @@ class TestDownloadCardInnerCtaClick:
 
 @pytest.mark.django_db(transaction=True)
 class TestDownloadCardSignupCtaClick:
-    def test_signup_cta_routes_to_signup_with_next(self, django_server, page):
+    def test_signup_cta_submits_inline_form_without_page_navigation(
+        self, django_server, page
+    ):
         _clear_all()
         _create_download(
             slug='lead-magnet-x',
@@ -251,11 +253,18 @@ class TestDownloadCardSignupCtaClick:
         )
 
         page.goto(f'{django_server}/downloads', wait_until='domcontentloaded')
-        page.locator('a:has-text("Sign Up to Download")').first.click()
-        page.wait_for_load_state('domcontentloaded')
-
-        # /accounts/signup redirects to /accounts/register/ on this platform.
-        assert '/accounts/signup' in page.url or '/accounts/register' in page.url
+        card = page.locator('[data-testid="download-card"]').filter(
+            has_text='Lead Magnet X'
+        )
+        form = card.get_by_test_id('download-inline-subscribe-form')
+        form.locator('input[name="email"]').fill('clickable-cards@test.com')
+        with page.expect_response('**/api/subscribe') as response_info:
+            form.locator('button[type="submit"]').click()
+        assert response_info.value.status == 200
+        card.get_by_test_id('download-inline-subscribe-message').wait_for(
+            state='visible'
+        )
+        assert page.url == f'{django_server}/downloads'
 
 
 # ---------------------------------------------------------------

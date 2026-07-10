@@ -185,7 +185,7 @@ class BlogDetailRelatedArticlesMobileTest(TestCase):
         # meaning single column by default on mobile
         self.assertIn("sm:grid-cols-2", content)
         # Should not have bare grid-cols-2 without sm: prefix on the related grid
-        grid_start = content.index("Related Articles")
+        grid_start = content.index('data-testid="related-content-rail"')
         grid_section = content[grid_start : grid_start + 500]
         self.assertIn("sm:grid-cols-2", grid_section)
         # Verify it does not force multi-column on mobile

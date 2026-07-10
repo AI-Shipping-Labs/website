@@ -10,6 +10,8 @@ Covers:
 - Admin CRUD for curated links
 """
 
+from html import unescape
+
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
@@ -93,6 +95,30 @@ class ResourcesPageBasicTest(TestCase):
         response = self.client.get('/resources')
         self.assertContains(response, 'A great workshop')
         self.assertContains(response, 'Browse AI articles')
+
+    def test_full_description_renders_without_literal_escaped_quotes(self):
+        CuratedLink.objects.create(
+            item_id='quoted-resource',
+            title='Quoted Resource',
+            description=(
+                'The "Claude Code" guide keeps the full description visible '
+                'without literal \\"quote\\" artifacts.'
+            ),
+            url='https://example.com/quoted',
+            category='articles',
+            published=True,
+        )
+
+        response = self.client.get('/resources')
+
+        self.assertIn(
+            (
+                'The "Claude Code" guide keeps the full description visible '
+                'without literal "quote" artifacts.'
+            ),
+            unescape(response.content.decode()),
+        )
+        self.assertNotContains(response, '\\"quote\\"')
 
     def test_canonical_category_headings_render(self):
         response = self.client.get('/resources')

@@ -14,7 +14,15 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import Client, TestCase
 
-from content.models import Workshop, WorkshopPage
+from content.models import (
+    SKILL_LEVEL_ADVANCED,
+    SKILL_LEVEL_BEGINNER,
+    SKILL_LEVEL_INTERMEDIATE,
+    Workshop,
+    WorkshopPage,
+    get_workshop_skill_level_description,
+    get_workshop_skill_level_label,
+)
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -142,6 +150,87 @@ class WorkshopModelValidationTest(TierSetupMixin, TestCase):
             recording_required_level=20,
         )
         self.assertEqual(ws.landing_required_level, 0)
+
+    def test_skill_level_defaults_to_blank(self):
+        """Blank means no skill badge/filter match, not beginner."""
+        ws = Workshop.objects.create(
+            slug='skill-default',
+            title='Skill Default',
+            date=date(2026, 4, 21),
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+
+        self.assertEqual(ws.skill_level, '')
+        self.assertEqual(ws.skill_level_label, '')
+        self.assertEqual(ws.skill_level_description, '')
+
+    def test_core_tools_defaults_to_empty_list(self):
+        ws = Workshop.objects.create(
+            slug='core-tools-default',
+            title='Core Tools Default',
+            date=date(2026, 4, 21),
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+        other = Workshop.objects.create(
+            slug='core-tools-default-other',
+            title='Core Tools Default Other',
+            date=date(2026, 4, 22),
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+
+        self.assertEqual(ws.core_tools, [])
+        self.assertEqual(other.core_tools, [])
+        self.assertIsNot(ws.core_tools, other.core_tools)
+
+    def test_skill_level_vocabulary_labels_and_descriptions(self):
+        self.assertEqual(
+            get_workshop_skill_level_label(SKILL_LEVEL_BEGINNER),
+            'Beginner-friendly',
+        )
+        self.assertEqual(
+            get_workshop_skill_level_label(SKILL_LEVEL_INTERMEDIATE),
+            'Intermediate',
+        )
+        self.assertEqual(
+            get_workshop_skill_level_label(SKILL_LEVEL_ADVANCED),
+            'Advanced',
+        )
+        self.assertIn(
+            'basic Python and command-line workflows',
+            get_workshop_skill_level_description(SKILL_LEVEL_BEGINNER),
+        )
+        self.assertIn(
+            'connect APIs',
+            get_workshop_skill_level_description(SKILL_LEVEL_INTERMEDIATE),
+        )
+        self.assertIn(
+            'production tradeoffs',
+            get_workshop_skill_level_description(SKILL_LEVEL_ADVANCED),
+        )
+
+    def test_skill_level_normalizes_case_and_whitespace_on_save(self):
+        ws = Workshop.objects.create(
+            slug='skill-normalized',
+            title='Skill Normalized',
+            date=date(2026, 4, 21),
+            skill_level=' Intermediate ',
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+
+        self.assertEqual(ws.skill_level, SKILL_LEVEL_INTERMEDIATE)
+        self.assertEqual(ws.skill_level_label, 'Intermediate')
+
+    def test_invalid_skill_level_rejected(self):
+        ws = self._make_workshop(skill_level='expert')
+
+        with self.assertRaises(ValidationError) as ctx:
+            ws.clean()
+
+        self.assertIn('skill_level', ctx.exception.error_dict)
 
     def test_save_renders_description_markdown(self):
         ws = Workshop.objects.create(
@@ -391,6 +480,27 @@ class WorkshopAdminSmokeTest(TierSetupMixin, TestCase):
         response = client.get('/admin/content/workshop/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Admin Smoke Workshop')
+
+    def test_workshop_changelist_shows_and_filters_skill_level(self):
+        Workshop.objects.create(
+            slug='admin-advanced',
+            title='Advanced Admin Workshop',
+            date=date(2026, 4, 22),
+            skill_level='advanced',
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+        client = Client()
+        client.force_login(self.admin_user)
+
+        response = client.get('/admin/content/workshop/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Advanced')
+
+        response = client.get('/admin/content/workshop/?skill_level__exact=advanced')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Advanced Admin Workshop')
+        self.assertNotContains(response, 'Admin Smoke Workshop')
 
     def test_workshop_page_changelist_loads(self):
         WorkshopPage.objects.create(

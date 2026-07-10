@@ -23,6 +23,7 @@ from integrations.services.github_sync.dispatchers.downloads import _dispatch_do
 from integrations.services.github_sync.dispatchers.events import _dispatch_events
 from integrations.services.github_sync.dispatchers.instructors import _dispatch_instructors
 from integrations.services.github_sync.dispatchers.interview_questions import _dispatch_interview_questions
+from integrations.services.github_sync.dispatchers.marketing_pages import _dispatch_marketing_pages
 from integrations.services.github_sync.dispatchers.projects import _dispatch_projects
 from integrations.services.github_sync.dispatchers.tiers import _sync_tiers_yaml
 from integrations.services.github_sync.dispatchers.workshops import _dispatch_workshops
@@ -60,6 +61,7 @@ class RepoClassification:
     instructor_files: list
     curated_link_files: list
     download_files: list
+    marketing_page_files: list
     interview_files: list
 
 
@@ -440,6 +442,7 @@ class RepoFileClassifier:
         self.instructor_files = []
         self.curated_link_files = []
         self.download_files = []
+        self.marketing_page_files = []
         self.interview_files = []
 
     def classify(self):
@@ -454,6 +457,7 @@ class RepoFileClassifier:
             instructor_files=self.instructor_files,
             curated_link_files=self.curated_link_files,
             download_files=self.download_files,
+            marketing_page_files=self.marketing_page_files,
             interview_files=self.interview_files,
         )
 
@@ -546,6 +550,13 @@ class RepoFileClassifier:
     def _classify_markdown(self, filepath, rel_path, filename, parts):
         if filename.upper() == 'README.MD':
             return
+        try:
+            metadata, _body = _parse_markdown_file(filepath)
+        except ValueError:
+            metadata = None
+        if metadata and metadata.get('content_type') == 'marketing_page':
+            self.marketing_page_files.append(rel_path)
+            return
         if 'blog' in parts:
             self.article_files.append(rel_path)
             return
@@ -555,9 +566,7 @@ class RepoFileClassifier:
         if 'interview-questions' in parts:
             self.interview_files.append(rel_path)
             return
-        try:
-            metadata, _body = _parse_markdown_file(filepath)
-        except ValueError:
+        if metadata is None:
             self.article_files.append(rel_path)
             return
         if metadata.get('difficulty'):
@@ -803,6 +812,10 @@ def _sync_repo(source, repo_dir, commit_sha, sync_log, known_images=None):
     )
     _dispatch_downloads(
         source, repo_dir, classified.download_files,
+        commit_sha, stats, known_images=known_images,
+    )
+    _dispatch_marketing_pages(
+        source, repo_dir, classified.marketing_page_files,
         commit_sha, stats, known_images=known_images,
     )
     _dispatch_interview_questions(

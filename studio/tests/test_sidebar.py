@@ -155,6 +155,7 @@ class StudioSidebarStructureTest(TestCase):
     NON_SUPERUSER_LINKS = [
         # Content
         ('/studio/articles/', 'Articles'),
+        ('/studio/marketing-pages/', 'Marketing pages'),
         ('/studio/courses/', 'Courses'),
         ('/studio/projects/', 'Projects'),
         ('/studio/workshops/', 'Workshops'),

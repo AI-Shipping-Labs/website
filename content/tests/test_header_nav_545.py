@@ -22,8 +22,9 @@ ABOUT_LINKS = [
 ]
 
 COMMUNITY_LINKS = [
-    ('Community', '/community'),
+    ('Overview', '/community'),
     ('Membership', '/pricing'),
+    ('Activities', '/activities#access-by-tier'),
     ('Community Sprints', '/sprints'),
     ('Events', '/events'),
 ]
@@ -101,9 +102,9 @@ class HeaderTextNavigationIssue580Test(TestCase):
         about_end = primary.index('id="community-dropdown-btn"')
         self.assertIn('href="/faq"', primary[about_start:about_end])
 
-        # Activities is not in top-level nav (regression check from #555).
-        self.assertNotIn('>Activities</a>', primary)
-        self.assertNotIn('href="/activities"', primary)
+        # Activities is grouped inside Community, not promoted as a top-level
+        # nav link (regression check from #555).
+        self.assertNotIn('data-testid="nav-activities"', primary)
 
         # About dropdown contents and order.
         about_panel = self._slice_block(primary, 'about-dropdown')
@@ -126,6 +127,7 @@ class HeaderTextNavigationIssue580Test(TestCase):
             [
                 'nav-community-link-overview',
                 'nav-community-link-membership',
+                'nav-community-link-activities',
                 'nav-community-link-sprints',
                 'nav-community-link-events',
             ],

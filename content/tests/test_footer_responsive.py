@@ -88,6 +88,35 @@ class FooterNewsletterFormMessageHooksTest(TestCase):
         self.assertIn("footer-subscribe-error", footer)
 
 
+class FooterCommunityNavigationTest(TestCase):
+    """Footer exposes the compact Community map from issue #1183."""
+
+    def test_footer_community_column_lists_major_destinations(self):
+        response = self.client.get("/")
+        footer = _extract_footer(response.content.decode())
+
+        expected = [
+            ('About', '/about'),
+            ('Membership Tiers', '/pricing'),
+            ('Activities', '/activities#access-by-tier'),
+            ('Community Sprints', '/sprints'),
+            ('Events', '/events'),
+            ('FAQ', '/faq'),
+        ]
+        positions = []
+        for label, href in expected:
+            with self.subTest(label=label):
+                match = re.search(
+                    rf'<a[^>]*href="{re.escape(href)}"[^>]*>{re.escape(label)}</a>',
+                    footer,
+                )
+                self.assertIsNotNone(match)
+                positions.append(match.start())
+
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn('Manage Subscription', footer)
+
+
 @tag("visual_regression")
 class FooterTapTargetsTest(TestCase):
     """Footer community links balance mobile tap targets with compact desktop rows."""

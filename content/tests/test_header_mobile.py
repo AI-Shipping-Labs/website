@@ -123,11 +123,27 @@ class HeaderMobileMenuTest(TestCase):
         self.assertIn('href="/blog"', content)
         self.assertIn('href="/sprints"', content)
         self.assertIn('href="/events"', content)
+        self.assertIn('href="/activities#access-by-tier"', content)
+        self.assertIn('data-testid="mobile-nav-community-link-activities"', content)
         self.assertIn('href="/resources"', content)
 
         header = content[:content.index("</header>")]
-        self.assertNotIn('href="/activities"', header)
-        self.assertNotIn('>Activities</a>', header)
+        primary = header[
+            header.index('data-testid="desktop-primary-nav"'):
+            header.index('<div class="hidden md:flex md:items-center md:gap-4">')
+        ]
+        top_level_ids = re.findall(
+            r'data-testid="(nav-about-trigger|nav-membership|nav-community-trigger|nav-sprints|nav-events|nav-resources-trigger)"',
+            primary,
+        )
+        self.assertEqual(
+            top_level_ids,
+            [
+                'nav-about-trigger',
+                'nav-community-trigger',
+                'nav-resources-trigger',
+            ],
+        )
 
     def test_close_on_outside_click_script_present(self):
         """The script should include close-on-outside-click logic for the mobile menu."""

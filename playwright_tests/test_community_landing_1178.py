@@ -80,9 +80,10 @@ def test_anonymous_desktop_nav_opens_community_overview(django_server, page):
             .map(a => [a.getAttribute('data-testid'), a.getAttribute('href')])
         """
     )
-    assert links[:4] == [
+    assert links[:5] == [
         ["nav-community-link-overview", "/community"],
         ["nav-community-link-membership", "/pricing"],
+        ["nav-community-link-activities", "/activities#access-by-tier"],
         ["nav-community-link-sprints", "/sprints"],
         ["nav-community-link-events", "/events"],
     ]
@@ -142,9 +143,10 @@ def test_mobile_nav_overview_link_first_and_still_lists_community_surfaces(
                 .map(a => [a.getAttribute('data-testid'), a.getAttribute('href')])
             """
         )
-        assert links[:4] == [
+        assert links[:5] == [
             ["mobile-nav-community-link-overview", "/community"],
             ["mobile-nav-community-link-membership", "/pricing"],
+            ["mobile-nav-community-link-activities", "/activities#access-by-tier"],
             ["mobile-nav-community-link-sprints", "/sprints"],
             ["mobile-nav-community-link-events", "/events"],
         ]

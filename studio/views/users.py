@@ -68,7 +68,7 @@ from payments.models import PaymentAccountMismatch, Tier
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from plans.models import Plan, SprintEnrollment
 from studio.decorators import staff_required, superuser_required
-from studio.utils import coerce_page_number
+from studio.utils import coerce_page_number, studio_pagination_context
 from studio.views.tier_overrides import DURATION_CHOICES
 
 User = get_user_model()
@@ -1175,6 +1175,7 @@ def _payment_mismatch_rows(mismatches, stripe_account_id):
 @staff_required
 def payment_mismatch_list(request):
     status = request.GET.get('status') or PaymentAccountMismatch.STATUS_OPEN
+    search = (request.GET.get('q') or '').strip()
     if status not in {
         PaymentAccountMismatch.STATUS_OPEN,
         PaymentAccountMismatch.STATUS_RESOLVED,
@@ -1189,13 +1190,28 @@ def payment_mismatch_list(request):
     qs = base_qs
     if status != 'all':
         qs = qs.filter(status=status)
+    if search:
+        qs = qs.filter(
+            Q(stripe_session_id__icontains=search)
+            | Q(stripe_customer_id__icontains=search)
+            | Q(stripe_subscription_id__icontains=search)
+            | Q(stripe_email__icontains=search)
+            | Q(paid_user__email__icontains=search)
+            | Q(candidate_user__email__icontains=search)
+            | Q(reason__icontains=search)
+            | Q(status__icontains=search)
+            | Q(resolution_note__icontains=search)
+        )
+    pager = studio_pagination_context(request, qs)
 
     stripe_account_id = get_config('STRIPE_DASHBOARD_ACCOUNT_ID', '')
-    rows = _payment_mismatch_rows(qs[:100], stripe_account_id)
+    rows = _payment_mismatch_rows(pager['page'].object_list, stripe_account_id)
     clear_url = f"{reverse('studio_payment_mismatch_list')}?status=all"
     return render(request, 'studio/users/payment_mismatches.html', {
         'rows': rows,
         'active_status': status,
+        'search': search,
+        'has_any_mismatch': PaymentAccountMismatch.objects.exists(),
         'status_open': PaymentAccountMismatch.STATUS_OPEN,
         'status_resolved': PaymentAccountMismatch.STATUS_RESOLVED,
         'status_ignored': PaymentAccountMismatch.STATUS_IGNORED,
@@ -1203,6 +1219,7 @@ def payment_mismatch_list(request):
         'has_payment_mismatches': has_payment_mismatches,
         'payment_mismatch_filters_active': payment_mismatch_filters_active,
         'payment_mismatches_clear_url': clear_url,
+        **pager,
     })
 
 

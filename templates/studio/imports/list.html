@@ -107,8 +107,8 @@
         <td class="px-4 py-3 text-sm" data-label="Status">
           {% studio_status_badge batch.status batch.get_status_display %}
         </td>
-        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Started">{{ batch.started_at|operator_datetime }}</td>
-        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Finished">{% if batch.finished_at %}{{ batch.finished_at|operator_datetime }}{% else %}running{% endif %}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap" data-label="Started">{{ batch.started_at|operator_datetime }}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap" data-label="Finished">{% if batch.finished_at %}{{ batch.finished_at|operator_datetime }}{% else %}running{% endif %}</td>
         <td class="px-4 py-3 text-sm" data-label="Mode">{% if batch.dry_run %}<span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300">dry-run</span>{% else %}<span class="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300">live</span>{% endif %}</td>
         <td class="px-4 py-3 text-sm text-right" data-label="Created">{{ batch.users_created }}</td>
         <td class="px-4 py-3 text-sm text-right" data-label="Updated">{{ batch.users_updated }}</td>
@@ -135,13 +135,7 @@
   {% studio_empty_state 'fresh' entity_label='import' entity_label_plural='import batches' create_url=imports_create_url cta_label='New import' %}
 {% endif %}
 
-{% if page_obj.paginator.num_pages > 1 %}
-<div class="flex items-center justify-between mt-6 text-sm">
-  <div class="text-muted-foreground">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
-  <div class="space-x-3">
-    {% if page_obj.has_previous %}<a class="text-accent hover:underline" href="?page={{ page_obj.previous_page_number }}&source={{ source_filter }}&dry_run={{ dry_run_filter }}">Previous</a>{% endif %}
-    {% if page_obj.has_next %}<a class="text-accent hover:underline" href="?page={{ page_obj.next_page_number }}&source={{ source_filter }}&dry_run={{ dry_run_filter }}">Next</a>{% endif %}
-  </div>
-</div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="import-list-pager" %}
 {% endif %}
 {% endblock %}

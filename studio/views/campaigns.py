@@ -27,6 +27,7 @@ from email_app.services.recording_available_prefill import (
 from events.models import Event
 from integrations.config import get_config
 from studio.decorators import staff_required
+from studio.utils import studio_pagination_context
 
 logger = logging.getLogger(__name__)
 
@@ -267,14 +268,16 @@ def campaign_list(request):
         campaigns = campaigns.filter(subject__icontains=search)
     if status_filter:
         campaigns = campaigns.filter(status=status_filter)
+    pager = studio_pagination_context(request, campaigns)
 
     return render(
         request,
         "studio/campaigns/list.html",
         {
-            "campaigns": campaigns,
+            "campaigns": pager["page"].object_list,
             "search": search,
             "status_filter": status_filter,
+            **pager,
         },
     )
 

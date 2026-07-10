@@ -17,7 +17,9 @@
   </a>
 </div>
 
-{% if questionnaires %}
+{% studio_list_filter search "" "Search questionnaires..." None False %}
+
+{% if questionnaires or search %}
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="w-full">
     <thead class="bg-secondary">
@@ -53,15 +55,21 @@
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_questionnaire_detail' questionnaire_id=q.pk as detail_url %}
             {% url 'studio_questionnaire_edit' questionnaire_id=q.pk as edit_url %}
-            {% studio_list_action detail_url 'View' 'primary' %}
-            {% studio_list_action edit_url 'Edit' 'secondary' %}
+            {% studio_list_action edit_url 'Edit' 'primary' %}
+            {% studio_list_action detail_url 'View' 'secondary' %}
           </div>
         </td>
       </tr>
+      {% empty %}
+        {% url 'studio_questionnaire_list' as questionnaires_clear_url %}
+        {% studio_empty_state 'filter' entity_label='questionnaire' entity_label_plural='questionnaires' clear_url=questionnaires_clear_url colspan=6 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="questionnaire-list-pager" %}
+{% endif %}
 {% else %}
   {% url 'studio_questionnaire_create' as questionnaires_create_url %}
   {% studio_empty_state 'fresh' entity_label='questionnaire' entity_label_plural='questionnaires' create_url=questionnaires_create_url %}

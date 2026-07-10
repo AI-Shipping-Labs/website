@@ -3,7 +3,6 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib import messages
-from django.core.paginator import Paginator
 from django.db import transaction
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
@@ -21,6 +20,7 @@ from accounts.services.import_users import get_import_adapter
 from accounts.utils.tags import normalize_tags
 from jobs.tasks import async_task, build_task_name
 from studio.decorators import staff_required
+from studio.utils import studio_pagination_context
 
 IMPORT_TASK_PATH = "accounts.tasks.run_import_batch_task"
 IMPORT_SOURCES = [source for source, _label in IMPORT_BATCH_SOURCE_CHOICES]
@@ -62,7 +62,8 @@ def import_batch_list(request):
     elif dry_run == "no":
         batches = batches.filter(dry_run=False)
 
-    page_obj = Paginator(batches, 25).get_page(request.GET.get("page"))
+    pager = studio_pagination_context(request, batches)
+    page_obj = pager["page"]
     return render(
         request,
         "studio/imports/list.html",
@@ -72,6 +73,7 @@ def import_batch_list(request):
             "dry_run_filter": dry_run,
             "source_options": IMPORT_BATCH_SOURCE_CHOICES,
             "scheduled_imports": _scheduled_import_context(),
+            **pager,
         },
     )
 

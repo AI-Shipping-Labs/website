@@ -73,8 +73,8 @@
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_plan_detail' plan_id=plan.pk as plan_detail_url %}
             {% url 'studio_plan_edit' plan_id=plan.pk as plan_edit_url %}
-            {% studio_list_action plan_detail_url 'View plan' 'primary' %}
-            {% studio_list_action plan_edit_url 'Edit' 'secondary' %}
+            {% studio_list_action plan_edit_url 'Edit' 'primary' %}
+            {% studio_list_action plan_detail_url 'View plan' 'secondary' %}
           </div>
         </td>
       </tr>
@@ -85,6 +85,9 @@
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="plan-list-pager" %}
+{% endif %}
 {% else %}
   {% url 'studio_plan_create' as plans_create_url %}
   {% studio_empty_state 'fresh' entity_label='plan' entity_label_plural='plans' create_url=plans_create_url %}

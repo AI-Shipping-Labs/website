@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 
 from django.contrib import messages
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone as dj_timezone
@@ -58,6 +59,7 @@ from notifications.services.slack_announcements import (
 )
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
+from studio.utils import studio_pagination_context
 from studio.views.events import (
     _default_timezone_for,
     _should_autodetect_tz,
@@ -114,9 +116,20 @@ def _generate_unique_slug(base, used=None):
 @staff_required
 def event_series_list(request):
     """List all event series."""
+    search = (request.GET.get('q') or '').strip()
     series_list = EventSeries.objects.all().order_by('-created_at')
+    if search:
+        series_list = series_list.filter(
+            Q(name__icontains=search)
+            | Q(slug__icontains=search)
+            | Q(cadence__icontains=search)
+            | Q(timezone__icontains=search)
+        )
+    pager = studio_pagination_context(request, series_list)
     return render(request, 'studio/event_series/list.html', {
-        'series_list': series_list,
+        'series_list': pager['page'].object_list,
+        'search': search,
+        **pager,
     })
 
 

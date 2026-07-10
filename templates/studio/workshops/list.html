@@ -53,7 +53,7 @@
         <td class="px-6 py-4" data-label="Status">
           {% studio_status_badge workshop.status workshop.get_status_display %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ workshop.date|operator_date }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap" data-label="Date">{{ workshop.date|operator_date }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Skill level" data-testid="studio-workshop-skill-level">{% if workshop.skill_level %}{{ workshop.skill_level_label }}{% else %}&mdash;{% endif %}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Landing gate">{{ workshop.get_landing_required_level_display }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Pages gate">{{ workshop.get_pages_required_level_display }}</td>
@@ -84,6 +84,9 @@
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="workshop-list-pager" %}
+{% endif %}
 {% else %}
   {# Workshops are sync-managed (PM ruling on #756): no "New workshop" CTA on fresh-zero. #}
   {% studio_empty_state 'fresh' entity_label='workshop' entity_label_plural='workshops' testid_suffix='workshops-empty-state' %}

@@ -56,7 +56,7 @@
              aria-label="{{ event.platform_label }}"
              title="{{ event.platform_label }}"></i>
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date" data-testid="event-row-date">{{ event.start_datetime_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap" data-label="Date" data-testid="event-row-date">{{ event.start_datetime_display }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_event_edit' event_id=event.pk as event_edit_url %}
           <div class="{% studio_list_class 'action_group' %}">

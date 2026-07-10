@@ -54,7 +54,7 @@
     <h2 class="text-lg font-semibold text-foreground mb-3" data-testid="event-section-heading-past">Past ({{ past_count }})</h2>
     {% include "studio/events/_list_table.html" with events=past_events %}
     {% if show_pager %}
-      {% include "studio/events/_past_pager.html" %}
+      {% include "studio/includes/list_pager.html" with pager_testid_prefix="event-past-list-pager" %}
     {% endif %}
   </section>
   {% elif search or status_filter %}
@@ -82,6 +82,9 @@
   <section class="mb-10" data-testid="event-section-upcoming">
     <h2 class="text-lg font-semibold text-foreground mb-3" data-testid="event-section-heading-upcoming">Upcoming ({{ upcoming_count }})</h2>
     {% include "studio/events/_list_table.html" with events=upcoming_events %}
+    {% if show_pager %}
+      {% include "studio/includes/list_pager.html" with pager_testid_prefix="event-upcoming-list-pager" %}
+    {% endif %}
   </section>
   {% endif %}
 {% elif search or status_filter %}

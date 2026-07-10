@@ -16,7 +16,9 @@
   </a>
 </div>
 
-{% if sprints %}
+{% studio_list_filter search "" "Search sprints..." None False %}
+
+{% if sprints or search %}
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="w-full">
     <thead class="bg-secondary">
@@ -40,7 +42,7 @@
         <td class="px-6 py-4">
           {% studio_status_badge sprint.status sprint.get_status_display %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.start_date|operator_date }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">{{ sprint.start_date|operator_date }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.duration_weeks }} weeks</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.plan_count }}</td>
         <td class="px-6 py-4 text-sm" data-testid="sprint-list-pending-count">
@@ -56,15 +58,21 @@
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_sprint_detail' sprint_id=sprint.pk as sprint_detail_url %}
             {% url 'studio_sprint_edit' sprint_id=sprint.pk as sprint_edit_url %}
-            {% studio_list_action sprint_detail_url 'View' 'primary' %}
-            {% studio_list_action sprint_edit_url 'Edit' 'secondary' %}
+            {% studio_list_action sprint_edit_url 'Edit' 'primary' %}
+            {% studio_list_action sprint_detail_url 'View' 'secondary' %}
           </div>
         </td>
       </tr>
+      {% empty %}
+        {% url 'studio_sprint_list' as sprints_clear_url %}
+        {% studio_empty_state 'filter' entity_label='sprint' entity_label_plural='sprints' clear_url=sprints_clear_url colspan=7 %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="sprint-list-pager" %}
+{% endif %}
 {% else %}
   {% url 'studio_sprint_create' as sprints_create_url %}
   {% studio_empty_state 'fresh' entity_label='sprint' entity_label_plural='sprints' create_url=sprints_create_url %}

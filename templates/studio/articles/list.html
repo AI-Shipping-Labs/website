@@ -41,7 +41,7 @@
           {% endif %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Author">{{ article.author|default:"-" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ article.date|operator_date }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap" data-label="Date">{{ article.date|operator_date }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_article_edit' article_id=article.pk as article_edit_url %}
           <div class="{% studio_list_class 'action_group' %}">
@@ -65,6 +65,9 @@
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="article-list-pager" %}
+{% endif %}
 {% else %}
   {% studio_empty_state 'fresh' entity_label='article' entity_label_plural='articles' %}
 {% endif %}

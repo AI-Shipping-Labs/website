@@ -16,19 +16,7 @@
   {% endif %}
 </div>
 
-<!-- Filters -->
-<div class="flex items-center space-x-4 mb-6">
-  <form method="get" class="flex items-center space-x-4 flex-1">
-    <input type="text" name="q" value="{{ search }}" placeholder="Search projects..."
-           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-64 focus:outline-none focus:ring-1 focus:ring-accent">
-    <select name="status" onchange="this.form.submit()" class="studio-select bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <option value="">All statuses</option>
-      <option value="pending_review" {% if status_filter == 'pending_review' %}selected{% endif %}>Pending Review</option>
-      <option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option>
-    </select>
-    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
-  </form>
-</div>
+{% studio_list_filter search status_filter "Search projects..." "project" %}
 
 {% if projects or search or status_filter %}
 <!-- Project List -->
@@ -54,7 +42,7 @@
           {% studio_status_badge project.status project.get_status_display %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Author">{{ project.author|default:"-" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ project.date|operator_date }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap" data-label="Date">{{ project.date|operator_date }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_project_review' project_id=project.pk as project_review_url %}
           <div class="{% studio_list_class 'action_group' %}">
@@ -74,6 +62,9 @@
     </tbody>
   </table>
 </div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="project-list-pager" %}
+{% endif %}
 {% else %}
   {% studio_empty_state 'fresh' entity_label='project' entity_label_plural='projects' %}
 {% endif %}

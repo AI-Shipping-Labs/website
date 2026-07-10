@@ -62,6 +62,7 @@ from plans.services import (
 )
 from studio.decorators import staff_required
 from studio.services.plan_editor import build_plan_editor_context
+from studio.utils import studio_pagination_context
 from studio.views.impersonate import impersonate_as
 
 logger = logging.getLogger(__name__)
@@ -104,13 +105,15 @@ def plan_list(request):
             | Q(member__first_name__icontains=search)
             | Q(member__last_name__icontains=search)
         )
+    pager = studio_pagination_context(request, plans)
 
     return render(request, 'studio/plans/list.html', {
-        'plans': plans,
+        'plans': pager['page'].object_list,
         'sprints': Sprint.objects.order_by('-start_date'),
         'sprint_filter_id': sprint_filter_id,
         'member_filter_id': member_filter_id,
         'search': search,
+        **pager,
     })
 
 

@@ -9,7 +9,11 @@ Context:
     with provider/label/name/configure_url/callback_url/scopes/client_id/
     secret/is_configured.
 {% endcomment %}
-<div class="bg-card border border-border rounded-lg p-6" id="auth-{{ provider.provider }}">
+<div class="bg-card border border-border rounded-lg p-6"
+     id="auth-{{ provider.provider }}"
+     data-settings-card
+     data-settings-card-type="auth"
+     data-card-search-text="{{ provider.label }} {{ provider.name }} {{ provider.provider }}">
   <!-- Card header: label + Configured/Not configured badge -->
   <div class="flex items-center justify-between mb-4">
     <div class="flex items-center space-x-3">

@@ -75,9 +75,9 @@ class SettingsSourceBadgeTest(TestCase):
         ``</div>`` because the field block contains several inner divs.
         """
         pattern = (
-            r'<div data-field-key="' + re.escape(key) + r'">'
+            r'<div[^>]*data-field-key="' + re.escape(key) + r'"[^>]*>'
             r'(.*?)'
-            r'(?=<div data-field-key=|<div class="mt-6 flex justify-end">)'
+            r'(?=<div[^>]*data-field-key=|<div class="mt-6 flex justify-end")'
         )
         match = re.search(pattern, body, re.DOTALL)
         self.assertIsNotNone(match, f'Field block for {key} not found in dashboard HTML')

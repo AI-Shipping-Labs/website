@@ -7,7 +7,11 @@ version it replaced.
 Context:
   group: dict from `_build_group_context` with name/label/fields/status.
 {% endcomment %}
-<div class="bg-card border border-border rounded-lg p-6" id="integration-{{ group.name }}">
+<div class="bg-card border border-border rounded-lg p-6"
+     id="integration-{{ group.name }}"
+     data-settings-card
+     data-settings-card-type="integration"
+     data-card-search-text="{{ group.label }} {{ group.name }}">
   <!-- Group header -->
   <div class="flex items-center justify-between mb-4">
     <div class="flex items-center space-x-3">
@@ -28,7 +32,9 @@ Context:
     {% csrf_token %}
     <div class="space-y-4">
       {% for field in group.fields %}
-      <div data-field-key="{{ field.key }}">
+      <div data-settings-field
+           data-field-key="{{ field.key }}"
+           data-field-search-text="{{ field.key }} {{ field.description }}">
         <div class="flex items-center justify-between mb-1 gap-2">
           <div class="flex items-center gap-1.5 min-w-0">
             <label for="field-{{ field.key }}" class="block text-sm font-medium text-gray-300">{{ field.description }}</label>

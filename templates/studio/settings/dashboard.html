@@ -28,21 +28,52 @@
 
 {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 
-<nav aria-label="Settings sections" class="sticky top-0 z-20 mb-8 border-y border-border bg-background/95 py-3 backdrop-blur" data-testid="settings-section-nav">
-  <div class="flex gap-2 overflow-x-auto">
-    {% for section in settings_sections %}
-      <a href="#{{ section.id }}"
-         data-section-nav-item="{{ section.id }}"
-         class="settings-section-link inline-flex whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent">
-        {{ section.label }}
-      </a>
-    {% endfor %}
+<div class="sticky top-0 z-20 mb-8 space-y-3 border-y border-border bg-background/95 py-3 backdrop-blur">
+  <div>
+    <label for="settings-key-filter" class="mb-1 block text-sm font-medium text-foreground">Filter settings</label>
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <input id="settings-key-filter"
+             type="search"
+             autocomplete="off"
+             placeholder="Search by key, description, section, or provider"
+             data-settings-filter
+             class="w-full rounded-lg border border-border bg-gray-900 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent">
+      <button type="button"
+              data-settings-filter-clear
+              class="hidden shrink-0 rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent">
+        Clear
+      </button>
+    </div>
+    <p class="mt-1 text-xs text-muted-foreground" data-settings-filter-status aria-live="polite"></p>
   </div>
-</nav>
+  <nav aria-label="Settings sections" data-testid="settings-section-nav">
+    <div class="flex gap-2 overflow-x-auto" role="tablist" aria-label="Settings sections">
+      {% for section in settings_sections %}
+        <a href="#{{ section.id }}"
+           id="settings-section-tab-{{ section.id }}"
+           role="tab"
+           aria-controls="{{ section.id }}"
+           aria-selected="false"
+           data-section-nav-item="{{ section.id }}"
+           class="settings-section-link inline-flex whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent">
+          {{ section.label }}
+        </a>
+      {% endfor %}
+    </div>
+  </nav>
+</div>
 
-<div class="space-y-12">
+<div class="space-y-12" data-settings-sections>
   {% for section in settings_sections %}
-    <section id="{{ section.id }}" class="scroll-mt-24" data-settings-section="{{ section.id }}" tabindex="-1">
+    <section id="{{ section.id }}"
+             class="scroll-mt-32"
+             data-settings-section="{{ section.id }}"
+             data-section-label="{{ section.label }}"
+             data-section-search-text="{{ section.label }} {{ section.id }} {{ section.description }}"
+             role="tabpanel"
+             aria-labelledby="settings-section-tab-{{ section.id }}"
+             tabindex="-1"
+             {% if not forloop.first %}hidden{% endif %}>
       <div class="mb-4 border-b border-border pb-3">
         <h2 class="text-xl font-semibold text-foreground">{{ section.label }}</h2>
         <p class="text-sm text-muted-foreground mt-1">{{ section.description }}</p>
@@ -58,6 +89,12 @@
       </div>
     </section>
   {% endfor %}
+</div>
+
+<div class="hidden rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground"
+     data-settings-filter-empty
+     role="status">
+  No settings match your filter. Clear the filter to return to the active section.
 </div>
 
 <script>
@@ -106,22 +143,199 @@ function copyCallbackUrl(btn) {
 }
 
 function updateSettingsSectionNav() {
-  var currentId = window.location.hash ? window.location.hash.substring(1) : 'auth';
-  var target = currentId ? document.getElementById(currentId) : null;
+  var activeSectionId = getSectionIdFromHash();
+  setActiveSection(activeSectionId, {scrollToHash: false});
+}
+
+function normalizeSettingsSearch(value) {
+  return (value || '').toString().toLowerCase();
+}
+
+function settingsSections() {
+  return Array.prototype.slice.call(
+    document.querySelectorAll('[data-settings-section]')
+  );
+}
+
+function getDefaultSettingsSectionId() {
+  var firstSection = document.querySelector('[data-settings-section]');
+  return firstSection ? firstSection.getAttribute('data-settings-section') : 'auth';
+}
+
+function getSectionIdFromHash() {
+  var rawHash = window.location.hash ? window.location.hash.substring(1) : '';
+  var hash = rawHash ? decodeURIComponent(rawHash) : '';
+  var target = hash ? document.getElementById(hash) : null;
+  if (!target && hash) {
+    target = document.getElementById('integration-' + hash);
+  }
   var targetSection = target ? target.closest('[data-settings-section]') : null;
   if (targetSection) {
-    currentId = targetSection.getAttribute('data-settings-section');
+    return targetSection.getAttribute('data-settings-section');
   }
+  if (hash) {
+    var directSection = settingsSections().find(function(section) {
+      return section.getAttribute('data-settings-section') === hash;
+    });
+    if (directSection) {
+      return directSection.getAttribute('data-settings-section');
+    }
+  }
+  return getDefaultSettingsSectionId();
+}
+
+function updateSectionNavState(activeSectionId) {
   document.querySelectorAll('[data-section-nav-item]').forEach(function(link) {
-    var active = link.getAttribute('data-section-nav-item') === currentId;
-    link.setAttribute('aria-current', active ? 'true' : 'false');
+    var active = link.getAttribute('data-section-nav-item') === activeSectionId;
+    link.setAttribute('aria-current', active ? 'page' : 'false');
+    link.setAttribute('aria-selected', active ? 'true' : 'false');
     link.classList.toggle('bg-muted', active);
     link.classList.toggle('text-foreground', active);
     link.classList.toggle('text-muted-foreground', !active);
   });
 }
 
-window.addEventListener('hashchange', updateSettingsSectionNav);
-document.addEventListener('DOMContentLoaded', updateSettingsSectionNav);
+function setActiveSection(activeSectionId, options) {
+  var settingsFilter = document.querySelector('[data-settings-filter]');
+  if (settingsFilter && settingsFilter.value.trim()) {
+    updateSectionNavState(activeSectionId);
+    return;
+  }
+
+  settingsSections().forEach(function(section) {
+    var sectionId = section.getAttribute('data-settings-section');
+    section.hidden = sectionId !== activeSectionId;
+    section.querySelectorAll('[data-settings-card], [data-settings-field]').forEach(function(el) {
+      el.hidden = false;
+    });
+  });
+
+  var emptyState = document.querySelector('[data-settings-filter-empty]');
+  if (emptyState) {
+    emptyState.classList.add('hidden');
+  }
+
+  var status = document.querySelector('[data-settings-filter-status]');
+  if (status) {
+    status.textContent = '';
+  }
+
+  updateSectionNavState(activeSectionId);
+
+  if (options && options.scrollToHash && window.location.hash) {
+    var hashTarget = decodeURIComponent(window.location.hash.substring(1));
+    var target = document.getElementById(hashTarget) || document.getElementById('integration-' + hashTarget);
+    if (target) {
+      window.setTimeout(function() {
+        target.scrollIntoView({block: 'start'});
+      }, 0);
+    }
+  }
+}
+
+function applySettingsFilter() {
+  var input = document.querySelector('[data-settings-filter]');
+  if (!input) { return; }
+
+  var query = input.value.trim();
+  var normalizedQuery = normalizeSettingsSearch(query);
+  var clearButton = document.querySelector('[data-settings-filter-clear]');
+  var emptyState = document.querySelector('[data-settings-filter-empty]');
+  var status = document.querySelector('[data-settings-filter-status]');
+
+  if (clearButton) {
+    clearButton.classList.toggle('hidden', !query);
+  }
+
+  if (!normalizedQuery) {
+    if (emptyState) {
+      emptyState.classList.add('hidden');
+    }
+    setActiveSection(getSectionIdFromHash(), {scrollToHash: false});
+    return;
+  }
+
+  var matchingSections = 0;
+  var matchingCards = 0;
+
+  settingsSections().forEach(function(section) {
+    var sectionSearchText = normalizeSettingsSearch(section.dataset.sectionSearchText);
+    var sectionMatches = sectionSearchText.indexOf(normalizedQuery) !== -1;
+    var sectionHasMatches = false;
+
+    section.querySelectorAll('[data-settings-card]').forEach(function(card) {
+      var cardSearchText = normalizeSettingsSearch(card.dataset.cardSearchText);
+      var cardMatches = cardSearchText.indexOf(normalizedQuery) !== -1;
+      var fieldMatches = 0;
+
+      card.querySelectorAll('[data-settings-field]').forEach(function(field) {
+        var fieldSearchText = normalizeSettingsSearch(field.dataset.fieldSearchText);
+        var fieldMatchesQuery = fieldSearchText.indexOf(normalizedQuery) !== -1;
+        field.hidden = !(sectionMatches || cardMatches || fieldMatchesQuery);
+        if (fieldMatchesQuery) {
+          fieldMatches += 1;
+        }
+      });
+
+      var hasSettingsFields = card.querySelectorAll('[data-settings-field]').length > 0;
+      var showCard = sectionMatches || cardMatches || fieldMatches > 0;
+      if (!hasSettingsFields) {
+        showCard = sectionMatches || cardMatches;
+      }
+
+      card.hidden = !showCard;
+      if (showCard) {
+        sectionHasMatches = true;
+        matchingCards += 1;
+      }
+    });
+
+    section.hidden = !sectionHasMatches;
+    if (sectionHasMatches) {
+      matchingSections += 1;
+    }
+  });
+
+  if (emptyState) {
+    emptyState.classList.toggle('hidden', matchingSections > 0);
+  }
+  if (status) {
+    if (matchingSections > 0) {
+      status.textContent = 'Showing ' + matchingCards + ' matching card' + (matchingCards === 1 ? '' : 's') + ' across ' + matchingSections + ' section' + (matchingSections === 1 ? '' : 's') + '.';
+    } else {
+      status.textContent = 'No settings match "' + query + '".';
+    }
+  }
+}
+
+window.addEventListener('hashchange', function() {
+  var input = document.querySelector('[data-settings-filter]');
+  if (input && input.value.trim()) {
+    input.value = '';
+  }
+  setActiveSection(getSectionIdFromHash(), {scrollToHash: true});
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('[data-section-nav-item]').forEach(function(link) {
+    link.id = link.id || 'settings-section-tab-' + link.getAttribute('data-section-nav-item');
+  });
+
+  var input = document.querySelector('[data-settings-filter]');
+  if (input) {
+    input.addEventListener('input', applySettingsFilter);
+  }
+
+  var clearButton = document.querySelector('[data-settings-filter-clear]');
+  if (clearButton && input) {
+    clearButton.addEventListener('click', function() {
+      input.value = '';
+      input.focus();
+      applySettingsFilter();
+    });
+  }
+
+  setActiveSection(getSectionIdFromHash(), {scrollToHash: true});
+});
 </script>
 {% endblock %}

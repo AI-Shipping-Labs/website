@@ -400,16 +400,12 @@ class TestUserDetailLayout586:
         assert empty_el.is_visible()
         assert "Not linked" in empty_el.inner_text()
 
-        # Edit in Django admin link points at the user's change page.
-        admin_link = page.locator(
+        assert page.locator(
             '[data-testid="user-detail-slack-id-admin-link"]'
-        )
-        assert admin_link.is_visible()
-        assert "Edit in Django admin" in admin_link.inner_text()
-        assert (
-            admin_link.get_attribute("href")
-            == f"/admin/accounts/user/{member_pk}/change/"
-        )
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="studio-open-in-admin"]'
+        ).count() == 1
         context.close()
 
     # ---------------- Scenario 7 --------------------------------------------

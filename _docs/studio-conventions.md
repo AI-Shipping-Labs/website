@@ -41,6 +41,22 @@ Newsletter and Slack pills keep their existing colours.
 ## Operations surfaces
 
 Operations is the sidebar group that hosts read-only audit logs and
-infrastructure-facing tooling. Current entries: Content sync, Worker,
-SES events (`/studio/ses-events/` — read-only browser over
-`email_app.SesEvent`, see issue #763), Redirects, Settings, API tokens.
+infrastructure-facing tooling. Current root entries:
+
+- Content sync (`/studio/sync/`)
+- Worker (`/studio/worker/`)
+- SES events (`/studio/ses-events/` — read-only browser over
+  `email_app.SesEvent`, see issue #763)
+- Redirects (`/studio/redirects/`)
+- Triggers, a nested group that keeps the existing trigger pages at their
+  current URLs:
+  - Trigger subscriptions (`/studio/triggers/subscriptions/`)
+  - Event widgets (`/studio/triggers/widgets/`)
+  - Event emissions (`/studio/triggers/emissions/`)
+  - Webhook deliveries (`/studio/triggers/deliveries/`)
+- Settings (`/studio/settings/`)
+- API docs (`/api/docs`, opens in a new tab)
+
+API tokens (`/studio/api-tokens/`) intentionally remains superuser-only and
+is hidden from non-superuser staff. The same is true for the People section's
+New user link.

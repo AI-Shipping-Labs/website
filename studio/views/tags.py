@@ -13,11 +13,11 @@ detail page) so the operator stays in context.
 from urllib.parse import urlsplit
 
 from django.contrib import messages
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from accounts.utils.tags import delete_tag, rename_tag
+from accounts.utils.tags import count_users_with_tag, delete_tag, list_all_tags, rename_tag
 from studio.decorators import staff_required
 
 
@@ -28,6 +28,12 @@ def _safe_redirect_url(request):
     referer points to a different host (defence-in-depth against open
     redirects, even though staff_required already gates the surface).
     """
+    explicit_next = request.POST.get('next') or ''
+    if explicit_next:
+        parsed_next = urlsplit(explicit_next)
+        if not parsed_next.netloc:
+            return explicit_next
+
     referer = request.META.get('HTTP_REFERER', '')
     if not referer:
         return reverse('studio_user_list')
@@ -46,6 +52,23 @@ def _safe_redirect_url(request):
     if parsed.fragment:
         relative = f'{relative}#{parsed.fragment}'
     return relative or reverse('studio_user_list')
+
+
+@staff_required
+def tag_list(request):
+    """List the normalized contact-tag namespace for staff operators."""
+    tags = [
+        {
+            'name': name,
+            'user_count': count_users_with_tag(name),
+        }
+        for name in list_all_tags()
+    ]
+    return render(
+        request,
+        'studio/tags/list.html',
+        {'tags': tags},
+    )
 
 
 @staff_required

@@ -1,0 +1,91 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Tags{% endblock %}
+
+{% block studio_content %}
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Tags</h1>
+    <p class="text-muted-foreground mt-1">Manage normalized contact tags across Studio users.</p>
+  </div>
+  <a href="{% url 'studio_user_list' %}"
+     class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2">
+    <i data-lucide="users" class="h-4 w-4"></i>
+    <span>Users</span>
+  </a>
+</div>
+
+{% if tags %}
+<div class="{% studio_list_class 'wrapper' %}" data-testid="studio-tags-list">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tag</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Users</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rename</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Delete</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for tag in tags %}
+      <tr class="hover:bg-secondary/50 transition-colors" data-testid="studio-tag-row" data-tag="{{ tag.name }}">
+        <td class="px-6 py-4 align-top">
+          <a href="{% url 'studio_user_list' %}?tag={{ tag.name|urlencode }}"
+             class="font-mono text-sm text-accent hover:underline"
+             data-testid="studio-tag-name">{{ tag.name }}</a>
+        </td>
+        <td class="px-6 py-4 align-top">
+          <a href="{% url 'studio_user_list' %}?tag={{ tag.name|urlencode }}"
+             class="text-sm text-foreground hover:text-accent"
+             data-testid="studio-tag-user-count">{{ tag.user_count }} user{{ tag.user_count|pluralize }}</a>
+        </td>
+        <td class="px-6 py-4 align-top">
+          <form method="post"
+                action="{% url 'studio_tag_rename' tag.name %}"
+                class="flex flex-col gap-2 sm:flex-row sm:items-center"
+                data-testid="studio-tag-rename-form">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'studio_tag_list' %}">
+            <label for="tag-rename-{{ forloop.counter }}" class="sr-only">Rename {{ tag.name }}</label>
+            <input id="tag-rename-{{ forloop.counter }}"
+                   type="text"
+                   name="new"
+                   value="{{ tag.name }}"
+                   class="w-full sm:w-48 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                   data-testid="studio-tag-rename-input">
+            <button type="submit" class="{% studio_action_class 'secondary' %}">Rename</button>
+          </form>
+        </td>
+        <td class="px-6 py-4 align-top {% studio_list_class 'action_cell' %}">
+          <form method="post"
+                action="{% url 'studio_tag_delete' tag.name %}"
+                class="{% studio_list_class 'action_form' %}"
+                data-testid="studio-tag-delete-form"
+                onsubmit="return confirm('Delete tag {{ tag.name|escapejs }}? This removes it from {{ tag.user_count }} user{{ tag.user_count|pluralize }} and cannot be undone.');">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'studio_tag_list' %}">
+            <button type="submit" class="{% studio_action_class 'destructive' %}">Delete</button>
+          </form>
+          <p class="mt-2 text-xs text-muted-foreground" data-testid="studio-tag-delete-copy">
+            Removes this tag from {{ tag.user_count }} user{{ tag.user_count|pluralize }}. Cannot be undone.
+          </p>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="bg-card border border-border rounded-lg p-12 text-center" data-testid="studio-tags-empty">
+  <i data-lucide="tag" class="mx-auto h-10 w-10 text-muted-foreground/60"></i>
+  <p class="mt-4 text-sm text-muted-foreground">No contact tags exist yet.</p>
+  <p class="mt-2 text-xs text-muted-foreground">Add tags from a user detail page; they will appear here for global rename and delete actions.</p>
+  <a href="{% url 'studio_user_list' %}"
+     class="mt-4 inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    <i data-lucide="users" class="h-4 w-4"></i>
+    <span>Find users</span>
+  </a>
+</div>
+{% endif %}
+{% endblock %}

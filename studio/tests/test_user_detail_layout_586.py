@@ -14,8 +14,9 @@ Locks the structural contract the issue spec lays out:
 - ``Grant temporary upgrade`` is a top-level section card with its own
   ``<h2>`` between Membership and Tags.
 - Slack ID row is read-only — no input, no save button, no form posting
-  to ``studio_user_slack_id_set``. When the ID is missing the row shows
-  ``Not linked`` plus an ``Edit in Django admin`` link.
+  to ``studio_user_slack_id_set``. When the ID is missing the row says
+  ``Not linked``; the action-row ``Open in Django admin`` link is the only
+  Django admin escape hatch.
 - The ``studio_user_slack_id_set`` URL stays defined and reachable from
   Django admin / scripts (template just stops surfacing it).
 """
@@ -312,21 +313,20 @@ class SlackIdReadOnlyTest(_Base586):
         # Helper copy about the U01ABC123 placeholder is gone.
         self.assertNotIn('U01ABC123', body)
 
-    def test_unlinked_row_renders_admin_edit_link(self):
+    def test_unlinked_row_does_not_render_admin_edit_link(self):
         member = self._make_member('slack-empty@test.com', tier=self.free)
         response = self.client.get(f'/studio/users/{member.pk}/')
         self.assertContains(
             response, 'data-testid="user-detail-slack-id-empty"',
         )
         self.assertContains(response, 'Not linked')
-        # Admin edit link points at the canonical Django admin change page.
-        self.assertContains(
+        self.assertNotContains(
             response, 'data-testid="user-detail-slack-id-admin-link"',
         )
-        self.assertContains(response, 'Edit in Django admin')
-        self.assertContains(
-            response,
-            f'href="/admin/accounts/user/{member.pk}/change/"',
+        self.assertNotContains(response, 'Edit in Django admin')
+        self.assertEqual(
+            response.content.decode().count('data-testid="studio-open-in-admin"'),
+            1,
         )
 
     def test_linked_row_does_not_render_admin_edit_link(self):

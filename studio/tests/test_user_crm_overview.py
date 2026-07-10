@@ -80,18 +80,14 @@ class UserListIdentityLinkTest(TestCase):
         self.assertIn('data-testid="user-view-link"', row_html)
         self.assertIn(f'href="/studio/users/{self.target.pk}/"', row_html)
 
-    def test_login_as_remains_a_post_action_not_a_get_link(self):
-        # AC: impersonation must stay POST-only (no unsafe GET). The
-        # login-as control is rendered as a button inside a POST form
-        # against the impersonate endpoint.
+    def test_login_as_is_not_rendered_on_list_rows(self):
+        # Issue #1198: list rows stay focused on View; contextual
+        # impersonation lives on the detail page.
         response = self.client.get('/studio/users/?q=target')
         row_html = _row_html(response.content.decode(), self.target.pk)
-        self.assertIn('method="post"', row_html.lower())
-        self.assertIn(
-            f'action="/studio/impersonate/{self.target.pk}/"',
-            row_html,
-        )
-        self.assertIn('Login as', row_html)
+        self.assertNotIn('method="post"', row_html.lower())
+        self.assertNotIn(f'/studio/impersonate/{self.target.pk}/', row_html)
+        self.assertNotIn('Login as', row_html)
 
 
 class UserDetailHeaderActionsTest(TestCase):

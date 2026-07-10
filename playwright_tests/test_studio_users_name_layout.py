@@ -639,11 +639,10 @@ class TestStudioUsersNameLayout:
         assert 'Avery Garcia' in user_cell_text
         assert 'avery.mobile@example.com' in user_cell_text
 
-        # The Actions cell still has both buttons.
+        # The Actions cell stays focused on the View action.
         view = row.locator('[data-testid="user-view-link"]')
-        login_as = row.get_by_role('button', name='Login as')
         assert view.is_visible()
-        assert login_as.is_visible()
+        assert row.get_by_role('button', name='Login as').count() == 0
 
         _assert_no_horizontal_overflow(page)
         _capture_screenshot(page, 'mobile-stacked-cards')

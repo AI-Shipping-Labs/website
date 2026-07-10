@@ -249,14 +249,14 @@ class TestStudioUserSlackId:
 
     # ---------------- Scenario 4 --------------------------------------------
 
-    def test_unlinked_row_offers_django_admin_path(
+    def test_unlinked_row_does_not_offer_second_django_admin_path(
         self, django_server, browser,
     ):
         # Issue #586 removed the inline edit form from the user detail
         # page. When the Slack ID is missing, the row now shows
-        # "Not linked" plus an "Edit in Django admin" link so operators
-        # still have a one-click path forward. The slack-id POST
-        # endpoint stays callable from Django admin / scripts.
+        # "Not linked". Issue #1198 keeps the action-row admin link as
+        # the only Django admin escape hatch. The slack-id POST endpoint
+        # stays callable from Django admin / scripts.
         staff_email = "slack-manual-admin@test.com"
         _create_staff_user(staff_email)
         _reset_users_and_settings(staff_email)
@@ -270,19 +270,14 @@ class TestStudioUserSlackId:
             wait_until="domcontentloaded",
         )
 
-        # Empty state: "Not linked" pill + "Edit in Django admin" link
-        # pointing at the canonical change page.
+        # Empty state: "Not linked" pill only; no inline admin link.
         assert page.locator(
             '[data-testid="user-detail-slack-id-empty"]'
         ).is_visible()
-        admin_link = page.locator(
+        assert page.locator(
             '[data-testid="user-detail-slack-id-admin-link"]'
-        )
-        assert admin_link.is_visible()
-        assert (
-            admin_link.get_attribute("href")
-            == f"/admin/accounts/user/{member_pk}/change/"
-        )
+        ).count() == 0
+        assert page.locator('[data-testid="studio-open-in-admin"]').count() == 1
 
         # The inline edit form, input, and submit must all be gone.
         assert page.locator(

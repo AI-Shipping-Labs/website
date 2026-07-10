@@ -313,10 +313,6 @@
         <td class="px-3 py-1.5 align-top {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %} flex-nowrap" data-testid="user-row-actions">
             <a href="{% url 'studio_user_detail' row.pk %}" class="{% studio_action_class 'primary' %}" data-testid="user-view-link">View</a>
-            <form method="post" action="{% url 'studio_impersonate' row.pk %}" class="{% studio_list_class 'action_form' %}">
-              {% csrf_token %}
-              <button type="submit" class="{% studio_action_class 'secondary' %}" title="Login as this user">Login as</button>
-            </form>
           </div>
         </td>
       </tr>

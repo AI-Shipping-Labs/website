@@ -140,7 +140,7 @@ class TestStudioActionCells:
         page.wait_for_url(f"**/studio/articles/{article.pk}/edit")
         context.close()
 
-    def test_user_secondary_impersonation_action_is_keyboard_reachable(
+    def test_user_row_only_exposes_view_action(
         self, django_server, browser,
     ):
         from accounts.models import User
@@ -163,13 +163,13 @@ class TestStudioActionCells:
         )
 
         row = page.locator("tr", has_text="target-action@test.com").first
-        assert row.locator("[data-testid='user-view-link']").is_visible()
-        button = row.get_by_role("button", name="Login as")
-        assert button.is_visible()
-        assert f"/studio/impersonate/{target.pk}/" in page.content()
+        view = row.locator("[data-testid='user-view-link']")
+        assert view.is_visible()
+        assert row.get_by_role("button", name="Login as").count() == 0
+        assert f"/studio/impersonate/{target.pk}/" not in page.content()
 
-        button.focus()
-        assert page.evaluate("document.activeElement.textContent.trim()") == "Login as"
+        view.focus()
+        assert page.evaluate("document.activeElement.textContent.trim()") == "View"
         context.close()
 
     def test_worker_destructive_and_async_actions_have_clear_confirm(

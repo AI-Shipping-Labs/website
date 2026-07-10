@@ -72,6 +72,131 @@ def _set_tier(email, tier_slug):
 
 
 @pytest.mark.django_db(transaction=True)
+class TestStudioTagsPage:
+    """Staff operator discovers and uses the global Tags page."""
+
+    @pytest.mark.core
+    def test_tags_page_lists_filters_and_renames(self, django_server, browser):
+        _ensure_tiers()
+        staff_email = "tag-page-admin@test.com"
+        _create_staff_user(staff_email)
+        _clear_users_except_staff(staff_email)
+        for email, tags in (
+            ("alice@test.com", ["paid-user", "beta"]),
+            ("bob@test.com", ["paid-user"]),
+            ("carol@test.com", ["early-adopter"]),
+        ):
+            _create_user(email)
+            _set_tags(email, tags)
+
+        context = _auth_context(browser, staff_email)
+        page = context.new_page()
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+        page.locator('[aria-controls="studio-section-people"]').click()
+        page.locator('#studio-section-people a[href="/studio/tags/"]').click()
+        page.wait_for_load_state("domcontentloaded")
+        assert page.url.endswith("/studio/tags/")
+
+        paid_row = page.locator('[data-testid="studio-tag-row"][data-tag="paid-user"]')
+        assert paid_row.is_visible()
+        assert "2 users" in paid_row.locator(
+            '[data-testid="studio-tag-user-count"]'
+        ).inner_text()
+
+        paid_row.locator('[data-testid="studio-tag-name"]').click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "tag=paid-user" in page.url
+        assert "alice@test.com" in page.content()
+        assert "bob@test.com" in page.content()
+        assert "carol@test.com" not in page.content()
+
+        page.goto(f"{django_server}/studio/tags/", wait_until="domcontentloaded")
+        paid_row = page.locator('[data-testid="studio-tag-row"][data-tag="paid-user"]')
+        paid_row.locator('[data-testid="studio-tag-rename-input"]').fill("Paid")
+        paid_row.locator('button:text-is("Rename")').click()
+        page.wait_for_load_state("domcontentloaded")
+
+        assert page.url.endswith("/studio/tags/")
+        assert 'Renamed "paid-user" to "paid" on 2 user(s).' in page.content()
+        assert page.locator(
+            '[data-testid="studio-tag-row"][data-tag="paid-user"]'
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="studio-tag-row"][data-tag="paid"]'
+        ).count() == 1
+
+        context.close()
+
+    @pytest.mark.core
+    def test_tags_page_delete_and_empty_state(self, django_server, browser):
+        _ensure_tiers()
+        staff_email = "tag-page-delete@test.com"
+        _create_staff_user(staff_email)
+        _clear_users_except_staff(staff_email)
+        for email in ("alice@test.com", "bob@test.com"):
+            _create_user(email)
+            _set_tags(email, ["early-adopter"])
+
+        context = _auth_context(browser, staff_email)
+        page = context.new_page()
+        page.goto(f"{django_server}/studio/tags/", wait_until="domcontentloaded")
+
+        row = page.locator('[data-testid="studio-tag-row"][data-tag="early-adopter"]')
+        assert "Removes this tag from 2 users. Cannot be undone." in row.locator(
+            '[data-testid="studio-tag-delete-copy"]'
+        ).inner_text()
+
+        dialog_messages = []
+
+        def accept_delete(dialog):
+            dialog_messages.append(dialog.message)
+            dialog.accept()
+
+        page.once("dialog", accept_delete)
+        row.locator('button:text-is("Delete")').click()
+        page.wait_for_load_state("domcontentloaded")
+
+        assert dialog_messages == [
+            "Delete tag early-adopter? This removes it from 2 users "
+            "and cannot be undone."
+        ]
+        assert page.url.endswith("/studio/tags/")
+        assert 'Deleted tag "early-adopter" from 2 user(s).' in page.content()
+        assert page.locator(
+            '[data-testid="studio-tag-row"][data-tag="early-adopter"]'
+        ).count() == 0
+        assert page.locator('[data-testid="studio-tags-empty"]').is_visible()
+        assert "No contact tags exist yet." in page.content()
+        assert page.locator('a[href="/studio/users/"]:has-text("Find users")').is_visible()
+
+        context.close()
+
+    @pytest.mark.core
+    def test_non_staff_cannot_access_tags_page(self, django_server, browser):
+        _ensure_tiers()
+        free_email = "tag-page-free@test.com"
+        _create_user(free_email, tier_slug="free")
+
+        context = _auth_context(browser, free_email)
+        page = context.new_page()
+        response = page.goto(
+            f"{django_server}/studio/tags/",
+            wait_until="domcontentloaded",
+        )
+        assert response.status == 403
+        context.close()
+
+        page = browser.new_page()
+        response = page.goto(
+            f"{django_server}/studio/tags/",
+            wait_until="domcontentloaded",
+        )
+        assert response.status == 302 or "/accounts/login/" in page.url
+        page.close()
+
+
+@pytest.mark.django_db(transaction=True)
 class TestTagPickerFiltersUserList:
     """Operator narrows the user list to one tag via the picker."""
 

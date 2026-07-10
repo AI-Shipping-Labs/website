@@ -81,6 +81,75 @@ class StudioUserListTagPickerTest(TestCase):
             )
 
 
+class StudioTagListViewTest(TestCase):
+    """Staff-facing global contact tag list."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        cls.regular = User.objects.create_user(
+            email='regular@test.com', password='testpass', is_staff=False,
+        )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def test_lists_normalized_tags_with_counts_and_user_filter_links(self):
+        User.objects.create_user(
+            email='alice-tags@test.com', password='testpass',
+            tags=['paid', 'beta'],
+        )
+        User.objects.create_user(
+            email='bob-tags@test.com', password='testpass',
+            tags=['paid', 'early-adopter'],
+        )
+
+        response = self.client.get('/studio/tags/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context['tags'],
+            [
+                {'name': 'beta', 'user_count': 1},
+                {'name': 'early-adopter', 'user_count': 1},
+                {'name': 'paid', 'user_count': 2},
+            ],
+        )
+        self.assertContains(response, 'data-testid="studio-tags-list"')
+        self.assertContains(response, 'href="/studio/users/?tag=paid"')
+        self.assertContains(response, '2 users')
+        self.assertContains(response, 'action="/studio/tags/paid/rename"')
+        self.assertContains(response, 'action="/studio/tags/paid/delete"')
+        self.assertContains(
+            response,
+            'Removes this tag from 2 users. Cannot be undone.',
+        )
+
+    def test_empty_state_points_back_to_users(self):
+        response = self.client.get('/studio/tags/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="studio-tags-empty"')
+        self.assertContains(response, 'No contact tags exist yet.')
+        self.assertContains(response, 'href="/studio/users/"')
+
+    def test_access_control_matches_existing_tag_endpoints(self):
+        self.client.logout()
+        response = self.client.get('/studio/tags/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response.url)
+
+        self.client.login(email='regular@test.com', password='testpass')
+        response = self.client.get('/studio/tags/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_staff_does_not_need_superuser_for_tag_list(self):
+        response = self.client.get('/studio/tags/')
+        self.assertEqual(response.status_code, 200)
+
+
 class StudioTagRenameViewTest(TestCase):
     """POST ``/studio/tags/<name>/rename``."""
 
@@ -151,6 +220,13 @@ class StudioTagRenameViewTest(TestCase):
             {'new': 'paid'},
         )
         self.assertRedirects(response, '/studio/users/')
+
+    def test_rename_redirects_to_explicit_relative_next(self):
+        response = self.client.post(
+            '/studio/tags/paid-user/rename',
+            {'new': 'paid', 'next': '/studio/tags/'},
+        )
+        self.assertRedirects(response, '/studio/tags/')
 
     def test_rename_rejects_offsite_referer(self):
         # A referer on a different host falls back to the user list to
@@ -232,6 +308,13 @@ class StudioTagDeleteViewTest(TestCase):
             response,
             'Deleted tag &quot;early-adopter&quot; from 2 user(s).',
         )
+
+    def test_delete_redirects_to_explicit_relative_next(self):
+        response = self.client.post(
+            '/studio/tags/early-adopter/delete',
+            {'next': '/studio/tags/'},
+        )
+        self.assertRedirects(response, '/studio/tags/')
 
     def test_delete_get_not_allowed(self):
         response = self.client.get('/studio/tags/early-adopter/delete')

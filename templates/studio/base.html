@@ -367,6 +367,13 @@ double-rendering. See issue #347.
               </a>
             </li>
             <li>
+              <a href="{% url 'studio_tag_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if request.path == '/studio/tags/' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="tags" class="w-4 h-4"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+            <li>
               <a href="{% url 'studio_user_merge' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/users/merge' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="git-merge" class="w-4 h-4"></i>
@@ -595,36 +602,51 @@ double-rendering. See issue #347.
               </a>
             </li>
             <li>
-              <a href="{% url 'studio_trigger_subscription_list' %}"
-                 data-testid="sidebar-triggers-subscriptions-link"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/triggers/subscriptions' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="webhook" class="w-4 h-4"></i>
-                <span>Trigger subscriptions</span>
-              </a>
-            </li>
-            <li>
-              <a href="{% url 'studio_trigger_widget_list' %}"
-                 data-testid="sidebar-triggers-widgets-link"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/triggers/widgets' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="badge-check" class="w-4 h-4"></i>
-                <span>Event widgets</span>
-              </a>
-            </li>
-            <li>
-              <a href="{% url 'studio_trigger_emission_list' %}"
-                 data-testid="sidebar-triggers-emissions-link"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/triggers/emissions' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="activity" class="w-4 h-4"></i>
-                <span>Event emissions</span>
-              </a>
-            </li>
-            <li>
-              <a href="{% url 'studio_trigger_delivery_list' %}"
-                 data-testid="sidebar-triggers-deliveries-link"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/triggers/deliveries' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="send" class="w-4 h-4"></i>
-                <span>Webhook deliveries</span>
-              </a>
+              <button type="button"
+                      data-studio-trigger-toggle
+                      aria-expanded="{% if state.triggers_active %}true{% else %}false{% endif %}"
+                      aria-controls="studio-triggers-children"
+                      class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm {% if state.triggers_active %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <span class="flex items-center space-x-3">
+                  <i data-lucide="webhook" class="w-4 h-4"></i>
+                  <span>Triggers</span>
+                </span>
+                <i data-lucide="chevron-down" class="studio-trigger-chevron w-4 h-4 transition-transform"></i>
+              </button>
+              <ul id="studio-triggers-children" class="mt-1 ml-5 space-y-1 border-l border-border pl-2{% if not state.triggers_active %} hidden{% endif %}">
+                <li>
+                  <a href="{% url 'studio_trigger_subscription_list' %}"
+                     data-testid="sidebar-triggers-subscriptions-link"
+                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/triggers/subscriptions' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                    <i data-lucide="webhook" class="w-4 h-4"></i>
+                    <span>Trigger subscriptions</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="{% url 'studio_trigger_widget_list' %}"
+                     data-testid="sidebar-triggers-widgets-link"
+                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/triggers/widgets' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                    <i data-lucide="badge-check" class="w-4 h-4"></i>
+                    <span>Event widgets</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="{% url 'studio_trigger_emission_list' %}"
+                     data-testid="sidebar-triggers-emissions-link"
+                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/triggers/emissions' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                    <i data-lucide="activity" class="w-4 h-4"></i>
+                    <span>Event emissions</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="{% url 'studio_trigger_delivery_list' %}"
+                     data-testid="sidebar-triggers-deliveries-link"
+                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/triggers/deliveries' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                    <i data-lucide="send" class="w-4 h-4"></i>
+                    <span>Webhook deliveries</span>
+                  </a>
+                </li>
+              </ul>
             </li>
             <li>
               <a href="{% url 'studio_settings' %}"
@@ -843,6 +865,16 @@ double-rendering. See issue #347.
     });
   });
 
+  document.querySelectorAll('[data-studio-trigger-toggle]').forEach(function(button) {
+    rotateChevron(
+      button.querySelector('.studio-trigger-chevron'),
+      button.getAttribute('aria-expanded') === 'true'
+    );
+    button.addEventListener('click', function(event) {
+      event.preventDefault();
+      toggleControlled(button, null, '.studio-trigger-chevron');
+    });
+  });
 })();
 
 (function() {

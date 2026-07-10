@@ -366,6 +366,95 @@ class TestNonSuperuserGating:
 
 
 # ---------------------------------------------------------------------------
+# Scenario 5b: Operations trigger pages are nested under Triggers
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestOperationsTriggersGroup:
+    """Operations has a nested Triggers group for trigger management pages."""
+
+    @pytest.mark.core
+    def test_operations_root_has_nested_triggers_group(self, django_server, browser):
+        _ensure_tiers()
+        _create_non_superuser_staff("trigger-staff@test.com")
+
+        context = _auth_context(browser, "trigger-staff@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 800})
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+        _section_button(page, "operations").click()
+        root_labels = page.locator(
+            "#studio-section-operations > li > a span"
+        ).all_inner_texts()
+        assert "Content sync" in root_labels
+        assert "Worker" in root_labels
+        assert "SES events" in root_labels
+        assert "Redirects" in root_labels
+        assert "Settings" in root_labels
+        assert "API docs" in root_labels
+        assert "Trigger subscriptions" not in root_labels
+        assert "Event widgets" not in root_labels
+        assert "Event emissions" not in root_labels
+        assert "Webhook deliveries" not in root_labels
+
+        trigger_button = page.locator('[data-studio-trigger-toggle]')
+        assert trigger_button.get_attribute("aria-expanded") == "false"
+        assert "Triggers" in trigger_button.inner_text()
+
+        trigger_button.click()
+        assert trigger_button.get_attribute("aria-expanded") == "true"
+        for label in (
+            "Trigger subscriptions",
+            "Event widgets",
+            "Event emissions",
+            "Webhook deliveries",
+        ):
+            assert page.locator(
+                f'#studio-triggers-children a:has(span:text-is("{label}"))'
+            ).is_visible()
+
+        context.close()
+
+    @pytest.mark.core
+    def test_trigger_deep_link_expands_and_highlights_child(self, django_server, browser):
+        _ensure_tiers()
+        _create_non_superuser_staff("trigger-deep@test.com")
+
+        context = _auth_context(browser, "trigger-deep@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 800})
+        page.goto(
+            f"{django_server}/studio/triggers/emissions/",
+            wait_until="domcontentloaded",
+        )
+
+        assert _section_button(page, "operations").get_attribute(
+            "aria-expanded"
+        ) == "true"
+        trigger_button = page.locator('[data-studio-trigger-toggle]')
+        assert trigger_button.get_attribute("aria-expanded") == "true"
+        assert page.locator("#studio-triggers-children").is_visible()
+        emissions = page.locator(
+            '#studio-triggers-children [data-testid="sidebar-triggers-emissions-link"]'
+        )
+        assert "bg-secondary" in (emissions.get_attribute("class") or "")
+
+        page.locator(
+            '#studio-triggers-children [data-testid="sidebar-triggers-deliveries-link"]'
+        ).click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/studio/triggers/deliveries/" in page.url
+        assert page.locator('[data-studio-trigger-toggle]').get_attribute(
+            "aria-expanded"
+        ) == "true"
+        assert page.locator("#studio-triggers-children").is_visible()
+
+        context.close()
+
+
+# ---------------------------------------------------------------------------
 # Scenario 6: Users row — single anchor, no inner subgroup
 # ---------------------------------------------------------------------------
 
@@ -511,6 +600,7 @@ class TestPlanningSection:
             "Call hosts",
             "Imports",
             "Tier overrides",
+            "Tags",
             "Merge accounts",
             "Payment mismatches",
             "New user",

@@ -165,6 +165,7 @@ class StudioSidebarStructureTest(TestCase):
         ('/studio/users/', 'Users'),
         ('/studio/imports/', 'Imports'),
         ('/studio/tier_overrides/', 'Tier overrides'),
+        ('/studio/tags/', 'Tags'),
         ('/studio/crm/', 'CRM'),
         # Planning
         ('/studio/sprints/', 'Sprints'),
@@ -189,6 +190,10 @@ class StudioSidebarStructureTest(TestCase):
         ('/studio/worker/', 'Worker'),
         ('/studio/ses-events/', 'SES events'),
         ('/studio/redirects/', 'Redirects'),
+        ('/studio/triggers/subscriptions/', 'Trigger subscriptions'),
+        ('/studio/triggers/widgets/', 'Event widgets'),
+        ('/studio/triggers/emissions/', 'Event emissions'),
+        ('/studio/triggers/deliveries/', 'Webhook deliveries'),
         ('/studio/settings/', 'Settings'),
         ('/api/docs', 'API docs'),
     ]
@@ -258,6 +263,49 @@ class StudioSidebarStructureTest(TestCase):
         self.assertIn('href="/api/docs"', anchor_tag)
         self.assertIn('target="_blank"', anchor_tag)
         self.assertIn('rel="noopener"', anchor_tag)
+
+    def test_operations_has_nested_triggers_group(self):
+        response = self._get_studio_dashboard()
+        body = response.content.decode()
+        start = body.index('id="studio-section-operations"')
+        end = body.index('text-xs text-muted-foreground">v')
+        operations = body[start:end]
+
+        self.assertIn('aria-controls="studio-triggers-children"', operations)
+        self.assertIn('<span>Triggers</span>', operations)
+        self.assertIn('id="studio-triggers-children"', operations)
+        for label in (
+            'Trigger subscriptions',
+            'Event widgets',
+            'Event emissions',
+            'Webhook deliveries',
+        ):
+            self.assertIn(f'<span>{label}</span>', operations)
+        self.assertIn(
+            'id="studio-triggers-children" class="mt-1 ml-5 space-y-1 border-l border-border pl-2 hidden"',
+            operations,
+        )
+
+    def test_trigger_deep_link_expands_operations_and_nested_triggers(self):
+        self.client.login(email='staff@test.com', password='pw')
+        response = self.client.get('/studio/triggers/emissions/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+
+        self.assertIn('id="studio-section-operations" class="space-y-1 mt-1"', body)
+        self.assertIn(
+            'aria-expanded="true"\n                      aria-controls="studio-triggers-children"',
+            body,
+        )
+        self.assertIn(
+            'id="studio-triggers-children" class="mt-1 ml-5 space-y-1 border-l border-border pl-2"',
+            body,
+        )
+        emissions_idx = body.index('data-testid="sidebar-triggers-emissions-link"')
+        anchor_open = body.rfind('<a ', 0, emissions_idx)
+        anchor_close = body.find('>', emissions_idx)
+        emissions_anchor = body[anchor_open:anchor_close]
+        self.assertIn('bg-secondary text-foreground', emissions_anchor)
 
     # ------------------------------------------------------------------
     # Renamed labels — make sure the OLD labels are gone
@@ -531,10 +579,15 @@ class StudioSidebarStructureTest(TestCase):
 
         expected_order = [
             '<span>Users</span>',
+            '<span>Call hosts</span>',
             '<span>Imports</span>',
             '<span>Tier overrides</span>',
+            '<span>Tags</span>',
+            '<span>Merge accounts</span>',
+            '<span>Payment mismatches</span>',
             '<span>New user</span>',
             '<span>CRM</span>',
+            '<span>AI Assistant</span>',
         ]
         positions = [people.find(label) for label in expected_order]
         for label, idx in zip(expected_order, positions):
@@ -557,6 +610,7 @@ class StudioSidebarStructureTest(TestCase):
         for path in (
             '/studio/users/',
             '/studio/users/export',
+            '/studio/tags/',
             '/studio/imports/',
             '/studio/tier_overrides/',
             '/studio/users/new/',
@@ -575,6 +629,10 @@ class StudioSidebarStructureTest(TestCase):
                 self.assertTrue(state['onboarding_active'])
                 self.assertFalse(state['planning_active'])
                 self.assertFalse(state['people_active'])
+
+        state = studio_sidebar_state('/studio/triggers/deliveries/')
+        self.assertTrue(state['operations_active'])
+        self.assertTrue(state['triggers_active'])
 
     # ------------------------------------------------------------------
     # Footer

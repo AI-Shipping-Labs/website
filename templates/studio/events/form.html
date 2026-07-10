@@ -327,12 +327,16 @@
               data-email="{{ reg.user.email|lower }}">
             <td class="px-3 py-2 align-top">
               <div class="truncate text-foreground" title="{{ reg.user.get_full_name|default:reg.user.email }}">
-                {{ reg.user.get_full_name|default:reg.user.email }}
+                <a href="{% url 'studio_user_detail' reg.user.pk %}"
+                   class="hover:text-accent hover:underline"
+                   data-testid="registration-user-link">{{ reg.user.get_full_name|default:reg.user.email }}</a>
               </div>
             </td>
             <td class="px-3 py-2 align-top">
               <div class="truncate text-muted-foreground" title="{{ reg.user.email }}">
-                {{ reg.user.email }}
+                <a href="{% url 'studio_user_detail' reg.user.pk %}"
+                   class="hover:text-accent hover:underline"
+                   data-testid="registration-email-link">{{ reg.user.email }}</a>
               </div>
             </td>
             <td class="px-3 py-2 align-top text-muted-foreground whitespace-nowrap">
@@ -364,8 +368,12 @@
           data-testid="registration-card"
           data-email="{{ reg.user.email|lower }}">
         <div>
-          <div class="text-sm font-medium text-foreground break-words">{{ reg.user.get_full_name|default:reg.user.email }}</div>
-          <div class="text-xs text-muted-foreground break-all">{{ reg.user.email }}</div>
+          <a href="{% url 'studio_user_detail' reg.user.pk %}"
+             class="text-sm font-medium text-foreground break-words hover:text-accent hover:underline"
+             data-testid="registration-card-user-link">{{ reg.user.get_full_name|default:reg.user.email }}</a>
+          <a href="{% url 'studio_user_detail' reg.user.pk %}"
+             class="block text-xs text-muted-foreground break-all hover:text-accent hover:underline"
+             data-testid="registration-card-email-link">{{ reg.user.email }}</a>
         </div>
         <dl class="text-xs space-y-1">
           <div class="flex gap-2">

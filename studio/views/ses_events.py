@@ -28,6 +28,7 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 
+from email_app.models import EmailCampaign
 from email_app.models.ses_event import SesEvent
 from studio.decorators import staff_required
 from studio.utils import coerce_page_number
@@ -100,7 +101,7 @@ def _normalize_type_filter(raw):
 
 
 def _apply_filters(queryset, *, search, type_filter, bounce_type,
-                   bounce_subtype, since, until):
+                   bounce_subtype, since, until, campaign_id=None):
     """Apply every query-string filter to the base SES-event queryset.
 
     Extracted so the upcoming JSON API (issue #764) can lift this helper
@@ -125,6 +126,9 @@ def _apply_filters(queryset, *, search, type_filter, bounce_type,
 
     if until is not None:
         queryset = queryset.filter(received_at__date__lte=until)
+
+    if campaign_id is not None:
+        queryset = queryset.filter(email_log__campaign_id=campaign_id)
 
     return queryset
 
@@ -175,8 +179,18 @@ def ses_event_list(request):
     type_filter = _normalize_type_filter(request.GET.get('type', ''))
     bounce_type = request.GET.get('bounce_type', '').strip()
     bounce_subtype = request.GET.get('bounce_subtype', '').strip()
+    raw_campaign_id = request.GET.get('campaign', '').strip()
     since = _parse_iso_date(request.GET.get('since', ''))
     until = _parse_iso_date(request.GET.get('until', ''))
+    campaign = None
+    campaign_id = None
+    if raw_campaign_id:
+        try:
+            campaign_id = int(raw_campaign_id)
+        except (TypeError, ValueError):
+            campaign_id = None
+        if campaign_id is not None:
+            campaign = EmailCampaign.objects.filter(pk=campaign_id).first()
 
     base_queryset = (
         SesEvent.objects
@@ -191,6 +205,7 @@ def ses_event_list(request):
         bounce_subtype=bounce_subtype,
         since=since,
         until=until,
+        campaign_id=campaign.pk if campaign is not None else campaign_id,
     )
 
     paginator = Paginator(filtered, SES_EVENT_PAGE_SIZE)
@@ -277,8 +292,10 @@ def ses_event_list(request):
         'bounce_type_choices': bounce_type_choices,
         'has_any_event': has_any_event,
         'more_filters_open': bool(
-            bounce_type or bounce_subtype or since or until,
+            bounce_type or bounce_subtype or since or until or raw_campaign_id,
         ),
+        'campaign': campaign,
+        'campaign_id': raw_campaign_id,
         **headline_counts,
     })
 

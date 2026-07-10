@@ -126,7 +126,7 @@ class StudioUserRowTooltipBounceLineTest(TestCase):
 
 @override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
 class StudioUserDetailBounceCardTest(TestCase):
-    """``user_detail`` renders the Bounce status card iff the state is set."""
+    """``user_detail`` renders the deliverability card for every user."""
 
     @classmethod
     def setUpTestData(cls):
@@ -152,16 +152,16 @@ class StudioUserDetailBounceCardTest(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Bounce status")
+        self.assertContains(response, "Deliverability")
         # Human-readable label, not the slug.
         self.assertContains(response, "Permanent bounce")
         # Diagnostic surfaces verbatim for operator triage.
         self.assertContains(response, "550 5.1.1 Mailbox does not exist")
         # Section is keyed by data-testid so Playwright + future tests
         # can target it without inspecting full HTML.
-        self.assertContains(response, "user-detail-bounce-section")
+        self.assertContains(response, "user-detail-deliverability-section")
 
-    def test_detail_omits_bounce_card_for_clean_user(self):
+    def test_detail_shows_clean_deliverability_card_for_clean_user(self):
         user = User.objects.create_user(
             email="happy@test.com", password="pw",
         )
@@ -171,9 +171,9 @@ class StudioUserDetailBounceCardTest(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        # No empty card -- the section is dropped entirely.
-        self.assertNotContains(response, "user-detail-bounce-section")
-        self.assertNotContains(response, "Bounce status")
+        self.assertContains(response, "user-detail-deliverability-section")
+        self.assertContains(response, 'data-bounce-state="none"')
+        self.assertContains(response, "No bounce")
 
     def test_detail_soft_state_renders_label_not_permanent(self):
         user = User.objects.create_user(
@@ -189,7 +189,7 @@ class StudioUserDetailBounceCardTest(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Bounce status")
+        self.assertContains(response, "Deliverability")
         # The label "Soft bounce" appears; no stale "permanent" state badge
         # turns up. Assert on the badge's ``data-bounce-state`` attribute
         # rather than the bare word "Permanent" so the State help tooltip

@@ -30,7 +30,10 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.core.validators import validate_email
+from django.db import transaction
 from django.db.models import Case, Count, F, IntegerField, Max, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
@@ -39,7 +42,9 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from accounts.models import TierOverride
+from accounts.models import EmailAlias, TierOverride
+from accounts.services.email_resolution import normalize_email
+from accounts.utils.bounce import mark_permanent_bounce, record_soft_bounce
 from accounts.utils.tags import (
     add_tag as _add_tag_to_user,
 )
@@ -56,9 +61,12 @@ from community.models import CommunityAuditLog
 from community.services.slack_links import build_slack_profile_url
 from content.models import Enrollment, UserCourseProgress
 from crm.models import CRMRecord
+from email_app.models import EmailLog, SesEvent
+from events.models import EventRegistration
 from integrations.config import get_config
 from payments.models import PaymentAccountMismatch, Tier
 from payments.services.backfill_tiers import backfill_user_from_stripe
+from plans.models import Plan, SprintEnrollment
 from studio.decorators import staff_required, superuser_required
 from studio.utils import coerce_page_number
 from studio.views.tier_overrides import DURATION_CHOICES
@@ -982,6 +990,115 @@ def _build_course_enrollments(user):
     return sorted(rows, key=lambda row: row['last_activity_at'], reverse=True)
 
 
+def _sprint_group_rank(sprint, today):
+    start = sprint.start_date
+    end = sprint.end_date
+    if start and end and start <= today < end:
+        return 0
+    if start and start > today:
+        return 1
+    return 2
+
+
+def _build_plan_sprint_rows(user):
+    """Build user-detail plan/sprint rows independent of CRM tracking."""
+    today = timezone.localdate()
+    plans = list(
+        Plan.objects
+        .filter(member=user)
+        .select_related("sprint")
+    )
+    planned_sprint_ids = {plan.sprint_id for plan in plans}
+    enrollments_without_plans = list(
+        SprintEnrollment.objects
+        .filter(user=user)
+        .exclude(sprint_id__in=planned_sprint_ids)
+        .select_related("sprint")
+    )
+
+    rows = []
+    for plan in plans:
+        sprint = plan.sprint
+        rows.append({
+            "kind": "plan",
+            "plan": plan,
+            "sprint": sprint,
+            "title": plan.display_title,
+            "status_label": "Plan",
+            "group_rank": _sprint_group_rank(sprint, today),
+            "start_date": sprint.start_date,
+            "plan_detail_url": reverse("studio_plan_detail", args=[plan.pk]),
+            "plan_edit_url": reverse("studio_plan_edit", args=[plan.pk]),
+            "sprint_url": reverse("studio_sprint_detail", args=[sprint.pk]),
+            "create_plan_url": "",
+        })
+
+    for enrollment in enrollments_without_plans:
+        sprint = enrollment.sprint
+        query = urlencode({"user": user.pk, "sprint": sprint.pk})
+        rows.append({
+            "kind": "enrollment",
+            "plan": None,
+            "sprint": sprint,
+            "title": sprint.name,
+            "status_label": "No plan yet",
+            "group_rank": _sprint_group_rank(sprint, today),
+            "start_date": sprint.start_date,
+            "plan_detail_url": "",
+            "plan_edit_url": "",
+            "sprint_url": reverse("studio_sprint_detail", args=[sprint.pk]),
+            "create_plan_url": f"{reverse('studio_plan_create')}?{query}",
+            "enrolled_at": enrollment.enrolled_at,
+        })
+
+    return sorted(
+        rows,
+        key=lambda row: (
+            row["group_rank"],
+            -(row["start_date"].toordinal() if row["start_date"] else 0),
+            row["title"].casefold(),
+        ),
+    )
+
+
+def _build_event_registration_rows(user):
+    rows = []
+    registrations = (
+        EventRegistration.objects
+        .filter(user=user)
+        .select_related("event")
+        .order_by("-event__start_datetime", "-registered_at")
+    )
+    for registration in registrations:
+        event = registration.event
+        rows.append({
+            "registration": registration,
+            "event": event,
+            "event_url": reverse("studio_event_edit", args=[event.pk]),
+            "public_url": event.get_absolute_url(),
+            "state": event.get_status_display(),
+            "joined": registration.joined_at is not None,
+        })
+    return rows
+
+
+def _recent_deliverability_rows(user):
+    return {
+        "email_logs": list(
+            EmailLog.objects
+            .filter(Q(user=user) | Q(recipient_email__iexact=user.email))
+            .select_related("campaign")
+            .order_by("-sent_at")[:5]
+        ),
+        "ses_events": list(
+            SesEvent.objects
+            .filter(Q(user=user) | Q(recipient_email__iexact=user.email))
+            .select_related("email_log", "email_log__campaign")
+            .order_by("-received_at")[:5]
+        ),
+    }
+
+
 # Number of most-recent activity rows shown on the user detail page
 # (issue #853; raised to 30 in #773 once `resource_view` browsing rows
 # share the timeline). When the user has more than this many total
@@ -1143,7 +1260,10 @@ def user_detail(request, user_id):
     override = _active_override_for_user(user)
     crm_record = CRMRecord.objects.filter(user=user).first()
     course_enrollments = _build_course_enrollments(user)
+    plan_sprint_rows = _build_plan_sprint_rows(user)
+    event_registration_rows = _build_event_registration_rows(user)
     activity_timeline = _build_activity_timeline(user)
+    deliverability_rows = _recent_deliverability_rows(user)
     open_payment_mismatches = list(
         _payment_mismatch_queryset().filter(
             Q(status=PaymentAccountMismatch.STATUS_OPEN),
@@ -1198,14 +1318,8 @@ def user_detail(request, user_id):
         for tag in user_tags
     ]
 
-    # Bounce-status card (issue #766). Only surfaced when the user has
-    # a non-``none`` ``bounce_state``; ``bounce_state_label`` is the
-    # human-readable choice display ("Permanent" / "Soft").
     bounce_state = user.bounce_state or User.BounceState.NONE
-    bounce_has_state = bounce_state != User.BounceState.NONE
-    bounce_state_label = (
-        user.get_bounce_state_display() if bounce_has_state else ''
-    )
+    bounce_state_label = user.get_bounce_state_display()
 
     context = {
         'detail_user': user,
@@ -1218,13 +1332,19 @@ def user_detail(request, user_id):
         'tag_chips': tag_chips,
         'known_tags': _all_known_contact_tags(),
         'bounce_state': bounce_state,
-        'bounce_has_state': bounce_has_state,
         'bounce_state_label': bounce_state_label,
         'bounce_recorded_at': user.bounce_recorded_at,
         'last_bounce_diagnostic': user.last_bounce_diagnostic or '',
+        'recent_email_logs': deliverability_rows["email_logs"],
+        'recent_ses_events': deliverability_rows["ses_events"],
+        'email_log_url': f"/api/users/{user.email}/email-log",
+        'ses_events_url': f"{reverse('studio_ses_event_list')}?q={user.email}",
+        'aliases': list(user.email_aliases.order_by("email")),
         'status': _user_status(user),
         'crm_record': crm_record,
         'course_enrollments': course_enrollments,
+        'plan_sprint_rows': plan_sprint_rows,
+        'event_registration_rows': event_registration_rows,
         'activities': activity_timeline['activities'],
         'activity_total': activity_timeline['activity_total'],
         'activity_limit': activity_timeline['activity_limit'],
@@ -1411,6 +1531,158 @@ def user_tag_remove(request, user_id):
     if raw:
         _remove_tag_from_user(user, raw)
     return redirect('studio_user_detail', user_id=user.pk)
+
+
+def _operator_reason(request):
+    return (request.POST.get("reason") or "").strip()
+
+
+def _audit_deliverability(user, *, action, actor, previous_state, reason):
+    CommunityAuditLog.objects.create(
+        user=user,
+        action="api_mark_bounced",
+        details=(
+            f"source=studio; action={action}; actor={actor.email}; "
+            f"previous_state={previous_state!r}; "
+            f"new_state={str(user.bounce_state)!r}; "
+            f"unsubscribed={user.unsubscribed}; reason={reason!r}"
+        ),
+    )
+
+
+@staff_required
+@require_POST
+def user_deliverability_action(request, user_id, action):
+    """POST handler for inline Studio bounce-state operations."""
+    user = get_object_or_404(User, pk=user_id)
+    reason = _operator_reason(request)
+    if not reason:
+        messages.error(request, "Enter an operator reason before changing deliverability.")
+        return redirect("studio_user_detail", user_id=user.pk)
+
+    if action not in {"soft", "permanent", "clear"}:
+        messages.error(request, "Unknown deliverability action.")
+        return redirect("studio_user_detail", user_id=user.pk)
+
+    with transaction.atomic():
+        locked = User.objects.select_for_update().get(pk=user.pk)
+        previous_state = locked.bounce_state
+        if action == "soft":
+            record_soft_bounce(locked, diagnostic=reason)
+            message = "Soft bounce recorded."
+        elif action == "permanent":
+            mark_permanent_bounce(locked, diagnostic=reason)
+            message = "Permanent bounce recorded and user unsubscribed."
+        else:
+            locked.bounce_state = User.BounceState.NONE
+            locked.bounce_recorded_at = None
+            locked.last_bounce_diagnostic = ""
+            locked.soft_bounce_count = 0
+            locked.save(update_fields=[
+                "bounce_state",
+                "bounce_recorded_at",
+                "last_bounce_diagnostic",
+                "soft_bounce_count",
+            ])
+            message = "Bounce state cleared. Subscription state was not changed."
+        _audit_deliverability(
+            locked,
+            action=action,
+            actor=request.user,
+            previous_state=previous_state,
+            reason=reason,
+        )
+
+    messages.success(request, message)
+    return redirect("studio_user_detail", user_id=user.pk)
+
+
+def _valid_alias_email(raw_alias):
+    if not isinstance(raw_alias, str):
+        return False
+    raw_alias = raw_alias.strip()
+    if not raw_alias or "@" not in raw_alias:
+        return False
+    try:
+        validate_email(raw_alias)
+    except ValidationError:
+        return False
+    return True
+
+
+@staff_required
+@require_POST
+def user_alias_add(request, user_id):
+    """POST handler mirroring the staff alias API add semantics."""
+    user = get_object_or_404(User, pk=user_id)
+    raw_alias = (request.POST.get("alias_email") or "").strip()
+    note = request.POST.get("note") or ""
+    if not _valid_alias_email(raw_alias):
+        messages.error(request, "Alias email is not valid.")
+        return redirect("studio_user_detail", user_id=user.pk)
+
+    normalized = normalize_email(raw_alias)
+    with transaction.atomic():
+        if User.objects.filter(email__iexact=normalized).exists():
+            messages.error(request, "Alias email is already a primary account email.")
+            return redirect("studio_user_detail", user_id=user.pk)
+
+        existing = (
+            EmailAlias.objects
+            .select_related("user")
+            .filter(email=normalized)
+            .first()
+        )
+        if existing is not None and existing.user_id != user.pk:
+            messages.error(request, "Alias email already routes to a different account.")
+            return redirect("studio_user_detail", user_id=user.pk)
+
+        if existing is None:
+            EmailAlias.objects.create(
+                user=user,
+                email=normalized,
+                source=EmailAlias.SOURCE_MANUAL,
+                note=note,
+                created_by=request.user,
+            )
+            verb = "added"
+            messages.success(request, f"Alias {normalized} added.")
+        else:
+            verb = "no-op add"
+            messages.info(request, f"Alias {normalized} already exists for this user.")
+
+        CommunityAuditLog.objects.create(
+            user=user,
+            action="email_alias_added",
+            details=(
+                f"{verb} alias {normalized!r}; actor=studio:{request.user.email}; "
+                f"note={note!r}"
+            ),
+        )
+
+    return redirect("studio_user_detail", user_id=user.pk)
+
+
+@staff_required
+@require_POST
+def user_alias_remove(request, user_id):
+    """POST handler mirroring the staff alias API remove semantics."""
+    user = get_object_or_404(User, pk=user_id)
+    normalized = normalize_email(request.POST.get("alias_email") or "")
+    with transaction.atomic():
+        deleted, _ = EmailAlias.objects.filter(user=user, email=normalized).delete()
+        verb = "removed" if deleted else "no-op remove"
+        CommunityAuditLog.objects.create(
+            user=user,
+            action="email_alias_removed",
+            details=f"{verb} alias {normalized!r}; actor=studio:{request.user.email}",
+        )
+
+    if deleted:
+        messages.success(request, f"Alias {normalized} removed.")
+    else:
+        messages.info(request, f"Alias {normalized} was not present.")
+    return redirect("studio_user_detail", user_id=user.pk)
 
 
 @staff_required

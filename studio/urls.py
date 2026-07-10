@@ -48,6 +48,7 @@ from studio.views.campaigns import (
     campaign_duplicate,
     campaign_edit,
     campaign_list,
+    campaign_recipients,
     campaign_send,
     campaign_test_send,
 )
@@ -263,8 +264,11 @@ from studio.views.user_imports import (
 from studio.views.users import (
     payment_mismatch_list,
     payment_mismatch_mark,
+    user_alias_add,
+    user_alias_remove,
     user_create,
     user_create_done,
+    user_deliverability_action,
     user_detail,
     user_export_csv,
     user_list,
@@ -586,6 +590,11 @@ urlpatterns = [
     path('campaigns/new', campaign_create, name='studio_campaign_create'),
     path('campaigns/<int:campaign_id>/', campaign_detail, name='studio_campaign_detail'),
     path(
+        'campaigns/<int:campaign_id>/recipients/',
+        campaign_recipients,
+        name='studio_campaign_recipients',
+    ),
+    path(
         'campaigns/<int:campaign_id>/edit',
         campaign_edit,
         name='studio_campaign_edit',
@@ -783,6 +792,21 @@ urlpatterns = [
     ),
     path('users/<int:user_id>/tags/add', user_tag_add, name='studio_user_tag_add'),
     path('users/<int:user_id>/tags/remove', user_tag_remove, name='studio_user_tag_remove'),
+    path(
+        'users/<int:user_id>/deliverability/<str:action>',
+        user_deliverability_action,
+        name='studio_user_deliverability_action',
+    ),
+    path(
+        'users/<int:user_id>/aliases/add',
+        user_alias_add,
+        name='studio_user_alias_add',
+    ),
+    path(
+        'users/<int:user_id>/aliases/remove',
+        user_alias_remove,
+        name='studio_user_alias_remove',
+    ),
     # Global contact-tag namespace operations (issue #694). Rename / delete
     # a tag across every user that carries it. Staff-only, POST-only. The
     # ``<str:name>`` segment is the already-normalized slug.

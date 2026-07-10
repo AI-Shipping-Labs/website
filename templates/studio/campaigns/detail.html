@@ -67,7 +67,11 @@
       </div>
       <div>
         <p class="text-sm text-muted-foreground">Eligible Recipients</p>
-        <p class="text-sm text-foreground mt-1" data-testid="eligible-recipients">{{ recipient_count }}</p>
+        <p class="text-sm text-foreground mt-1" data-testid="eligible-recipients">
+          <a href="{{ recipients_url }}"
+             class="text-accent hover:underline"
+             data-testid="campaign-recipients-link">{{ recipient_count }}</a>
+        </p>
       </div>
       <div>
         <p class="text-sm text-muted-foreground">Include tags</p>
@@ -91,6 +95,10 @@
           Sent: {{ engagement.sent }} /
           Opened: {{ engagement.opened }} ({{ engagement.opened_rate|floatformat:1 }}%) /
           Clicked: {{ engagement.clicked }} ({{ engagement.clicked_rate|floatformat:1 }}%)
+          &middot;
+          <a href="{{ recipients_url }}" class="text-accent hover:underline">Recipients</a>
+          &middot;
+          <a href="{{ ses_campaign_url }}" class="text-accent hover:underline" data-testid="campaign-ses-events-link">SES events</a>
         </p>
       </div>
       {% if campaign.sent_at %}

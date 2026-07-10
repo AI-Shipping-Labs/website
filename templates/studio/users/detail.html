@@ -462,14 +462,8 @@
   </div>
 </section>
 
-{% comment %}
-  Bounce status card (issue #766). Only rendered when the user has a
-  non-``none`` ``bounce_state``; when ``bounce_state == "none"`` we drop
-  the section entirely so the page is unchanged for healthy rows.
-{% endcomment %}
-{% if bounce_has_state %}
-<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-detail-bounce-section">
-  <h2 class="text-lg font-semibold text-foreground mb-4">Bounce status</h2>
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-detail-deliverability-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Deliverability</h2>
   <dl class="space-y-3 text-sm">
     <div class="flex justify-between gap-4">
       <dt class="text-muted-foreground inline-flex items-center gap-1"
@@ -482,11 +476,21 @@
         <span class="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30"
               data-testid="user-detail-bounce-state"
               data-bounce-state="{{ bounce_state }}">{{ bounce_state_label }}</span>
-        {% else %}
+        {% elif bounce_state == 'soft' %}
         <span class="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30"
               data-testid="user-detail-bounce-state"
               data-bounce-state="{{ bounce_state }}">{{ bounce_state_label }}</span>
+        {% else %}
+        <span class="text-xs px-2 py-1 rounded-full bg-green-500/10 text-green-400"
+              data-testid="user-detail-bounce-state"
+              data-bounce-state="{{ bounce_state }}">{{ bounce_state_label }}</span>
         {% endif %}
+      </dd>
+    </div>
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Newsletter</dt>
+      <dd class="text-foreground" data-testid="user-detail-deliverability-unsubscribed">
+        {% if detail_user.unsubscribed %}Unsubscribed{% else %}Subscribed{% endif %}
       </dd>
     </div>
     {% if bounce_recorded_at %}
@@ -505,8 +509,76 @@
     </div>
     {% endif %}
   </dl>
+
+  <div class="mt-5 grid gap-3 sm:grid-cols-3">
+    <form method="post" action="{% url 'studio_user_deliverability_action' detail_user.pk 'soft' %}" class="space-y-2">
+      {% csrf_token %}
+      <input type="text" name="reason" placeholder="Reason" required
+             class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder-muted-foreground">
+      <button type="submit" data-testid="user-deliverability-soft"
+              class="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary">
+        Mark soft bounce
+      </button>
+    </form>
+    <form method="post" action="{% url 'studio_user_deliverability_action' detail_user.pk 'permanent' %}" class="space-y-2">
+      {% csrf_token %}
+      <input type="text" name="reason" placeholder="Reason" required
+             class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder-muted-foreground">
+      <button type="submit" data-testid="user-deliverability-permanent"
+              class="w-full rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300 hover:bg-red-500/20">
+        Mark permanent
+      </button>
+    </form>
+    <form method="post" action="{% url 'studio_user_deliverability_action' detail_user.pk 'clear' %}" class="space-y-2">
+      {% csrf_token %}
+      <input type="text" name="reason" placeholder="Reason" required
+             class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder-muted-foreground">
+      <button type="submit" data-testid="user-deliverability-clear"
+              class="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary">
+        Clear bounce
+      </button>
+    </form>
+  </div>
+
+  <div class="mt-5 flex flex-wrap gap-3 text-xs">
+    <a href="{{ ses_events_url }}" class="text-accent hover:underline" data-testid="user-deliverability-ses-shortcut">SES events</a>
+    <a href="{{ email_log_url }}" class="text-accent hover:underline" data-testid="user-deliverability-email-log-shortcut">Email log API</a>
+  </div>
 </section>
-{% endif %}
+
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-aliases-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Email aliases</h2>
+  {% if aliases %}
+  <ul class="divide-y divide-border mb-4">
+    {% for alias in aliases %}
+    <li class="py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between" data-testid="user-alias-row">
+      <div class="min-w-0">
+        <p class="font-mono text-sm text-foreground break-all">{{ alias.email }}</p>
+        {% if alias.note %}<p class="text-xs text-muted-foreground mt-1">{{ alias.note }}</p>{% endif %}
+      </div>
+      <form method="post" action="{% url 'studio_user_alias_remove' detail_user.pk %}"
+            onsubmit="return confirm('Remove alias {{ alias.email|escapejs }}?');">
+        {% csrf_token %}
+        <input type="hidden" name="alias_email" value="{{ alias.email }}">
+        <button type="submit" class="text-xs text-red-300 hover:underline" data-testid="user-alias-remove">Remove</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground mb-4" data-testid="user-aliases-empty">No aliases yet.</p>
+  {% endif %}
+  <form method="post" action="{% url 'studio_user_alias_add' detail_user.pk %}" class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" data-testid="user-alias-add-form">
+    {% csrf_token %}
+    <input type="email" name="alias_email" placeholder="alias@example.com" required
+           data-testid="user-alias-input"
+           class="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground">
+    <input type="text" name="note" placeholder="Optional note"
+           data-testid="user-alias-note"
+           class="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground">
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90" data-testid="user-alias-add-submit">Add alias</button>
+  </form>
+</section>
 
 <!-- Tags -->
 <section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-tags-section">
@@ -704,6 +776,106 @@
       });
     })();
   </script>
+</section>
+
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl"
+         data-testid="user-plans-sprints-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Plans &amp; sprints</h2>
+  {% if plan_sprint_rows %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+          <th class="py-2 pr-4 font-medium">Sprint</th>
+          <th class="py-2 px-4 font-medium">State</th>
+          <th class="py-2 px-4 font-medium">Start</th>
+          <th class="py-2 pl-4 font-medium">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in plan_sprint_rows %}
+        <tr data-testid="user-plan-sprint-row">
+          <td class="py-3 pr-4">
+            <a href="{{ row.sprint_url }}" class="text-foreground hover:text-accent hover:underline">{{ row.sprint.name }}</a>
+            {% if row.plan_detail_url %}
+            <p class="text-xs text-muted-foreground mt-1">
+              <a href="{{ row.plan_detail_url }}" class="text-accent hover:underline" data-testid="user-plan-link">{{ row.title }}</a>
+            </p>
+            {% endif %}
+          </td>
+          <td class="py-3 px-4">
+            <span class="inline-flex rounded-full bg-secondary px-2 py-1 text-xs text-muted-foreground" data-testid="user-plan-sprint-status">{{ row.status_label }}</span>
+          </td>
+          <td class="py-3 px-4 font-mono text-foreground tabular-nums">{{ row.sprint.start_date|date:"Y-m-d" }}</td>
+          <td class="py-3 pl-4">
+            <div class="flex flex-wrap gap-2">
+              {% if row.plan_detail_url %}<a href="{{ row.plan_detail_url }}" class="text-xs text-accent hover:underline">Plan</a>{% endif %}
+              {% if row.plan_edit_url %}<a href="{{ row.plan_edit_url }}" class="text-xs text-accent hover:underline">Edit</a>{% endif %}
+              <a href="{{ row.sprint_url }}" class="text-xs text-accent hover:underline">Sprint</a>
+              {% if row.create_plan_url %}<a href="{{ row.create_plan_url }}" class="text-xs text-accent hover:underline" data-testid="user-create-plan-link">Create plan</a>{% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="user-plans-sprints-empty">
+    No plans or sprint enrollments yet.
+  </p>
+  {% endif %}
+</section>
+
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl"
+         data-testid="user-event-registrations-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Event registrations</h2>
+  {% if event_registration_rows %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+          <th class="py-2 pr-4 font-medium">Event</th>
+          <th class="py-2 px-4 font-medium">Date/state</th>
+          <th class="py-2 px-4 font-medium">Registered</th>
+          <th class="py-2 px-4 font-medium">Joined</th>
+          <th class="py-2 pl-4 font-medium">Links</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in event_registration_rows %}
+        <tr data-testid="user-event-registration-row">
+          <td class="py-3 pr-4">
+            <a href="{{ row.event_url }}" class="text-foreground hover:text-accent hover:underline" data-testid="user-event-registration-edit-link">{{ row.event.title }}</a>
+          </td>
+          <td class="py-3 px-4 text-muted-foreground">
+            <span class="font-mono text-foreground">{{ row.event.start_datetime|operator_datetime }}</span>
+            <span class="ml-2">{{ row.state }}</span>
+          </td>
+          <td class="py-3 px-4 font-mono text-foreground">{{ row.registration.registered_at|operator_datetime }}</td>
+          <td class="py-3 px-4">
+            {% if row.joined %}
+            <span class="inline-flex rounded-full bg-green-500/10 px-2 py-1 text-xs text-green-400">Joined</span>
+            {% else %}
+            <span class="text-muted-foreground">Not joined</span>
+            {% endif %}
+          </td>
+          <td class="py-3 pl-4">
+            <div class="flex flex-wrap gap-2">
+              <a href="{{ row.event_url }}" class="text-xs text-accent hover:underline">Studio</a>
+              <a href="{{ row.public_url }}" class="text-xs text-accent hover:underline" target="_blank" rel="noopener">Public</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="user-event-registrations-empty">
+    No event registrations yet.
+  </p>
+  {% endif %}
 </section>
 
 <!-- Course context -->

@@ -1,0 +1,104 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Recipients: {{ campaign.subject }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_campaign_list' %}" class="hover:text-foreground">Campaigns</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <a href="{% url 'studio_campaign_detail' campaign.pk %}" class="hover:text-foreground">{{ campaign.subject }}</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">Recipients</span>
+  </div>
+  <header class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div>
+      <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Campaign recipients</p>
+      <h1 class="text-2xl font-semibold text-foreground mt-1 break-all">{{ campaign.subject }}</h1>
+      {% if mode == "preview" %}
+      <p class="text-sm text-muted-foreground mt-2" data-testid="campaign-recipient-mode">
+        Draft preview, not sent yet. These rows come from the current eligible audience.
+      </p>
+      {% else %}
+      <p class="text-sm text-muted-foreground mt-2" data-testid="campaign-recipient-mode">
+        Actual send log recipients from EmailLog.
+      </p>
+      {% endif %}
+    </div>
+    <a href="{{ ses_campaign_url }}"
+       class="inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+       data-testid="campaign-recipient-ses-link">
+      SES events
+    </a>
+  </header>
+</div>
+
+<section class="bg-card border border-border rounded-lg p-6 max-w-5xl" data-testid="campaign-recipients-section">
+  <div class="flex items-center justify-between gap-4 mb-4">
+    <h2 class="text-lg font-semibold text-foreground">Recipients</h2>
+    <span class="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground">
+      {{ recipient_count }} row{{ recipient_count|pluralize }}
+    </span>
+  </div>
+
+  {% if rows %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm" data-testid="campaign-recipients-table">
+      <thead>
+        <tr class="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+          <th class="py-2 pr-4 font-medium">Recipient</th>
+          <th class="py-2 px-4 font-medium">Sent</th>
+          <th class="py-2 px-4 font-medium">Opens</th>
+          <th class="py-2 px-4 font-medium">Clicks</th>
+          <th class="py-2 px-4 font-medium">Disposition</th>
+          <th class="py-2 pl-4 font-medium">Diagnostic</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in rows %}
+        <tr data-testid="campaign-recipient-row">
+          <td class="py-3 pr-4">
+            {% if row.user_url %}
+            <a href="{{ row.user_url }}" class="text-accent hover:underline break-all" data-testid="campaign-recipient-user-link">{{ row.recipient_email }}</a>
+            {% else %}
+            <span class="font-mono text-foreground break-all">{{ row.recipient_email }}</span>
+            {% endif %}
+          </td>
+          <td class="py-3 px-4 text-muted-foreground whitespace-nowrap">
+            {% if row.sent_at %}{{ row.sent_at|operator_datetime }}{% else %}Preview{% endif %}
+          </td>
+          <td class="py-3 px-4 text-foreground tabular-nums">{{ row.opens }}</td>
+          <td class="py-3 px-4 text-foreground tabular-nums">{{ row.clicks }}</td>
+          <td class="py-3 px-4">
+            {% if row.disposition == "bounced" %}
+            <span class="inline-flex rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-300 border border-red-500/30" data-testid="campaign-recipient-disposition">Bounced</span>
+            {% elif row.disposition == "complained" %}
+            <span class="inline-flex rounded-full bg-red-500/20 px-2 py-1 text-xs text-red-300 border border-red-500/30" data-testid="campaign-recipient-disposition">Complained</span>
+            {% elif row.disposition == "preview" %}
+            <span class="inline-flex rounded-full bg-secondary px-2 py-1 text-xs text-muted-foreground" data-testid="campaign-recipient-disposition">Preview</span>
+            {% else %}
+            <span class="inline-flex rounded-full bg-green-500/10 px-2 py-1 text-xs text-green-400" data-testid="campaign-recipient-disposition">Delivered</span>
+            {% endif %}
+          </td>
+          <td class="py-3 pl-4 text-muted-foreground">
+            {% if row.bounce_diagnostic %}
+            <span class="font-mono text-xs break-all" data-testid="campaign-recipient-diagnostic">{{ row.bounce_diagnostic }}</span>
+            {% elif row.bounce_type or row.bounce_subtype %}
+            <span class="font-mono text-xs">{{ row.bounce_type }} {{ row.bounce_subtype }}</span>
+            {% else %}
+            <span>&mdash;</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="campaign-recipients-empty">
+    No recipients match this campaign yet.
+  </p>
+  {% endif %}
+</section>
+{% endblock %}

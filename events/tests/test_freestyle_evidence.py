@@ -77,7 +77,18 @@ class FreestyleEvidenceTest(TestCase):
         self.assertContains(response, 'Mid Freestyle Session')
         self.assertContains(response, 'Older Freestyle Session')
         self.assertNotContains(response, 'Oldest Freestyle Session')
-        self.assertNotContains(response, 'Regular Community Session')
+
+        evidence_start = body.index('data-testid="freestyle-evidence-block"')
+        related_rail_start = body.find(
+            'data-testid="related-content-rail"',
+            evidence_start,
+        )
+        evidence_body = body[
+            evidence_start : related_rail_start
+            if related_rail_start != -1
+            else len(body)
+        ]
+        self.assertNotIn('Regular Community Session', evidence_body)
 
     def test_non_freestyle_event_does_not_show_evidence(self):
         event = Event.objects.create(

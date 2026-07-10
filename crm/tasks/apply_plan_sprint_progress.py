@@ -140,6 +140,7 @@ def apply_thread_progress(thread, *, ingest=None):
     model_name = get_config('LLM_MODEL', 'claude-sonnet-4-5')
     blockers = list(parsed.blockers or [])
 
+    new_changes = []
     with transaction.atomic():
         event, _created = IngestedProgressEvent.objects.update_or_create(
             thread=thread,
@@ -183,6 +184,14 @@ def apply_thread_progress(thread, *, ingest=None):
             elif completion.item_kind == ITEM_KIND_NEXT_STEP:
                 change.next_step = item
             change.save()
+            new_changes.append(change)
+
+    if new_changes:
+        from plans.services.sprint_cadence import (  # noqa: PLC0415
+            create_slack_progress_delivery,
+        )
+
+        create_slack_progress_delivery(event, new_changes)
 
     return event
 

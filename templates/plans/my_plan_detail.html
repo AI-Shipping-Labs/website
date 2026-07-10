@@ -109,6 +109,36 @@
         </div>
       </section>
 
+      {% if slack_progress_event %}
+      <section class="mb-6 rounded-lg border border-accent/40 bg-accent/10 p-4"
+               id="slack-progress"
+               data-testid="slack-progress-callout">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div class="min-w-0">
+            <h2 class="text-base font-semibold text-foreground">Slack progress applied</h2>
+            <p class="mt-1 text-sm text-muted-foreground">
+              We marked these items done from your Slack update.
+            </p>
+            <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-foreground" data-testid="slack-progress-items">
+              {% for change in slack_progress_event.changes.all %}
+              <li>{{ change.item_description }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          <form method="post"
+                action="{% url 'undo_slack_progress' sprint_slug=sprint.slug plan_id=plan.pk event_id=slack_progress_event.pk %}">
+            {% csrf_token %}
+            <button type="submit"
+                    class="{% button_classes 'secondary' %}"
+                    data-testid="slack-progress-undo">
+              <i data-lucide="undo-2" class="h-4 w-4"></i>
+              Undo these updates
+            </button>
+          </form>
+        </div>
+      </section>
+      {% endif %}
+
       <div id="member-plan"
            data-testid="member-plan"
            data-api-base="{{ api_base }}">

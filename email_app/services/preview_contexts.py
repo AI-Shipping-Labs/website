@@ -182,6 +182,28 @@ PREVIEW_CONTEXTS = {
         'sprint_name': 'May 2026',
         'plan_url': 'https://aishippinglabs.com/sprints/may-2026/plan/42',
     },
+    'sprint_week_start': {
+        'user_name': 'Ada',
+        'sprint_name': 'May 2026',
+        'week_number': 3,
+        'week_theme': 'Ship the working prototype',
+        'unfinished_count': 2,
+        'unfinished_label': 'unfinished checkpoints',
+        'needs_previous_week_note': True,
+        'previous_week_number': 2,
+        'plan_url': (
+            'https://aishippinglabs.com/sprints/may-2026/plan/42#week-3'
+        ),
+    },
+    'sprint_week_note_prompt': {
+        'user_name': 'Ada',
+        'sprint_name': 'May 2026',
+        'week_number': 2,
+        'week_theme': 'Validate the workflow',
+        'plan_url': (
+            'https://aishippinglabs.com/sprints/may-2026/plan/42#week-2'
+        ),
+    },
     'lead_magnet_delivery': {
         'user_name': 'Ada',
         'resource_title': 'AI Cheat Sheet',

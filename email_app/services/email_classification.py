@@ -95,6 +95,8 @@ TRANSACTIONAL_EMAIL_TYPES = {
 PROMOTIONAL_EMAIL_TYPES = {
     "campaign",
     "workshop_announcement",
+    "sprint_week_start",
+    "sprint_week_note_prompt",
 }
 
 # Issue #937: welcome emails go out from a dedicated `welcome@` sender, but

@@ -53,6 +53,7 @@ from plans.services import (
     count_unfinished_carry_over_items,
     find_carry_over_source_plan,
 )
+from plans.services.sprint_cadence import unresolved_slack_progress_event_for_plan
 
 # Mirrors plans.views.sprints.PLAN_REQUEST_RATE_LIMIT. Imported as a
 # constant rather than from the sister module to avoid creating a
@@ -284,6 +285,10 @@ def my_plan_detail(request, sprint_slug, plan_id):
                 source_plan=carry_over_source,
                 destination_plan=plan,
             )
+    slack_progress_event = unresolved_slack_progress_event_for_plan(
+        plan,
+        request.GET.get('progress_event', ''),
+    )
 
     return render(
         request,
@@ -301,6 +306,7 @@ def my_plan_detail(request, sprint_slug, plan_id):
             'carry_over_source': carry_over_source,
             'carry_over_unfinished_count': carry_over_unfinished_count,
             'carry_over_dismissal_key': carry_over_dismissal_key,
+            'slack_progress_event': slack_progress_event,
         },
     )
 

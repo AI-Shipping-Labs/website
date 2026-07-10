@@ -222,6 +222,9 @@ def _render_account_page(
         "workshop_emails_enabled": user.email_preferences.get(
             "workshop_emails", True
         ),
+        "sprint_cadence_emails_enabled": user.email_preferences.get(
+            "sprint_cadence_emails", True
+        ),
         "timezone_options": build_timezone_options(),
         "preferred_timezone_label": get_timezone_label(user.preferred_timezone),
         "active_override": active_override,
@@ -367,9 +370,9 @@ def member_api_key_delete_view(request, key_id):
 def email_preferences_view(request):
     """Update email preferences.
 
-    Issue #655: accepts either or both of ``newsletter`` (boolean) and
-    ``workshop_emails`` (boolean) in a single JSON body. At least one
-    known boolean key must be present, otherwise returns 400.
+    Issue #655: accepts ``newsletter`` and per-channel email booleans in a
+    single JSON body. At least one known boolean key must be present,
+    otherwise returns 400.
 
     The response echoes back only the fields that were updated.
     """
@@ -380,13 +383,24 @@ def email_preferences_view(request):
 
     newsletter = data.get("newsletter")
     workshop_emails = data.get("workshop_emails")
+    sprint_cadence_emails = data.get("sprint_cadence_emails")
 
     newsletter_provided = isinstance(newsletter, bool)
     workshop_emails_provided = isinstance(workshop_emails, bool)
+    sprint_cadence_emails_provided = isinstance(sprint_cadence_emails, bool)
 
-    if not newsletter_provided and not workshop_emails_provided:
+    if (
+        not newsletter_provided
+        and not workshop_emails_provided
+        and not sprint_cadence_emails_provided
+    ):
         return JsonResponse(
-            {"error": "newsletter or workshop_emails boolean field is required"},
+            {
+                "error": (
+                    "newsletter, workshop_emails, or sprint_cadence_emails "
+                    "boolean field is required"
+                ),
+            },
             status=400,
         )
 
@@ -403,6 +417,10 @@ def email_preferences_view(request):
     if workshop_emails_provided:
         user.email_preferences["workshop_emails"] = workshop_emails
         response["workshop_emails"] = workshop_emails
+
+    if sprint_cadence_emails_provided:
+        user.email_preferences["sprint_cadence_emails"] = sprint_cadence_emails
+        response["sprint_cadence_emails"] = sprint_cadence_emails
 
     user.save(update_fields=update_fields)
 

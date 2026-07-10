@@ -21,7 +21,10 @@ from django.utils.html import escape
 from django.views.decorators.http import require_POST
 
 from email_app.models import EmailTemplateOverride
-from email_app.services.email_classification import TRANSACTIONAL_EMAIL_TYPES
+from email_app.services.email_classification import (
+    PROMOTIONAL_EMAIL_TYPES,
+    TRANSACTIONAL_EMAIL_TYPES,
+)
 from email_app.services.email_service import (
     TEMPLATES_DIR,
     EmailService,
@@ -48,6 +51,8 @@ TEMPLATE_DISPLAY_ORDER = [
     'cancellation',
     'payment_failed',
     'welcome_imported',
+    'sprint_week_start',
+    'sprint_week_note_prompt',
 ]
 
 
@@ -57,7 +62,7 @@ def _all_template_names():
     # We render in TEMPLATE_DISPLAY_ORDER and append any extras that may
     # show up later so the page never silently drops one.
     known = list(TEMPLATE_DISPLAY_ORDER)
-    for name in sorted(TRANSACTIONAL_EMAIL_TYPES):
+    for name in sorted(TRANSACTIONAL_EMAIL_TYPES | PROMOTIONAL_EMAIL_TYPES):
         if name not in known:
             known.append(name)
     # Filter to ones we can actually load (file or override) so the list

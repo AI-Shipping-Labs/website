@@ -646,6 +646,29 @@ class EmailPreferencesAPITest(TestCase):
         self.assertIn("email_preferences", update_fields)
         self.assertIn("unsubscribed", update_fields)
 
+    def test_email_preferences_accepts_sprint_cadence_emails_field(self):
+        """Sprint reminder email opt-out persists without changing global
+        newsletter subscription state."""
+        original_unsubscribed = self.user.unsubscribed
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"sprint_cadence_emails": False}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertFalse(data["sprint_cadence_emails"])
+        self.assertNotIn("newsletter", data)
+
+        self.user.refresh_from_db()
+        self.assertFalse(
+            self.user.email_preferences.get("sprint_cadence_emails"),
+        )
+        self.assertEqual(self.user.unsubscribed, original_unsubscribed)
+
     def test_email_preferences_workshop_emails_default_true_in_context(self):
         """A brand-new user with empty ``email_preferences`` defaults to
         ``workshop_emails_enabled=True`` in the account context."""
@@ -670,6 +693,14 @@ class EmailPreferencesAPITest(TestCase):
         response = self.client.post(
             self.url,
             data=json.dumps({"workshop_emails": "yes"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_email_preferences_rejects_non_bool_sprint_cadence_emails(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"sprint_cadence_emails": "yes"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
@@ -711,6 +742,41 @@ class AccountPageWorkshopEmailsToggleTest(TestCase):
         self.assertContains(
             response, "You will not receive workshop announcement emails.",
         )
+
+
+class AccountPageSprintCadenceEmailsToggleTest(TestCase):
+    """Issue #1200: account page carries a sprint reminder email toggle."""
+
+    def test_account_page_renders_sprint_cadence_toggle(self):
+        user = User.objects.create_user(email="sprint-toggle@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+
+        self.assertContains(response, 'id="sprint-cadence-emails-toggle"')
+        self.assertContains(response, 'id="sprint-cadence-emails-status"')
+        self.assertContains(response, "Sprint reminders")
+        self.assertContains(
+            response,
+            "Receive weekly sprint plan and note reminder emails.",
+        )
+
+    def test_default_sprint_cadence_toggle_is_on(self):
+        user = User.objects.create_user(email="sprint-toggle-on@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+
+        self.assertTrue(response.context["sprint_cadence_emails_enabled"])
+        self.assertContains(response, "You will receive sprint reminder emails.")
+
+    def test_opted_out_sprint_cadence_toggle_is_off(self):
+        user = User.objects.create_user(email="sprint-toggle-off@example.com")
+        user.email_preferences = {"sprint_cadence_emails": False}
+        user.save(update_fields=["email_preferences"])
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+
+        self.assertFalse(response.context["sprint_cadence_emails_enabled"])
+        self.assertContains(response, "You will not receive sprint reminder emails.")
 
 
 class AccountPageEmailPreferencesDisplayTest(TestCase):

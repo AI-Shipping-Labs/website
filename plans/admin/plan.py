@@ -13,6 +13,7 @@ from plans.models import (
     PlanRequest,
     Sprint,
     SprintAccountabilityPartner,
+    SprintCadenceDeliveryLog,
     SprintEnrollment,
     SprintFeedbackRequest,
     SprintPartnerIntroEmailLog,
@@ -91,6 +92,24 @@ class PlanReadyEmailLogAdmin(admin.ModelAdmin):
     search_fields = ['member__email', 'sprint__name', 'sprint__slug']
     raw_id_fields = [
         'plan', 'sprint', 'member', 'triggered_by', 'notification',
+        'email_log',
+    ]
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(SprintCadenceDeliveryLog)
+class SprintCadenceDeliveryLogAdmin(admin.ModelAdmin):
+    list_display = [
+        'kind', 'plan', 'member', 'week', 'progress_event', 'status',
+        'sent_at', 'updated_at',
+    ]
+    list_filter = ['kind', 'status']
+    search_fields = [
+        'member__email', 'plan__sprint__name', 'plan__sprint__slug',
+        'source_message_ts',
+    ]
+    raw_id_fields = [
+        'plan', 'member', 'week', 'progress_event', 'notification',
         'email_log',
     ]
     readonly_fields = ['created_at', 'updated_at']

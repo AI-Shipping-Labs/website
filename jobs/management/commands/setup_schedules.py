@@ -147,6 +147,17 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: ingest-plan-sprints (daily at 05:00 UTC)'))
 
+        # Daily member sprint cadence nudges (issue #1200). Runs after the
+        # #plan-sprints ingest and before onboarding reminders. The task is
+        # idempotent through SprintCadenceDeliveryLog rows, so re-running setup
+        # or the job itself never duplicates member notifications.
+        schedule(
+            'plans.tasks.sprint_cadence.send_sprint_cadence_notifications',
+            cron='15 5 * * *',
+            name='sprint-cadence-notifications',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: sprint-cadence-notifications (daily at 05:15 UTC)'))
+
         # One-week onboarding reminder sweep (issue #1133). Runs daily at
         # 06:30 UTC, an off-peak slot clear of the 03:00-05:00 import/ingest
         # jobs, the 06:00 Slack-membership refresh, and the 07:00-08:00

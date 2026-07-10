@@ -223,6 +223,34 @@ class HeaderTextNavigationIssue580Test(TestCase):
         self.assertIn('data-testid="mobile-header-plan-link"', header)
         self.assertNotIn('>My Plan<', header)
 
+    def test_public_desktop_dropdowns_expose_keyboard_aria_contract(self):
+        header = self._header_html()
+        primary = self._primary_nav(header)
+
+        for dropdown_id in ['about', 'community', 'resources']:
+            with self.subTest(dropdown=dropdown_id):
+                button_match = re.search(
+                    rf'<button[^>]*id="{dropdown_id}-dropdown-btn"[^>]*>',
+                    primary,
+                )
+                self.assertIsNotNone(button_match)
+                button_html = button_match.group(0)
+                self.assertIn('focus-visible:ring-2', button_html)
+                self.assertIn('aria-haspopup="menu"', button_html)
+                self.assertIn('aria-expanded="false"', button_html)
+                self.assertIn(
+                    f'aria-controls="{dropdown_id}-dropdown"',
+                    button_html,
+                )
+
+                panel = self._slice_block(primary, f'{dropdown_id}-dropdown')
+                self.assertIn('role="menu"', panel)
+                self.assertIn(
+                    f'aria-labelledby="{dropdown_id}-dropdown-btn"',
+                    panel,
+                )
+                self.assertIn('role="menuitem"', panel)
+
     def test_staff_header_keeps_studio_inside_account_controls(self):
         staff = User.objects.create_user(
             email='staff580@example.com',

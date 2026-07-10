@@ -13,49 +13,49 @@
     </a>
 
     <div class="hidden md:flex md:items-center md:gap-5 lg:gap-8" data-testid="desktop-primary-nav">
-      <div class="relative group">
-        <button type="button" class="text-sm text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1 outline-none" id="about-dropdown-btn" data-testid="nav-about-trigger">
+      <div class="relative group" data-header-public-dropdown="about">
+        <button type="button" class="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" id="about-dropdown-btn" data-testid="nav-about-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="about-dropdown">
           About
           <i data-lucide="chevron-down" class="h-4 w-4"></i>
         </button>
-        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="about-dropdown" data-testid="nav-about-menu">
+        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="about-dropdown" data-testid="nav-about-menu" role="menu" aria-labelledby="about-dropdown-btn">
         <div class="rounded-md border border-border bg-popover p-1 shadow-lg">
-          <a href="/about" data-testid="nav-about-link-about" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">About</a>
-          <a href="/about#team" data-testid="nav-about-link-team" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Team</a>
-          <a href="/faq" data-testid="nav-about-link-faq" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">FAQ</a>
+          <a href="/about" data-testid="nav-about-link-about" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">About</a>
+          <a href="/about#team" data-testid="nav-about-link-team" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Team</a>
+          <a href="/faq" data-testid="nav-about-link-faq" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">FAQ</a>
         </div>
         </div>
       </div>
-      <div class="relative group">
-        <button type="button" class="text-sm text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1 outline-none" id="community-dropdown-btn" data-testid="nav-community-trigger">
+      <div class="relative group" data-header-public-dropdown="community">
+        <button type="button" class="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" id="community-dropdown-btn" data-testid="nav-community-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="community-dropdown">
           Community
           <i data-lucide="chevron-down" class="h-4 w-4"></i>
         </button>
-        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="community-dropdown" data-testid="nav-community-menu">
+        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="community-dropdown" data-testid="nav-community-menu" role="menu" aria-labelledby="community-dropdown-btn">
         <div class="rounded-md border border-border bg-popover p-1 shadow-lg">
-          <a href="/community" data-testid="nav-community-link-overview" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Community</a>
-          <a href="/pricing" data-testid="nav-community-link-membership" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Membership</a>
-          <a href="/sprints" data-testid="nav-community-link-sprints" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Community Sprints</a>
-          <a href="/events" data-testid="nav-community-link-events" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Events</a>
+          <a href="/community" data-testid="nav-community-link-overview" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Community</a>
+          <a href="/pricing" data-testid="nav-community-link-membership" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Membership</a>
+          <a href="/sprints" data-testid="nav-community-link-sprints" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Community Sprints</a>
+          <a href="/events" data-testid="nav-community-link-events" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Events</a>
         </div>
         </div>
       </div>
-      <div class="relative group">
-        <button type="button" class="text-sm text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1 outline-none" id="resources-dropdown-btn" data-testid="nav-resources-trigger">
+      <div class="relative group" data-header-public-dropdown="resources">
+        <button type="button" class="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" id="resources-dropdown-btn" data-testid="nav-resources-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="resources-dropdown">
           Resources
           <i data-lucide="chevron-down" class="h-4 w-4"></i>
         </button>
-        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="resources-dropdown" data-testid="nav-resources-menu">
+        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="resources-dropdown" data-testid="nav-resources-menu" role="menu" aria-labelledby="resources-dropdown-btn">
         <div class="rounded-md border border-border bg-popover p-1 shadow-lg">
-          <a href="/blog" data-testid="nav-resources-link-blog" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Blog</a>
-          <a href="/courses" data-testid="nav-resources-link-courses" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Courses</a>
-          <a href="/workshops" data-testid="nav-resources-link-workshops" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Workshops</a>
-          <a href="/learning-path/ai-engineer" data-testid="nav-resources-link-learning-paths" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Learning Paths</a>
-          <a href="/projects" data-testid="nav-resources-link-projects" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Project Ideas</a>
-          <a href="/interview" data-testid="nav-resources-link-interview" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Interview Prep</a>
-          <a href="/resources" data-testid="nav-resources-link-curated-links" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Curated Links</a>
+          <a href="/blog" data-testid="nav-resources-link-blog" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Blog</a>
+          <a href="/courses" data-testid="nav-resources-link-courses" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Courses</a>
+          <a href="/workshops" data-testid="nav-resources-link-workshops" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Workshops</a>
+          <a href="/learning-path/ai-engineer" data-testid="nav-resources-link-learning-paths" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Learning Paths</a>
+          <a href="/projects" data-testid="nav-resources-link-projects" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Project Ideas</a>
+          <a href="/interview" data-testid="nav-resources-link-interview" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Interview Prep</a>
+          <a href="/resources" data-testid="nav-resources-link-curated-links" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Curated Links</a>
           {% if has_published_downloads %}
-          <a href="/downloads" data-testid="nav-resources-link-downloads" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Downloads</a>
+          <a href="/downloads" data-testid="nav-resources-link-downloads" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none cursor-pointer">Downloads</a>
           {% endif %}
         </div>
         </div>
@@ -349,6 +349,125 @@
         });
       }
       });
+  })();
+
+  // Public desktop dropdowns
+  (function() {
+    var containers = Array.prototype.slice.call(
+      document.querySelectorAll('[data-header-public-dropdown]')
+    );
+
+    if (!containers.length) return;
+
+    function getParts(container) {
+      var trigger = container.querySelector('button[aria-controls]');
+      var menu = trigger ? document.getElementById(trigger.getAttribute('aria-controls')) : null;
+      return { trigger: trigger, menu: menu };
+    }
+
+    function isOpen(container) {
+      var parts = getParts(container);
+      return parts.menu && !parts.menu.classList.contains('hidden');
+    }
+
+    function closeDropdown(container) {
+      var parts = getParts(container);
+      if (!parts.trigger || !parts.menu) return;
+      parts.menu.classList.add('hidden');
+      parts.trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    function closeAllExcept(activeContainer) {
+      containers.forEach(function(container) {
+        if (container !== activeContainer) {
+          closeDropdown(container);
+        }
+      });
+    }
+
+    function openDropdown(container) {
+      var name = container.getAttribute('data-header-public-dropdown');
+      var parts = getParts(container);
+      if (!parts.trigger || !parts.menu) return;
+
+      closeAllExcept(container);
+      document.dispatchEvent(new CustomEvent('header:dropdown-opened', {
+        detail: { dropdown: 'public-' + name }
+      }));
+      parts.menu.classList.remove('hidden');
+      parts.trigger.setAttribute('aria-expanded', 'true');
+    }
+
+    containers.forEach(function(container) {
+      var parts = getParts(container);
+      if (!parts.trigger || !parts.menu) return;
+
+      parts.trigger.addEventListener('focus', function() {
+        openDropdown(container);
+      });
+
+      parts.trigger.addEventListener('click', function(e) {
+        e.stopPropagation();
+        openDropdown(container);
+      });
+
+      parts.trigger.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openDropdown(container);
+        } else if (e.key === 'Escape' && isOpen(container)) {
+          e.preventDefault();
+          closeDropdown(container);
+          parts.trigger.focus();
+        }
+      });
+
+      parts.menu.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeDropdown(container);
+          parts.trigger.focus();
+        }
+      });
+
+      container.addEventListener('mouseenter', function() {
+        openDropdown(container);
+      });
+
+      container.addEventListener('mouseleave', function() {
+        closeDropdown(container);
+      });
+
+      container.addEventListener('focusout', function(e) {
+        if (!container.contains(e.relatedTarget)) {
+          closeDropdown(container);
+        }
+      });
+    });
+
+    document.addEventListener('click', function(e) {
+      containers.forEach(function(container) {
+        if (isOpen(container) && !container.contains(e.target)) {
+          closeDropdown(container);
+        }
+      });
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key !== 'Escape') return;
+      containers.forEach(function(container) {
+        if (isOpen(container)) {
+          closeDropdown(container);
+          getParts(container).trigger.focus();
+        }
+      });
+    });
+
+    document.addEventListener('header:dropdown-opened', function(e) {
+      if (!e.detail || !String(e.detail.dropdown || '').startsWith('public-')) {
+        closeAllExcept(null);
+      }
+    });
   })();
 
   // Account menu

@@ -387,7 +387,7 @@ class RelatedArticlesTest(TestCase):
     def test_related_articles_shown_on_detail(self):
         response = self.client.get('/blog/main-article')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Related Articles')
+        self.assertContains(response, 'Related content')
         self.assertContains(response, 'Related Python')
         self.assertContains(response, 'Related AI')
 

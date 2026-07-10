@@ -211,6 +211,20 @@ class BuildSpecTest(TestCase):
         )
         self.assertIn("event_series", example)
 
+    def test_sprint_response_example_documents_lifecycle_badge(self):
+        example = (
+            self.document["paths"]["/api/sprints/{slug}"]["get"]
+            ["responses"]["200"]["content"]["application/json"]["example"]
+        )
+        self.assertEqual(
+            set(example["lifecycle_badge"]),
+            {"state", "label"},
+        )
+
+    def test_sprint_status_enum_documents_completed(self):
+        props = self._request_body_properties("/api/sprints/{slug}", "patch")
+        self.assertIn("completed", props["status"]["enum"])
+
     def test_sprint_create_documents_unknown_series_422(self):
         example = (
             self.document["paths"]["/api/sprints"]["post"]

@@ -37,6 +37,8 @@ from plans.interview_note_utils import (
     normalize_source_type,
 )
 
+# Stored operator/admin state. This is intentionally separate from the
+# date-derived lifecycle badge returned by ``Sprint.sprint_badge()``.
 SPRINT_STATUS_CHOICES = [
     ('draft', 'Draft'),
     ('active', 'Active'),
@@ -271,8 +273,9 @@ class Sprint(TimestampedModelMixin, models.Model):
         Single source of truth for both the ``/sprints`` card and the sprint
         detail page, so neither template nor view duplicates the date logic.
         Display-only: this reads ``start_date`` / ``end_date`` and never
-        touches the stored ``status`` field. Compares plain dates (both
-        bounds are calendar dates, not datetimes).
+        touches the stored admin ``status`` field (``draft``, ``active``,
+        ``completed``, ``cancelled``). Compares plain dates (both bounds are
+        calendar dates, not datetimes).
 
         ``now`` is injectable (defaults to :func:`timezone.localdate`) so
         tests drive each state deterministically without freezing real time.

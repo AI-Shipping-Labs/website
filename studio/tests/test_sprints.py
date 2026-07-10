@@ -4,6 +4,7 @@ import datetime
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from plans.models import Sprint
 
@@ -72,6 +73,43 @@ class SprintListRenderTest(TestCase):
             f'<a href="/studio/sprints/{self.s2.pk}/" class="text-accent hover:underline">Beta sprint</a>',
             html=True,
         )
+
+    def test_sprint_list_separates_lifecycle_from_admin_status(self):
+        ended_active = Sprint.objects.create(
+            name='Ended but active',
+            slug='ended-active',
+            start_date=timezone.localdate() - datetime.timedelta(weeks=8),
+            duration_weeks=6,
+            status='active',
+        )
+        future_draft = Sprint.objects.create(
+            name='Future draft',
+            slug='future-draft',
+            start_date=timezone.localdate() + datetime.timedelta(days=30),
+            duration_weeks=6,
+            status='draft',
+        )
+
+        response = self.client.get('/studio/sprints/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Lifecycle')
+        self.assertContains(response, 'Admin status')
+        body = response.content.decode()
+        ended_row = body[
+            body.index(f'/studio/sprints/{ended_active.pk}/'):
+            body.index('</tr>', body.index(f'/studio/sprints/{ended_active.pk}/'))
+        ]
+        self.assertIn('Ended', ended_row)
+        self.assertIn('Active', ended_row)
+        self.assertIn('data-testid="sprint-list-lifecycle"', ended_row)
+        self.assertIn('data-testid="sprint-list-admin-status"', ended_row)
+        future_row = body[
+            body.index(f'/studio/sprints/{future_draft.pk}/'):
+            body.index('</tr>', body.index(f'/studio/sprints/{future_draft.pk}/'))
+        ]
+        self.assertIn('Upcoming', future_row)
+        self.assertIn('Draft', future_row)
 
 
 class SprintCreateTest(TestCase):
@@ -233,6 +271,58 @@ class SprintDetailEditAccessTest(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 403)
         self.assertNotContains(response, 'data-testid="view-on-site"', status_code=403)
+
+
+class SprintDetailLifecycleStatusTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff-detail-status@test.com', password='pw', is_staff=True,
+        )
+
+    def setUp(self):
+        self.client.login(email='staff-detail-status@test.com', password='pw')
+
+    def test_detail_separates_ended_lifecycle_from_active_admin_status(self):
+        sprint = Sprint.objects.create(
+            name='Ended admin active',
+            slug='ended-admin-active',
+            start_date=timezone.localdate() - datetime.timedelta(weeks=8),
+            duration_weeks=6,
+            status='active',
+        )
+
+        response = self.client.get(f'/studio/sprints/{sprint.pk}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Lifecycle')
+        self.assertContains(response, 'Admin status')
+        self.assertContains(response, 'data-testid="sprint-lifecycle-badge"')
+        self.assertContains(response, 'data-testid="sprint-admin-status-badge"')
+        body = response.content.decode()
+        lifecycle_pos = body.index('data-testid="sprint-lifecycle-badge"')
+        lifecycle_block = body[lifecycle_pos:body.index('</dd>', lifecycle_pos)]
+        self.assertIn('Ended', lifecycle_block)
+        admin_pos = body.index('data-testid="sprint-admin-status-badge"')
+        admin_block = body[admin_pos:body.index('</dd>', admin_pos)]
+        self.assertIn('Active', admin_block)
+
+    def test_complete_action_is_near_status_metadata_not_danger_zone(self):
+        sprint = Sprint.objects.create(
+            name='Can complete',
+            slug='can-complete',
+            start_date=timezone.localdate() - datetime.timedelta(weeks=8),
+            duration_weeks=6,
+            status='active',
+        )
+
+        response = self.client.get(f'/studio/sprints/{sprint.pk}/')
+
+        body = response.content.decode()
+        complete_pos = body.index('data-testid="sprint-complete-form"')
+        danger_pos = body.index('data-testid="sprint-danger-zone"')
+        self.assertLess(complete_pos, danger_pos)
+        self.assertContains(response, 'Mark completed')
 
 
 class SprintDetailViewOnSiteTest(TestCase):

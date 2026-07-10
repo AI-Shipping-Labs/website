@@ -1446,6 +1446,35 @@ def sprint_plan_request_create_plan(request, sprint_id, member_id):
 
 @staff_required
 @require_POST
+def sprint_complete(request, sprint_id):
+    """Mark a sprint's stored admin status as completed.
+
+    This is an operator lifecycle action only: it does not derive from dates
+    and does not mutate plans, enrollments, feedback, partners, or events.
+    """
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    if sprint.status == 'completed':
+        messages.info(request, f'Sprint "{sprint.name}" is already completed.')
+        return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+    if sprint.status == 'cancelled':
+        messages.warning(
+            request,
+            f'Sprint "{sprint.name}" is cancelled and cannot be completed.',
+        )
+        return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+    sprint.status = 'completed'
+    sprint.save(update_fields=['status'])
+    logger.info(
+        'studio.sprint_complete actor=%s sprint_id=%s',
+        request.user.pk, sprint.pk,
+    )
+    messages.success(request, f'Sprint "{sprint.name}" marked completed.')
+    return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+
+@staff_required
+@require_POST
 def sprint_cancel(request, sprint_id):
     """Soft-cancel a sprint (issue #949).
 

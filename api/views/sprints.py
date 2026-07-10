@@ -72,6 +72,7 @@ _SPRINT_EXAMPLE = {
     "start_date": "2026-05-01",
     "duration_weeks": 6,
     "status": "active",
+    "lifecycle_badge": {"state": "active", "label": "Active"},
     "event_series": None,
     "created_at": "2026-04-15T12:00:00+00:00",
     "updated_at": "2026-04-15T12:00:00+00:00",
@@ -265,6 +266,7 @@ def _snippet(value, *, limit=180):
 
 
 def _serialize_sprint_summary(sprint):
+    lifecycle_badge = sprint.sprint_badge_current
     return {
         "slug": sprint.slug,
         "name": sprint.name,
@@ -276,6 +278,10 @@ def _serialize_sprint_summary(sprint):
         ),
         "duration_weeks": sprint.duration_weeks,
         "status": sprint.status,
+        "lifecycle_badge": {
+            "state": lifecycle_badge.state,
+            "label": lifecycle_badge.label,
+        },
     }
 
 
@@ -660,7 +666,8 @@ def _validation_error_response(exc):
                 "Returns every sprint visible to the bearer token. "
                 "Non-staff tokens see every sprint row -- visibility "
                 "narrowing happens on the per-sprint detail endpoint, "
-                "not on the collection."
+                "not on the collection. ``status`` is the stored admin "
+                "state; ``lifecycle_badge`` is derived from sprint dates."
             ),
             "query": {
                 "status": {
@@ -863,6 +870,11 @@ def sprints_collection(request):
         },
         "PATCH": {
             "summary": "Update a sprint (staff-only)",
+            "description": (
+                "Staff-token-only. ``status`` writes the stored admin "
+                "state, including ``completed``; ``lifecycle_badge`` in the "
+                "response remains date-derived."
+            ),
             "request_body": {
                 "properties": {
                     "name": {"type": "string"},

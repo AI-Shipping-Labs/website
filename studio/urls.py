@@ -221,6 +221,7 @@ from studio.views.sprints import (
     sprint_accountability_remove,
     sprint_add_member,
     sprint_cancel,
+    sprint_complete,
     sprint_create,
     sprint_delete,
     sprint_detail,
@@ -901,6 +902,11 @@ urlpatterns = [
     path('sprints/new', sprint_create, name='studio_sprint_create'),
     path('sprints/<int:sprint_id>/', sprint_detail, name='studio_sprint_detail'),
     path('sprints/<int:sprint_id>/edit', sprint_edit, name='studio_sprint_edit'),
+    path(
+        'sprints/<int:sprint_id>/complete',
+        sprint_complete,
+        name='studio_sprint_complete',
+    ),
     # Destructive sprint controls (issue #949). Action verbs, no trailing
     # slash, matching the ``sprints/<id>/edit`` convention. Cancel is a soft
     # state change; delete is hard but guarded to empty sprints in the view.

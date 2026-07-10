@@ -26,6 +26,7 @@ def _isoformat_or_none(value):
 def serialize_sprint(sprint):
     """Sprint dict shape used by every sprint endpoint."""
     series = sprint.event_series
+    lifecycle_badge = sprint.sprint_badge_current
     return {
         "slug": sprint.slug,
         "name": sprint.name,
@@ -37,6 +38,10 @@ def serialize_sprint(sprint):
         ),
         "duration_weeks": sprint.duration_weeks,
         "status": sprint.status,
+        "lifecycle_badge": {
+            "state": lifecycle_badge.state,
+            "label": lifecycle_badge.label,
+        },
         "event_series": (
             {"id": series.id, "slug": series.slug} if series else None
         ),

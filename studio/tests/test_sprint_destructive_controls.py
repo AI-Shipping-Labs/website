@@ -11,7 +11,17 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from plans.models import Plan, Sprint, SprintEnrollment
+from events.models import EventSeries
+from plans.models import (
+    Plan,
+    PlanRequest,
+    Sprint,
+    SprintAccountabilityPartner,
+    SprintEnrollment,
+    SprintFeedbackRequest,
+    SprintFeedbackSummary,
+)
+from questionnaires.models import Questionnaire
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -77,6 +87,135 @@ class SprintCancelTest(TierSetupMixin, TestCase):
     def test_cancel_non_staff_forbidden(self):
         self.client.login(email='member@example.com', password='pw')
         response = self.client.post(f'/studio/sprints/{self.sprint.pk}/cancel')
+        self.assertEqual(response.status_code, 403)
+        self.sprint.refresh_from_db()
+        self.assertEqual(self.sprint.status, 'active')
+
+
+class SprintCompleteTest(TierSetupMixin, TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            email='staff@example.com', password='pw', is_staff=True,
+        )
+        self.member = User.objects.create_user(
+            email='member@example.com', password='pw',
+        )
+        self.partner = User.objects.create_user(
+            email='partner@example.com', password='pw',
+        )
+        self.sprint = _make_sprint(slug='complete', status='active')
+
+    def test_complete_sets_status_and_preserves_related_work(self):
+        series = EventSeries.objects.create(
+            name='Sprint calls',
+            slug='sprint-calls',
+            start_time='18:00',
+        )
+        self.sprint.event_series = series
+        self.sprint.save(update_fields=['event_series'])
+        enrollment = SprintEnrollment.objects.create(
+            sprint=self.sprint, user=self.member, enrolled_by=self.staff,
+        )
+        Plan.objects.create(sprint=self.sprint, member=self.member)
+        request = PlanRequest.objects.create(
+            sprint=self.sprint, member=self.member,
+        )
+        questionnaire = Questionnaire.objects.create(
+            title='Sprint Feedback', purpose='feedback',
+        )
+        feedback_request = SprintFeedbackRequest.objects.create(
+            sprint=self.sprint,
+            questionnaire=questionnaire,
+            created_by=self.staff,
+        )
+        summary = SprintFeedbackSummary.objects.create(
+            feedback_request=feedback_request,
+            result_json={
+                'themes': [],
+                'what_went_well': [],
+                'what_to_improve': [],
+                'recommendations': [],
+                'next_sprint_signal': '',
+                'response_count': 0,
+            },
+            response_count=0,
+            model_name='test-model',
+            generated_by=self.staff,
+            generated_at=timezone.now(),
+        )
+        SprintEnrollment.objects.create(
+            sprint=self.sprint, user=self.partner, enrolled_by=self.staff,
+        )
+        assignment = SprintAccountabilityPartner.objects.create(
+            sprint=self.sprint,
+            member=self.member,
+            partner=self.partner,
+            assigned_by=self.staff,
+        )
+        self.client.login(email='staff@example.com', password='pw')
+
+        response = self.client.post(f'/studio/sprints/{self.sprint.pk}/complete')
+
+        self.assertRedirects(response, f'/studio/sprints/{self.sprint.pk}/')
+        self.sprint.refresh_from_db()
+        self.assertEqual(self.sprint.status, 'completed')
+        self.assertEqual(self.sprint.event_series_id, series.pk)
+        self.assertTrue(SprintEnrollment.objects.filter(pk=enrollment.pk).exists())
+        self.assertEqual(self.sprint.enrollments.count(), 2)
+        self.assertEqual(self.sprint.plans.count(), 1)
+        self.assertTrue(PlanRequest.objects.filter(pk=request.pk).exists())
+        self.assertTrue(
+            SprintFeedbackRequest.objects.filter(pk=feedback_request.pk).exists(),
+        )
+        self.assertTrue(SprintFeedbackSummary.objects.filter(pk=summary.pk).exists())
+        self.assertTrue(
+            SprintAccountabilityPartner.objects.filter(pk=assignment.pk).exists(),
+        )
+
+    def test_complete_is_idempotent_for_already_completed_sprint(self):
+        self.sprint.status = 'completed'
+        self.sprint.save(update_fields=['status'])
+        self.client.login(email='staff@example.com', password='pw')
+
+        response = self.client.post(f'/studio/sprints/{self.sprint.pk}/complete')
+
+        self.assertRedirects(response, f'/studio/sprints/{self.sprint.pk}/')
+        self.sprint.refresh_from_db()
+        self.assertEqual(self.sprint.status, 'completed')
+
+    def test_complete_refuses_cancelled_sprint_and_ui_hides_action(self):
+        self.sprint.status = 'cancelled'
+        self.sprint.save(update_fields=['status'])
+        self.client.login(email='staff@example.com', password='pw')
+
+        response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-testid="sprint-complete-form"')
+
+        response = self.client.post(f'/studio/sprints/{self.sprint.pk}/complete')
+
+        self.assertRedirects(response, f'/studio/sprints/{self.sprint.pk}/')
+        self.sprint.refresh_from_db()
+        self.assertEqual(self.sprint.status, 'cancelled')
+
+    def test_complete_get_returns_405(self):
+        self.client.login(email='staff@example.com', password='pw')
+        response = self.client.get(f'/studio/sprints/{self.sprint.pk}/complete')
+        self.assertEqual(response.status_code, 405)
+        self.sprint.refresh_from_db()
+        self.assertEqual(self.sprint.status, 'active')
+
+    def test_complete_anonymous_redirects_to_login(self):
+        response = self.client.post(f'/studio/sprints/{self.sprint.pk}/complete')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+        self.sprint.refresh_from_db()
+        self.assertEqual(self.sprint.status, 'active')
+
+    def test_complete_non_staff_forbidden(self):
+        self.client.login(email='member@example.com', password='pw')
+        response = self.client.post(f'/studio/sprints/{self.sprint.pk}/complete')
         self.assertEqual(response.status_code, 403)
         self.sprint.refresh_from_db()
         self.assertEqual(self.sprint.status, 'active')
@@ -334,7 +473,7 @@ class SprintDetailMembersTest(TierSetupMixin, TestCase):
         self.sprint.save(update_fields=['status'])
         self.client.login(email='staff@example.com', password='pw')
         response = self.client.get(f'/studio/sprints/{self.sprint.pk}/')
-        self.assertContains(response, 'sprint-status-badge')
+        self.assertContains(response, 'sprint-admin-status-badge')
         self.assertContains(response, 'Cancelled')
 
     def test_member_rows_order_enrolled_then_plan_only_by_created_at(self):

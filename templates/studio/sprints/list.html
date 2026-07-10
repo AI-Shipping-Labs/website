@@ -24,7 +24,8 @@
     <thead class="bg-secondary">
       <tr>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Lifecycle</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Admin status</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Start date</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Duration</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Plans</th>
@@ -39,7 +40,14 @@
           <a href="{% url 'studio_sprint_detail' sprint_id=sprint.pk %}" class="text-accent hover:underline">{{ sprint.name }}</a>
           <div class="text-xs text-muted-foreground font-mono">{{ sprint.slug }}</div>
         </td>
-        <td class="px-6 py-4">
+        <td class="px-6 py-4" data-testid="sprint-list-lifecycle">
+          {% with badge=sprint.sprint_badge_current %}
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ badge.css_class }}">
+            {{ badge.label }}
+          </span>
+          {% endwith %}
+        </td>
+        <td class="px-6 py-4" data-testid="sprint-list-admin-status">
           {% studio_status_badge sprint.status sprint.get_status_display %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">{{ sprint.start_date|operator_date }}</td>
@@ -65,7 +73,7 @@
       </tr>
       {% empty %}
         {% url 'studio_sprint_list' as sprints_clear_url %}
-        {% studio_empty_state 'filter' entity_label='sprint' entity_label_plural='sprints' clear_url=sprints_clear_url colspan=7 %}
+        {% studio_empty_state 'filter' entity_label='sprint' entity_label_plural='sprints' clear_url=sprints_clear_url colspan=8 %}
       {% endfor %}
     </tbody>
   </table>

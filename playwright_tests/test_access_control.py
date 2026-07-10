@@ -502,7 +502,8 @@ class TestScenario449UnverifiedSignupFreeArticle:
         final_body = page.content()
         assert "Full article body after verification" in final_body
         assert 'data-testid="verify-email-required-card"' not in final_body
-        assert "Related Articles" in final_body
+        assert "Related content" in final_body
+        assert "Related Verification Article" in final_body
 
 
 # ---------------------------------------------------------------

@@ -19,6 +19,7 @@ from content.access import (
     can_access,
     get_required_tier_name,
 )
+from content.services.related_content import build_related_content_rail
 from events.models import (
     Event,
     EventFeedback,
@@ -796,6 +797,11 @@ def event_detail(request, event_id, slug):
         # Issue #1037: structured post-event resource links for standalone
         # completed events. No description scraping, no inline playback UI.
         'post_event_resources': post_event_resources,
+        'related_content': (
+            build_related_content_rail(event)
+            if event.published and event.status not in HIDDEN_FROM_PUBLIC_STATUSES
+            else None
+        ),
         'freestyle_evidence': (
             build_freestyle_evidence(event)
             if event.is_upcoming and gating.get('gated_reason') == 'insufficient_tier'

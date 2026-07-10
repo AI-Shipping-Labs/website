@@ -12,6 +12,7 @@ from content.access import (
     get_user_level,
 )
 from content.models import Article, CuratedLink, Download, Project, TagRule, Tutorial
+from content.services.related_content import build_related_content_rail
 from content.tier_config import get_activities
 from plans.models import Plan, Sprint, SprintEnrollment
 
@@ -280,11 +281,10 @@ def blog_detail(request, slug):
     """Blog post detail page with related articles."""
     article = get_object_or_404(Article, slug=slug, published=True)
 
-    related_articles = article.get_related_articles(limit=3)
     tag_rules = _get_tag_rules_for_tags(article.tags)
     context = {
         'article': article,
-        'related_articles': related_articles,
+        'related_content': build_related_content_rail(article),
         'tag_rules': tag_rules,
         'learning_stages': article.data_json.get('learning_stages', []),
     }
@@ -357,7 +357,11 @@ def project_detail(request, slug):
     """Project detail page."""
     project = get_object_or_404(Project, slug=slug, published=True)
     tag_rules = _get_tag_rules_for_tags(project.tags)
-    context = {'project': project, 'tag_rules': tag_rules}
+    context = {
+        'project': project,
+        'related_content': build_related_content_rail(project),
+        'tag_rules': tag_rules,
+    }
     context.update(build_gating_context(request.user, project, 'project'))
     _record_resource_view_if_accessible(
         request, project, 'project', project.slug, 'project_detail', slug,
@@ -474,7 +478,11 @@ def tutorial_detail(request, slug):
     """Tutorial detail page."""
     tutorial = get_object_or_404(Tutorial, slug=slug, published=True)
     tag_rules = _get_tag_rules_for_tags(tutorial.tags)
-    context = {'tutorial': tutorial, 'tag_rules': tag_rules}
+    context = {
+        'tutorial': tutorial,
+        'related_content': build_related_content_rail(tutorial),
+        'tag_rules': tag_rules,
+    }
     context.update(build_gating_context(request.user, tutorial, 'tutorial'))
     _record_resource_view_if_accessible(
         request, tutorial, 'tutorial', tutorial.slug, 'tutorial_detail', slug,

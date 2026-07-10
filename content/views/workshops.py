@@ -51,6 +51,7 @@ from content.models import (
     normalize_workshop_skill_level,
 )
 from content.services import completion as completion_service
+from content.services.related_content import build_related_content_rail
 from content.templatetags.video_utils import (
     append_query_param,
     detect_video_source,
@@ -670,6 +671,7 @@ def workshop_detail(request, slug):
         'pages': pages,
         'first_page': first_page,
         'event': workshop.event,
+        'related_content': build_related_content_rail(workshop),
         'resolved_materials': materials,
         'can_show_materials': can_show_materials,
     })

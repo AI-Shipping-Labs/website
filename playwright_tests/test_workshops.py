@@ -133,11 +133,12 @@ def _create_workshop(
             defaults={'position': 0},
         )
 
-    pages_data = pages_data or [
-        ('intro', 'Introduction', '# Welcome\n\nThis is the intro.'),
-        ('setup', 'Setup', '## Step 1\n\nInstall dependencies.'),
-        ('deploy', 'Deploy', '## Final step\n\nShip it.'),
-    ]
+    if pages_data is None:
+        pages_data = [
+            ('intro', 'Introduction', '# Welcome\n\nThis is the intro.'),
+            ('setup', 'Setup', '## Step 1\n\nInstall dependencies.'),
+            ('deploy', 'Deploy', '## Final step\n\nShip it.'),
+        ]
     for i, (s, t, body) in enumerate(pages_data, start=1):
         WorkshopPage.objects.create(
             workshop=workshop, slug=s, title=t,
@@ -470,6 +471,120 @@ class TestVisitorBrowsesCatalog:
         recording_lock = page.locator('[data-testid="workshop-video-locked"]')
         assert recording_lock.is_visible()
         assert 'Main or above' in recording_lock.inner_text()
+
+    @pytest.mark.core
+    def test_visitor_scans_redesigned_card_signals_before_opening(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='scan-workshop',
+            title='Card Signal Workshop',
+            landing=0,
+            pages=10,
+            recording=20,
+            with_event=True,
+            materials=[{
+                'title': 'Slides',
+                'url': 'https://example.com/slides',
+            }],
+            code_repo_url='https://github.com/example/card-signal-workshop',
+            tags=['agents', 'python'],
+            instructor='Alexey Grigorev',
+            core_tools=['Claude Code', 'OpenAI API'],
+        )
+        _create_workshop(
+            slug='signin-workshop',
+            title='Sign-in Workshop',
+            landing=0,
+            pages=5,
+            recording=5,
+            with_event=False,
+            code_repo_url='',
+            tags=[],
+            instructor='Valeriia Kuka',
+        )
+        _create_workshop(
+            slug='bare-workshop',
+            title='Bare Metadata Workshop',
+            landing=0,
+            pages=0,
+            recording=0,
+            pages_data=[],
+            with_event=False,
+            code_repo_url='',
+            description='',
+            instructor='',
+            tags=[],
+        )
+
+        page.goto(f'{django_server}/workshops/catalog', wait_until='domcontentloaded')
+
+        scan_card = page.locator('article[data-workshop-slug="scan-workshop"]')
+        assert scan_card.is_visible()
+        assert scan_card.locator('[data-testid="workshop-card-type"]').inner_text() == (
+            'Workshop'
+        )
+
+        access = scan_card.locator('[data-testid="workshop-card-access"]')
+        assert 'Access' in access.inner_text()
+        assert 'Basic or above' in access.inner_text()
+        assert 'Free with sign-in' not in access.inner_text()
+
+        metadata = scan_card.locator('[data-testid="workshop-card-metadata"]')
+        metadata_text = metadata.inner_text()
+        assert 'Instructor' in metadata_text
+        assert 'Alexey Grigorev' in metadata_text
+        assert 'Date' in metadata_text
+        assert 'Apr 21, 2026' in metadata_text
+
+        tools = scan_card.locator('[data-testid="workshop-card-tools"]')
+        tools_text = tools.inner_text()
+        assert 'tools' in tools_text.lower()
+        assert 'Claude Code' in tools_text
+        assert 'OpenAI API' in tools_text
+
+        deliverables = scan_card.locator('[data-testid="workshop-card-deliverables"]')
+        deliverable_text = deliverables.inner_text()
+        assert 'includes' in deliverable_text.lower()
+        assert 'Tutorial pages' in deliverable_text
+        assert 'Recording' in deliverable_text
+        assert 'Code' in deliverable_text
+        assert 'Materials' in deliverable_text
+
+        topics = scan_card.locator('[data-testid="workshop-card-topics"]')
+        assert 'topics' in topics.inner_text().lower()
+        agents_tag = topics.locator('a:has-text("agents")')
+        assert agents_tag.get_attribute('href') == '/workshops/catalog?tag=agents'
+
+        signin_access = page.locator(
+            'article[data-workshop-slug="signin-workshop"] '
+            '[data-testid="workshop-card-access"]',
+        )
+        assert 'Access' in signin_access.inner_text()
+        assert 'Free with sign-in' in signin_access.inner_text()
+
+        bare_card = page.locator('article[data-workshop-slug="bare-workshop"]')
+        assert bare_card.locator('[data-testid="workshop-card-link"]').get_attribute(
+            'href',
+        ) == '/workshops/bare-workshop'
+        assert bare_card.locator('[data-testid="workshop-card-title"]').inner_text() == (
+            'Bare Metadata Workshop'
+        )
+        assert bare_card.locator('[data-testid="workshop-card-instructor"]').count() == 0
+        assert bare_card.locator('[data-testid="workshop-card-description"]').count() == 0
+        assert bare_card.locator('[data-testid="workshop-card-topics"]').count() == 0
+        assert bare_card.locator('[data-testid="workshop-card-deliverables"]').count() == 0
+
+        scan_card.locator('[data-testid="workshop-card-link"]').click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert page.url.endswith('/workshops/scan-workshop')
+        assert page.locator('[data-testid="workshop-title"]').inner_text() == (
+            'Card Signal Workshop'
+        )
+        assert page.locator('[data-testid="workshop-pages-paywall"]').is_visible()
+        assert 'Upgrade to Basic to access this workshop' in page.content()
 
     def test_access_and_tag_filters_preserve_each_other(
         self, django_server, page,

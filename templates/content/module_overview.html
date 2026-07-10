@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% load seo_tags %}
 
 {% block title %}{{ module.title }} | {{ course.title }} | AI Shipping Labs{% endblock %}
-{% block meta_description %}{{ module.overview|truncatechars:160 }}{% endblock %}
+{% block meta_description %}{% seo_description module "module" %}{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ site_url }}{{ module.get_absolute_url }}">{% endblock %}
 
 {% block body %}

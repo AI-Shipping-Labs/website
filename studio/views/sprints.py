@@ -69,6 +69,10 @@ from plans.services import (
     send_plan_ready_email_for_plan,
     send_plan_ready_emails,
 )
+from plans.services.roster_activity import (
+    ACTIVITY_FILTER_NO_UPDATE_THIS_WEEK,
+    build_sprint_roster_activity,
+)
 from questionnaires.models import Questionnaire, Response
 from questionnaires.onboarding import get_onboarding_response
 from studio.decorators import staff_required
@@ -546,23 +550,18 @@ def sprint_detail(request, sprint_id):
         Sprint.objects.select_related('event_series'),
         pk=sprint_id,
     )
-    plans = list(
-        Plan.objects.filter(sprint=sprint)
-        .select_related('member')
-        .order_by('created_at', 'pk')
+    activity_filter = (request.GET.get('activity') or '').strip()
+    if activity_filter != ACTIVITY_FILTER_NO_UPDATE_THIS_WEEK:
+        activity_filter = ''
+    roster_activity = build_sprint_roster_activity(
+        sprint,
+        activity_filter=activity_filter,
     )
+    plans = roster_activity['plans']
     _attach_plan_ready_email_state(plans)
-    enrollments = list(
-        sprint.enrollments
-        .select_related('user', 'enrolled_by')
-        .order_by('enrolled_at', 'pk')
-    )
+    enrollments = roster_activity['enrollments']
     enrollment_count = len(enrollments)
-    sprint_member_rows = _build_sprint_member_rows(
-        sprint=sprint,
-        enrollments=enrollments,
-        plans=plans,
-    )
+    sprint_member_rows = roster_activity['rows']
     _attach_accountability_context(sprint, sprint_member_rows, enrollments)
     event_series = sprint.event_series
     event_series_events = (
@@ -580,6 +579,9 @@ def sprint_detail(request, sprint_id):
         'enrollment_count': enrollment_count,
         'plan_count': len(plans),
         'sprint_member_rows': sprint_member_rows,
+        'roster_activity': roster_activity,
+        'activity_filter': activity_filter,
+        'activity_filter_no_update': ACTIVITY_FILTER_NO_UPDATE_THIS_WEEK,
         'event_series': event_series,
         'event_series_events': event_series_events,
         'pending_plan_requests': pending_plan_requests,

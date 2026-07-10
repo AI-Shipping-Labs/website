@@ -9069,6 +9069,120 @@
         ]
       }
     },
+    "/api/sprints/{slug}/roster-activity": {
+      "get": {
+        "description": "Staff-token-only read API for the same merged sprint roster activity data shown in Studio: enrolled rows first, plan-only rows after, checkpoint progress, latest local activity source, and current sprint-week triage state. Supports ``activity=no_update_this_week`` to return only rows needing follow-up during an active sprint week.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "activity",
+            "required": false,
+            "schema": {
+              "description": "Filter to no-plan or stale rows for the current active sprint week.",
+              "enum": [
+                "no_update_this_week"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "current_week": {
+                    "active": true,
+                    "week_end": "2026-05-10T12:00:00+02:00",
+                    "week_number": 2,
+                    "week_start": "2026-05-08T00:00:00+02:00"
+                  },
+                  "members": [
+                    {
+                      "enrollment": {
+                        "enrolled": true,
+                        "enrolled_at": "2026-05-01T12:00:00+00:00",
+                        "id": 12
+                      },
+                      "last_update": {
+                        "label": "Slack update",
+                        "source": "slack",
+                        "source_label": "Slack update",
+                        "timestamp": "2026-05-10T10:00:00+00:00"
+                      },
+                      "member": {
+                        "display_name": "Member Example",
+                        "email": "member@example.com",
+                        "id": 42
+                      },
+                      "plan": {
+                        "exists": true,
+                        "id": 88,
+                        "shared_at": null,
+                        "title": "Ship the first agent workflow",
+                        "visibility": "private"
+                      },
+                      "progress": {
+                        "done": 3,
+                        "label": "3/5 checkpoints",
+                        "total": 5
+                      },
+                      "this_week": {
+                        "label": "Updated this week",
+                        "status": "updated",
+                        "updated": true
+                      }
+                    }
+                  ],
+                  "sprint": {
+                    "duration_weeks": 6,
+                    "end_date": "2026-06-12",
+                    "id": 8,
+                    "name": "May 2026",
+                    "slug": "may-2026",
+                    "start_date": "2026-05-01",
+                    "status": "active"
+                  },
+                  "totals": {
+                    "enrolled": 2,
+                    "members": 3,
+                    "no_update_this_week": 1,
+                    "plans": 2
+                  }
+                }
+              }
+            },
+            "description": "Sprint roster activity."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_sprint",
+                  "error": "Sprint not found"
+                }
+              }
+            },
+            "description": "Sprint not found."
+          }
+        },
+        "summary": "Retrieve sprint roster activity (staff-only)",
+        "tags": [
+          "Sprints"
+        ]
+      }
+    },
     "/api/sync/sources": {
       "delete": {
         "description": "Source deletion is intentionally unavailable through the API; use Studio.",

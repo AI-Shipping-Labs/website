@@ -652,7 +652,7 @@ class StudioEventSeriesCadenceLabelTest(StaffMixin, TestCase):
         response = self.client.get('/studio/event-series/')
         html = response.content.decode()
         cell = self._cell(html, 'Cadence', '/empty-series')
-        self.assertEqual(cell, '')
+        self.assertEqual(cell, 'No occurrences scheduled')
 
     # --- Studio detail header ---------------------------------------------
 

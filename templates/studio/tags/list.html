@@ -77,15 +77,7 @@
   </table>
 </div>
 {% else %}
-<div class="bg-card border border-border rounded-lg p-12 text-center" data-testid="studio-tags-empty">
-  <i data-lucide="tag" class="mx-auto h-10 w-10 text-muted-foreground/60"></i>
-  <p class="mt-4 text-sm text-muted-foreground">No contact tags exist yet.</p>
-  <p class="mt-2 text-xs text-muted-foreground">Add tags from a user detail page; they will appear here for global rename and delete actions.</p>
-  <a href="{% url 'studio_user_list' %}"
-     class="mt-4 inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-    <i data-lucide="users" class="h-4 w-4"></i>
-    <span>Find users</span>
-  </a>
-</div>
+  {% url 'studio_user_list' as tags_user_list_url %}
+  {% studio_empty_state 'fresh' entity_label='contact tag' entity_label_plural='contact tags' create_url=tags_user_list_url cta_label='Find users' testid_suffix='studio-tags-empty' %}
 {% endif %}
 {% endblock %}

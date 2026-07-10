@@ -244,7 +244,7 @@ class StudioListComponentRenderTest(TestCase):
                 self.assertNotContains(response, 'data-testid="synced-badge"')
                 self.assertNotContains(response, 'data-component="studio-synced-badge"')
 
-    def test_user_list_uses_primary_and_secondary_action_hierarchy(self):
+    def test_user_list_exposes_only_view_action(self):
         user = User.objects.create_user(
             email='action-user@test.com',
             password='testpass',
@@ -254,10 +254,10 @@ class StudioListComponentRenderTest(TestCase):
 
         self.assertContains(response, f'/studio/users/{user.pk}/')
         self.assertContains(response, 'data-testid="user-view-link"')
-        self.assertContains(response, f'/studio/impersonate/{user.pk}/')
+        self.assertNotContains(response, f'/studio/impersonate/{user.pk}/')
+        self.assertNotContains(response, 'Login as')
         self.assertContains(response, 'studio-action-group')
         self.assertContains(response, 'border-accent bg-accent')
-        self.assertContains(response, 'border-border bg-secondary')
 
     def test_redirect_list_uses_destructive_action_confirming_item(self):
         from integrations.models import Redirect
@@ -304,11 +304,12 @@ class StudioListRowActionPillStyleTest(TestCase):
     # the cell uses the canonical helpers.
     canonical_call_sites = [
         ('templates/studio/plans/list.html', [
-            "studio_list_action plan_detail_url 'View plan' 'primary'",
-            "studio_list_action plan_edit_url 'Edit' 'secondary'",
+            "studio_list_action plan_edit_url 'Edit' 'primary'",
+            "studio_list_action plan_detail_url 'View plan' 'secondary'",
         ]),
         ('templates/studio/sprints/list.html', [
-            "studio_list_action sprint_edit_url 'Edit' 'secondary'",
+            "studio_list_action sprint_edit_url 'Edit' 'primary'",
+            "studio_list_action sprint_detail_url 'View' 'secondary'",
         ]),
         ('templates/studio/downloads/list.html', [
             "studio_list_action download.get_absolute_url 'View on site' 'secondary' True 'noopener noreferrer'",

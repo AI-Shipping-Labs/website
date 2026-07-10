@@ -167,7 +167,7 @@ class StudioRecordingsListSharedHelperTest(TestCase):
         # header. Every other field must carry one so the LABEL: VALUE
         # pair renders inline at mobile.
         self.assertContains(response, 'data-label="Status"')
-        self.assertContains(response, 'data-label="Date"')
+        self.assertContains(response, 'data-label="Recorded"')
         self.assertContains(response, 'data-label="Actions"')
 
     def test_actions_cell_is_marked_with_studio_actions_cell(self):

@@ -195,10 +195,12 @@ class StudioUserListTest(TestCase):
         rows = {row['email']: row for row in response.context['user_rows']}
         self.assertEqual(rows['alice@test.com']['status'], 'Active')
 
-    def test_login_as_button_present_for_every_user(self):
+    def test_user_list_omits_login_as_actions(self):
         response = self.client.get('/studio/users/?filter=all')
-        self.assertContains(response, f'/studio/impersonate/{self.alice.pk}/')
-        self.assertContains(response, f'/studio/impersonate/{self.override_user.pk}/')
+        self.assertContains(response, 'data-testid="user-view-link"')
+        self.assertNotContains(response, f'/studio/impersonate/{self.alice.pk}/')
+        self.assertNotContains(response, f'/studio/impersonate/{self.override_user.pk}/')
+        self.assertNotContains(response, 'Login as')
 
     def test_counts_in_context(self):
         response = self.client.get('/studio/users/')

@@ -3,7 +3,7 @@
 {% load member_empty_state %}
 
 {% block title %}Events | AI Shipping Labs{% endblock %}
-{% block meta_description %}Upcoming and past events - live workshops, coding sessions, and community activities.{% endblock %}
+{% block meta_description %}Scheduled live community sessions, registration, calendar view, and recordings from past AI Shipping Labs events.{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}
@@ -13,10 +13,10 @@
       <div class="mb-12">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Events</p>
         <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-          Community Events &amp; Workshops
+          Live community events
         </h1>
         <p class="mt-4 text-lg text-muted-foreground">
-          Join live workshops, coding sessions, and community activities. Register for upcoming events or watch recordings of past ones.
+          Join scheduled live sessions, coding sessions, and community moments. Register for upcoming events, add them to your calendar, or browse recordings from past events.
         </p>
       </div>
 
@@ -52,7 +52,7 @@
            data-testid="events-filter-past"
            class="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors min-h-[44px]
            {% if filter_mode == 'past' %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80{% endif %}">
-          Past recordings
+          Past event recordings
         </a>
       </div>
 
@@ -105,16 +105,20 @@
         <h2 class="mb-6 flex items-center gap-2 text-2xl font-semibold tracking-tight">
           {% if filter_mode == 'past' %}
           <i data-lucide="video" class="h-6 w-6 text-accent"></i>
-          Past recordings
+          Past event recordings
           {% else %}
           <i data-lucide="archive" class="h-6 w-6 text-muted-foreground"></i>
-          Past
+          Past events
           {% endif %}
         </h2>
 
         {% if past_events %}
         {% if filter_mode == 'past' %}
-        <!-- Past recordings: rich card layout for completed events with recordings -->
+        <p class="mb-6 max-w-2xl text-sm leading-6 text-muted-foreground">
+          Recordings from past events stay here for legacy discovery. When a recording has a linked workshop, the workshop is the canonical learning artifact.
+        </p>
+
+        <!-- Past event recordings: rich card layout for completed events with recordings -->
         <div class="space-y-8">
           {% for event in past_events %}
           <article class="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 sm:p-5" data-testid="past-recording-card">
@@ -300,9 +304,9 @@
 
         {% else %}
         {% if filter_mode == 'past' and selected_tags %}
-        {% member_empty_state title='No events match this filter' body='No events match this filter.' icon='video' kind='filter' primary_cta_label='View all recordings' primary_cta_url='/events?filter=past' %}
+        {% member_empty_state title='No past event recordings match this filter' body='No past event recordings match this filter.' icon='video' kind='filter' primary_cta_label='View all past event recordings' primary_cta_url='/events?filter=past' %}
         {% elif filter_mode == 'past' %}
-        {% member_empty_state title='No recordings yet' body='Check back soon!' icon='video' kind='fresh' %}
+        {% member_empty_state title='No past event recordings yet' body='Check back soon!' icon='video' kind='fresh' %}
         {% else %}
         {% member_empty_state title='No past events yet' body='Past events will appear here after they finish.' icon='archive' kind='fresh' %}
         {% endif %}

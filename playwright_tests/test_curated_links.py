@@ -121,9 +121,9 @@ class TestScenario1VisitorBrowsesByCategory:
         )
         body = page.content()
 
-        # Page heading uses the new copy (issue #524)
+        # Page heading reflects that /resources is the curated-links surface.
         heading = page.locator("h1")
-        assert "Workshops, Courses & More" in heading.inner_text()
+        assert "Curated links for AI builders" in heading.inner_text()
 
         # Both links visible
         assert "Weekend Agent Workshop" in body

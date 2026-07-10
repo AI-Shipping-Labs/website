@@ -9,7 +9,7 @@ Covers:
 - Event detail page: always visible, badges, date/time, location
 - Registration gating: authorized user can register, tier check, full event
 - Unauthorized user sees CTA "Upgrade to {tier_name} to attend"
-- Completed event shows link to recording if recording_id is set
+- Completed event shows recording availability when recording fields are set
 - POST /api/events/{slug}/register and DELETE /api/events/{slug}/unregister
 - Admin CRUD with status transitions
 """
@@ -279,8 +279,8 @@ class EventsListPageTest(TestCase):
 
     def test_event_card_omits_type_badge(self):
         response = self.client.get('/events')
-        self.assertNotContains(response, 'Live')
-        self.assertNotContains(response, 'Async')
+        self.assertNotContains(response, 'Live Event')
+        self.assertNotContains(response, 'Async Event')
 
     def test_event_card_shows_list_datetime(self):
         response = self.client.get('/events')

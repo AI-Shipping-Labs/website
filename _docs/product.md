@@ -35,6 +35,19 @@ Accesses the Django admin at `/admin/` and the Studio interface at `/studio/`. C
 
 Access control logic: a user can access any content object where `user.tier.level >= content.required_level`. Anonymous users are treated as level 0. The mapping is defined in `content/access.py` with constants `LEVEL_OPEN = 0`, `LEVEL_BASIC = 10`, `LEVEL_MAIN = 20`, `LEVEL_PREMIUM = 30`.
 
+## Product Taxonomy Contract
+
+This taxonomy is the source of truth for public navigation, page copy, and future issue grooming.
+
+| Term | Product Role | Current Routes / Surfaces |
+|------|--------------|---------------------------|
+| Community | Umbrella for membership and active participation. It includes membership tiers, activities by tier, community sprints, Slack/community access, and scheduled live events. | `/pricing`, `/activities#access-by-tier`, `/sprints`, `/events`, Slack access |
+| Events | Scheduled live/community sessions with registration, calendar, and join flows. Events are not the umbrella home for all recordings, workshops, or resources. | `/events`, `/events/calendar`, `/events/<id>/<slug>` |
+| Workshops | Durable hands-on learning artifacts. A workshop can originate from a live event, but after publication the canonical learning surface is the workshop landing/video/tutorial pages. | `/workshops`, `/workshops/<slug>`, `/workshops/<slug>/video`, `/workshops/<slug>/tutorial/<page_slug>` |
+| Recordings | Recorded learning resources created from events. Workshop-linked recordings point to the workshop; legacy standalone event recordings stay discoverable through the past filter and event detail URLs until a future recording-library decision. | `/events?filter=past`, `/events/<id>/<slug>`, workshop video pages |
+| Resources | Passive or self-serve content. The Resources navigation group contains learning/content destinations. The `/resources` route itself is the curated-links collection, not a catch-all hub. | Resources dropdown; `/resources` for Curated Links |
+| Activities | Membership benefits and participation modes, not a content type. The activities page compares tier access and links out to the relevant participation surfaces. | `/activities#access-by-tier`, plus links to pricing, sprints, events, and workshops |
+
 ## Feature Inventory
 
 ### Homepage
@@ -65,12 +78,21 @@ Access control logic: a user can access any content object where `user.tier.leve
 | Article detail | `/blog/<slug>` | Full article with cover image, author, date, reading time, tags, rendered markdown content, related articles, newsletter CTA after content; tag rule components; SEO (canonical, OG tags, structured data) | Open articles: everyone; gated articles: tier-dependent | Shipped |
 | Content gating overlay | (included partial) | Blurred placeholder with teaser text, lock icon, "Upgrade to [Tier] to read this article" CTA linking to `/pricing` | Shown when user lacks access | Shipped |
 
-### Content -- Event Recordings
+### Content -- Past Event Recordings
 
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
-| Recordings listing | `/events?filter=past` | Paginated list of published past events with recordings, date, tags, tag filtering; gated recordings show lock icon | Everyone (listing visible) | Shipped |
-| Recording detail | `/events/<slug>` | Full recording with embedded video player, timestamps, description, tags, materials; SEO metadata | Open recordings: everyone; gated: tier-dependent | Shipped |
+| Past event recordings listing | `/events?filter=past` | Paginated legacy discovery surface for published past events with recordings; workshop-linked rows hand off to the workshop, standalone rows keep existing event detail URLs; tag filtering and gated tier cues remain visible | Everyone (listing visible) | Shipped |
+| Standalone recording detail | `/events/<id>/<slug>` | Event detail page for a completed standalone event with inline recording, timestamps, description, tags, and materials; workshop-linked events show the workshop handoff instead | Open recordings: everyone; gated: tier-dependent | Shipped |
+
+### Content -- Workshops
+
+| Feature | URL | Description | Access | State |
+|---------|-----|-------------|--------|-------|
+| Workshops listing | `/workshops` | Catalog of published hands-on workshop learning artifacts with access filters, skill/tool/tag filters, instructor/date metadata, and tier badges | Everyone (listing visible) | Shipped |
+| Workshop detail | `/workshops/<slug>` | Durable workshop landing page with description, tools, tutorial pages, materials, code repository link, and recording action | Landing may be open or tier-dependent; pages/recording are separately gated | Shipped |
+| Workshop recording | `/workshops/<slug>/video` | Canonical recording page for workshop-linked events, with gated playback, timestamps, transcript, and materials when available | Open recordings: everyone; gated: tier-dependent | Shipped |
+| Workshop tutorial page | `/workshops/<slug>/tutorial/<page_slug>` | Step-by-step tutorial page in the workshop reader with breadcrumbs, navigation, progress controls, and paywall teaser when gated | Open pages: everyone; gated pages: tier-dependent | Shipped |
 
 ### Content -- Tutorials
 
@@ -123,8 +145,9 @@ Access control logic: a user can access any content object where `user.tier.leve
 
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
-| Events listing | `/events` | Upcoming and past events split into two sections with status/tier badges, registration status, spots remaining, and links to recordings for past events | Everyone (listing visible) | Shipped |
-| Event detail | `/events/<slug>` | Announcement page for the event: status, dates, location, timezone, description, registration button, join link near start time; SEO metadata. Workshop-linked events show a "View workshop writeup" CTA that hands off to the workshop landing page — recording, timestamps, materials, learning objectives, and core tools live on the workshop, not on the event. Legacy past events with no linked workshop still render the inline recording block. | Open events: everyone; gated: tier-dependent | Shipped |
+| Events listing | `/events` | Scheduled live/community event discovery with upcoming sessions, default past-event history, status/tier badges, registration state, and a past-event-recordings filter | Everyone (listing visible) | Shipped |
+| Events calendar | `/events/calendar` | Monthly calendar and mobile agenda for scheduled live/community events with links to event details | Everyone | Shipped |
+| Event detail | `/events/<id>/<slug>` | Announcement page for a scheduled session: status, dates, location, timezone, description, registration button, and join link near start time. Workshop-linked past events show a "View workshop writeup" handoff because recording, materials, learning objectives, and core tools live on the workshop. Legacy past standalone events still render inline recording resources. | Open events: everyone; gated: tier-dependent | Shipped |
 | Event registration | `/api/events/<slug>/register` | POST to register for an event | Authenticated users with access | Shipped |
 | Event unregistration | `/api/events/<slug>/unregister` | POST to unregister from an event | Authenticated users | Shipped |
 
@@ -190,7 +213,8 @@ Access control logic: a user can access any content object where `user.tier.leve
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
 | About page | `/about` | Community introduction, founders (Alexey Grigorev and Valeriia Kuka) with bios and LinkedIn links, "Why AI Shipping Labs?" CTA | Everyone | Shipped |
-| Activities page | `/activities` | All activities organized by tier with filter buttons (Basic/Main/Premium); tier badges on each activity card; quick comparison grid | Everyone | Shipped |
+| Activities page | `/activities#access-by-tier` | Membership benefits and participation modes organized by tier, with filter buttons (Basic/Main/Premium), quick comparison, and links to pricing, sprints, events, and workshops | Everyone | Shipped |
+| Community sprints index | `/sprints` | Public discovery page for current, future, and past community sprint cohorts with tier requirements and next-step CTAs | Everyone (joining requires authentication/tier access) | Shipped |
 | Sitemap | `/sitemap.xml` | XML sitemap for search engines | Everyone | Shipped |
 | Django admin | `/admin/` | Full Django admin with custom admin views for all models, including email campaign change form with timestamp editor widget | Superusers/staff | Shipped |
 
@@ -199,23 +223,25 @@ Access control logic: a user can access any content object where `user.tier.leve
 ### Header (Global)
 The fixed header appears on every page and contains:
 - Logo + site name linking to `/` (home)
-- Primary nav links (desktop): About, Activities, Membership (anchor to `/#tiers`), Resources dropdown, FAQ (anchor to `/#faq`)
-- Resources dropdown: Blog, Project Ideas, Event Recordings, Tutorials, Curated Links
+- Primary nav groups (desktop): About, Community, Resources
+- About dropdown: About, Team, FAQ
+- Community dropdown: Membership (`/pricing`), Community Sprints (`/sprints`), Events (`/events`)
+- Resources dropdown: Blog, Courses, Workshops, Learning Paths, Project Ideas, Interview Prep, Curated Links (`/resources`), and Downloads when published downloads exist
 - Auth area (desktop): "Sign in" for anonymous users; for authenticated users: notification bell with unread badge dropdown, email link to account page, "Log out" button
-- Mobile menu: Hamburger toggle revealing all nav links plus account/notifications/logout
+- Mobile menu: Hamburger toggle with About, Community, and Resources accordions plus account/notifications/logout controls
 
 ### Footer (Global)
 Appears on every page:
 - Newsletter signup form (email input + subscribe button, calls `/api/subscribe`)
 - Site logo + tagline: "Where action-oriented builders turn AI ideas into real projects"
-- Community links: About, Membership Tiers, FAQ, Manage Subscription (Stripe customer portal)
+- Community links: About, Membership Tiers, FAQ, Manage Subscription (Stripe customer portal). Broader Community nav additions belong to #1183.
 - Copyright notice
 
 ### Homepage CTAs (Anonymous)
 The homepage serves as the primary conversion funnel for anonymous visitors:
 1. Hero: "Subscribe for updates" (scrolls to newsletter section) and "View Membership Tiers" (scrolls to tiers section)
 2. Tiers section: Payment links for each tier (monthly/annual toggle)
-3. Recordings section: "View all recordings" links to `/events?filter=past`
+3. Past event recordings section: "View past event recordings" links to `/events?filter=past`
 4. Blog section: "View all posts" links to `/blog`
 5. Projects section: "View all project ideas" links to `/projects`
 6. Collection section: "View all curated links" links to `/resources`
@@ -228,14 +254,14 @@ The dashboard surfaces personalized actions:
 2. Upcoming Events: View registered events
 3. Recent Content: Click through to accessible articles/recordings
 4. Active Polls: Vote on polls
-5. Quick Actions: Browse Courses, View Recordings, Community (Main+ only), Submit Project
+5. Quick Actions: Browse Courses, View Recordings (`/events?filter=past`), Community (Main+ only), Submit Project
 6. Notifications: Click through to notification targets
 
 ### Content-Level Cross-Links
 - Gated content: When a user cannot access content, a CTA banner appears with "Upgrade to [Tier] to [action]" linking to `/pricing`
 - Article detail: Related articles section; newsletter CTA after content; tag links
 - Course detail: "Sign Up Free" CTA for free courses (unauthenticated users); "View Pricing" CTA for paid courses
-- Event listing: Past events link to their recordings
+- Event listing: Past event recordings link to the workshop when one is linked; legacy standalone recordings keep the event detail URL
 - Tag system: Tag chips on listings link to filtered views; global tag index at `/tags`
 
 ## Key User Journeys
@@ -250,37 +276,44 @@ Free member logs in -> sees dashboard with limited content -> browses blog and e
 Member navigates to `/courses` -> browses course catalog with tag filters -> clicks into a course -> reads syllabus and description -> enrolls in a cohort (if available) -> starts first unit -> watches embedded video, reads lesson text, completes homework -> clicks "Mark as completed" -> proceeds to next unit via "Next" button -> progress bar updates on course detail page -> returns to dashboard and sees course in "Continue Learning" section -> eventually completes all units.
 
 ### 4. Member Registers for an Event
-Member navigates to `/events` -> sees upcoming events with spots remaining -> clicks into an event detail page -> reads description and schedule -> clicks "Register" button -> event appears in their dashboard under "Upcoming Events" -> receives notification before event -> attends via the join link near start time -> after event, recording becomes available at `/events/<slug>`.
+Member navigates to `/events` -> sees scheduled live/community events -> clicks into an event detail page -> reads description and schedule -> clicks "Register" button -> event appears in their dashboard under "Upcoming Events" -> receives notification before event -> attends via the join link near start time -> after the event, a workshop-linked session points to `/workshops/<slug>` / `/workshops/<slug>/video`, while a legacy standalone recording remains available from the event detail URL and `/events?filter=past`.
 
-### 5. Visitor to Paid Member via Pricing
+### 5. Visitor Uses Workshops and Past Event Recordings
+Visitor opens `/workshops` from the Resources dropdown -> scans durable hands-on learning artifacts with writeups, recordings, tutorial pages, tools, and materials -> opens a workshop landing page -> watches the recording or reads tutorial pages if their tier allows it. If the visitor starts from `/events?filter=past`, workshop-linked recordings hand off to the workshop and standalone recordings keep the existing event detail URL.
+
+### 6. Visitor to Paid Member via Pricing
 Visitor clicks "View Membership Tiers" on homepage or navigates to `/pricing` -> reviews all 4 tiers in the grid -> toggles between monthly and annual pricing (annual saves approximately 17%) -> clicks "Join" on their chosen tier -> redirected to Stripe Checkout -> creates account during checkout (or logs in) -> completes payment -> gains access at the purchased tier level.
 
-### 6. Staff Manages Content via Studio
+### 7. Staff Manages Content via Studio
 Staff member logs in -> navigates to `/studio/` -> sees dashboard with content counts -> clicks into Articles section -> creates a new article (title, slug, content in markdown, tags, required_level, published flag) -> article appears on the blog listing and homepage. Alternatively, staff configures a GitHub content source at `/admin/sync/` -> content auto-syncs from a GitHub repo on push (via webhook) or manual trigger -> articles, recordings, projects are created/updated from markdown + YAML frontmatter files in the repo.
 
-### 7. Member Votes on Topics
+### 8. Member Votes on Topics
 Main or Premium member navigates to `/vote` -> sees active polls filtered to their tier level (topic polls for Main+, course polls for Premium) -> clicks into a poll -> reads options -> votes on up to N options (toggle on/off) -> optionally proposes a new option (if proposals are open) -> poll results influence what the community builds next.
 
-### 8. Member Manages Subscription
+### 9. Member Manages Subscription
 Member goes to `/account/` -> sees current tier, billing period end date -> wants to upgrade: clicks "Upgrade" -> modal shows higher tiers with prices -> selects one -> redirected to Stripe Checkout. Or wants to downgrade: clicks "Downgrade" -> modal shows lower tiers -> selects one -> change scheduled for end of billing period. Or wants to cancel: clicks "Cancel Subscription" -> confirmation modal -> confirms -> cancellation scheduled for end of billing period, access retained until then.
 
 ## Terminology Glossary
 
 | Term | Meaning | Do NOT Call It |
 |------|---------|----------------|
+| Community | The membership and active-participation umbrella: tiers, activities, Slack access, sprints, and scheduled live events | Resources, content library |
 | Tier | A membership level (Free, Basic, Main, Premium) | Plan, package, subscription level |
 | Level | The numeric access level associated with a tier (0, 10, 20, 30) | Rank, grade |
 | Article | A blog post on the site | Post, blog entry |
-| Recording | A recorded workshop video with timestamps and materials. Lives on the Workshop landing/video pages (`/workshops/<slug>` and `/workshops/<slug>/video`); the linked Event page only announces the session and links out to the workshop. Legacy past events that have not been promoted to a Workshop still host their recording inline on the event detail page. | Video, replay |
+| Workshop | A durable hands-on learning artifact with writeup/tutorial pages, recording, materials, tools, and optional code repository | Past event, webinar |
+| Recording | A recorded learning resource created from an event. Workshop-linked recordings live on the workshop landing/video pages (`/workshops/<slug>` and `/workshops/<slug>/video`); the linked Event page announces the session and links out to the workshop. Legacy past events that have not been promoted to a Workshop still host their recording inline on the event detail page and list at `/events?filter=past`. | Generic event, workshop |
 | Tutorial | A focused step-by-step guide on a narrow topic | How-to, guide |
 | Course | A structured multi-module learning path with units | Class, program |
 | Module | A grouping of units within a course | Section, chapter |
 | Unit | A single lesson within a module (video + text + homework) | Lesson, lecture |
 | Cohort | A time-bound group taking a course together (with drip scheduling) | Batch, class, group |
 | Project | A project idea or portfolio project writeup | Showcase, portfolio item |
-| Curated Link | An external resource link categorized by type (tool, model, course) | Resource, bookmark, collection item |
+| Resource | Passive or self-serve content surfaced through the Resources navigation group. The `/resources` route itself is Curated Links. | Activity, live event |
+| Curated Link | An external link categorized by type (workshop, course, article, other) on `/resources` | Resource hub, activity, recording library |
 | Download | A downloadable file (PDF, slides, notebook) | Asset, attachment |
-| Event | A scheduled activity with registration | Meeting, session, webinar |
+| Activity | A membership benefit or participation mode shown on `/activities#access-by-tier` | Resource, content type |
+| Event | A scheduled live/community session with registration and join flow | Resource, recording library |
 | Instructor | A person who teaches courses, workshops, or speaks at events; identified by a stable `instructor_id` slug and referenced from yaml | Speaker, presenter, author |
 | Poll | A vote on a topic or course idea | Survey, questionnaire |
 | Option | A choice within a poll that members can vote on | Answer, item |

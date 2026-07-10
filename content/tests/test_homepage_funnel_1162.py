@@ -251,7 +251,8 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
 
         self.assertEqual(list(response.context['recordings']), [past_recording])
-        self.assertContains(response, 'Event Recordings')
+        self.assertContains(response, 'Past event recordings')
+        self.assertContains(response, 'Recordings from live sessions')
         self.assertContains(response, 'Upcoming live events')
 
     def test_authenticated_member_keeps_dashboard_route(self):

@@ -2,7 +2,7 @@
 {% load sprint_extras %}
 
 {% block title %}Activities and Community Sprints | AI Shipping Labs{% endblock %}
-{% block meta_description %}Join active community sprints, workshops, cohorts, and tier-based participation opportunities at AI Shipping Labs.{% endblock %}
+{% block meta_description %}Compare membership benefits, participation modes, community sprints, live events, and workshop access by tier at AI Shipping Labs.{% endblock %}
 
 {% block body %}
 <main class="min-h-screen">
@@ -22,6 +22,23 @@
           Compare what Basic, Main, and Premium unlock across content, community accountability,
           live learning, courses, and career support.
         </p>
+        <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
+          Activities are membership benefits and participation modes: use them to understand how each tier connects to sprints, live events, workshops, and pricing.
+        </p>
+        <div class="mt-6 flex flex-wrap items-center justify-center gap-3" data-testid="activities-taxonomy-links">
+          <a href="/pricing" class="inline-flex min-h-[44px] items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90">
+            Compare pricing
+          </a>
+          <a href="/sprints" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
+            Community sprints
+          </a>
+          <a href="/events" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
+            Live events
+          </a>
+          <a href="/workshops" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">
+            Workshops
+          </a>
+        </div>
       </div>
 
       {% if activities %}

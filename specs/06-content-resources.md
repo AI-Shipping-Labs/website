@@ -2,26 +2,26 @@
 
 ## Overview
 
-Four resource types: event recordings, project showcase, curated links, downloadable resources.
+Self-serve resource surfaces include project showcase, curated links, downloadable resources, and the legacy past-event-recordings discovery surface. The `/resources` route is the curated-links collection, not a catch-all hub for all community activity or recordings.
 
 ## Data Models
 
-### Event Recordings
+### Past Event Recordings (shipped model)
+
+The shipped platform does not use an active standalone `Recording` content table or `/recordings` public route. Recordings are stored on `Event` fields and, when the event has a linked `Workshop`, the workshop becomes the canonical learning artifact.
 
 ```
-Recording:
-  id: uuid
-  slug: string (unique)
-  title: string
-  description: text               # markdown
-  video_url: string               # YouTube/Loom URL
-  timestamps: jsonb               # [{time_seconds: int, label: string}, ...]
-  materials: jsonb                 # [{title: string, url: string}, ...] — slides, repos, docs used
-  event_id: FK -> Event | null    # link to originating event, if any
-  tags: string[]
-  required_level: int             # 0-3
-  published_at: datetime
-  created_at: datetime
+Event recording fields:
+  recording_url: string                 # YouTube/Loom/external URL
+  recording_embed_url: string           # embeddable provider URL
+  recording_s3_url: string              # private S3 object URL
+  timestamps: jsonb                     # [{time_seconds: int, label: string}, ...]
+  materials: jsonb                      # [{title: string, url: string}, ...]
+  required_level: int                   # access level for standalone event recordings
+
+Workshop linked recording:
+  event_id: FK -> Event | null          # recording source event
+  recording_required_level: int         # access level for workshop video page
 ```
 
 ### Project Showcase
@@ -79,17 +79,19 @@ Download:
 
 ## Pages
 
-### `/recordings` — Recordings library
+### `/events?filter=past` — Past event recordings
 
-- Grid/list of all published recordings, sorted by `published_at` desc
-- Each card: title, thumbnail (auto-generated from video or cover image), date, tags, lock icon if gated
-- Filterable by tags
-- Clicking a card goes to `/recordings/{slug}`
+- Paginated list of published past events that have a recording field populated.
+- Each card: title, event date, tags, lock icon/tier cue if gated.
+- Filterable by tags.
+- Workshop-linked events link to `/workshops/{slug}` and their recording CTA points to `/workshops/{slug}/video`.
+- Standalone legacy recordings keep the existing event detail URL (`/events/{id}/{slug}`).
 
-### `/recordings/{slug}` — Recording detail
+### `/events/{id}/{slug}` — Standalone recording detail
 
-- If user has access: video player with clickable timestamps (see spec 08), description, materials list (links to slides/repos/docs)
-- If not: title, description visible. Video replaced with blurred placeholder + CTA: "Upgrade to {tier_name} to watch this recording"
+- For completed standalone events with a recording: video player with clickable timestamps (see spec 08), description, and materials list.
+- For workshop-linked events: show a clear handoff to the workshop landing page.
+- If the user lacks access: preserve the existing upgrade/paywall behavior.
 
 ### `/projects` — Project showcase
 
@@ -128,9 +130,9 @@ Renders as: a card with the download title, description, and a button. Button be
 
 ## Requirements
 
-- R-RES-1: Create `recordings`, `projects`, `curated_links`, `downloads` tables with schemas above.
-- R-RES-2: `GET /api/recordings` returns published recordings paginated (20/page), sorted by `published_at` desc. Each includes `is_locked` flag.
-- R-RES-3: `GET /api/recordings/{slug}` returns full recording (video_url, timestamps, materials) if user has access, or title + description + `is_locked + required_tier_name` if not.
+- R-RES-1: Create `projects`, `curated_links`, and `downloads` tables with schemas above. Past event recordings use `Event` and linked `Workshop` fields from the shipped event/workshop model.
+- R-RES-2: `/events?filter=past` returns published past events with recording fields populated, paginated 20/page, sorted by event start time descending, and with existing gated tier cues.
+- R-RES-3: Workshop-linked event recordings hand off to `/workshops/{slug}` and `/workshops/{slug}/video`; standalone legacy event recordings keep `/events/{id}/{slug}`.
 - R-RES-4: `GET /api/projects` returns published projects, filterable by `difficulty` and `tags` query params.
 - R-RES-5: Community members can submit projects via `POST /api/projects/submit` (requires auth). Creates with `status = "pending_review"`. Admin approves via `PUT /api/admin/projects/{id}/approve`.
 - R-RES-6: `GET /api/curated-links` returns all links grouped by `category`. Gated links return `is_locked` instead of `url`.

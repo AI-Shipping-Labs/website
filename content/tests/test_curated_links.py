@@ -745,12 +745,13 @@ class ResourcesHeadingCopyIssue524Test(TestCase):
 
     def test_h1_uses_new_copy(self):
         response = self.client.get('/resources')
-        self.assertContains(response, 'Workshops, Courses & More')
+        self.assertContains(response, 'Curated links for AI builders')
 
     def test_intro_mentions_workshops_and_articles(self):
         response = self.client.get('/resources')
         self.assertContains(response, 'workshops')
         self.assertContains(response, 'articles')
+        self.assertContains(response, 'community activity or recording')
 
 
 class ResourcesWorkshopBadgeIconIssue524Test(TestCase):

@@ -18,7 +18,7 @@ Tags are stored as a `string[]` on each content item (articles, courses, recordi
 
 ### Tag Filtering
 
-On listing pages (`/blog`, `/courses`, `/recordings`, `/projects`, `/resources`), tags appear as clickable filter chips. Clicking a tag filters the list to items with that tag. Multiple tags can be selected (AND logic). Active filters shown as removable chips above the list.
+On listing pages (`/blog`, `/courses`, `/workshops`, `/events?filter=past`, `/projects`, `/resources`), tags appear as clickable filter chips where supported. Clicking a tag filters the list to items with that tag. Multiple tags can be selected (AND logic). Active filters shown as removable chips above the list.
 
 ### Conditional Components
 

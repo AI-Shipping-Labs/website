@@ -729,16 +729,14 @@ class TestScenario8EmptyStateNoRecordings:
 
         body = page.content()
 
-        # Heading is present. After the events/recordings unification, the
-        # /events?filter=past page renders the canonical events heading
-        # 'Community Events & Workshops'.
+        # Heading is present and frames Events as scheduled live/community
+        # sessions, not as the whole workshop/resource archive.
         heading = page.locator("h1")
-        assert "Community Events" in heading.inner_text()
-        assert "Workshops" in heading.inner_text()
+        assert "Live community events" in heading.inner_text()
 
         # Helpful empty state message (post-unification copy on
         # /events?filter=past).
-        assert "No recordings yet" in body
+        assert "No past event recordings yet" in body
         assert "Check back soon!" in body
         empty_state = page.locator('[data-testid="member-empty-state"]')
         assert empty_state.count() == 1
@@ -783,20 +781,20 @@ class TestScenario9EmptyStateNoMatchingTag:
         assert recording_cards.count() == 0
 
         # Empty state message (post-unification copy on /events?filter=past).
-        assert "No events match this filter." in body
+        assert "No past event recordings match this filter." in body
         empty_state = page.locator('[data-testid="member-empty-state"]')
         assert empty_state.count() == 1
         assert empty_state.get_attribute("data-empty-kind") == "filter"
 
-        # "View all recordings" link points back to /events?filter=past.
+        # "View all past event recordings" link points back to /events?filter=past.
         view_all_link = page.locator(
-            'a:has-text("View all recordings")'
+            'a:has-text("View all past event recordings")'
         )
         assert view_all_link.count() >= 1
         href = view_all_link.first.get_attribute("href")
         assert "/events?filter=past" in href
 
-        # Step 2: Click "View all recordings"
+        # Step 2: Click "View all past event recordings"
         view_all_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 

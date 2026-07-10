@@ -225,7 +225,7 @@ The fixed header appears on every page and contains:
 - Logo + site name linking to `/` (home)
 - Primary nav groups (desktop): About, Community, Resources
 - About dropdown: About, Team, FAQ
-- Community dropdown: Membership (`/pricing`), Community Sprints (`/sprints`), Events (`/events`)
+- Community dropdown: Overview (`/community`) when the launch recap exists, Membership (`/pricing`), Activities (`/activities#access-by-tier`), Community Sprints (`/sprints`), Events (`/events`)
 - Resources dropdown: Blog, Courses, Workshops, Learning Paths, Project Ideas, Interview Prep, Curated Links (`/resources`), and Downloads when published downloads exist
 - Auth area (desktop): "Sign in" for anonymous users; for authenticated users: notification bell with unread badge dropdown, email link to account page, "Log out" button
 - Mobile menu: Hamburger toggle with About, Community, and Resources accordions plus account/notifications/logout controls
@@ -234,7 +234,7 @@ The fixed header appears on every page and contains:
 Appears on every page:
 - Newsletter signup form (email input + subscribe button, calls `/api/subscribe`)
 - Site logo + tagline: "Where action-oriented builders turn AI ideas into real projects"
-- Community links: About, Membership Tiers, FAQ, Manage Subscription (Stripe customer portal). Broader Community nav additions belong to #1183.
+- Community links: About, Membership Tiers, Activities, Community Sprints, Events, FAQ, Manage Subscription (Stripe customer portal)
 - Copyright notice
 
 ### Homepage CTAs (Anonymous)

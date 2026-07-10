@@ -166,8 +166,9 @@ class TestMobileMenuTextNavAccordion:
                 "FAQ",
             ],
             "community": [
-                "Community",
+                "Overview",
                 "Membership",
+                "Activities",
                 "Community Sprints",
                 "Events",
             ],

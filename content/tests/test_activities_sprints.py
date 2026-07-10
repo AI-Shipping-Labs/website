@@ -58,8 +58,15 @@ class ActivitiesSprintHubTest(TestCase):
         self.assertIn('href="/sprints"', header)
         self.assertIn('href="/resources"', header)
         self.assertIn('href="/faq"', header)
-        self.assertNotIn('href="/activities"', header)
-        self.assertNotIn('>Activities</a>', header)
+        self.assertIn('href="/activities#access-by-tier"', header)
+        self.assertIn('data-testid="nav-community-link-activities"', header)
+        top_level_ids = [
+            'data-testid="nav-membership"',
+            'data-testid="nav-sprints"',
+            'data-testid="nav-events"',
+        ]
+        for test_id in top_level_ids:
+            self.assertNotIn(test_id, primary)
 
     def test_active_sprint_details_render_for_anonymous_users(self):
         start_date = _active_sprint_start()

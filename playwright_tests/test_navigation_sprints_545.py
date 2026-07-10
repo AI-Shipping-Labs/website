@@ -253,6 +253,7 @@ def test_community_dropdown_groups_membership_sprints_events(django_server, page
     assert link_ids == [
         "nav-community-link-overview",
         "nav-community-link-membership",
+        "nav-community-link-activities",
         "nav-community-link-sprints",
         "nav-community-link-events",
     ]
@@ -277,9 +278,10 @@ def test_community_dropdown_links_overview_first(django_server, page):
             .map(a => [a.getAttribute('data-testid'), a.getAttribute('href')])
         """
     )
-    assert links[:4] == [
+    assert links[:5] == [
         ["nav-community-link-overview", "/community"],
         ["nav-community-link-membership", "/pricing"],
+        ["nav-community-link-activities", "/activities#access-by-tier"],
         ["nav-community-link-sprints", "/sprints"],
         ["nav-community-link-events", "/events"],
     ]
@@ -445,6 +447,7 @@ def test_mobile_320px_has_no_horizontal_overflow(django_server, browser):
     for test_id in [
         "mobile-nav-about-link-team",
         "mobile-nav-community-link-overview",
+        "mobile-nav-community-link-activities",
         "mobile-nav-community-link-sprints",
         "mobile-nav-resources-link-curated-links",
     ]:

@@ -54,9 +54,12 @@ class AnnotatePlanProgressTest(TestCase):
 class SprintPlanCardProgressContextTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        today = timezone.localdate()
         cls.sprint = Sprint.objects.create(
             name='May 2026', slug='may-2026',
-            start_date=datetime.date(2026, 5, 1),
+            start_date=today - datetime.timedelta(days=7),
+            duration_weeks=6,
+            status='active',
         )
         cls.member = User.objects.create_user(
             email='member@test.com', password='pw',
@@ -111,6 +114,11 @@ class SprintPlanCardProgressContextTest(TestCase):
                 'plan_progress_total': 0,
                 'plan_progress_done': 0,
                 'cohort_has_other_members': False,
+                'plan_has_ended': False,
+                'sprint_end_feedback_response': None,
+                'sprint_end_feedback_url': '',
+                'sprint_end_feedback_label': '',
+                'sprint_end_next_action': None,
             },
         )
 

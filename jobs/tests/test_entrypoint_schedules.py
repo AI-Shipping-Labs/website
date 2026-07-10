@@ -61,6 +61,7 @@ class EntrypointRegistersSchedulesTest(TestCase):
             'purge-unverified-users',
             'ingest-plan-sprints',
             'sprint-cadence-notifications',
+            'sprint-end-recaps',
             'onboarding-reminders',
         }
         self.assertEqual(names, expected)

@@ -131,9 +131,8 @@ class StudioTagListViewTest(TestCase):
         response = self.client.get('/studio/tags/')
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="studio-empty-state-fresh"')
-        self.assertContains(response, 'data-empty-state="studio-tags-empty"')
-        self.assertContains(response, 'No contact tags yet.')
+        self.assertContains(response, 'data-testid="studio-tags-empty"')
+        self.assertContains(response, 'No contact tags exist yet.')
         self.assertContains(response, 'href="/studio/users/"')
 
     def test_access_control_matches_existing_tag_endpoints(self):

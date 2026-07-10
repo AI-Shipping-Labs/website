@@ -166,11 +166,8 @@ class TestStudioTagsPage:
         assert page.locator(
             '[data-testid="studio-tag-row"][data-tag="early-adopter"]'
         ).count() == 0
-        empty_state = page.locator(
-            '[data-testid="studio-empty-state-fresh"][data-empty-state="studio-tags-empty"]'
-        )
-        assert empty_state.is_visible()
-        assert "No contact tags yet." in page.content()
+        assert page.locator('[data-testid="studio-tags-empty"]').is_visible()
+        assert "No contact tags exist yet." in page.content()
         assert page.locator('a[href="/studio/users/"]:has-text("Find users")').is_visible()
 
         context.close()

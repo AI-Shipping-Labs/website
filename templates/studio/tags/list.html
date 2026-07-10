@@ -78,6 +78,8 @@
 </div>
 {% else %}
   {% url 'studio_user_list' as tags_user_list_url %}
-  {% studio_empty_state 'fresh' entity_label='contact tag' entity_label_plural='contact tags' create_url=tags_user_list_url cta_label='Find users' testid_suffix='studio-tags-empty' %}
+  <div data-testid="studio-tags-empty">
+    {% studio_empty_state 'fresh' entity_label='contact tag' entity_label_plural='contact tags' create_url=tags_user_list_url cta_label='Find users' testid_suffix='studio-tags-empty' empty_message='No contact tags exist yet.' %}
+  </div>
 {% endif %}
 {% endblock %}

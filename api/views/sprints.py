@@ -8,6 +8,7 @@ Core sprint endpoints:
 - ``PATCH /api/sprints/<slug>/`` -- update (staff-only)
 - ``DELETE /api/sprints/<slug>/`` -- delete (staff-only); 409 if plans attached
 - ``GET /api/sprints/<slug>/progress-evidence`` -- staff progress evidence
+- ``GET /api/sprints/<slug>/roster-activity`` -- staff roster activity
 """
 
 from datetime import date
@@ -47,6 +48,11 @@ from plans.services.accountability import (
     assign_accountability_partners,
     randomize_accountability_partners,
     remove_accountability_partners,
+)
+from plans.services.roster_activity import (
+    ACTIVITY_FILTER_NO_UPDATE_THIS_WEEK,
+    build_sprint_roster_activity,
+    serialize_roster_activity,
 )
 from studio.views.sprints import _parse_event_series
 
@@ -172,6 +178,67 @@ _ACCOUNTABILITY_PAIR_REQUEST_BODY = {
         "member_email": "alice@example.com",
         "partner_email": "bob@example.com",
     },
+}
+
+_ROSTER_ACTIVITY_EXAMPLE = {
+    "sprint": {
+        "id": 8,
+        "slug": "may-2026",
+        "name": "May 2026",
+        "start_date": "2026-05-01",
+        "end_date": "2026-06-12",
+        "duration_weeks": 6,
+        "status": "active",
+    },
+    "current_week": {
+        "active": True,
+        "week_number": 2,
+        "week_start": "2026-05-08T00:00:00+02:00",
+        "week_end": "2026-05-10T12:00:00+02:00",
+    },
+    "totals": {
+        "members": 3,
+        "enrolled": 2,
+        "plans": 2,
+        "no_update_this_week": 1,
+    },
+    "members": [
+        {
+            "member": {
+                "id": 42,
+                "email": "member@example.com",
+                "display_name": "Member Example",
+            },
+            "enrollment": {
+                "enrolled": True,
+                "id": 12,
+                "enrolled_at": "2026-05-01T12:00:00+00:00",
+            },
+            "plan": {
+                "exists": True,
+                "id": 88,
+                "title": "Ship the first agent workflow",
+                "visibility": "private",
+                "shared_at": None,
+            },
+            "progress": {
+                "done": 3,
+                "total": 5,
+                "label": "3/5 checkpoints",
+            },
+            "last_update": {
+                "source": "slack",
+                "source_label": "Slack update",
+                "timestamp": "2026-05-10T10:00:00+00:00",
+                "label": "Slack update",
+            },
+            "this_week": {
+                "status": "updated",
+                "label": "Updated this week",
+                "updated": True,
+            },
+        },
+    ],
 }
 
 # Shared request-body documentation for the ``event_series`` link.
@@ -829,6 +896,66 @@ def sprints_collection(request):
         event_series=event_series,
     )
     return JsonResponse(serialize_sprint(sprint), status=201)
+
+
+@token_required
+@csrf_exempt
+@require_methods("GET")
+@openapi_spec(
+    tag="Sprints",
+    summary="Retrieve staff roster activity for a sprint",
+    methods={
+        "GET": {
+            "summary": "Retrieve sprint roster activity (staff-only)",
+            "description": (
+                "Staff-token-only read API for the same merged sprint roster "
+                "activity data shown in Studio: enrolled rows first, "
+                "plan-only rows after, checkpoint progress, latest local "
+                "activity source, and current sprint-week triage state. "
+                "Supports ``activity=no_update_this_week`` to return only "
+                "rows needing follow-up during an active sprint week."
+            ),
+            "query": {
+                "activity": {
+                    "type": "string",
+                    "enum": [ACTIVITY_FILTER_NO_UPDATE_THIS_WEEK],
+                    "required": False,
+                    "description": (
+                        "Filter to no-plan or stale rows for the current "
+                        "active sprint week."
+                    ),
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Sprint roster activity.",
+                    "example": _ROSTER_ACTIVITY_EXAMPLE,
+                },
+                401: {"description": "Missing or invalid staff token."},
+                404: {
+                    "description": "Sprint not found.",
+                    "example": {
+                        "error": "Sprint not found",
+                        "code": "unknown_sprint",
+                    },
+                },
+            },
+        },
+    },
+)
+def sprint_roster_activity(request, slug):
+    """``GET /api/sprints/<slug>/roster-activity``."""
+    sprint, sprint_error = _resolve_sprint(slug)
+    if sprint_error is not None:
+        return sprint_error
+    activity_filter = request.GET.get("activity", "")
+    if activity_filter != ACTIVITY_FILTER_NO_UPDATE_THIS_WEEK:
+        activity_filter = ""
+    activity = build_sprint_roster_activity(
+        sprint,
+        activity_filter=activity_filter,
+    )
+    return JsonResponse(serialize_roster_activity(activity), status=200)
 
 
 @token_required

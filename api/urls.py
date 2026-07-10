@@ -115,6 +115,7 @@ from api.views.sprints import (
     sprint_accountability_randomize,
     sprint_detail,
     sprint_progress_evidence,
+    sprint_roster_activity,
     sprints_collection,
 )
 from api.views.sync_sources import sync_source_trigger, sync_sources_collection
@@ -440,6 +441,11 @@ urlpatterns = [
         "sprints/<slug:slug>/progress-evidence",
         sprint_progress_evidence,
         name="api_sprint_progress_evidence",
+    ),
+    path(
+        "sprints/<slug:slug>/roster-activity",
+        sprint_roster_activity,
+        name="api_sprint_roster_activity",
     ),
     path(
         "sprints/<slug:slug>/accountability-partners/randomize",

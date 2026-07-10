@@ -238,6 +238,7 @@ class SprintsModuleHasOpenApiSpecTest(TestCase):
             "sprint_accountability_partners",
             "sprint_accountability_randomize",
             "sprint_progress_evidence",
+            "sprint_roster_activity",
         ]
         for name in view_names:
             view = getattr(sprints_module, name)
@@ -268,6 +269,19 @@ class SprintsModuleHasOpenApiSpecTest(TestCase):
             set(spec["methods"].keys()),
             {"GET", "PATCH", "DELETE"},
         )
+
+    def test_roster_activity_route_is_documented(self):
+        document = build_spec(urlpatterns)
+        self.assertIn(
+            "/api/sprints/{slug}/roster-activity",
+            document["paths"],
+        )
+        operation = document["paths"][
+            "/api/sprints/{slug}/roster-activity"
+        ]["get"]
+        self.assertEqual(operation["tags"], ["Sprints"])
+        params = {param["name"] for param in operation["parameters"]}
+        self.assertIn("activity", params)
 
     def test_methods_match_require_methods_for_sprint_progress_evidence(self):
         import api.views.sprints as sprints_module

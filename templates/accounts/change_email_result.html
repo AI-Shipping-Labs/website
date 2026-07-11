@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}Email change | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen pt-24">
+  {% include "includes/header.html" %}
+
+  <div class="mx-auto max-w-2xl px-4 py-12 sm:px-6 lg:px-8">
+    <div class="rounded-lg border border-border bg-card p-6 sm:p-8" data-testid="email-change-result">
+      <div class="mb-5 flex items-start gap-3">
+        {% if success %}
+        <i data-lucide="check-circle-2" class="mt-0.5 h-6 w-6 shrink-0 text-green-500"></i>
+        {% else %}
+        <i data-lucide="alert-circle" class="mt-0.5 h-6 w-6 shrink-0 text-amber-500"></i>
+        {% endif %}
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight">
+            {% if success %}Email changed{% else %}Email change link unavailable{% endif %}
+          </h1>
+          <p class="mt-2 text-sm text-muted-foreground" data-testid="email-change-result-message">
+            {{ message }}
+          </p>
+        </div>
+      </div>
+
+      <a href="{{ cta_url }}" class="{% button_classes 'primary' %}" data-testid="email-change-result-cta">
+        {% if success %}
+        <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        {% else %}
+        <i data-lucide="rotate-ccw" class="h-4 w-4"></i>
+        {% endif %}
+        {{ cta_label }}
+      </a>
+    </div>
+  </div>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

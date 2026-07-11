@@ -20,6 +20,12 @@ from django.views.decorators.http import require_POST
 from accounts.gating import is_newsletter_only_user
 from accounts.models import MemberAPIKey
 from accounts.return_context import sanitize_verification_return_path
+from accounts.services.email_change import (
+    EmailChangeError,
+    active_email_change_request_for_user,
+    confirm_email_change,
+    request_email_change,
+)
 
 # Issue #448: per-user resend throttle for the account verification banner.
 RESEND_VERIFICATION_THROTTLE_SECONDS = 60
@@ -367,6 +373,8 @@ def _render_account_page(
             "https://github.com/AI-Shipping-Labs/website/tree/main/"
             "skills/ai-shipping-labs-plans-api"
         ),
+        "pending_email_change": active_email_change_request_for_user(user),
+        "email_change_requires_password": user.has_usable_password(),
     }
 
     # Issue #581: the Sprint plan card was removed from /account/. The
@@ -380,6 +388,76 @@ def _render_account_page(
 def account_view(request):
     """Render the account page showing tier, billing info, and actions."""
     return _render_account_page(request)
+
+
+@login_required
+@require_POST
+def change_email_request_view(request):
+    """Start a member-owned login email change request."""
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    try:
+        request_obj, _token = request_email_change(
+            request.user,
+            data.get("new_email", ""),
+            current_password=data.get("current_password", ""),
+        )
+    except EmailChangeError as exc:
+        return JsonResponse(
+            {"error": exc.message, "code": exc.code},
+            status=exc.status,
+        )
+    except Exception:
+        logger.exception(
+            "Email change request failed for user_id=%s",
+            request.user.pk,
+        )
+        return JsonResponse(
+            {"error": "We couldn't send that verification link. Please try again."},
+            status=500,
+        )
+
+    return JsonResponse({
+        "status": "ok",
+        "message": f"Verification link sent to {request_obj.new_email}.",
+        "pending_new_email": request_obj.new_email,
+        "current_email": request_obj.old_email,
+    })
+
+
+def change_email_confirm_view(request):
+    """Public confirmation link for pending login email changes."""
+    result = confirm_email_change(request.GET.get("token", ""))
+    if result.success:
+        cta_url = "/account/" if request.user.is_authenticated else "/accounts/login/"
+        cta_label = (
+            "Continue to Account"
+            if request.user.is_authenticated
+            else "Sign In"
+        )
+        status_code = 200
+    else:
+        cta_url = "/account/" if request.user.is_authenticated else "/accounts/login/"
+        cta_label = (
+            "Go to Account" if request.user.is_authenticated else "Sign In"
+        )
+        status_code = 400
+
+    return render(
+        request,
+        "accounts/change_email_result.html",
+        {
+            "success": result.success,
+            "message": result.message,
+            "status": result.status,
+            "cta_url": cta_url,
+            "cta_label": cta_label,
+        },
+        status=status_code,
+    )
 
 
 @login_required

@@ -20,7 +20,7 @@ import json
 
 from django.test import TestCase, tag
 
-from accounts.models import User
+from accounts.models import EmailAlias, User
 from community.models import CommunityAuditLog
 from payments.exceptions import WebhookPermanentError
 from payments.services import handle_customer_updated
@@ -298,3 +298,47 @@ class CustomerUpdatedHandlerTest(TestCase):
             audit_count_before,
             "No-op customer.updated paths must not write an audit log row.",
         )
+
+    def test_customer_updated_with_same_user_alias_does_not_roll_back_primary(self):
+        user = User.objects.create_user(email="new-login@example.com")
+        user.stripe_customer_id = "cus_alias_same_user"
+        user.save(update_fields=["stripe_customer_id"])
+        EmailAlias.objects.create(
+            user=user,
+            email="old-login@example.com",
+            source=EmailAlias.SOURCE_ACCOUNT_CHANGE,
+        )
+
+        handle_customer_updated(
+            _make_customer_payload(
+                customer_id="cus_alias_same_user",
+                email="old-login@example.com",
+            )
+        )
+
+        user.refresh_from_db()
+        self.assertEqual(user.email, "new-login@example.com")
+        self.assertTrue(
+            EmailAlias.objects.filter(
+                user=user,
+                email="old-login@example.com",
+            ).exists()
+        )
+
+    def test_customer_updated_with_other_user_alias_raises_permanent_error(self):
+        owner = User.objects.create_user(email="owner@example.com")
+        editor = User.objects.create_user(email="editor@example.com")
+        editor.stripe_customer_id = "cus_alias_other_user"
+        editor.save(update_fields=["stripe_customer_id"])
+        EmailAlias.objects.create(user=owner, email="alias@example.com")
+
+        with self.assertRaises(WebhookPermanentError):
+            handle_customer_updated(
+                _make_customer_payload(
+                    customer_id="cus_alias_other_user",
+                    email="alias@example.com",
+                )
+            )
+
+        editor.refresh_from_db()
+        self.assertEqual(editor.email, "editor@example.com")

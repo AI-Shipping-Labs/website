@@ -44,6 +44,22 @@ PREVIEW_CONTEXTS = {
         'user_name': 'Ada',
         'reset_url': 'https://aishippinglabs.com/reset?token=demo',
     },
+    'account_email_change_confirm': {
+        'user_name': 'Ada',
+        'old_email': 'old-member@test.com',
+        'new_email': 'new-member@test.com',
+        'confirm_url': (
+            'https://aishippinglabs.com/account/change-email/confirm'
+            '?token=demo'
+        ),
+        'expiry_hours': 24,
+    },
+    'account_email_changed_notice': {
+        'user_name': 'Ada',
+        'old_email': 'old-member@test.com',
+        'new_email': 'new-member@test.com',
+        'account_url': 'https://aishippinglabs.com/account/',
+    },
     'cancellation': {
         'user_name': 'Ada',
         'tier_name': 'Main',

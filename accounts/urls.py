@@ -3,6 +3,8 @@ from django.urls import include, path
 from accounts.views.account import (
     account_profile_post_view,
     account_view,
+    change_email_confirm_view,
+    change_email_request_view,
     dismiss_dashboard_card,
     email_preferences_view,
     member_api_key_create_view,
@@ -105,6 +107,16 @@ onboarding_urlpatterns = [
 account_urlpatterns = [
     path('', account_view, name='account'),
     path('profile', account_profile_post_view, name='account_profile'),
+    path(
+        'api/change-email/request',
+        change_email_request_view,
+        name='account_change_email_request',
+    ),
+    path(
+        'change-email/confirm',
+        change_email_confirm_view,
+        name='account_change_email_confirm',
+    ),
     path(
         'api/member-api-keys',
         member_api_key_create_view,
